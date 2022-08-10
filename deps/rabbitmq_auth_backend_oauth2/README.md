@@ -1,16 +1,23 @@
 # OAuth 2.0 (JWT) Token Authorisation Backend for RabbitMQ
 
-This [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
-and users authenticate and authorize using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
+This [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets
+applications (clients) and users authenticate and present their permissions 
+using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
-It is not specific to but developed against [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa).
+The plugin supports several identity providers, sometimes with vendor-specific configuration bits:
+
+ * [Cloud Foundry UAA](./demo), the original provider
+ * [Keycloak](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/keycloak.md)
+ * [IdentityServer 4](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/identityServer4.md)
+ * [Microsoft AD on Azure](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/azure.md)
+ * [Auth0](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/oauth0.md)
 
 An OAuth 2.0 primer is available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
 
 
 ## Supported RabbitMQ Versions
 
-The plugin targets and ships with RabbitMQ 3.8. Like all RabbitMQ [plugins](https://www.rabbitmq.com/plugins.html), it must be enabled before it can be used:
+The plugin targets and ships with RabbitMQ. Like all RabbitMQ [plugins](https://www.rabbitmq.com/plugins.html), it must be enabled before it can be used:
 
 ``` shell
 rabbitmq-plugins enable rabbitmq_auth_backend_oauth2
@@ -155,9 +162,10 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 | `auth_oauth2.algorithms`                 | Restrict [the usable algorithms](https://github.com/potatosalad/erlang-jose#algorithm-support).
 | `auth_oauth2.verify_aud`                 | [Verify token's `aud`](#token-validation).
 
-For example:
+Two examples below demonstrate
 
-Configure with key files
+Configure with key files:
+
 ```
 auth_oauth2.resource_server_id = new_resource_server_id
 auth_oauth2.additional_scopes_key = my_custom_scope_key
@@ -167,7 +175,9 @@ auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
 auth_oauth2.algorithms.1 = HS256
 auth_oauth2.algorithms.2 = RS256
 ```
-Configure with key server
+
+Configure with key server:
+
 ```
 auth_oauth2.resource_server_id = new_resource_server_id
 auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
@@ -198,17 +208,17 @@ use to validate the signature.
 
 #### Must not be expired
 
-RabbitMQ uses this field `exp` ([exp](https://tools.ietf.org/html/rfc7519#page-9)) to validate the token if present.
-It contains the expiration time after which the JWT MUST NOT be accepted for processing.
+Tokens are also checked for expiration using the `exp` ([exp](https://tools.ietf.org/html/rfc7519#page-9)) field, if present.
+Expired tokens (past their expiration timestamp) will not be accepted.
 
-#### Audience must have/match the resource_server_id
+#### Audience must match (or include) the configured resource_server_id
 
-The `aud` ([Audience](https://tools.ietf.org/html/rfc7519#page-9)) identifies the recipients and/or resource_server of the JWT. By default, **RabbitMQ uses this field to validate the token** although we can disable it by setting `verify_aud` to `false`.  When it set to `true`, this attribute must either match the `resource_server_id` setting or in case of a list, it must contain the `resource_server_id`.
+The `aud` ([Audience](https://tools.ietf.org/html/rfc7519#page-9)) identifies the recipients and/or resource_server of the JWT. By default, **RabbitMQ uses this field to validate the token** although it can be disabled by setting `verify_aud` to `false`.  When set to `true`, this attribute must either be equal to the value of the `resource_server_id` setting or, in case of a list, it must contain the value of `resource_server_id`.
 
 
 ### Scope-to-Permission Translation
 
-Scopes are translated into permission grants to RabbitMQ resources for the provided token.
+Scopes are translated into [permission grants to RabbitMQ resources](https://www.rabbitmq.com/access-control.html#authorisation) for the provided token.
 
 The current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routing_key_pattern>]` where
 
@@ -232,16 +242,16 @@ There can be multiple wildcards in a pattern:
  * `start*middle*end`
  * `*before*after*`
 
-**To use special characters like `*`, `%`, or `/` in a wildcard pattern,
-the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
+**If special characters (`*`, `%`, or `/`) are used in a wildcard pattern,
+the pattern must be [percent-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
 
 These are the typical permissions examples:
 
-- `read:*/*`(`read:*/*/*`) - read permissions to any resource on any vhost
-- `write:*/*`(`write:*/*/*`) - write permissions to any resource on any vhost
-- `read:vhost1/*`(`read:vhost1/*/*`) - read permissions to any resource on the `vhost1` vhost
-- `read:vhost1/some*` - read permissions to all the resources, starting with `some` on the `vhost1` vhost
-- `write:vhsot1/some*/routing*` - topic write permissions to publish to an exchange starting with `some` with a routing key starting with `routing`
+ * `read:*/*`(`read:*/*/*`): read permissions to any resource on any vhost
+ * `write:*/*`(`write:*/*/*`): write permissions to any resource on any vhost
+ * `read:vhost1/*`(`read:vhost1/*/*`): read permissions to any resource on the `vhost1` vhost
+ * `read:vhost1/some*`: read permissions to all the resources, starting with `some` on the `vhost1` vhost
+ * `write:vhsot1/some*/routing*`: topic write permissions to publish to an exchange starting with `some` with a routing key starting with `routing`
 
 See the [wildcard matching test suite](./test/wildcard_match_SUITE.erl) and [scopes test suite](./test/scope_SUITE.erl) for more examples.
 
