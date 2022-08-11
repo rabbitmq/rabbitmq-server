@@ -543,6 +543,8 @@ delete_last_replica(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
+
+    check_leader_and_replicas(Config, [Server0, Server2], members),
     ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server2])),
