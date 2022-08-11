@@ -15,7 +15,7 @@
          update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
          route/2, delete/3, validate_binding/2, count/0]).
--export([list_names/0, is_amq_prefixed/1]).
+-export([list_names/0]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
 
@@ -92,18 +92,6 @@ serial(#exchange{name = XName} = X) ->
     fun (true)  -> Serial;
         (false) -> none
     end.
-
--spec is_amq_prefixed(rabbit_types:exchange() | binary()) -> boolean().
-
-is_amq_prefixed(Name) when is_binary(Name) ->
-    case re:run(Name, <<"^amq\.">>) of
-        nomatch    -> false;
-        {match, _} -> true
-    end;
-is_amq_prefixed(#exchange{name = #resource{name = <<>>}}) ->
-    false;
-is_amq_prefixed(#exchange{name = #resource{name = Name}}) ->
-    is_amq_prefixed(Name).
 
 -spec declare
         (name(), type(), boolean(), boolean(), boolean(),
