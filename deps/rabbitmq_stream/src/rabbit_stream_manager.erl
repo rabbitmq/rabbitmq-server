@@ -223,11 +223,11 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                             rabbit_log:info("Error while creating ~p stream, "
                                             ++ M,
                                             [Reference]),
-                            {error, validation_failed};
+                            {reply, {error, validation_failed}, State};
                         E ->
                             rabbit_log:warning("Error while creating ~p stream, ~p",
                                                [Reference, E]),
-                            {error, validation_failed}
+                            {reply, {error, validation_failed}, State}
                     end
             end;
         error ->
