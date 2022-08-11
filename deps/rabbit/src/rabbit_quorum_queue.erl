@@ -1305,7 +1305,7 @@ dlh(undefined, _, Strategy, _, QName) ->
 dlh(Exchange, RoutingKey, <<"at-least-once">>, reject_publish, QName) ->
     %% Feature flag stream_queue includes the rabbit_queue_type refactor
     %% which is required by rabbit_fifo_dlx_worker.
-    case rabbit_feature_flags:is_enabled(stream_queue) of
+    case rabbit_queue_type:is_supported() of
         true ->
             at_least_once;
         false ->
