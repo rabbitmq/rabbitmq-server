@@ -37,9 +37,10 @@
                       client_id,
                       clean_sess,
                       will_msg,
+                      queue_states,
                       channels,
                       connection,
-                      exchange,
+                      exchange :: rabbit_exchange:name(),
                       ssl_login_name,
                       %% Retained messages handler. See rabbit_mqtt_retainer_sup
                       %% and rabbit_mqtt_retainer.

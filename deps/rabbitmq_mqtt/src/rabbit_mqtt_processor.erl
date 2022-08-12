@@ -38,9 +38,9 @@ initial_state(Socket, SSLLoginName, SendFun, PeerAddr) ->
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
                  subscriptions  = #{},
+                 queue_states   = rabbit_queue_type:init(),
                  consumer_tags  = {undefined, undefined},
                  channels       = {undefined, undefined},
-                 exchange       = rabbit_mqtt_util:env(exchange),
                  socket         = Socket,
                  ssl_login_name = SSLLoginName,
                  send_fun       = SendFun,
@@ -121,7 +121,10 @@ process_connect(#mqtt_frame{variable = #mqtt_frame_connect{
                                     Prefetch = rabbit_mqtt_util:env(prefetch),
                                     rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
                                     {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Socket, inbound),
+                                    ExchangeBin = rabbit_mqtt_util:env(exchange),
+                                    ExchangeName = rabbit_misc:r(VHost, exchange, ExchangeBin),
                                     PState1 = PState0#proc_state{
+                                                exchange = ExchangeName,
                                                 will_msg   = make_will_msg(Var),
                                                 clean_sess = CleanSess,
                                                 client_id  = ClientId,
@@ -916,68 +919,84 @@ send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
     end,
     PState #proc_state{ channels = {undefined, undefined} }.
 
-%% TODO amqp_pub/2 is publishing messages asynchronously, using
-%% amqp_channel:cast_flow/3
-%%
-%% It does access check using check_publish/3 before submitting, but
-%% this is superfluous, as actual publishing will do the same
-%% check. While check results cached, it's still some unnecessary
-%% work.
-%%
-%% And the only reason to keep it that way is that it prevents useless
-%% crash messages flooding logs, as there is no code to handle async
-%% channel crash gracefully.
-%%
-%% It'd be better to rework the whole thing, removing performance
-%% penalty and some 50 lines of duplicate code. Maybe unlinking from
-%% channel, and adding it as a child of connection supervisor instead.
-%% But exact details are not yet clear.
 amqp_pub(undefined, PState) ->
     PState;
-
-%% set up a qos1 publishing channel if necessary
-%% this channel will only be used for publishing, not consuming
-amqp_pub(Msg   = #mqtt_msg{ qos = ?QOS_1 },
-         PState = #proc_state{ channels       = {ChQos0, undefined},
-                               awaiting_seqno = undefined,
-                               connection     = Conn }) ->
-    {ok, Channel} = amqp_connection:open_channel(Conn),
-    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Channel, self()),
-    amqp_pub(Msg, PState #proc_state{ channels       = {ChQos0, Channel},
-                                      awaiting_seqno = 1 });
-
-amqp_pub(#mqtt_msg{ qos        = Qos,
-                    topic      = Topic,
-                    dup        = Dup,
-                    message_id = MessageId,
-                    payload    = Payload },
-         PState = #proc_state{ channels       = {ChQos0, ChQos1},
-                               exchange       = Exchange,
-                               unacked_pubs   = UnackedPubs,
-                               awaiting_seqno = SeqNo,
-                               mqtt2amqp_fun  = Mqtt2AmqpFun }) ->
+amqp_pub(#mqtt_msg{qos        = Qos,
+                   topic      = Topic,
+                   dup        = Dup,
+                   message_id = _MessageId, %%TODO track in unacked_pubs for QoS > 0
+                   payload    = Payload},
+         PState = #proc_state{exchange       = ExchangeName,
+                              % unacked_pubs   = UnackedPubs,
+                              % awaiting_seqno = SeqNo,
+                              mqtt2amqp_fun  = Mqtt2AmqpFun}) ->
+    %%TODO: Use message containers
     RoutingKey = Mqtt2AmqpFun(Topic),
-    Method = #'basic.publish'{ exchange    = Exchange,
-                               routing_key = RoutingKey },
+    Confirm = Qos > ?QOS_0,
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
                {<<"x-mqtt-dup">>, bool, Dup}],
-    Msg = #amqp_msg{ props   = #'P_basic'{ headers       = Headers,
-                                           delivery_mode = delivery_mode(Qos)},
-                     payload = Payload },
-    {UnackedPubs1, Ch, SeqNo1} =
-        case Qos =:= ?QOS_1 andalso MessageId =/= undefined of
-            true  -> {gb_trees:enter(SeqNo, MessageId, UnackedPubs), ChQos1,
-                      SeqNo + 1};
-            false -> {UnackedPubs, ChQos0, SeqNo}
-        end,
-    amqp_channel:cast_flow(Ch, Method, Msg),
-    PState #proc_state{ unacked_pubs   = UnackedPubs1,
-                        awaiting_seqno = SeqNo1 }.
+    Props = #'P_basic'{
+               headers = Headers,
+               delivery_mode = delivery_mode(Qos)},
+    {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
+    Content = #content{
+                 class_id = ClassId,
+                 properties = Props,
+                 properties_bin = none,
+                 protocol = none,
+                 payload_fragments_rev = [Payload]
+                },
+    BasicMessage = #basic_message{
+                      exchange_name = ExchangeName,
+                      routing_keys = [RoutingKey],
+                      content = Content,
+                      id = <<>>,
+                      is_persistent = Confirm
+                     },
+    Delivery = #delivery{
+                  mandatory = false,
+                  confirm = Confirm,
+                  sender = self(),
+                  message = BasicMessage,
+                  msg_seq_no = undefined, %%TODO assumes QoS 0
+                  flow = noflow %%TODO enable flow control
+                 },
 
-% set_proto_version(AdapterInfo = #amqp_adapter_info{protocol = {Proto, _}}, Vsn) ->
-%     AdapterInfo#amqp_adapter_info{protocol = {Proto,
-%         human_readable_mqtt_version(Vsn)}}.
+    Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+    QNames = rabbit_exchange:route(Exchange, Delivery),
+    deliver_to_queues(Delivery, QNames, PState).
+
+deliver_to_queues(#delivery{confirm = false},
+                  _RoutedToQueueNames = [],
+                  PState) ->
+    % rabbit_global_counters:messages_unroutable_dropped(mqtt, 1),
+    PState;
+deliver_to_queues(Delivery = #delivery{message    = _Message = #basic_message{exchange_name = _XName},
+                                       confirm    = _Confirm,
+                                       msg_seq_no = _MsgSeqNo},
+                  RoutedToQueueNames,
+                  PState = #proc_state{queue_states = QueueStates0}) ->
+    Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    % QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
+
+    {ok, QueueStates, _Actions} =  rabbit_queue_type:deliver(Qs, Delivery, QueueStates0),
+    % rabbit_global_counters:messages_routed(mqtt, length(Qs)),
+
+    %% NB: the order here is important since basic.returns must be
+    %% sent before confirms.
+    %% TODO: AMQP 0.9.1 mandatory flag corresponds to MQTT 5 PUBACK reason code "No matching subscribers"
+    % ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+    %% TODO allows QoS > 0
+    % State1 = process_routing_confirm(Confirm, QueueNames,
+    %                                  MsgSeqNo, XName, State0),
+
+    %% Actions must be processed after registering confirms as actions may
+    %% contain rejections of publishes
+    %% TODO handle Actions: For example if the messages is rejected, MQTT 5 allows to send a NACK
+    %% back to the client (via PUBACK Reason Code).
+    % State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
+    PState#proc_state{queue_states = QueueStates}.
 
 human_readable_mqtt_version(3) ->
     "3.1.0";
@@ -1042,6 +1061,7 @@ handle_ra_event(Evt, PState) ->
     PState.
 
 check_publish(TopicName, Fn, PState) ->
+  %%TODO check additionally write access to exchange as done in channel?
   case check_topic_access(TopicName, write, PState) of
     ok -> Fn();
     _ -> {error, unauthorized, PState}
@@ -1051,7 +1071,7 @@ check_topic_access(TopicName, Access,
                    #proc_state{
                         auth_state = #auth_state{user = User = #user{username = Username},
                                                  vhost = VHost},
-                        exchange = Exchange,
+                        exchange = #resource{name = ExchangeBin},
                         client_id = ClientId,
                         mqtt2amqp_fun = Mqtt2AmqpFun }) ->
     Cache =
@@ -1060,14 +1080,14 @@ check_topic_access(TopicName, Access,
             Other     -> Other
         end,
 
-    Key = {TopicName, Username, ClientId, VHost, Exchange, Access},
+    Key = {TopicName, Username, ClientId, VHost, ExchangeBin, Access},
     case lists:member(Key, Cache) of
         true ->
             ok;
         false ->
             Resource = #resource{virtual_host = VHost,
                                  kind = topic,
-                                 name = Exchange},
+                                 name = ExchangeBin},
 
             RoutingKey = Mqtt2AmqpFun(TopicName),
             Context = #{routing_key  => RoutingKey,
@@ -1105,7 +1125,7 @@ info(client_id, #proc_state{client_id = Val}) ->
 info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
 info(will_msg, #proc_state{will_msg = Val}) -> Val;
 info(channels, #proc_state{channels = Val}) -> Val;
-info(exchange, #proc_state{exchange = Val}) -> Val;
+info(exchange, #proc_state{exchange = #resource{name = Val}}) -> Val;
 info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
 info(retainer_pid, #proc_state{retainer_pid = Val}) -> Val;
 info(user, #proc_state{auth_state = #auth_state{username = Val}}) -> Val;
