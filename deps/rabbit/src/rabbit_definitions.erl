@@ -849,7 +849,8 @@ list_exchanges() ->
     %% applications
     [exchange_definition(X) || X <- lists:filter(fun(#exchange{internal = true}) -> false;
                                                     (#exchange{name = #resource{name = <<>>}}) -> false;
-                                                    (X) -> not rabbit_exchange:is_amq_prefixed(X)
+                                                    (#exchange{name = #resource{name = <<"amq.", _Rest/binary>>}}) -> false;
+                                                    (_) -> true
                                                  end,
                                                  rabbit_exchange:list())].
 
