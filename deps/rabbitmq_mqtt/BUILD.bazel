@@ -48,12 +48,9 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/amqp_client:erlang_app",
     "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
     "@ra//:erlang_app",
     "@ranch//:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
 ]
 
 rabbitmq_app(
@@ -63,7 +60,6 @@ rabbitmq_app(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
 

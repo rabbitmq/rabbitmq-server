@@ -14,7 +14,8 @@
          init/1,
          apply/3,
          state_enter/2,
-         notify_connection/2]).
+         notify_connection/2,
+         overview/1]).
 
 -type state() :: #machine_state{}.
 
@@ -177,6 +178,12 @@ state_enter(leader, State) ->
     [{monitor, process, Pid} || Pid <- all_pids(State)];
 state_enter(_, _) ->
     [].
+
+-spec overview(state()) -> map().
+overview(#machine_state{client_ids = ClientIds,
+                        pids = Pids}) ->
+    #{num_client_ids => maps:size(ClientIds),
+      num_pids => maps:size(Pids)}.
 
 %% ==========================
 

@@ -118,6 +118,10 @@ handle_cast({close_connection, Reason},
                                   [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
     {stop, {shutdown, server_initiated_close}, State};
 
+handle_cast(QueueEvent = {queue_event, _, _},
+            State = #state{proc_state = PState}) ->
+    callback_reply(State, rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState));
+
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
@@ -250,11 +254,16 @@ handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), hibernate};
 
 handle_info({ra_event, _From, Evt},
-            #state{proc_state = PState} = State) ->
+            #state{proc_state = PState0} = State) ->
     %% handle applied event to ensure registration command actually got applied
     %% handle not_leader notification in case we send the command to a non-leader
-    PState1 = rabbit_mqtt_processor:handle_ra_event(Evt, PState),
-    {noreply, State#state{proc_state = PState1}, hibernate};
+    PState = rabbit_mqtt_processor:handle_ra_event(Evt, PState0),
+    {noreply, pstate(State, PState), hibernate};
+
+handle_info({'DOWN', _MRef, process, _Pid, _Reason} = Evt,
+            #state{proc_state = PState0} = State) ->
+    PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
+    {noreply, pstate(State, PState), hibernate};
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.

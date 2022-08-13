@@ -69,14 +69,15 @@
 -record(mqtt_frame_publish,  {topic_name,
                               message_id}).
 
+-record(mqtt_topic,          {name,
+                              qos}).
+
 -record(mqtt_frame_subscribe,{message_id,
-                              topic_table}).
+                              topic_table :: nonempty_list(#mqtt_topic{})
+                             }).
 
 -record(mqtt_frame_suback,   {message_id,
                               qos_table = []}).
-
--record(mqtt_topic,          {name,
-                              qos}).
 
 -record(mqtt_frame_other,    {other}).
 
