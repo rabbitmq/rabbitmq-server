@@ -42,21 +42,25 @@ id(Node, Name) -> {Node, Name}.
 -spec count_tracked_items_ets(atom(), term(), string()) ->
     non_neg_integer().
 count_tracked_items_ets(Tab, Key, ContextMsg) ->
-    lists:foldl(fun (Node, Acc) when Node == node() ->
-                        N = count_tracked_items_local(Tab, Key),
-                        Acc + N;
-                    (Node, Acc) ->
-                        N = case rabbit_misc:rpc_call(Node, ?MODULE, count_tracked_items_local,
-                                                      [Tab, Key]) of
-                                Int when is_integer(Int) -> Int;
-                                {badrpc, Err} ->
-                                    rabbit_log:error(
-                                      "Failed to fetch number of ~p ~p on node ~p:~n~p",
-                                      [ContextMsg, Key, Node, Err]),
-                                    0
-                            end,
-                        Acc + N
-                end, 0, rabbit_nodes:all_running()).
+    Nodes = rabbit_nodes:all_running(),
+    ResL = erpc:multicall(Nodes,
+                          ?MODULE, count_tracked_items_local, [Tab, Key]),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Key, 0).
+
+sum_rpc_multicall_result([{ok, Int}|ResL], [_N|Nodes], ContextMsg, Key, Acc) when is_integer(Int) ->
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Key, Acc + Int);
+sum_rpc_multicall_result([{ok, BadValue}|ResL], [BadNode|Nodes], ContextMsg, Key, Acc) ->
+    rabbit_log:error(
+      "Failed to fetch number of ~p ~p on node ~p:~n not an integer ~p",
+      [ContextMsg, Key, BadNode, BadValue]),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Key, Acc);
+sum_rpc_multicall_result([{Class, Reason}|ResL], [BadNode|Nodes], ContextMsg, Key, Acc) ->
+    rabbit_log:error(
+      "Failed to fetch number of ~p ~p on node ~p:~n~p:~p",
+      [ContextMsg, Key, BadNode, Class, Reason]),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Key, Acc);
+sum_rpc_multicall_result([], [], _, _, Acc) ->
+    Acc.
 
 count_tracked_items_local(Tab, Key) ->
     case ets:lookup(Tab, Key) of
