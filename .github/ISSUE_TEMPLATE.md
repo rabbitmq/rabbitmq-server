@@ -14,7 +14,7 @@ cause analysis and so on.
 Please take the time to read the CONTRIBUTING.md document for instructions on
 how to effectively ask a question or report a suspected issue:
 
-https://github.com/rabbitmq/rabbitmq-server/blob/master/CONTRIBUTING.md#github-issues
+https://github.com/rabbitmq/rabbitmq-server/blob/main/CONTRIBUTING.md#github-issues
 
 Following these rules **will save time** for both you and RabbitMQ's maintainers.
 

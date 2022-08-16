@@ -2,7 +2,7 @@ name: Test Mixed Version Clusters
 on:
   push:
     branches:
-      - master
+      - main
       - v3.11.x
       - v3.10.x
       - v3.9.x
