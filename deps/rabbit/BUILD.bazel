@@ -13,23 +13,9 @@ load(
 )
 load(":bats.bzl", "bats")
 
-exports_files([
-    "scripts/rabbitmq-defaults",
-    "scripts/rabbitmq-defaults.bat",
-    "scripts/rabbitmq-diagnostics",
-    "scripts/rabbitmq-diagnostics.bat",
-    "scripts/rabbitmq-env",
-    "scripts/rabbitmq-env.bat",
-    "scripts/rabbitmq-plugins",
-    "scripts/rabbitmq-plugins.bat",
-    "scripts/rabbitmq-queues",
-    "scripts/rabbitmq-queues.bat",
-    "scripts/rabbitmq-server",
-    "scripts/rabbitmq-server.bat",
-    "scripts/rabbitmqctl",
-    "scripts/rabbitmqctl.bat",
-    "INSTALL",
-])
+exports_files(glob([
+    "scripts/**",
+]) + ["INSTALL"])
 
 _APP_ENV = """[
 	    {tcp_listeners, [5672]},
