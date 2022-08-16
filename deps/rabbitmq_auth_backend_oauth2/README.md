@@ -322,11 +322,12 @@ refuse all operations (but it won't disconnect).
 
 ## Rich Authorization Request
 
-The [Rich Authorization Request](https://oauth.net/2/rich-authorization-requests/) extension provides a way for OAuth clients to request fine-grained permissions during an authorization request. It moves away from the concept of Scopes and instead
-define a rich permission model.
+The [Rich Authorization Request](https://oauth.net/2/rich-authorization-requests/) extension provides a way for
+OAuth clients to request fine-grained permissions during an authorization request.
+It moves away from the concept of scopes that are text labels and instead
+defines a more sophisticated permission model.
 
-RabbitMQ supports JWT tokens compliant with this specification. Here is a sample JWT token where we have stripped out
-all the other attributes and left only the relevant ones for this specification:
+RabbitMQ supports JWT tokens compliant with the extension. Below is a sample example section of JWT token:
 
 ```
 {
