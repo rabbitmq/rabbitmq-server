@@ -9,8 +9,8 @@ http_archive(
 
 http_archive(
     name = "rabbitmq-server",
-    strip_prefix = "rabbitmq-server-master",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/archive/master.zip"],
+    strip_prefix = "rabbitmq-server-main",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/archive/main.zip"],
 )
 
 load("@rabbitmq-server//:workspace_helpers.bzl", "rabbitmq_external_deps")

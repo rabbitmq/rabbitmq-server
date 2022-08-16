@@ -2,7 +2,7 @@ load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
     app_name = "rabbitmq_ct_helpers",
-    app_version = "master",
+    app_version = "main",
     extra_priv = [
         "tools/tls-certs/Makefile",
         "tools/tls-certs/openssl.cnf.in",

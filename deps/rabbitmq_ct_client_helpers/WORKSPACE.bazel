@@ -9,14 +9,14 @@ http_archive(
 
 http_archive(
     name = "rabbitmq-server",
-    strip_prefix = "rabbitmq-server-master",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/archive/master.zip"],
+    strip_prefix = "rabbitmq-server-main",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/archive/main.zip"],
 )
 
 http_archive(
     name = "rabbitmq_ct_helpers",
-    strip_prefix = "rabbitmq-ct-helpers-master",
-    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/master.zip"],
+    strip_prefix = "rabbitmq-ct-helpers-main",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/main.zip"],
 )
 
 load("@rabbitmq-server//:workspace_helpers.bzl", "rabbitmq_external_deps")
