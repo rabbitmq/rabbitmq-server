@@ -7,7 +7,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/amqp10_client"}
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/amqp10_client"}
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
@@ -20,7 +20,7 @@ define HEX_TARBALL_EXTRA_METADATA
 	licenses => [<<"MPL-2.0">>],
 	links => #{
 		<<"Website">> => <<"https://www.rabbitmq.com">>,
-		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/deps/amqp10_client">>
+		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/amqp10_client">>
 	}
 }
 endef
