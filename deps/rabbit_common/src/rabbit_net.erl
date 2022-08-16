@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_net).
--include("rabbit.hrl").
 
 -include_lib("kernel/include/inet.hrl").
 -include_lib("kernel/include/net_address.hrl").
@@ -351,19 +350,24 @@ dist_info({Node, Info}, TcpInetPorts) ->
     end.
 
 dist_info(Node, TcpInetPorts, DistPid, PeerAddrArg) ->
-    [DistPort] = [P || P <- TcpInetPorts,
-                       inet:peername(P) =:= {ok, PeerAddrArg}],
-    S = case {socket_ends(DistPort, inbound), getstat(DistPort, [recv_oct, send_oct])} of
-            {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
-                PeerAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(PeerAddr)),
-                SockAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(SockAddr)),
-                [{peer_addr, PeerAddrBin},
-                 {peer_port, PeerPort},
-                 {sock_addr, SockAddrBin},
-                 {sock_port, SockPort},
-                 {recv_bytes, rabbit_misc:pget(recv_oct, Stats)},
-                 {send_bytes, rabbit_misc:pget(send_oct, Stats)}];
-            _ ->
-                []
-        end,
-    {Node, DistPid, S}.
+    case [P || P <- TcpInetPorts, inet:peername(P) =:= {ok, PeerAddrArg}] of
+        [] ->
+            % Note: sometimes the port closes before we get here and thus can't get stats
+            % See rabbitmq/rabbitmq-server#5490
+            {Node, DistPid, []};
+        [DistPort] ->
+            S = case {socket_ends(DistPort, inbound), getstat(DistPort, [recv_oct, send_oct])} of
+                    {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
+                        PeerAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(PeerAddr)),
+                        SockAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(SockAddr)),
+                        [{peer_addr, PeerAddrBin},
+                         {peer_port, PeerPort},
+                         {sock_addr, SockAddrBin},
+                         {sock_port, SockPort},
+                         {recv_bytes, rabbit_misc:pget(recv_oct, Stats)},
+                         {send_bytes, rabbit_misc:pget(send_oct, Stats)}];
+                    _ ->
+                        []
+                end,
+            {Node, DistPid, S}
+    end.
