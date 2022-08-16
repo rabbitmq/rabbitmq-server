@@ -15,7 +15,7 @@ pull_request_rules:
           - make
   - name: Automatically backport to v3.11.x based on label
     conditions:
-      - base=master
+      - base=main
       - label=backport-v3.11.x
       - label!=backport-v3.10.x
       - label!=backport-v3.9.x
@@ -28,7 +28,7 @@ pull_request_rules:
           - "{{ author }}"
   - name: Automatically backport to v3.11.x & v3.10.x based on label
     conditions:
-      - base=master
+      - base=main
       - label=backport-v3.11.x
       - label=backport-v3.10.x
       - label!=backport-v3.9.x
@@ -43,7 +43,7 @@ pull_request_rules:
           - "{{ author }}"
   - name: Automatically backport to v3.11.x, v3.10.x & v3.9.x based on labels
     conditions:
-      - base=master
+      - base=main
       - label=backport-v3.11.x
       - label=backport-v3.10.x
       - label=backport-v3.9.x
@@ -59,7 +59,7 @@ pull_request_rules:
           - "{{ author }}"
   - name: Automatically backport to v3.11.x, v3.10.x, v3.9.x & v3.8.x based on labels
     conditions:
-      - base=master
+      - base=main
       - label=backport-v3.11.x
       - label=backport-v3.10.x
       - label=backport-v3.9.x

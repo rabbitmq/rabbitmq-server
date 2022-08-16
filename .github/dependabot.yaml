@@ -5,7 +5,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    target-branch: "master"
+    target-branch: "main"
     labels:
       - backport-v3.11.x
       - backport-v3.10.x
