@@ -160,11 +160,11 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "prometheus",
-        version = "4.8.2",
+        version = "4.9.0",
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
-        sha256 = "c3abd6521e52cec4f0d8eca603cf214dfc84d8a27aa85946639f1424b8554d98",
+        sha256 = "026bd40f952c3ffc45aa6a0673602f800ff219a81c63b1c4683d2b7d8a780c2b",
     )
 
     github_erlang_app(
