@@ -1667,9 +1667,7 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
     %% Arguments are split into a list of strings to support a filename with
     %% whitespaces in the path.
     Marker = vars_list_marker(),
-    Script = [ConfEnvFile, "&&",
-              "echo", Marker, "&&",
-              "set"],
+    ConfEnvFileNoQuotes = string:trim(ConfEnvFile, both, "\"'"),
 
     #{rabbitmq_base := RabbitmqBase,
       rabbitmq_home := RabbitmqHome} = Context,
@@ -1689,7 +1687,7 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
            {"CONF_ENV_FILE_PHASE", "rabbtimq-prelaunch"}
           ],
 
-    Args = ["/Q", "/C" | Script],
+    Args = ["/Q", "/C", ConfEnvFileNoQuotes, "&&", "echo", Marker, "&&", "set"],
     Opts = [{args, Args},
             {env, Env},
             hide,
@@ -1700,8 +1698,11 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
     collect_conf_env_file_output(Context, Port, "\"" ++ Marker ++ "\" ", <<>>).
 
 vars_list_marker() ->
+    % Note:
+    % The following can't have any spaces in the text or it will not work on
+    % win32. See rabbitmq/rabbitmq-server#5471
     rabbit_misc:format(
-      "-----BEGIN VARS LIST FOR PID ~s-----", [os:getpid()]).
+      "-----VARS-PID-~s-----", [os:getpid()]).
 
 collect_conf_env_file_output(Context, Port, Marker, Output) ->
     receive
