@@ -78,8 +78,8 @@ stop_and_delete_vhost(VHost) ->
             case is_process_alive(WrapperPid) of
                 false -> ok;
                 true  ->
-                    rabbit_log:info("Stopping vhost supervisor ~p"
-                                    " for vhost '~s'",
+                    rabbit_log:info("Stopping vhost supervisor ~tp"
+                                    " for vhost '~ts'",
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->
@@ -100,9 +100,9 @@ stop_and_delete_vhost(VHost, Node) ->
     case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, stop_and_delete_vhost, [VHost]) of
         ok -> ok;
         {badrpc, RpcErr} ->
-            rabbit_log:error("Failed to stop and delete a vhost ~p"
-                             " on node ~p."
-                             " Reason: ~p",
+            rabbit_log:error("Failed to stop and delete a vhost ~tp"
+                             " on node ~tp."
+                             " Reason: ~tp",
                              [VHost, Node, RpcErr]),
             {error, RpcErr}
     end.
@@ -113,7 +113,7 @@ init_vhost(VHost) ->
         {ok, _} -> ok;
         {error, {already_started, _}} ->
             rabbit_log:warning(
-                "Attempting to start an already started vhost '~s'.",
+                "Attempting to start an already started vhost '~ts'.",
                 [VHost]),
             ok;
         {error, {no_such_vhost, VHost}} ->
@@ -122,15 +122,15 @@ init_vhost(VHost) ->
             case vhost_restart_strategy() of
                 permanent ->
                     rabbit_log:error(
-                        "Unable to initialize vhost data store for vhost '~s'."
-                        " Reason: ~p",
+                        "Unable to initialize vhost data store for vhost '~ts'."
+                        " Reason: ~tp",
                         [VHost, Reason]),
                     throw({error, Reason});
                 transient ->
                     rabbit_log:warning(
-                        "Unable to initialize vhost data store for vhost '~s'."
+                        "Unable to initialize vhost data store for vhost '~ts'."
                         " The vhost will be stopped for this node. "
-                        " Reason: ~p",
+                        " Reason: ~tp",
                         [VHost, Reason]),
                     ok
             end

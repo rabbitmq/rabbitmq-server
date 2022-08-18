@@ -25,7 +25,7 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} = E ->
-            rabbit_log:error("Failed to start a message store for vhost ~s: vhost no longer exists!",
+            rabbit_log:error("Failed to start a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
             E
     end.
@@ -37,7 +37,7 @@ stop(VHost, Type) ->
             ok = supervisor2:delete_child(VHostSup, Type);
         %% see start/4
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to stop a message store for vhost ~s: vhost no longer exists!",
+            rabbit_log:error("Failed to stop a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
 
             ok

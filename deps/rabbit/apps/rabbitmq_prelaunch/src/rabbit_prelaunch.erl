@@ -206,7 +206,7 @@ shutdown_func(Reason) ->
     end.
 
 write_pid_file(#{pid_file := PidFile}) ->
-    ?LOG_DEBUG("Writing PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Writing PID file: ~ts", [PidFile]),
     case filelib:ensure_dir(PidFile) of
         ok ->
             OSPid = os:getpid(),
@@ -215,13 +215,13 @@ write_pid_file(#{pid_file := PidFile}) ->
                     ok;
                 {error, Reason} = Error ->
                     ?LOG_WARNING(
-                      "Failed to write PID file \"~s\": ~s",
+                      "Failed to write PID file \"~ts\": ~ts",
                       [PidFile, file:format_error(Reason)]),
                     Error
             end;
         {error, Reason} = Error ->
             ?LOG_WARNING(
-              "Failed to create PID file \"~s\" directory: ~s",
+              "Failed to create PID file \"~ts\" directory: ~ts",
               [PidFile, file:format_error(Reason)]),
             Error
     end;
@@ -229,10 +229,10 @@ write_pid_file(_) ->
     ok.
 
 remove_pid_file(#{pid_file := PidFile, keep_pid_file_on_exit := true}) ->
-    ?LOG_DEBUG("Keeping PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Keeping PID file: ~ts", [PidFile]),
     ok;
 remove_pid_file(#{pid_file := PidFile}) ->
-    ?LOG_DEBUG("Deleting PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Deleting PID file: ~ts", [PidFile]),
     _ = file:delete(PidFile),
     ok;
 remove_pid_file(_) ->

@@ -521,7 +521,7 @@ configure_logger(Context) ->
     %% IDs are assigned to handlers.
     Handlers = create_logger_handlers_conf(LogConfig4),
     ?LOG_DEBUG(
-       "Logging: logger handlers:~n  ~p", [Handlers],
+       "Logging: logger handlers:~n  ~tp", [Handlers],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     %% We can now install the new handlers. The function takes care of

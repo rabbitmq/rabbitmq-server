@@ -141,8 +141,8 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
         false ->
             rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
-                "access to vhost '~s' refused for user '~s': "
-                "vhost '~s' is down",
+                "access to vhost '~ts' refused for user '~s': "
+                "vhost '~ts' is down",
                 [Pid, VHost, PrintedUsername, VHost]),
             false
     end.
@@ -157,7 +157,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
         {true, Limit} ->
             rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
-                "access to vhost '~s' refused for user '~s': "
+                "access to vhost '~ts' refused for user '~s': "
                 "vhost connection limit (~p) is reached",
                 [Pid, VHost, PrintedUsername, Limit]),
             true
@@ -165,7 +165,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
         throw:{error, {no_such_vhost, VHost}} ->
             rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
-                "vhost ~s not found", [Pid, VHost]),
+                "vhost ~ts not found", [Pid, VHost]),
             true
     end.
 
