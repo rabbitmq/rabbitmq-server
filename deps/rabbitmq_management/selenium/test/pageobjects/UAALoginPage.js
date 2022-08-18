@@ -6,10 +6,10 @@ const FORM = By.css('form');
 const USERNAME = By.css('input[name="username"]')
 const PASSWORD = By.css('input[name="password"]')
 
-module.exports = class UAAHomePage extends BasePage {
+module.exports = class UAALoginPage extends BasePage {
 
   async isLoaded () {
-    return this.waitForDisplayed(FORM)    
+    return this.waitForDisplayed(FORM)
   }
   async login(username, password) {
     await this.isLoaded();
