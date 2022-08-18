@@ -714,7 +714,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
             put({ch_fr_pid, ChFrPid}, {channel, Channel}),
             rabbit_log_connection:info(
                         "AMQP 1.0 connection ~p: "
-                        "user '~s' authenticated and granted access to vhost '~s'",
+                        "user '~s' authenticated and granted access to vhost '~ts'",
                         [self(), User#user.username, vhost(Hostname)]),
             ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
         {error, {not_allowed, _}} ->

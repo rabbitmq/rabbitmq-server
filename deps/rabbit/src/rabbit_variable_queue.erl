@@ -522,7 +522,7 @@ stop(VHost) ->
     ok = rabbit_classic_queue_index_v2:stop(VHost).
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
-    rabbit_log:info("Starting message stores for vhost '~s'", [VHost]),
+    rabbit_log:info("Starting message stores for vhost '~ts'", [VHost]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
     ok.
@@ -530,13 +530,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
 do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
-            rabbit_log:info("Started message store of type ~s for vhost '~s'", [abbreviated_type(Type), VHost]);
+            rabbit_log:info("Started message store of type ~s for vhost '~ts'", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!",
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~ts': the vhost no longer exists!",
                              [Type, VHost]),
             exit(Err);
         {error, Error} ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p",
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~ts': ~p",
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
@@ -1168,7 +1168,7 @@ convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
                                          store_state = V2Store0 }) ->
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_queue_index:init_args(V1Index),
     #resource{virtual_host = VHost, name = QName} = QueueName,
-    rabbit_log:info("Converting running queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    rabbit_log:info("Converting running queue ~ts in vhost ~ts from v1 to v2", [QName, VHost]),
     State = convert_from_v1_to_v2_in_memory(State0),
     V2Index0 = rabbit_classic_queue_index_v2:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     %% We do not need to init the v2 per-queue store because we already did so in the queue init.
@@ -1181,7 +1181,7 @@ convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
                                                     fun (_, FunState) -> {write, FunState} end),
     %% We have already deleted segments files but not the journal.
     rabbit_queue_index:delete_journal(V1Index),
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
+    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
                     [QName, VHost, counters:get(CountersRef, ?CONVERT_COUNT)]),
     State#vqstate{ index_mod   = rabbit_classic_queue_index_v2,
                    index_state = V2Index,
@@ -1291,7 +1291,7 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v1 to v2",
+    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b messages from v1 to v2",
                     [Name, VHost, length(Messages)]),
     convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId, SkipFun).
 
@@ -1302,7 +1302,7 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
                                          index_state = V2Index }) ->
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
     #resource{virtual_host = VHost, name = QName} = QueueName,
-    rabbit_log:info("Converting running queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
+    rabbit_log:info("Converting running queue ~ts in vhost ~ts from v2 to v1", [QName, VHost]),
     State = convert_from_v2_to_v1_in_memory(State0),
     %% We may have read from the per-queue store state and opened FDs.
     #vqstate{ store_state = V2Store0 } = State,
@@ -1314,7 +1314,7 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
                                                     LoSeqId, HiSeqId,
                                                     %% Write all messages.
                                                     fun (_, FunState) -> {write, FunState} end),
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v2 to v1",
+    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b total messages from v2 to v1",
                     [QName, VHost, counters:get(CountersRef, ?CONVERT_COUNT)]),
     %% We have already closed the v2 index/store FDs when deleting the files.
     State#vqstate{ index_mod   = rabbit_queue_index,
@@ -1459,7 +1459,7 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0,
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v2 to v1",
+    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b messages from v2 to v1",
                     [Name, VHost, length(Messages)]),
     convert_from_v2_to_v1_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId, SkipFun).
 
@@ -3470,7 +3470,7 @@ migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
                RecoveryTerm},
               OldStore, NewStore) ->
     log_upgrade_verbose(
-        "Migrating messages in queue ~s in vhost ~s to per-vhost message store",
+        "Migrating messages in queue ~ts in vhost ~ts to per-vhost message store",
         [Name, VHost]),
     OldStoreClient = get_global_store_client(OldStore),
     NewStoreClient = get_per_vhost_store_client(QueueName, NewStore),
@@ -3498,7 +3498,7 @@ migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
                                                {persistent_ref, NewClientRef}),
             rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm)
     end,
-    log_upgrade_verbose("Finished migrating queue ~s in vhost ~s", [Name, VHost]),
+    log_upgrade_verbose("Finished migrating queue ~ts in vhost ~ts", [Name, VHost]),
     {QueueName, NewClientRef}.
 
 migrate_message(MsgId, OldC, NewC) ->

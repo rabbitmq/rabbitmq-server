@@ -357,11 +357,11 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
             %% connection was closed cleanly by the client
             #v1{connection = #connection{user  = #user{username = Username},
                                          vhost = VHost}} ->
-                rabbit_log_connection:info("closing AMQP connection ~p (~s, vhost: '~s', user: '~s')",
+                rabbit_log_connection:info("closing AMQP connection ~p (~ts, vhost: '~ts', user: '~ts')",
                     [self(), dynamic_connection_name(Name), VHost, Username]);
             %% just to be more defensive
             _ ->
-                rabbit_log_connection:info("closing AMQP connection ~p (~s)",
+                rabbit_log_connection:info("closing AMQP connection ~p (~ts)",
                     [self(), dynamic_connection_name(Name)])
             end
     catch
@@ -417,7 +417,7 @@ log_connection_exception(Severity, Name, {connection_closed_abruptly,
                                           #v1{connection = #connection{user  = #user{username = Username},
                                                                        vhost = VHost}}}) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection",
+        "closing AMQP connection ~p (~ts, vhost: '~ts', user: '~ts'):~nclient unexpectedly closed TCP connection",
         [self(), Name, VHost, Username]);
 %% when client abruptly closes connection before connection.open/authentication/authorization
 %% succeeded, don't log username and vhost as 'none'
@@ -746,8 +746,8 @@ wait_for_channel_termination(N, TimerRef,
                     wait_for_channel_termination(N-1, TimerRef, State1);
                 {_, uncontrolled} ->
                     rabbit_log_connection:error(
-                        "Error on AMQP connection ~p (~s, vhost: '~s',"
-                        " user: '~s', state: ~p), channel ~p:"
+                        "Error on AMQP connection ~p (~ts, vhost: '~ts',"
+                        " user: '~ts', state: ~tp), channel ~p:"
                         "error while terminating:~n~p",
                         [self(), ConnName, VHost, User#user.username,
                          CS, Channel, Reason]),
@@ -788,8 +788,8 @@ log_hard_error(#v1{connection_state = CS,
                                    user  = User,
                                    vhost = VHost}}, Channel, Reason) ->
     rabbit_log_connection:error(
-        "Error on AMQP connection ~p (~s, vhost: '~s',"
-        " user: '~s', state: ~p), channel ~p:~n ~s",
+        "Error on AMQP connection ~p (~s, vhost: '~ts',"
+        " user: '~ts', state: ~tp), channel ~tp:~n ~ts",
         [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
@@ -1248,7 +1248,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     maybe_emit_stats(State1),
     rabbit_log_connection:info(
         "connection ~p (~s): "
-        "user '~s' authenticated and granted access to vhost '~s'",
+        "user '~s' authenticated and granted access to vhost '~ts'",
         [self(), dynamic_connection_name(ConnName), Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
@@ -1315,8 +1315,8 @@ is_vhost_alive(VHostPath, User) ->
         true  -> ok;
         false ->
             rabbit_misc:protocol_error(internal_error,
-                            "access to vhost '~s' refused for user '~s': "
-                            "vhost '~s' is down",
+                            "access to vhost '~ts' refused for user '~s': "
+                            "vhost '~ts' is down",
                             [VHostPath, User#user.username, VHostPath])
     end.
 
@@ -1324,12 +1324,12 @@ is_over_vhost_connection_limit(VHostPath, User) ->
     try rabbit_vhost_limit:is_over_connection_limit(VHostPath) of
         false         -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
-                            "access to vhost '~s' refused for user '~s': "
+                            "access to vhost '~ts' refused for user '~s': "
                             "connection limit (~p) is reached",
                             [VHostPath, User#user.username, Limit])
     catch
         throw:{error, {no_such_vhost, VHostPath}} ->
-            rabbit_misc:protocol_error(not_allowed, "vhost ~s not found", [VHostPath])
+            rabbit_misc:protocol_error(not_allowed, "vhost ~ts not found", [VHostPath])
     end.
 
 is_over_user_connection_limit(#user{username = Username}) ->

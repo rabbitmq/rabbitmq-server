@@ -52,7 +52,7 @@ recover() ->
 
 recover(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists",
+    rabbit_log:info("Making sure data directory '~ts' for vhost '~ts' exists",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
@@ -64,7 +64,7 @@ recover(VHost) ->
     {Time, ok} = timer:tc(fun() ->
                                   rabbit_binding:recover(rabbit_exchange:recover(VHost), QNames)
                           end),
-    rabbit_log:debug("rabbit_binding:recover/2 for vhost ~s completed in ~fs", [VHost, Time/1000000]),
+    rabbit_log:debug("rabbit_binding:recover/2 for vhost ~ts completed in ~fs", [VHost, Time/1000000]),
 
     ok = rabbit_amqqueue:start(Recovered),
     %% Start queue mirrors.
@@ -95,7 +95,7 @@ ensure_config_file(VHost) ->
                 _ ->
                     ?LEGACY_INDEX_SEGMENT_ENTRY_COUNT
             end,
-            rabbit_log:info("Setting segment_entry_count for vhost '~s' with ~b queues to '~b'",
+            rabbit_log:info("Setting segment_entry_count for vhost '~ts' with ~b queues to '~b'",
                             [VHost, length(QueueDirs), SegmentEntryCount]),
             file:write_file(Path, io_lib:format(
                 "%% This file is auto-generated! Edit at your own risk!~n"
@@ -124,8 +124,8 @@ parse_tags(<<"">>) ->
 parse_tags([]) ->
     [];
 parse_tags(Val) when is_binary(Val) ->
-    SVal = rabbit_data_coercion:to_list(Val),
-    [trim_tag(Tag) || Tag <- re:split(SVal, ",", [{return, list}])];
+    ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
+    [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])];
 parse_tags(Val) when is_list(Val) ->
     case hd(Val) of
       Bin when is_binary(Bin) ->
@@ -136,7 +136,8 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- Val];
       Int when is_integer(Int) ->
         %% this is a string/charlist
-        [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
+        ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
+        [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
     end.
 
 -spec default_limits(vhost:name()) -> proplists:proplist().
@@ -198,9 +199,9 @@ do_add(Name, Metadata, ActingUser) ->
 
     case Description of
         undefined ->
-            rabbit_log:info("Adding vhost '~s' without a description", [Name]);
+            rabbit_log:info("Adding vhost '~ts' without a description", [Name]);
         Description ->
-            rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)",
+            rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
     DefaultLimits = default_limits(Name),
@@ -227,7 +228,7 @@ do_add(Name, Metadata, ActingUser) ->
                   end,
                   [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-                    rabbit_log:debug("Will declare an exchange ~p", [Resource]),
+                    rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
                     _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
                   end || {ExchangeName, Type, Internal} <-
                           [{<<"">>,                   direct,  false},
@@ -249,7 +250,7 @@ do_add(Name, Metadata, ActingUser) ->
                                     {tags, Tags}]),
             ok;
         {error, Reason} ->
-            Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
+            Msg = rabbit_misc:format("failed to set up vhost '~ts': ~tp",
                                      [Name, Reason]),
             {error, Msg}
     end.
@@ -263,7 +264,7 @@ update(Name, Description, Tags, ActingUser) ->
                           {error, {no_such_vhost, Name}};
                       [VHost0] ->
                           VHost = vhost:merge_metadata(VHost0, #{description => Description, tags => Tags}),
-                          rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
+                          rabbit_log:debug("Updating a virtual host record ~tp", [VHost]),
                           ok = mnesia:write(rabbit_vhost, VHost, write),
                           rabbit_event:notify(vhost_updated, info(VHost)
                                 ++ [{user_who_performed_action, ActingUser},
@@ -282,7 +283,7 @@ delete(VHost, ActingUser) ->
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~s'", [VHost]),
+    rabbit_log:info("Deleting vhost '~ts'", [VHost]),
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
     rabbit_misc:execute_mnesia_transaction(
           with(VHost, fun () -> clear_permissions(VHost, ActingUser) end)),
@@ -318,7 +319,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
       Other       -> Other
     end,
     ParsedTags = parse_tags(Tags),
-    rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
+    rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, Username);
@@ -415,16 +416,16 @@ vhost_down(VHost) ->
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'", [VHost, VhostDir]),
+    rabbit_log:info("Deleting message store directory for vhost '~ts' at '~ts'", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
     case rabbit_file:recursive_delete([VhostDir]) of
         ok                   -> ok;
         {error, {_, enoent}} ->
             %% a concurrent delete did the job for us
-            rabbit_log:warning("Tried to delete storage directories for vhost '~s', it failed with an ENOENT", [VHost]),
+            rabbit_log:warning("Tried to delete storage directories for vhost '~ts', it failed with an ENOENT", [VHost]),
             ok;
         Other                ->
-            rabbit_log:warning("Tried to delete storage directories for vhost '~s': ~p", [VHost, Other]),
+            rabbit_log:warning("Tried to delete storage directories for vhost '~ts': ~tp", [VHost, Other]),
             Other
     end.
 
@@ -541,20 +542,20 @@ update_tags(VHostName, Tags, ActingUser) ->
         R = rabbit_misc:execute_mnesia_transaction(fun() ->
             update_tags(VHostName, ConvertedTags)
         end),
-        rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
+        rabbit_log:info("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
         rabbit_event:notify(vhost_tags_set, [{name, VHostName},
                                              {tags, ConvertedTags},
                                              {user_who_performed_action, ActingUser}]),
         R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': the virtual host does not exist", [VHostName]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': the virtual host does not exist", [VHostName]),
             throw(Error);
         throw:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             throw(Error);
         exit:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             exit(Error)
     end.
 
@@ -605,8 +606,13 @@ config_file_path(VHost) ->
     filename:join(VHostDir, ".config").
 
 -spec trim_tag(list() | binary() | atom()) -> atom().
-trim_tag(Val) ->
-    rabbit_data_coercion:to_atom(string:trim(rabbit_data_coercion:to_list(Val))).
+trim_tag(Val) when is_atom(Val) ->
+    trim_tag(rabbit_data_coercion:to_binary(Val));
+trim_tag(Val) when is_list(Val) ->
+    trim_tag(rabbit_data_coercion:to_utf8_binary(Val));
+trim_tag(Val) when is_binary(Val) ->
+    ValTrimmed = string:trim(Val),
+    rabbit_data_coercion:to_atom(ValTrimmed).
 
 %%----------------------------------------------------------------------------
 
@@ -620,7 +626,7 @@ i(tags, VHost) -> vhost:get_tags(VHost);
 i(default_queue_type, VHost) -> vhost:get_default_queue_type(VHost);
 i(metadata, VHost) -> vhost:get_metadata(VHost);
 i(Item, VHost)     ->
-  rabbit_log:error("Don't know how to compute a virtual host info item '~s' for virtual host '~p'", [Item, VHost]),
+  rabbit_log:error("Don't know how to compute a virtual host info item '~ts' for virtual host '~tp'", [Item, VHost]),
   throw({bad_argument, Item}).
 
 -spec info(vhost:vhost() | vhost:name()) -> rabbit_types:infos().

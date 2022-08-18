@@ -163,7 +163,7 @@ check_vhost_access(User = #user{username       = Username,
                             Mod:check_vhost_access(
                               auth_user(User, Impl), VHostPath, FullAuthzContext)
                 end,
-                Mod, "access to vhost '~s' refused for user '~s'",
+                Mod, "access to vhost '~ts' refused for user '~s'",
                 [VHostPath, Username], not_allowed);
          (_, Else) ->
               Else

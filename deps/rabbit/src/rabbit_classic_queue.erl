@@ -96,14 +96,14 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
             #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q1),
             case IfEmpty of
                 true ->
-                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
+                    rabbit_log:error("Queue ~s in vhost ~ts has its master node down and "
                                      "no mirrors available or eligible for promotion. "
                                      "The queue may be non-empty. "
                                      "Refusing to force-delete.",
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
-                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
+                    rabbit_log:warning("Queue ~s in vhost ~ts has its master node is down and "
                                        "no mirrors available or eligible for promotion. "
                                        "Forcing queue deletion.",
                                        [Name, Vhost]),
@@ -141,7 +141,7 @@ recover(VHost, Queues) ->
                                  not lists:member(amqqueue:get_name(Q), RecoveredNames)],
             {RecoveredQs, FailedQueues};
         {error, Reason} ->
-            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
+            rabbit_log:error("Failed to start queue supervisor for vhost '~ts': ~s", [VHost, Reason]),
             throw({error, Reason})
     end.
 

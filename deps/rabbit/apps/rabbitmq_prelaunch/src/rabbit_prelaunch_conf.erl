@@ -57,7 +57,7 @@ setup(Context) ->
                       config_advanced_file => AdvancedConfigFile};
                 undefined when AdvancedConfigFile =/= undefined ->
                     ?LOG_WARNING(
-                      "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~s",
+                      "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~ts",
                       [AdvancedConfigFile],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     Config = load_cuttlefish_config_file(Context,
@@ -72,7 +72,7 @@ setup(Context) ->
                       config_advanced_file => undefined}
             end,
     ?LOG_DEBUG(
-      "Saving config state to application env: ~p", [State],
+      "Saving config state to application env: ~tp", [State],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     store_config_state(State).
 
@@ -158,7 +158,7 @@ find_actual_main_config_file(#{main_config_file := File}) ->
                               "config files exist.",
                               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                             ?LOG_WARNING(
-                              "Using the old format config file: ~s",
+                              "Using the old format config file: ~ts",
                               [OldFormatFile],
                               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                             ?LOG_WARNING(
@@ -342,7 +342,7 @@ list_schemas_in_app(App) ->
                    case code:priv_dir(App) of
                        {error, bad_name} ->
                            ?LOG_DEBUG(
-                             "  [ ] ~s (no readable priv dir)", [App],
+                             "  [ ] ~ts (no readable priv dir)", [App],
                              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                            [];
                        PrivDir ->
@@ -351,7 +351,7 @@ list_schemas_in_app(App) ->
                    end;
                Reason1 ->
                    ?LOG_DEBUG(
-                     "  [ ] ~s (failed to load application: ~p)",
+                     "  [ ] ~ts (failed to load application: ~tp)",
                      [App, Reason1],
                      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                    []
@@ -366,14 +366,14 @@ list_schemas_in_app(App) ->
 do_list_schemas_in_app(App, SchemaDir) ->
     case erl_prim_loader:list_dir(SchemaDir) of
         {ok, Files} ->
-            ?LOG_DEBUG("  [x] ~s", [App],
+            ?LOG_DEBUG("  [x] ~ts", [App],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             [filename:join(SchemaDir, File)
              || [C | _] = File <- Files,
                 C =/= $.];
         error ->
             ?LOG_DEBUG(
-              "  [ ] ~s (no readable schema dir)", [App],
+              "  [ ] ~ts (no readable schema dir)", [App],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             []
     end.
@@ -391,7 +391,7 @@ override_with_advanced_config(Config, AdvancedConfigFile) ->
         {ok, OtherTerms} ->
             ?LOG_ERROR(
               "Failed to load advanced configuration file \"~ts\", "
-              "incorrect format: ~p",
+              "incorrect format: ~tp",
               [AdvancedConfigFile, OtherTerms],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_parse_advanced_configuration_file});
@@ -406,7 +406,7 @@ override_with_advanced_config(Config, AdvancedConfigFile) ->
 apply_erlang_term_based_config([{_, []} | Rest]) ->
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
-    ?LOG_DEBUG("  Applying configuration for '~s':", [App],
+    ?LOG_DEBUG("  Applying configuration for '~ts':", [App],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
@@ -421,16 +421,16 @@ apply_app_env_vars(_, []) ->
     ok.
 
 log_app_env_var(password = Var, _) ->
-    ?LOG_DEBUG("    - ~s = ********", [Var],
+    ?LOG_DEBUG("    - ~ts = ********", [Var],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
 log_app_env_var(Var, Value) when is_list(Value) ->
     %% To redact sensitive entries,
     %% e.g. {password,"********"} for stream replication over TLS
     Redacted = redact_env_var(Value),
-    ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
+    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Redacted],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
 log_app_env_var(Var, Value) ->
-    ?LOG_DEBUG("    - ~s = ~p", [Var, Value],
+    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Value],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
 
 redact_env_var(Value) when is_list(Value) ->
@@ -470,7 +470,7 @@ decrypt_app(App, [{Key, Value} | Tail], Algo) ->
                         Algo1;
                     {NewValue, Algo1} ->
                         ?LOG_DEBUG(
-                          "Value of `~s` decrypted", [Key],
+                          "Value of `~ts` decrypted", [Key],
                           #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                         ok = application:set_env(App, Key, NewValue,
                                                  [{persistent, true}]),

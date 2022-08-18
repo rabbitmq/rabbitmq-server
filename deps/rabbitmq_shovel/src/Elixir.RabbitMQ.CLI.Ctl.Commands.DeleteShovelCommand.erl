@@ -58,7 +58,7 @@ merge_defaults(A, Opts) ->
     {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
 
 banner([Name], #{vhost := VHost}) ->
-    erlang:list_to_binary(io_lib:format("Deleting shovel ~s in vhost ~s",
+    erlang:list_to_binary(io_lib:format("Deleting shovel ~s in vhost ~ts",
                                         [Name, VHost])).
 
 run([Name], #{node := Node, vhost := VHost}) ->

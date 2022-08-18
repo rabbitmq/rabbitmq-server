@@ -430,7 +430,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
     maybe_rebalance(get_rebalance_lock(self()), Type, VhostSpec, QueueSpec).
 
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
-    rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
+    rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~ts' and queues matching '~s'",
                     [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
     NumRunning = length(Running),

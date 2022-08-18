@@ -76,10 +76,10 @@ tap_out({#resource{name = QName, virtual_host = VHost},
 start(VHost) ->
     case lists:member(VHost, vhosts_with_tracing_enabled()) of
         true  ->
-            rabbit_log:info("Tracing is already enabled for vhost '~s'", [VHost]),
+            rabbit_log:info("Tracing is already enabled for vhost '~ts'", [VHost]),
             ok;
         false ->
-            rabbit_log:info("Enabling tracing for vhost '~s'", [VHost]),
+            rabbit_log:info("Enabling tracing for vhost '~ts'", [VHost]),
             update_config(fun (VHosts) ->
                             lists:usort([VHost | VHosts])
                           end)
@@ -90,10 +90,10 @@ start(VHost) ->
 stop(VHost) ->
     case lists:member(VHost, vhosts_with_tracing_enabled()) of
         true  ->
-            rabbit_log:info("Disabling tracing for vhost '~s'", [VHost]),
+            rabbit_log:info("Disabling tracing for vhost '~ts'", [VHost]),
             update_config(fun (VHosts) -> VHosts -- [VHost] end);
         false ->
-            rabbit_log:info("Tracing is already disabled for vhost '~s'", [VHost]),
+            rabbit_log:info("Tracing is already disabled for vhost '~ts'", [VHost]),
             ok
     end.
 

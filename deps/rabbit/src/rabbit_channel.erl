@@ -965,8 +965,8 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
             rabbit_log_channel:error(
-                "Channel error on connection ~p (~s, vhost: '~s',"
-                " user: '~s'), channel ~p:~n~s",
+                "Channel error on connection ~p (~ts, vhost: '~ts',"
+                " user: '~ts'), channel ~p:~n~ts",
                 [ConnPid, ConnName, VHost, User#user.username,
                  Channel, format_soft_error(Reason)]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
@@ -1120,7 +1120,7 @@ check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
   case rabbit_vhost_limit:is_over_queue_limit(VHost) of
     false         -> ok;
     {true, Limit} -> precondition_failed("cannot declare queue '~s': "
-                               "queue limit in vhost '~s' (~p) is reached",
+                               "queue limit in vhost '~ts' (~p) is reached",
                                [QueueName, VHost, Limit])
 
   end.

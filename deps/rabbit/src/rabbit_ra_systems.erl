@@ -44,25 +44,25 @@ all_ra_systems() ->
 ensure_ra_system_started(RaSystem) ->
     RaSystemConfig = get_config(RaSystem),
     ?LOG_DEBUG(
-       "Starting Ra system called \"~s\" with configuration:~n~p",
+       "Starting Ra system called \"~ts\" with configuration:~n~tp",
        [RaSystem, RaSystemConfig],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     case ra_system:start(RaSystemConfig) of
         {ok, _} ->
             ?LOG_DEBUG(
-               "Ra system \"~s\" ready",
+               "Ra system \"~ts\" ready",
                [RaSystem],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok;
         {error, {already_started, _}} ->
             ?LOG_DEBUG(
-               "Ra system \"~s\" ready",
+               "Ra system \"~ts\" ready",
                [RaSystem],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok;
         Error ->
             ?LOG_ERROR(
-               "Failed to start Ra system \"~s\": ~p",
+               "Failed to start Ra system \"~ts\": ~tp",
                [RaSystem, Error],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             throw(Error)

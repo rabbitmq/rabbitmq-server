@@ -1825,14 +1825,14 @@ log_delete_exclusive({ConPid, _ConRef}, State) ->
 log_delete_exclusive(ConPid, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting exclusive queue '~s' in vhost '~s' " ++
+    rabbit_log_queue:debug("Deleting exclusive queue '~s' in vhost '~ts' " ++
                            "because its declaring connection ~p was closed",
                            [QName, VHost, ConPid]).
 
 log_auto_delete(Reason, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++
+    rabbit_log_queue:debug("Deleting auto-delete queue '~s' in vhost '~ts' " ++
                            Reason,
                            [QName, VHost]).
 
