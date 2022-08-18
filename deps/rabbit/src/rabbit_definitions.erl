@@ -421,6 +421,8 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         ok
     catch {error, E} -> {error, E};
           exit:E     -> {error, E}
+    after
+        rabbit_runtime:gc_all_processes()
     end.
 
 -spec apply_defs(Map :: #{atom() => any()},
@@ -456,6 +458,8 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
         SuccessFun()
     catch {error, E} -> {error, format(E)};
           exit:E     -> {error, format(E)}
+    after
+        rabbit_runtime:gc_all_processes()
     end.
 
 -spec apply_defs(Map :: #{atom() => any()},
@@ -492,9 +496,18 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
         SuccessFun()
     catch {error, E} -> ErrorFun(format(E));
           exit:E     -> ErrorFun(format(E))
+    after
+        rabbit_runtime:gc_all_processes()
     end.
 
 sequential_for_all(Category, ActingUser, Definitions, Fun) ->
+    try
+        sequential_for_all0(Category, ActingUser, Definitions, Fun)
+    after
+        rabbit_runtime:gc_all_processes()
+    end.
+
+sequential_for_all0(Category, ActingUser, Definitions, Fun) ->
     case maps:get(rabbit_data_coercion:to_atom(Category), Definitions, undefined) of
         undefined -> ok;
         List      ->
@@ -509,12 +522,26 @@ sequential_for_all(Category, ActingUser, Definitions, Fun) ->
     end.
 
 sequential_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
+    try
+        sequential_for_all0(Name, ActingUser, Definitions, VHost, Fun)
+    after
+        rabbit_runtime:gc_all_processes()
+    end.
+
+sequential_for_all0(Name, ActingUser, Definitions, VHost, Fun) ->
     case maps:get(rabbit_data_coercion:to_atom(Name), Definitions, undefined) of
         undefined -> ok;
         List      -> [Fun(VHost, atomize_keys(M), ActingUser) || M <- List, is_map(M)]
     end.
 
 concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
+    try
+        concurrent_for_all0(Category, ActingUser, Definitions, Fun)
+    after
+        rabbit_runtime:gc_all_processes()
+    end.
+
+concurrent_for_all0(Category, ActingUser, Definitions, Fun) ->
     case maps:get(rabbit_data_coercion:to_atom(Category), Definitions, undefined) of
         undefined -> ok;
         List      ->
@@ -529,6 +556,13 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
     end.
 
 concurrent_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
+    try
+        concurrent_for_all0(Name, ActingUser, Definitions, VHost, Fun)
+    after
+        rabbit_runtime:gc_all_processes()
+    end.
+
+concurrent_for_all0(Name, ActingUser, Definitions, VHost, Fun) ->
     case maps:get(rabbit_data_coercion:to_atom(Name), Definitions, undefined) of
         undefined -> ok;
         List      ->
