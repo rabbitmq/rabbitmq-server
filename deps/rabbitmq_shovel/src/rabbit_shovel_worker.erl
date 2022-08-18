@@ -92,13 +92,19 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config1 = rabbit_shovel_behaviour:init_dest(Config),
-    Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    rabbit_log_shovel:debug("Shovel ~s has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
-    State1 = State#state{config = Config2},
-    ok = report_running(State1),
-    {noreply, State1}.
-
+    try
+        Config1 = rabbit_shovel_behaviour:init_dest(Config),
+        Config2 = rabbit_shovel_behaviour:init_source(Config1)
+    of
+        Config2 ->
+            rabbit_log_shovel:debug("Shovel ~s has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
+            State1 = State#state{config = Config2},
+            ok = report_running(State1),
+            {noreply, State1}
+    catch _:_ ->
+            rabbit_log_shovel:error("Shovel ~s could not set up its topology", [human_readable_name(maps:get(name, Config))]),
+            {stop, shutdown, State}
+    end.
 
 handle_info(Msg, State = #state{config = Config, name = Name}) ->
     case rabbit_shovel_behaviour:handle_source(Msg, Config) of
