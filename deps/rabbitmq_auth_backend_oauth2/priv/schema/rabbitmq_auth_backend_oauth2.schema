@@ -58,7 +58,7 @@
 {mapping,
  "auth_oauth2.verify_aud",
  "rabbitmq_auth_backend_oauth2.verify_aud",
- [{datatype, {enum, [true, false ] } }] }.
+ [{datatype, {enum, [true, false]}}]}.
 
 
 %% ID of the default signing key
