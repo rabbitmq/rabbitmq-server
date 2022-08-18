@@ -16,7 +16,7 @@
 %%
 %% See also rabbit_reader, rabbit_connection_helper_sup.
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 -behaviour(ranch_protocol).
 
 -export([start_link/3, reader/1]).
@@ -28,10 +28,10 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link(any(), module(), any()) ->
-          {'ok', pid(), pid()}.
+    {'ok', pid(), pid()}.
 
 start_link(Ref, _Transport, _Opts) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate
     %% them cleanly. But for 1.0 readers we can't start the real
@@ -43,24 +43,49 @@ start_link(Ref, _Transport, _Opts) ->
     %% reader due to the potential for deadlock if they are added/restarted
     %% whilst the supervision tree is shutting down.
     {ok, HelperSup} =
-        supervisor2:start_child(
-          SupPid,
-          {helper_sup, {rabbit_connection_helper_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_connection_helper_sup]}),
+        supervisor:start_child(
+            SupPid,
+            #{
+                id => helper_sup,
+                start => {rabbit_connection_helper_sup, start_link, []},
+                restart => transient,
+                significant => true,
+                shutdown => infinity,
+                type => supervisor,
+                modules => [rabbit_connection_helper_sup]
+            }
+        ),
     {ok, ReaderPid} =
-        supervisor2:start_child(
-          SupPid,
-          {reader, {rabbit_reader, start_link, [HelperSup, Ref]},
-           intrinsic, ?WORKER_WAIT, worker, [rabbit_reader]}),
+        supervisor:start_child(
+            SupPid,
+            #{
+                id => reader,
+                start => {rabbit_reader, start_link, [HelperSup, Ref]},
+                restart => transient,
+                significant => true,
+                shutdown => ?WORKER_WAIT,
+                type => worker,
+                modules => [rabbit_reader]
+            }
+        ),
     {ok, SupPid, ReaderPid}.
 
 -spec reader(pid()) -> pid().
 
 reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader)).
+    hd(rabbit_misc:find_child(Pid, reader)).
 
 %%--------------------------------------------------------------------------
 
 init([]) ->
     ?LG_PROCESS_TYPE(connection_sup),
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok,
+        {
+            #{
+                strategy => one_for_all,
+                intensity => 0,
+                period => 1,
+                auto_shutdown => any_significant
+            },
+            []
+        }}.

@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_web_stomp_sup).
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/0, init/1]).
 
@@ -16,7 +16,7 @@
 
 -spec start_link() -> ignore | {'ok', pid()} | {'error', any()}.
 start_link() ->
-    supervisor2:start_link({local, ?SUP_NAME}, ?MODULE, []).
+    supervisor:start_link({local, ?SUP_NAME}, ?MODULE, []).
 
 init([]) ->
     {ok, {{one_for_one, 1, 5}, []}}.

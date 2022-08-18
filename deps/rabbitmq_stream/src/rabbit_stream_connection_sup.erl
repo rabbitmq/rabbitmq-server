@@ -16,41 +16,60 @@
 
 -module(rabbit_stream_connection_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 -behaviour(ranch_protocol).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/3,
-         start_keepalive_link/0]).
+-export([
+    start_link/3,
+    start_keepalive_link/0
+]).
 -export([init/1]).
 
 start_link(Ref, Transport, Opts) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
     {ok, KeepaliveSup} =
-        supervisor2:start_child(SupPid,
-                                {rabbit_stream_keepalive_sup,
-                                 {rabbit_stream_connection_sup,
-                                  start_keepalive_link, []},
-                                 intrinsic,
-                                 infinity,
-                                 supervisor,
-                                 [rabbit_keepalive_sup]}),
+        supervisor:start_child(
+            SupPid,
+            #{
+                id => rabbit_stream_keepalive_sup,
+                start => {rabbit_stream_connection_sup, start_keepalive_link, []},
+                restart => transient,
+                significant => true,
+                shutdown => infinity,
+                type => supervisor,
+                modules => [rabbit_keepalive_sup]
+            }
+        ),
     {ok, ReaderPid} =
-        supervisor2:start_child(SupPid,
-                                {rabbit_stream_reader,
-                                 {rabbit_stream_reader, start_link,
-                                  [KeepaliveSup, Transport, Ref, Opts]},
-                                 intrinsic,
-                                 ?WORKER_WAIT,
-                                 worker,
-                                 [rabbit_stream_reader]}),
+        supervisor:start_child(
+            SupPid,
+            #{
+                id => rabbit_stream_reader,
+                start => {rabbit_stream_reader, start_link, [KeepaliveSup, Transport, Ref, Opts]},
+                restart => transient,
+                significant => true,
+                shutdown => ?WORKER_WAIT,
+                type => worker,
+                modules => [rabbit_stream_reader]
+            }
+        ),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
-    supervisor2:start_link(?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok,
+        {
+            #{
+                strategy => one_for_all,
+                intensity => 0,
+                period => 1,
+                auto_shutdown => any_significant
+            },
+            []
+        }}.

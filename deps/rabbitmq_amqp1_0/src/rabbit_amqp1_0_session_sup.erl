@@ -7,7 +7,7 @@
 
 -module(rabbit_amqp1_0_session_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/1]).
 
@@ -29,24 +29,47 @@
 %%----------------------------------------------------------------------------
 start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
             Username, VHost, Collector, ProxySocket}) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
     {ok, WriterPid} =
-        supervisor2:start_child(
-          SupPid,
-          {writer, {rabbit_amqp1_0_writer, start_link,
-                    [Sock, Channel, FrameMax, amqp10_framing,
-                     ReaderPid]},
-           intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_writer]}),
+        supervisor:start_child(
+            SupPid,
+            #{
+                id => writer,
+                start =>
+                    {rabbit_amqp1_0_writer, start_link, [
+                        Sock,
+                        Channel,
+                        FrameMax,
+                        amqp10_framing,
+                        ReaderPid
+                    ]},
+                restart => transient,
+                significant => true,
+                shutdown => ?WORKER_WAIT,
+                type => worker,
+                modules => [rabbit_amqp1_0_writer]
+            }
+        ),
     SocketForAdapterInfo = case ProxySocket of
         undefined -> Sock;
         _         -> ProxySocket
     end,
-    case supervisor2:start_child(
+    case supervisor:start_child(
            SupPid,
-           {channel, {rabbit_amqp1_0_session_process, start_link,
-                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                        adapter_info(SocketForAdapterInfo), Collector}]},
-            intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}) of
+           #{
+               id => channel,
+               start =>
+                   {rabbit_amqp1_0_session_process, start_link, [
+                       {Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
+                           adapter_info(SocketForAdapterInfo), Collector}
+                   ]},
+               restart => transient,
+               significant => true,
+               shutdown => ?WORKER_WAIT,
+               type => worker,
+               modules => [rabbit_amqp1_0_session_process]
+           }
+        ) of
         {ok, ChannelPid} ->
             {ok, SupPid, ChannelPid};
         {error, Reason} ->
@@ -56,7 +79,11 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    SupFlags = #{strategy => one_for_all,
+                intensity => 0,
+                period => 1,
+                auto_shutdown => any_significant},
+    {ok, {SupFlags, []}}.
 
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).

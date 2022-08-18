@@ -17,7 +17,7 @@
 %%
 %% See also rabbit_channel, rabbit_writer, rabbit_limiter.
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/1]).
 
@@ -46,47 +46,79 @@
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->
-    {ok, SupPid} = supervisor2:start_link(
+    {ok, SupPid} = supervisor:start_link(
                      ?MODULE, {tcp, Sock, Channel, FrameMax,
                                ReaderPid, Protocol, {ConnName, Channel}}),
-    [LimiterPid] = supervisor2:find_child(SupPid, limiter),
-    [WriterPid] = supervisor2:find_child(SupPid, writer),
-    {ok, ChannelPid} =
-        supervisor2:start_child(
-          SupPid,
-          {channel, {rabbit_channel, start_link,
-                     [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
-                      Protocol, User, VHost, Capabilities, Collector,
-                      LimiterPid]},
-           intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
+    [LimiterPid] = rabbit_misc:find_child(SupPid, limiter),
+    [WriterPid] = rabbit_misc:find_child(SupPid, writer),
+    StartMFA = {rabbit_channel, start_link,
+                [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
+                 Protocol, User, VHost, Capabilities, Collector,
+                 LimiterPid]},
+    ChildSpec = #{id => channel,
+                  start => StartMFA,
+                  restart => transient,
+                  significant => true,
+                  shutdown => ?FAIR_WAIT,
+                  type => worker,
+                  modules => [rabbit_channel]},
+    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector, AmqpParams}) ->
-    {ok, SupPid} = supervisor2:start_link(
+    {ok, SupPid} = supervisor:start_link(
                      ?MODULE, {direct, {ConnName, Channel}}),
-    [LimiterPid] = supervisor2:find_child(SupPid, limiter),
-    {ok, ChannelPid} =
-        supervisor2:start_child(
-          SupPid,
-          {channel, {rabbit_channel, start_link,
-                     [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
-                      ConnName, Protocol, User, VHost, Capabilities, Collector,
-                      LimiterPid, AmqpParams]},
-           intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
+    [LimiterPid] = rabbit_misc:find_child(SupPid, limiter),
+    StartMFA = {rabbit_channel, start_link,
+                [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
+                 ConnName, Protocol, User, VHost, Capabilities, Collector,
+                 LimiterPid, AmqpParams]},
+    ChildSpec = #{id => channel,
+                  start => StartMFA,
+                  restart => transient,
+                  significant => true,
+                  shutdown => ?FAIR_WAIT,
+                  type => worker,
+                  modules => [rabbit_channel]},
+    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
     {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------
 
 init(Type) ->
     ?LG_PROCESS_TYPE(channel_sup),
-    {ok, {{one_for_all, 0, 1}, child_specs(Type)}}.
+    SupFlags = #{strategy => one_for_all,
+                 intensity => 0,
+                 period => 1,
+                 auto_shutdown => any_significant},
+    {ok, {SupFlags, child_specs(Type)}}.
 
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, Identity}) ->
-    [{writer, {rabbit_writer, start_link,
-               [Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, true]},
-      intrinsic, ?FAIR_WAIT, worker, [rabbit_writer]}
-     | child_specs({direct, Identity})];
+    StartMFA = {rabbit_writer, start_link,
+                [Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, true]},
+    [
+        #{
+            id => writer,
+            start => StartMFA,
+            restart => transient,
+            significant => true,
+            shutdown => ?FAIR_WAIT,
+            type => worker,
+            modules => [rabbit_writer]
+        }
+        | child_specs({direct, Identity})
+    ];
 child_specs({direct, Identity}) ->
-    [{limiter, {rabbit_limiter, start_link, [Identity]},
-      transient, ?FAIR_WAIT, worker, [rabbit_limiter]}].
+    StartMFA = {rabbit_limiter, start_link, [Identity]},
+    [
+        #{
+            id => limiter,
+            start => StartMFA,
+            restart => transient,
+            significant => true,
+            shutdown => ?FAIR_WAIT,
+            type => worker,
+            modules => [rabbit_limiter]
+        }
+    ].

@@ -11,12 +11,12 @@
 
 %% Each vhost gets an instance of this supervisor that supervises
 %% message stores and queues (via rabbit_amqqueue_sup_sup).
--behaviour(supervisor2).
+-behaviour(supervisor).
 -export([init/1]).
 -export([start_link/1]).
 
 start_link(VHost) ->
-    supervisor2:start_link(?MODULE, [VHost]).
+    supervisor:start_link(?MODULE, [VHost]).
 
 init([_VHost]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok, {#{strategy => one_for_all, intensity => 0, period => 1}, []}}.

@@ -213,7 +213,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
     case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
         false ->
             {ok, _, {ChannelPid, _}} =
-                supervisor2:start_child(
+                supervisor:start_child(
                   rabbit_direct_client_sup,
                   [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
                     User, VHost, Capabilities, Collector, AmqpParams}]),

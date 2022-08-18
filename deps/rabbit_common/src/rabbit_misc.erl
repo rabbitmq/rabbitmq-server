@@ -83,6 +83,7 @@
 -export([get_gc_info/1]).
 -export([group_proplists_by/2]).
 -export([raw_read_file/1]).
+-export([find_child/2]).
 -export([is_regular_file/1]).
 
 %% Horrible macro to use in guards
@@ -1434,6 +1435,14 @@ is_regular_file(Name) ->
         {ok, #file_info{type=regular}} -> true;
         _ -> false
     end.
+
+%% this used to be in supervisor2
+-spec find_child(Supervisor, Name) -> [pid()] when
+      Supervisor :: supervisor:sup_ref(),
+      Name :: supervisor:child_id().
+find_child(Supervisor, Name) ->
+    [Pid || {Name1, Pid, _Type, _Modules} <- supervisor:which_children(Supervisor),
+            Name1 =:= Name].
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

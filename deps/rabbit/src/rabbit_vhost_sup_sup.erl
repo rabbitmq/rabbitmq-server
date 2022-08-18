@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([init/1]).
 
@@ -38,7 +38,7 @@ start() ->
     end.
 
 start_link() ->
-    supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
     %% This assumes that a single vhost termination should not shut down nodes
@@ -81,7 +81,7 @@ stop_and_delete_vhost(VHost) ->
                     rabbit_log:info("Stopping vhost supervisor ~tp"
                                     " for vhost '~ts'",
                                     [VHostSupPid, VHost]),
-                    case supervisor2:terminate_child(?MODULE, WrapperPid) of
+                    case supervisor:terminate_child(?MODULE, WrapperPid) of
                         ok ->
                             true = ets:delete(?MODULE, VHost),
                             ok;
@@ -179,7 +179,7 @@ start_vhost(VHost) ->
         true  ->
             case whereis(?MODULE) of
                 Pid when is_pid(Pid) ->
-                    supervisor2:start_child(?MODULE, [VHost]);
+                    supervisor:start_child(?MODULE, [VHost]);
                 undefined ->
                     {error, rabbit_vhost_sup_sup_not_running}
             end
