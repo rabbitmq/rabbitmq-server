@@ -23,7 +23,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(TICKTIME_RATIO, 4).
+-define(VHOST_CHECK_INTERVAL, 5000).
 
 -behaviour(gen_server2).
 -export([start_link/1]).
@@ -42,8 +42,7 @@ init([VHost]) ->
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),
         rabbit_vhost_sup_sup:save_vhost_process(VHost, self()),
-        Interval = interval(),
-        timer:send_interval(Interval, check_vhost),
+        timer:send_interval(?VHOST_CHECK_INTERVAL, check_vhost),
         true = erlang:garbage_collect(),
         {ok, VHost}
     catch _:Reason:Stacktrace ->
@@ -87,6 +86,3 @@ terminate(_, _VHost) ->
 
 code_change(_OldVsn, VHost, _Extra) ->
     {ok, VHost}.
-
-interval() ->
-    application:get_env(kernel, net_ticktime, 60000) * ?TICKTIME_RATIO.
