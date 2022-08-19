@@ -7,20 +7,30 @@
 
 -module(rabbit_date_time).
 
--export([parse_duration/1]).
-
 -type datetime_plist() :: list({atom(), integer()}).
 
-% from https://github.com/erlsci/iso8601/blob/main/src/iso8601.erl
--spec gi(string()) -> integer().
-gi(DS) ->
-    {Int, _Rest} = string:to_integer(DS),
-    case Int of
-        error ->
-            0;
-        _ ->
-            Int
-    end.
+%%
+%% API
+%%
+
+-export([
+    today/0,
+    is_in_the_past/1
+]).
+-export([parse_duration/1]).
+
+-spec today() -> calendar:date().
+today() ->
+    {Date, _Time} = calendar:local_time(),
+    Date.
+
+-spec is_in_the_past(calendar:date()) -> boolean().
+is_in_the_past({_Y, _M, _D} = Date) ->
+    Today = today(),
+    TodayInDays = calendar:date_to_gregorian_days(Today),
+    DateInDays = calendar:date_to_gregorian_days(Date),
+
+    DateInDays < TodayInDays.
 
 -spec parse_duration(string()) -> datetime_plist().
 parse_duration(Bin)
@@ -45,4 +55,19 @@ parse_duration(Str) ->
                   {seconds, gi(Seconds)}]};
         nomatch ->
             error
+    end.
+
+%%
+%% Implementation
+%%
+
+% from https://github.com/erlsci/iso8601/blob/main/src/iso8601.erl
+-spec gi(string()) -> integer().
+gi(DS) ->
+    {Int, _Rest} = string:to_integer(DS),
+    case Int of
+        error ->
+            0;
+        _ ->
+            Int
     end.
