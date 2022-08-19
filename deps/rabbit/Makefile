@@ -125,7 +125,10 @@ define PROJECT_ENV
       {track_auth_attempt_source, false},
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       {dead_letter_worker_consumer_prefetch, 32},
-      {dead_letter_worker_publisher_confirm_timeout, 180000}
+      {dead_letter_worker_publisher_confirm_timeout, 180000},
+
+			%% EOL date for the current release series, if known/announced
+			{release_series_eol_date, none}
 	  ]
 endef
 
