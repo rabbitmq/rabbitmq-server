@@ -57,6 +57,10 @@ jobs:
         buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
           //bazel/toolchains:%${LINE} || test $? -eq 3
 
+        echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.find-commit.outputs.VERSION }}.tar.gz"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.find-commit.outputs.VERSION }}.tar.gz"]' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.find-commit.outputs.SHA }}"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
+
         set -x
         git diff
     - name: CREATE PULL REQUEST
