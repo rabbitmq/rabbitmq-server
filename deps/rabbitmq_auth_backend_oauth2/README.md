@@ -1,7 +1,7 @@
 # OAuth 2.0 (JWT) Token Authorisation Backend for RabbitMQ
 
 This [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets
-applications (clients) and users authenticate and present their permissions 
+applications (clients) and users authenticate and present their permissions
 using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
 The plugin supports several identity providers, sometimes with vendor-specific configuration bits:
@@ -318,7 +318,7 @@ On an existing connection the token can be refreshed by the [update-secret](http
 
 If the latest token expires on an existing connection, after a limited time the broker will
 refuse all operations (but it won't disconnect).
-  
+
 
 ## Rich Authorization Request
 
@@ -332,12 +332,12 @@ RabbitMQ supports JWT tokens compliant with the extension. Below is a sample exa
 ```
 {
   "authorization_details": [
-    { 
+    {
       "type" : "rabbitmq",  
       "locations": ["cluster:finance/vhost:production-*"],
       "actions": [ "read", "write", "configure"  ]
     },
-    { 
+    {
       "type" : "rabbitmq",
       "locations": ["cluster:finance", "cluster:inventory" ],
       "actions": ["administrator" ]
@@ -350,9 +350,8 @@ The token above contains two permissions under the attribute `authorization_deta
 Both permissions are meant for RabbitMQ servers with `resource_server_type` set to `rabbitmq`.
 This field identifies RabbitMQ-specific permissions.
 
-The first permission grants `read`, `write` and `configure` permissions to any virtual host whose name matches
-the pattern `production-*`, and that reside in clusters whose `resource_server_id` contains the string `finance`.
-The `cluster` attribute's va;ie is also a regular expression. To match exactly the string `finance`,
+The first permission grants `read`, `write` and `configure` permissions to any queue and/or exchange on any virtual host whose name matches the pattern `production-*`, and that reside in clusters whose `resource_server_id` contains the string `finance`.
+The `cluster` attribute's value is also a regular expression. To match exactly the string `finance`,
 use `^finance$`.
 
 The second permission grants the `administrator` user tag in two clusters, `finance` and `inventory`. Other
@@ -427,17 +426,17 @@ aforementioned convention using the following algorithm:
 
 The plugin produces permutations of all `actions` by  all `locations` that match the node's configured `resource_server_id`.
 
-In the following RAR example 
+In the following RAR example
 
 ``` json
 {
   "authorization_details": [
-    { 
+    {
       "type" : "rabbitmq",  
       "locations": ["cluster:finance/vhost:primary-*"],
       "actions": [ "read", "write", "configure"  ]
     },
-    { 
+    {
       "type" : "rabbitmq",
       "locations": ["cluster:finance", "cluster:inventory"],
       "actions": ["administrator" ]
@@ -446,7 +445,7 @@ In the following RAR example
 }
 ```
 if RabbitMQ node's `resource_server_id` is equal to `finance`, the plugin will compute the following sets of scopes:
- 
+
  * `finance.read:primary-*/*/*`
  * `finance.write:primary-*/*/*`
  * `finance.configure:primary-*/*/*`
