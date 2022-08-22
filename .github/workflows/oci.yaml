@@ -150,3 +150,132 @@ jobs:
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  build-publish-dev-bazel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image_tag_suffix: otp-min-bazel
+            otp_major: 24
+          - image_tag_suffix: otp-max-bazel
+            otp_major: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Inject RabbitMQ Version
+        run: |
+          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
+
+      - name: Mount Bazel Cache
+        uses: actions/cache@v3.0.7
+        with:
+          path: "/home/runner/repo-cache/"
+          key: repo-cache
+
+      - name: Configure Bazel
+        run: |
+          if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          EOF
+          fi
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --build_metadata=ROLE=CI
+            build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+            build:buildbuddy --repository_cache=/home/runner/repo-cache/
+            build:buildbuddy --color=yes
+            build:buildbuddy --disk_cache=
+
+            build:buildbuddy --remote_download_toplevel
+
+            build --@io_bazel_rules_docker//transitions:enable=false
+          EOF
+
+      - name: Check OTP/Elixir versions used in RBE
+        id: load-info
+        run: |
+          bazelisk build :otp_version :elixir_version \
+            --config=rbe-${{ matrix.otp_major }}
+          echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
+          echo "::set-output name=elixir::$(cat bazel-bin/elixir_version.txt)"
+
+      - name: Configure OTP & Elixir
+        uses: erlef/setup-beam@v1.12
+        with:
+          otp-version: ${{ steps.load-info.outputs.otp }}
+          elixir-version: ${{ steps.load-info.outputs.elixir }}
+
+      - name: Further Configure Bazel
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          cat << EOF >> user.bazelrc
+            build --@rules_erlang//:erlang_version=${{ matrix.otp_major }}
+            build --@rules_erlang//:erlang_home=${ERLANG_HOME}
+            build --//:elixir_home=${ELIXIR_HOME}
+            build --platforms=//bazel/platforms:erlang_external_platform
+            build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
+          EOF
+
+      - name: Set the correct erlang source tar for the container
+        run: |
+          sudo npm install --global --silent @bazel/buildozer
+
+          buildozer 'set tars ["@otp_src_${{ matrix.otp_major }}//file"]' \
+            //packaging/docker-image:otp_source
+
+          git diff
+
+      - name: Build
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          bazelisk build //packaging/docker-image:rabbitmq \
+            --config=buildbuddy
+
+      - name: Test
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          bazelisk test //packaging/docker-image:all \
+            --config=buildbuddy
+
+      - name: Load
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          bazelisk run //packaging/docker-image:rabbitmq \
+            --config=buildbuddy
+
+      - name: Check for Push Credentials
+        id: authorized
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "::set-output name=PUSH::true"
+          else
+            echo "::set-output name=PUSH::false"
+          fi
+
+      - name: Login to DockerHub
+        if: steps.authorized.outputs.PUSH == 'true'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Tag and Push
+        if: steps.authorized.outputs.PUSH == 'true'
+        run: |
+          TAG_1="${{ github.event.pull_request.head.sha || github.sha }}-${{ matrix.image_tag_suffix }}"
+          TAG_2="${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
+
+          docker tag bazel/packaging/docker-image:rabbitmq \
+            pivotalrabbitmq/rabbitmq:${TAG_1}
+          docker tag bazel/packaging/docker-image:rabbitmq \
+            pivotalrabbitmq/rabbitmq:${TAG_2}
+
+          docker push pivotalrabbitmq/rabbitmq:${TAG_1}
+          docker push pivotalrabbitmq/rabbitmq:${TAG_2}

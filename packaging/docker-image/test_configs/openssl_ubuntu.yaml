@@ -1,0 +1,7 @@
+schemaVersion: 2.0.0
+
+commandTests:
+  - name: "openssl version"
+    command: "openssl"
+    args: ["version"]
+    expectedOutput: ["OpenSSL 1\\.1\\.1g"]
