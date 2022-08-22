@@ -65,21 +65,21 @@ http_file(
 http_file(
     name = "otp_src_23",
     downloaded_file_path = "OTP-23.3.4.16.tar.gz",
-    # sha256 = "",
+    sha256 = "ff091e8a2b3e6350b890d37123444474cf49754f6add0ccee17582858ee464e7",
     urls = ["https://github.com/erlang/otp/archive/OTP-23.3.4.16.tar.gz"],
 )
 
 http_file(
     name = "otp_src_24",
     downloaded_file_path = "OTP-24.3.4.2.tar.gz",
-    # sha256 = "",
+    sha256 = "0cb512ece7804d0512fd39683db36b261fef83dc8e1fb98e026cad374df0b7e3",
     urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.2.tar.gz"],
 )
 
 http_file(
     name = "otp_src_25",
     downloaded_file_path = "OTP-25.0.3.tar.gz",
-    # sha256 = "",
+    sha256 = "e8eca69b6bdaac9cc8f3e3177dd2913920513495ee83bdecf73af546768febd6",
     urls = ["https://github.com/erlang/otp/archive/OTP-25.0.3.tar.gz"],
 )
 
