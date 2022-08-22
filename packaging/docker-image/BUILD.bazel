@@ -210,7 +210,6 @@ container_image(
         "15674/tcp",  # web-stomp
         "15670/tcp",  # examples
     ],
-    tags = ["manual"],
     volumes = [
         RABBITMQ_DATA_DIR,
     ],
@@ -238,16 +237,19 @@ container_test(
     name = "openssl_test",
     configs = ["//packaging/docker-image/test_configs:openssl_ubuntu.yaml"],
     image = ":openssl_install_wrapper",
+    tags = ["docker"],
 )
 
 container_test(
     name = "otp_test",
     configs = ["//packaging/docker-image/test_configs:otp_ubuntu.yaml"],
     image = ":otp_install_wrapper",
+    tags = ["docker"],
 )
 
 container_test(
     name = "rabbitmq_test",
     configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
     image = ":rabbitmq",
+    tags = ["docker"],
 )
