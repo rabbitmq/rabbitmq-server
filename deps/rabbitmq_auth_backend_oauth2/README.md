@@ -382,7 +382,7 @@ The supported location attributed are:
 
  * `cluster`: this is the only mandatory attribute. It is a wildcard pattern which must match RabbitMQ's `resource_server_id`, otherwise the location is ignored.
  * `vhost`: This is the virtual host we are granting access to. It also a wildcard pattern. RabbitMQ defaults to `*`.
- * `queue`|`exchange`: queue or exchange name the location grants the permission to. A location can only specify one or the other but not both
+ * `queue`|`exchange`: queue or exchange name pattern. The location grants the permission to a set of queues (or exchanges) that match it. One location can only specify either `queue` or `exchange` but not both
  * `routing_key`: this is the routing key pattern the location grants the permission to. If not specified, `*` will be used
 
 For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
