@@ -391,7 +391,7 @@ For more information about wildcard patterns, check the section [Scope-to-Permis
 
 The `actions` field can be either a string containing a single action or a JSON array containing one or more actions.
 
-The supported actions map to either [RabbitMQ permissions]():
+The supported actions map to either [RabbitMQ permissions](https://www.rabbitmq.com/access-control.html#authorisation):
 
 *`configure`
 *`read`
