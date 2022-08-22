@@ -332,11 +332,13 @@ RabbitMQ supports JWT tokens compliant with the extension. Below is a sample exa
 ```
 {
   "authorization_details": [
-    { "type" : "rabbitmq",  
-      "locations": ["cluster:finance/vhost:primary-*"],
+    { 
+      "type" : "rabbitmq",  
+      "locations": ["cluster:finance/vhost:production-*"],
       "actions": [ "read", "write", "configure"  ]
     },
-    { "type" : "rabbitmq",
+    { 
+      "type" : "rabbitmq",
       "locations": ["cluster:finance", "cluster:inventory" ],
       "actions": ["administrator" ]
     }
@@ -349,9 +351,9 @@ Both permissions are meant for a RabbitMQ server whose `resource_server_type` is
 This field is essentially a permission discriminator.
 
 The first permission grants `read`, `write` and `configure` permissions to any vhost which matches
-the pattern `primary-*` that belongs to a cluster whose `resource_server_id` contains the string `finance`.
-The `cluster` attribute is a regular expression like the `vhost`. If we wanted to match exactly the `finance` cluster
-we would use instead `^finance$`.
+the pattern `production-*` that belongs to a cluster whose `resource_server_id` contains the string `finance`.
+The `cluster` attribute is a regular expression like the `vhost`. To match exactly the string `finance`,
+use `^finance$`.
 
 The second permission grants the `administrator` user-tag to both clusters, `finance` and `inventory`. The other
 supported user-tags as `management`, `policymaker` and `monitoring`.
