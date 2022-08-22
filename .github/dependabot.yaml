@@ -6,8 +6,23 @@ updates:
     schedule:
       interval: "daily"
     target-branch: "main"
-    labels:
-      - backport-v3.11.x
-      - backport-v3.10.x
-      - backport-v3.9.x
-      - backport-v3.8.x
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.11.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.10.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.9.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.8.x"
