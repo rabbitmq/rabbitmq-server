@@ -63,7 +63,7 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe-${{ matrix.erlang_major }} \
-          --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
+          --test_tag_filters=mixed-version-cluster,-exclusive,-aws,-docker \
           --build_tests_only \
           --verbose_failures
   test-exclusive-mixed-versions:
@@ -119,7 +119,7 @@ jobs:
         MIXED_EXCLUSIVE_TESTS=$(bazel query 'attr(tags, "mixed-version-cluster", attr(tags, "exclusive", tests(//...)))')
         bazelisk test $MIXED_EXCLUSIVE_TESTS \
           --config=buildbuddy \
-          --test_tag_filters=-aws \
+          --test_tag_filters=-aws,-docker \
           --build_tests_only \
           --test_env RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES=true \
           --verbose_failures
