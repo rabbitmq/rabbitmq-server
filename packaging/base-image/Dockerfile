@@ -10,7 +10,6 @@ RUN set -eux; \
         echo "deb http://ddebs.ubuntu.com $(lsb_release -cs)-proposed main restricted universe multiverse" >> /etc/apt/sources.list.d/ddebs.list; \
         apt-get update; \
         apt-get install -y --no-install-recommends \
- # grab gosu for easy step-down from root
         libc6-dbg \
         libgcc-s1-dbgsym \
         libstdc++6-dbgsym \

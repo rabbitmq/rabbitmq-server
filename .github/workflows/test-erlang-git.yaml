@@ -43,5 +43,6 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe \
-          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws \
+          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws,-docker \
+          --build_tests_only \
           --verbose_failures

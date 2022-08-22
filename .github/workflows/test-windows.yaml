@@ -64,6 +64,6 @@ jobs:
       run: |
         bazelisk test //... ^
           --config=buildbuddy ^
-          --test_tag_filters=-aws,-bats,-starts-background-broker ^
+          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
           --build_tests_only ^
           --verbose_failures
