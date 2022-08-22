@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.7
+        uses: actions/cache@v3.0.8
         with:
           path: "/home/runner/repo-cache/"
           key: repo-cache
@@ -91,7 +91,7 @@ jobs:
         uses: docker/setup-buildx-action@v1
 
       - name: Cache Docker layers
-        uses: actions/cache@v3.0.7
+        uses: actions/cache@v3.0.8
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.event.pull_request.head.sha || github.sha }}
@@ -170,7 +170,7 @@ jobs:
           sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
 
       - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.7
+        uses: actions/cache@v3.0.8
         with:
           path: "/home/runner/repo-cache/"
           key: repo-cache
