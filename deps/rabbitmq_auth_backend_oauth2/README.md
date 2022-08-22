@@ -347,53 +347,58 @@ RabbitMQ supports JWT tokens compliant with the extension. Below is a sample exa
 ```
 
 The token above contains two permissions under the attribute `authorization_details`.
-Both permissions are meant for a RabbitMQ server whose `resource_server_type` is equal to `rabbitmq`.
-This field is essentially a permission discriminator.
+Both permissions are meant for RabbitMQ servers with `resource_server_type` set to `rabbitmq`.
+This field identifies RabbitMQ-specific permissions.
 
-The first permission grants `read`, `write` and `configure` permissions to any vhost which matches
-the pattern `production-*` that belongs to a cluster whose `resource_server_id` contains the string `finance`.
-The `cluster` attribute is a regular expression like the `vhost`. To match exactly the string `finance`,
+The first permission grants `read`, `write` and `configure` permissions to any virtual host whose name matches
+the pattern `production-*`, and that reside in clusters whose `resource_server_id` contains the string `finance`.
+The `cluster` attribute's va;ie is also a regular expression. To match exactly the string `finance`,
 use `^finance$`.
 
-The second permission grants the `administrator` user-tag to both clusters, `finance` and `inventory`. The other
-supported user-tags as `management`, `policymaker` and `monitoring`.
+The second permission grants the `administrator` user tag in two clusters, `finance` and `inventory`. Other
+supported user tags as `management`, `policymaker` and `monitoring`.
 
 ### Type Field
 
-In order for RabbitMQ to accept a permission, its value must match with RabbitMQ's `resource_server_type`.
-A JWT token may have permissions for resources' types.
+In order for a RabbitMQ node to accept a permission, its value must match that node's `resource_server_type` setting value. A JWT token may have permissions for multiple resource types.
 
 ### Locations Field
 
-The `locations` field can be either a string containing a single location or a Json array containing
-zero or many locations.
+The `locations` field can be either a string containing a single location or a JSON array containing
+one or more locations.
 
-A location consists of a list of key-value pairs separated by forward slash `/` character. Here is the format:
+A location consists of a list of key-value pairs separated by a forward slash `/` character. The format
+used is:
+
 ```
-cluster:<resource_server_id_pattern>[/vhost:<vhostpattern>][/queue:<queue_name_pattern>|/exchange:<exchange_name_pattern][/routing-key:<routing_key_pattern>]
+cluster:{resource_server_id_pattern}[/vhost:{virtual_host_pattern}][/queue:{queue_name_pattern}|/exchange:{exchange_name_pattern}][/routing-key:{routing_key_pattern}]
 ```
 
-Any string separated by `/` which does not conform to `<key>:<value>` is ignored. For instance, if your locations start with a prefix, e.g. `vrn/cluster:rabbitmq`, the `vrn` pattern part is ignored.
+Any string separated by `/` which does not conform to the `{key}:{value}` format will be ignored.
+For instance, if locations start with a prefix, e.g. `vrn/cluster:rabbitmq`, the `vrn` pattern part will be
+ignored.
 
-The supported location's attributed are:
+The supported location attributed are:
 
-- `cluster` This is the only mandatory attribute. It is a wildcard pattern which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
-- `vhost` This is the virtual host we are granting access to. It also a wildcard pattern. RabbitMQ defaults to `*`.
-- `queue`|`exchange` This is the queue or exchange we are granting access to. A location can only specify one or the
-other but not both.
-- `routing-key` this is the routing key we are granted access to. RabbitMQ defaults to `*`.
+ * `cluster`: this is the only mandatory attribute. It is a wildcard pattern which must match RabbitMQ's `resource_server_id`, otherwise the location is ignored.
+ * `vhost`: This is the virtual host we are granting access to. It also a wildcard pattern. RabbitMQ defaults to `*`.
+ * `queue`|`exchange`: queue or exchange name the location grants the permission to. A location can only specify one or the other but not both
+ * `routing_key`: this is the routing key pattern the location grants the permission to. If not specified, `*` will be used
 
 For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
 
 ### Actions Field  
 
-The `actions` field can be either a string containing a single action or a Json array containing zero or many actions.
+The `actions` field can be either a string containing a single action or a JSON array containing one or more actions.
 
-The supported actions are:
+The supported actions map to either [RabbitMQ permissions]():
 
 *`configure`
 *`read`
 *`write`
+
+Or RabbitMQ user tags:
+
 *`administrator`
 *`monitoring`
 *`management`
@@ -401,25 +406,23 @@ The supported actions are:
 
 ### Rich-Permission to Scope translation
 
-Rich Authorization Request permissions are translated into scopes that use RabbitMQ conventions
-(see above) using the following algorithm:
+Rich Authorization Request permissions are translated into JWT token scopes that use the
+aforementioned convention using the following algorithm:
 
-* For each location found in the `locations` where the `cluster` attribute matches the current RabbitMQ server's `resource_server_id`, the plugin extracts the `vhost`, `queue` or `exchange` and `routing_key` attributes from the location.
-  If the location did not  have any of those attributes, the default value is `*`. Out of that, the following scope suffix will be produced:
+* For each location found in the `locations` field where the `cluster` attribute matches the current RabbitMQ node's `resource_server_id`, the plugin extracts the `vhost`, `queue` or `exchange` and `routing_key` attributes from the location. If the location does not  have any of those attributes, the default value of `*` is assumed. Out of those values, the following scope suffix will be produced:
     ```
-       scope_suffix = {vhost}/{queue}|{exchange}/{routing_key}
+    scope_suffix = {vhost}/{queue}|{exchange}/{routing_key}
     ```
-  The plugin will not accept a location which specifies both `queue` and `exchange`.
-* For each action found in the `actions`:
+  The plugin will not accept a location which specifies both `queue` and `exchange`
+* For each action found in the `actions` field:
 
-    if the action is not a user-tag, it produces the following scope:
+    if the action is not a known user tag, the following scope is produced out of it:
     ```
-      scope = <resource_server_id>.<action>:<scope_suffix>
+    scope = {resource_server_id}.{action}:{scope_suffix}
     ```
-
-    otherwise, for user-tag actions, it produces the following scope:
+    For known user tag actions, the following scope is produced:
     ```
-      scope = <resource_server_id>.<action>
+    scope = {resource_server_id}.{action}
     ```
 
 The plugin produces permutations of all `actions` by  all `locations` that match the node's configured `resource_server_id`.
@@ -429,12 +432,14 @@ In the following RAR example
 ``` json
 {
   "authorization_details": [
-    { "type" : "rabbitmq",  
+    { 
+      "type" : "rabbitmq",  
       "locations": ["cluster:finance/vhost:primary-*"],
       "actions": [ "read", "write", "configure"  ]
     },
-    { "type" : "rabbitmq",
-      "locations": ["cluster:finance", "cluster:inventory" ],
+    { 
+      "type" : "rabbitmq",
+      "locations": ["cluster:finance", "cluster:inventory"],
       "actions": ["administrator" ]
     }
   ]
