@@ -67,8 +67,24 @@ jobs:
         - erlang_major: "24"
           tag: v3.10.6
           patch: |
+            diff --git a/MODULE.bazel b/MODULE.bazel
+            index bbc541b766..9290f13053 100644
+            --- a/MODULE.bazel
+            +++ b/MODULE.bazel
+            @@ -13,6 +13,11 @@ bazel_dep(
+                 version = "1.2.0",
+             )
+
+            +bazel_dep(
+            +    name = "platforms",
+            +    version = "0.0.5",
+            +)
+            +
+             bazel_dep(
+                 name = "rules_cc",
+                 version = "0.0.1",
             diff --git a/rabbitmq.bzl b/rabbitmq.bzl
-            index 85f9a2d790..08c2bc957e 100644
+            index 7c13e30385..330b54494a 100644
             --- a/rabbitmq.bzl
             +++ b/rabbitmq.bzl
             @@ -28,6 +28,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
