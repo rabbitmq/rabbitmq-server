@@ -39,8 +39,8 @@ jobs:
         fi
 
         ARCHIVE_RBE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_RBE_URL}"
-        SHA="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
+        wget --continue --quiet --output-document="/tmp/otp_src_${VERSION}.tar.gz" "${ARCHIVE_RBE_URL}"
+        SHA="$(shasum -a 256 "/tmp/otp_src_${VERSION}.tar.gz" | awk '{print $1}')"
 
         if [[ -z "${SHA}" ]]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
@@ -48,8 +48,8 @@ jobs:
         fi
 
         ARCHIVE_OCI_URL="https://github.com/erlang/otp/archive/OTP-${VERSION}.tar.gz"
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_OCI_URL}"
-        SHA2="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
+        wget --continue --quiet --output-document="/tmp/OTP-${VERSION}.tar.gz" "${ARCHIVE_OCI_URL}"
+        SHA2="$(shasum -a 256 "/tmp/OTP-${VERSION}.tar.gz" | awk '{print $1}')"
 
         if [[ -z "${SHA2}" ]]; then
           echo "Failed to determine SHA2 for ${TAG_NAME}"
