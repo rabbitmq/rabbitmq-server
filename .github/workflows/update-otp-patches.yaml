@@ -68,27 +68,27 @@ jobs:
 
         set -x
         git diff
-    #! - name: CREATE PULL REQUEST
-    #!   if: steps.check-for-branch.outputs.c != 0
-    #!   uses: peter-evans/create-pull-request@v4.1.1
-    #!   with:
-    #!     token: ${{ secrets.REPO_SCOPED_TOKEN }}
-    #!     committer: GitHub <noreply@github.com>
-    #!     author: GitHub <noreply@github.com>
-    #!     title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
-    #!     body: >
-    #!        Automated changes created by
-    #!        ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-    #!        using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
-    #!        GitHub action
+    - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.outputs.c != 0
+      uses: peter-evans/create-pull-request@v4.1.1
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        body: >
+           Automated changes created by
+           ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+           using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
+           GitHub action
 
-    #!        Source workflow: `${{ github.action_path }}`
-    #!     commit-message: |
-    #!       Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
-    #!     labels: |
-    #!       backport-v3.11.x
-    #!       backport-v3.10.x
-    #!       backport-v3.9.x
-    #!       backport-v3.8.x
-    #!     branch: bump-otp-${{ matrix.erlang_version }}
-    #!     delete-branch: true
+           Source workflow: `${{ github.action_path }}`
+        commit-message: |
+          Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        labels: |
+          backport-v3.11.x
+          backport-v3.10.x
+          backport-v3.9.x
+          backport-v3.8.x
+        branch: bump-otp-${{ matrix.erlang_version }}
+        delete-branch: true
