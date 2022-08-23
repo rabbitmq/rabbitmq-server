@@ -38,8 +38,8 @@ jobs:
           exit 1
         fi
 
-        ARCHIVE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_URL}"
+        ARCHIVE_RBE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_RBE_URL}"
         SHA="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
 
         if [[ -z "${SHA}" ]]; then
@@ -47,8 +47,18 @@ jobs:
           exit 1
         fi
 
+        ARCHIVE_OCI_URL="https://github.com/erlang/otp/archive/OTP-${VERSION}.tar.gz"
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_OCI_URL}"
+        SHA2="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
+
+        if [[ -z "${SHA2}" ]]; then
+          echo "Failed to determine SHA2 for ${TAG_NAME}"
+          exit 1
+        fi
+
         echo "::set-output name=VERSION::${VERSION}"
         echo "::set-output name=SHA::${SHA}"
+        echo "::set-output name=SHA2::${SHA2}"
     - name: MODIFY VERSION FILE
       if: steps.check-for-branch.outputs.c != 0
       run: |
@@ -64,7 +74,7 @@ jobs:
 
         echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
         echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
-        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
 
         set -x
         git diff
