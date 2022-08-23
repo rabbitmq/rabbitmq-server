@@ -455,13 +455,13 @@ build_scopes(ResourceServerId, Actions, Locations) -> lists:flatmap(
   fun(Action) ->
     produce_list_of_user_tag_or_action_on_resources(ResourceServerId, Action, Locations) end, Actions).
 
-is_legal_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIELD := Type }, ResourceServerType) ->
+is_recognized_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIELD := Type }, ResourceServerType) ->
   case ResourceServerType of
     <<>> -> false;
     V when V == Type -> true;
     _ -> false
   end;
-is_legal_permission(_, _) -> false.
+is_recognized_permission(_, _) -> false.
 
 
 -spec post_process_payload_in_rich_auth_request_format(Payload :: map()) -> map().
@@ -473,7 +473,7 @@ post_process_payload_in_rich_auth_request_format(#{<<"authorization_details">> :
     application:get_env(?APP, ?RESOURCE_SERVER_TYPE, <<>>)),
 
   FilteredPermissionsByType = lists:filter(fun(P) ->
-      is_legal_permission(P, ResourceServerType) end, Permissions),
+      is_recognized_permission(P, ResourceServerType) end, Permissions),
   AdditionalScopes = map_rich_auth_permissions_to_scopes(ResourceServerId, FilteredPermissionsByType),
 
   ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
