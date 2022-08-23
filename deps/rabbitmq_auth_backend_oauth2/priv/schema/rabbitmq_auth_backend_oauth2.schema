@@ -19,6 +19,23 @@
  fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_id", Conf))
  end}.
 
+
+%% An identifier used for JWT Tokens compliant with Rich Authorization Request spec
+%% RabbitMq uses this field as discriminator to filter out permissions meant for RabbitMQ
+%% as a Resource server
+%%
+%% {resource_server_type, <<"rabbitmq">>},
+
+{mapping,
+ "auth_oauth2.resource_server_type",
+ "rabbitmq_auth_backend_oauth2.resource_server_type",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.resource_server_type",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_type", Conf))
+ end}.
+
 %% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
 %% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
@@ -33,6 +50,16 @@
  fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
+
+%% Configure the plugin to skip validation of the aud field
+%%
+%% {verify_aud, true},
+
+{mapping,
+ "auth_oauth2.verify_aud",
+ "rabbitmq_auth_backend_oauth2.verify_aud",
+ [{datatype, {enum, [true, false]}}]}.
+
 
 %% ID of the default signing key
 %%
