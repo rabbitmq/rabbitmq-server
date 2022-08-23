@@ -29,14 +29,11 @@ jobs:
       if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
-        echo "Simulated failure"
-        exit 1
-
         TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
         VERSION=${TAG_NAME#OTP-}
 
-        if [ x"${VERSION}" = x ]; then
+        if [[ -z "${VERSION}" ]]; then
           echo "Failed to determine latest VERSION for OTP-${{ matrix.erlang_version }}"
           exit 1
         fi
@@ -45,7 +42,7 @@ jobs:
         wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_URL}"
         SHA="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
 
-        if [ x"${SHA}" = x ]; then
+        if [[ -z "${SHA}" ]]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
           exit 1
         fi
