@@ -33,6 +33,11 @@
          ensure_tracked_tables_for_this_node/0,
          delete_tracked_channel_user_entry/1]).
 
+%% All nodes (that support the `tracking_records_in_ets' feature) must
+%% export this function with the same spec, as they are called via
+%% RPC from other nodes. (Their implementation can differ.)
+-export([count_local_tracked_items_of_user/1]).
+
 -export([migrate_tracking_records/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -223,9 +228,13 @@ count_tracked_items_in(Type) ->
     end.
 
 count_tracked_items_in_ets({user, Username}) ->
-    rabbit_tracking:count_tracked_items_ets(
-      ?TRACKED_CHANNEL_TABLE_PER_USER, Username,
-      "channels of user").
+    rabbit_tracking:count_on_all_nodes(
+      ?MODULE, count_local_tracked_items_of_user, [Username],
+      ["channels of user ", Username]).
+
+-spec count_local_tracked_items_of_user(rabbit_types:username()) -> non_neg_integer().
+count_local_tracked_items_of_user(Username) ->
+    rabbit_tracking:read_ets_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username).
 
 count_tracked_items_in_mnesia({user, Username}) ->
     rabbit_tracking:count_tracked_items_mnesia(
@@ -409,7 +418,7 @@ get_tracked_channels_by_connection_pid(ConnPid) ->
     end.
 
 get_tracked_channels_by_connection_pid_ets(ConnPid) ->
-    rabbit_tracking:match_tracked_items_ets(
+    rabbit_tracking:match_tracked_items_local(
         ?TRACKED_CHANNEL_TABLE,
         #tracked_channel{connection = ConnPid, _ = '_'}).
 

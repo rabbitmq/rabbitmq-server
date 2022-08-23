@@ -28,8 +28,8 @@
 
 -export([id/2, delete_tracked_entry/4, delete_tracked_entry_internal/4,
          clear_tracking_table/1, delete_tracking_table/3]).
--export([count_tracked_items_ets/3, match_tracked_items_ets/2]).
--export([count_tracked_items_local/2, match_tracked_items_local/2]).
+-export([count_on_all_nodes/4, match_tracked_items_ets/2]).
+-export([read_ets_counter/2, match_tracked_items_local/2]).
 -export([count_tracked_items_mnesia/4, match_tracked_items_mnesia/2]).
 
 %%----------------------------------------------------------------------------
@@ -39,26 +39,29 @@
 
 id(Node, Name) -> {Node, Name}.
 
--spec count_tracked_items_ets(atom(), term(), string()) ->
+-spec count_on_all_nodes(module(), atom(), [term()], iodata()) ->
     non_neg_integer().
-count_tracked_items_ets(Tab, Key, ContextMsg) ->
-    lists:foldl(fun (Node, Acc) when Node == node() ->
-                        N = count_tracked_items_local(Tab, Key),
-                        Acc + N;
-                    (Node, Acc) ->
-                        N = case rabbit_misc:rpc_call(Node, ?MODULE, count_tracked_items_local,
-                                                      [Tab, Key]) of
-                                Int when is_integer(Int) -> Int;
-                                {badrpc, Err} ->
-                                    rabbit_log:error(
-                                      "Failed to fetch number of ~p ~p on node ~p:~n~p",
-                                      [ContextMsg, Key, Node, Err]),
-                                    0
-                            end,
-                        Acc + N
-                end, 0, rabbit_nodes:all_running()).
+count_on_all_nodes(Mod, Fun, Args, ContextMsg) ->
+    Nodes = rabbit_nodes:all_running(),
+    ResL = erpc:multicall(Nodes, Mod, Fun, Args),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, 0).
 
-count_tracked_items_local(Tab, Key) ->
+sum_rpc_multicall_result([{ok, Int}|ResL], [_N|Nodes], ContextMsg, Acc) when is_integer(Int) ->
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc + Int);
+sum_rpc_multicall_result([{ok, BadValue}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
+    rabbit_log:error(
+      "Failed to fetch number of ~s on node ~p:~n not an integer ~p",
+      [ContextMsg, BadNode, BadValue]),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
+sum_rpc_multicall_result([{Class, Reason}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
+    rabbit_log:error(
+      "Failed to fetch number of ~s on node ~p:~n~p:~p",
+      [ContextMsg, BadNode, Class, Reason]),
+    sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
+sum_rpc_multicall_result([], [], _, Acc) ->
+    Acc.
+
+read_ets_counter(Tab, Key) ->
     case ets:lookup(Tab, Key) of
         []         -> 0;
         [{_, Val}] -> Val
