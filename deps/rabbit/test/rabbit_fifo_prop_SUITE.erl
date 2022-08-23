@@ -61,11 +61,15 @@ all_tests() ->
      scenario30,
      scenario31,
      scenario32,
+     v2_v3,
      upgrade,
      upgrade_snapshots,
      upgrade_snapshots_scenario1,
      upgrade_snapshots_scenario2,
      messages_total,
+     simple_prefetch,
+     simple_prefetch_without_checkout_cancel,
+     simple_prefetch_01,
      single_active,
      single_active_01,
      single_active_02,
@@ -919,6 +923,32 @@ single_active(_Config) ->
                       end)
       end, [], Size).
 
+v2_v3(_Config) ->
+    Size = 700,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, undefined, false}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), 0, undefined]),
+                                      oneof([true, false])
+                                     }}]),
+                      begin
+                          Config  = config(?FUNCTION_NAME,
+                                           Length,
+                                           Bytes,
+                                           SingleActive,
+                                           DeliveryLimit,
+                                           InMemoryLength,
+                                           undefined
+                                          ),
+                          ?FORALL(O, ?LET(Ops, log_gen_v2_v3(Size), expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          v2_v3_prop(Config, O)))
+                      end)
+      end, [], Size).
 
 upgrade(_Config) ->
     Size = 500,
@@ -1003,6 +1033,77 @@ messages_total(_Config) ->
                                       messages_total_prop(Config, O)))
                       end)
       end, [], Size).
+
+simple_prefetch(_Config) ->
+    Size = 2000,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, false}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([true, false])
+                                     }}]),
+                      begin
+                          Config  = config(?FUNCTION_NAME,
+                                           Length,
+                                           Bytes,
+                                           SingleActive,
+                                           DeliveryLimit,
+                                           undefined,
+                                           undefined),
+                          ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          simple_prefetch_prop(Config, O, true)))
+                      end)
+      end, [], Size).
+
+simple_prefetch_without_checkout_cancel(_Config) ->
+    Size = 2000,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, false}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([true, false])
+                                     }}]),
+                      begin
+                          Config  = config(?FUNCTION_NAME,
+                                           Length,
+                                           Bytes,
+                                           SingleActive,
+                                           DeliveryLimit,
+                                           undefined,
+                                           undefined),
+                          ?FORALL(O, ?LET(Ops, log_gen_without_checkout_cancel(Size), expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          simple_prefetch_prop(Config, O, false)))
+                      end)
+      end, [], Size).
+
+simple_prefetch_01(_Config) ->
+    C1Pid = test_util:fake_pid(rabbit@fake_node1),
+    C1 = {<<0>>, C1Pid},
+    E = test_util:fake_pid(rabbit@fake_node2),
+    Commands = [
+                make_enqueue(E,1,msg(<<"1">>)),
+                make_enqueue(E,2,msg(<<"22">>)),
+                make_checkout(C1, {auto,2,simple_prefetch}, #{prefetch => 2}),
+                make_checkout(C1, cancel),
+                make_checkout(C1, {auto,1,simple_prefetch}, #{prefetch => 1}),
+                make_settle(C1, [0]),
+                make_settle(C1, [1])
+               ],
+    ?assert(
+       simple_prefetch_prop(#{name => ?FUNCTION_NAME,
+                              max_length => 2,
+                              delivery_limit => 3
+                             },
+                            Commands, true)),
+    ok.
 
 single_active_ordering(_Config) ->
     Size = 2000,
@@ -1539,6 +1640,80 @@ messages_total_invariant() ->
             end
     end.
 
+simple_prefetch_prop(Conf0, Commands, WithCheckoutCancel) ->
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    InitState = test_init(Conf),
+    run_log(InitState, Entries, simple_prefetch_invariant(WithCheckoutCancel), rabbit_fifo),
+    true.
+
+simple_prefetch_invariant(WithCheckoutCancel) ->
+    fun(#rabbit_fifo{consumers = Consumers}) ->
+            maps:fold(
+              fun(_, _, false) ->
+                      false;
+                 (Id, #consumer{cfg = #consumer_cfg{meta = #{prefetch := Prefetch},
+                                                    credit_mode = simple_prefetch},
+                                checked_out = CheckedOut,
+                                credit = Credit}, true) ->
+                      valid_simple_prefetch(Prefetch, Credit, maps:size(CheckedOut), WithCheckoutCancel, Id)
+              end, true, Consumers)
+    end.
+
+valid_simple_prefetch(Prefetch, Credit, _, _, CId)
+  when Credit > Prefetch ->
+    ct:pal("simple_prefetch invariant failed: consumer ~p has credit (~b) > prefetch (~b)",
+           [CId, Credit, Prefetch]),
+    false;
+valid_simple_prefetch(_, Credit, _, _, CId)
+  when Credit < 0 ->
+    ct:pal("simple_prefetch invariant failed: consumer ~p has negative credit (~b)",
+           [CId, Credit]),
+    false;
+valid_simple_prefetch(Prefetch, _, CheckedOut, false, CId)
+  when CheckedOut > Prefetch ->
+    %% We only check this invariant when there are no {checkout, cancel, _} Ra commands because
+    %% if a consumer is cancelled while it has unacked messages, and a new consumer with same
+    %% consumer ID but lower Prefetch subscribes, we know that the number of messages checked out
+    %% to the new consumer can be (temporarily) higher than the new consumer's Prefetch value.
+    ct:pal("simple_prefetch invariant failed: consumer ~p has checked_out (~b) > prefetch (~b)",
+           [CId, CheckedOut, Prefetch]),
+    false;
+valid_simple_prefetch(_, _, _, _, _) ->
+    true.
+
+v2_v3_prop(Conf0, Commands) ->
+    Conf = Conf0#{release_cursor_interval => 0},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    InitState = test_init(Conf),
+    %% run log v2
+    {V2, V2Effs} = run_log(InitState, Entries, fun (_) -> true end,
+                           rabbit_fifo, 2),
+    %% run log v3
+    {V3, V3Effs} = run_log(InitState, Entries, fun (_) -> true end,
+                           rabbit_fifo, 3),
+    %% We expect machine versions v2 and v3 to be exactly the same
+    %% when no "return", "down", or "cancel consumer" Ra commands are used.
+    case V2 =:= V3 of
+        true ->
+            ok;
+        false ->
+            ct:pal("v2_v3_prop failed~nExpected:~n~p~nGot:~n~p",
+                   [V2, V3]),
+            ?assertEqual(V2, V3)
+    end,
+    case V2Effs =:= V3Effs of
+        true ->
+            ok;
+        false ->
+            ct:pal("v2_v3_prop failed~nExpected:~n~p~nGot:~n~p",
+                   [V2Effs, V3Effs]),
+            ?assertEqual(V2Effs, V3Effs)
+    end,
+    true.
+
 upgrade_prop(Conf0, Commands) ->
     Conf = Conf0#{release_cursor_interval => 0},
     Indexes = lists:seq(1, length(Commands)),
@@ -1674,6 +1849,28 @@ log_gen(Size) ->
                           {1, purge}
                          ]))))).
 
+%% Does not use "return", "down", or "checkout cancel" Ra commands
+%% since these 3 commands change behaviour across v2 and v3 fixing
+%% a bug where to many credits are granted to the consumer.
+log_gen_v2_v3(Size) ->
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(2, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {40, {input_event,
+                                frequency([{10, settle},
+                                           {2, discard},
+                                           {2, requeue}])}},
+                          {1, checkout_gen(oneof(CPids))},
+                          {1, purge}
+                         ]))))).
+
 log_gen_upgrade_snapshots(Size) ->
     Nodes = [node(),
              fakenode@fake,
@@ -1783,6 +1980,28 @@ log_gen_ordered(Size) ->
                           {2, checkout_cancel_gen(oneof(CPids))},
                           {2, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)}
+                         ]))))).
+
+log_gen_without_checkout_cancel(Size) ->
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(2, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {40, {input_event,
+                                frequency([{10, settle},
+                                           {2, return},
+                                           {2, discard},
+                                           {2, requeue}])}},
+                          {2, checkout_gen(oneof(CPids))},
+                          {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, nodeup_gen(Nodes)},
+                          {1, purge}
                          ]))))).
 
 monotonic_gen() ->
@@ -2109,7 +2328,7 @@ run_upgrade_snapshot_test(Conf, Commands) ->
          %% Perform conversion and recover in V2.
          Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
          #rabbit_fifo{} = V2 = element(1, Res),
-         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo),
+         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo, 2),
          %% Invariant: Recovering a V1 snapshot in V1 or V2 should end up in the same
          %% number of messages.
          Fields = [num_messages,
@@ -2146,6 +2365,9 @@ run_log(InitState, Entries) ->
     run_log(InitState, Entries, fun(_) -> true end, rabbit_fifo).
 
 run_log(InitState, Entries, InvariantFun, FifoMod) ->
+    run_log(InitState, Entries, InvariantFun, FifoMod, 3).
+
+run_log(InitState, Entries, InvariantFun, FifoMod, MachineVersion) ->
     Invariant = fun(E, S) ->
                        case InvariantFun(S) of
                            true -> ok;
@@ -2155,7 +2377,7 @@ run_log(InitState, Entries, InvariantFun, FifoMod) ->
                 end,
 
     lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case FifoMod:apply(meta(Idx), E, Acc0) of
+                        case FifoMod:apply(meta(Idx, MachineVersion), E, Acc0) of
                             {Acc, _, Efx} when is_list(Efx) ->
                                 Invariant(E, Acc),
                                 {Acc, Efx0 ++ Efx};
@@ -2181,10 +2403,15 @@ test_init_v1(Conf) ->
     rabbit_fifo_v1:init(maps:merge(Default, Conf)).
 
 meta(Idx) ->
-    #{index => Idx, term => 1, system_time => 0}.
+    meta(Idx, 3).
+
+meta(Idx, Vsn) ->
+    #{machine_version => Vsn, index => Idx, term => 1, system_time => 0}.
 
 make_checkout(Cid, Spec) ->
-    rabbit_fifo:make_checkout(Cid, Spec, #{}).
+    make_checkout(Cid, Spec, #{}).
+make_checkout(Cid, Spec, Meta) ->
+    rabbit_fifo:make_checkout(Cid, Spec, Meta).
 
 make_enqueue(Pid, Seq, Msg) ->
     rabbit_fifo:make_enqueue(Pid, Seq, Msg).
