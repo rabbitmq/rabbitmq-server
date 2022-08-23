@@ -235,7 +235,8 @@ jobs:
         run: |
           ERLANG_HOME="$(dirname $(dirname $(which erl)))"
           ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
-          bazelisk test //packaging/docker-image:all \
+          OCI_TESTS=$(bazel query 'tests(//packaging/docker-image/...)')
+          bazelisk test ${OCI_TESTS} \
             --config=buildbuddy
 
       - name: Load
