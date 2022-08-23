@@ -24,7 +24,8 @@ all() ->
      {group, basic_unhappy_path},
      {group, token_refresh},
      {group, extra_scopes_source},
-     {group, scope_aliases}
+     {group, scope_aliases},
+     {group, rich_authorization_requests}
     ].
 
 groups() ->
@@ -52,8 +53,7 @@ groups() ->
                        test_successful_connection_with_complex_claim_as_a_map,
                        test_successful_connection_with_complex_claim_as_a_list,
                        test_successful_connection_with_complex_claim_as_a_binary,
-                       test_successful_connection_with_keycloak_token,
-                       test_successful_connection_with_rich_authorization_request_token
+                       test_successful_connection_with_keycloak_token
      ]},
 
      {scope_aliases, [], [
@@ -64,7 +64,10 @@ groups() ->
                        test_successful_connection_with_scope_alias_in_scope_field_case3,
                        test_failed_connection_with_with_non_existent_scope_alias_in_extra_scopes_source,
                        test_failed_connection_with_non_existent_scope_alias_in_scope_field
-                      ]}
+                      ]},
+     {rich_authorization_requests, [], [
+         test_successful_connection_with_rich_authorization_request_token
+     ]}
     ].
 
 %%
