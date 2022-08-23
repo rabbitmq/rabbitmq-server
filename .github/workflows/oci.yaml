@@ -4,6 +4,8 @@ on:
   push:
     paths-ignore:
       - '.github/workflows/secondary-umbrella.yaml'
+      - '.github/workflows/update-elixir-patches.yaml'
+      - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
