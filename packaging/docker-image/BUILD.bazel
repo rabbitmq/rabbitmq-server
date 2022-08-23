@@ -48,12 +48,14 @@ download_pkgs(
     name = "otp_pkgs",
     image_tar = "@ubuntu2004//image",
     packages = BUILD_DEPS_PACKAGES,
+    tags = ["manual"],
 )
 
 download_pkgs(
     name = "rabbitmq_pkgs",
     image_tar = "@ubuntu2004//image",
     packages = REQUIRED_PACKAGES + CONVENIENCE_PACKAGES,
+    tags = ["manual"],
 )
 
 install_pkgs(
@@ -62,6 +64,7 @@ install_pkgs(
     installables_tar = ":otp_pkgs.tar",
     installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
     output_image_name = "otp_pkgs_image",
+    tags = ["manual"],
 )
 
 install_pkgs(
@@ -70,6 +73,7 @@ install_pkgs(
     installables_tar = ":rabbitmq_pkgs.tar",
     installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
     output_image_name = "rabbitmq_pkgs_image",
+    tags = ["manual"],
 )
 
 container_layer(
@@ -81,6 +85,7 @@ container_layer(
     files = [
         "build_install_openssh.sh",
     ],
+    tags = ["manual"],
     tars = [
         "@openssl-1.1.1g//file",
     ],
@@ -90,6 +95,7 @@ container_image(
     name = "openssl_source",
     base = ":otp_pkgs_image",
     layers = [":openssl_source_layer"],
+    tags = ["manual"],
 )
 
 container_run_and_commit_layer(
@@ -99,6 +105,7 @@ container_run_and_commit_layer(
         "rm /usr/local/src/build_install_openssh.sh",
     ],
     image = ":openssl_source.tar",
+    tags = ["manual"],
 )
 
 container_image(
@@ -111,6 +118,7 @@ container_image(
     layers = [
         ":openssl_layer",
     ],
+    tags = ["manual"],
     tars = select({
         "@rules_erlang//platforms:erlang_23": ["@otp_src_23//file"],
         "@rules_erlang//platforms:erlang_24": ["@otp_src_24//file"],
@@ -126,6 +134,7 @@ container_run_and_commit_layer(
         "rm /usr/local/src/build_install_otp.sh",
     ],
     image = ":otp_source.tar",
+    tags = ["manual"],
 )
 
 container_layer(
@@ -136,6 +145,7 @@ container_layer(
         "docker-entrypoint.sh",
         "install_rabbitmq.sh",
     ],
+    tags = ["manual"],
     tars = [
         "//:package-generic-unix",
     ],
@@ -157,6 +167,7 @@ container_image(
         ":otp_layer",
         ":rabbitmq_tarball_layer",
     ],
+    tags = ["manual"],
 )
 
 container_run_and_commit_layer(
@@ -166,6 +177,7 @@ container_run_and_commit_layer(
         "rm /opt/install_rabbitmq.sh",
     ],
     image = ":rabbitmq_tarball.tar",
+    tags = ["manual"],
 )
 
 C_UTF8 = "C.UTF-8"
@@ -210,6 +222,7 @@ container_image(
         "15674/tcp",  # web-stomp
         "15670/tcp",  # examples
     ],
+    tags = ["manual"],
     volumes = [
         RABBITMQ_DATA_DIR,
     ],
@@ -221,6 +234,7 @@ container_image(
 container_image(
     name = "openssl_install_wrapper",
     base = ":otp_source",
+    tags = ["manual"],
 )
 
 container_image(
@@ -229,6 +243,7 @@ container_image(
     layers = [
         ":otp_layer",
     ],
+    tags = ["manual"],
 )
 
 # Tests
@@ -237,19 +252,28 @@ container_test(
     name = "openssl_test",
     configs = ["//packaging/docker-image/test_configs:openssl_ubuntu.yaml"],
     image = ":openssl_install_wrapper",
-    tags = ["docker"],
+    tags = [
+        "docker",
+        "manual",
+    ],
 )
 
 container_test(
     name = "otp_test",
     configs = ["//packaging/docker-image/test_configs:otp_ubuntu.yaml"],
     image = ":otp_install_wrapper",
-    tags = ["docker"],
+    tags = [
+        "docker",
+        "manual",
+    ],
 )
 
 container_test(
     name = "rabbitmq_test",
     configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
     image = ":rabbitmq",
-    tags = ["docker"],
+    tags = [
+        "docker",
+        "manual",
+    ],
 )
