@@ -33,11 +33,16 @@ jobs:
           | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
         VERSION=${TAG_NAME#OTP-}
 
+        if [ x"${VERSION}" = x ]; then
+          echo "Failed to determine latest VERSION for OTP-${{ matrix.erlang_version }}"
+          exit 1
+        fi
+
         ARCHIVE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
         wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_URL}"
-        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
+        SHA="$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')"
 
-        if [ -z "${SHA}" ]; then
+        if [ x"${SHA}" = x ]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
           exit 1
         fi
@@ -71,6 +76,13 @@ jobs:
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
         title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        body: >
+           Automated changes created by
+           ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+           using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
+           GitHub action
+
+           Source workflow: `${{ github.action_path }}`
         commit-message: |
           Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
