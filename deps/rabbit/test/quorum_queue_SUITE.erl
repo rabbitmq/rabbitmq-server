@@ -20,10 +20,10 @@
 
 -compile([nowarn_export_all, export_all]).
 
--define(DEFAULT_AWAIT, 10000).
+-define(DEFAULT_AWAIT, 10_000).
 
 suite() ->
-    [{timetrap, 5 * 60000}].
+    [{timetrap, 5 * 60_000}].
 
 all() ->
     [
@@ -133,6 +133,7 @@ all_tests() ->
      queue_length_limit_drop_head,
      queue_length_limit_reject_publish,
      subscribe_redelivery_limit,
+     subscribe_redelivery_limit_many,
      subscribe_redelivery_policy,
      subscribe_redelivery_limit_with_dead_letter,
      purge,
@@ -2149,6 +2150,46 @@ subscribe_redelivery_limit(Config) ->
             ok
     end.
 
+%% Test that consumer credit is increased correctly.
+subscribe_redelivery_limit_many(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delivery-limit">>, long, 1}])),
+
+    publish_many(Ch, QQ, 5),
+    wait_for_messages(Config, [[QQ, <<"5">>, <<"5">>, <<"0">>]]),
+
+    qos(Ch, 2, false),
+    subscribe(Ch, QQ, false),
+    wait_for_messages(Config, [[QQ, <<"5">>, <<"3">>, <<"2">>]]),
+
+    nack(Ch, false, true),
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"5">>, <<"3">>, <<"2">>]]),
+
+    nack(Ch, false, true),
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"3">>, <<"1">>, <<"2">>]]),
+
+    nack(Ch, false, true),
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"3">>, <<"1">>, <<"2">>]]),
+
+    nack(Ch, false, true),
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
+
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
+
+    nack(Ch, false, true),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
 subscribe_redelivery_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -3025,6 +3066,16 @@ receive_basic_deliver(Redelivered) ->
     receive
         {#'basic.deliver'{redelivered = R}, _} when R == Redelivered ->
             ok
+    end.
+
+nack(Ch, Multiple, Requeue) ->
+    receive {#'basic.deliver'{delivery_tag = DeliveryTag}, #amqp_msg{}} ->
+                amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                    multiple     = Multiple,
+                                                    requeue      = Requeue})
+    after 5000 ->
+              flush(10),
+              ct:fail("basic deliver timeout")
     end.
 
 wait_for_cleanup(Server, Channel, Number) ->

@@ -66,7 +66,11 @@
 -type consumer_id() :: {consumer_tag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type credit_mode() :: simple_prefetch | credited.
+-type credit_mode() :: credited |
+                        %% machine_version 2
+                        simple_prefetch |
+                        %% machine_version 3
+                        {simple_prefetch, MaxCredit :: non_neg_integer()}.
 %% determines how credit is replenished
 
 -type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
@@ -102,7 +106,7 @@
          %% or returned.
          %% credited: credit can only be changed by receiving a consumer_credit
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
-         credit_mode = simple_prefetch :: credit_mode(), % part of snapshot data
+         credit_mode :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
          priority = 0 :: non_neg_integer()}).
 
