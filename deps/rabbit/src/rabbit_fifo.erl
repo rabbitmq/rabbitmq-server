@@ -626,7 +626,7 @@ convert_msg({Header, empty}) ->
 convert_msg(Header) when ?IS_HEADER(Header) ->
     ?MSG(undefined, Header).
 
-convert_consumer({ConsumerTag, Pid}, CV1) ->
+convert_consumer_v1_to_v2({ConsumerTag, Pid}, CV1) ->
     Meta = element(2, CV1),
     CheckedOut = element(3, CV1),
     NextMsgId = element(4, CV1),
@@ -677,11 +677,11 @@ convert_v1_to_v2(V1State0) ->
                             end, V2PrefReturns, ReturnsV1),
     ConsumersV2 = maps:map(
                     fun (ConsumerId, CV1) ->
-                            convert_consumer(ConsumerId, CV1)
+                            convert_consumer_v1_to_v2(ConsumerId, CV1)
                     end, ConsumersV1),
     WaitingConsumersV2 = lists:map(
                            fun ({ConsumerId, CV1}) ->
-                                   {ConsumerId, convert_consumer(ConsumerId, CV1)}
+                                   {ConsumerId, convert_consumer_v1_to_v2(ConsumerId, CV1)}
                            end, WaitingConsumersV1),
     EnqueuersV1 = rabbit_fifo_v1:get_field(enqueuers, V1State),
     EnqueuersV2 = maps:map(fun (_EnqPid, Enq) ->
@@ -749,6 +749,18 @@ convert_v1_to_v2(V1State0) ->
              waiting_consumers = WaitingConsumersV2,
              last_active = rabbit_fifo_v1:get_field(last_active, V1State)
             }.
+
+convert_v2_to_v3(#rabbit_fifo{consumers = ConsumersV2} = StateV2) ->
+    ConsumersV3 = maps:map(fun(_, C) ->
+                                   convert_consumer_v2_to_v3(C)
+                           end, ConsumersV2),
+    StateV2#rabbit_fifo{consumers = ConsumersV3}.
+
+convert_consumer_v2_to_v3(C = #consumer{cfg = Cfg = #consumer_cfg{credit_mode = simple_prefetch,
+                                                                  meta = #{prefetch := Prefetch}}}) ->
+    C#consumer{cfg = Cfg#consumer_cfg{credit_mode = {simple_prefetch, Prefetch}}};
+convert_consumer_v2_to_v3(C) ->
+    C.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1667,11 +1679,10 @@ increase_credit(_Meta, #consumer{cfg = #consumer_cfg{lifetime = auto,
     %% credit_mode: `credited' also doesn't automatically increment credit
     Credit;
 increase_credit(#{machine_version := MachineVersion},
-                #consumer{cfg = #consumer_cfg{meta = #{prefetch := Prefetch},
-                                              credit_mode = simple_prefetch},
+                #consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredit}},
                           credit = Current}, Credit)
-  when MachineVersion >= 3, Prefetch > 0 ->
-    min(Prefetch, Current + Credit);
+  when MachineVersion >= 3, MaxCredit > 0 ->
+    min(MaxCredit, Current + Credit);
 increase_credit(_Meta, #consumer{credit = Current}, Credit) ->
     Current + Credit.
 
@@ -2110,13 +2121,14 @@ uniq_queue_in(_Key, _Consumer, ServiceQueue) ->
     ServiceQueue.
 
 update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
-                {Life, Credit, Mode} = Spec, Priority,
+                {Life, Credit, Mode0} = Spec, Priority,
                 #?MODULE{cfg = #cfg{consumer_strategy = competing},
                          consumers = Cons0} = State0) ->
     Consumer = case Cons0 of
                    #{ConsumerId := #consumer{} = Consumer0} ->
-                       merge_consumer(Consumer0, ConsumerMeta, Spec, Priority);
+                       merge_consumer(Meta, Consumer0, ConsumerMeta, Spec, Priority);
                    _ ->
+                       Mode = credit_mode(Meta, Credit, Mode0),
                        #consumer{cfg = #consumer_cfg{tag = Tag,
                                                      pid = Pid,
                                                      lifetime = Life,
@@ -2127,7 +2139,7 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                end,
     update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
 update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
-                {Life, Credit, Mode} = Spec, Priority,
+                {Life, Credit, Mode0} = Spec, Priority,
                 #?MODULE{cfg = #cfg{consumer_strategy = single_active},
                          consumers = Cons0,
                          waiting_consumers = Waiting,
@@ -2137,17 +2149,18 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
     %% one, then merge
     case active_consumer(Cons0) of
         {ConsumerId, #consumer{status = up} = Consumer0} ->
-            Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
+            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta, Spec, Priority),
             update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
         undefined when is_map_key(ConsumerId, Cons0) ->
             %% there is no active consumer and the current consumer is in the
             %% consumers map and thus must be cancelled, in this case we can just
             %% merge and effectively make this the current active one
             Consumer0 = maps:get(ConsumerId, Cons0),
-            Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
+            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta, Spec, Priority),
             update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
         _ ->
             %% add as a new waiting consumer
+            Mode = credit_mode(Meta, Credit, Mode0),
             Consumer = #consumer{cfg = #consumer_cfg{tag = Tag,
                                                      pid = Pid,
                                                      lifetime = Life,
@@ -2159,16 +2172,23 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
             State0#?MODULE{waiting_consumers = Waiting ++ [{ConsumerId, Consumer}]}
     end.
 
-merge_consumer(#consumer{cfg = CCfg, checked_out = Checked} = Consumer,
-               ConsumerMeta, {Life, Credit, Mode}, Priority) ->
+merge_consumer(Meta, #consumer{cfg = CCfg, checked_out = Checked} = Consumer,
+               ConsumerMeta, {Life, Credit, Mode0}, Priority) ->
     NumChecked = map_size(Checked),
     NewCredit = max(0, Credit - NumChecked),
+    Mode = credit_mode(Meta, Credit, Mode0),
     Consumer#consumer{cfg = CCfg#consumer_cfg{priority = Priority,
                                               meta = ConsumerMeta,
                                               credit_mode = Mode,
                                               lifetime = Life},
                       status = up,
                       credit = NewCredit}.
+
+credit_mode(#{machine_version := Vsn}, Credit, simple_prefetch)
+  when Vsn >= 3 ->
+    {simple_prefetch, Credit};
+credit_mode(_, _, Mode) ->
+    Mode.
 
 maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
                      ServiceQueue0) ->
@@ -2391,7 +2411,7 @@ convert(0, To, State) ->
 convert(1, To, State) ->
     convert(2, To, convert_v1_to_v2(State));
 convert(2, To, State) ->
-    convert(3, To, State).
+    convert(3, To, convert_v2_to_v3(State)).
 
 smallest_raft_index(#?MODULE{messages = Messages,
                              ra_indexes = Indexes,
