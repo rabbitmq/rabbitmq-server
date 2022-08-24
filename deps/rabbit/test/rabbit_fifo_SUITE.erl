@@ -22,7 +22,8 @@
 all() ->
     [
      {group, machine_version_2},
-     {group, machine_version_3}
+     {group, machine_version_3},
+     {group, machine_version_conversion}
     ].
 
 
@@ -34,7 +35,8 @@ all_tests() ->
 groups() ->
     [
      {machine_version_2, [], all_tests()},
-     {machine_version_3, [], all_tests()}
+     {machine_version_3, [], all_tests()},
+     {machine_version_conversion, [], [convert_v2_to_v3]}
     ].
 
 init_per_suite(Config) ->
@@ -46,7 +48,9 @@ end_per_suite(_Config) ->
 init_per_group(machine_version_2, Config) ->
     [{machine_version, 2} | Config];
 init_per_group(machine_version_3, Config) ->
-    [{machine_version, 3} | Config].
+    [{machine_version, 3} | Config];
+init_per_group(machine_version_conversion, Config) ->
+    Config.
 
 end_per_group(_Group, _Config) ->
     ok.
@@ -1713,6 +1717,29 @@ machine_version_waiting_consumer_test(C) ->
     ?assertEqual(0, lqueue:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
     ?assertEqual(1, priority_queue:len(S)),
+    ok.
+
+convert_v2_to_v3(Config) ->
+    ConfigV2 = [{machine_version, 2} | Config],
+    ConfigV3 = [{machine_version, 3} | Config],
+
+    Cid1 = {ctag1, self()},
+    Cid2 = {ctag2, self()},
+    MaxCredits = 20,
+    Entries = [{1, rabbit_fifo:make_checkout(Cid1, {auto, 10, credited}, #{})},
+               {2, rabbit_fifo:make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
+                                             #{prefetch => MaxCredits})}],
+
+    %% run log in v2
+    {State, _} = run_log(ConfigV2, test_init(?FUNCTION_NAME), Entries),
+
+    %% convert from v2 to v3
+    {#rabbit_fifo{consumers = Consumers}, ok, _} =
+        apply(meta(ConfigV3, 3), {machine_version, 2, 3}, State),
+
+    ?assertEqual(2, maps:size(Consumers)),
+    ?assertMatch(#consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredits}}},
+                 maps:get(Cid2, Consumers)),
     ok.
 
 queue_ttl_test(C) ->
