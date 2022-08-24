@@ -1681,7 +1681,7 @@ increase_credit(_Meta, #consumer{cfg = #consumer_cfg{lifetime = auto,
 increase_credit(#{machine_version := MachineVersion},
                 #consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredit}},
                           credit = Current}, Credit)
-  when MachineVersion >= 3, MaxCredit > 0 ->
+  when MachineVersion >= 3 andalso MaxCredit > 0 ->
     min(MaxCredit, Current + Credit);
 increase_credit(_Meta, #consumer{credit = Current}, Credit) ->
     Current + Credit.
