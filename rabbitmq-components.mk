@@ -116,6 +116,7 @@ dep_cowlib = hex 2.9.1
 dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 <<<<<<< HEAD
+<<<<<<< HEAD
 dep_prometheus = hex 4.9.0
 <<<<<<< HEAD
 dep_ra = hex 2.0.13
@@ -126,6 +127,10 @@ dep_prometheus = hex 4.9.1
 dep_ra = git https://github.com/rabbitmq/ra.git main
 >>>>>>> 1429d3afcd (Update prometheus to 4.9.1)
 >>>>>>> 0b400d1183 (Update prometheus to 4.9.1)
+=======
+dep_prometheus = hex 4.9.1
+dep_ra = hex 2.2.0
+>>>>>>> e4433549f9 (Resolve a conflict)
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.2
 dep_redbug = hex 2.0.7
