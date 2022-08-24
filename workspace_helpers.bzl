@@ -169,11 +169,11 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "prometheus",
-        version = "4.9.0",
+        version = "4.9.1",
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
-        sha256 = "026bd40f952c3ffc45aa6a0673602f800ff219a81c63b1c4683d2b7d8a780c2b",
+        sha256 = "d75e80d7b2c1be6bf296e211e806e939ae3d9e0428f45b4caad1817f028213d3",
     )
 
     github_erlang_app(
