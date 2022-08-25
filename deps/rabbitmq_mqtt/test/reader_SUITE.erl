@@ -19,6 +19,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 block,
+                                block_connack_timeout,
                                 handle_invalid_frames,
                                 stats
                                ]}
@@ -116,6 +117,53 @@ block(Config) ->
                                     <<"Blocked">>]),
 
     emqttc:disconnect(C).
+
+block_connack_timeout(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Ports0 = rpc(Config, erlang, ports, []),
+
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    %% Let connection block.
+    timer:sleep(100),
+
+    %% We can still connect via TCP, but CONNECT frame will not be processed on the server.
+    {ok, Client} = emqttc:start_link([{host, "localhost"},
+                                      {port, P},
+                                      {client_id, <<"simpleClient">>},
+                                      {proto_ver, 3},
+                                      {logger, info},
+                                      {connack_timeout, 1}]),
+    timer:sleep(100),
+
+    Ports = rpc(Config, erlang, ports, []),
+    %% Server creates 1 new port to handle our MQTT connection.
+    [NewPort] = Ports -- Ports0,
+    {connected, MqttReader} = rpc(Config, erlang, port_info, [NewPort, connected]),
+    MqttReaderMRef = monitor(process, MqttReader),
+
+    unlink(Client),
+    ClientMRef = monitor(process, Client),
+    receive
+        {'DOWN', ClientMRef, process, Client, {shutdown, connack_timeout}} ->
+            ok
+    after 2000 ->
+              ct:fail("missing connack_timeout in client")
+    end,
+
+    %% Unblock connection. CONNECT frame will be processed on the server.
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+
+    receive
+        {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, peername_not_known}} ->
+            %% We expect that MQTT reader process exits with reason peername_not_known
+            %% because our client already disconnected.
+            ok
+    after 2000 ->
+              ct:fail("missing peername_not_known from server")
+    end,
+    %% Ensure that our client is not registered.
+    [] = rpc(Config, rabbit_mqtt_collector, list, []),
+    ok.
 
 handle_invalid_frames(Config) ->
     N = rpc(Config, ets, info, [connection_metrics, size]),
