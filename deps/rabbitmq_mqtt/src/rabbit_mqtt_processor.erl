@@ -201,11 +201,12 @@ process_connect(#mqtt_frame{ variable = #mqtt_frame_connect{
     end.
 
 process_request(?CONNECT, Frame, PState = #proc_state{socket = Socket}) ->
-    case rabbit_net:peername(Socket) of
-        {error, einval} ->
-            %% Can happen when connection was blocked because of resource alarm
-            %% and client therefore disconnected due to client side CONNACK timeout.
-            {error, peername_not_known, PState};
+    %% Check whether peer closed the connection.
+    %% For example, this can happen when connection was blocked because of resource
+    %% alarm and client therefore disconnected due to client side CONNACK timeout.
+    case rabbit_net:socket_ends(Socket, inbound) of
+        {error, Reason} ->
+            {error, {socket_ends, Reason}, PState};
         _ ->
             process_connect(Frame, PState)
     end;
@@ -591,8 +592,8 @@ process_login(UserBin, PassBin, ProtoVersion,
                           adapter_info = AdapterInfo,
                           ssl_login_name = SslLoginName,
                           peer_addr    = Addr}) ->
-    {ok, {_, LocalPort}} = rabbit_net:sockname(Sock),
-    {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, LocalPort),
+    {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
+    {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log_connection:debug(
         "MQTT vhost picked using ~s",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),

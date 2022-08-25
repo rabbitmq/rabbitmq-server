@@ -169,8 +169,8 @@ block_connack_timeout(Config) ->
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
 
     receive
-        {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, peername_not_known}} ->
-            %% We expect that MQTT reader process exits with reason peername_not_known
+        {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, {socket_ends, einval}}} ->
+            %% We expect that MQTT reader process exits (without crashing)
             %% because our client already disconnected.
             ok
     after 2000 ->
