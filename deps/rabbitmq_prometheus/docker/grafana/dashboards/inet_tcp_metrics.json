@@ -10,7 +10,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.0.0"
+      "version": "8.0.0"
     },
     {
       "type": "panel",
@@ -1711,5 +1711,5 @@
   "timezone": "",
   "title": "inet_tcp_metrics",
   "uid": "RCTIrQDMz",
-  "version": 20210322
+  "version": 20220805
 }
