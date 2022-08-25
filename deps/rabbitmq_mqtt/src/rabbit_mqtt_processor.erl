@@ -96,8 +96,7 @@ add_client_id_to_adapter_info(ClientId, #amqp_adapter_info{additional_info = Add
                       end,
     AdapterInfo#amqp_adapter_info{additional_info = AdditionalInfo2}.
 
-process_request(?CONNECT,
-                #mqtt_frame{ variable = #mqtt_frame_connect{
+process_connect(#mqtt_frame{ variable = #mqtt_frame_connect{
                                            username   = Username,
                                            password   = Password,
                                            proto_ver  = ProtoVersion,
@@ -199,6 +198,16 @@ process_request(?CONNECT,
       ?CONNACK_SERVER      -> {error, unavailable, PState5};
       ?CONNACK_INVALID_ID  -> {error, invalid_client_id, PState5};
       ?CONNACK_PROTO_VER   -> {error, unsupported_protocol_version, PState5}
+    end.
+
+process_request(?CONNECT, Frame, PState = #proc_state{socket = Socket}) ->
+    case rabbit_net:peername(Socket) of
+        {error, einval} ->
+            %% Can happen when connection was blocked because of resource alarm
+            %% and client therefore disconnected due to client side CONNACK timeout.
+            {error, peername_not_known, PState};
+        _ ->
+            process_connect(Frame, PState)
     end;
 
 process_request(?PUBACK,
@@ -582,8 +591,8 @@ process_login(UserBin, PassBin, ProtoVersion,
                           adapter_info = AdapterInfo,
                           ssl_login_name = SslLoginName,
                           peer_addr    = Addr}) ->
-    {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
-    {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
+    {ok, {_, LocalPort}} = rabbit_net:sockname(Sock),
+    {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, LocalPort),
     rabbit_log_connection:debug(
         "MQTT vhost picked using ~s",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
