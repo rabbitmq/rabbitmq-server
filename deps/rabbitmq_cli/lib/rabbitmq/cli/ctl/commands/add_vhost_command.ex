@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
   end
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, description, tags, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, tags, Helpers.cli_acting_user()])
   end
   def run([vhost], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
