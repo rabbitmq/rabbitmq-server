@@ -82,7 +82,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -ifdef(TRACE_SUP2).
--define(TRACE_SUPERVISOR2_ERROR_LOG(SUP_PID, ERROR, CHILD, SUP_NAME, LOGGED),
+-define(TRACE_SUPERVISOR2_ERROR_LOG(ERROR, CHILD, SUP_NAME, LOGGED),
         rabbit_event:notify(supervisor2_error_report,
            [{supervisor, SUP_NAME},
             {errorContext, ERROR},
@@ -90,13 +90,13 @@
             {logged, LOGGED},
             {timestamp, os:system_time(milli_seconds)}])).
 -else.
--define(TRACE_SUPERVISOR2_ERROR_LOG(SUP_PID, ERROR, CHILD, SUP_NAME, LOGGED), ok).
+-define(TRACE_SUPERVISOR2_ERROR_LOG(ERROR, CHILD, SUP_NAME, LOGGED), ok).
 -endif.
 
 -define(report_error(Error, Reason, Child, SupName),
         case lists:member(Error, rabbit_misc:get_env(rabbit, ignore_supervisor2_error_reports, [])) of
             false ->
-                ?TRACE_SUPERVISOR2_ERROR_LOG(self(), Error, Child, SupName, true),
+                ?TRACE_SUPERVISOR2_ERROR_LOG(Error, Child, SupName, true),
                 ?LOG_ERROR(#{label=>{supervisor,Error},
                              report=>[{supervisor,SupName},
                                       {errorContext,Error},
@@ -108,7 +108,7 @@
                              error_logger=>#{tag=>error_report,
                                              type=>supervisor_report}});
             true ->
-                ?TRACE_SUPERVISOR2_ERROR_LOG(self(), Error, Child, SupName, false),
+                ?TRACE_SUPERVISOR2_ERROR_LOG(Error, Child, SupName, false),
                 ok
         end).
 
