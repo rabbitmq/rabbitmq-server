@@ -73,3 +73,12 @@ To run this suite, we need to shutdown UAA.
 make stop-uaa
 make run-remote-test TEST_ARGS=test/oauth/with-uaa-down
 ```
+
+# Run RabbitMQ directly from source and interactively using your local chrome browser
+
+If we prefer, we can run RabbitMQ from source, we proceed as follows:
+```bash
+docker kill rabbitmq && docker rm rabbitmq 
+gmake run-broker PLUGINS="rabbitmq_management rabbitmq_auth_backend_oauth2" RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config
+```
+> Run the command from the root of rabbitmq-server checked out folder
