@@ -2,7 +2,7 @@ logging:
   config: /uaa/log4j2.properties
 
 issuer:
-  uri: http://localhost:8080/
+  uri: http://uaa:8080/
 
 encryption:
   active_key_label: CHANGE-THIS-KEY
@@ -125,7 +125,7 @@ oauth:
       authorized-grant-types: authorization_code
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
-      redirect-uri: http://localhost:15672
+      redirect-uri: http://rabbitmq:15672
       autoapprove: true
 
     mgt_api_client_2:

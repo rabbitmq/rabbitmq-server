@@ -1,7 +1,7 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
-const {buildDriver, goToHome, delay} = require("../../utils");
+const {buildDriver, goToHome, delay, teardown} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
@@ -11,7 +11,7 @@ describe("Once user is logged in", function() {
   var homePage;
   var uaaLogin;
   var overview;
-  this.timeout(25000); 
+  this.timeout(25000); // hard-coded to 25secs because this test requires 25sec to run
 
   before(async function() {
     driver = buildDriver();
@@ -37,15 +37,7 @@ describe("Once user is logged in", function() {
 
   });
 
-  after(function(done) {
-   if (this.currentTest.isPassed) {
-      driver.executeScript("lambda-status=passed");
-    } else {
-      driver.executeScript("lambda-status=failed");
-    }
-    driver.quit().then(function() {
-      done();
-    });
+  after(async function() {
+    await teardown(driver, this)
   });
-
 })

@@ -2,50 +2,31 @@
 
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-export RABBITMQ_CONFIG=${SCRIPT}/rabbitmq.config
+export RABBITMQ_CONFIG=${SCRIPT}/${RABBITMQ_CONFIG_FILE:-rabbitmq.config}
+export UAA_CONFIG=${SCRIPT}/${UAA_CONFIG_FOLDER:-uaa}
 
 . $SCRIPT/../../../bin/rabbitmq.sh
 
 start_uaa() {
 
-  UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-latest}
+  UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-75.21.0}
+  UAA_IMAGE_NAME=${UAA_IMAGE_NAME:-cloudfoundry/uaa}
 
-  docker network inspect rabbitmq_selenimum_net >/dev/null 2>&1 || docker network create rabbitmq_selenimum_net
-  docker rm -f local-uaa 2>/dev/null || echo "uaa was not running"
+  docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net
+  docker rm -f uaa 2>/dev/null || echo "uaa was not running"
 
-  echo "Running uaa:${UAA_IMAGE_TAG} docker image ..."
+  echo "Running ${UAA_IMAGE_NAME}:${UAA_IMAGE_TAG} docker image with .."
 
   docker run \
   		--detach \
-      --name local-uaa --net rabbitmq_net \
+      --name uaa --net rabbitmq_net \
   		--publish 8080:8080 \
-  		--mount type=bind,source=${SCRIPT}/uaa,target=/etc/uaa \
+  		--mount "type=bind,source=${UAA_CONFIG},target=/uaa" \
+  		--env UAA_CONFIG_PATH="/uaa" \
   		--env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
-      uaa:${UAA_IMAGE_TAG}
-
-
-}
-
-install_uaac() {
-
-  gem list --local | grep cf-uaac || sudo gem install cf-uaac && echo "Already installed"
-
-  target=${UAA_HOST:="http://local-uaa:8080/uaa"}
-  # export to use a different ctl, e.g. if the node was built from source
-
-  # Target the server
-  uaac target $target
-
-  # Get admin client to manage UAA
-  uaac token client get admin -s adminsecret
-
-  # Set permission to list signing keys
-  uaac client update admin --authorities "clients.read clients.secret clients.write uaa.admin clients.admin scim.write scim.read uaa.resource"
+      "${UAA_IMAGE_NAME}:${UAA_IMAGE_TAG}"
 
 }
 
 start_rabbitmq
 start_uaa
-sleep 5
-install_uaac
-${SCRIPT}/uaa/setup

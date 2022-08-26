@@ -11,8 +11,8 @@ start_rabbitmq() {
 
 
   docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net
-  docker rm -f local-rabbitmq 2>/dev/null || echo "rabbitmq was not running"
-  docker run -d --name local-rabbitmq --net rabbitmq_net \
+  docker rm -f rabbitmq 2>/dev/null || echo "rabbitmq was not running"
+  docker run -d --name rabbitmq --net rabbitmq_net \
       -p 15672:15672 -p 5672:5672 \
       -v ${RABBITMQ_CONFIG}:/etc/rabbitmq/rabbitmq.config:ro \
       -v ${LOCAL_SCRIPT}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
@@ -20,6 +20,6 @@ start_rabbitmq() {
 }
 
 stop_rabbitmq() {
-  docker kill local-rabbitmq
-  docker rm local-rabbitmq
+  docker kill rabbitmq
+  docker rm rabbitmq
 }
