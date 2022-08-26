@@ -17,54 +17,59 @@ we have another subfolder, `tests/oauth/with-uaa` to group all the tests cases w
 At the moment, there are no smart around discovering all the tests under subfolders. That will come later.
 For now, the command `make run-tests` explicitly runs the test cases under `oauth/with-uaa`.
 
-# Get environment ready before running any tests
+# Run tests interactively using your local chrome browser
 
-Before running a test we need to set up its environment by running the command below. It will
-launch RabbitMQ and UAA as a docker containers, and set up UAA with the right users, clients and scopes.  
-```bash
-test/oauth/with-uaa/setup.sh
+Get node.js dependencies ready:
+```
+npm install
 ```
 
-**IMPORTANT**: When we run UAA and RabbitMQ in docker and the browser in our local machine, we have to use
-the hostnames aliases `local-rabbitmq` and `local-uaa` which must be declared in our /etc/hosts file.
+Get UAA and RabbitMQ Ready and wait until UAA is ready:
 ```
-127.0.0.1 local-uaa local-rabbitmq
-```
-
-
-# Run all tests (WIP)
-
-There are two ways to run the tests:
-- **Developer way** - We run the tests against your locally installed
-Chrome browser. This way we can see all the interactions driven by the tests on the browser and
-should anything failed, we can see where it failed. To use this mode, we run the tests with the command `RUN_LOCAL=TRUE make run-tests`
-- **Continuous integration way** - We run the tests against a standalone chrome browser which runs in silent mode (no UI) in
-a docker container. To launch the standalone chrome browser we run `make run-chrome` followed by `make run-tests` to run the tests.
-
-Both methods run the tests from a docker container using a docker image that we have to build first by running the following command:
-```
-make init-tests
+make local-setup
+make wait-for-uaa
 ```
 
-In summary, if we want to run all tests against our local browser, we have to run these commands:
+At this stage, we can run all the tests under `test/oauth/with-uaa` by running
 ```
-test/oauth/with-uaa/setup.sh
-make init-tests
-RUN_LOCAL=TRUE make run-tests
-
+make run-local-test TEST_ARGS=test/oauth/with-uaa
 ```
 
-# Run single test
+Or to test an individual test :
+```
+make run-local-test TEST_ARGS=test/oauth/with-uaa/landing.js
+```
+> By default, if we do not specify any TEST_ARGS, it uses `test/oauth/with-uaa`
 
-If we want to run a single tests rather than all tests under `oauth/with-uaa`, we run a command similar to this one:
-```bash
-RUN_LOCAL=TRUE ./node_modules/.bin/mocha  --timeout 20000 test/oauth/with-uaa/happy-login.js
+# Run tests in headless-mode locally
+
+Launch **Selenium Hub** which is where the headless chrome browser runs:
+```
+make run-chrome
 ```
 
-## Run RabbitMQ from source
-
-If we prefer, we can run RabbitMQ from source rather from a docker container, we launch it as follows:
-```bash
-gmake run-broker PLUGINS="rabbitmq_management rabbitmq_auth_backend_oauth2" RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config
+Get UAA and RabbitMQ Ready and wait until UAA is ready:
 ```
-> Run the command from the root of rabbitmq-server checked out folder
+make remote-setup
+make wait-for-uaa
+```
+
+The difference between `remote-setup` and `local-setup` are the URLs each component
+uses to refer to the other. For instance, we use `http://rabbitmq:15672` to access RabbitMQ UI
+when we are running in `remote` mode because the browser is actually running in a container.
+
+To run all tests under `test/oauth/with-uaa` invoke the following command:
+```
+make run-remote-test TEST_ARGS=test/oauth/with-uaa
+```
+> By default, if we do not specify any TEST_ARGS, it uses `test/oauth/with-uaa`
+
+
+At the moment there are only 2 groups of tests. The first one is `oauth/with-uaa` that we just discussed above.
+The second one is `oauth/with-uaa-down` which runs a test case with UAA down.
+To run this suite, we need to shutdown UAA.
+
+```
+make stop-uaa
+make run-remote-test TEST_ARGS=test/oauth/with-uaa-down
+```
