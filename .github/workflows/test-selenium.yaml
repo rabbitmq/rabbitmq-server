@@ -131,9 +131,18 @@ jobs:
           -v ${PWD}/screens:/screens \
           mocha-test /code/test/oauth/with-uaa
 
-    - name: Run Suite Test oauth/with-uaa-down
+    - name: Save UAA Logs
+      if: always()
+      run: |
+        mkdir logs
+        docker logs uaa > logs/uaa.log
+
+    - name: Stop UAA
       run: |
         docker kill uaa && docker rm uaa
+
+    - name: Run Suite Test oauth/with-uaa-down
+      run: |
         TEST_DIR="${PWD}/${SELENIUM_DIR}/test"
         docker run \
           --rm \
@@ -152,9 +161,7 @@ jobs:
     - name: Save Logs
       if: always()
       run: |
-        mkdir logs
         docker logs rabbitmq > logs/rabbitmq.log
-        docker logs uaa > logs/uaa.log
         docker logs selenium > logs/selenium.log
 
 
