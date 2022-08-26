@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
+      fail-fast: false
       matrix:
         include:
         - elixir_version: "1.10"
@@ -34,7 +35,7 @@ jobs:
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("v${{ matrix.elixir_version }}"))) | first | .name')
 
-        if [[ -z "${VERSION}" ]]; then
+        if [[ -z "${TAG_NAME}" ]]; then
           echo "Failed to determine latest TAG_NAME for v${{ matrix.elixir_version }}"
           exit 1
         fi
