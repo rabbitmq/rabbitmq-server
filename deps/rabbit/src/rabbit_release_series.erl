@@ -17,15 +17,15 @@
 -spec eol_date() -> rabbit_types:maybe(calendar:date()).
 eol_date() ->
   case application:get_env(rabbit, ?EOL_DATE_KEY) of
-    undefined           -> none;
-    none                -> none;
-    {_Y, _M, _D} = Date -> Date;
-    _                   -> none
+    undefined                  -> none;
+    {ok, none}                -> none;
+    {ok, {_Y, _M, _D} = Date} -> Date;
+      _                       -> none
   end.
 
 -spec is_currently_supported() -> boolean().
 is_currently_supported() ->
   case eol_date() of
     none -> true;
-    Date -> rabbit_date_time:is_in_the_past(Date)
+    Date -> not rabbit_date_time:is_in_the_past(Date)
   end.
