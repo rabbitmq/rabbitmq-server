@@ -71,9 +71,15 @@ http_file(
 
 http_file(
     name = "otp_src_24",
+<<<<<<< HEAD
     downloaded_file_path = "OTP-24.3.4.2.tar.gz",
     sha256 = "0cb512ece7804d0512fd39683db36b261fef83dc8e1fb98e026cad374df0b7e3",
     urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.2.tar.gz"],
+=======
+    downloaded_file_path = "OTP-24.3.4.4.tar.gz",
+    sha256 = "b127aba77c4754904c642cf93f9b4b6667507ac31e8419b3131ed815e1f6827c",
+    urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.4.tar.gz"],
+>>>>>>> b67b582017 (Adopt otp 24.3.4.4)
 )
 
 http_file(
