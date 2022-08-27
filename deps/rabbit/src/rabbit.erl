@@ -653,6 +653,10 @@ status() ->
         [Tuple] when is_tuple(Tuple) -> Tuple;
         Tuple   when is_tuple(Tuple) -> Tuple
     end,
+    SeriesMaintenanceStatus = case rabbit_release_series:is_currently_supported() of
+        false -> <<"unmaintained">>;
+        _     -> <<"maintained">>
+    end,
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
@@ -660,6 +664,7 @@ status() ->
           {rabbitmq_version,     Version},
           {crypto_lib_info,      CryptoLibInfo},
           {erlang_version,       erlang:system_info(system_version)},
+          {release_series_maintenance_status, SeriesMaintenanceStatus},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
           {is_under_maintenance, rabbit_maintenance:is_being_drained_local_read(node())},
