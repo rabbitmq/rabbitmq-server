@@ -11,7 +11,8 @@
 
 -export([
   eol_date/0,
-  is_currently_supported/0
+  is_currently_supported/0,
+  readable_support_status/0
 ]).
 
 -spec eol_date() -> rabbit_types:maybe(calendar:date()).
@@ -28,4 +29,11 @@ is_currently_supported() ->
   case eol_date() of
     none -> true;
     Date -> not rabbit_date_time:is_in_the_past(Date)
+  end.
+
+-spec readable_support_status() -> binary().
+readable_support_status() ->
+    case is_currently_supported() of
+      false -> <<"out of support">>;
+      _     -> <<"supported">>
   end.
