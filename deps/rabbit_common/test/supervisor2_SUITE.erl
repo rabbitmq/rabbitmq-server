@@ -95,7 +95,7 @@ test_supervisor_delayed_restart(SupPid) ->
     ok = ping_child(SupPid),
     passed.
 
--ifdef(TRACE_SUP2).
+-ifdef(TRACE_SUPERVISOR2).
 test_supervisor_ignore_error_reports(SupPid, IsLogged = false) ->
     ok = ping_child(SupPid),
 
