@@ -132,7 +132,9 @@ _APP_ENV = """[
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
         {track_auth_attempt_source, false},
-        {credentials_obfuscation_fallback_secret, <<"nocookie">>}
+        {credentials_obfuscation_fallback_secret, <<"nocookie">>},
+        %% EOL date for the current release series, if known/announced
+		{release_series_eol_date, none}
 	  ]
 """
 

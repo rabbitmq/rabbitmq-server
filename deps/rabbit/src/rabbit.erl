@@ -679,6 +679,7 @@ status() ->
         [Tuple] when is_tuple(Tuple) -> Tuple;
         Tuple   when is_tuple(Tuple) -> Tuple
     end,
+    SeriesSupportStatus = rabbit_release_series:readable_support_status(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
@@ -686,6 +687,7 @@ status() ->
           {rabbitmq_version,     Version},
           {crypto_lib_info,      CryptoLibInfo},
           {erlang_version,       erlang:system_info(system_version)},
+          {release_series_support_status, SeriesSupportStatus},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
           {is_under_maintenance, rabbit_maintenance:is_being_drained_local_read(node())},
@@ -848,6 +850,7 @@ start(normal, []) ->
                     ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
         end,
+        maybe_warn_about_release_series_eol(),
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
 
@@ -1165,6 +1168,7 @@ print_banner() ->
     %% padded list lines
     {LogFmt, LogLocations} = LineListFormatter("~n        ~ts", log_locations()),
     {CfgFmt, CfgLocations} = LineListFormatter("~n                  ~ts", config_locations()),
+    SeriesSupportStatus    = rabbit_release_series:readable_support_status(),
     {MOTDFormat, MOTDArgs} = case motd() of
                                  undefined ->
                                      {"", []};
@@ -1182,6 +1186,7 @@ print_banner() ->
               MOTDFormat ++
               "~n  Erlang:      ~ts [~ts]"
               "~n  TLS Library: ~ts"
+              "~n  Release series support status: ~ts"
               "~n"
               "~n  Doc guides:  https://rabbitmq.com/documentation.html"
               "~n  Support:     https://rabbitmq.com/contact.html"
@@ -1192,10 +1197,22 @@ print_banner() ->
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
               "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
-              [rabbit_misc:otp_release(), emu_flavor(), crypto_version()] ++
+              [rabbit_misc:otp_release(), emu_flavor(), crypto_version(),
+               SeriesSupportStatus] ++
               MOTDArgs ++
               LogLocations ++
               CfgLocations).
+
+maybe_warn_about_release_series_eol() ->
+    case rabbit_release_series:is_currently_supported() of
+        false ->
+            %% we intentionally log this as an error for increased visibiity
+            ?LOG_ERROR("This release series has reached end of life "
+                       "and is no longer supported. "
+                       "Please visit https://rabbitmq.com/versions.html "
+                       "to learn more and upgrade");
+        _ -> ok
+    end.
 
 emu_flavor() ->
     %% emu_flavor was introduced in Erlang 24 so we need to catch the error on Erlang 23
