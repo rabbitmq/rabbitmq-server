@@ -63,7 +63,10 @@ ignore_error_reports(_Config) ->
             supervisor2:start_child(SupPid, []),
         test_supervisor_ignore_error_reports(SupPid, true)
     end,
-    {passed, _} = with_sup(Args1, F1).
+    Result = {passed, _} = with_sup(Args1, F1),
+    ok = gen_event:stop(rabbit_event),
+
+    Result.
 
 test_supervisor_intrinsic(SupPid) ->
     ok = ping_child(SupPid),
