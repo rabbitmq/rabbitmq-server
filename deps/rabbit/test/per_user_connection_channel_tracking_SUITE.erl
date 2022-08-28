@@ -80,7 +80,7 @@ init_per_group(cluster_size_2_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_2_direct, Config1, 2).
 
-init_per_multinode_group(_Group, Config, NodeCount) ->
+init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
