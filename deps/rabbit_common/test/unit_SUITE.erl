@@ -24,7 +24,8 @@ all() ->
     [
         {group, parallel_tests},
         {group, parse_mem_limit},
-        {group, gen_server2}
+        {group, gen_server2},
+        {group, date_time}
     ].
 
 groups() ->
@@ -44,8 +45,7 @@ groups() ->
             frame_encoding_does_not_fail_with_empty_binary_payload,
             amqp_table_conversion,
             name_type,
-            get_erl_path,
-            date_time_parse_duration
+            get_erl_path
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -60,6 +60,10 @@ groups() ->
             stop_stats_timer_on_backoff,
             stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout,
             gen_server2_stop
+        ]},
+        {date_time, [parallel], [
+            date_time_parse_duration,
+            date_time_in_the_past
         ]}
     ].
 
@@ -481,3 +485,9 @@ date_time_parse_duration(_) ->
     ),
     ?assertEqual(error, rabbit_date_time:parse_duration("foo")),
     ok.
+
+date_time_in_the_past(_) ->
+    {Year, Month, Day} = rabbit_date_time:today(),
+
+    ?assertEqual(false, rabbit_date_time:is_in_the_past({Year + 1, Month, Day})),
+    ?assertEqual(true,  rabbit_date_time:is_in_the_past({Year - 3, Month, Day})).
