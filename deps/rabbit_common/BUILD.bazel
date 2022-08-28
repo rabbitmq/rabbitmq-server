@@ -138,6 +138,9 @@ suites = [
     rabbitmq_suite(
         name = "supervisor2_SUITE",
         size = "small",
+        additional_srcs = [
+            "test/test_event_handler.erl",
+        ],
     ),
     rabbitmq_suite(
         name = "unit_priority_queue_SUITE",
