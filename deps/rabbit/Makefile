@@ -113,7 +113,7 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-		%% interval at which the channel can perform periodic actions
+		  %% interval at which the channel can perform periodic actions
 	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
 	    {max_message_size, 134217728},
@@ -125,7 +125,10 @@ define PROJECT_ENV
       {track_auth_attempt_source, false},
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       {dead_letter_worker_consumer_prefetch, 32},
-      {dead_letter_worker_publisher_confirm_timeout, 180000}
+      {dead_letter_worker_publisher_confirm_timeout, 180000},
+
+			%% EOL date for the current release series, if known/announced
+			{release_series_eol_date, none}
 	  ]
 endef
 
