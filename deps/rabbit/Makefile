@@ -127,16 +127,15 @@ define PROJECT_ENV
 	    {stream_messages_soft_limit, 256},
       {track_auth_attempt_source, false},
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> 20be914176 (Introduce a concept of release series EOL date)
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>}
 =======
+=======
+>>>>>>> ed1d65b510 (Resolve conflicts)
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
-      {dead_letter_worker_consumer_prefetch, 32},
-      {dead_letter_worker_publisher_confirm_timeout, 180000},
-
 			%% EOL date for the current release series, if known/announced
 			{release_series_eol_date, none}
->>>>>>> c6846b65d1 (Introduce a concept of release series EOL date)
 	  ]
 endef
 

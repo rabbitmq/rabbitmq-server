@@ -465,8 +465,6 @@ get_erl_path(_) ->
             ?assertNotMatch(nomatch, string:find(Exe, "erl"))
     end,
     ok.
-<<<<<<< HEAD
-=======
 
 date_time_parse_duration(_) ->
     ?assertEqual(
@@ -493,4 +491,3 @@ date_time_in_the_past(_) ->
 
     ?assertEqual(false, rabbit_date_time:is_in_the_past({Year + 1, Month, Day})),
     ?assertEqual(true,  rabbit_date_time:is_in_the_past({Year - 3, Month, Day})).
->>>>>>> 5847924228 (Basic unit tests for rabbit_date_time)
