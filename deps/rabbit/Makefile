@@ -121,21 +121,10 @@ define PROJECT_ENV
 	    {writer_gc_threshold, 1000000000},
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
-<<<<<<< HEAD
 	    {track_auth_attempt_source, false},
-=======
-	    {stream_messages_soft_limit, 256},
-      {track_auth_attempt_source, false},
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> 20be914176 (Introduce a concept of release series EOL date)
-			{credentials_obfuscation_fallback_secret, <<"nocookie">>}
-=======
-=======
->>>>>>> ed1d65b510 (Resolve conflicts)
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
 			%% EOL date for the current release series, if known/announced
-			{release_series_eol_date, none}
+			{release_series_eol_date, {2022, 7, 31}}
 	  ]
 endef
 
