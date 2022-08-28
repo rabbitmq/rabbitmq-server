@@ -1224,10 +1224,11 @@ print_banner() ->
 maybe_warn_about_release_series_eol() ->
     case rabbit_release_series:is_currently_supported() of
         false ->
-            ?LOG_WARNING("This release series has reached end of life "
-                         "and is no longer supported. "
-                         "Please visit https://rabbitmq.com/versions.html "
-                         "to learn more and upgrade");
+            %% we intentionally log this as an error for increased visibiity
+            ?LOG_ERROR("This release series has reached end of life "
+                       "and is no longer supported. "
+                       "Please visit https://rabbitmq.com/versions.html "
+                       "to learn more and upgrade");
         _ -> ok
     end.
 
