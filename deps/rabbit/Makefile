@@ -259,6 +259,10 @@ ifdef DEBUG_FF
 RMQ_ERLC_OPTS += -DDEBUG_QUORUM_QUEUE_FF=true
 endif
 
+ifdef TRACE_SUPERVISOR2
+RMQ_ERLC_OPTS += -DTRACE_SUPERVISOR2=true
+endif
+
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/

@@ -81,7 +81,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--ifdef(TRACE_SUP2).
+-ifdef(TRACE_SUPERVISOR2).
 -define(TRACE_SUPERVISOR2_ERROR_LOG(ERROR, CHILD, SUP_NAME, LOGGED),
         rabbit_event:notify(supervisor2_error_report,
            [{supervisor, SUP_NAME},
