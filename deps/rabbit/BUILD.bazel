@@ -142,7 +142,9 @@ _APP_ENV = """[
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
 	    {track_auth_attempt_source, false},
-        {credentials_obfuscation_fallback_secret, <<"nocookie">>}
+        {credentials_obfuscation_fallback_secret, <<"nocookie">>},
+        %% EOL date for the current release series, if known/announced
+		{release_series_eol_date, {2022, 7, 31}}
 	  ]
 """
 

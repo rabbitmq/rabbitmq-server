@@ -24,7 +24,8 @@ all() ->
     [
         {group, parallel_tests},
         {group, parse_mem_limit},
-        {group, gen_server2}
+        {group, gen_server2},
+        {group, date_time}
     ].
 
 groups() ->
@@ -59,6 +60,10 @@ groups() ->
             stop_stats_timer_on_backoff,
             stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout,
             gen_server2_stop
+        ]},
+        {date_time, [parallel], [
+            date_time_parse_duration,
+            date_time_in_the_past
         ]}
     ].
 
@@ -460,3 +465,29 @@ get_erl_path(_) ->
             ?assertNotMatch(nomatch, string:find(Exe, "erl"))
     end,
     ok.
+
+date_time_parse_duration(_) ->
+    ?assertEqual(
+        {ok, [{sign, "+"}, {years, 6}, {months, 3}, {days, 1}, {hours, 1}, {minutes, 1}, {seconds, 1}]},
+        rabbit_date_time:parse_duration("+P6Y3M1DT1H1M1.1S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 6}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("PT6M")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 10}, {seconds, 30}]},
+        rabbit_date_time:parse_duration("PT10M30S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 5}, {hours, 8}, {minutes, 0}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("P5DT8H")
+    ),
+    ?assertEqual(error, rabbit_date_time:parse_duration("foo")),
+    ok.
+
+date_time_in_the_past(_) ->
+    {Year, Month, Day} = rabbit_date_time:today(),
+
+    ?assertEqual(false, rabbit_date_time:is_in_the_past({Year + 1, Month, Day})),
+    ?assertEqual(true,  rabbit_date_time:is_in_the_past({Year - 3, Month, Day})).
