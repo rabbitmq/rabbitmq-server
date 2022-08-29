@@ -10,6 +10,12 @@ encryption:
   - label: CHANGE-THIS-KEY
     passphrase: CHANGEME
 
+logout:
+  redirect:
+    parameter:
+      disable: false
+      whitelist:
+        http://localhost:15672/*
 login:
   serviceProviderKey: |
     -----BEGIN RSA PRIVATE KEY-----

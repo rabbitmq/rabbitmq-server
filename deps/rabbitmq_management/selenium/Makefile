@@ -31,8 +31,13 @@ build-test-runner-image: ## Prepare docker image to run tests
 stop-uaa: ## Stop uaa
 	@(docker kill uaa && docker rm uaa)
 
-local-setup: ## Deploy RAbbitMQ and UAA to run the test locally using localhost
-	@(test/oauth/with-uaa/setup.sh)
+local-rabbitmq: ## Deploy RabbitMQ from source using make run-broker
+	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
+	@(gmake --directory=../../../ run-broker \
+		PLUGINS="rabbitmq_management rabbitmq_auth_backend_oauth2" \
+		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
+local-uaa: ## Deploy UAA using localhost for all redirect uris to RabbitMQ
+	@(test/oauth/with-uaa/uaa.sh)
 
 remote-setup: ## Deploy RAbbitMQ and UAA to run the test in selenium hub
 	@(RABBITMQ_CONFIG_FILE=rabbitmq-remote.config UAA_CONFIG_FOLDER=uaa-remote test/oauth/with-uaa/setup.sh)
