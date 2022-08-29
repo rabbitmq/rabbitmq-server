@@ -131,13 +131,13 @@ erlang_package.git_package(
 erlang_package.git_package(
     name = "jose",
     repository = "michaelklishin/erlang-jose",
-    commit = "5d0e927fdaac25c95890b1fc15c7d0f741898acf",
+    commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
 )
 
 erlang_package.hex_package(
     name = "thoas",
-    version = "0.3.0",
-    sha256 = "b8e1f8c8fad317c0b75239a9234cb093de1fb8be7ba3e41433ff80a0b3353973",
+    version = "0.4.0",
+    sha256 = "442296847aca11db8d25180693d7ca3073d6d7179f66952f07b16415306513b6",
 )
 
 erlang_package.git_package(
