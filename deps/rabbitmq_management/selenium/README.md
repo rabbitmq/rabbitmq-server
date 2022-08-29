@@ -17,16 +17,40 @@ we have another subfolder, `tests/oauth/with-uaa` to group all the tests cases w
 At the moment, there are no smart around discovering all the tests under subfolders. That will come later.
 For now, the command `make run-tests` explicitly runs the test cases under `oauth/with-uaa`.
 
-# Run tests interactively using your local chrome browser
+# How to run tests locally
+
+First of all, we build RabbitMQ server and its docker image:
+```
+make package-generic-unix
+make docker-image
+```
+From the output of the `make docker-image` we copy the image's tag and run the following
+command:
+```
+export RABBITMQ_IMAGE_TAG=3.8.10-1696.g171734f.dirty
+```
+> The script bin/rabbitmq.sh uses this environment variable to launch RabbitMQ in a docker container
+
+Once we have RabbitMQ compiled and its docker image ready we can run the tests.
+
+## Run tests interactively using your local chrome browser
+
+This is the best mode when we are still writing the tests and we want to see the
+browser interactions.
 
 Get node.js dependencies ready:
 ```
 npm install
 ```
 
-Get UAA and RabbitMQ Ready and wait until UAA is ready:
+Run RabbitMQ from source (`it runs make run-broker`):
 ```
-make local-setup
+make local-rabbitmq
+```
+
+Run UAA, via its docker image, and wait until it is ready:
+```
+make local-uaa
 make wait-for-uaa
 ```
 
@@ -34,6 +58,7 @@ At this stage, we can run all the tests under `test/oauth/with-uaa` by running
 ```
 make run-local-test TEST_ARGS=test/oauth/with-uaa
 ```
+> If it failed with the error `sh: mocha: command not found` you forgot to run `npm install`
 
 Or to test an individual test :
 ```
@@ -41,14 +66,19 @@ make run-local-test TEST_ARGS=test/oauth/with-uaa/landing.js
 ```
 > By default, if we do not specify any TEST_ARGS, it uses `test/oauth/with-uaa`
 
-# Run tests in headless-mode locally
+## Run tests in headless-mode locally
 
-Launch **Selenium Hub** which is where the headless chrome browser runs:
+In this mode, both RabbitMQ and UAA and the browser and the test runner runs in docker containers.
+That is why we need to build the latest RabbitMQ docker image.
+
+First, we launch **Selenium Hub** which is where the headless chrome browser runs:
 ```
 make run-chrome
 ```
 
-Get UAA and RabbitMQ Ready and wait until UAA is ready:
+Make sure you stopped RabbitMQ if you run it via `make local-rabbitmq`.
+
+Then we start UAA and RabbitMQ and wait until UAA is ready:
 ```
 make remote-setup
 make wait-for-uaa
@@ -73,12 +103,3 @@ To run this suite, we need to shutdown UAA.
 make stop-uaa
 make run-remote-test TEST_ARGS=test/oauth/with-uaa-down
 ```
-
-# Run RabbitMQ directly from source and interactively using your local chrome browser
-
-If we prefer, we can run RabbitMQ from source, we proceed as follows:
-```bash
-docker kill rabbitmq && docker rm rabbitmq 
-gmake run-broker PLUGINS="rabbitmq_management rabbitmq_auth_backend_oauth2" RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config
-```
-> Run the command from the root of rabbitmq-server checked out folder

@@ -7,7 +7,7 @@ var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
 var OverviewPage = require('../../pageobjects/OverviewPage')
 
-describe.skip("When a logged in user", function() {
+describe("When a logged in user", function() {
   var overview
   var homePage
   var captureScreen
@@ -31,7 +31,7 @@ describe.skip("When a logged in user", function() {
 
     await overview.logout()
 
-    await uaaLogin.isLoaded()
+    await homePage.isLoaded()
     // await takeAndSaveScreenshot(driver, require('path').basename(__filename), '05-afterUaaLogin');
   });
 

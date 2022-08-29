@@ -302,8 +302,9 @@ dispatcher_add(function(sammy) {
         if (oauth.logged_in) {
             oauth.logged_in = false;
             oauth_initiateLogout();
+        }else {
+          location.reload();
         }
-        location.reload();
     });
 
     sammy.put('#/rate-options', function() {

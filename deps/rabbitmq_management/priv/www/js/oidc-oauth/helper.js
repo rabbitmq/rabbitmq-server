@@ -67,7 +67,7 @@ function oauth_initialize(authSettings) {
         scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
         redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri + "/js/oidc-oauth/logout-callback.html",
+        post_logout_redirect_uri: rabbit_base_uri ,
 
         filterProtocolClaims: true,
         automaticSilentRenew: true,
