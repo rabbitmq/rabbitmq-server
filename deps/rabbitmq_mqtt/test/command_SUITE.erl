@@ -79,26 +79,26 @@ run(Config) ->
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, _} = emqttc:start_link([{host, "localhost"},
+    {ok, C1} = emqtt:start_link([{host, "localhost"},
                                  {port, P},
-                                 {client_id, <<"simpleClient">>},
+                                 {clientid, <<"simpleClient">>},
                                  {proto_ver, 3},
-                                 {logger, info},
-                                 {puback_timeout, 1}]),
+                                 {ack_timeout, 1}]),
+    {ok, _} = emqtt:connect(C1),
     ct:sleep(100),
 
     [[{client_id, <<"simpleClient">>}]] =
-            'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+        'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
 
-    {ok, _} = emqttc:start_link([{host, "localhost"},
-                                  {port, P},
-                                  {client_id, <<"simpleClient1">>},
-                                  {proto_ver, 3},
-                                  {logger, info},
-                                  {username, <<"guest">>},
-                                  {password, <<"guest">>},
-                                  {puback_timeout, 1}]),
+    {ok, C2} = emqtt:start_link([{host, "localhost"},
+                                 {port, P},
+                                 {clientid, <<"simpleClient1">>},
+                                 {proto_ver, 3},
+                                 {username, <<"guest">>},
+                                 {password, <<"guest">>},
+                                 {ack_timeout, 1}]),
+    {ok, _} = emqtt:connect(C2),
     ct:sleep(200),
 
     [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
@@ -143,8 +143,10 @@ run(Config) ->
     Keys = maps:keys(First),
 
     [] = Keys -- ?INFO_ITEMS,
-    [] = ?INFO_ITEMS -- Keys.
+    [] = ?INFO_ITEMS -- Keys,
 
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
 
 start_amqp_connection(Type, Node, Port) ->
     amqp_connection:start(amqp_params(Type, Node, Port)).
@@ -153,6 +155,3 @@ amqp_params(network, _, Port) ->
     #amqp_params_network{port = Port};
 amqp_params(direct, Node, _) ->
     #amqp_params_direct{node = Node}.
-
-
-
