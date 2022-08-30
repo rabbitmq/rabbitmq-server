@@ -30,8 +30,7 @@
           if (status.loggedIn && !has_auth_cookie_value()) {
             console.log("Session has expired");
             oauth.logged_in = false;
-            oauth_initiateLogout();
-            location.reload();
+            oauth_initiateLogout();        
           }else {
             if (!status.loggedIn) {
               replace_content('outer', format('login_oauth', {}));

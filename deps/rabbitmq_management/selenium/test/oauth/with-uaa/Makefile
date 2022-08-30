@@ -19,4 +19,4 @@ start-uaa: ## Deploy UAA
 	@(./start-uaa.sh)
 
 run-test: ## Run tests interactively
-	@(RABBITMQ_URL=http://localhost:15672 RUN_LOCAL=true SCREENSHOTS_DIR=${PWD}/screens npm test  $(PWD)/$(TEST))
+	@(RABBITMQ_URL=http://localhost:15672 RUN_LOCAL=true SCREENSHOTS_DIR=${PWD}/screens npm test $(PWD)/$(TEST))
