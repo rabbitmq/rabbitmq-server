@@ -18,11 +18,6 @@ SCRIPTS_DIR=$(dirname "$0")
 
 RABBITMQ_DEFAULT_ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
 
-# Bump ETS table limit to 50000
-if [ "x" = "x$ERL_MAX_ETS_TABLES" ]; then
-    ERL_MAX_ETS_TABLES=50000
-fi
-
 check_start_params() {
     check_not_empty RABBITMQ_BOOT_MODULE
     check_not_empty SASL_BOOT_FILE
