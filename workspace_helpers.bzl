@@ -72,22 +72,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         ],
     )
 
-    http_archive(
-        name = "emqttc",
-        urls = ["https://github.com/rabbitmq/emqttc/archive/remove-logging.zip"],
-        strip_prefix = "emqttc-remove-logging",
-        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "emqttc",
-    erlc_opts = [
-        "+warn_export_all",
-        "+warn_unused_import",
-    ],
-)
-""",
-    )
-
     hex_pm_erlang_app(
         name = "enough",
         version = "0.1.0",
@@ -217,6 +201,10 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         name = "redbug",
         version = "2.0.7",
         sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+        erlc_opts = [
+            "+deterministic",
+            "+debug_info",
+        ],
     )
 
     hex_pm_erlang_app(
@@ -252,3 +240,31 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
             "@enough//:erlang_app",
         ],
     )
+<<<<<<< HEAD
+=======
+
+    github_erlang_app(
+        name = "emqtt",
+        org = "ansd",
+        repo = "emqtt",
+        version = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
+        ref = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "emqtt",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+        "-DBUILD_WITHOUT_QUIC",
+    ],
+)
+""",
+    )
+
+RA_INJECT_GIT_VERSION = """
+VERSION=$(git rev-parse HEAD)
+echo "Injecting ${VERSION} into ra.app.src..."
+sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
+"""
+>>>>>>> e6d23fa973 (Upgrade MQTT Erlang client)

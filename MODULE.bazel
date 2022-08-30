@@ -100,8 +100,20 @@ erlang_app(
 )
 
 erlang_package.git_package(
-    repository = "rabbitmq/emqttc",
-    branch = "remove-logging",
+    name = "emqtt",
+    repository = "ansd/emqtt",
+    commit = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "emqtt",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+        "-DBUILD_WITHOUT_QUIC",
+    ],
+)
+""",
 )
 
 erlang_package.hex_package(
@@ -297,7 +309,7 @@ use_repo(
     "ct_helper",
     "cuttlefish",
     "eetcd",
-    "emqttc",
+    "emqtt",
     "gen_batch_server",
     "gun",
     "inet_tcp_proxy_dist",
