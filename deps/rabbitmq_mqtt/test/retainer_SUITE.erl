@@ -18,7 +18,7 @@ groups() ->
     [
         {non_parallel_tests, [], [
             coerce_configuration_data,
-	          should_translate_amqp2mqtt_on_publish,
+            should_translate_amqp2mqtt_on_publish,
             should_translate_amqp2mqtt_on_retention,
             should_translate_amqp2mqtt_on_retention_search
         ]}
@@ -77,14 +77,13 @@ end_per_testcase(Testcase, Config) ->
 
 coerce_configuration_data(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqttc:start_link(connection_opts(P)),
+    C = connect(P),
 
-    emqttc:subscribe(C, <<"TopicA">>, qos0),
-    emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
+    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
-    emqttc:disconnect(C),
-    ok.
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% When a client is subscribed to TopicA/Device.Field and another
@@ -93,52 +92,56 @@ coerce_configuration_data(Config) ->
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_publish(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqttc:start_link(connection_opts(P)),
+    C = connect(P),
     %% there's an active consumer
-	  emqttc:subscribe(C, <<"TopicA/Device.Field">>, qos1),
-	  emqttc:publish(C, <<"TopicA/Device.Field">>, <<"Payload">>, [{retain, true}]),
-	  expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
-	  emqttc:disconnect(C).
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
+    ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
+    expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
-%% If a client is publishes a retained message to TopicA/Device.Field and another
+%% If a client publishes a retained message to TopicA/Device.Field and another
 %% client subscribes to TopicA/Device.Field the client should be
 %% sent the retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqttc:start_link(connection_opts(P)),
+    C = connect(P),
     %% publish with retain = true before a consumer comes around
-    emqttc:publish(C, <<"TopicA/Device.Field">>, <<"Payload">>, [{retain, true}]),
-    emqttc:subscribe(C, <<"TopicA/Device.Field">>, qos1),
+    ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
-    emqttc:disconnect(C).
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
-%% If a client is publishes a retained message to TopicA/Device.Field and another
+%% If a client publishes a retained message to TopicA/Device.Field and another
 %% client subscribes to TopicA/Device/Field the client should be
 %% sent retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention_search(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqttc:start_link(connection_opts(P)),
-    emqttc:publish(C, <<"TopicA/Device.Field">>, <<"Payload">>, [{retain, true}]),
-    emqttc:subscribe(C, <<"TopicA/Device/Field">>, qos1),
+    C = connect(P),
+    ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
     expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
-    emqttc:disconnect(C).
+    ok = emqtt:disconnect(C).
 
-connection_opts(Port) ->
-  [{host, "localhost"},
-   {port, Port},
-   {client_id, <<"simpleClientRetainer">>},
-   {proto_ver,3},
-   {logger, info},
-   {puback_timeout, 1}].
+connect(Port) ->
+    {ok, C} = emqtt:start_link(
+                [{host, "localhost"},
+                 {port, Port},
+                 {clientid, <<"simpleClientRetainer">>},
+                 {proto_ver,3},
+                 {ack_timeout, 1}]),
+    {ok, _Properties} = emqtt:connect(C),
+    C.
 
- expect_publishes(_Topic, []) -> ok;
- expect_publishes(Topic, [Payload | Rest]) ->
-     receive
-         {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
-     after 1500 ->
-         throw({publish_not_delivered, Payload})
-     end.
+expect_publishes(_Topic, []) -> ok;
+expect_publishes(Topic, [Payload|Rest]) ->
+    receive
+        {publish, #{topic := Topic,
+                    payload := Payload}} ->
+            expect_publishes(Topic, Rest)
+    after 1500 ->
+              throw({publish_not_delivered, Payload})
+    end.
