@@ -105,7 +105,7 @@ suites = [
         ],
         flaky = True,
         runtime_deps = [
-            "@emqttc//:erlang_app",
+            "@emqtt//:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
@@ -114,14 +114,14 @@ suites = [
         size = "large",
         flaky = True,
         runtime_deps = [
-            "@emqttc//:erlang_app",
+            "@emqtt//:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "command_SUITE",
         runtime_deps = [
-            "@emqttc//:erlang_app",
+            "@emqtt//:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
@@ -153,14 +153,14 @@ suites = [
         PACKAGE,
         name = "reader_SUITE",
         runtime_deps = [
-            "@emqttc//:erlang_app",
+            "@emqtt//:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "retainer_SUITE",
         runtime_deps = [
-            "@emqttc//:erlang_app",
+            "@emqtt//:erlang_app",
         ],
     ),
     rabbitmq_suite(
