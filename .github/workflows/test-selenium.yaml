@@ -73,8 +73,7 @@ jobs:
 
     - name: Start RabbitMQ
       run: |
-        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"
-        ENABLED_PLUGINS="${PWD}/${SELENIUM_DIR}/bin/enabled_plugins"
+        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"        
         docker run \
           --detach \
           --name rabbitmq \
@@ -82,7 +81,7 @@ jobs:
           -p 15672:15672 -p 5672:5672 \
           -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
           -v ${RABBITMQ_CONFIG_DIR}/rabbitmq-remote.config:/etc/rabbitmq/rabbitmq.config:ro \
-          -v ${ENABLED_PLUGINS}:/etc/rabbitmq/enabled_plugins \
+          -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
           bazel/packaging/docker-image:rabbitmq
 
     - name: Start Selenium

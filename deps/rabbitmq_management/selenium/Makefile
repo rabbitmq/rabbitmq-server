@@ -3,8 +3,8 @@ SHELL = bash# we depend on bash expansion for e.g. queue patterns
 
 .DEFAULT_GOAL = help
 
-ifndef TEST_ARGS
-override TEST_ARGS = "test/oauth/with-uaa"
+ifndef SUITE
+override SUITE = "test/oauth/with-uaa"
 endif
 
 SELENIUM_VERSION := 103.0
@@ -13,9 +13,6 @@ SELENIUM_VERSION := 103.0
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-
-wait-for-uaa: ## Wait till UAA is ready
-	@(bin/waitTillUAAReady)
 
 run-chrome: ## Install Selenium Chrome
 	@(echo "Installing Selenium Chrome")
@@ -28,31 +25,19 @@ run-chrome: ## Install Selenium Chrome
 build-test-runner-image: ## Prepare docker image to run tests
 	@(docker build -t mocha-test  --target test .)
 
-stop-uaa: ## Stop uaa
-	@(docker kill uaa && docker rm uaa)
+run-setup: ## Deploy infrastructure for headless mode to run $(SUITE)
+	RABBITMQ_CONFIG_FILE=rabbitmq-headless.config \
+	  ENABLED_PLUGINS_FILE=enabled_plugins \
+		UAA_CONFIG_FOLDER=uaa-headless $(SUITE)/setup.sh
+run-teardown: ## Undeploy infrastructure for headless mode to run
+	$(SUITE)/teardown.sh
 
-local-rabbitmq: ## Deploy RabbitMQ from source using make run-broker
-	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
-	@(gmake --directory=../../../ run-broker \
-		PLUGINS="rabbitmq_management rabbitmq_auth_backend_oauth2" \
-		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
-local-uaa: ## Deploy UAA using localhost for all redirect uris to RabbitMQ
-	@(test/oauth/with-uaa/uaa.sh)
-
-remote-setup: ## Deploy RAbbitMQ and UAA to run the test in selenium hub
-	@(RABBITMQ_CONFIG_FILE=rabbitmq-remote.config UAA_CONFIG_FOLDER=uaa-remote test/oauth/with-uaa/setup.sh)
-
-run-remote-test: ## Run tests using selenium hub (headless mode)
+run-test-suite: ## Run tests using selenium hub (headless mode)
 	@(docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net)
-	@(echo "Running selenium tests ...")
+	@(echo "Running tests in headless mode for suite $(SUITE) ...")
 	@(docker run --rm  --name mocha --net rabbitmq_net \
 	  --env RABBITMQ_URL=http://rabbitmq:15672 \
 		--env RUN_LOCAL=false \
 		-v ${PWD}/screens:/screens \
-		-v ${PWD}/test:/code/test mocha-test $(TEST_ARGS)
-
+		-v ${PWD}/test:/code/test mocha-test $(SUITE)
 		)
-
-run-local-test: ## Run tests using local browser, e.g. run-local-test TEST=oauth/with-uaa/landing.js
-	#@(test/oauth/with-uaa/setup.sh)
-	@(RABBITMQ_URL=http://localhost:15672 RUN_LOCAL=true SCREENSHOTS_DIR=${PWD}/screens npm test $(TEST_ARGS))
