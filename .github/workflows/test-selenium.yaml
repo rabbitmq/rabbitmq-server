@@ -73,14 +73,14 @@ jobs:
 
     - name: Start RabbitMQ
       run: |
-        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"        
+        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"
         docker run \
           --detach \
           --name rabbitmq \
           --net ${DOCKER_NETWORK} \
           -p 15672:15672 -p 5672:5672 \
           -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-          -v ${RABBITMQ_CONFIG_DIR}/rabbitmq-remote.config:/etc/rabbitmq/rabbitmq.config:ro \
+          -v ${RABBITMQ_CONFIG_DIR}/rabbitmq-headless.config:/etc/rabbitmq/rabbitmq.config:ro \
           -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
           bazel/packaging/docker-image:rabbitmq
 
@@ -96,7 +96,7 @@ jobs:
 
     - name: Start UAA
       run: |
-        UAA_CONFIG="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa/uaa-remote"
+        UAA_CONFIG="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa/uaa-headless"
         docker run \
           --detach \
           --name uaa \
