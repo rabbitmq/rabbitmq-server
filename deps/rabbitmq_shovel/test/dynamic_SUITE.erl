@@ -34,7 +34,8 @@ groups() ->
           autodelete,
           validation,
           security_validation,
-          get_connection_name
+          get_connection_name,
+          credit_flow
         ]},
 
         {quorum_queue_tests, [], [
@@ -439,6 +440,67 @@ get_connection_name(_Config) ->
     <<"Shovel">> = rabbit_shovel_worker:get_connection_name({one, two, three}),
     <<"Shovel">> = rabbit_shovel_worker:get_connection_name(<<"anything else">>).
 
+credit_flow(Config) ->
+    OrigCredit = set_default_credit(Config, {20, 10}),
+
+    with_ch(Config,
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'confirm.select'{}),
+              amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+              %% Send larger payloads to fill up the socket buffers quicker
+              Payload = binary:copy(<<"hello">>, 1000),
+              publish_count(Ch, <<>>, <<"src">>, Payload, 1000),
+              amqp_channel:wait_for_confirms(Ch),
+
+              OrigLimit = set_vm_memory_high_watermark(Config, 0.00000001),
+              %% Let connection block.
+              timer:sleep(100),
+
+              try
+                  shovel_test_utils:set_param_nowait(
+                    Config,
+                    <<"test">>, [{<<"src-queue">>,    <<"src">>},
+                                 {<<"dest-queue">>,   <<"dest">>},
+                                 {<<"src-prefetch-count">>, 50},
+                                 {<<"ack-mode">>,     <<"on-publish">>},
+                                 {<<"src-delete-after">>, <<"never">>}]),
+                  shovel_test_utils:await_shovel(Config, <<"test">>),
+
+                  %% There should be only one process with a message buildup
+                  [{WriterPid, MQLen, _}, {_, 0, _}] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 2]),
+
+                  %% The writer process should have only a limited message queue,
+                  %% but it is hard to exactly know how long.
+                  %% (There are some `inet_reply' messages from the
+                  %% inet driver, and some messages from the channel,
+                  %% we estimate the later to be less than double the
+                  %% initial credit)
+                  {messages, Msgs} = rabbit_ct_broker_helpers:rpc(
+                        Config, 0, erlang, process_info, [WriterPid, messages]),
+                  CmdLen = length([Msg || Msg <- Msgs,
+                                          element(1, Msg) =:= send_command_flow]),
+                  case {writer_msg_queue_len, CmdLen, MQLen} of
+                      _ when CmdLen < 2 * 20 -> ok
+                  end,
+
+                  ExpDest = 0,
+                  #'queue.declare_ok'{message_count = ExpDest} =
+                      amqp_channel:call(Ch, #'queue.declare'{queue = <<"dest">>,
+                                                             durable = true}),
+                  #'queue.declare_ok'{message_count = SrcCnt} =
+                      amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+
+                  %% Most messages should still be in the queue either ready or unacked
+                  case {src_queue_message_count, SrcCnt} of
+                      _ when 0 < SrcCnt andalso SrcCnt < 1000 - MQLen -> ok
+                  end
+              after
+                  set_vm_memory_high_watermark(Config, OrigLimit),
+                  set_default_credit(Config, OrigCredit)
+              end
+      end).
 
 %%----------------------------------------------------------------------------
 
@@ -541,3 +603,21 @@ await_autodelete1(_Config, Name) ->
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
     [rabbit_misc:pget(name, Shovel) || Shovel <- L].
+
+set_default_credit(Config, Value) ->
+    {ok, OrigValue} =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, application, get_env, [rabbit, credit_flow_default_credit]),
+    ok =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, application, set_env, [rabbit, credit_flow_default_credit, Value]),
+    OrigValue.
+
+set_vm_memory_high_watermark(Config, Limit) ->
+    OrigLimit =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, vm_memory_monitor, get_vm_memory_high_watermark, []),
+    ok =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [Limit]),
+    OrigLimit.
