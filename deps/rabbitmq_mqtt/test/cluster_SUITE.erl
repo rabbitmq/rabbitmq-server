@@ -92,8 +92,8 @@ end_per_testcase(Testcase, Config) ->
 connection_id_tracking(Config) ->
     ID = <<"duplicate-id">>,
     {ok, MRef1, C1} = connect_to_node(Config, 0, ID),
-    emqttc:subscribe(C1, <<"TopicA">>, qos0),
-    emqttc:publish(C1, <<"TopicA">>, <<"Payload">>),
+    {ok, _, _} = emqtt:subscribe(C1, <<"TopicA">>, qos0),
+    ok = emqtt:publish(C1, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
@@ -111,14 +111,13 @@ connection_id_tracking(Config) ->
 
     %% C2 is disconnected
     await_disconnection(MRef2),
-
-    emqttc:disconnect(C3).
+    ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
-    emqttc:subscribe(C, <<"TopicA">>, qos0),
-    emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
+    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 10, 2, 1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
@@ -129,8 +128,8 @@ connection_id_tracking_on_nodedown(Config) ->
 connection_id_tracking_with_decommissioned_node(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
-    emqttc:subscribe(C, <<"TopicA">>, qos0),
-    emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
+    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     assert_connection_count(Config, 10, 2, 1),
@@ -164,25 +163,29 @@ connect_to_node(Config, Node, ClientID) ->
   {ok, MRef, C}.
 
 connect(Port, ClientID) ->
-  {ok, C} = emqttc:start_link([{host, "localhost"},
-                               {port, Port},
-                               {client_id, ClientID},
-                               {proto_ver, 3},
-                               {logger, info},
-                               {puback_timeout, 1}]),
-  unlink(C),
-  {ok, C}.
+    {ok, C} = emqtt:start_link([{host, "localhost"},
+                                {port, Port},
+                                {clientid, ClientID},
+                                {proto_ver, 3},
+                                {connect_timeout, 1},
+                                {ack_timeout, 1}]),
+    {ok, _Properties} = emqtt:connect(C),
+    unlink(C),
+    {ok, C}.
 
 await_disconnection(Ref) ->
-  receive
-      {'DOWN', Ref, _, _, _} -> ok
-      after 30000            -> exit(missing_down_message)
-  end.
+    receive
+        {'DOWN', Ref, _, _, _} -> ok
+    after
+        30000 -> exit(missing_down_message)
+    end.
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
     receive
-        {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
-        after 5000 ->
-            throw({publish_not_delivered, Payload})
+        {publish, #{topic := Topic,
+                    payload := Payload}} ->
+            expect_publishes(Topic, Rest)
+    after 5000 ->
+              throw({publish_not_delivered, Payload})
     end.
