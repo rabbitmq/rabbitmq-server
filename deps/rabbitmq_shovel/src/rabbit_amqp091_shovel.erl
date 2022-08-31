@@ -153,10 +153,23 @@ dest_endpoint(#{dest := Dest}) ->
     Keys = [dest_exchange, dest_exchange_key, dest_queue],
     maps:to_list(maps:filter(fun(K, _) -> proplists:is_defined(K, Keys) end, Dest)).
 
-forward(IncomingTag, Props, Payload,
-        State0 = #{dest := #{props_fun := PropsFun,
-                             current := {_, _, DstUri},
-                             fields_fun := FieldsFun}}) ->
+forward(IncomingTag, Props, Payload, State) ->
+    State1 = control_throttle(State),
+    case is_blocked(State1) of
+        true ->
+            %% We are blocked by client-side flow-control and/or
+            %% `connection.blocked` message from the destination
+            %% broker. Simply cache the forward.
+            PendingEntry = {IncomingTag, Props, Payload},
+            add_pending(PendingEntry, State1);
+        false ->
+            do_forward(IncomingTag, Props, Payload, State1)
+    end.
+
+do_forward(IncomingTag, Props, Payload,
+           State0 = #{dest := #{props_fun := PropsFun,
+                                current := {_, _, DstUri},
+                                fields_fun := FieldsFun}}) ->
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
     Exchange = maps:get(exchange, Props, undefined),
@@ -258,6 +271,14 @@ handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
 
+handle_dest({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    {Pending, State1} = reset_pending(control_throttle(State)),
+    %% we have credit so can begin to forward
+    lists:foldl(fun ({Tag, Props, Payload}, S) ->
+                        forward(Tag, Props, Payload, S)
+                end, State1, lists:reverse(Pending));
+
 handle_dest(_Msg, _State) ->
     not_handled.
 
@@ -301,7 +322,13 @@ publish(IncomingTag, Method, Msg,
                   amqp_channel:next_publish_seqno(OutboundChan);
               _  -> undefined
           end,
-    ok = amqp_channel:call(OutboundChan, Method, Msg),
+    case AckMode of
+        on_publish ->
+            ok = amqp_channel:cast_flow(OutboundChan, Method, Msg);
+        _  ->
+            ok = amqp_channel:call(OutboundChan, Method, Msg)
+    end,
+
     rabbit_shovel_behaviour:decr_remaining_unacked(
       case AckMode of
           no_ack ->
@@ -312,6 +339,31 @@ publish(IncomingTag, Method, Msg,
               State1 = rabbit_shovel_behaviour:ack(IncomingTag, false, State),
               rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
+
+control_throttle(State) ->
+    update_blocked_by(flow, credit_flow:blocked(), State).
+
+update_blocked_by(Tag, IsBlocked, State = #{dest := Dest}) ->
+    BlockReasons = maps:get(blocked_by, Dest, []),
+    NewBlockReasons =
+        case IsBlocked of
+            true -> ordsets:add_element(Tag, BlockReasons);
+            false -> ordsets:del_element(Tag, BlockReasons)
+        end,
+    State#{dest => Dest#{blocked_by => NewBlockReasons}}.
+
+is_blocked(#{dest := #{blocked_by := BlockReasons}}) when BlockReasons =/= [] ->
+    true;
+is_blocked(_) ->
+    false.
+
+add_pending(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, []),
+    State#{dest => Dest#{pending => [Elem|Pending]}}.
+
+reset_pending(State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, []),
+    {Pending, State#{dest => Dest#{pending => []}}}.
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
