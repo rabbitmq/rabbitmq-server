@@ -187,66 +187,6 @@ stats(Config) ->
                               [connection_coarse_metrics, Pid]),
     ok = emqtt:disconnect(C).
 
-<<<<<<< HEAD
-=======
-get_durable_queue_type(Server, Q0) ->
-    QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
-    {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
-    amqqueue:get_type(Q1).
-
-set_env(QueueType) ->
-    application:set_env(rabbitmq_mqtt, durable_queue_type, QueueType).
-
-get_env() ->
-    rabbit_mqtt_util:env(durable_queue_type).
-
-
-validate_durable_queue_type(Config, ClientName, CleanSession, Expected) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clean_start, CleanSession},
-                                {clientid, ClientName},
-                                {proto_ver, 3}]),
-    {ok, _Properties} = emqtt:connect(C),
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
-    ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
-    expect_publishes(<<"TopicB">>, [<<"Payload">>]),
-    {ok, _, _} = emqtt:unsubscribe(C, <<"TopicB">>),
-    Prefix = <<"mqtt-subscription-">>,
-    Suffix = <<"qos1">>,
-    Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
-    ?assertEqual(Expected,get_durable_queue_type(Server,Q)),
-    timer:sleep(500),
-    ok = emqtt:disconnect(C).
-
-%% quorum queue test when enable
-quorum_session_false(Config) ->
-  %%  test if the quorum queue is enable after the setting
-    Default = rpc(Config, reader_SUITE, get_env, []),
-    rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
-    rpc(Config, reader_SUITE, set_env, [Default]).
-
-quorum_session_true(Config) ->
-  %%  in case clean session == true must be classic since quorum
-  %% doesn't support auto-delete
-    Default = rpc(Config, reader_SUITE, get_env, []),
-    rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionTrue">>, true, rabbit_classic_queue),
-    rpc(Config, reader_SUITE, set_env, [Default]).
-
-classic_session_true(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionTrue">>, true, rabbit_classic_queue).
-
-classic_session_false(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionFalse">>, false, rabbit_classic_queue).
-
-
->>>>>>> d37c3aca8f (Upgrade MQTT Erlang client)
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
     receive
