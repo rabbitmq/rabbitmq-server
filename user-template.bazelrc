@@ -1,6 +1,4 @@
-build:local --@rules_erlang//:erlang_home=/Users/rabbitmq/kerl/25.0
-build:local --@rules_erlang//:erlang_version=25.0
-build:local --//:elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.14.0/lib/elixir
+build --elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.14.0/lib/elixir
 
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
 # sandbox (https://github.com/bazelbuild/bazel/issues/7448)
@@ -16,9 +14,3 @@ build:buildbuddy --experimental_strict_action_env
 build --flaky_test_attempts=1
 
 build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
-
-# cross compile for linux (if on macOS) with rbe
-# build:rbe --host_cpu=k8
-# build:rbe --cpu=k8
-
-build --@io_bazel_rules_docker//transitions:enable=false
