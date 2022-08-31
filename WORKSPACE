@@ -112,26 +112,55 @@ git_repository(
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.2.0",
+    tag = "3.6.3",
 )
 
 load(
     "@rules_erlang//:rules_erlang.bzl",
+    "erlang_config",
+    "internal_erlang_from_github_release",
+    "internal_erlang_from_http_archive",
     "rules_erlang_dependencies",
+)
+
+erlang_config(
+    internal_erlang_configs = [
+        internal_erlang_from_github_release(
+            name = "23",
+            sha256 = "e3ecb3ac2cc549ab90cd9f8921eaebc8613f4d5c89972a3987e5a762d5a2df08",
+            version = "23.3.4.16",
+        ),
+        internal_erlang_from_github_release(
+            name = "24",
+            sha256 = "86dddc0de486acc320ed7557f12033af0b5045205290ee4926aa931b3d8b3ab2",
+            version = "24.3.4.4",
+        ),
+        internal_erlang_from_github_release(
+            name = "25",
+            sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
+            version = "25.0.4",
+        ),
+        internal_erlang_from_http_archive(
+            name = "git_master",
+            strip_prefix = "otp-master",
+            url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
+            version = "master",
+        ),
+    ],
 )
 
 rules_erlang_dependencies()
 
+load("@erlang_config//:defaults.bzl", "register_defaults")
+
+register_defaults()
+
 register_toolchains(
-    "//bazel/toolchains:erlang_toolchain_external",
-    "//bazel/toolchains:erlang_toolchain_23",
-    "//bazel/toolchains:erlang_toolchain_24",
-    "//bazel/toolchains:erlang_toolchain_25",
-    "//bazel/toolchains:erlang_toolchain_git_master",
     "//bazel/toolchains:elixir_toolchain_external",
     "//bazel/toolchains:elixir_toolchain_1_10",
     "//bazel/toolchains:elixir_toolchain_1_12",
     "//bazel/toolchains:elixir_toolchain_1_13",
+    "//bazel/toolchains:elixir_toolchain_1_14",
 )
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")

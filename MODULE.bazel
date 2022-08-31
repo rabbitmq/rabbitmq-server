@@ -25,7 +25,55 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.5.0",
+    version = "3.6.3",
+)
+
+erlang_config = use_extension(
+    "@rules_erlang//bzlmod:extensions.bzl",
+    "erlang_config",
+)
+
+erlang_config.internal_erlang_from_github_release(
+    name = "23",
+    sha256 = "e3ecb3ac2cc549ab90cd9f8921eaebc8613f4d5c89972a3987e5a762d5a2df08",
+    version = "23.3.4.16",
+)
+
+erlang_config.internal_erlang_from_github_release(
+    name = "24",
+    sha256 = "86dddc0de486acc320ed7557f12033af0b5045205290ee4926aa931b3d8b3ab2",
+    version = "24.3.4.4",
+)
+
+erlang_config.internal_erlang_from_github_release(
+    name = "25",
+    sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
+    version = "25.0.4",
+)
+
+erlang_config.internal_erlang_from_http_archive(
+    name = "git_master",
+    strip_prefix = "otp-master",
+    url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
+    version = "master",
+)
+
+use_repo(
+    erlang_config,
+    "erlang_config",
+)
+
+register_toolchains(
+    "@erlang_config//external:toolchain",
+    "@erlang_config//23:toolchain",
+    "@erlang_config//24:toolchain",
+    "@erlang_config//25:toolchain",
+    "@erlang_config//git_master:toolchain",
+    "//bazel/toolchains:elixir_toolchain_external",
+    "//bazel/toolchains:elixir_toolchain_1_10",
+    "//bazel/toolchains:elixir_toolchain_1_12",
+    "//bazel/toolchains:elixir_toolchain_1_13",
+    "//bazel/toolchains:elixir_toolchain_1_14",
 )
 
 erlang_package = use_extension(
