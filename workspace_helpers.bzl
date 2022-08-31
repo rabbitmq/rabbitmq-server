@@ -240,8 +240,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
             "@enough//:erlang_app",
         ],
     )
-<<<<<<< HEAD
-=======
 
     github_erlang_app(
         name = "emqtt",
@@ -250,7 +248,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         version = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
         ref = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
         build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
 erlang_app(
     app_name = "emqtt",
     erlc_opts = [
@@ -261,10 +258,3 @@ erlang_app(
 )
 """,
     )
-
-RA_INJECT_GIT_VERSION = """
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
-"""
->>>>>>> e6d23fa973 (Upgrade MQTT Erlang client)
