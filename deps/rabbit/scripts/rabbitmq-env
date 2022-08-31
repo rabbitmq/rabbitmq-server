@@ -94,10 +94,21 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
-[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
-if [ -f "${RABBITMQ_CONF_ENV_FILE}" ]; then
+[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE="$CONF_ENV_FILE"
+if [ -f "$RABBITMQ_CONF_ENV_FILE" ]; then
     CONF_ENV_FILE_PHASE=rabbitmq-env
-    . ${RABBITMQ_CONF_ENV_FILE} || true
+    . "$RABBITMQ_CONF_ENV_FILE" || true
+fi
+
+# Bump ETS table limit to 50000
+if [ -z "$ERL_MAX_ETS_TABLES" ]; then
+    export ERL_MAX_ETS_TABLES=50000
+fi
+
+# Default is defined here:
+# https://github.com/erlang/otp/blob/master/erts/emulator/beam/erl_port.h
+if [ -z "$ERL_MAX_PORTS" ]; then
+    export ERL_MAX_PORTS=65536
 fi
 
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
