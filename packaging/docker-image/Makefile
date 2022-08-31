@@ -34,8 +34,8 @@ endif
 IMAGE_TAG_1 ?= $(subst +,-,$(VERSION))
 endif
 
-OTP_VERSION ?= 24.3.4.4
-OTP_SHA256 ?= b127aba77c4754904c642cf93f9b4b6667507ac31e8419b3131ed815e1f6827c
+OTP_VERSION ?= 25.0.4
+OTP_SHA256 ?= 05878cb51a64b33c86836b12a21903075c300409b609ad5e941ddb0feb8c2120
 REPO ?= pivotalrabbitmq/rabbitmq
 SKIP_PGP_VERIFY ?= false
 PGP_KEYSERVER ?= pgpkeys.eu
@@ -65,7 +65,7 @@ endif
 clean:
 	rm -rf rabbitmq_server-*
 
-OTP_VERSION_MATCH ?= 24[0-9.]+
+OTP_VERSION_MATCH ?= 25[0-9.]+
 define LATEST_STABLE_OTP_VERSION
 curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
   jq -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_VERSION_MATCH)$$") | .string' | \
