@@ -107,13 +107,18 @@ cd selenium
 npm install
 ```
 
-Run UAA:
+Access the test suite folder:
+```
+cd test/oauth/with-uaa
+```
+
+Start UAA:
 ```
 cd test/oauth/with-uaa
 make start-uaa
 ```
 
-Run RabbitMQ from source (it runs `make run-broker`):
+Start RabbitMQ from source (it runs `make run-broker`):
 ```
 make start-rabbitmq
 ```
