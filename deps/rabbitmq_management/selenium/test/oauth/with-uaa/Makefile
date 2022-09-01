@@ -13,10 +13,13 @@ help:
 start-rabbitmq: ## Start RabbitMQ
 	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
 	@(gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-		RABBITMQ_ENABLED_PLUGINS_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/enabled_plugins \
+		RABBITMQ_ENABLED_PLUGINS="rabbitmq_auth_backend_oauth2,rabbitmq_management" \
 		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
-start-uaa: ## Deploy UAA
-	@(./start-uaa.sh)
 
-run-test: ## Run tests interactively
+start-uaa: ## Start UAA
+	@(./start-uaa.sh)
+stop-uaa: ## Stop UAA
+	@(./stop-uaa.sh)
+
+run-test: ## Run tests interactively e.g. make run-test [TEST=landing.js]
 	@(RABBITMQ_URL=http://localhost:15672 RUN_LOCAL=true SCREENSHOTS_DIR=${PWD}/screens npm test $(PWD)/$(TEST))

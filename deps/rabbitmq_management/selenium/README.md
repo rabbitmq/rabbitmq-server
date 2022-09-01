@@ -114,7 +114,6 @@ cd test/oauth/with-uaa
 
 Start UAA:
 ```
-cd test/oauth/with-uaa
 make start-uaa
 ```
 
