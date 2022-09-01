@@ -13,6 +13,7 @@
 -define(CONNECT_TIMEOUT, 10000).
 -define(WAIT_LOG_NO_CRASHES, {["Generic server.*terminating"], fun () -> exit(there_should_be_no_crashes) end}).
 
+%%TODO check for loopback user, i.e. that rabbit_access_control:check_user_loopback/2 is called.
 all() ->
     [{group, anonymous_no_ssl_user},
      {group, anonymous_ssl_user},

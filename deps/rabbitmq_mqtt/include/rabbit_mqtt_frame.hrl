@@ -26,12 +26,18 @@
 
 %% connect return codes
 
--define(CONNACK_ACCEPT,      0).
--define(CONNACK_PROTO_VER,   1). %% unacceptable protocol version
--define(CONNACK_INVALID_ID,  2). %% identifier rejected
--define(CONNACK_SERVER,      3). %% server unavailable
--define(CONNACK_CREDENTIALS, 4). %% bad user name or password
--define(CONNACK_AUTH,        5). %% not authorized
+%% Connection accepted.
+-define(CONNACK_ACCEPT,                 0).
+%% The Server does not support the level of the MQTT protocol requested by the Client.
+-define(CONNACK_UNACCEPTABLE_PROTO_VER, 1).
+%% The Client identifier is correct UTF-8 but not allowed by the Server.
+-define(CONNACK_ID_REJECTED,            2).
+%% The Network Connection has been made but the MQTT service is unavailable.
+-define(CONNACK_SERVER_UNAVAILABLE,     3).
+%% The data in the user name or password is malformed.
+-define(CONNACK_BAD_CREDENTIALS,        4).
+%% The Client is not authorized to connect.
+-define(CONNACK_NOT_AUTHORIZED,         5).
 
 %% qos levels
 

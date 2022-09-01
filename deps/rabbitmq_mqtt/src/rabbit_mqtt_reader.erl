@@ -20,7 +20,6 @@
 -export([conserve_resources/3, start_keepalive/2,
          close_connection/2]).
 
--export([ssl_login_name/1]).
 -export([info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -62,7 +61,7 @@ init(Ref) ->
               self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
-            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(RealSocket)),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
             gen_server2:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(
@@ -325,17 +324,6 @@ do_terminate(_Reason, #state{proc_state = ProcState}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-ssl_login_name(Sock) ->
-  case rabbit_net:peercert(Sock) of
-      {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
-                                    unsafe    -> none;
-                                    not_found -> none;
-                                    Name      -> Name
-                                end;
-      {error, no_peercert} -> none;
-      nossl                -> none
-  end.
 
 %%----------------------------------------------------------------------------
 
