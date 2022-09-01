@@ -26,15 +26,10 @@ describe("Once user is logged in", function() {
     await uaaLogin.login("rabbit_admin", "rabbit_admin");
     await overview.isLoaded()
 
-    await delay(5000)
+    await delay(15000)
+    await overview.isLoaded() // still after accessTokenValiditySeconds = 15 sec
     await overview.clickOnConnectionsTab()
-    await delay(5000) // 10 sec
-    await overview.clickOnConnectionsTab()
-    await delay(5000) // 15 sec => accessTokenValiditySeconds = 15 sec
-    await overview.clickOnChannelsTab()
-    await delay(5000) // 20 sec
-    await overview.clickOnQueuesTab()
-
+    
   });
 
   after(async function() {
