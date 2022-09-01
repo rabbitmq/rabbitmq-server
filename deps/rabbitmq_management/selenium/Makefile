@@ -7,7 +7,7 @@ ifndef SUITE
 override SUITE = "test/oauth/with-uaa"
 endif
 
-SELENIUM_VERSION := 103.0
+SELENIUM_VERSION := 105.0
 
 ### TARGETS ###
 
@@ -26,9 +26,7 @@ build-test-runner-image: ## Prepare docker image to run tests
 	@(docker build -t mocha-test  --target test .)
 
 run-setup: ## Deploy infrastructure for headless mode to run $(SUITE)
-	RABBITMQ_CONFIG_FILE=rabbitmq-headless.config \
-	  ENABLED_PLUGINS_FILE=enabled_plugins \
-		UAA_CONFIG_FOLDER=uaa-headless $(SUITE)/setup.sh
+	$(SUITE)/setup.sh
 run-teardown: ## Undeploy infrastructure for headless mode to run
 	$(SUITE)/teardown.sh
 
