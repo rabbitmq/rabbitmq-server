@@ -7,7 +7,7 @@ ifndef SUITE
 override SUITE = "test/oauth/with-uaa"
 endif
 
-SELENIUM_VERSION := 105.0
+SELENIUM_VERSION := 104.0
 
 ### TARGETS ###
 
@@ -25,12 +25,12 @@ run-chrome: ## Install Selenium Chrome
 build-test-runner-image: ## Prepare docker image to run tests
 	@(docker build -t mocha-test  --target test .)
 
-run-setup: ## Deploy infrastructure for headless mode to run $(SUITE)
+setup: ## Deploy infrastructure for headless mode to run $(SUITE)
 	$(SUITE)/setup.sh
-run-teardown: ## Undeploy infrastructure for headless mode to run
+teardown: ## Undeploy infrastructure for headless mode to run
 	$(SUITE)/teardown.sh
 
-run-test-suite: ## Run tests using selenium hub (headless mode)
+run-test: ## Run tests using selenium hub (headless mode)
 	@(docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net)
 	@(echo "Running tests in headless mode for suite $(SUITE) ...")
 	@(docker run --rm  --name mocha --net rabbitmq_net \

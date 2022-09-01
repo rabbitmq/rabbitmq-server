@@ -1,7 +1,7 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
-const {buildDriver, goToHome, delay, teardown} = require("../../utils");
+const {buildDriver, goToHome, captureScreensFor, teardown, delay} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
@@ -19,6 +19,7 @@ describe("Once user is logged in", function() {
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
     overview = new OverviewPage(driver)
+    captureScreen = captureScreensFor(driver, __filename)
   });
 
   it("it is logged out when it exceeds logging_session_timeout of 1 minute", async function() {
@@ -34,7 +35,6 @@ describe("Once user is logged in", function() {
       await overview.clickOnConnectionsTab()
       endTime = new Date()
       var timeDiff = Math.round((endTime - startTime)/1000);
-      console.log("Elapsed : " + timeDiff + "sec")
     }
     // And on the last 10 seconds to reach the 1 minute timeout we do
     // not need to renew the token as it expires only after 15 seconds
@@ -42,7 +42,6 @@ describe("Once user is logged in", function() {
     await delay(10000)
     endTime = new Date()
     var timeDiff = Math.round((endTime - startTime)/1000);
-    console.log("Elapsed : " + timeDiff + "sec")
     await homePage.isLoaded()
 
     // But also, we should be logged out from the Idp (i.e. UAA)
@@ -53,6 +52,6 @@ describe("Once user is logged in", function() {
   });
 
   after(async function() {
-    await teardown(driver, this)
+    await teardown(driver, this, captureScreen)
   });
 })

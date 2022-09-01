@@ -61,18 +61,18 @@ make run-chrome
 
 Then we run the setup.sh script which deploys the runtime requirement for the suite test we are going to run:
 ```
-make run-setup SUITE=test/oauth/with-uaa
+make setup SUITE=test/oauth/with-uaa
 ```
 
 And now we run the tests
 ```
-make run-test-suite SUITE=test/oauth/with-uaa
+make run-test SUITE=test/oauth/with-uaa
 ```
 > By default, if we do not specify any SUITE, it uses `test/oauth/with-uaa`
 
 And to tear down the runtime for the test suite we run:
 ```
-make run-teardown SUITE=test/oauth/with-uaa
+make teardown SUITE=test/oauth/with-uaa
 ```
 
 At the moment there are only 2 suites of tests. The first one is `test/oauth/with-uaa` that we just discussed above.
@@ -80,9 +80,9 @@ The second one is `test/oauth/with-uaa-down` which runs a test case with UAA dow
 To run this suite, we would proceed as follows:
 
 ```
-make run-setup SUITE=test/oauth/with-uaa-down
-make run-test-suite SUITE=test/oauth/with-uaa-down
-make run-teardown SUITE=test/oauth/with-uaa-down
+make setup SUITE=test/oauth/with-uaa-down
+make run-test SUITE=test/oauth/with-uaa-down
+make teardown SUITE=test/oauth/with-uaa-down
 ```
 
 **Note**: If at any stage, the tests take a long time to run, try restarting the selenium-hub by running. Sometimes it becomes unresponsive.

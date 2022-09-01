@@ -17,9 +17,9 @@ start-rabbitmq: ## Start RabbitMQ
 		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
 
 start-uaa: ## Start UAA
-	@(./start-uaa.sh)
+	@(UAA_CONFIG=${PWD}/uaa ./start-uaa.sh)
 stop-uaa: ## Stop UAA
 	@(./stop-uaa.sh)
 
-run-test: ## Run tests interactively e.g. make run-test [TEST=landing.js]
+test: ## Run tests interactively e.g. make run-test [TEST=landing.js]
 	@(RABBITMQ_URL=http://localhost:15672 RUN_LOCAL=true SCREENSHOTS_DIR=${PWD}/screens npm test $(PWD)/$(TEST))
