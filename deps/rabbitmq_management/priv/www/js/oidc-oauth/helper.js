@@ -12,7 +12,7 @@ function oauth_initialize_if_required() {
     if (request.status === 200) {
         return oauth_initialize(JSON.parse(request.responseText));
     }else {
-        return { "enable" : false };
+        return { "enabled" : false };
     }
 
 }
@@ -47,7 +47,7 @@ function auth_settings_apply_defaults(authSettings) {
 function oauth_initialize(authSettings) {
     oauth = {
       "logged_in": false,
-      "enable" : authSettings.oauth_enabled,
+      "enabled" : authSettings.oauth_enabled,
       "authority" : authSettings.oauth_provider_url
     }
 
