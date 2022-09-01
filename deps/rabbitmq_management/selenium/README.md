@@ -109,7 +109,7 @@ npm install
 
 Run UAA:
 ```
-cd oauth/test/with-uaa
+cd test/oauth/with-uaa
 make start-uaa
 ```
 
