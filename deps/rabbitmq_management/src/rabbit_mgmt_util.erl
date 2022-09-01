@@ -210,7 +210,7 @@ is_basic_auth_disabled() ->
     get_bool_env(rabbitmq_management, disable_basic_auth, false).
 
 is_oauth2_enabled() ->
-    get_bool_env(rabbitmq_management, oauth_enable, false).
+    get_bool_env(rabbitmq_management, oauth_enabled, false).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
