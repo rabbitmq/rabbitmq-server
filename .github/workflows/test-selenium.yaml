@@ -114,8 +114,9 @@ jobs:
 
     - name: Wait for UAA to be Up
       run: |
-        cd ${PWD}/${SELENIUM_DIR}
-        make wait-for-uaa
+        cd ${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa
+        waitTillUAAReady
+
 
     - name: Run Suite Test oauth/with-uaa
       run: |
