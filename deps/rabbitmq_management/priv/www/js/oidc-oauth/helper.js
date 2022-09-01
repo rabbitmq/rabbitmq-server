@@ -1,9 +1,6 @@
 
-//import {UserManager} from "./scripts/oidc-client-ts/oidc-client-ts.js"
-// import {axios} from "./scripts/axios/axios.min.js"
-
-
 var mgr;
+var _management_logger;
 
 function oauth_initialize_if_required() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
@@ -69,7 +66,6 @@ function oauth_initialize(authSettings) {
         redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri ,
 
-        filterProtocolClaims: true,
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
         extraQueryParams: {
@@ -85,25 +81,24 @@ function oauth_initialize(authSettings) {
         end_session_endpoint: authSettings.oauth_provider_url + '/logout.do'
       }
     }
+    oidc.Log.setLevel(oidc.Log.DEBUG);
+    oidc.Log.setLogger(console);
 
     mgr = new oidc.UserManager(oidcSettings);
     oauth.readiness_url = mgr.settings.metadataUrl
 
-    oidc.Log.setLogger(console);
-    oidc.Log.setLevel(oidc.Log.INFO);
+    _management_logger = new oidc.Logger("Management");
 
     mgr.events.addAccessTokenExpiring(function() {
-        console.log("token expiring...");
+        _management_logger.info("token expiring...");
     });
     mgr.events.addAccessTokenExpired(function() {
-        console.log("token expired !!");
+        _management_logger.info("token expired!!");
     });
     mgr.events.addSilentRenewError(function(err) {
-        console.log("token expiring failed due to " + err);
+        _management_logger.error("token expiring failed due to ", err);
     });
     mgr.events.addUserLoaded(function(user) {
-        let expiryDate = new Date(user.expires_at * 1000)  // it is epoch in seconds
-        console.log("user loaded with token which expires at " + expiryDate);
         oauth.access_token = user.access_token;
      });
 
@@ -121,31 +116,9 @@ function log() {
         }
         message += msg
     });
-    console.log(message)
+    _management_logger.info(message)
 }
 
-
-
-
-function oauth_registerCallbacks() {
-  mgr.events.addUserLoaded(function (user) {
-      console.log("addUserLoaded=> ", user);
-      mgr.getUser().then(function() {
-          console.log("getUser loaded user after userLoaded event fired");
-      });
-  });
-  mgr.events.addUserUnloaded(function (e) {
-      console.log("addUserUnloaded=> ", e);
-  });
-
-  mgr.events.addUserSignedIn(function (e) {
-      log("addUserSignedIn=> " , e);
-  });
-  mgr.events.addUserSignedOut(function (e) {
-      log("addUserSignedOut=> ", e);
-  });
-
-}
 function oauth_is_logged_in() {
     return mgr.getUser().then(user => {
         if (!user) {
@@ -154,14 +127,11 @@ function oauth_is_logged_in() {
         return { "user": user, "loggedIn": !user.expired };
     });
 }
-
-
 function oauth_initiateLogin() {
-    mgr.signinRedirect({ state: { } /*, useReplaceToNavigate: true*/ }).then(function() {
-        log("signinRedirect done");
+    mgr.signinRedirect({ state: { } }).then(function() {
+        _management_logger.debug("signinRedirect done");
     }).catch(function(err) {
-        console.error(err);
-        log(err);
+        _management_logger.error(err);
     });
 }
 function oauth_redirectToHome(oauth) {
@@ -176,8 +146,7 @@ function oauth_redirectToLogin(error) {
 }
 function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(user => oauth_redirectToHome(user)).catch(function(err) {
-        console.error(err);
-        log(err);
+        _management_logger.error(err);        
         oauth_redirectToLogin(err)
     });
 }

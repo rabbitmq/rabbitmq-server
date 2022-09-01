@@ -28,9 +28,8 @@
       if (oauth.enable) {
         oauth_is_logged_in().then( status => {
           if (status.loggedIn && !has_auth_cookie_value()) {
-            console.log("Session has expired");
             oauth.logged_in = false;
-            oauth_initiateLogout();        
+            oauth_initiateLogout();
           }else {
             if (!status.loggedIn) {
               replace_content('outer', format('login_oauth', {}));
@@ -38,7 +37,9 @@
               oauth.logged_in = true
               oauth.access_token = status.user.access_token
               oauth.expiryDate = new Date(status.user.expires_at * 1000)  // it is epoch in seconds
-              console.log("token expires at : " + oauth.expiryDate);
+              let current = new Date();
+              _management_logger.debug("token expires in ",(oauth.expiryDate-current)/1000 ,
+                "secs at : ", oauth.expiryDate );
               oauth.user_name = status.user.profile["user_name"]
               if (!oauth.user_name || oauth.user_name == "") oauth.user_name = status.user.profile["sub"]
               oauth.scopes = status.user.scope
