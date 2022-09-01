@@ -47,7 +47,7 @@ function auth_settings_apply_defaults(authSettings) {
 function oauth_initialize(authSettings) {
     oauth = {
       "logged_in": false,
-      "enable" : authSettings.oauth_enable,
+      "enable" : authSettings.oauth_enabled,
       "authority" : authSettings.oauth_provider_url
     }
 
@@ -146,7 +146,7 @@ function oauth_redirectToLogin(error) {
 }
 function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(user => oauth_redirectToHome(user)).catch(function(err) {
-        _management_logger.error(err);        
+        _management_logger.error(err);
         oauth_redirectToLogin(err)
     });
 }

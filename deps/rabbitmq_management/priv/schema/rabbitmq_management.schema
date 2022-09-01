@@ -447,7 +447,7 @@ end}.
       [{datatype, string}]}.
 
 %% Enable OAuth2 in the management ui
-{mapping, "management.oauth_enable", "rabbitmq_management.oauth_enable",
+{mapping, "management.oauth_enabled", "rabbitmq_management.oauth_enabled",
     [{datatype, {enum, [true, false]}}]}.
 
 %% The URL of the OIDC/OAuth2 provider

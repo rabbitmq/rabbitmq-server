@@ -3282,13 +3282,13 @@ oauth_test(Config) ->
 
     Map1 = http_get(Config, "/auth", ?OK),
     %% Defaults
-    ?assertEqual(false, maps:get(oauth_enable, Map1)),
+    ?assertEqual(false, maps:get(oauth_enabled, Map1)),
 
     %% Misconfiguration
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth_enable, true]),
+                                 [rabbitmq_management, oauth_enabled, true]),
     Map2 = http_get(Config, "/auth", ?OK),
-    ?assertEqual(false, maps:get(oauth_enable, Map2)),
+    ?assertEqual(false, maps:get(oauth_enabled, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_client_id, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_provider_url, Map2)),
     %% Valid config requires non empty OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl
@@ -3302,14 +3302,14 @@ oauth_test(Config) ->
                                  [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
     Map3 = http_get(Config, "/auth", ?OK),
     println(Map3),
-    ?assertEqual(true, maps:get(oauth_enable, Map3)),
+    ?assertEqual(true, maps:get(oauth_enabled, Map3)),
     ?assertEqual(<<"rabbit_user">>, maps:get(oauth_client_id, Map3)),
     ?assertEqual(<<"rabbit_secret">>, maps:get(oauth_client_secret, Map3)),
     ?assertEqual(<<"rabbitmq">>, maps:get(resource_server_id, Map3)),
     ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(oauth_provider_url, Map3)),
     %% cleanup
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbitmq_management, oauth_enable]).
+                                 [rabbitmq_management, oauth_enabled]).
 
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},

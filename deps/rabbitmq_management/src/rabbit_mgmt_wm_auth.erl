@@ -26,7 +26,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
-    EnableOAUTH = application:get_env(rabbitmq_management, oauth_enable, false),
+    EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
     Data = case EnableOAUTH of
                true ->
                    OAuthClientId = application:get_env(rabbitmq_management, oauth_client_id, ""),
@@ -38,14 +38,14 @@ to_json(ReqData, Context) ->
                    case is_invalid([OAuthResourceId]) of
                        true ->
                            rabbit_log:warning("Disabling OAuth 2 authorization, missing resource_server_id in oauth2 plugin", []),
-                            [{oauth_enable, false}];
+                            [{oauth_enabled, false}];
                        false ->
                            case is_invalid([OAuthClientId, OAuthClientSecret, OAuthProviderUrl]) of
                                true ->
                                    rabbit_log:warning("Disabling OAuth 2 authorization, missing relevant configuration in management plugin", []),
-                                   [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
+                                   [{oauth_enabled, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
                                false ->
-                                   [{oauth_enable, true},
+                                   [{oauth_enabled, true},
                                     {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
                                     {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
                                     {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
@@ -57,7 +57,7 @@ to_json(ReqData, Context) ->
                            end
                    end;
                false ->
-                   [{oauth_enable, false}]
+                   [{oauth_enabled, false}]
            end,
     rabbit_mgmt_util:reply(Data, ReqData, Context).
 
