@@ -2,9 +2,6 @@
 
 LOCAL_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-${RABBITMQ_CONFIG:?"Required RABBITMQ_CONFIG environment variable"}
-${ENABLED_PLUGINS:?"Required ENABLED_PLUGINS environment variable"}
-
 RABBITMQ_IMAGE_TAG=${RABBITMQ_IMAGE_TAG:-69a4159f3482e5212d364f499b2ca2e05bede0ca-otp-min}
 RABBITMQ_IMAGE=${RABBITMQ_IMAGE:-pivotalrabbitmq/rabbitmq}
 

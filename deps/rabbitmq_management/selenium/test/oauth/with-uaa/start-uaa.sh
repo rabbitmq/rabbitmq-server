@@ -2,8 +2,7 @@
 
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-export UAA_CONFIG=${SCRIPT}/${UAA_CONFIG_FOLDER:-uaa}
-
+echo "Starting UAA with UAA_CONFIG : ${UAA_CONFIG}"
 
 UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-75.21.0}
 UAA_IMAGE_NAME=${UAA_IMAGE_NAME:-cloudfoundry/uaa}

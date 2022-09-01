@@ -1,7 +1,7 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
-const {buildDriver, goToHome, teardown} = require("../../utils");
+const {buildDriver, goToHome, captureScreensFor, teardown} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
@@ -18,6 +18,7 @@ describe("An UAA user with administrator tag", function() {
     homePage = new SSOHomePage(driver);
     uaaLogin = new UAALoginPage(driver);
     overview = new OverviewPage(driver);
+    captureScreen = captureScreensFor(driver, __filename)
   });
 
   it("can log in into the management ui", async function() {
@@ -30,6 +31,6 @@ describe("An UAA user with administrator tag", function() {
   });
 
   after(async function() {
-    await teardown(driver, this)
+    await teardown(driver, this, captureScreen)
   });
 })

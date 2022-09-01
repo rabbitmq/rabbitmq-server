@@ -1,7 +1,7 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
-const {buildDriver, goToHome, delay, teardown} = require("../../utils");
+const {buildDriver, goToHome, captureScreensFor, teardown, delay} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
@@ -19,6 +19,7 @@ describe("Once user is logged in", function() {
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
     overview = new OverviewPage(driver)
+    captureScreen = captureScreensFor(driver, __filename)
   });
 
   it("its token is automatically renewed", async function() {
@@ -28,11 +29,11 @@ describe("Once user is logged in", function() {
 
     await delay(15000)
     await overview.isLoaded() // still after accessTokenValiditySeconds = 15 sec
-    await overview.clickOnConnectionsTab()
-    
+    await overview.clickOnConnectionsTab() // and we can still interact with the ui
+
   });
 
   after(async function() {
-    await teardown(driver, this)
+    await teardown(driver, this, captureScreen)
   });
 })

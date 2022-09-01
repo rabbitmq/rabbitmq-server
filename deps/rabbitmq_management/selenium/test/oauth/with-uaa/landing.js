@@ -1,7 +1,7 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
-const {buildDriver, goToHome, teardown} = require("../../utils");
+const {buildDriver, goToHome, captureScreensFor, teardown} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 
@@ -13,6 +13,7 @@ describe("Management UI with UAA running", function() {
     driver = buildDriver();
     await goToHome(driver);
     homePage = new SSOHomePage(driver)
+    captureScreen = captureScreensFor(driver, __filename)
   });
 
   it("should have a login button to SSO", async function() {
@@ -28,6 +29,6 @@ describe("Management UI with UAA running", function() {
   });
 
   after(async function() {
-    await teardown(driver, this)
+    await teardown(driver, this, captureScreen)
   });
 })
