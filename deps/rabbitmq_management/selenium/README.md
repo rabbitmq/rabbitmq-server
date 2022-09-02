@@ -56,7 +56,7 @@ docker network in our local machine:
 First, we launch **Selenium Hub** which is where the headless chrome browser runs:
 ```
 cd selenium
-make run-chrome
+make start-chrome
 ```
 
 Then we run the setup.sh script which deploys the runtime requirement for the suite test we are going to run:
@@ -87,7 +87,7 @@ make teardown SUITE=test/oauth/with-uaa-down
 
 **Note**: If at any stage, the tests take a long time to run, try restarting the selenium-hub by running. Sometimes it becomes unresponsive.
 ```
-make run-chrome
+make start-chrome
 ```
 
 
