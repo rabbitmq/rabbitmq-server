@@ -2,7 +2,7 @@ name: Test Management UI with Selenium
 on:
   push:
     branches:
-    - oidc-integration
+    - main
 jobs:
   selenimum:
     runs-on: ubuntu-latest
