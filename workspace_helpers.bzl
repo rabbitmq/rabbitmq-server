@@ -174,7 +174,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     git_repository(
         name = "ra",
-        branch = "main",
+        branch = "ra-log-fold",
         remote = "https://github.com/rabbitmq/ra.git",
         patch_cmds = [RA_INJECT_GIT_VERSION],
     )
