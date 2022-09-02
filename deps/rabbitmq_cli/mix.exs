@@ -13,6 +13,7 @@ defmodule RabbitMQCtl.MixfileBase do
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       version: "3.8.0-dev",
 =======
 =======
@@ -41,6 +42,9 @@ defmodule RabbitMQCtl.MixfileBase do
 =======
       version: "3.10.0-dev",
 >>>>>>> 4e9d1effcf (Resolve conflicts)
+=======
+      version: "3.9.0-dev",
+>>>>>>> 0bb7d38f45 (Resolve conflicts)
       elixir: ">= 1.10.4 and < 1.15.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
