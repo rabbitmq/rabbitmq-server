@@ -25,7 +25,7 @@
     <script type="application/javascript">
       var oauth = oauth_initialize_if_required();
 
-      if (oauth.enable) {
+      if (oauth.enabled) {
         oauth_is_logged_in().then( status => {
           if (status.loggedIn && !has_auth_cookie_value()) {
             oauth.logged_in = false;

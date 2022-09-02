@@ -51,7 +51,7 @@ function oauth_initialize(authSettings) {
       "authority" : authSettings.oauth_provider_url
     }
 
-    if (!oauth.enable) return oauth;
+    if (!oauth.enabled) return oauth;
 
     authSettings = auth_settings_apply_defaults(authSettings);
 

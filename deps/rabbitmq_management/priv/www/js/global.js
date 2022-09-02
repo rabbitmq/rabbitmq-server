@@ -655,7 +655,7 @@ function setup_global_vars() {
 
     user_name = fmt_escape_html(user.name);
     $('#header #logout').prepend(
-      'User ' + (user_administrator && !oauth.enable ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
+      'User ' + (user_administrator && !oauth.enabled ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
 
     var product = overview.rabbitmq_version;
