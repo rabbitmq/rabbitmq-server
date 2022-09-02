@@ -102,7 +102,7 @@ erlang_app(
 erlang_package.git_package(
     name = "emqtt",
     repository = "ansd/emqtt",
-    commit = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
+    commit = "68683689546b081c1cd5efeaa897b619e581fe29",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
