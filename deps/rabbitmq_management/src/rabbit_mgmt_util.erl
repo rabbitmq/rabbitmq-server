@@ -83,7 +83,7 @@ is_authorized_admin(ReqData, Context) ->
 is_authorized_admin(ReqData, Context, Token) ->
     is_authorized(ReqData, Context,
                   rabbit_data_coercion:to_binary(
-                    application:get_env(rabbitmq_management, uaa_client_id, "")),
+                    application:get_env(rabbitmq_management, oauth_client_id, "")),
                   Token, <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
@@ -209,6 +209,9 @@ is_authorized_global_parameters(ReqData, Context) ->
 is_basic_auth_disabled() ->
     get_bool_env(rabbitmq_management, disable_basic_auth, false).
 
+is_oauth2_enabled() ->
+    get_bool_env(rabbitmq_management, oauth_enabled, false).
+
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
         <<"OPTIONS">> -> {true, ReqData, Context};
@@ -230,7 +233,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             end;
         {bearer, Token} ->
             Username = rabbit_data_coercion:to_binary(
-                         application:get_env(rabbitmq_management, uaa_client_id, "")),
+                         application:get_env(rabbitmq_management, oauth_client_id, "")),
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
             case is_basic_auth_disabled() of
@@ -737,8 +740,13 @@ bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
 not_authenticated(Reason, ReqData, Context) ->
-    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
-    halt_response(401, not_authorized, Reason, ReqData1, Context).
+    case is_oauth2_enabled() of
+      false ->
+          ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+          halt_response(401, not_authorized, Reason, ReqData1, Context);
+      true ->
+          halt_response(401, not_authorized, Reason, ReqData, Context)
+    end.
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0

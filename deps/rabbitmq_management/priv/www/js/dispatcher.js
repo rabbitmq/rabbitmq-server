@@ -14,7 +14,16 @@ dispatcher_add(function(sammy) {
             }
             render(reqs, 'overview', '#/');
         });
-
+    sammy.get('#/', function() {
+        var reqs = {'overview': {path:    '/overview',
+                                 options: {ranges: ['lengths-over',
+                                                    'msg-rates-over']}},
+                    'vhosts': '/vhosts'};
+        if (user_monitor) {
+            reqs['nodes'] = '/nodes';
+        }
+        render(reqs, 'overview', '#/');
+    });
     path('#/cluster-name', {'cluster_name': '/cluster-name'}, 'cluster-name');
     sammy.put('#/cluster-name', function() {
             if (sync_put(this, '/cluster-name')) {
@@ -289,19 +298,13 @@ dispatcher_add(function(sammy) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
-        if (uaa_logged_in) {
-            clear_pref('uaa_token');
-            var redirect;
-            if (window.location.hash != "") {
-                redirect = window.location.href.split(window.location.hash)[0];
-            } else {
-                redirect = window.location.href
-            };
-            uaa_logged_in = false;
-            var logoutRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
-            get(logoutRedirectUrl, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", function(req) { });
+        clear_cookie_value('m');
+        if (oauth.logged_in) {
+            oauth.logged_in = false;
+            oauth_initiateLogout();
+        }else {
+          location.reload();
         }
-        location.reload();
     });
 
     sammy.put('#/rate-options', function() {
