@@ -120,7 +120,7 @@ user_from_req(Req) ->
             Username;
         {bearer, _} ->
             rabbit_data_coercion:to_binary(
-              application:get_env(rabbitmq_management, uaa_client_id, ""));
+              application:get_env(rabbitmq_management, oauth_client_id, ""));
         _ ->
             "-"
     catch _:_ ->
