@@ -6,7 +6,7 @@ $(document).ready(function() {
    if (error) {
      renderWarningMessageInLoginStatus(error);
    }else {
-      if (oauth.enable) {
+      if (oauth.enabled) {
         if (!oauth.logged_in ) {
           get(oauth.readiness_url, "application/json", function(req) {
               if (req.status !== 200) {
@@ -80,7 +80,7 @@ function start_app_login() {
             check_login();
         });
     });
-    if (oauth.enable) {
+    if (oauth.enabled) {
         var token = oauth.access_token;
         if (token != null) {
             set_auth_pref(oauth.user_name + ':' + oauth.access_token);
@@ -104,14 +104,14 @@ function check_login() {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
-        if (oauth.enable) {
+        if (oauth.enabled) {
             renderWarningMessageInLoginStatus("Not authorized");
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
     }
     else {
-        if (oauth.enable) {
+        if (oauth.enabled) {
           user.name = oauth.user_name;
           // remove once we are able to configure which oauth2 claim can be used as identity
           // for now we take the claim
@@ -615,7 +615,7 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            if (oauth.enable) {
+            if (oauth.enabled) {
                 var form_action = "/definitions" + vhost_part + '?token=' + oauth.access_token;
             } else {
                 var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
@@ -659,7 +659,7 @@ function postprocess() {
     $('#download-definitions').on('click', function() {
             var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
-        if (oauth.enable) {
+        if (oauth.enabled) {
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
                 '&token=' + oauth.access_token;
@@ -1202,7 +1202,7 @@ function has_auth_cookie_value() {
 }
 
 function auth_header() {
-    if(has_auth_cookie_value() && oauth.enable) {
+    if(has_auth_cookie_value() && oauth.enabled) {
         return "Bearer " + decodeURIComponent(oauth.access_token);
     } else {
         if(has_auth_cookie_value()) {
