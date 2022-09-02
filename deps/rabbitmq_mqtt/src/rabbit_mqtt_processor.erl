@@ -294,16 +294,15 @@ check_credentials(Frame = #mqtt_frame_connect{username = Username,
 login({UserBin, PassBin,
        Frame = #mqtt_frame_connect{client_id = ClientId0,
                                    clean_sess = CleanSess}},
-      PState) ->
+      PState0) ->
     ClientId = client_id(ClientId0),
-    case process_login(UserBin, PassBin, ClientId, PState) of
+    case process_login(UserBin, PassBin, ClientId, PState0) of
         connack_dup_auth ->
-            maybe_clean_sess(PState);
-        {?CONNACK_ACCEPT, AuthState} ->
-            {ok, Frame, PState#proc_state{client_id = ClientId,
-                                          clean_sess = CleanSess,
-                                          auth_state = AuthState}};
-        {error, _} = Err ->
+            maybe_clean_sess(PState0);
+        {ok, PState} ->
+            {ok, Frame, PState#proc_state{clean_sess = CleanSess,
+                                          client_id = ClientId}};
+        {error, _Reason, _PState} = Err ->
             Err
     end.
 
@@ -601,115 +600,105 @@ process_login(UserBin, PassBin, ClientId0,
               #proc_state{socket = Sock,
                           ssl_login_name = SslLoginName,
                           peer_addr = Addr,
-                          auth_state = undefined}) ->
-    {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
+                          auth_state = undefined} = PState0) ->
+    {ok, {_PeerHost, _PeerPort, _Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, Port),
     rabbit_log_connection:debug(
       "MQTT vhost picked using ~s",
       [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
-    RemoteAddress = list_to_binary(inet:ntoa(Addr)),
-    maybe
-        ok ?= case rabbit_vhost:exists(VHost) of
-                  true  ->
-                      ok;
-                  false ->
-                      rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
-                      rabbit_log_connection:error("MQTT login failed for user '~s': virtual host '~s' does not exist",
-                                                  [UserBin, VHost]),
-                      {error, ?CONNACK_BAD_CREDENTIALS}
-              end,
-        ok ?= case rabbit_vhost_limit:is_over_connection_limit(VHost) of
-                  false ->
-                      ok;
-                  {true, Limit0} ->
-                      rabbit_log_connection:error(
-                        "Error on MQTT connection ~p~n"
-                        "access to vhost '~s' refused for user '~s': "
-                        "vhost connection limit (~p) is reached",
-                        [self(), VHost, UsernameBin, Limit0]),
-                      {error, ?CONNACK_NOT_AUTHORIZED}
-              end,
-        ok ?= case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
-                  true  ->
-                      ok;
-                  false ->
-                      rabbit_log_connection:error(
-                        "Error on MQTT connection ~p~n"
-                        "access refused for user '~s': "
-                        "vhost is down",
-                        [self(), UsernameBin, VHost]),
-                      {error, ?CONNACK_NOT_AUTHORIZED}
-              end,
-        ClientId = rabbit_data_coercion:to_binary(ClientId0),
-        User = #user{username = Username} ?=
-            case rabbit_access_control:check_user_login(
-                   UsernameBin,
-                   [{password, PassBin}, {vhost, VHost}, {client_id, ClientId}]) of
-                {ok, User0} ->
-                    User0;
-                {refused, Username0, Msg, Args} ->
-                    rabbit_log_connection:error(
-                      "Error on MQTT connection ~p~n"
-                      "access refused for user '~s' in vhost '~s' "
-                      ++ Msg,
-                      [self(), Username0, VHost] ++ Args),
-                    notify_auth_result(Username0,
-                                       user_authentication_failure,
-                                       [{error, rabbit_misc:format(Msg, Args)}]),
-                    {error, ?CONNACK_BAD_CREDENTIALS}
-            end,
-        notify_auth_result(Username, user_authentication_success, []),
-        ok ?= case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
-                  false ->
-                      ok;
-                  {true, Limit} ->
-                      rabbit_log_connection:error(
-                        "Error on MQTT connection ~p~n"
-                        "access refused for user '~s': "
-                        "user connection limit (~p) is reached",
-                        [self(), Username, Limit]),
-                      {error, ?CONNACK_NOT_AUTHORIZED}
-              end,
-        AuthzCtx = #{<<"client_id">> => ClientId},
-        try rabbit_access_control:check_vhost_access(User,
-                                                     VHost,
-                                                     {ip, Addr},
-                                                     AuthzCtx) of
-            ok ->
-                case rabbit_access_control:check_user_loopback(UsernameBin, Addr) of
-                    ok ->
-                        rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, UsernameBin,
-                                                                   mqtt),
-                        Infos = [{node, node()},
-                                 {host, Host},
-                                 {port, Port},
-                                 {peer_host, PeerHost},
-                                 {peer_port, PeerPort},
-                                 {user, UsernameBin},
-                                 {vhost, VHost}],
-                        rabbit_core_metrics:connection_created(self(), Infos),
-                        rabbit_event:notify(connection_created, Infos),
-                        {?CONNACK_ACCEPT,
-                         #auth_state{user = User,
-                                     username = UsernameBin,
-                                     vhost = VHost,
-                                     authz_ctx = AuthzCtx}};
-                    not_allowed ->
-                        rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin,
-                                                                mqtt),
-                        rabbit_log_connection:warning(
-                          "MQTT login failed for user ~s: "
-                          "this user's access is restricted to localhost",
-                          [binary_to_list(UsernameBin)]),
-                        {error, ?CONNACK_NOT_AUTHORIZED}
-                end
-        catch exit:#amqp_error{name = not_allowed} ->
-                  rabbit_log_connection:error(
-                    "Error on MQTT connection ~p~n"
-                    "access refused for user '~s'",
-                    [self(), Username]),
-                  {error, ?CONNACK_NOT_AUTHORIZED}
-        end
+    RemoteIpAddressBin = list_to_binary(inet:ntoa(Addr)),
+    ClientId = rabbit_data_coercion:to_binary(ClientId0),
+    Input = #{vhost => VHost,
+              username_bin => UsernameBin,
+              pass_bin => PassBin,
+              client_id => ClientId},
+    case rabbit_misc:pipeline(
+           [fun check_vhost_exists/1,
+            fun check_vhost_connection_limit/1,
+            fun check_vhost_alive/1,
+            fun check_user_login/2,
+            fun check_user_connection_limit/1,
+            fun check_vhost_access/2,
+            fun check_user_loopback/2
+           ],
+           Input, PState0) of
+        {ok, _Output, PState} ->
+            rabbit_core_metrics:auth_attempt_succeeded(RemoteIpAddressBin, UsernameBin, mqtt),
+            {ok, PState};
+        {error, _Reason, _PState} = Err ->
+            rabbit_core_metrics:auth_attempt_failed(RemoteIpAddressBin, UsernameBin, mqtt),
+            Err
+    end.
+
+check_vhost_exists(#{vhost := VHost,
+                     username_bin := UsernameBin}) ->
+    case rabbit_vhost:exists(VHost) of
+        true  ->
+            ok;
+        false ->
+            rabbit_log_connection:error("MQTT login failed for user '~s': virtual host '~s' does not exist",
+                                        [UsernameBin, VHost]),
+            {error, ?CONNACK_BAD_CREDENTIALS}
+    end.
+
+check_vhost_connection_limit(#{vhost := VHost,
+                               username_bin := UsernameBin}) ->
+    case rabbit_vhost_limit:is_over_connection_limit(VHost) of
+        false ->
+            ok;
+        {true, Limit} ->
+            rabbit_log_connection:error(
+              "Error on MQTT connection ~p~n"
+              "access to vhost '~s' refused for user '~s': "
+              "vhost connection limit (~p) is reached",
+              [self(), VHost, UsernameBin, Limit]),
+            {error, ?CONNACK_NOT_AUTHORIZED}
+    end.
+
+check_vhost_alive(#{vhost := VHost,
+                    username_bin := UsernameBin}) ->
+    case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+        true  ->
+            ok;
+        false ->
+            rabbit_log_connection:error(
+              "Error on MQTT connection ~p~n"
+              "access refused for user '~s': "
+              "vhost is down",
+              [self(), UsernameBin, VHost]),
+            {error, ?CONNACK_NOT_AUTHORIZED}
+    end.
+
+check_user_login(#{vhost := VHost,
+                   username_bin := UsernameBin,
+                   pass_bin := PassBin,
+                   client_id := ClientId
+                  } = In, PState) ->
+    AuthProps = case PassBin of
+                    none ->
+                        %% SSL user name provided.
+                        %% Authenticating using username only.
+                        [];
+                    _ ->
+                        [{password, PassBin},
+                         {vhost, VHost},
+                         {client_id, ClientId}]
+                end,
+    case rabbit_access_control:check_user_login(
+           UsernameBin, AuthProps) of
+        {ok, User = #user{username = Username}} ->
+            notify_auth_result(Username, user_authentication_success, []),
+            {ok, maps:put(user, User, In), PState};
+        {refused, Username, Msg, Args} ->
+            rabbit_log_connection:error(
+              "Error on MQTT connection ~p~n"
+              "access refused for user '~s' in vhost '~s' "
+              ++ Msg,
+              [self(), Username, VHost] ++ Args),
+            notify_auth_result(Username,
+                               user_authentication_failure,
+                               [{error, rabbit_misc:format(Msg, Args)}]),
+            {error, ?CONNACK_BAD_CREDENTIALS}
     end.
 
 notify_auth_result(Username, AuthResult, ExtraProps) ->
@@ -717,6 +706,73 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
                   {name, case Username of none -> ''; _ -> Username end}] ++
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
+
+check_user_connection_limit(#{user := #user{username = Username}}) ->
+    case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
+        false ->
+            ok;
+        {true, Limit} ->
+            rabbit_log_connection:error(
+              "Error on MQTT connection ~p~n"
+              "access refused for user '~s': "
+              "user connection limit (~p) is reached",
+              [self(), Username, Limit]),
+            {error, ?CONNACK_NOT_AUTHORIZED}
+    end.
+
+
+check_vhost_access(#{vhost := VHost,
+                     client_id := ClientId,
+                     user := User = #user{username = Username}
+                    } = In,
+                   #proc_state{peer_addr = PeerAddr} = PState) ->
+    AuthzCtx = #{<<"client_id">> => ClientId},
+    try rabbit_access_control:check_vhost_access(
+          User,
+          VHost,
+          {ip, PeerAddr},
+          AuthzCtx) of
+        ok ->
+            {ok, maps:put(authz_ctx, AuthzCtx, In), PState}
+    catch exit:#amqp_error{name = not_allowed} ->
+              rabbit_log_connection:error(
+                "Error on MQTT connection ~p~n"
+                "access refused for user '~s'",
+                [self(), Username]),
+              {error, ?CONNACK_NOT_AUTHORIZED}
+    end.
+
+check_user_loopback(#{vhost := VHost,
+                      username_bin := UsernameBin,
+                      user := User,
+                      authz_ctx := AuthzCtx
+                     },
+                    #proc_state{socket = Sock,
+                                peer_addr = PeerAddr} = PState) ->
+    case rabbit_access_control:check_user_loopback(UsernameBin, PeerAddr) of
+        ok ->
+            {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
+            Infos = [{node, node()},
+                     {host, Host},
+                     {port, Port},
+                     {peer_host, PeerHost},
+                     {peer_port, PeerPort},
+                     {user, UsernameBin},
+                     {vhost, VHost}],
+            rabbit_core_metrics:connection_created(self(), Infos),
+            rabbit_event:notify(connection_created, Infos),
+            AuthState = #auth_state{user = User,
+                                    username = UsernameBin,
+                                    vhost = VHost,
+                                    authz_ctx = AuthzCtx},
+            {ok, PState#proc_state{auth_state = AuthState}};
+        not_allowed ->
+            rabbit_log_connection:warning(
+              "MQTT login failed for user ~s: "
+              "this user's access is restricted to localhost",
+              [binary_to_list(UsernameBin)]),
+            {error, ?CONNACK_NOT_AUTHORIZED}
+    end.
 
 get_vhost(UserBin, none, Port) ->
     get_vhost_no_ssl(UserBin, Port);
@@ -1060,7 +1116,6 @@ amqp_pub(#mqtt_msg{qos        = Qos,
                               % unacked_pubs   = UnackedPubs,
                               % awaiting_seqno = SeqNo,
                               mqtt2amqp_fun  = Mqtt2AmqpFun}) ->
-    %%TODO: Use message containers
     RoutingKey = Mqtt2AmqpFun(Topic),
     Confirm = Qos > ?QOS_0,
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
@@ -1263,17 +1318,16 @@ check_publish(TopicName, Fn, PState) ->
 
 check_topic_access(TopicName, Access,
                    #proc_state{
-                        auth_state = #auth_state{user = User = #user{username = Username},
-                                                 vhost = VHost},
-                        exchange = #resource{name = ExchangeBin},
-                        client_id = ClientId,
-                        mqtt2amqp_fun = Mqtt2AmqpFun }) ->
-    Cache =
-        case get(topic_permission_cache) of
-            undefined -> [];
-            Other     -> Other
-        end,
-
+                      auth_state = #auth_state{user = User = #user{username = Username},
+                                               vhost = VHost,
+                                               authz_ctx = AuthzCtx},
+                      exchange = #resource{name = ExchangeBin},
+                      client_id = ClientId,
+                      mqtt2amqp_fun = Mqtt2AmqpFun}) ->
+    Cache = case get(topic_permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
     Key = {TopicName, Username, ClientId, VHost, ExchangeBin, Access},
     case lists:member(Key, Cache) of
         true ->
@@ -1285,13 +1339,7 @@ check_topic_access(TopicName, Access,
 
             RoutingKey = Mqtt2AmqpFun(TopicName),
             Context = #{routing_key  => RoutingKey,
-                        variable_map => #{
-                                          <<"username">>  => Username,
-                                          <<"vhost">>     => VHost,
-                                          <<"client_id">> => rabbit_data_coercion:to_binary(ClientId)
-                                         }
-                       },
-
+                        variable_map => AuthzCtx},
             try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
                 ok ->
                     CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),

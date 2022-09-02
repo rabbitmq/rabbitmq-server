@@ -64,6 +64,9 @@ groups() ->
      {client_id_propagation, [],
       [client_id_propagation]
      },
+     %%TODO check write access to exchange as done in channel
+     %% or is that covered in topic_write_permission already?
+     %% "Topic authorisation is an additional layer on top of existing checks for publishers. Publishing a message to a topic-typed exchange will go through both the basic.publish and the routing key checks. The latter is never called if the former refuses access."
      {authz_handling, [],
       [no_queue_bind_permission,
        no_queue_consume_permission,
@@ -459,11 +462,12 @@ client_id_propagation(Config) ->
               end),
     %% the setup process will notify us
     receive
-        ok         -> ok
-        after 3000 -> ok
+        ok -> ok
+    after
+        3000 -> ct:fail("timeout waiting for rabbit_auth_backend_mqtt_mock:setup/1")
     end,
     ClientId = <<"client-id-propagation">>,
-    {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>,
+    {ok, C} = connect_user(<<"fake-user">>, <<"fake-password">>,
                            Config, ClientId),
     {ok, _} = emqtt:connect(C),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>),
