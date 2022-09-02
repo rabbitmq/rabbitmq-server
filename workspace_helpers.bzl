@@ -245,8 +245,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "emqtt",
         org = "ansd",
         repo = "emqtt",
-        version = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
-        ref = "f6d7ddd391890f4db5f77c775e83cf0ffe3d2d76",
+        version = "68683689546b081c1cd5efeaa897b619e581fe29",
+        ref = "68683689546b081c1cd5efeaa897b619e581fe29",
         build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 erlang_app(
     app_name = "emqtt",
