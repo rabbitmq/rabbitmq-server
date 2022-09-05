@@ -20,7 +20,6 @@
 -define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
-%    variable_queue_dynamic_duration_change,
     variable_queue_partial_segments_delta_thing,
     variable_queue_all_the_bits_not_covered_elsewhere_A,
     variable_queue_all_the_bits_not_covered_elsewhere_B,
@@ -934,42 +933,6 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-%variable_queue_dynamic_duration_change(Config) ->
-%    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-%      ?MODULE, variable_queue_dynamic_duration_change1, [Config]).
-%
-%variable_queue_dynamic_duration_change1(Config) ->
-%    with_fresh_variable_queue(
-%      fun variable_queue_dynamic_duration_change2/2,
-%      ?config(variable_queue_type, Config)).
-%
-%variable_queue_dynamic_duration_change2(VQ0, _QName) ->
-%    IndexMod = index_mod(),
-%    SegmentSize = IndexMod:next_segment_boundary(0),
-%
-%    %% start by sending in a couple of segments worth
-%    Len = 2*SegmentSize,
-%    VQ1 = variable_queue_publish(false, Len, VQ0),
-%    %% squeeze and relax queue
-%    Churn = Len div 32,
-%    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
-%
-%    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
-%    VQ7 = lists:foldl(
-%            fun (Duration1, VQ4) ->
-%                    {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
-%                    VQ6 = variable_queue_set_ram_duration_target(
-%                            Duration1, VQ5),
-%                    publish_fetch_and_ack(Churn, Len, VQ6)
-%            end, VQ3, [Duration / 4, 0, Duration / 4, infinity]),
-%
-%    %% drain
-%    {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-%    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
-%    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
-%
-%    VQ10.
-
 variable_queue_partial_segments_delta_thing(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, variable_queue_partial_segments_delta_thing1, [Config]).
@@ -1271,7 +1234,7 @@ variable_queue_fetchwhile_varying_ram_duration1(Config) ->
 variable_queue_fetchwhile_varying_ram_duration2(VQ0, _QName) ->
     test_dropfetchwhile_varying_ram_duration(
       fun (VQ1) ->
-              {Fetched, ok, VQ2} = rabbit_variable_queue:fetchwhile(
+              {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
                                fun (_) -> false end,
                                fun (_, _, A) -> A end,
                                ok, VQ1),
@@ -1711,7 +1674,6 @@ with_fresh_variable_queue(Fun, Mode) ->
                                           {delta, undefined, 0, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
-                       %% @todo Some tests probably don't keep this after restart (dropwhile_(sync)_restart, A2).
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
@@ -1729,10 +1691,7 @@ with_fresh_variable_queue(Fun, Mode) ->
     passed.
 
 set_queue_mode(Mode, VQ) ->
-    VQ1 = rabbit_variable_queue:set_queue_mode(Mode, VQ),
-    S1 = variable_queue_status(VQ1),
-%    assert_props(S1, [{mode, Mode}]),
-    VQ1.
+    rabbit_variable_queue:set_queue_mode(Mode, VQ).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).

@@ -502,14 +502,7 @@ next_state(State = #q{q = Q,
                       backing_queue       = BQ,
                       backing_queue_state = BQS,
                       msg_id_to_channel   = MTC}) ->
-%    try
-        assert_invariant(State),
-%    catch C:E:S ->
-%        rabbit_time_travel_dbg:dump(),
-%        rabbit_time_travel_dbg:print(),
-%        logger:error("BAD STATE ~p", [State]),
-%        erlang:raise(C,E,S)
-%    end,
+    assert_invariant(State),
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
     MTC1 = confirm_messages(MsgIds, MTC, amqqueue:get_name(Q)),
     State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},

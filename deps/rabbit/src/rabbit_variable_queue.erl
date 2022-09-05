@@ -812,13 +812,10 @@ requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
                             in_counter = InCounter,
                             len        = Len } = State) ->
-
     %% @todo This can be heavily simplified: if the message falls into delta,
     %%       add it there. Otherwise just add it to q3 in the correct position.
-
-    {SeqIds, Q3a, MsgIds, State1} = queue_merge(lists:sort(AckTags), Q3, [],
-                                                delta_limit(Delta),
-                                                fun publish_beta/2, State),
+    {SeqIds, Q3a, MsgIds, State1} = requeue_merge(lists:sort(AckTags), Q3, [],
+                                                  delta_limit(Delta), State),
     {Delta1, MsgIds1, State2}     = delta_merge(SeqIds, Delta, MsgIds,
                                                 State1),
     MsgCount = length(MsgIds1),
@@ -895,30 +892,9 @@ update_rate(Now, TS, Count, Rate) ->
     end.
 
 %% @todo Should be renamed since it's only used to update_rates.
+%%       Can do this after mirroring gets removed.
 ram_duration(State) ->
-    State1 = %#vqstate { rates = #rates { in      = AvgIngressRate,
-             %                            out     = AvgEgressRate,
-             %                            ack_in  = AvgAckIngressRate,
-             %                            ack_out = AvgAckEgressRate },
-             %           ram_msg_count      = RamMsgCount,
-             %           ram_msg_count_prev = RamMsgCountPrev,
-             %           ram_pending_ack    = RPA,
-             %           ram_ack_count_prev = RamAckCountPrev } =
-        update_rates(State),
-
-%    RamAckCount = map_size(RPA),
-%
-%    Duration = %% msgs+acks / (msgs+acks/sec) == sec
-%        case lists:all(fun (X) -> X < 0.01 end,
-%                       [AvgEgressRate, AvgIngressRate,
-%                        AvgAckEgressRate, AvgAckIngressRate]) of
-%            true  -> infinity;
-%            false -> (RamMsgCountPrev + RamMsgCount +
-%                          RamAckCount + RamAckCountPrev) /
-%                         (4 * (AvgEgressRate + AvgIngressRate +
-%                                   AvgAckEgressRate + AvgAckIngressRate))
-%        end,
-
+    State1 = update_rates(State),
     {infinity, State1}.
 
 needs_timeout(#vqstate { index_mod   = IndexMod,
@@ -1045,7 +1021,6 @@ set_queue_version(1, State0 = #vqstate { version = 2 }) ->
     %% We call timeout/1 so that we sync to disk and get the confirms
     %% handled before we do the conversion. This is necessary because
     %% v2 now has a simpler confirms code path.
-    %% @todo Perhaps rename the function.
     State = timeout(State0),
     convert_from_v2_to_v1(State #vqstate { version = 1 });
 %% v1 -> v2.
@@ -1460,13 +1435,6 @@ beta_msg_status0(SeqId, MsgProps, IsPersistent) ->
               is_persistent = IsPersistent,
               index_on_disk = true,
               msg_props     = MsgProps}.
-
-%trim_msg_status(MsgStatus) ->
-%    case persist_to(MsgStatus) of
-%        msg_store   -> MsgStatus#msg_status{msg = undefined};
-%        queue_store -> MsgStatus#msg_status{msg = undefined};
-%        queue_index -> MsgStatus
-%    end.
 
 with_msg_store_state({MSCStateP, MSCStateT},  true, Fun) ->
     {Result, MSCStateP1} = Fun(MSCStateP),
@@ -2542,42 +2510,33 @@ msgs_and_indices_written_to_disk(Callback, MsgIdSet) ->
 %% Internal plumbing for requeue
 %%----------------------------------------------------------------------------
 
-%% @todo This function is misnamed because we don't do alpha/beta anymore.
-%%       So we don't need to write the messages to disk at all, just add
-%%       the messages back to q3 and update the stats.
-publish_beta(MsgStatus, State) ->
-%    {MsgStatus1, State1} = maybe_prepare_write_to_disk(true, false, MsgStatus, State),
-%    MsgStatus2 = m(trim_msg_status(MsgStatus1)),
-    {MsgStatus, stats_requeued_memory(MsgStatus, State)}.
-
 %% Rebuild queue, inserting sequence ids to maintain ordering
-queue_merge(SeqIds, Q, MsgIds, Limit, PubFun, State) ->
-    queue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds,
-                Limit, PubFun, State).
+requeue_merge(SeqIds, Q, MsgIds, Limit, State) ->
+    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds,
+                Limit, State).
 
-queue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
-            Limit, PubFun, State)
+requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
+            Limit, State)
   when Limit == undefined orelse SeqId < Limit ->
     case ?QUEUE:out(Q) of
         {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
           when SeqIdQ < SeqId ->
             %% enqueue from the remaining queue
-            queue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds,
-                        Limit, PubFun, State);
+            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds,
+                        Limit, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
             case msg_from_pending_ack(SeqId, State) of
                 {none, _} ->
-                    queue_merge(Rest, Q, Front, MsgIds, Limit, PubFun, State);
-                {MsgStatus, State1} ->
-                    {#msg_status { msg_id = MsgId } = MsgStatus1, State2} =
-                        PubFun(MsgStatus, State1),
-                    queue_merge(Rest, Q, ?QUEUE:in(MsgStatus1, Front), [MsgId | MsgIds],
-                                Limit, PubFun, State2)
+                    requeue_merge(Rest, Q, Front, MsgIds, Limit, State);
+                {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
+                    State2 = stats_requeued_memory(MsgStatus, State1),
+                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds],
+                                Limit, State2)
             end
     end;
-queue_merge(SeqIds, Q, Front, MsgIds,
-            _Limit, _PubFun, State) ->
+requeue_merge(SeqIds, Q, Front, MsgIds,
+            _Limit, State) ->
     {SeqIds, ?QUEUE:join(Front, Q), MsgIds, State}.
 
 delta_merge([], Delta, MsgIds, State) ->
