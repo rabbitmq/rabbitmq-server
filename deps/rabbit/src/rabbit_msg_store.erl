@@ -974,6 +974,12 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
+%% @todo When a CQ crashes the message store does not remove
+%%       the client information and clean up. This eventually
+%%       leads to the queue running a full recovery on the next
+%%       message store restart because the store will keep the
+%%       crashed queue's ref in its persistent state and fail
+%%       to find the corresponding ref during start.
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
     %% similar to what happens in
     %% rabbit_amqqueue_process:handle_ch_down but with a relation of

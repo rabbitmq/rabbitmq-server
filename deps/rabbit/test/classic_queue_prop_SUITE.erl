@@ -544,7 +544,11 @@ postcondition(_, {call, _, cmd_channel_publish, _}, Msg) ->
 postcondition(_, {call, _, cmd_channel_publish_many, _}, Msgs) ->
     lists:all(fun(Msg) -> is_record(Msg, amqp_msg) end, Msgs);
 postcondition(_, {call, _, cmd_channel_wait_for_confirms, _}, Res) ->
-    Res =:= true;
+    %% It is possible for nacks to be sent during restarts.
+    %% This is a rare event but it is not a bug, the client
+    %% is simply expected to take action. Timeouts are
+    %% always a bug however (acks/nacks not sent at all).
+    Res =:= true orelse Res =:= false;
 postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
