@@ -390,7 +390,6 @@ consolidate_reads([], _, Segment, _, Acc, Segs) ->
 read_many_from_disk(Segs, Msgs, State) ->
     %% We read from segments in reverse order because
     %% we need to control the order of returned messages.
-    %% @todo As a result it doesn't help much to keep the read FD.
     Keys = lists:reverse(lists:sort(maps:keys(Segs))),
     lists:foldl(fun(Segment, {Acc0, FoldState0}) ->
         {ok, Fd, FoldState} = get_read_fd(Segment, FoldState0),

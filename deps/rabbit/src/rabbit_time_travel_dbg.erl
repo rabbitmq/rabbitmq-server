@@ -1,3 +1,21 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+%% This module is a debugging utility mainly meant for debugging
+%% test failures. It should not be used in production in its
+%% current form.
+%%
+%% The tracer is started and configured against a pid and a set
+%% of applications. Then update the code where you need to
+%% obtain events, such as a crash. Wrapping the crash in
+%% a try/catch and adding rabbit_time_travel_dbg:print()
+%% will print up to 1000 events before the crash occured,
+%% allowing you to easily figure out what happened.
+
 -module(rabbit_time_travel_dbg).
 -compile(export_all).
 -compile(nowarn_export_all).
