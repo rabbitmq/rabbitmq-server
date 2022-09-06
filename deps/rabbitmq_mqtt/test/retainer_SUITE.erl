@@ -131,7 +131,7 @@ connect(Port) ->
                 [{host, "localhost"},
                  {port, Port},
                  {clientid, <<"simpleClientRetainer">>},
-                 {proto_ver,3},
+                 {proto_ver, v4},
                  {ack_timeout, 1}]),
     {ok, _Properties} = emqtt:connect(C),
     C.
