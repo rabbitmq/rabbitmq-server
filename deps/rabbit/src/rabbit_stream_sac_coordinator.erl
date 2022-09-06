@@ -208,12 +208,6 @@ apply(#command_register_consumer{vhost = VirtualHost,
                                  owner = Owner,
                                  subscription_id = SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State) ->
-    rabbit_log:debug("New consumer ~p ~p in group ~p, partition index "
-                     "is ~p",
-                     [ConnectionPid,
-                      SubscriptionId,
-                      {VirtualHost, Stream, ConsumerName},
-                      PartitionIndex]),
     StreamGroups1 =
         maybe_create_group(VirtualHost,
                            Stream,
@@ -244,19 +238,9 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                     case lookup_consumer(ConnectionPid, SubscriptionId, Group0)
                     of
                         {value, Consumer} ->
-                            rabbit_log:debug("Unregistering consumer ~p from group",
-                                             [Consumer]),
                             G1 = remove_from_group(Consumer, Group0),
-                            rabbit_log:debug("Consumer removed from group: ~p",
-                                             [G1]),
                             handle_consumer_removal(G1, Consumer);
                         false ->
-                            rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
-                                             [ConnectionPid,
-                                              SubscriptionId,
-                                              VirtualHost,
-                                              Stream,
-                                              ConsumerName]),
                             {Group0, []}
                     end,
                 SGS = update_groups(VirtualHost,
@@ -497,7 +481,6 @@ do_register_consumer(VirtualHost,
     Group0 =
         lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
-    rabbit_log:debug("Group: ~p", [Group0]),
     Consumer =
         case lookup_active_consumer(Group0) of
             {value, _} ->
@@ -512,7 +495,6 @@ do_register_consumer(VirtualHost,
                           active = true}
         end,
     Group1 = add_to_group(Consumer, Group0),
-    rabbit_log:debug("Consumer added to group: ~p", [Group1]),
     StreamGroups1 =
         update_groups(VirtualHost,
                       Stream,
@@ -541,7 +523,6 @@ do_register_consumer(VirtualHost,
     Group0 =
         lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
-    rabbit_log:debug("Group: ~p", [Group0]),
     {Group1, Effects} =
         case Group0 of
             #group{consumers = []} ->
@@ -603,22 +584,18 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
                         Consumer) ->
     case Consumer of
         #consumer{active = true} ->
+            %% this is the active consumer we remove, computing the new one
             Group1 = compute_active_consumer(Group0),
-            rabbit_log:debug("This is the active consumer, group after active "
-                             "consumer calculation: ~p",
-                             [Group1]),
             case lookup_active_consumer(Group1) of
-                {value, #consumer{pid = Pid, subscription_id = SubId} = C} ->
-                    rabbit_log:debug("Creating side effect to notify new active consumer ~p",
-                                     [C]),
+                {value, #consumer{pid = Pid, subscription_id = SubId}} ->
+                    %% creating the side effect to notify the new active consumer
                     {Group1, [notify_consumer_effect(Pid, SubId, true)]};
                 _ ->
-                    rabbit_log:debug("No active consumer found in the group, nothing "
-                                     "to do"),
+                    %% no active consumer found in the group, nothing to do
                     {Group1, []}
             end;
         #consumer{active = false} ->
-            rabbit_log:debug("Not the active consumer, nothing to do."),
+            %% not the active consumer, nothing to do."),
             {Group0, []}
     end;
 handle_consumer_removal(Group0, Consumer) ->
@@ -743,8 +720,7 @@ update_groups(VirtualHost,
               ConsumerName,
               #group{consumers = []},
               StreamGroups) ->
-    rabbit_log:debug("Group ~p ~p ~p is now empty, removing it",
-                     [VirtualHost, Stream, ConsumerName]),
+    %% the group is now empty, removing the key
     maps:remove({VirtualHost, Stream, ConsumerName}, StreamGroups);
 update_groups(VirtualHost,
               Stream,
