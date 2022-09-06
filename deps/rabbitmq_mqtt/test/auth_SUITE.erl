@@ -430,7 +430,7 @@ connect_anonymous(Config) ->
     emqtt:start_link([{host, "localhost"},
                       {port, P},
                       {clientid, <<"simpleClient">>},
-                      {proto_ver, 3}]).
+                      {proto_ver, v4}]).
 
 connect_ssl(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
@@ -441,7 +441,7 @@ connect_ssl(Config) ->
     emqtt:start_link([{host, "localhost"},
                       {port, P},
                       {clientid, <<"simpleClient">>},
-                      {proto_ver, 3},
+                      {proto_ver, v4},
                       {ssl, true},
                       {ssl_opts, SSLConfig}]).
 
@@ -580,7 +580,7 @@ no_queue_declare_permission(Config) ->
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, P},
                                 {clientid, <<"no_queue_declare_permission">>},
-                                {proto_ver, 3},
+                                {proto_ver, v4},
                                 {username, ?config(mqtt_user, Config)},
                                 {password, ?config(mqtt_password, Config)},
                                 {clean_start, false}
@@ -713,7 +713,7 @@ connect_user(User, Pass, Config, ClientID0, Opts) ->
                end,
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     emqtt:start_link(Opts ++ Creds ++ ClientID ++
-                     [{host, "localhost"}, {port, P}, {proto_ver, 3}]).
+                     [{host, "localhost"}, {port, P}, {proto_ver, v4}]).
 
 expect_successful_connection(ConnectFun, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),

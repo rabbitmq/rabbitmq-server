@@ -94,7 +94,7 @@ block(Config) ->
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, P},
                                 {clientid, <<"simpleClient">>},
-                                {proto_ver, 3}]),
+                                {proto_ver, v4}]),
     {ok, _Properties} = emqtt:connect(C),
 
     %% Only here to ensure the connection is really up
@@ -133,7 +133,7 @@ block_connack_timeout(Config) ->
     {ok, Client} = emqtt:start_link([{host, "localhost"},
                                      {port, P},
                                      {clientid, <<"simpleClient">>},
-                                     {proto_ver, 3},
+                                     {proto_ver, v4},
                                      {connect_timeout, 1}]),
     unlink(Client),
     ClientMRef = monitor(process, Client),
@@ -183,7 +183,7 @@ stats(Config) ->
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, P},
                                 {clientid, <<"simpleClient">>},
-                                {proto_ver, 3}]),
+                                {proto_ver, v4}]),
     {ok, _Properties} = emqtt:connect(C),
     %% Ensure that there are some stats
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
@@ -221,7 +221,7 @@ validate_durable_queue_type(Config, ClientName, CleanSession, Expected) ->
                                 {port, P},
                                 {clean_start, CleanSession},
                                 {clientid, ClientName},
-                                {proto_ver, 3}]),
+                                {proto_ver, v4}]),
     {ok, _Properties} = emqtt:connect(C),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
