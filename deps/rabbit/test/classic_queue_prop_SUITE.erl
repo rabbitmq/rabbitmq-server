@@ -1102,7 +1102,7 @@ reg_v1_full_recover_only_journal(Config) ->
 
 do_reg_v1_full_recover_only_journal(Config) ->
 
-    St0 = #cq{name=prop_classic_queue_v1, mode=lazy, version=1,
+    St0 = #cq{name=prop_classic_queue_v1, version=1,
               config=minimal_config(Config)},
 
     Res1 = cmd_setup_queue(St0),
