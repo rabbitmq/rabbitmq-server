@@ -35,7 +35,7 @@ scopes() ->
     [streams].
 
 description() ->
-    <<"Delete a super stream (experimental feature)">>.
+    <<"Delete a super stream">>.
 
 help_section() ->
     {plugin, stream}.
@@ -82,7 +82,7 @@ delete_super_stream(NodeName, Timeout, VHost, SuperStream) ->
     end.
 
 banner(_, _) ->
-    <<"Deleting a super stream (experimental feature)...">>.
+    <<"Deleting a super stream...">>.
 
 output({error, Msg}, _Opts) ->
     {error, 'Elixir.RabbitMQ.CLI.Core.ExitCodes':exit_software(), Msg};

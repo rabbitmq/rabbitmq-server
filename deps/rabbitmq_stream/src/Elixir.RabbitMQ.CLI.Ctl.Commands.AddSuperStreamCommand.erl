@@ -36,7 +36,7 @@ scopes() ->
     [streams].
 
 description() ->
-    <<"Add a super stream (experimental feature)">>.
+    <<"Add a super stream">>.
 
 switches() ->
     [{partitions, integer},
@@ -280,7 +280,7 @@ create_super_stream(NodeName,
     end.
 
 banner(_, _) ->
-    <<"Adding a super stream (experimental feature)...">>.
+    <<"Adding a super stream...">>.
 
 output({error, Msg}, _Opts) ->
     {error, 'Elixir.RabbitMQ.CLI.Core.ExitCodes':exit_software(), Msg};
