@@ -25,6 +25,8 @@
     rewrite_node_config_file/2,
     cluster_nodes/1, cluster_nodes/2,
 
+    setup_meck/1,
+
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
@@ -1946,3 +1948,9 @@ if_cover(F) ->
         _ ->
             F()
     end.
+
+setup_meck(Config) ->
+    {Mod, Bin, File} = code:get_object_code(meck),
+    [true | _] = rpc_all(Config, code, add_path, [filename:dirname(File)]),
+    [{module, Mod} | _] = rpc_all(Config, code, load_binary, [Mod, File, Bin]),
+    ok.

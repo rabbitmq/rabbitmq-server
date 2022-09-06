@@ -8,7 +8,7 @@
 -module(rabbit_mqtt_frame).
 
 -export([parse/2, initial_state/0]).
--export([serialise/1]).
+-export([serialise/2]).
 
 -include("rabbit_mqtt_frame.hrl").
 
@@ -146,10 +146,10 @@ bool(1) -> true.
 
 %% serialisation
 
-serialise(#mqtt_frame{ fixed    = Fixed,
-                       variable = Variable,
-                       payload  = Payload }) ->
-    serialise_variable(Fixed, Variable, serialise_payload(Payload)).
+serialise(#mqtt_frame{fixed    = Fixed,
+                      variable = Variable,
+                      payload  = Payload}, Vsn) ->
+    serialise_variable(Fixed, Variable, serialise_payload(Payload), Vsn).
 
 serialise_payload(undefined)           -> <<>>;
 serialise_payload(B) when is_binary(B) -> B.
@@ -157,24 +157,30 @@ serialise_payload(B) when is_binary(B) -> B.
 serialise_variable(#mqtt_frame_fixed   { type        = ?CONNACK } = Fixed,
                    #mqtt_frame_connack { session_present = SessionPresent,
                                          return_code = ReturnCode },
-                   <<>> = PayloadBin) ->
+                   <<>> = PayloadBin, _Vsn) ->
     VariableBin = <<?RESERVED:7, (opt(SessionPresent)):1, ReturnCode:8>>,
     serialise_fixed(Fixed, VariableBin, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed  { type       = SubAck } = Fixed,
                    #mqtt_frame_suback { message_id = MessageId,
                                         qos_table  = Qos },
-                   <<>> = _PayloadBin)
+                   <<>> = _PayloadBin, Vsn)
   when SubAck =:= ?SUBACK orelse SubAck =:= ?UNSUBACK ->
     VariableBin = <<MessageId:16/big>>,
-    QosBin = << <<?RESERVED:6, Q:2>> || Q <- Qos >>,
+    QosBin = case Vsn of
+                 ?MQTT_PROTO_V3 ->
+                     << <<?RESERVED:6, Q:2>> || Q <- Qos >>;
+                 ?MQTT_PROTO_V4 ->
+                     %% Allow error code (0x80) in the MQTT SUBACK message.
+                     << <<Q:8>> || Q <- Qos >>
+             end,
     serialise_fixed(Fixed, VariableBin, QosBin);
 
 serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
                                          qos        = Qos } = Fixed,
                    #mqtt_frame_publish { topic_name = TopicName,
                                          message_id = MessageId },
-                   PayloadBin) ->
+                   PayloadBin, _Vsn) ->
     TopicBin = serialise_utf(TopicName),
     MessageIdBin = case Qos of
                        0 -> <<>>;
@@ -184,13 +190,13 @@ serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
 
 serialise_variable(#mqtt_frame_fixed   { type       = ?PUBACK } = Fixed,
                    #mqtt_frame_publish { message_id = MessageId },
-                   PayloadBin) ->
+                   PayloadBin, _Vsn) ->
     MessageIdBin = <<MessageId:16/big>>,
     serialise_fixed(Fixed, MessageIdBin, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed {} = Fixed,
                    undefined,
-                   <<>> = _PayloadBin) ->
+                   <<>> = _PayloadBin, _Vsn) ->
     serialise_fixed(Fixed, <<>>, <<>>).
 
 serialise_fixed(#mqtt_frame_fixed{ type   = Type,

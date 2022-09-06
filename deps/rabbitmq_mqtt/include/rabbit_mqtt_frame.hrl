@@ -5,7 +5,9 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(PROTOCOL_NAMES,  [{3, "MQIsdp"}, {4, "MQTT"}]).
+-define(MQTT_PROTO_V3, 3).
+-define(MQTT_PROTO_V4, 4).
+-define(PROTOCOL_NAMES,  [{?MQTT_PROTO_V3, "MQIsdp"}, {?MQTT_PROTO_V4, "MQTT"}]).
 
 %% frame types
 
@@ -44,6 +46,7 @@
 -define(QOS_0, 0).
 -define(QOS_1, 1).
 -define(QOS_2, 2).
+-define(SUBACK_FAILURE, 16#80).
 
 %% TODO
 -type message_id() :: any().

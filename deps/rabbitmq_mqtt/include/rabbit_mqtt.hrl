@@ -51,6 +51,7 @@
                       mqtt2amqp_fun,
                       amqp2mqtt_fun,
                       register_state,
+                      proto_ver :: 3 | 4,
                       info}).
 
 -record(auth_state, {username,
@@ -63,7 +64,7 @@
                port,
                peer_host,
                peer_port,
-               protocol}).
+               proto_human}).
 
 %% does not include vhost: it is used in
 %% the table name
