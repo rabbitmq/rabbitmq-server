@@ -166,7 +166,7 @@ connect(Port, ClientID) ->
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, Port},
                                 {clientid, ClientID},
-                                {proto_ver, 3},
+                                {proto_ver, v4},
                                 {connect_timeout, 1},
                                 {ack_timeout, 1}]),
     {ok, _Properties} = emqtt:connect(C),
