@@ -949,35 +949,31 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
     OneAndAHalfSegment = SegmentSize + HalfSegment,
     VQ1 = variable_queue_publish(true, OneAndAHalfSegment, VQ0),
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
-    VQ3 = variable_queue_set_ram_duration_target(0, VQ2),
-%    VQ3 = check_variable_queue_status(
-%            variable_queue_set_ram_duration_target(0, VQ2),
-%            %% one segment in q3, and half a segment in delta
-%            %% @todo That's wrong now! v1/v2
-%            [{delta, {delta, SegmentSize, HalfSegment, 0, OneAndAHalfSegment}},
-%             {q3, SegmentSize},
-%             {len, SegmentSize + HalfSegment}]),
+    VQ3 = check_variable_queue_status(
+            variable_queue_set_ram_duration_target(0, VQ2),
+            %% We only have one message in memory because the amount in memory
+            %% depends on the consume rate, which is nil in this test.
+            [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
+             {q3, 1},
+             {len, OneAndAHalfSegment}]),
     VQ4 = variable_queue_set_ram_duration_target(infinity, VQ3),
-    VQ5 = variable_queue_publish(true, 1, VQ4),
-%    VQ5 = check_variable_queue_status(
-%            variable_queue_publish(true, 1, VQ4),
-%            %% one alpha, but it's in the same segment as the deltas
-%            %% @todo That's wrong now! v1/v2
-%            [{q1, 1},
-%             {delta, {delta, SegmentSize, HalfSegment, 0, OneAndAHalfSegment}},
-%             {q3, SegmentSize},
-%             {len, SegmentSize + HalfSegment + 1}]),
+    VQ5 = check_variable_queue_status(
+            variable_queue_publish(true, 1, VQ4),
+            %% one alpha, but it's in the same segment as the deltas
+            %% @todo That's wrong now! v1/v2
+            [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
+             {q3, 1},
+             {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
-    VQ7 = VQ6,
-%    VQ7 = check_variable_queue_status(
-%            VQ6,
-%            %% the half segment should now be in q3
-%            %% @todo That's wrong now! v1/v2
-%            [{q1, 1},
-%             {delta, {delta, undefined, 0, 0, undefined}},
-%             {q3, HalfSegment},
-%             {len, HalfSegment + 1}]),
+    VQ7 = check_variable_queue_status(
+            VQ6,
+            %% We only read from delta up to the end of the segment, so
+            %% after fetching exactly one segment, we should have no
+            %% messages in memory.
+            [{delta, {delta, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
+             {q3, 0},
+             {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
     {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
@@ -1274,34 +1270,10 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
-    Status = variable_queue_status(VQ4),
-    VQ5 = VQ4,
-%    VQ5 = case proplists:get_value(mode, Status) of
-%        default ->
-%            check_variable_queue_status(
-%                VQ4, [{len,                         Len div 2},
-%                      {messages_unacknowledged_ram, Len div 2},
-%                      {messages_ready_ram,          Len div 2},
-%                      {messages_ram,                Len}]);
-%        lazy ->
-%            VQ4
-%            %% @todo This check has been broken for a very long time. (Or never worked.)
-%%            check_variable_queue_status(
-%%                VQ4, [{len,                         Len div 2},
-%%                      {messages_unacknowledged_ram, 0},
-%%                      {messages_ready_ram,          0},
-%%                      {messages_ram,                0}])
-%    end,
+    %% We only check the length anymore because
+    %% that's the only predictable stats we got.
+    VQ5 = check_variable_queue_status(VQ4, [{len, Len div 2}]),
 
-    %% ensure all acks go to disk on 0 duration target
-    %% @todo They don't! v1 with embed limit 1024 only (so with embedded messages)
-%    VQ6 = check_variable_queue_status(
-%            variable_queue_set_ram_duration_target(0, VQ5),
-%            [{len,                         Len div 2},
-%             {target_ram_count,            0},
-%             {messages_unacknowledged_ram, 0},
-%             {messages_ready_ram,          0},
-%             {messages_ram,                0}]),
     VQ6 = variable_queue_set_ram_duration_target(0, VQ5),
 
     VQ6.
@@ -1850,9 +1822,7 @@ variable_queue_with_holes(VQ0) ->
             true, Count + 1, Interval,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
     %% assertions
-    Status = variable_queue_status(VQ8),
-
-    vq_with_holes_assertions(VQ8, proplists:get_value(mode, Status)),
+    vq_with_holes_assertions(VQ8),
     Depth = Count + Interval,
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
@@ -1860,22 +1830,14 @@ variable_queue_with_holes(VQ0) ->
 
     {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + Interval), VQ8}.
 
-vq_with_holes_assertions(VQ, _) -> ok.
-%vq_with_holes_assertions(VQ, default) ->
-%    [false =
-%         case V of
-%             {delta, _, 0, _, _} -> true;
-%             0                   -> true;
-%             _                   -> false
-%         end || {K, V} <- variable_queue_status(VQ),
-%                lists:member(K, [delta, q3])];
-%vq_with_holes_assertions(VQ, lazy) ->
-%    [false =
-%         case V of
-%             {delta, _, 0, _, _} -> true;
-%             _                -> false
-%         end || {K, V} <- variable_queue_status(VQ),
-%                lists:member(K, [delta])].
+vq_with_holes_assertions(VQ) ->
+    [false =
+         case V of
+             {delta, _, 0, _, _} -> true;
+             0                   -> true;
+             _                   -> false
+         end || {K, V} <- variable_queue_status(VQ),
+                lists:member(K, [delta, q3])].
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
