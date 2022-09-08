@@ -1995,20 +1995,18 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
                               disk_pending_ack  = DPA }) ->
     map_size(RPA) + map_size(DPA).
 
-%% @todo This should set the out rate to infinity temporarily while we drop deltas.
 %% @todo When doing maybe_deltas_to_betas stats are updated. Then stats
 %%       are updated again in remove_queue_entries1. All unnecessary since
 %%       we are purging anyway?
 purge_betas_and_deltas(DelsAndAcksFun, State) ->
-    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State),
+    %% We use the maximum memory limit when purging to get greater performance.
+    MemoryLimit = 2048,
+    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State, MemoryLimit),
 
     case ?QUEUE:is_empty(Q3) of
         true  -> State0;
         false -> State1 = remove_queue_entries(Q3, DelsAndAcksFun, State0),
-                 purge_betas_and_deltas(DelsAndAcksFun,
-                                        maybe_deltas_to_betas(
-                                          DelsAndAcksFun,
-                                          State1#vqstate{q3 = ?QUEUE:new()}))
+                 purge_betas_and_deltas(DelsAndAcksFun, State1#vqstate{q3 = ?QUEUE:new()})
     end.
 
 remove_queue_entries(Q, DelsAndAcksFun,
@@ -2674,12 +2672,15 @@ fetch_from_q3(State = #vqstate { delta = #delta { count = DeltaCount },
             {loaded, {MsgStatus, State1}}
     end.
 
-maybe_deltas_to_betas(State) ->
+maybe_deltas_to_betas(State = #vqstate { rates = #rates{ out = OutRate }}) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
-    maybe_deltas_to_betas(AfterFun, State).
+    %% We allow from 1 to 2048 messages in memory depending on the consume rate.
+    MemoryLimit = min(1 + floor(2 * OutRate), 2048),
+    maybe_deltas_to_betas(AfterFun, State, MemoryLimit).
 
 maybe_deltas_to_betas(_DelsAndAcksFun,
-                      State = #vqstate {delta = ?BLANK_DELTA_PATTERN(X) }) ->
+                      State = #vqstate {delta = ?BLANK_DELTA_PATTERN(X) },
+                      _MemoryLimit) ->
     State;
 maybe_deltas_to_betas(DelsAndAcksFun,
                       State = #vqstate {
@@ -2693,14 +2694,12 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         disk_read_count      = DiskReadCount,
                         delta_transient_bytes = DeltaTransientBytes,
                         transient_threshold  = TransientThreshold,
-                        rates                = #rates{ out = OutRate },
-                        version              = Version }) ->
+                        version              = Version },
+                      MemoryLimit) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
              transient    = Transient,
              end_seq_id   = DeltaSeqIdEnd } = Delta,
-    %% We allow from 1 to 2048 messages in memory depending on the consume rate.
-    MemoryLimit = min(1 + floor(2 * OutRate), 2048),
     DeltaSeqId1 =
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    %% We must limit the number of messages read at once
@@ -2735,7 +2734,8 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             maybe_deltas_to_betas(
               DelsAndAcksFun,
               State2 #vqstate {
-                delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })});
+                delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })},
+              MemoryLimit);
         Q3aLen ->
             Q3b = ?QUEUE:join(Q3, Q3a),
             case DeltaCount - Q3aLen of
@@ -2747,6 +2747,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                 N when N > 0 ->
                     Delta1 = d(#delta { start_seq_id = DeltaSeqId1,
                                         count        = N,
+                                        %% @todo Probably something wrong, seen it become negative...
                                         transient    = Transient - TransientCount,
                                         end_seq_id   = DeltaSeqIdEnd }),
                     State2 #vqstate { delta = Delta1,
