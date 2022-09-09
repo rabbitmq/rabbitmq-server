@@ -7,6 +7,8 @@
 
 -module(rabbit_event_consumer).
 
+-behaviour(gen_event).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([register/4]).
