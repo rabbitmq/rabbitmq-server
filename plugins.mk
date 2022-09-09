@@ -1,6 +1,6 @@
 # This is the list of Tier-1 plugins shipped with a release.
 #
-# IMPORTANT: This list is overriden in the server-release Concourse
+# IMPORTANT: This list is overridden in the server-release Concourse
 # pipeline: Concourse takes all tested plugins and put them in the
 # release. So if you want to add or remove a plugin to the distribution,
 # you need to update the server-release pipeline!
