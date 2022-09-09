@@ -83,10 +83,13 @@
           %% default queue or lazy queue
           mode,
           version = 1,
-          %% number of reduce_memory_usage executions, once it
-          %% reaches a threshold the queue will manually trigger a runtime GC
-            %% see: maybe_execute_gc/1
-          memory_reduction_run_count,
+          %% Fast path for confirms handling. Instead of having
+          %% index/store keep track of confirms separately and
+          %% doing intersect/subtract/union we just put the messages
+          %% here and on sync move them to 'confirmed'.
+          %%
+          %% Note: This field used to be 'memory_reduction_run_count'.
+          unconfirmed_simple,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
           virtual_host,
@@ -325,7 +328,12 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator, State) ->
 
 %% Delay
 maybe_delay(QPA) ->
-  case is_timeout_test(maps:values(QPA)) of
+  %% The structure for ram_pending_acks has changed to maps in 3.12.
+  Values = case is_map(QPA) of
+    true -> maps:values(QPA);
+    false -> gb_trees:values(QPA)
+  end,
+  case is_timeout_test(Values) of
     true -> receive
               %% The queue received an EXIT message, it's probably the
               %% node being stopped with "rabbitmqctl stop". Thus, abort
