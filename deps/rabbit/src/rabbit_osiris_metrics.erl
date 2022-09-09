@@ -79,12 +79,7 @@ handle_info(tick, #state{timeout = Timeout} = State) ->
                               %% down `rabbit_sup` and the whole `rabbit` app.
                               []
                       end,
-
               rabbit_core_metrics:queue_stats(QName, Infos),
-              rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
-                                                         {messages, COffs},
-                                                         {messages_ready, COffs},
-                                                         {messages_unacknowledged, 0}]),
               ok;
           (_, _V) ->
               ok

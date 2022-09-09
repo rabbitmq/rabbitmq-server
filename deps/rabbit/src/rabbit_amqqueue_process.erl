@@ -1209,13 +1209,15 @@ emit_stats(State) ->
 
 emit_stats(State, Extra) ->
     ExtraKs = [K || {K, _} <- Extra],
-    [{messages_ready, MR}, {messages_unacknowledged, MU}, {messages, M},
-     {reductions, R}, {name, Name} | Infos] = All
-	= [{K, V} || {K, V} <- infos(statistics_keys(), State),
-		     not lists:member(K, ExtraKs)],
+    [{messages_ready, MR},
+     {messages_unacknowledged, MU},
+     {messages, M},
+     {reductions, R},
+     {name, Name} | Infos]
+    = [{K, V} || {K, V} <- infos(statistics_keys(), State),
+                 not lists:member(K, ExtraKs)],
     rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
-    rabbit_core_metrics:queue_stats(Name, MR, MU, M, R),
-    rabbit_event:notify(queue_stats, Extra ++ All).
+    rabbit_core_metrics:queue_stats(Name, MR, MU, M, R).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
                       PrefetchCount, Args, Ref, ActingUser) ->
