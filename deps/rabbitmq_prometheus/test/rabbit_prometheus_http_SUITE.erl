@@ -467,11 +467,11 @@ queue_coarse_metrics_per_object_test(Config) ->
 
 queue_metrics_per_object_test(Config) ->
     Expected1 =  #{#{queue => "vhost-1-queue-with-consumer", vhost => "vhost-1"} => [7],
-                   #{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [7]},
+                   #{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [1]},
     Expected2 =  #{#{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [11],
-                   #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [11]},
+                   #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [1]},
     ExpectedD =  #{#{queue => "default-queue-with-consumer", vhost => "/"} => [3],
-                   #{queue => "default-queue-with-messages", vhost => "/"} => [3]},
+                   #{queue => "default-queue-with-messages", vhost => "/"} => [1]},
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?vhost=vhost-1&family=queue_metrics", [], 200),
     ?assertEqual(Expected1,
                  map_get(rabbitmq_detailed_queue_messages_ram, parse_response(Body1))),
