@@ -386,6 +386,11 @@ suites = [
     ),
     rabbitmq_integration_suite(
         PACKAGE,
+        name = "disk_monitor_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
         name = "dynamic_ha_SUITE",
         size = "large",
         flaky = True,
@@ -823,11 +828,6 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_credit_flow_SUITE",
-        size = "small",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "unit_disk_monitor_mocks_SUITE",
         size = "small",
     ),
     rabbitmq_integration_suite(
