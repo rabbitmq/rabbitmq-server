@@ -6,6 +6,8 @@
 %%
 -module(rabbit_quorum_memory_manager).
 
+-behaviour(gen_event).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
