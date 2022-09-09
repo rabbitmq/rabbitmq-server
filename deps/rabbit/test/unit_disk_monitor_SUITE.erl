@@ -69,7 +69,7 @@ set_disk_free_limit_command(Config) ->
 set_disk_free_limit_command1(_Config) ->
     F = fun () ->
         DiskFree = rabbit_disk_monitor:get_disk_free(),
-        DiskFree =/= unknown
+        DiskFree =/= 'NaN'
     end,
     rabbit_ct_helpers:await_condition(F),
 
