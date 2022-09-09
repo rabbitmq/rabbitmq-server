@@ -194,14 +194,14 @@ change_policy(Config) ->
 
     %% Give it policy "nodes", it gets specific mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
-      {<<"nodes">>, [rabbit_misc:atom_to_binary(A),
-                     rabbit_misc:atom_to_binary(B)]}),
+      {<<"nodes">>, [atom_to_binary(A),
+                     atom_to_binary(B)]}),
     assert_followers(A, ?QNAME, {A, [B]}, [{A, [B, C]}]),
 
     %% Now explicitly change the mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
-      {<<"nodes">>, [rabbit_misc:atom_to_binary(A),
-                     rabbit_misc:atom_to_binary(C)]}),
+      {<<"nodes">>, [atom_to_binary(A),
+                     atom_to_binary(C)]}),
     assert_followers(A, ?QNAME, {A, [C]}, [{A, [B, C]}]),
 
     %% Clear the policy, and we go back to non-mirrored
@@ -210,8 +210,8 @@ change_policy(Config) ->
 
     %% Test switching "away" from an unmirrored node
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
-      {<<"nodes">>, [rabbit_misc:atom_to_binary(B),
-                     rabbit_misc:atom_to_binary(C)]}),
+      {<<"nodes">>, [atom_to_binary(B),
+                     atom_to_binary(C)]}),
     assert_followers(A, ?QNAME, {B, [C]}, [{A, []}, {A, [B]}, {A, [C]}, {A, [B, C]}]),
 
     ok.
@@ -727,7 +727,7 @@ rebalance_nodes(Config) ->
     amqp_channel:call(ACh, #'queue.declare'{queue = Q5}),
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, A, <<"q.*">>,
-      {<<"nodes">>, [rabbit_misc:atom_to_binary(A), rabbit_misc:atom_to_binary(B)]}),
+      {<<"nodes">>, [atom_to_binary(A), atom_to_binary(B)]}),
     timer:sleep(1000),
 
     rabbit_ct_client_helpers:publish(ACh, Q1, 5),
@@ -1020,7 +1020,7 @@ apply_policy(Config, N, all) ->
       Config, N, ?POLICY, <<"all">>,
       [{<<"ha-sync-mode">>, <<"automatic">>}]);
 apply_policy(Config, N, {nodes, Nodes}) ->
-    NNodes = [rabbit_misc:atom_to_binary(Node) || Node <- Nodes],
+    NNodes = [atom_to_binary(Node) || Node <- Nodes],
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"nodes">>, NNodes},
       [{<<"ha-sync-mode">>, <<"automatic">>}]);
