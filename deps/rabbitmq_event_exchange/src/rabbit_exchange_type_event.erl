@@ -7,6 +7,8 @@
 
 -module(rabbit_exchange_type_event).
 
+-behaviour(gen_event).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_event_exchange.hrl").

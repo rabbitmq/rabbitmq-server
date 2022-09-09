@@ -289,7 +289,7 @@ sigkill(Config, Node) ->
 
 policy(Config, Node)->
     Nodes = [
-      rabbit_misc:atom_to_binary(N)
+      atom_to_binary(N)
       || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
          N =/= Node],
     rabbit_ct_broker_helpers:set_ha_policy(Config, Node, <<".*">>,

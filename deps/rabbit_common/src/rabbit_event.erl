@@ -85,6 +85,8 @@ start_link() ->
 %%
 %% internal_emit_stats:
 %%   notify(stats)
+%% Nowadays, instead of sending a message to rabbit_event via notify(stats),
+%% some stat-emitting objects update ETS tables directly via module rabbit_core_metrics.
 
 init_stats_timer(C, P) ->
     %% If the rabbit app is not loaded - use default none:5000

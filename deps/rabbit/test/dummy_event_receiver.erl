@@ -7,6 +7,8 @@
 
 -module(dummy_event_receiver).
 
+-behaviour(gen_event).
+
 -export([start/3, stop/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
