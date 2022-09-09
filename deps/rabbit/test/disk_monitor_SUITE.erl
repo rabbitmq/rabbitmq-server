@@ -5,14 +5,12 @@
 %% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(unit_disk_monitor_mocks_SUITE).
+-module(disk_monitor_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
-
--define(TIMEOUT, 30000).
 
 all() ->
     [
@@ -63,50 +61,35 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 disk_monitor(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, disk_monitor1, [Config]).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                      disk_monitor1, [Config]).
 
 disk_monitor1(_Config) ->
     %% Issue: rabbitmq-server #91
     %% os module could be mocked using 'unstick', however it may have undesired
     %% side effects in following tests. Thus, we mock at rabbit_misc level
-    ok = meck:new(rabbit_misc, [passthrough]),
-    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
-    meck:unload(rabbit_misc),
-    passed.
+    Value = rabbit_disk_monitor:get_disk_free(),
+    true = is_integer(Value) andalso Value >= 0,
+    ok.
 
 disk_monitor_enable(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, disk_monitor_enable1, [Config]).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                      disk_monitor_enable1, [Config]).
 
 disk_monitor_enable1(_Config) ->
-    ok = meck:new(rabbit_misc, [passthrough]),
-    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
     application:set_env(rabbit, disk_monitor_failure_retries, 20000),
     application:set_env(rabbit, disk_monitor_failure_retry_interval, 100),
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
-    ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
-    unknown = rabbit_disk_monitor:get_disk_free(),
-    Cmd = case os:type() of
-              {win32, _} -> " Le volume dans le lecteur C n’a pas de nom.\n"
-                            " Le numéro de série du volume est 707D-5BDC\n"
-                            "\n"
-                            " Répertoire de C:\Users\n"
-                            "\n"
-                            "10/12/2015  11:01    <DIR>          .\n"
-                            "10/12/2015  11:01    <DIR>          ..\n"
-                            "               0 fichier(s)                0 octets\n"
-                            "               2 Rép(s)  758537121792 octets libres\n";
-              _          -> "Filesystem 1024-blocks      Used Available Capacity  iused     ifree %iused  Mounted on\n"
-                            "/dev/disk1   975798272 234783364 740758908    25% 58759839 185189727   24%   /\n"
-          end,
-    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> Cmd end),
-    timer:sleep(1000),
-    Bytes = 740758908 * 1024,
-    Bytes = rabbit_disk_monitor:get_disk_free(),
-    meck:unload(rabbit_misc),
+    ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [250]),
+
+    Value0 = rabbit_disk_monitor:get_disk_free(),
+    true = (is_integer(Value0) andalso Value0 >= 0),
+    ok = timer:sleep(500),
+    Value1 = rabbit_disk_monitor:get_disk_free(),
+    true = (is_integer(Value1) andalso Value1 >= 0),
+
     application:set_env(rabbit, disk_monitor_failure_retries, 10),
     application:set_env(rabbit, disk_monitor_failure_retry_interval, 120000),
-    passed.
+    ok.
