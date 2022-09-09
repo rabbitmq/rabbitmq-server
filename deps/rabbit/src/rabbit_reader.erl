@@ -1596,12 +1596,13 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State) ->
-    [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
-      = infos(?SIMPLE_METRICS, State),
+    [{_, Pid},
+     {_, Recv_oct},
+     {_, Send_oct},
+     {_, Reductions}] = infos(?SIMPLE_METRICS, State),
     Infos = infos(?OTHER_METRICS, State),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
-    rabbit_event:notify(connection_stats, Infos ++ I),
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
     ensure_stats_timer(State1).
 
