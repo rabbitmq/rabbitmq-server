@@ -1020,12 +1020,7 @@ is_process_alive(Pid) ->
 
 -spec pget(term(), list() | map()) -> term().
 pget(K, M) when is_map(M) ->
-    case maps:find(K, M) of
-        {ok, V} ->
-            V;
-        _ ->
-            undefined
-    end;
+    maps:get(K, M, undefined);
 
 pget(K, P) ->
     case lists:keyfind(K, 1, P) of
@@ -1037,12 +1032,7 @@ pget(K, P) ->
 
 -spec pget(term(), list() | map(), term()) -> term().
 pget(K, M, D) when is_map(M) ->
-    case maps:find(K, M) of
-        {ok, V} ->
-            V;
-        _ ->
-            D
-    end;
+    maps:get(K, M, D);
 
 pget(K, P, D) ->
     case lists:keyfind(K, 1, P) of
