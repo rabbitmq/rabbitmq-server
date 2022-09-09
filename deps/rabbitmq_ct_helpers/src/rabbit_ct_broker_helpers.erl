@@ -1807,9 +1807,9 @@ set_ha_policy_all(Config, Extra) ->
     Config.
 
 set_ha_policy_two_pos(Config) ->
-    Members = [
-      rabbit_misc:atom_to_binary(N)
-      || N <- get_node_configs(Config, nodename)],
+    Members =
+    [atom_to_binary(N)
+     || N <- get_node_configs(Config, nodename)],
     TwoNodes = [M || M <- lists:sublist(Members, 2)],
     set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
                   [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
@@ -1819,9 +1819,9 @@ set_ha_policy_two_pos(Config) ->
     Config.
 
 set_ha_policy_two_pos_batch_sync(Config) ->
-    Members = [
-      rabbit_misc:atom_to_binary(N)
-      || N <- get_node_configs(Config, nodename)],
+    Members =
+    [atom_to_binary(N)
+     || N <- get_node_configs(Config, nodename)],
     TwoNodes = [M || M <- lists:sublist(Members, 2)],
     set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
                   [{<<"ha-promote-on-shutdown">>, <<"always">>}]),

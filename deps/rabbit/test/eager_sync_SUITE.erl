@@ -193,7 +193,7 @@ eager_sync_auto_on_policy_change(Config) ->
     %% Sync automatically once the policy is changed to tell us to.
     rabbit_ct_client_helpers:publish(Ch, ?QNAME, ?MESSAGE_COUNT),
     restart(Config, A),
-    Params = [rabbit_misc:atom_to_binary(N) || N <- [A, B]],
+    Params = [atom_to_binary(N) || N <- [A, B]],
     rabbit_ct_broker_helpers:set_ha_policy(Config,
       A, <<"^ha.two.">>, {<<"nodes">>, Params},
       [{<<"ha-sync-mode">>, <<"automatic">>}]),
