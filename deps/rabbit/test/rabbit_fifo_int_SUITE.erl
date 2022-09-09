@@ -62,8 +62,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _, _) -> ok end),
     meck:expect(rabbit_quorum_queue, file_handle_leader_reservation, fun (_) -> ok end),
     meck:expect(rabbit_quorum_queue, file_handle_other_reservation, fun () -> ok end),
-    meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
-                fun (_, _) -> ok end),
+    meck:expect(rabbit_quorum_queue, cancel_consumer_handler, fun (_, _) -> ok end),
     ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
@@ -433,7 +432,7 @@ credit(Config) ->
     %% credit and drain
     {F8, []} = rabbit_fifo_client:credit(<<"tag">>, 4, true, F7),
     {[{_, _, _, _, m2}], [{send_credit_reply, _}, {send_drained, _}], F9} =
-        process_ra_events(receive_ra_events(1, 1), F8),
+        process_ra_events(receive_ra_events(2, 1), F8),
     flush(),
 
     %% enqueue another message - at this point the consumer credit should be
@@ -554,7 +553,8 @@ process_ra_event(State, Wait) ->
 receive_ra_events(Applied, Deliveries) ->
     receive_ra_events(Applied, Deliveries, []).
 
-receive_ra_events(Applied, Deliveries, Acc) when Applied =< 0, Deliveries =< 0->
+receive_ra_events(Applied, Deliveries, Acc)
+  when Applied =< 0 andalso Deliveries =< 0 ->
     %% what if we get more events? Testcases should check what they're!
     lists:reverse(Acc);
 receive_ra_events(Applied, Deliveries, Acc) ->
