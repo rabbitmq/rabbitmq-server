@@ -43,7 +43,7 @@
 -export([format/2, format_many/1, format_stderr/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
--export([atom_to_binary/1, parse_bool/1, parse_int/1]).
+-export([parse_bool/1, parse_int/1]).
 -export([pid_to_string/1, string_to_pid/1,
          pid_change_node/2, node_to_fake_pid/1]).
 -export([hexify/1]).
@@ -765,9 +765,6 @@ sort_field_table(Arguments) when is_map(Arguments) ->
     sort_field_table(maps:to_list(Arguments));
 sort_field_table(Arguments) ->
     lists:keysort(1, Arguments).
-
-atom_to_binary(A) ->
-    list_to_binary(atom_to_list(A)).
 
 %% This provides a string representation of a pid that is the same
 %% regardless of what node we are running on. The representation also
