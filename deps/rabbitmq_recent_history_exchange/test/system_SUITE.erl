@@ -148,6 +148,9 @@ e2e_test(Config) ->
                          routing_key = <<"">>
                         }),
 
+    %% Wait a few seconds for all messages to be queued.
+    timer:sleep(3000),
+
     #'queue.declare_ok'{message_count = Count, queue = Q} =
         amqp_channel:call(Chan, #'queue.declare' {
                                    passive   = true,
