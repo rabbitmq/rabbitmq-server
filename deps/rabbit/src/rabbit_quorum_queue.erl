@@ -460,12 +460,6 @@ handle_tick(QName,
 
                                | infos(QName, ?STATISTICS_KEYS -- [consumers])],
                       rabbit_core_metrics:queue_stats(QName, Infos),
-                      rabbit_event:notify(queue_stats,
-                                          Infos ++ [{name, QName},
-                                                    {messages, M},
-                                                    {messages_ready, MR},
-                                                    {messages_unacknowledged, MU},
-                                                    {reductions, R}]),
                       ok = repair_leader_record(QName, Self),
                       ExpectedNodes = rabbit_nodes:all(),
                       case Nodes -- ExpectedNodes of

@@ -25,8 +25,7 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          channel_statistics,
-          head_message_timestamp_statistics
+          channel_statistics
         ]}
     ].
 
@@ -161,100 +160,6 @@ test_ch_metrics(Fun, Timeout) ->
         _:{badmatch, _} ->
             timer:sleep(1000),
             test_ch_metrics(Fun, Timeout - 1000)
-    end.
-
-head_message_timestamp_statistics(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, head_message_timestamp1, [Config]).
-
-head_message_timestamp1(_Config) ->
-    %% there is no convenient rabbit_channel API for confirms
-    %% this test could use, so it relies on tx.* methods
-    %% and gen_server2 flushing
-    application:set_env(rabbit, collect_statistics, fine),
-
-    %% Set up a channel and queue
-    {_Writer, Ch} = test_spawn(),
-    rabbit_channel:do(Ch, #'queue.declare'{}),
-    QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
-            after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
-            end,
-    QRes = rabbit_misc:r(<<"/">>, queue, QName),
-
-    {ok, Q1} = rabbit_amqqueue:lookup(QRes),
-    QPid = amqqueue:get_pid(Q1),
-
-    %% Set up event receiver for queue
-    dummy_event_receiver:start(self(), [node()], [queue_stats]),
-
-    %% the head timestamp field is empty when the queue is empty
-    test_queue_statistics_receive_event(QPid,
-                                        fun (E) ->
-                                                (proplists:get_value(name, E) == QRes)
-                                                    and
-                                                      (proplists:get_value(head_message_timestamp, E) == '')
-                                        end),
-
-    rabbit_channel:do(Ch, #'tx.select'{}),
-    receive #'tx.select_ok'{} -> ok
-    after ?TIMEOUT -> throw(failed_to_receive_tx_select_ok)
-    end,
-
-    %% Publish two messages and check that the timestamp is that of the first message
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
-                                           routing_key = QName},
-                      rabbit_basic:build_content(#'P_basic'{timestamp = 1}, <<"">>)),
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
-                                           routing_key = QName},
-                      rabbit_basic:build_content(#'P_basic'{timestamp = 2}, <<"">>)),
-    rabbit_channel:do(Ch, #'tx.commit'{}),
-    rabbit_channel:flush(Ch),
-    receive #'tx.commit_ok'{} -> ok
-    after ?TIMEOUT -> throw(failed_to_receive_tx_commit_ok)
-    end,
-    test_queue_statistics_receive_event(QPid,
-                                        fun (E) ->
-                                                (proplists:get_value(name, E) == QRes)
-                                                    and
-                                                      (proplists:get_value(head_message_timestamp, E) == 1)
-                                        end),
-
-    %% Consume a message and check that the timestamp is now that of the second message
-    rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    test_queue_statistics_receive_event(QPid,
-                                        fun (E) ->
-                                                (proplists:get_value(name, E) == QRes)
-                                                    and
-                                                      (proplists:get_value(head_message_timestamp, E) == 2)
-                                        end),
-
-    %% Consume one more message and check again
-    rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    test_queue_statistics_receive_event(QPid,
-                                        fun (E) ->
-                                                (proplists:get_value(name, E) == QRes)
-                                                    and
-                                                      (proplists:get_value(head_message_timestamp, E) == '')
-                                        end),
-
-    %% Tear down
-    rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
-    rabbit_channel:shutdown(Ch),
-    dummy_event_receiver:stop(),
-
-    passed.
-
-test_queue_statistics_receive_event(Q, Matcher) ->
-    %% Q ! emit_stats,
-    test_queue_statistics_receive_event1(Q, Matcher).
-
-test_queue_statistics_receive_event1(Q, Matcher) ->
-    receive #event{type = queue_stats, props = Props} ->
-            case Matcher(Props) of
-                true -> Props;
-                _    -> test_queue_statistics_receive_event1(Q, Matcher)
-            end
-    after ?TIMEOUT -> throw(failed_to_receive_event)
     end.
 
 test_spawn() ->
