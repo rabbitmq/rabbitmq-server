@@ -15,7 +15,7 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
--export([lookup/1]).
+-export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
@@ -461,6 +461,13 @@ all_tagged_with(TagName) ->
 -spec count() -> non_neg_integer().
 count() ->
     length(list()).
+
+-spec default_name() -> vhost:name().
+default_name() ->
+    case application:get_env(default_vhost) of
+        {ok, Value} -> Value;
+        undefined   -> <<"/">>
+    end.
 
 -spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 lookup(VHostName) ->
