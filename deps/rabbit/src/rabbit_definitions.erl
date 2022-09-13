@@ -731,10 +731,22 @@ add_queue_int(Queue, Name, ActingUser) ->
         true ->
             ok;
         false ->
+            VHostName = maps:get(vhost, Queue, undefined),
+            AutoDelete = maps:get(auto_delete, Queue, false),
+            DurableDeclare = maps:get(durable, Queue, true),
+            ExclusiveDeclare = maps:get(exclusive, Queue, false),
+
+            Args0 = args(maps:get(arguments, Queue, undefined)),
+            Args1 = rabbit_amqqueue:augment_declare_args(VHostName,
+                                                         DurableDeclare,
+                                                         ExclusiveDeclare,
+                                                         AutoDelete,
+                                                         Args0),
+
             rabbit_amqqueue:declare(Name,
-                                    maps:get(durable, Queue, undefined),
-                                    maps:get(auto_delete, Queue, undefined),
-                                    args(maps:get(arguments, Queue, undefined)),
+                                    DurableDeclare,
+                                    AutoDelete,
+                                    Args1,
                                     none,
                                     ActingUser)
     end.
