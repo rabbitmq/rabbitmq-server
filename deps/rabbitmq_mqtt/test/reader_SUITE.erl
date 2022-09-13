@@ -22,24 +22,9 @@ groups() ->
                                 block,
                                 block_connack_timeout,
                                 handle_invalid_frames,
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                stats
-<<<<<<< HEAD
-                               ]}
-=======
-=======
                                 stats,
                                 login_timeout
->>>>>>> 7aa825aefa (Resolve a conflict)
-                               ]},
-      {non_parallel_tests_quorum, [], [
-                                quorum_session_false,
-                                quorum_session_true,
-                                classic_session_true,
-                                classic_session_false
-      ]}
->>>>>>> 316225ad06 (Add login_timeout to mqtt and stomp reader)
+                               ]}
     ].
 
 suite() ->
