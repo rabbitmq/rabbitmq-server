@@ -23,16 +23,17 @@ groups() ->
                                 block_connack_timeout,
                                 handle_invalid_frames,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                 stats
 <<<<<<< HEAD
                                ]}
 =======
+=======
+                                stats,
+                                login_timeout
+>>>>>>> 7aa825aefa (Resolve a conflict)
                                ]},
       {non_parallel_tests_quorum, [], [
-=======
-                                login_timeout,
-                                stats,
->>>>>>> f3c17ceee7 (Add login_timeout to mqtt and stomp reader)
                                 quorum_session_false,
                                 quorum_session_true,
                                 classic_session_true,
