@@ -66,6 +66,10 @@ init([SupHelperPid, Ref, Configuration]) ->
 
             ParseState = rabbit_stomp_frame:initial_state(),
             _ = register_resource_alarm(),
+
+            LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
+            erlang:send_after(LoginTimeout, self(), login_timeout),
+
             gen_server2:enter_loop(?MODULE, [],
               rabbit_event:init_stats_timer(
                 run_socket(control_throttle(
@@ -142,6 +146,15 @@ handle_info({bump_credit, Msg}, State) ->
 
 handle_info(client_timeout, State) ->
     {stop, {shutdown, client_heartbeat_timeout}, State};
+
+handle_info(login_timeout, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:info(channel, ProcState) of
+        none ->
+            {stop, {shutdown, login_timeout}, State};
+        _ ->
+            {noreply, State, hibernate}
+    end;
 
 %%----------------------------------------------------------------------------
 
