@@ -194,7 +194,7 @@ handle_info(login_timeout, State = #state{conn_name = ConnStr}) ->
     %% the connection is blocked because of a resource alarm. However
     %% we don't know what is in the buffer, it can be arbitrary bytes,
     %% and we don't want to skip closing the connection in that case.
-    rabbit_log_connection:error("closing MQTT connection ~p (login timeout)", [ConnStr]),
+    _ = rabbit_log_connection:error("closing MQTT connection ~p (login timeout)", [ConnStr]),
     {stop, {shutdown, login_timeout}, State};
 
 handle_info(emit_stats, State) ->
