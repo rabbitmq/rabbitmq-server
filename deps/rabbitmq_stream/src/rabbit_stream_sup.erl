@@ -76,7 +76,7 @@ init([]) ->
           start => {rabbit_stream_manager, start_link, [OsirisConf]}},
 
     MetricsGc =
-        #{id => rabbit_stream_metrics_gc_sup,
+        #{id => rabbit_stream_metrics_gc,
           type => worker,
           start => {rabbit_stream_metrics_gc, start_link, []}},
 
