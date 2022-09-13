@@ -213,6 +213,9 @@ end}.
 {mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect",
     [{datatype, {enum, [true, false]}}]}.
 
+{mapping, "stomp.login_timeout", "rabbitmq_stomp.login_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
 %% Whether or not to enable proxy protocol support.
 %%
 %% Defaults to false.

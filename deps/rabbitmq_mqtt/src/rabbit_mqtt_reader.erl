@@ -58,6 +58,8 @@ init([KeepaliveSup, Ref]) ->
             rabbit_log_connection:debug("MQTT accepting TCP connection ~p (~s)", [self(), ConnStr]),
             rabbit_alarm:register(
               self(), {?MODULE, conserve_resources, []}),
+            LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
+            erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(RealSocket)),
             gen_server2:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
@@ -188,6 +190,17 @@ handle_info(keepalive_timeout, State = #state {conn_name = ConnStr,
                                                proc_state = PState}) ->
     rabbit_log_connection:error("closing MQTT connection ~p (keepalive timeout)", [ConnStr]),
     send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
+
+handle_info(login_timeout, State = #state{received_connect_frame = true}) ->
+    {noreply, State};
+handle_info(login_timeout, State = #state{conn_name = ConnStr}) ->
+    %% The connection is also closed if the CONNECT frame happens to
+    %% be already in the `deferred_recv' buffer. This can happen while
+    %% the connection is blocked because of a resource alarm. However
+    %% we don't know what is in the buffer, it can be arbitrary bytes,
+    %% and we don't want to skip closing the connection in that case.
+    rabbit_log_connection:error("closing MQTT connection ~p (login timeout)", [ConnStr]),
+    {stop, {shutdown, login_timeout}, State};
 
 handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), hibernate};
