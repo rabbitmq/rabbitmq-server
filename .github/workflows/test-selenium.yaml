@@ -10,11 +10,11 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "24.3.4.3"
+        - "24.3.4.5"
         browser:
         - chrome
         include:
-        - erlang_version: "24.3.4.3"
+        - erlang_version: "24.3.4.5"
           elixir_version: 1.12.3
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
@@ -135,7 +135,7 @@ jobs:
       if: always()
       run: |
         mkdir logs
-        docker logs uaa > logs/uaa.log
+        docker container ls | grep uaa && docker logs uaa > logs/uaa.log || echo "uaa not running"
 
     - name: Stop UAA
       run: |
@@ -162,7 +162,7 @@ jobs:
       if: always()
       run: |
         docker container ls | grep rabbitmq && docker logs rabbitmq > logs/rabbitmq.log || echo "rabbitmq not running"
-        docker container ls | grep selenium && docker logs selenium > logs/selenium.log || echo "selenium not running"        
+        docker container ls | grep selenium && docker logs selenium > logs/selenium.log || echo "selenium not running"
 
     - name: Upload Test Artifacts
       if: always()
