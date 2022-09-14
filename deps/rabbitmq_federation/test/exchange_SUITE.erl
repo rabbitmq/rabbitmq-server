@@ -40,13 +40,15 @@ groups() ->
       single_upstream,
       multiple_upstreams,
       multiple_upstreams_pattern,
-      single_upstream_multiple_uris
+      single_upstream_multiple_uris,
+      multiple_downstreams,
+      e2e_binding
     ]},
     {cycle_detection, [], [
-
+      %% TBD: port from v3.10.x in an Erlang 25-compatible way
     ]},
     {channel_use_mod_single, [], [
-
+      %% TBD: port from v3.10.x in an Erlang 25-compatible way
     ]}
   ].
 
@@ -262,6 +264,77 @@ single_upstream_multiple_uris(Config) ->
   Q = declare_and_bind_queue(Ch, FedX, RK),
   await_binding(Config, 0, UpX, RK),
   publish_expect(Ch, UpX, RK, Q, <<"single_upstream_multiple_uris payload">>),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+multiple_downstreams(Config) ->
+  FedX = <<"multiple_downstreams.federated">>,
+  UpX = <<"multiple_downstreams.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^multiple_downstreams.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q1 = declare_and_bind_queue(Ch, FedX, RK),
+  _ = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish(Ch, UpX, RK, <<"multiple_downstreams payload 1">>),
+  publish(Ch, UpX, RK, <<"multiple_downstreams payload 2">>),
+  expect(Ch, Q1, [<<"multiple_downstreams payload 1">>]),
+  expect(Ch, Q1, [<<"multiple_downstreams payload 2">>]),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+e2e_binding(Config) ->
+  FedX = <<"e2e_binding.federated">>,
+  E2EX = <<"e2e_binding.e2e">>,
+  UpX = <<"e2e_binding.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^e2e_binding.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX, <<"fanout">>),
+    exchange_declare_method(E2EX, <<"fanout">>)
+  ],
+  declare_exchanges(Ch, Xs),
+  Key = <<"key">>,
+  %% federated exchange routes to the E2E fanout
+  bind_exchange(Ch, E2EX, FedX, Key),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, E2EX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"e2e_binding payload">>),
 
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
