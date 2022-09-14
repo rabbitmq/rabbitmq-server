@@ -15,16 +15,11 @@
 %% for testing purposes
 -export([get_connection_name/1]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
--record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                name, type, config, inbound_uri, outbound_uri, unacked,
-                remaining, %% [1]
-                remaining_unacked}). %% [2]
-
-%% [1] Counts down until we shut down in all modes
-%% [2] Counts down until we stop publishing in on-confirm mode
+-record(state, {name :: binary() | {rabbit_types:vhost(), binary()},
+                type :: static | dynamic,
+                config :: rabbit_shovel_behaviour:state()}).
 
 start_link(Type, Name, Config) ->
     ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
