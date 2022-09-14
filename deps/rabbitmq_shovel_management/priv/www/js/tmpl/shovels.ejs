@@ -40,13 +40,11 @@
     <td><%= fmt_string(shovel.vhost, '') %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
-    <td colspan="5"><%= fmt_state('red', shovel.state) %></td>
-    <td><%= shovel.timestamp %></td>
-  </tr>
-  <tr>
-    <td colspan="<%= 8 + extra_width %>">
+    <td><%= fmt_state('red', shovel.state) %></td>
+    <td colspan="6">
       <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
+    <td><%= shovel.timestamp %></td>
 <% } else { %>
     <td><%= fmt_state('green', shovel.state) %></td>
       <td><%= fmt_string(shovel.src_protocol) %></td>
