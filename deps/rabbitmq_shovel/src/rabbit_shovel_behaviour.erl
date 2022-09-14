@@ -152,6 +152,8 @@ nack(Tag, Multi, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tag, Multi, State).
 
 %% Common functions
+
+%% Count down until we stop publishing in on-confirm mode
 decr_remaining_unacked(State = #{source := #{remaining_unacked := unlimited}}) ->
     State;
 decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
@@ -159,6 +161,7 @@ decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
 decr_remaining_unacked(State = #{source := #{remaining_unacked := N} = Src}) ->
     State#{source => Src#{remaining_unacked =>  N - 1}}.
 
+%% Count down until we shut down in all modes
 decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
     State;
 decr_remaining(N, State = #{source := #{remaining := M} = Src,
