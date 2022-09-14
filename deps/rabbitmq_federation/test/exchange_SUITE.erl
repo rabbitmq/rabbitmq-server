@@ -38,7 +38,8 @@ groups() ->
   [
     {essential, [], [
       single_upstream,
-      multiple_upstreams
+      multiple_upstreams,
+      multiple_upstreams_pattern
     ]},
     {cycle_detection, [], [
 
@@ -199,8 +200,33 @@ multiple_upstreams(Config) ->
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
 
-multiple_upstreams_pattern(_Config) ->
-  ok.
+multiple_upstreams_pattern(Config) ->
+  FedX = <<"multiple_upstreams_pattern.federated">>,
+  UpX1 = <<"upstream.x.1">>,
+  UpX2 = <<"upstream.x.2">>,
+  set_up_upstreams(Config),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^multiple_upstreams_pattern.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream-pattern">>, <<"^localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"multiple_upstreams_pattern.key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX1, RK),
+  await_binding(Config, 0, UpX2, RK),
+  publish_expect(Ch, UpX1, RK, Q, <<"multiple_upstreams_pattern payload">>),
+  publish_expect(Ch, UpX2, RK, Q, <<"multiple_upstreams_pattern payload">>),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
 
 
 %%
@@ -210,7 +236,8 @@ multiple_upstreams_pattern(_Config) ->
 clean_up_federation_related_bits(Config) ->
   delete_all_queues_on(Config, 0),
   delete_all_exchanges_on(Config, 0),
-  delete_all_policies_on(Config, 0).
+  delete_all_policies_on(Config, 0),
+  delete_all_runtime_parameters_on(Config, 0).
 
 set_up_upstream(Config) ->
   rabbit_ct_broker_helpers:set_parameter(
@@ -316,6 +343,12 @@ delete_all_policies_on(Config, Node) ->
     Config, Node, rabbit_policy, delete, [V, Name, <<"acting-user">>]) ||
       #{name := Name, vhost := V} <- all_policies_on(Config, Node)].
 
+delete_all_runtime_parameters_on(Config, Node) ->
+  [rabbit_ct_broker_helpers:rpc(
+    Config, Node, rabbit_runtime_parameters, clear, [V, Component, Name, <<"acting-user">>]) ||
+      #{component := Component, name := Name, vhost := V} <- all_runtime_parameters_on(Config, Node)].
+
+
 all_queues_on(Config, Node) ->
   Ret = rabbit_ct_broker_helpers:rpc(Config, Node,
     rabbit_amqqueue, list, [<<"/">>]),
@@ -335,6 +368,14 @@ all_exchanges_on(Config, Node) ->
 all_policies_on(Config, Node) ->
   Ret = rabbit_ct_broker_helpers:rpc(Config, Node,
     rabbit_policy, list, [<<"/">>]),
+  case Ret of
+      {badrpc, _} -> [];
+      Xs          -> [maps:from_list(PList) || PList <- Xs]
+  end.
+
+all_runtime_parameters_on(Config, Node) ->
+  Ret = rabbit_ct_broker_helpers:rpc(Config, Node,
+    rabbit_runtime_parameters, list, [<<"/">>]),
   case Ret of
       {badrpc, _} -> [];
       Xs          -> [maps:from_list(PList) || PList <- Xs]
