@@ -29,8 +29,8 @@
 
 all() ->
     [
-      {group, essential}
-      %% {group, cycle_detection},
+      {group, essential},
+      {group, cycle_protection}
       %% {group, channel_use_mode_single}
     ].
 
@@ -42,9 +42,14 @@ groups() ->
       multiple_upstreams_pattern,
       single_upstream_multiple_uris,
       multiple_downstreams,
-      e2e_binding
+      e2e_binding,
+      unbind_on_delete,
+      unbind_on_client_unbind
     ]},
-    {cycle_detection, [], [
+    {cluster_size_3, [], [
+      max_hops
+    ]},
+    {cycle_protection, [], [
       %% TBD: port from v3.10.x in an Erlang 25-compatible way
     ]},
     {channel_use_mod_single, [], [
@@ -339,6 +344,83 @@ e2e_binding(Config) ->
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
 
+unbind_on_delete(Config) ->
+  FedX = <<"unbind_on_delete.federated">>,
+  UpX = <<"unbind_on_delete.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^unbind_on_delete.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q1 = declare_and_bind_queue(Ch, FedX, RK),
+  Q2 = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  delete_queue(Ch, Q2),
+  publish_expect(Ch, UpX, RK, Q1, <<"unbind_on_delete payload">>),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+unbind_on_client_unbind(Config) ->
+  FedX = <<"unbind_on_client_unbind.federated">>,
+  UpX = <<"unbind_on_client_unbind.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^unbind_on_client_unbind.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q1 = declare_and_bind_queue(Ch, FedX, RK),
+  Q2 = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  unbind_queue(Ch, Q2, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q1, <<"unbind_on_delete payload">>),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+max_hops(Config) ->
+  case rabbit_ct_helpers:is_mixed_versions() of
+    false ->
+      [Flopsy, Mopsy, Cottontail] = rabbit_ct_broker_helpers:get_node_configs(
+        Config, nodename),
+
+      ok;
+    true ->
+      %% skip the test in mixed version mode
+      {skip, "Should not run in mixed version environments"}
+  end.
 
 %%
 %% Test helpers
