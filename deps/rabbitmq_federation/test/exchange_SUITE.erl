@@ -39,7 +39,8 @@ groups() ->
     {essential, [], [
       single_upstream,
       multiple_upstreams,
-      multiple_upstreams_pattern
+      multiple_upstreams_pattern,
+      single_upstream_multiple_uris
     ]},
     {cycle_detection, [], [
 
@@ -200,6 +201,7 @@ multiple_upstreams(Config) ->
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
 
+
 multiple_upstreams_pattern(Config) ->
   FedX = <<"multiple_upstreams_pattern.federated">>,
   UpX1 = <<"upstream.x.1">>,
@@ -224,6 +226,42 @@ multiple_upstreams_pattern(Config) ->
   await_binding(Config, 0, UpX2, RK),
   publish_expect(Ch, UpX1, RK, Q, <<"multiple_upstreams_pattern payload">>),
   publish_expect(Ch, UpX2, RK, Q, <<"multiple_upstreams_pattern payload">>),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+
+single_upstream_multiple_uris(Config) ->
+  FedX = <<"single_upstream_multiple_uris.federated">>,
+  UpX = <<"single_upstream_multiple_uris.upstream.x">>,
+  URIs = [
+    rabbit_ct_broker_helpers:node_uri(Config, 0),
+    rabbit_ct_broker_helpers:node_uri(Config, 0, [use_ipaddr])
+  ],
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      URIs},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^single_upstream_multiple_uris.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"single_upstream_multiple_uris payload">>),
 
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
