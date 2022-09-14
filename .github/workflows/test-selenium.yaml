@@ -161,9 +161,8 @@ jobs:
     - name: Save Logs
       if: always()
       run: |
-        docker logs rabbitmq > logs/rabbitmq.log
-        docker logs selenium > logs/selenium.log
-
+        docker container ls | grep rabbitmq && docker logs rabbitmq > logs/rabbitmq.log || echo "rabbitmq not running"
+        docker container ls | grep selenium && docker logs selenium > logs/selenium.log || echo "selenium not running"        
 
     - name: Upload Test Artifacts
       if: always()
