@@ -293,7 +293,8 @@ assert_status(Config, Node, XorQs, Names) ->
 
 assert_status1(XorQs, Names) ->
     [begin
-         ct:pal("links(XorQ) for ~p: ~p", [XorQ, links(XorQ)])
+         ct:pal("links(XorQ) for ~p: ~p", [XorQ, links(XorQ)]),
+         ct:pal("rabbit_federation_status:status(): ~p", [rabbit_federation_status:status()])
      end || XorQ <- XorQs],
     Links = lists:append([links(XorQ) || XorQ <- XorQs]),
     Remaining = lists:foldl(fun (Link, Status) ->
