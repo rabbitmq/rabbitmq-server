@@ -44,7 +44,8 @@ groups() ->
       multiple_downstreams,
       e2e_binding,
       unbind_on_delete,
-      unbind_on_client_unbind
+      unbind_on_client_unbind,
+      exchange_federation_link_status
     ]},
     {cluster_size_3, [], [
       max_hops
@@ -489,6 +490,39 @@ max_hops(Config) ->
       %% skip the test in mixed version mode
       {skip, "Should not run in mixed version environments"}
   end.
+
+exchange_federation_link_status(Config) ->
+  FedX = <<"single_upstream.federated">>,
+  UpX = <<"single_upstream.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^single_upstream.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  _ = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+
+  [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                            rabbit_federation_status, status, []),
+  true = is_binary(proplists:get_value(id, Link)),
+
+  clean_up_federation_related_bits(Config).
 
 %%
 %% Test helpers
