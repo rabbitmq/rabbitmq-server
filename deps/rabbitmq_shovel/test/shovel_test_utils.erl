@@ -9,7 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param_nowait/3, await_shovel/2, await_shovel1/2,
-         shovels_from_status/0, await/1, clear_param/2]).
+         shovels_from_status/0, await/1, await/2, clear_param/2]).
 
 make_uri(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -44,6 +44,17 @@ await(Pred) ->
         true  -> ok;
         false -> timer:sleep(100),
                  await(Pred)
+    end.
+
+await(_Pred, Timeout) when Timeout =< 0 ->
+    error(await_timeout);
+await(Pred, Timeout) ->
+    case Pred() of
+        true  -> ok;
+        Other when Timeout =< 100 ->
+            error({await_timeout, Other});
+        _ -> timer:sleep(100),
+             await(Pred, Timeout - 100)
     end.
 
 clear_param(Config, Name) ->
