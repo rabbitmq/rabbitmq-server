@@ -30,7 +30,7 @@
 all() ->
     [
       {group, essential},
-      {group, cycle_protection}
+      {group, cluster_size_3}
       %% {group, channel_use_mode_single}
     ].
 
@@ -413,10 +413,79 @@ unbind_on_client_unbind(Config) ->
 max_hops(Config) ->
   case rabbit_ct_helpers:is_mixed_versions() of
     false ->
-      [Flopsy, Mopsy, Cottontail] = rabbit_ct_broker_helpers:get_node_configs(
+      [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
         Config, nodename),
+      await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-      ok;
+      UpX = <<"ring">>,
+
+      %% form of ring of upstreams,
+      %% A upstream points at B
+      rabbit_ct_broker_helpers:set_parameter(
+        Config, NodeA, <<"federation-upstream">>, <<"upstream">>,
+        [
+          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
+          {<<"exchange">>, UpX},
+          {<<"max-hops">>, 2}
+        ]),
+      %% B upstream points at C
+      rabbit_ct_broker_helpers:set_parameter(
+        Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
+        [
+          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeC)},
+          {<<"exchange">>, UpX},
+          {<<"max-hops">>, 2}
+        ]),
+      %% C upstream points at A
+      rabbit_ct_broker_helpers:set_parameter(
+        Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
+        [
+          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
+          {<<"exchange">>, UpX},
+          {<<"max-hops">>, 2}
+        ]),
+
+      %% policy on A
+      [begin
+        rabbit_ct_broker_helpers:set_policy(
+          Config, Node,
+          <<"fed.x">>, <<"^ring">>, <<"exchanges">>,
+          [
+            {<<"federation-upstream">>, <<"upstream">>}
+          ])
+       end || Node <- [NodeA, NodeB, NodeC]],
+
+      NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+      NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
+      NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
+
+      FedX = <<"ring">>,
+      X = exchange_declare_method(FedX),
+      declare_exchange(NodeACh, X),
+      declare_exchange(NodeBCh, X),
+      declare_exchange(NodeCCh, X),
+
+      Q1 = declare_and_bind_queue(NodeACh, <<"ring">>, <<"key">>),
+      Q2 = declare_and_bind_queue(NodeBCh, <<"ring">>, <<"key">>),
+      Q3 = declare_and_bind_queue(NodeCCh, <<"ring">>, <<"key">>),
+
+      await_binding(Config, NodeA, <<"ring">>, <<"key">>, 3),
+      await_binding(Config, NodeB, <<"ring">>, <<"key">>, 3),
+      await_binding(Config, NodeC, <<"ring">>, <<"key">>, 3),
+
+      publish(NodeACh, <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
+      publish(NodeBCh, <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
+      publish(NodeCCh, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
+
+      Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
+      expect(NodeACh, Q1, Msgs),
+      expect(NodeBCh, Q2, Msgs),
+      expect(NodeCCh, Q3, Msgs),
+      expect_empty(NodeACh, Q1),
+      expect_empty(NodeBCh, Q2),
+      expect_empty(NodeCCh, Q3),
+
+      clean_up_federation_related_bits(Config);
     true ->
       %% skip the test in mixed version mode
       {skip, "Should not run in mixed version environments"}
@@ -623,3 +692,12 @@ publish(Ch, X, Key, Payload) when is_binary(Payload) ->
 publish(Ch, X, Key, Msg = #amqp_msg{}) ->
   amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                          routing_key = Key}, Msg).
+
+await_credentials_obfuscation_seeding_on_two_nodes(Config) ->
+  %% give credentials_obfuscation a moment to start and be seeded
+  rabbit_ct_helpers:await_condition(fun() ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, credentials_obfuscation, enabled, []) and
+    rabbit_ct_broker_helpers:rpc(Config, 1, credentials_obfuscation, enabled, [])
+  end),
+
+  timer:sleep(1000).
