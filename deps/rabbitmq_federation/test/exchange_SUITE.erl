@@ -45,7 +45,8 @@ groups() ->
       e2e_binding,
       unbind_on_delete,
       unbind_on_client_unbind,
-      exchange_federation_link_status
+      exchange_federation_link_status,
+      lookup_exchange_status
     ]},
     {cluster_size_3, [], [
       max_hops
@@ -524,6 +525,42 @@ exchange_federation_link_status(Config) ->
 
   clean_up_federation_related_bits(Config).
 
+lookup_exchange_status(Config) ->
+  FedX = <<"single_upstream.federated">>,
+  UpX = <<"single_upstream.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^single_upstream.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  _ = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+
+  [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
+  rabbit_federation_status, status, []),
+  Id = proplists:get_value(id, Link),
+  Props = rabbit_ct_broker_helpers:rpc(Config, 0,
+    rabbit_federation_status, lookup, [Id]),
+  lists:all(fun(K) -> lists:keymember(K, 1, Props) end,
+            [key, uri, status, timestamp, id, supervisor, upstream]),
+
+  clean_up_federation_related_bits(Config).
 %%
 %% Test helpers
 %%
