@@ -119,6 +119,7 @@ init_dest(Conf = #{ack_mode := AckMode,
         _ ->
             ok
     end,
+    amqp_connection:register_blocked_handler(Conn, self()),
     Conf#{dest => Dst#{unacked => #{}}}.
 
 ack(Tag, Multi, State = #{source := #{current := {_, Chan, _}}}) ->
@@ -270,6 +271,16 @@ handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
 
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
+
+handle_dest(#'connection.blocked'{}, State) ->
+    update_blocked_by(connection_blocked, true, State);
+
+handle_dest(#'connection.unblocked'{}, State) ->
+    {Pending, State1} = reset_pending(update_blocked_by(connection_blocked, false, State)),
+    %% we are unblocked so can begin to forward
+    lists:foldl(fun ({Tag, Props, Payload}, S) ->
+                        forward(Tag, Props, Payload, S)
+                end, State1, lists:reverse(Pending));
 
 handle_dest({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),

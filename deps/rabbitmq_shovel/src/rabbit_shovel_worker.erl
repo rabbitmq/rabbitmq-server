@@ -13,7 +13,8 @@
          code_change/3]).
 
 %% for testing purposes
--export([get_connection_name/1]).
+-export([get_connection_name/1,
+         get_internal_config/1]).
 
 -include("rabbit_shovel.hrl").
 
@@ -244,3 +245,6 @@ get_connection_name(_) ->
 close_connections(#state{config = Conf}) ->
     ok = rabbit_shovel_behaviour:close_source(Conf),
     ok = rabbit_shovel_behaviour:close_dest(Conf).
+
+get_internal_config(#state{config = Conf}) ->
+    Conf.

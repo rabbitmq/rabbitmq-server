@@ -12,6 +12,8 @@
 
 -compile(export_all).
 
+-export([spawn_suspender_proc/1]).
+
 all() ->
     [
       {group, core_tests},
@@ -35,7 +37,10 @@ groups() ->
           validation,
           security_validation,
           get_connection_name,
-          credit_flow
+          credit_flow,
+          dest_resource_alarm_on_confirm,
+          dest_resource_alarm_on_publish,
+          dest_resource_alarm_no_ack
         ]},
 
         {quorum_queue_tests, [], [
@@ -445,17 +450,6 @@ credit_flow(Config) ->
 
     with_ch(Config,
       fun (Ch) ->
-              amqp_channel:call(Ch, #'confirm.select'{}),
-              amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
-              %% Send larger payloads to fill up the socket buffers quicker
-              Payload = binary:copy(<<"hello">>, 1000),
-              publish_count(Ch, <<>>, <<"src">>, Payload, 1000),
-              amqp_channel:wait_for_confirms(Ch),
-
-              OrigLimit = set_vm_memory_high_watermark(Config, 0.00000001),
-              %% Let connection block.
-              timer:sleep(100),
-
               try
                   shovel_test_utils:set_param_nowait(
                     Config,
@@ -466,39 +460,194 @@ credit_flow(Config) ->
                                  {<<"src-delete-after">>, <<"never">>}]),
                   shovel_test_utils:await_shovel(Config, <<"test">>),
 
+                  ShovelPid = find_shovel_pid(Config),
+                  #{dest :=
+                        #{current :=
+                              {_DestConn, DestChan, _DestUri}}} =
+                      get_shovel_state(ShovelPid),
+                  WriterPid = find_writer_pid_for_channel(Config, DestChan),
+
+                  %% When the broker-side channel is blocked by flow
+                  %% control, it stops reading from the tcp
+                  %% socket. After all the OS, BEAM and process buffers
+                  %% are full, gen_tcp:send/2 will block the writer
+                  %% process. Simulate this by suspending the writer process.
+                  true = suspend_process(Config, WriterPid),
+
+                  %% Publish 1000 messages to the src queue
+                  amqp_channel:call(Ch, #'confirm.select'{}),
+                  publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 1000),
+                  amqp_channel:wait_for_confirms(Ch),
+
+                  %% Wait until the shovel is blocked
+                  shovel_test_utils:await(
+                    fun() ->
+                            case get_shovel_state(ShovelPid) of
+                                #{dest := #{blocked_by := [flow]}} -> true;
+                                Conf -> Conf
+                            end
+                    end,
+                    5000),
+
                   %% There should be only one process with a message buildup
-                  [{WriterPid, MQLen, _}, {_, 0, _}] =
+                  [{WriterPid, MQLen, _}, {_, 0, _} | _] =
                       rabbit_ct_broker_helpers:rpc(
-                        Config, 0, recon, proc_count, [message_queue_len, 2]),
+                        Config, 0, recon, proc_count, [message_queue_len, 10]),
 
-                  %% The writer process should have only a limited message queue,
-                  %% but it is hard to exactly know how long.
-                  %% (There are some `inet_reply' messages from the
-                  %% inet driver, and some messages from the channel,
-                  %% we estimate the later to be less than double the
-                  %% initial credit)
-                  {messages, Msgs} = rabbit_ct_broker_helpers:rpc(
-                        Config, 0, erlang, process_info, [WriterPid, messages]),
-                  CmdLen = length([Msg || Msg <- Msgs,
-                                          element(1, Msg) =:= send_command_flow]),
-                  case {writer_msg_queue_len, CmdLen, MQLen} of
-                      _ when CmdLen < 2 * 20 -> ok
-                  end,
-
-                  ExpDest = 0,
-                  #'queue.declare_ok'{message_count = ExpDest} =
-                      amqp_channel:call(Ch, #'queue.declare'{queue = <<"dest">>,
-                                                             durable = true}),
-                  #'queue.declare_ok'{message_count = SrcCnt} =
-                      amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+                  %% The writer process should have only a limited
+                  %% message queue. The shovel stops sending messages
+                  %% when the channel and shovel process used up all
+                  %% their initial credit (that is 20 + 20).
+                  2 * 20 = MQLen = proc_info(WriterPid, message_queue_len),
 
                   %% Most messages should still be in the queue either ready or unacked
-                  case {src_queue_message_count, SrcCnt} of
-                      _ when 0 < SrcCnt andalso SrcCnt < 1000 - MQLen -> ok
-                  end
+                  ExpDestCnt = 0,
+                  #{messages := ExpDestCnt} = message_count(Config, <<"dest">>),
+                  ExpSrcCnt = 1000 - MQLen,
+                  #{messages := ExpSrcCnt,
+                    messages_unacknowledged := 50} = message_count(Config, <<"src">>),
+
+                  %% After the writer process is resumed all messages
+                  %% should be shoveled to the dest queue, and process
+                  %% message queues should be empty
+                  resume_process(Config),
+
+                  shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"src">>),
+                            Cnt =:= 0
+                    end,
+                    5000),
+                  #{messages := 1000} = message_count(Config, <<"dest">>),
+                  [{_, 0, _}] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 1])
+
               after
-                  set_vm_memory_high_watermark(Config, OrigLimit),
+                  resume_process(Config),
                   set_default_credit(Config, OrigCredit)
+              end
+      end).
+
+dest_resource_alarm_on_confirm(Config) ->
+    dest_resource_alarm(<<"on-confirm">>, Config).
+
+dest_resource_alarm_on_publish(Config) ->
+    dest_resource_alarm(<<"on-publish">>, Config).
+
+dest_resource_alarm_no_ack(Config) ->
+    dest_resource_alarm(<<"no-ack">>, Config).
+
+dest_resource_alarm(AckMode, Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'confirm.select'{}),
+              amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+              publish(Ch, <<>>, <<"src">>, <<"hello">>),
+              amqp_channel:call(Ch, #'queue.declare'{queue = <<"temp">>}),
+              publish_count(Ch, <<>>, <<"temp">>, <<"hello">>, 1000),
+              true = amqp_channel:wait_for_confirms(Ch),
+
+              #{messages := 1} = message_count(Config, <<"src">>),
+              %%#{messages := 0} = message_count(Config, <<"dest">>),
+
+              %% A resource alarm will block publishing connections
+              OrigLimit = set_vm_memory_high_watermark(Config, 0.00000001),
+              %% Let connection block.
+              timer:sleep(100),
+
+              try
+                  shovel_test_utils:set_param(
+                    Config,
+                    <<"test">>, [{<<"src-queue">>,    <<"src">>},
+                                 {<<"dest-queue">>,   <<"dest">>},
+                                 {<<"src-prefetch-count">>, 50},
+                                 {<<"ack-mode">>,     AckMode},
+                                 {<<"src-delete-after">>, <<"never">>}]),
+
+                  %% The shovel is blocked
+                  ShovelPid = find_shovel_pid(Config),
+                  Conf = get_shovel_state(ShovelPid),
+                  #{dest := #{blocked_by := [connection_blocked]}} = Conf,
+
+                  %% The shoveled message triggered a
+                  %% connection.blocked notification, but hasn't
+                  %% reached the dest queue because of the resource
+                  %% alarm
+                  InitialMsgCnt =
+                      case AckMode of
+                          <<"on-confirm">> -> 1;
+                          _ -> 0
+                      end,
+
+                  #{messages := InitialMsgCnt,
+                    messages_unacknowledged := InitialMsgCnt} = message_count(Config, <<"src">>),
+                  #{messages := 0} = message_count(Config, <<"dest">>),
+
+                  %% Now publish messages to "src" queue
+                  %% (network connections are blocked from publishing
+                  %% so we use a temporary shovel with direct
+                  %% connections to populate "src" queue with messages
+                  %% from the "temp" queue)
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0,
+                         rabbit_runtime_parameters, set,
+                         [
+                          <<"/">>, <<"shovel">>, <<"temp">>,
+                          [{<<"src-uri">>, <<"amqp://">>},
+                           {<<"dest-uri">>, [<<"amqp://">>]},
+                           {<<"src-queue">>, <<"temp">>},
+                           {<<"dest-queue">>, <<"src">>},
+                           {<<"src-delete-after">>, <<"queue-length">>}], none]),
+                  shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"temp">>),
+                            Cnt =:= 0
+                    end,
+                    5000),
+
+                  %% No messages reached the dest queue
+                  #{messages := 0} = message_count(Config, <<"dest">>),
+
+                  %% When the shovel sets a prefetch_count
+                  %% (on-confirm/on-publish mode), all messages are in
+                  %% the source queue, prefrech count are
+                  %% unacknowledged and buffered in the shovel
+                  MsgCnts =
+                      case AckMode of
+                          <<"on-confirm">> ->
+                              #{messages => 1001,
+                                messages_unacknowledged => 50};
+                          <<"on-publish">> ->
+                              #{messages => 1000,
+                                messages_unacknowledged => 50};
+                          <<"no-ack">> ->
+                              %% no prefetch limit, all messages are
+                              %% buffered in the shovel
+                              #{messages => 0,
+                                messages_unacknowledged => 0}
+                      end,
+
+                  MsgCnts = message_count(Config, <<"src">>),
+
+                  %% There should be no process with a message buildup
+                  [{_, 0, _}] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 1]),
+
+                  %% Clear the resource alarm, all messages should
+                  %% arrive to the dest queue
+                  set_vm_memory_high_watermark(Config, OrigLimit),
+
+                  catch shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"dest">>),
+                            Cnt =:= 1001
+                    end,
+                    5000),
+                  #{messages := 0} = message_count(Config, <<"src">>)
+              after
+                  set_vm_memory_high_watermark(Config, OrigLimit)
               end
       end).
 
@@ -621,3 +770,75 @@ set_vm_memory_high_watermark(Config, Limit) ->
         rabbit_ct_broker_helpers:rpc(
           Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [Limit]),
     OrigLimit.
+
+message_count(Config, QueueName) ->
+    Resource = rabbit_misc:r(<<"/">>, queue, QueueName),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
+    maps:from_list(
+      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info,
+                                   [Q, [messages, messages_unacknowledged]])).
+
+%% A process can be only suspended by another process on the same node
+suspend_process(Config, Pid) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, spawn_suspender_proc, [Pid]),
+    suspended = proc_info(Pid, status),
+    true.
+
+%% When the suspender process terminates, the suspended process is also resumed
+resume_process(Config) ->
+    case rabbit_ct_broker_helpers:rpc(Config, 0, erlang, whereis, [suspender]) of
+        undefined ->
+            false;
+        SusPid ->
+            exit(SusPid, kill)
+    end.
+
+spawn_suspender_proc(Pid) ->
+    undefined = whereis(suspender),
+    ReqPid = self(),
+    SusPid =
+        spawn(
+          fun() ->
+                  register(suspender, self()),
+                  Res = catch (true = erlang:suspend_process(Pid)),
+                  ReqPid ! {suspend_res, self(), Res},
+                  %% wait indefinitely
+                  receive stop -> ok end
+          end),
+    receive
+        {suspend_res, SusPid, Res} -> Res
+    after
+        5000 -> timeout
+    end.
+
+find_shovel_pid(Config) ->
+    [ShovelPid] = [P || P <- rabbit_ct_broker_helpers:rpc(
+                               Config, 0, erlang, processes, []),
+                        rabbit_shovel_worker ==
+                            (catch element(1, erpc:call(node(P), proc_lib, initial_call, [P])))],
+    ShovelPid.
+
+get_shovel_state(ShovelPid) ->
+    gen_server2:with_state(ShovelPid, fun rabbit_shovel_worker:get_internal_config/1).
+
+find_writer_pid_for_channel(Config, ChanPid) ->
+    {amqp_channel, ChanName} = process_name(ChanPid),
+    [WriterPid] = [P || P <- rabbit_ct_broker_helpers:rpc(
+                               Config, 0, erlang, processes, []),
+                        {rabbit_writer, ChanName} == process_name(P)],
+    WriterPid.
+
+process_name(Pid) ->
+    try proc_info(Pid, dictionary) of
+        Dict ->
+            proplists:get_value(process_name, Dict)
+    catch _:_ ->
+            undefined
+    end.
+
+proc_info(Pid) ->
+    erpc:call(node(Pid), erlang, process_info, [Pid]).
+
+proc_info(Pid, Item) ->
+    {Item, Value} = erpc:call(node(Pid), erlang, process_info, [Pid, Item]),
+    Value.
