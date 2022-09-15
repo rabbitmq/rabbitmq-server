@@ -29,7 +29,6 @@ all() ->
 groups() ->
     [
      {non_parallel_tests, [], [
-                               exchange_status,
                                queue_status,
                                lookup_exchange_status,
                                lookup_queue_status,
@@ -70,16 +69,8 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases
 %% -------------------------------------------------------------------
-exchange_status(Config) ->
-    exchange_SUITE:with_ch(
-      Config,
-      fun (_Ch) ->
-              [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                    rabbit_federation_status, status, []),
-              true = is_binary(proplists:get_value(id, Link))
-      end, exchange_SUITE:upstream_downstream()).
 
 queue_status(Config) ->
     with_ch(
