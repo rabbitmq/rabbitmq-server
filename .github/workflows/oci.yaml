@@ -129,6 +129,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: packaging/docker-image
+          platforms: linux/amd64,linux/arm64
           pull: true
           push: ${{ steps.authorized.outputs.PUSH }}
           tags: |
