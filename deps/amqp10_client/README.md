@@ -35,7 +35,7 @@ The `connection_config` map contains various configuration properties.
       % the dns name of the target host
       % required by some vendors such as Azure ServiceBus
       hostname => binary(),
-      tls_opts => {secure_port, [ssl:ssl_option()]}, % optional
+      tls_opts => {secure_port, [ssl:tls_option()]}, % optional
       notify => pid(), % Pid to receive protocol notifications. Set to self() if not provided
       max_frame_size => non_neg_integer(), % incoming max frame size
       idle_time_out => non_neg_integer(), % heartbeat
@@ -50,7 +50,7 @@ The `connection_config` map contains various configuration properties.
 ### TLS
 
 TLS is enabled by setting the `tls_opts` connection configuration property.
-Currently the only valid value is `{secure_port, [ssl_option]}` where the port
+Currently the only valid value is `{secure_port, [tls_option]}` where the port
 specified only accepts TLS. It is possible that tls negotiation as described
 in the amqp 1.0 protocol will be supported in the future. If no value is provided
 for `tls_opt` then a plain socket will be used.
