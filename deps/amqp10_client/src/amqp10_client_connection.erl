@@ -60,7 +60,7 @@
       addresses => [address()],
       address => address(),
       port => inet:port_number(),
-      tls_opts => {secure_port, [ssl:ssl_option()]},
+      tls_opts => {secure_port, [ssl:tls_option()]},
       notify => pid() | none, % the pid to send connection events to
       notify_when_opened => pid() | none,
       notify_when_closed => pid() | none,
