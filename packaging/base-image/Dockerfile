@@ -13,5 +13,4 @@ RUN set -eux; \
         libc6-dbg \
         libgcc-s1-dbgsym \
         libstdc++6-dbgsym \
-        libtinfo6-dbgsym \
-        zlib1g-dbgsym
+        libtinfo6-dbgsym
