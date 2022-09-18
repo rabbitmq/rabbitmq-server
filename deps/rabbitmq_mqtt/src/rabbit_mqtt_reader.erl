@@ -61,7 +61,10 @@ init(Ref) ->
               self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
-            ProcessorState = rabbit_mqtt_processor:initial_state(Sock),
+            ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnStr),
+            %%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
+            %% when need to force load the 'connection_created' event for the management plugin.
+            %% Same is done for streams.
             gen_server2:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(
@@ -510,6 +513,10 @@ emit_stats(State=#state{connection = C}) when C == none; C == undefined ->
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1);
 emit_stats(State) ->
+    %%TODO only emit stats if rabbit_event:if_enabled()
+    %% Should be disabled if rabbitmq management agent is disabled, see
+    %% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L57-L72
+    %% Otherwise emitting stats for many MQTT connections becomes expensive
     [{_, Pid},
      {_, Recv_oct},
      {_, Send_oct},

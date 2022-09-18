@@ -8,18 +8,18 @@
 -define(CLIENT_ID_MAXLEN, 23).
 
 %% reader state
--record(state,      { socket,
-                      conn_name,
-                      await_recv,
-                      deferred_recv,
-                      received_connect_frame,
-                      connection_state,
-                      conserve,
-                      parse_state,
-                      proc_state,
-                      connection,
-                      stats_timer,
-                      keepalive }).
+-record(state, {socket,
+                conn_name,
+                await_recv,
+                deferred_recv,
+                received_connect_frame,
+                connection_state,
+                conserve,
+                parse_state,
+                proc_state,
+                connection,
+                stats_timer,
+                keepalive}).
 
 -record(keepalive, {timer :: reference(),
                     interval_ms :: pos_integer(),
@@ -27,32 +27,33 @@
                     received :: boolean()}).
 
 %% processor state
--record(proc_state, { socket,
-                      subscriptions,
-                      consumer_tags,
-                      unacked_pubs,
-                      awaiting_ack,
-                      awaiting_seqno,
-                      message_id,
-                      client_id,
-                      clean_sess,
-                      will_msg,
-                      queue_states,
-                      channels,
-                      connection,
-                      exchange :: rabbit_exchange:name(),
-                      ssl_login_name,
-                      %% Retained messages handler. See rabbit_mqtt_retainer_sup
-                      %% and rabbit_mqtt_retainer.
-                      retainer_pid,
-                      auth_state,
-                      send_fun,
-                      peer_addr,
-                      mqtt2amqp_fun,
-                      amqp2mqtt_fun,
-                      register_state,
-                      proto_ver :: 3 | 4,
-                      info}).
+-record(proc_state, {socket,
+                     conn_name,
+                     subscriptions,
+                     consumer_tags,
+                     unacked_pubs,
+                     awaiting_ack,
+                     awaiting_seqno,
+                     message_id,
+                     client_id,
+                     clean_sess,
+                     will_msg,
+                     queue_states,
+                     channels,
+                     connection,
+                     exchange :: rabbit_exchange:name(),
+                     ssl_login_name,
+                     %% Retained messages handler. See rabbit_mqtt_retainer_sup
+                     %% and rabbit_mqtt_retainer.
+                     retainer_pid,
+                     auth_state,
+                     send_fun,
+                     peer_addr,
+                     mqtt2amqp_fun,
+                     amqp2mqtt_fun,
+                     register_state,
+                     proto_ver :: 3 | 4,
+                     info}).
 
 -record(auth_state, {username,
                      user,

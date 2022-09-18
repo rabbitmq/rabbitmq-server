@@ -66,8 +66,7 @@ proxy_protocol(Config) ->
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, mqtt_3_1_1_connect_frame()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.

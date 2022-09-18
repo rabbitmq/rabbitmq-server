@@ -7,7 +7,7 @@
 
 -module(rabbit_mqtt_processor).
 
--export([info/2, initial_state/1, initial_state/4,
+-export([info/2, initial_state/2,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
          close_connection/1, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2]).
@@ -26,30 +26,27 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, mqtt_consumer).
 
-initial_state(Socket) ->
-    RealSocket = rabbit_net:unwrap_socket(Socket),
-    SSLLoginName = ssl_login_name(RealSocket),
-    {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(RealSocket),
-    initial_state(RealSocket, SSLLoginName, fun serialise_and_send_to_client/2, PeerAddr).
-
-initial_state(Socket, SSLLoginName, SendFun, PeerAddr) ->
+initial_state(Socket, ConnectionName) ->
+    SSLLoginName = ssl_login_name(Socket),
+    {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(Socket),
     {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} =
-        rabbit_mqtt_util:get_topic_translation_funs(),
+    rabbit_mqtt_util:get_topic_translation_funs(),
     %% MQTT connections use exactly one channel. The frame max is not
     %% applicable and there is no way to know what client is used.
-    #proc_state{ unacked_pubs   = gb_trees:empty(),
-                 awaiting_ack   = gb_trees:empty(),
-                 message_id     = 1,
-                 subscriptions  = #{},
-                 queue_states   = rabbit_queue_type:init(),
-                 consumer_tags  = {undefined, undefined},
-                 channels       = {undefined, undefined},
-                 socket         = Socket,
-                 ssl_login_name = SSLLoginName,
-                 send_fun       = SendFun,
-                 peer_addr      = PeerAddr,
-                 mqtt2amqp_fun  = M2A,
-                 amqp2mqtt_fun  = A2M}.
+    #proc_state{socket         = Socket,
+                conn_name      = ConnectionName,
+                unacked_pubs   = gb_trees:empty(),
+                awaiting_ack   = gb_trees:empty(),
+                message_id     = 1,
+                subscriptions  = #{},
+                queue_states   = rabbit_queue_type:init(),
+                consumer_tags  = {undefined, undefined},
+                channels       = {undefined, undefined},
+                ssl_login_name = SSLLoginName,
+                send_fun       = fun serialise_and_send_to_client/2,
+                peer_addr      = PeerAddr,
+                mqtt2amqp_fun  = M2A,
+                amqp2mqtt_fun  = A2M}.
 
 process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState = #proc_state{ auth_state = undefined } )
@@ -244,7 +241,8 @@ process_connect(#mqtt_frame{
                                fun check_client_id/1,
                                fun check_credentials/2,
                                fun login/2,
-                               fun register_client/2],
+                               fun register_client/2,
+                               fun notify_connection_created/2],
                               FrameConnect, PState0) of
         {ok, SessionPresent0, PState1} ->
             {?CONNACK_ACCEPT, SessionPresent0, PState1};
@@ -355,6 +353,34 @@ register_client(Frame = #mqtt_frame_connect{
                                         "client ID registration timed out"),
             {error, ?CONNACK_SERVER_UNAVAILABLE}
     end.
+
+notify_connection_created(
+  _Frame,
+  #proc_state{socket = Sock,
+              conn_name = ConnName,
+              info = #info{proto_human = {ProtoName, ProtoVsn}},
+              auth_state = #auth_state{vhost = VHost,
+                                       username = Username}} = PState) ->
+    {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
+    ConnectedAt = os:system_time(milli_seconds),
+    Infos = [{host, Host},
+             {port, Port},
+             {peer_host, PeerHost},
+             {peer_port, PeerPort},
+             {vhost, VHost},
+             {node, node()},
+             {user, Username},
+             {name, ConnName},
+             {connected_at, ConnectedAt},
+             {pid, self()},
+             {protocol, {ProtoName, binary_to_list(ProtoVsn)}},
+             {type, network}
+            ],
+    rabbit_core_metrics:connection_created(self(), Infos),
+    rabbit_event:notify(connection_created, Infos),
+    {ok, PState#proc_state{
+           %% We won't need conn_name anymore. Use less memmory by setting to undefined.
+           conn_name = undefined}}.
 
 human_readable_mqtt_version(3) ->
     <<"3.1.0">>;
@@ -758,20 +784,9 @@ check_user_loopback(#{vhost := VHost,
                       user := User,
                       authz_ctx := AuthzCtx
                      },
-                    #proc_state{socket = Sock,
-                                peer_addr = PeerAddr} = PState) ->
+                    #proc_state{peer_addr = PeerAddr} = PState) ->
     case rabbit_access_control:check_user_loopback(UsernameBin, PeerAddr) of
         ok ->
-            {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
-            Infos = [{node, node()},
-                     {host, Host},
-                     {port, Port},
-                     {peer_host, PeerHost},
-                     {peer_port, PeerPort},
-                     {user, UsernameBin},
-                     {vhost, VHost}],
-            rabbit_core_metrics:connection_created(self(), Infos),
-            rabbit_event:notify(connection_created, Infos),
             AuthState = #auth_state{user = User,
                                     username = UsernameBin,
                                     vhost = VHost,
