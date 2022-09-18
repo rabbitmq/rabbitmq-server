@@ -12,8 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "24.3"
-          name_suffix: '_24'
         - erlang_version: "25.0"
           name_suffix: '_25'
     timeout-minutes: 10

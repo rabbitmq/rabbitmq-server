@@ -19,13 +19,13 @@ jobs:
   # This job will build one docker image per supported Erlang major version.
   # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
   #
-  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '24',
+  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '26',
   # the following tags will be pushed to Dockerhub:
   #
-  # * 111aaa-otp-min (image OTP 24)
-  # * main-otp-min (image OTP 24)
-  # * 111aaa-otp-max (image OTP 25)
-  # * main-otp-max (image OTP 25)
+  # * 111aaa-otp-min (image OTP 25)
+  # * main-otp-min (image OTP 25)
+  # * 111aaa-otp-max (image OTP 26)
+  # * main-otp-max (image OTP 26)
 
   build-publish-dev:
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
           # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
           include:
           - image_tag_suffix: otp-min
-            otp_major: 24
+            otp_major: 25
           - image_tag_suffix: otp-max
             otp_major: 25
     steps:
@@ -171,7 +171,7 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_major: 24
+            otp_major: 25
           - image_tag_suffix: otp-max-bazel
             otp_major: 25
     steps:
