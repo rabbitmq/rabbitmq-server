@@ -12,5 +12,4 @@ RUN set -eux; \
         apt-get install -y --no-install-recommends \
         libc6-dbg \
         libgcc-s1-dbgsym \
-        libstdc++6-dbgsym \
         libtinfo6-dbgsym
