@@ -89,8 +89,18 @@ jobs:
           name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
           path: ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }}
 
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: linux/amd64,linux/arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+
+      - name: Available platforms
+        run: echo ${{ steps.buildx.outputs.platforms }}
 
       - name: Cache Docker layers
         uses: actions/cache@v3.0.8
