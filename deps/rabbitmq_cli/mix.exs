@@ -10,8 +10,13 @@ defmodule RabbitMQCtl.MixfileBase do
   def project do
     [
       app: :rabbitmqctl,
+<<<<<<< HEAD
       version: "3.11.0-dev",
       elixir: ">= 1.10.4 and < 1.15.0",
+=======
+      version: "3.12.0-dev",
+      elixir: ">= 1.13.4 and < 1.15.0",
+>>>>>>> 7780c594eb (Require Elixir 1.13.4 or 1.14.x)
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       escript: [main_module: RabbitMQCtl,
