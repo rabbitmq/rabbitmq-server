@@ -275,9 +275,13 @@ load_and_decode_cert(Provider, CertId, Attributes, Config) ->
     try
         case Provider:load_cert(CertId, Attributes, Config) of
             {ok, Cert} ->
-                DecodedCert = public_key:pkix_decode_cert(Cert, otp),
-                Id = extract_issuer_id(DecodedCert),
-                {ok, Cert, Id};
+                case public_key:pkix_decode_cert(Cert, otp) of
+                    {error, Reason} ->
+                        {error, Reason};
+                    DecodedCert ->
+                        Id = extract_issuer_id(DecodedCert),
+                        {ok, Cert, Id}
+                end;
             {error, Reason} -> {error, Reason}
         end
     catch _:Error:Stacktrace ->
