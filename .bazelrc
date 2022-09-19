@@ -48,7 +48,8 @@ build:rbe-25 --platforms=//bazel/platforms:erlang_linux_25_platform
 build:local --color=auto
 
 # having bzlmod enabled seems to interfere with docker toolchain resolution,
-# so we set this flag
+# so we set this flag. Altertively, set `--noexperimental_enable_bzlmod`, or
+# remove it from above
 build --@io_bazel_rules_docker//transitions:enable=false
 
 # Try importing a user specific .bazelrc
