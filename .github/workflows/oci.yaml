@@ -25,6 +25,7 @@ jobs:
   # * 111aaa-otp-max (image OTP 26)
   # * main-otp-max (image OTP 26)
 
+<<<<<<< HEAD
   build-publish-dev:
     runs-on: ubuntu-latest
     strategy:
@@ -152,6 +153,8 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
+=======
+>>>>>>> 9fbd3ae479 ((Possibly temporarily) remove non-Bazel OCI image builds)
   build-publish-dev-bazel:
     runs-on: ubuntu-latest
     strategy:
