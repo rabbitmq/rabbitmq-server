@@ -1091,7 +1091,7 @@ build_topic_variable_map(AuthzContext, VHost, Username) ->
 
 %% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
 %% Extracts variable map only from amqp_params_direct, not amqp_params_network.
-%% amqp_params_direct records are usually used by plugins (e.g. MQTT, STOMP)
+%% amqp_params_direct records are usually used by plugins (e.g. STOMP)
 extract_variable_map_from_amqp_params({amqp_params, {amqp_params_direct, _, _, _, _,
                                                         {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}) ->
     proplists:get_value(variable_map, AdditionalInfo, #{});

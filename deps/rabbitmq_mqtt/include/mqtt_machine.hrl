@@ -10,7 +10,7 @@
 %% millions of connections.
 %% 1. Use binaries instead of string()s for the ConnectionId
 %% 2. Use new Erlang 24 function erlang:monitor/3 with tag being the ConnectionId
-%%    so that we can get rid of pids fields because we won't to lookup the ConnectionId
+%%    so that we can get rid of pids fields because we won't lookup the ConnectionId
 %%    by PID anymore.
 -record(machine_state, {
           %% client ID to connection PID

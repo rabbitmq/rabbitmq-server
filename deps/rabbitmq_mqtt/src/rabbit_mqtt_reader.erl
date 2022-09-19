@@ -63,8 +63,11 @@ init(Ref) ->
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnStr),
             %%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
-            %% when need to force load the 'connection_created' event for the management plugin.
-            %% Same is done for streams.
+            %% when need to force load the 'connection_created' event for the management plugin, see
+            %% https://github.com/rabbitmq/rabbitmq-management-agent/issues/58
+            %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L536
+            %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L189
+            %% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L72
             gen_server2:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(
@@ -317,12 +320,12 @@ do_terminate({network_error, Reason}, _State) ->
 
 do_terminate(normal, #state{proc_state = ProcState,
                          conn_name  = ConnName}) ->
-    rabbit_mqtt_processor:close_connection(ProcState),
-    rabbit_log_connection:info("closing MQTT connection ~tp (~ts)", [self(), ConnName]),
+    rabbit_mqtt_processor:terminate(ProcState),
+    rabbit_log_connection:info("closing MQTT connection ~p (~s)", [self(), ConnName]),
     ok;
 
 do_terminate(_Reason, #state{proc_state = ProcState}) ->
-    rabbit_mqtt_processor:close_connection(ProcState),
+    rabbit_mqtt_processor:terminate(ProcState),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -340,18 +343,12 @@ log_tls_alert(Alert, ConnStr) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: alert ~ts",
        [ConnStr, Alert]).
 
-log_new_connection(#state{conn_name = ConnStr, proc_state = PState}) ->
-    rabbit_log_connection:info("accepting MQTT connection ~tp (~ts, client id: ~ts)",
-                               [self(), ConnStr, rabbit_mqtt_processor:info(client_id, PState)]).
-
-process_received_bytes(<<>>, State = #state{proc_state = ProcState,
-                                            received_connect_frame = false}) ->
-    MqttConn = ProcState#proc_state.connection,
-    case MqttConn of
-        undefined -> ok;
-        _         -> log_new_connection(State)
-    end,
-    {noreply, ensure_stats_timer(State#state{ received_connect_frame = true }), hibernate};
+process_received_bytes(<<>>, State = #state{received_connect_frame = false,
+                                            proc_state = PState,
+                                            conn_name = ConnStr}) ->
+    rabbit_log_connection:info("Accepted MQTT connection ~p (~s, client id: ~s)",
+                               [self(), ConnStr, rabbit_mqtt_processor:info(client_id, PState)]),
+    {noreply, ensure_stats_timer(State#state{received_connect_frame = true}), hibernate};
 process_received_bytes(<<>>, State) ->
     {noreply, ensure_stats_timer(State), hibernate};
 process_received_bytes(Bytes,
@@ -365,13 +362,12 @@ process_received_bytes(Bytes,
              hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
-                {ok, ProcState1, ConnPid} ->
+                {ok, ProcState1} ->
                     PS = rabbit_mqtt_frame:initial_state(),
                     process_received_bytes(
                       Rest,
-                      State #state{ parse_state = PS,
-                                    proc_state = ProcState1,
-                                    connection = ConnPid });
+                      State #state{parse_state = PS,
+                                   proc_state = ProcState1});
                 %% PUBLISH and more
                 {error, unauthorized = Reason, ProcState1} ->
                     rabbit_log_connection:error("MQTT connection ~ts is closing due to an authorization failure", [ConnStr]),
@@ -444,13 +440,13 @@ send_will_and_terminate(PState, Reason, State = #state{conn_name = ConnStr}) ->
 
 network_error(closed,
               State = #state{conn_name  = ConnStr,
-                             proc_state = PState}) ->
-    MqttConn = PState#proc_state.connection,
-    Fmt = "MQTT connection ~tp will terminate because peer closed TCP connection",
+                             proc_state = PState,
+                             received_connect_frame = Connected}) ->
+    Fmt = "MQTT connection ~p will terminate because peer closed TCP connection",
     Args = [ConnStr],
-    case MqttConn of
-        undefined  -> rabbit_log_connection:debug(Fmt, Args);
-        _          -> rabbit_log_connection:info(Fmt, Args)
+    case Connected of
+        true -> rabbit_log_connection:info(Fmt, Args);
+        false  -> rabbit_log_connection:debug(Fmt, Args)
     end,
     send_will_and_terminate(PState, State);
 
@@ -507,16 +503,12 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#state{connection = C}) when C == none; C == undefined ->
+emit_stats(State=#state{received_connect_frame = false}) ->
     %% Avoid emitting stats on terminate when the connection has not yet been
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1);
 emit_stats(State) ->
-    %%TODO only emit stats if rabbit_event:if_enabled()
-    %% Should be disabled if rabbitmq management agent is disabled, see
-    %% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L57-L72
-    %% Otherwise emitting stats for many MQTT connections becomes expensive
     [{_, Pid},
      {_, Recv_oct},
      {_, Send_oct},
@@ -554,7 +546,7 @@ info_internal(connection_state, #state{received_connect_frame = false}) ->
     starting;
 info_internal(connection_state, #state{connection_state = Val}) ->
     Val;
-info_internal(connection, #state{connection = Val}) ->
-    Val;
+info_internal(connection, _State) ->
+    self();
 info_internal(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).

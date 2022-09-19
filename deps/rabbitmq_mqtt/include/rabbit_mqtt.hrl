@@ -17,7 +17,6 @@
                 conserve,
                 parse_state,
                 proc_state,
-                connection,
                 stats_timer,
                 keepalive}).
 
@@ -40,7 +39,6 @@
                      will_msg,
                      queue_states,
                      channels,
-                     connection,
                      exchange :: rabbit_exchange:name(),
                      ssl_login_name,
                      %% Retained messages handler. See rabbit_mqtt_retainer_sup

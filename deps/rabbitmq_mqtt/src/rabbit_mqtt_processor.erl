@@ -9,7 +9,7 @@
 
 -export([info/2, initial_state/2,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
-         close_connection/1, handle_pre_hibernate/0,
+         terminate/1, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2]).
 
 %% for testing purposes
@@ -48,18 +48,12 @@ initial_state(Socket, ConnectionName) ->
                 mqtt2amqp_fun  = M2A,
                 amqp2mqtt_fun  = A2M}.
 
-process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
-              PState = #proc_state{ auth_state = undefined } )
+process_frame(#mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}},
+              PState = #proc_state{auth_state = undefined})
   when Type =/= ?CONNECT ->
     {error, connect_expected, PState};
-process_frame(Frame = #mqtt_frame{fixed = #mqtt_frame_fixed{ type = Type }},
-              PState) ->
-    case process_request(Type, Frame, PState) of
-        {ok, PState1} ->
-            {ok, PState1, PState1#proc_state.connection};
-        Ret ->
-            Ret
-    end.
+process_frame(Frame = #mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}}, PState) ->
+    process_request(Type, Frame, PState).
 
 process_request(?CONNECT, Frame, PState = #proc_state{socket = Socket}) ->
     %% Check whether peer closed the connection.
@@ -1251,24 +1245,11 @@ serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = S
                                   [Sock, Error, Frame])
     end.
 
-close_connection(PState = #proc_state{ connection = undefined }) ->
-    PState;
-close_connection(PState = #proc_state{ connection = Connection,
-                                       client_id  = ClientId }) ->
-    % todo: maybe clean session
-    case ClientId of
-        undefined -> ok;
-        _         ->
-            case rabbit_mqtt_collector:unregister(ClientId, self()) of
-                ok           -> ok;
-                %% ignore as we are shutting down
-                {timeout, _} -> ok
-            end
-    end,
-    %% ignore noproc or other exceptions, we are shutting down
-    catch amqp_connection:close(Connection),
-    PState #proc_state{ channels   = {undefined, undefined},
-                        connection = undefined }.
+terminate(#proc_state{client_id = undefined}) ->
+    ok;
+terminate(#proc_state{client_id = ClientId}) ->
+    %% ignore any errors as we are shutting down
+    rabbit_mqtt_collector:unregister(ClientId, self()).
 
 handle_pre_hibernate() ->
     erase(permission_cache),
