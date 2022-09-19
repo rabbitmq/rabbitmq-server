@@ -132,6 +132,7 @@ register_toolchains(
     "//bazel/toolchains:elixir_toolchain_1_10",
     "//bazel/toolchains:elixir_toolchain_1_12",
     "//bazel/toolchains:elixir_toolchain_1_13",
+    "//bazel/toolchains:elixir_toolchain_1_14",
 )
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
