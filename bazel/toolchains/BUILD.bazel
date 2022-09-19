@@ -56,3 +56,9 @@ elixir_toolchain_from_github_release(
     sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
     version = "1.13.4",
 )
+
+elixir_toolchain_from_github_release(
+    name_suffix = "_1_14",
+    sha256 = "ac129e266a1e04cdc389551843ec3dbdf36086bb2174d3d7e7936e820735003b",
+    version = "1.14.0",
+)
