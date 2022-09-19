@@ -83,6 +83,7 @@ jobs:
 
       - name: Save the package as a workflow artifact
         uses: actions/upload-artifact@v3
+        continue-on-error: true
         with:
           name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
           path: ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }}
