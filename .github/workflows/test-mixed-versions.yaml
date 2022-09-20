@@ -111,8 +111,6 @@ jobs:
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home=${ERLANG_HOME}
           build --//:elixir_home=${ELIXIR_HOME}
-          build --platforms=//bazel/platforms:erlang_external_platform
-          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
