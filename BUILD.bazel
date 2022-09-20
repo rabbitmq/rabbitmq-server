@@ -16,6 +16,7 @@ load(":rabbitmq.bzl", "all_plugins")
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
     "scripts/bazel/rabbitmq-run.bat",
+    "release-notes",
 ])
 
 config_setting(

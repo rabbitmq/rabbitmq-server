@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
         - erlang_version: "25.0"
-          name_suffix: '_25'
+          name: '25'
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -63,17 +63,19 @@ jobs:
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
-        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
-        LINE=$(($LINE-1))
+        OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
+        OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
 
-        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
-          //bazel/toolchains:%${LINE} || test $? -eq 3
-        buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
-          //bazel/toolchains:%${LINE} || test $? -eq 3
+        echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
+        echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
 
-        echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
-        echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
-        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src${{ matrix.name_suffix }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src_${{ matrix.name }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
+
+        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}" WORKSPACE
+        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}" WORKSPACE
+        rm *_orig
 
         set -x
         git diff
