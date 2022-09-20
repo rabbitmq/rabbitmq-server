@@ -52,8 +52,6 @@ jobs:
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home="${ERL_PATH/\/bin\/erl/}"
           build --//:elixir_home="${IEX_PATH/\/bin\/iex/}"
-          build --platforms=//bazel/platforms:erlang_external_platform
-          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
         EOF
 
         bazelisk info release
