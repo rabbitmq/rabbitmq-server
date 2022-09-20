@@ -119,7 +119,7 @@ jobs:
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
