@@ -7,7 +7,9 @@
          to_amqp091/1,
          add_message_annotations/2,
          message_annotation/2,
-         message_annotation/3
+         message_annotation/3,
+         from_091/2,
+         to_091/2
          ]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
