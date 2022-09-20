@@ -17,6 +17,7 @@ hostArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
 buildArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"
 dpkgArch="$(dpkg --print-architecture)"; dpkgArch="${dpkgArch##*-}"
 ./configure \
+    --prefix=/opt/otp \
     --host="$hostArch" \
     --build="$buildArch" \
     --disable-dynamic-ssl-lib \
@@ -60,4 +61,4 @@ rm -rf \
     /usr/local/lib/erlang/lib/*/src
 
 # Check that Erlang/OTP crypto & ssl were compiled against OpenSSL correctly
-erl -noshell -eval 'io:format("~p~n~n~p~n~n", [crypto:supports(), ssl:versions()]), init:stop().'
+/opt/otp/bin/erl -noshell -eval 'io:format("~p~n~n~p~n~n", [crypto:supports(), ssl:versions()]), init:stop().'

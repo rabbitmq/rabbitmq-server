@@ -2,6 +2,8 @@
 
 set -euxo pipefail
 
+export PATH="/opt/otp/bin:$PATH"
+
 mv /opt/rabbitmq_server-* $RABBITMQ_HOME
 
 groupadd --gid 999 --system rabbitmq

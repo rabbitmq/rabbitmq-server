@@ -98,6 +98,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v2
 
       - name: Available platforms
@@ -130,7 +131,8 @@ jobs:
       - name: Expand generic-unix-package
         working-directory: packaging/docker-image
         run: |
-          xzcat ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }} | tar xvf -
+          xzcat ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }} \
+            > package-generic-unix.tar
 
       - name: Compute image tags
         id: compute-tags

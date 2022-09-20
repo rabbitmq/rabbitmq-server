@@ -24,8 +24,8 @@ BUILD_DEPS_PACKAGES = [
     "autoconf",
     "ca-certificates",
     "dpkg-dev",
-    "g++",
     "gcc",
+    "g++",
     "libncurses5-dev",
     "make",
 ]
@@ -83,7 +83,7 @@ container_layer(
         "OPENSSL_VERSION": "1.1.1g",
     },
     files = [
-        "build_install_openssh.sh",
+        "build_install_openssl.sh",
     ],
     tags = ["manual"],
     tars = [
@@ -101,8 +101,8 @@ container_image(
 container_run_and_commit_layer(
     name = "openssl_layer",
     commands = [
-        "/usr/local/src/build_install_openssh.sh",
-        "rm /usr/local/src/build_install_openssh.sh",
+        "/usr/local/src/build_install_openssl.sh",
+        "rm /usr/local/src/build_install_openssl.sh",
     ],
     image = ":openssl_source.tar",
     tags = ["manual"],
@@ -191,7 +191,7 @@ container_image(
         "RABBITMQ_HOME": RABBITMQ_HOME,
         "RABBITMQ_LOGS": "-",
         "HOME": RABBITMQ_DATA_DIR,
-        "PATH": "%s/sbin:$$PATH" % RABBITMQ_HOME,
+        "PATH": "/opt/otp/bin:%s/sbin:$$PATH" % RABBITMQ_HOME,
         "LANG": C_UTF8,
         "LANGUAGE": C_UTF8,
         "LC_ALL": C_UTF8,
@@ -239,6 +239,9 @@ container_image(
 container_image(
     name = "otp_install_wrapper",
     base = ":rabbitmq_pkgs_image",
+    env = {
+        "PATH": "/opt/otp/bin:$$PATH",
+    },
     layers = [
         ":otp_layer",
     ],
