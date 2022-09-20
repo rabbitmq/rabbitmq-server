@@ -2,7 +2,24 @@ name: Test Management UI with Selenium
 on:
   push:
     branches:
-    - oidc-integration
+      - main
+      - v3.11.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-selenium.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   selenimum:
     runs-on: ubuntu-latest
@@ -10,12 +27,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "24.3.4.3"
+        - "25"
         browser:
         - chrome
         include:
-        - erlang_version: "24.3.4.3"
-          elixir_version: 1.12.3
+        - erlang_version: "25"
+          elixir_version: 1.13.4
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
       DOCKER_NETWORK: rabbitmq_net
@@ -56,10 +73,6 @@ jobs:
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home=${ERLANG_HOME}
           build --//:elixir_home=${ELIXIR_HOME}
-          build --platforms=//bazel/platforms:erlang_external_platform
-          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
-
-          build --@io_bazel_rules_docker//transitions:enable=false
         EOF
 
     - name: Build & Load RabbitMQ OCI
