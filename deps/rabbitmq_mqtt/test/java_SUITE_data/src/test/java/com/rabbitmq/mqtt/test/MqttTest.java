@@ -740,7 +740,7 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void publishMultiple() throws MqttException, InterruptedException {
-        int pubCount = 50;
+        int pubCount = 1000;
         for (int subQos=0; subQos <= 2; subQos++){
             for (int pubQos=0; pubQos <= 2; pubQos++){
                 // avoid reusing the client in this test as a shared
