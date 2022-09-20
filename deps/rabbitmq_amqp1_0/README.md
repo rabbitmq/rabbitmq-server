@@ -51,6 +51,17 @@ Configuration example using [sysctl config format](https://next.rabbitmq.com/con
     amqp1_0.protocol_strict_mode = false
 
 
+Configuration for interoperability between AMQP 0.9.1 and AMQP 1.0. 
+
+```
+# Conversion only handles simple types, such as strings, ints and booleans.
+# Convert AMQP 0.9.1 message headers to application properties for an AMQP 1.0 consumer
+amqp1_0.convert_amqp091_headers_to_app_props = false | true (default false)
+# Convert AMQP 1.0 Application Properties to AMQP 0.9.1 headers
+amqp1_0.convert_app_props_to_amqp091_headers = false | true (default false)
+
+```
+
 ## Clients we have tested
 
 The current field of AMQP 1.0 clients is somewhat limited. Therefore
