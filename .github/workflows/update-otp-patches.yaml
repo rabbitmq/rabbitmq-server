@@ -14,8 +14,8 @@ jobs:
         include:
         - erlang_version: "25.0"
           name: '25'
-        - erlang_version: "25.1"
-          name: '25'
+        #! - erlang_version: "25.1"
+        #!   name: '25'
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -75,8 +75,8 @@ jobs:
         echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
         echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
 
-        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}" WORKSPACE
-        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}" WORKSPACE
+        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}/" WORKSPACE
+        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}/" WORKSPACE
         rm *_orig
 
         set -x

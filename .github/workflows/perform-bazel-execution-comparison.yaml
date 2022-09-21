@@ -14,7 +14,6 @@ jobs:
       matrix:
         erlang_version:
         - "25"
-        - "25.1"
         include:
         - erlang_version: "25"
           cache_name: ci-bazel-cache-analysis
