@@ -86,6 +86,9 @@ suites = [
         deps = [
             "//deps/amqp10_common:erlang_app",
         ],
+        runtime_deps = [
+            "//deps/amqp10_client:erlang_app",
+        ],
     ),
     rabbitmq_integration_suite(
         PACKAGE,

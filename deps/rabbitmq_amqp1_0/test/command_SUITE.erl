@@ -89,8 +89,8 @@ when_one_connection(_Config) ->
     Opts = #{node => A, timeout => 2000, verbose => true},
 
     Connection = open_client_connection(_Config),
-    List = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
-    println("connections", List),
+    [ExpectedConnection|_] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
+    println("connection", ExpectedConnection),
     close_client_connection(Connection).
 
 open_client_connection(_Config) ->
