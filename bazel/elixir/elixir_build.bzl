@@ -70,7 +70,6 @@ ABS_RELEASE_DIR=$PWD/{release_path}
 ABS_VERSION_FILE=$PWD/{version_file}
 
 tar --extract \\
-    --transform 's/{strip_prefix}//' \\
     --file {archive_path} \\
     --directory $ABS_BUILD_DIR
 
