@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("rabbit_amqp1_0.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand').
 
@@ -25,7 +26,8 @@ groups() ->
                                merge_defaults,
                                validate,
                                when_no_connections,
-                               when_one_connection
+                               when_one_connection,
+                               when_one_amqp091_connection
                               ]}
     ].
 
@@ -88,12 +90,43 @@ when_one_connection(_Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(_Config, nodename),
     Opts = #{node => A, timeout => 2000, verbose => true},
 
-    Connection = open_client_connection(_Config),
-    [ExpectedConnection|_] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
+    Connection = open_amqp10_connection(_Config),
+    [ExpectedConnection] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
     println("connection", ExpectedConnection),
-    close_client_connection(Connection).
+    close_amqp10_connection(Connection).
 
-open_client_connection(_Config) ->
+when_one_amqp091_connection(_Config) ->
+    [A] = rabbit_ct_broker_helpers:get_node_configs(_Config, nodename),
+    Opts = #{node => A, timeout => 2000},
+
+    Connection = open_amqp091_client_connection(_Config),
+    println("amqp connection", Connection),
+    [ Listed ] = rabbitmqctl_list_connections(_Config, A),
+    println("listed connection:", Listed),
+    close_amqp091_client_connection(Connection).
+
+rabbitmqctl_list_connections(Config, Node) ->
+    {ok, StdOut} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Node,
+      ["list_connections", "--no-table-headers"]),
+    [<<"Listing connections", _/binary>> | Rows] = re:split(StdOut, <<"\n">>, [trim]),
+    Rows.
+
+open_amqp091_client_connection(_Config) ->
+  ConnName = <<"Custom Name">>,
+  Host = ?config(rmq_hostname, _Config),
+  Port = rabbit_ct_broker_helpers:get_node_config(_Config, 0, tcp_port_amqp),
+  AmqpParams = #amqp_params_network{port = Port,
+                                    host = Host,
+                                    virtual_host = <<"/">>
+                                    },
+
+  {ok, Connection} = amqp_connection:start(AmqpParams, ConnName),
+  Connection.
+
+close_amqp091_client_connection(Connection) ->
+  ?assertEqual(ok, amqp_connection:close(Connection)).
+
+open_amqp10_connection(_Config) ->
   Host = ?config(rmq_hostname, _Config),
   Port = rabbit_ct_broker_helpers:get_node_config(_Config, 0, tcp_port_amqp),
   % create a configuration map
@@ -105,5 +138,5 @@ open_client_connection(_Config) ->
   {ok, _} = amqp10_client:begin_session(Connection),
   Connection.
 
-close_client_connection(Connection) ->
+close_amqp10_connection(Connection) ->
   ok = amqp10_client:close_connection(Connection).
