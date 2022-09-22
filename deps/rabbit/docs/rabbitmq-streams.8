@@ -130,5 +130,184 @@ Set the retention policy of a stream.
 Example:
 .Sp
 .Dl rabbitmq-streams set_stream_retention_policy --vhost Qo a-vhost Qc Qo a-stream Qc Qo a-policy Qc
-
-
+.\" ------------------------------------
+.El
+.Ss Stream plugin
+.Bl -tag -width Ds
+.\" ------------------------------------------------------------------
+.It Cm list_stream_connections Op Ar connectioninfoitem ...
+.Pp
+Returns stream protocol connection statistics.
+.Pp
+The
+.Ar connectioninfoitem
+parameter is used to indicate which connection information items to
+include in the results.
+The column order in the results will match the order of the parameters.
+.Ar connectioninfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Cm auth_mechanism
+SASL authentication mechanism used, such as
+.Qq PLAIN .
+.It Cm client_properties
+Informational properties transmitted by the client during connection
+establishment.
+.It Cm conn_name
+Readable name for the connection.
+.It Cm connected_at
+Date and time this connection was established, as timestamp.
+.It Cm connection_state
+Connection state; one of:
+.Bl -bullet -compact
+.It
+running
+.It
+blocked
+.El
+.It Cm frame_max
+Maximum frame size (bytes).
+.It Cm heartbeat
+Negotiated heartbeat interval, in seconds.
+.It Cm host
+Server hostname obtained via reverse DNS, or its IP address if reverse
+DNS failed or was disabled.
+.It Cm peer_cert_issuer
+The issuer of the peer's SSL certificate, in RFC4514 form.
+.It Cm peer_cert_subject
+The subject of the peer's SSL certificate, in RFC4514 form.
+.It Cm peer_cert_validity
+The period for which the peer's SSL certificate is valid.
+.It Cm peer_host
+Peer hostname obtained via reverse DNS, or its IP address if reverse DNS
+failed or was not enabled.
+.It Cm peer_port
+Peer port.
+.It Cm port
+Server port.
+.It Cm ssl
+Boolean indicating whether the connection is secured with SSL.
+.It Cm ssl_cipher
+SSL cipher algorithm (e.g.\&
+.Qq aes_256_cbc ) .
+.It Cm ssl_hash
+SSL hash function (e.g.\&
+.Qq sha ) .
+.It Cm ssl_key_exchange
+SSL key exchange algorithm (e.g.\&
+.Qq rsa ) .
+.It Cm ssl_protocol
+SSL protocol (e.g.\&
+.Qq tlsv1 ) .
+.It Cm subscriptions
+Number of subscriptions (consumers) on the connection.
+.It Cm user
+Username associated with the connection.
+.It Cm vhost
+Virtual host name with non-ASCII characters escaped as in C.
+.El
+.Pp
+If no
+.Ar connectioninfoitem
+are specified then only conn_name is displayed.
+.Pp
+For example, this command displays the connection name and user
+for each connection:
+.sp
+.Dl rabbitmq-streams list_stream_connections conn_name user
+.\" ------------------------------------------------------------------
+.It Cm list_stream_consumers Oo Fl p Ar vhost Oc Op Ar consumerinfoitem ...
+.Pp
+Returns consumers attached to a stream.
+.Pp
+The
+.Ar consumerinfoitem
+parameter is used to indicate which consumer information items to
+include in the results.
+The column order in the results will match the order of the parameters.
+.Ar consumerinfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Ar connection_pid
+Id of the Erlang process associated with the consumer connection.
+.It Ar credits
+Available credits for the consumer.
+.It Ar messages_consumed
+Number of messages the consumer consumed.
+.It Ar offset
+The offset (location in the stream) the consumer is at.
+.It Ar offset_lag
+The difference between the last stored offset and the last
+dispatched offset for the consumer.
+.It Ar properties
+The properties of the consumer subscription.
+.It Ar stream
+The stream the consumer is attached to.
+.It Ar subscription_id
+The connection-scoped ID of the consumer.
+.El
+.Pp
+If no
+.Ar consumerinfoitem
+are specified then connection_pid, subscription_id, stream,
+messages_consumed, offset, offset_lag, credits, properties are displayed.
+.Pp
+For example, this command displays the connection PID, subscription ID and stream
+for each consumer:
+.sp
+.Dl rabbitmq-streams list_stream_consumers connection_pid subscription_id stream
+\" ------------------------------------------------------------------
+.It Cm list_stream_publishers Oo Fl p Ar vhost Oc Op Ar publisherinfoitem ...
+.Pp
+Returns registered publishers.
+.Pp
+The
+.Ar publisherinfoitem
+parameter is used to indicate which publisher information items to
+include in the results.
+The column order in the results will match the order of the parameters.
+.Ar publisherinfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Ar connection_pid
+Id of the Erlang process associated with the consumer connection.
+.It Ar messages_confirmed
+The number of confirmed messages for the publisher.
+.It Ar messages_errored
+The number of errored messages for the publisher.
+.It Ar messages_published
+The overall number of messages the publisher published.
+.It Ar publisher_id
+The connection-scoped ID of the publisher.
+.It Ar reference
+The deduplication reference of the publisher.
+.It Ar stream
+The stream the publisher publishes to.
+.El
+.Pp
+If no
+.Ar publisherinfoitem
+are specified then connection_pid, publisher_id, stream, reference,
+messages_published, messages_confirmed, and messages_errored are displayed.
+.Pp
+For example, this command displays the connection PID, publisher ID and stream
+for each producer:
+.sp
+.Dl rabbitmq-streams list_stream_publishers connection_pid publisher_id stream
+.El
+.El
+.\" ------------------------------------------------------------------
+.Sh SEE ALSO
+.\" ------------------------------------------------------------------
+.Xr rabbitmqctl 8 ,
+.Xr rabbitmq-diagnostics 8 ,
+.Xr rabbitmq-server 8 ,
+.Xr rabbitmq-queues 8 ,
+.Xr rabbitmq-upgrade 8 ,
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmq-env.conf 5 ,
+.Xr rabbitmq-echopid 8
+.\" ------------------------------------------------------------------
+.Sh AUTHOR
+.\" ------------------------------------------------------------------
+.An The RabbitMQ Team Aq Mt info@rabbitmq.com
