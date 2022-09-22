@@ -96,6 +96,45 @@ when_one_connection(_Config) ->
     rabbit_ct_broker_helpers:rpc(_Config, A,
                                         rabbit_connection_tracking, list, []),
 
+    [P1, P2] = [P
+         || {_, P, _, [tcp_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children, [rabbit_sup])],
+    println("Pid1", P1),
+    println("Pid2", P2),
+
+    Children1 =  rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[P1]),
+    println("tcp_listener_sup1", Children1),
+    Children2 =  rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[P2]),
+    println("tcp_listener_sup2", Children2),
+
+    [Res1, Res2] = [RanchSupPid
+     || {_, TcpPid, _, [tcp_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [rabbit_sup]),
+        {_, RanchSupPid, _, [ranch_embedded_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [TcpPid])
+        ],
+    println("ranch_embedded_sup 1", rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[Res1])),
+    println("ranch_embedded_sup 2", rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[Res2])),
+
+    [Rl1, Rl2] = [RanchLPid
+   || {_, TcpPid, _, [tcp_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [rabbit_sup]),
+      {_, RanchEPid, _, [ranch_embedded_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [TcpPid]),
+      {_, RanchLPid, _, [ranch_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [RanchEPid])
+      ],
+    println("ranch_listener_sup", [Rl1, Rl2]),
+    println("ranch_listener_sup 1", rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[Rl1])),
+    println("ranch_listener_sup 2", rabbit_ct_broker_helpers:rpc(_Config, A, supervisor,which_children,[Rl2])),
+
+    ReaderPids = [ReaderPid
+   || {_, TcpPid, _, [tcp_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [rabbit_sup]),
+      {_, RanchEPid, _, [ranch_embedded_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [TcpPid]),
+      {_, RanchLPid, _, [ranch_listener_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [RanchEPid]),
+      {_, RanchSPid, _, [ranch_conns_sup_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [RanchLPid]),
+      {_, RanchCPid, _, [ranch_conns_sup]} <- rabbit_ct_broker_helpers:rpc(_Config, A, supervisor, which_children, [RanchSPid]),
+      {rabbit_connection_sup, ConnPid, _, _} <- supervisor:which_children(RanchCPid),
+      {reader, ReaderPid, _, _} <- supervisor:which_children(ConnPid)
+      ],
+    println("ReaderPid", ReaderPids),
+    ReaderInfos = [rabbit_ct_broker_helpers:rpc(_Config, A, rabbit_amqp1_0_reader, info, [Pid, [node,user]]) || Pid <- ReaderPids],
+    println("ReaderPid info",ReaderInfos),
+
     [ExpectedConnection] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
     close_amqp10_connection(Connection).
 
