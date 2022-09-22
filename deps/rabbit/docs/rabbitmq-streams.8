@@ -1,0 +1,134 @@
+.\" vim:ft=nroff:
+.\" This Source Code Form is subject to the terms of the Mozilla Public
+.\" License, v. 2.0. If a copy of the MPL was not distributed with this
+.\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
+.\"
+.\" Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
+.\"
+.Dd September 20, 2022
+.Dt RABBITMQ-STREAMS 8
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-streams
+.Nd RabbitMQ stream management tools
+.\" ------------------------------------------------------------------
+.Sh SYNOPSIS
+.\" ------------------------------------------------------------------
+.Nm
+.Op Fl q
+.Op Fl s
+.Op Fl l
+.Op Fl n Ar node
+.Op Fl t Ar timeout
+.Ar command
+.Op Ar command_options
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+.Nm
+is a command line tool that provides commands used to manage streams,
+for example, add or delete stream replicas.
+See the
+.Lk https://www.rabbitmq.com/streams.html "RabbitMQ streams overview".
+.\" ------------------------------------------------------------------
+.Sh OPTIONS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It Fl n Ar node
+Default node is
+.Qq Pf rabbit@ Ar target-hostname ,
+where
+.Ar target-hostname
+is the local host.
+On a host named
+.Qq myserver.example.com ,
+the node name will usually be
+.Qq rabbit@myserver
+(unless
+.Ev RABBITMQ_NODENAME
+has been overridden).
+The output of
+.Qq hostname -s
+is usually the correct suffix to use after the
+.Qq @
+sign.
+See
+.Xr rabbitmq-server 8
+for details of configuring a RabbitMQ node.
+.It Fl q , -quiet
+Quiet output mode is selected.
+Informational messages are reduced when quiet mode is in effect.
+.It Fl s , -silent
+Silent output mode is selected.
+Informational messages are reduced and table headers are suppressed when silent mode is in effect.
+.It Fl t Ar timeout , Fl -timeout Ar timeout
+Operation timeout in seconds.
+Not all commands support timeouts.
+Default is
+.Cm infinity .
+.It Fl l , Fl -longnames
+Must be specified when the cluster is configured to use long (FQDN) node names.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.It Fl -erlang-cookie Ar cookie
+Shared secret to use to authenticate to the target node.
+Prefer using a local file or the
+.Ev RABBITMQ_ERLANG_COOKIE
+environment variable instead of specifying this option on the command line.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.El
+.\" ------------------------------------------------------------------
+.Sh COMMANDS
+.\" ------------------------------------
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm help
+.Pp
+Displays general help and commands supported by
+.Nm .
+.El
+.Ss Replication
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm add_replica Ar queue Ar node Fl -vhost Ar virtual-host
+.Pp
+Adds a stream replica on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams add_replica --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@new-node Qc
+.\" ------------------------------------
+.It Cm delete_replica Ar queue Ar node Fl -vhost Ar virtual-host
+.Pp
+Removes a stream replica on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams delete_replica --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@decomissioned-node Qc
+.\" ------------------------------------
+.El
+.Ss Monitoring, observability and health checks
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm stream_status Ar stream Fl -vhost Ar virtual-host
+.Pp
+Displays the status of a stream.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams stream_status --vhost Qo a-vhost Qc Qo a-stream Qc
+.\" ------------------------------------
+.El
+.Ss Policies
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm set_stream_retention_policy Ar stream Ar policy Fl -vhost Ar virtual-host
+.Pp
+Set the retention policy of a stream.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams set_stream_retention_policy --vhost Qo a-vhost Qc Qo a-stream Qc Qo a-policy Qc
+
+
