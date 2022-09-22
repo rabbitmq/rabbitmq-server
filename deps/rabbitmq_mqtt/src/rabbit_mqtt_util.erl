@@ -9,7 +9,7 @@
 
 -include("rabbit_mqtt.hrl").
 
--export([subcription_queue_name/1,
+-export([queue_names/1,
          gen_client_id/0,
          env/1,
          table_lookup/2,
@@ -21,7 +21,7 @@
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
 
-subcription_queue_name(ClientId) ->
+queue_names(ClientId) ->
     Base = "mqtt-subscription-" ++ ClientId ++ "qos",
     {list_to_binary(Base ++ "0"), list_to_binary(Base ++ "1")}.
 

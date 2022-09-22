@@ -48,7 +48,8 @@
 -define(QOS_2, 2).
 -define(SUBACK_FAILURE, 16#80).
 
-%% TODO
+-type qos() :: ?QOS_0 | ?QOS_1 | ?QOS_2.
+%%TODO remove message_id()
 -type message_id() :: any().
 
 -record(mqtt_frame, {fixed,
@@ -91,7 +92,7 @@
 -record(mqtt_frame_other,    {other}).
 
 -record(mqtt_msg,            {retain :: boolean(),
-                              qos :: ?QOS_0 | ?QOS_1 | ?QOS_2,
+                              qos :: qos(),
                               topic :: string(),
                               dup :: boolean(),
                               message_id :: message_id(),

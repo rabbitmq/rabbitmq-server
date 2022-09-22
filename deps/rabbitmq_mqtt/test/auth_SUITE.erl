@@ -10,8 +10,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--define(CONNECT_TIMEOUT, 10000).
+
+%% defined in MQTT v4 and v5 (not in v3)
 -define(SUBACK_FAILURE, 16#80).
+
 -define(FAIL_IF_CRASH_LOG, {["Generic server.*terminating"],
                             fun () -> ct:fail(crash_detected) end}).
 -import(rabbit_ct_broker_helpers, [rpc/5]).
@@ -528,90 +530,99 @@ no_queue_consume_permission(Config) ->
     test_subscribe_permissions_combination(<<".*">>, <<".*">>, <<"^amq\\.topic">>, Config, ExpectedLogs).
 
 no_queue_delete_permission(Config) ->
-    {skip, "TODO support clean_start=false"}.
-    % set_permissions(".*", ".*", ".*", Config),
-    % C1 = open_mqtt_connection(Config, [{clientid, <<"no_queue_delete_permission">>}, {clean_start, false}]),
-    % {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
-    % ok = emqtt:disconnect(C1),
-    % set_permissions(<<>>, ".*", ".*", Config),
+    set_permissions(".*", ".*", ".*", Config),
+    ClientId = <<"no_queue_delete_permission">>,
+    {ok, C1} = connect_user(
+                 ?config(mqtt_user, Config),
+                 ?config(mqtt_password, Config),
+                 Config,
+                 ClientId,
+                 [{clean_start, false}]),
+    {ok, _} = emqtt:connect(C1),
+    {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
+    ok = emqtt:disconnect(C1),
 
-    % %% And now we have a durable queue that user doesn't have permission to delete.
-    % %% Attempt to establish clean session should fail.
-    % {ok, C2} = connect_user(
-    %              ?config(mqtt_user, Config),
-    %              ?config(mqtt_password, Config),
-    %              Config,
-    %              ?config(mqtt_user, Config),
-    %              [{clientid, <<"no_queue_delete_permission">>},
-    %               {clean_start, true}]),
-    % unlink(C2),
-    % ?assertMatch({error, _},
-    %              emqtt:connect(C2)),
+    set_permissions(<<>>, ".*", ".*", Config),
+    %% Now we have a durable queue that user doesn't have permission to delete.
+    %% Attempt to establish clean session should fail.
+    {ok, C2} = connect_user(
+                 ?config(mqtt_user, Config),
+                 ?config(mqtt_password, Config),
+                 Config,
+                 ClientId,
+                 [{clean_start, true}]),
+    unlink(C2),
+    ?assertMatch({error, _},
+                 emqtt:connect(C2)),
+    wait_log(
+      Config,
+      [?FAIL_IF_CRASH_LOG
+       ,{[io_lib:format("MQTT resource access refused: configure access to queue "
+                        "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+                        [ClientId]),
+          "MQTT connection .* is closing due to an authorization failure"],
+         fun() -> stop end}
+      ]),
+    ok.
 
-    % wait_log(Config,
-    %          [?FAIL_IF_CRASH_LOG
-    %           ,{["operation queue.delete caused a channel exception access_refused",
-    %              "MQTT cannot start a clean session: `configure` permission missing for queue"],
-    %             fun () -> stop end}
-    %          ]),
-    % ok.
+no_queue_consume_permission_on_connect(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    ClientId = <<"no_queue_consume_permission_on_connect">>,
+    {ok, C1} = connect_user(
+                 ?config(mqtt_user, Config),
+                 ?config(mqtt_password, Config),
+                 Config,
+                 ClientId,
+                 [{clean_start, false}]),
+    {ok, _} = emqtt:connect(C1),
+    {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
+    ok = emqtt:disconnect(C1),
 
-no_queue_consume_permission_on_connect(_Config) ->
-    {skip, "TODO support clean_start=false"}.
-    % set_permissions(".*", ".*", ".*", Config),
-    % C1 = open_mqtt_connection(Config, [{clientid, <<"no_queue_consume_permission_on_connect">>}, {clean_start, false}]),
-    % {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
-    % ok = emqtt:disconnect(C1),
+    set_permissions(".*", ".*", "^amq\\.topic", Config),
+    {ok, C2} = connect_user(
+                 ?config(mqtt_user, Config),
+                 ?config(mqtt_password, Config),
+                 Config,
+                 ClientId,
+                 [{clean_start, false}]),
+    unlink(C2),
+    ?assertMatch({error, _},
+                 emqtt:connect(C2)),
+    wait_log(
+      Config,
+      [?FAIL_IF_CRASH_LOG
+       ,{[io_lib:format("MQTT resource access refused: read access to queue "
+                        "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+                        [ClientId]),
+          "MQTT connection .* is closing due to an authorization failure"],
+         fun () -> stop end}
+      ]),
+    ok.
 
-    % set_permissions(".*", ".*", "^amq\\.topic", Config),
-    % {ok, C2} = connect_user(
-    %              ?config(mqtt_user, Config),
-    %              ?config(mqtt_password, Config),
-    %              Config,
-    %              ?config(mqtt_user, Config),
-    %              [{clientid, <<"no_queue_consume_permission_on_connect">>},
-    %               {clean_start, false}]),
-    % unlink(C2),
-    % ?assertMatch({error, _},
-    %              emqtt:connect(C2)),
+no_queue_declare_permission(Config) ->
+    set_permissions("", ".*", ".*", Config),
+    ClientId = <<"no_queue_declare_permission">>,
+    {ok, C} = connect_user(
+                ?config(mqtt_user, Config),
+                ?config(mqtt_password, Config),
+                Config,
+                ClientId,
+                [{clean_start, true}]),
+    {ok, _} = emqtt:connect(C),
 
-    % wait_log(Config,
-    %          [{["Generic server.*terminating"], fun () -> exit(there_should_be_no_crashes) end}
-    %           ,{["operation basic.consume caused a channel exception access_refused",
-    %              "MQTT cannot recover a session, user is missing permissions"],
-    %             fun () -> stop end}
-    %          ]),
-    % ok.
-
-no_queue_declare_permission(_Config) ->
-    {skip, "TODO support clean_start=false"}.
-    % rabbit_ct_broker_helpers:set_permissions(Config, ?config(mqtt_user, Config), ?config(mqtt_vhost, Config), <<"">>, <<".*">>, <<".*">>),
-    % P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    % {ok, C} = emqtt:start_link([{host, "localhost"},
-    %                             {port, P},
-    %                             {clientid, <<"no_queue_declare_permission">>},
-    %                             {proto_ver, v4},
-    %                             {username, ?config(mqtt_user, Config)},
-    %                             {password, ?config(mqtt_password, Config)},
-    %                             {clean_start, false}
-    %                            ]),
-    % {ok, _} = emqtt:connect(C),
-
-    % process_flag(trap_exit, true),
-    % try emqtt:subscribe(C, <<"test/topic">>) of
-    %     _ -> exit(this_should_not_succeed)
-    % catch
-    %     exit:{{shutdown, tcp_closed} , _} -> ok
-    % end,
-    % process_flag(trap_exit, false),
-
-    % wait_log(Config,
-    %          [{["Generic server.*terminating"], fun () -> exit(there_should_be_no_crashes) end}
-    %          ,{["MQTT protocol error on connection.*access_refused",
-    %             "operation queue.declare caused a channel exception access_refused"],
-    %            fun () -> stop end}
-    %          ]),
-    % ok.
+    process_flag(trap_exit, true),
+    {ok, _, [?SUBACK_FAILURE]} = emqtt:subscribe(C, <<"test/topic">>, qos0),
+    ok = assert_connection_closed(C),
+    wait_log(
+      Config,
+      [?FAIL_IF_CRASH_LOG
+       ,{[io_lib:format("MQTT resource access refused: configure access to queue "
+                        "'mqtt-subscription-~sqos0' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+                        [ClientId]),
+          "MQTT protocol error on connection .*: subscribe_error"],
+         fun () -> stop end}
+      ]),
+    ok.
 
 no_publish_permission(Config) ->
     set_permissions(".*", "", ".*", Config),
@@ -631,8 +642,8 @@ no_publish_permission(Config) ->
 no_topic_read_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),
     set_topic_permissions("^allow-write\\..*", "^allow-read\\..*", Config),
-
     C = open_mqtt_connection(Config),
+
     %% Check topic permission setup is working.
     {ok, _, [0]} = emqtt:subscribe(C, <<"allow-read/some/topic">>),
 
@@ -650,25 +661,25 @@ no_topic_read_permission(Config) ->
              ]),
     ok.
 
-no_topic_write_permission(_Config) ->
-    {skip, "TODO implement QoS1"}.
-    % set_permissions(".*", ".*", ".*", Config),
-    % set_topic_permissions("^allow-write\\..*", "^allow-read\\..*", Config),
-    % C = open_mqtt_connection(Config),
-    % %% Check topic permission setup is working.
-    % {ok, _} = emqtt:publish(C, <<"allow-write/some/topic">>, <<"payload">>, qos1),
+no_topic_write_permission(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    set_topic_permissions("^allow-write\\..*", "^allow-read\\..*", Config),
+    C = open_mqtt_connection(Config),
 
-    % process_flag(trap_exit, true),
-    % ?assertMatch({error, _},
-    %              emqtt:publish(C, <<"some/other/topic">>, <<"payload">>, qos1)),
-    % wait_log(Config,
-    %          [?FAIL_IF_CRASH_LOG
-    %           ,{["MQTT topic access refused: write access to topic 'some.other.topic' in "
-    %              "exchange 'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
-    %              "MQTT connection .* is closing due to an authorization failure"],
-    %             fun () -> stop end}
-    %          ]),
-    % ok.
+    %% Check topic permission setup is working.
+    {ok, _} = emqtt:publish(C, <<"allow-write/some/topic">>, <<"payload">>, qos1),
+
+    process_flag(trap_exit, true),
+    ?assertMatch({error, _},
+                 emqtt:publish(C, <<"some/other/topic">>, <<"payload">>, qos1)),
+    wait_log(Config,
+             [?FAIL_IF_CRASH_LOG
+              ,{["MQTT topic access refused: write access to topic 'some.other.topic' in "
+                 "exchange 'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+                 "MQTT connection .* is closing due to an authorization failure"],
+                fun () -> stop end}
+             ]),
+    ok.
 
 loopback_user_connects_from_remote_host(Config) ->
     set_permissions(".*", ".*", ".*", Config),

@@ -13,6 +13,7 @@
          close_local_client_connections/1]).
 
 start(normal, []) ->
+    rabbit_global_counters:init([{protocol, mqtt}]),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     ok = mqtt_node:start(),

@@ -22,7 +22,6 @@
 
 -export([info/2]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
 
 -define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
@@ -129,25 +128,6 @@ handle_cast(QueueEvent = {queue_event, _, _},
 
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
-
-handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
-    State) ->
-    %% receiving a message from a quorum queue
-    %% no delivery context
-    handle_info(erlang:insert_element(3, Delivery, undefined), State);
-handle_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
-            State = #state{ proc_state = ProcState }) ->
-    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery,
-                                                              ProcState));
-
-handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
-    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
-
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State, hibernate};
-
-handle_info(#'basic.cancel'{}, State) ->
-    {stop, {shutdown, subscription_cancelled}, State};
 
 handle_info({'EXIT', _Conn, Reason}, State) ->
     {stop, {connection_died, Reason}, State};
@@ -434,8 +414,7 @@ send_will_and_terminate(PState, State) ->
 
 send_will_and_terminate(PState, Reason, State = #state{conn_name = ConnStr}) ->
     rabbit_mqtt_processor:send_will(PState),
-    rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~tp", [ConnStr]),
-    % todo: flush channel after publish
+    rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~p", [ConnStr]),
     {stop, Reason, State}.
 
 network_error(closed,
