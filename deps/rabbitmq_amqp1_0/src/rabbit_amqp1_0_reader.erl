@@ -187,6 +187,7 @@ handle_other({bump_credit, Msg}, State) ->
 handle_other(terminate_connection, State) ->
     State;
 handle_other({info, InfoItems, Pid}, State) ->
+    logger:info("Reader info:  State: ~p pid ~p infoitems: ~p ", [State, Pid, InfoItems]),
     Infos = lists:map(
               fun(InfoItem) ->
                       {InfoItem, info_internal(InfoItem, State)}
