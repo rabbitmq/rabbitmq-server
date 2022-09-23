@@ -45,7 +45,7 @@ jobs:
                  "+{parse_transform,lager_transform}",
                  "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
              ]
-        - erlang_major: "25"
+        - erlang_major: "24"
           tag: v3.9.13
           patch: |
             diff --git a/rabbitmq.bzl b/rabbitmq.bzl
