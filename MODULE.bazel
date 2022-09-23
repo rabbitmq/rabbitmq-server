@@ -212,9 +212,8 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/osiris",
-    version = "1.3.1",
-    patch_cmds = [
-        """VERSION=$(git rev-parse HEAD)
+    tag = "v1.3.1",
+    patch_cmds = ["""VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
 sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
 echo "Injecting ${VERSION} into BUILD.bazel..."
@@ -257,13 +256,33 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
-    version = "2.3.0",
     tag = "v2.3.0",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
+    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+NAME = "ra"
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@aten//:erlang_app",
+]
+
+erlang_app(
+    app_name = NAME,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+"""
 )
 
 erlang_package.hex_package(
