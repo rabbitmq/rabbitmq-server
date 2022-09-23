@@ -135,7 +135,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     git_repository(
         name = "osiris",
-        branch = "main",
+        tag = "v1.3.1",
         remote = "https://github.com/rabbitmq/osiris.git",
         patch_cmds = [
             """VERSION=$(git rev-parse HEAD)
@@ -172,11 +172,13 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
-    git_repository(
+    hex_pm_erlang_app(
         name = "ra",
-        branch = "main",
-        remote = "https://github.com/rabbitmq/ra.git",
-        patch_cmds = [RA_INJECT_GIT_VERSION],
+        version = "2.3.0",
+        sha256 = "ce589a898173d6f1c768d54926079110a896aa48199afa9973f2621c954a08a9",
+        deps = [
+            "@enough//:erlang_app",
+        ],
     )
 
     hex_archive(
