@@ -258,6 +258,7 @@ erlang_package.hex_package(
 erlang_package.git_package(
     repository = "rabbitmq/ra",
     version = "2.3.0",
+    tag = "v2.3.0",
     patch_cmds = ["""
 VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into ra.app.src..."
