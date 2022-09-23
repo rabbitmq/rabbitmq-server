@@ -13,6 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The erlang_major should be the minumum version used across
+        # all mixed version tests that utilize that artifact
         include:
         - erlang_major: "23"
           tag: v3.8.27
