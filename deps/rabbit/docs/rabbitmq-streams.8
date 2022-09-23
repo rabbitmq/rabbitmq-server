@@ -5,7 +5,7 @@
 .\"
 .\" Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd September 20, 2022
+.Dd September 23, 2022
 .Dt RABBITMQ-STREAMS 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -228,6 +228,18 @@ The column order in the results will match the order of the parameters.
 .Ar consumerinfoitem
 can take any value from the list that follows:
 .Bl -tag -width Ds
+.It Ar active
+Boolean indicating whether the consumer is active or not.
+.It Ar activity_status
+Consumer activity status; one of:
+.Bl -bullet -compact
+.It
+up
+.It
+single_active
+.It
+waiting
+.El
 .It Ar connection_pid
 Id of the Erlang process associated with the consumer connection.
 .It Ar credits
@@ -250,7 +262,7 @@ The connection-scoped ID of the consumer.
 If no
 .Ar consumerinfoitem
 are specified then connection_pid, subscription_id, stream,
-messages_consumed, offset, offset_lag, credits, properties are displayed.
+messages_consumed, offset, offset_lag, credits, active, activity_status, and properties are displayed.
 .Pp
 For example, this command displays the connection PID, subscription ID and stream
 for each consumer:
@@ -294,7 +306,123 @@ For example, this command displays the connection PID, publisher ID and stream
 for each producer:
 .sp
 .Dl rabbitmq-streams list_stream_publishers connection_pid publisher_id stream
+.\" ------------------------------------------------------------------
+.It Cm add_super_stream Ar super-stream Oo Fl -vhost Ar vhost Oc Oo Fl -partitions Ar partitions Oc Oo Fl -routing-keys Ar routing-keys Oc Oo Fl -max-length-bytes Ar max-length-bytes Oc Oo Fl -max-age Ar max-age Oc Oo Fl -stream-max-segment-size-bytes Ar stream-max-segment-size-bytes Oc Oo Fl -leader-locator Ar leader-locator Oc Oo Fl -initial-cluster-size Ar initial-cluster-size Oc
+.Bl -tag -width Ds
+.It Ar super-stream
+The name of the super stream to create.
+.It Ar vhost
+The name of the virtual host to create the super stream into.
+.It Ar partitions
+The number of partitions the super stream will have.
+.It Ar routing-keys
+Comma-separated list of routing keys.
+.It Ar max-length-bytes
+The maximum size of partition streams, example values: 20gb, 500mb.
+.It Ar max-age
+The maximum age of partition stream segments, using the ISO 8601 duration format, e.g. PT10M30S for 10 minutes 30 seconds, P5DT8H for 5 days 8 hours.
+.It Ar stream-max-segment-size-bytes
+The maximum size of partition stream segments, example values: 500mb, 1gb.
+.It Ar leader-locator
+Leader locator strategy for partition streams.
+Possible values are:
+.Bl -bullet -compact
+.It
+client-local
+.It
+balanced
 .El
+The default is
+.Cm balanced
+.It Ar initial-cluster-size
+The initial cluster size of partition streams.
+.El
+.Pp
+Create a super stream.
+.\" ------------------------------------------------------------------
+.It Cm delete_super_stream Ar super-stream Oo Fl -vhost Ar vhost Oc
+.Bl -tag -width Ds
+.It Ar super-stream
+The name of the super stream to delete.
+.It Ar vhost
+The virtual host of the super stream.
+.Pp
+Delete a super stream.
+.El
+\" ------------------------------------------------------------------
+.It Cm list_stream_consumer_groups Oo Fl p Ar vhost Oc Op Ar groupinfoitem ...
+.Pp
+Lists groups of stream single active consumers for a vhost.
+.Pp
+The
+.Ar groupinfoitem
+parameter is used to indicate which group information items to
+include in the results.
+The column order in the results will match the order of the parameters.
+.Ar groupinfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Ar consumers
+Number of consumers in the group.
+.It Ar partition_index
+The stream partition index if the stream is part of a super stream,
+-1 if it is not.
+.It Ar reference
+The group reference (name).
+.It Ar stream
+The stream the consumers are attached to.
+.El
+.Pp
+If no
+.Ar groupinfoitem
+are specified then stream, reference, partition_index, and consumers are displayed.
+.Pp
+For example, this command displays the stream, reference, and number of consumers
+for each group:
+.sp
+.Dl rabbitmq-streams list_stream_consumer_groups stream reference consumers
+\" ------------------------------------------------------------------
+.It Cm list_stream_group_consumers Fl -stream Ar stream Fl -reference Ar reference Oo Fl -vhost Ar vhost Oc Op Ar consumerinfoitem ...
+.Pp
+Lists consumers of a stream consumer group in a vhost.
+.It Ar stream
+The stream the consumers are attached to.
+.It Ar reference
+The group reference (name).
+.It Ar vhost
+The virtual host of the stream.
+.El
+.Pp
+The
+.Ar consumerinfoitem
+parameter is used to indicate which consumer information items to
+include in the results.
+The column order in the results will match the order of the parameters.
+.Ar consumerinfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Ar connection_name
+Readable name of the consumer connection.
+.It Ar state
+Consumer state; one of:
+.Bl -bullet -compact
+.It
+active
+.It
+inactive
+.El
+.It Ar subscription_id
+The connection-scoped ID of the consumer.
+.El
+.Pp
+If no
+.Ar consumerinfoitem
+are specified then subscription_id, connection_name, and state are displayed.
+.Pp
+For example, this command displays the connection name and state
+for each consumer attached to the stream-1 stream and belonging to the stream-1 group:
+.sp
+.Dl rabbitmq-streams list_stream_group_consumers --stream stream-1 --reference stream-1 connection_name state
 .El
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
