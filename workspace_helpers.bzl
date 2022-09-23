@@ -175,7 +175,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
     hex_pm_erlang_app(
         name = "ra",
         version = "2.3.0",
-        sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
+        sha256 = "ce589a898173d6f1c768d54926079110a896aa48199afa9973f2621c954a08a9",
         deps = [
             "@enough//:erlang_app",
         ],
