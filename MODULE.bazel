@@ -257,7 +257,11 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
+<<<<<<< HEAD
     tag = "v2.2.0",
+=======
+    tag = "v2.3.0",
+>>>>>>> af382c5535 (Pin Osiris to 1.3.1 and Ra to 2.3.0 (#5863))
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")

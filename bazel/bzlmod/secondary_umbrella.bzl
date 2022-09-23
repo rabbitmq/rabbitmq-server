@@ -28,6 +28,13 @@ def secondary_umbrella():
         name = "rabbitmq-server-generic-unix-3.9",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+<<<<<<< HEAD
         strip_prefix = "rabbitmq_server-3.9.13",
         urls = ["https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.9.13.tar.xz"],
+=======
+        strip_prefix = "rabbitmq_server-3.10.7",
+        urls = [
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.10.7.tar.xz"
+            ],
+>>>>>>> af382c5535 (Pin Osiris to 1.3.1 and Ra to 2.3.0 (#5863))
     )

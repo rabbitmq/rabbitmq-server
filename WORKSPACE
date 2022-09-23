@@ -126,11 +126,6 @@ load(
 erlang_config(
     internal_erlang_configs = [
         internal_erlang_from_github_release(
-            name = "23",
-            sha256 = "e3ecb3ac2cc549ab90cd9f8921eaebc8613f4d5c89972a3987e5a762d5a2df08",
-            version = "23.3.4.16",
-        ),
-        internal_erlang_from_github_release(
             name = "24",
             sha256 = "86dddc0de486acc320ed7557f12033af0b5045205290ee4926aa931b3d8b3ab2",
             version = "24.3.4.4",
@@ -157,8 +152,6 @@ register_defaults()
 
 register_toolchains(
     "//bazel/toolchains:elixir_toolchain_external",
-    "//bazel/toolchains:elixir_toolchain_1_10",
-    "//bazel/toolchains:elixir_toolchain_1_12",
     "//bazel/toolchains:elixir_toolchain_1_13",
     "//bazel/toolchains:elixir_toolchain_1_14",
 )
