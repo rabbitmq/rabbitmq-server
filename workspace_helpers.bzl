@@ -174,21 +174,14 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "ra",
-<<<<<<< HEAD
-        version = "2.2.0",
-        sha256 = "e130a9c0bde791d5a1779d1e0145ec50475bc1f03c4c35b59de7541d8757fef9",
-        deps = [
-            "@gen_batch_server//:erlang_app",
-        ],
-        runtime_deps = [
-            "@aten//:erlang_app",
-=======
         version = "2.3.0",
         sha256 = "ce589a898173d6f1c768d54926079110a896aa48199afa9973f2621c954a08a9",
         deps = [
             "@enough//:erlang_app",
->>>>>>> af382c5535 (Pin Osiris to 1.3.1 and Ra to 2.3.0 (#5863))
         ],
+        runtime_deps = [
+            "@aten//:erlang_app",
+        ]
     )
 
     hex_archive(
