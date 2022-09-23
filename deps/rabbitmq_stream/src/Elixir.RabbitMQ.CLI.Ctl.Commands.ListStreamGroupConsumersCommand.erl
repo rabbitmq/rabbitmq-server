@@ -73,8 +73,8 @@ merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false, vhost => <<"/">>}, Opts)}.
 
 usage() ->
-    <<"list_stream_consumer_groups --stream <stream> "
-      "--reference <reference> [--vhost <vhost> [<column> "
+    <<"list_stream_group_consumers --stream <stream> "
+      "--reference <reference> [--vhost <vhost>] [<column> "
       "...]">>.
 
 usage_additional() ->
