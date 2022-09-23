@@ -179,6 +179,9 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         deps = [
             "@enough//:erlang_app",
         ],
+        runtime_deps = [
+            "@aten//:erlang_app",
+        ]
     )
 
     hex_archive(
