@@ -11,6 +11,9 @@ load(
 def elixir_toolchain_external():
     elixir_external(
         name = "external_elixir_installation_ref",
+        target_compatible_with = [
+            Label("//bazel/platforms:elixir_external"),
+        ],
     )
 
     elixir_toolchain(
@@ -42,6 +45,7 @@ def elixir_toolchain_from_http_archive(
         url = url,
         strip_prefix = strip_prefix,
         sha256 = sha256,
+        target_compatible_with = elixir_constraints,
     )
 
     elixir_toolchain(
