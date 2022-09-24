@@ -1732,7 +1732,7 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
                 _ -> Context
             end;
         {Port, {data, Chunk}} when is_binary(Chunk) ->
-            UnicodeChunk = unicode:characters_to_list(Chunk),
+            UnicodeChunk = unicode_characters_to_list(Chunk),
             collect_conf_env_file_output(
               Context, Port, Marker, [Output, UnicodeChunk]);
         {Port, {data, Chunk}} ->
@@ -1811,17 +1811,15 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
     end.
 
 is_sh_set_x_output(Line) ->
-    UnicodeLine = unicode:characters_to_binary(Line),
-    re:run(UnicodeLine, "^\\++ ", [{capture, none}]) =:= match.
+    re:run(Line, "^\\++ ", [unicode, {capture, none}]) =:= match.
 
 is_sh_function(_, []) ->
     false;
-is_sh_function(Line, Lines) ->
-    UnicodeLine1 = unicode:characters_to_binary(Line),
-    UnicodeLine2 = unicode:characters_to_binary(hd(Lines)),
-    re:run(UnicodeLine1, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
+is_sh_function(Line1, Lines) ->
+    Line2 = Lines,
+    re:run(Line1, "\\s\\(\\)\\s*$", [unicode, {capture, none}]) =:= match
     andalso
-    re:run(UnicodeLine2, "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
+    re:run(Line2, "^\\s*\\{\\s*$", [unicode, {capture, none}]) =:= match.
 
 parse_sh_literal([$' | SingleQuoted], Lines, Literal) ->
     parse_single_quoted_literal(SingleQuoted, Lines, Literal);
@@ -2048,8 +2046,9 @@ normalize_path(P0, P1) ->
 
 normalize_path("" = Path) ->
     Path;
-normalize_path(Path) ->
-    unicode:characters_to_list(filename:join(filename:split(Path))).
+normalize_path(Path0) ->
+    Path1 = filename:join(filename:split(Path0)),
+    unicode_characters_to_list(Path1).
 
 this_module_dir() ->
     File = code:which(?MODULE),
@@ -2132,3 +2131,19 @@ query_remote({RemoteNode, Timeout}, Mod, Func, Args) ->
         {badrpc, _} = Error        -> throw({query, RemoteNode, Error});
         _                          -> {ok, Ret}
     end.
+
+unicode_characters_to_list(Input) ->
+    case unicode:characters_to_list(Input) of
+        {error, Partial, Rest} ->
+            log_characters_to_list_error(Input, Partial, Rest),
+            Partial;
+        {incomplete, Partial, Rest} ->
+            log_characters_to_list_error(Input, Partial, Rest),
+            Partial;
+        String when is_list(String) ->
+            String
+    end.
+
+log_characters_to_list_error(Input, Partial, Rest) ->
+    rabbit_log:error("error converting '~tp' to unicode string "
+                     "(partial '~tp', rest '~tp')", [Input, Partial, Rest]).
