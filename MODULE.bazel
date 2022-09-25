@@ -190,7 +190,6 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "jose",
-<<<<<<< HEAD
     repository = "potatosalad/erlang-jose",
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
 )
@@ -199,16 +198,6 @@ erlang_package.hex_package(
     name = "jsx",
     version = "3.1.0",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
-=======
-    commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
-    repository = "michaelklishin/erlang-jose",
-)
-
-erlang_package.hex_package(
-    name = "thoas",
-    sha256 = "442296847aca11db8d25180693d7ca3073d6d7179f66952f07b16415306513b6",
-    version = "0.4.0",
->>>>>>> ddefd27369 (Adopt otp 25.0.4 (backport #5873) (#5874))
 )
 
 erlang_package.git_package(
