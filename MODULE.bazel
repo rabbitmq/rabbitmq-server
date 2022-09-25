@@ -211,15 +211,9 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-<<<<<<< HEAD
     repository = "rabbitmq/osiris",
     tag = "v1.3.1",
     patch_cmds = ["""VERSION=$(git rev-parse HEAD)
-=======
-    branch = "main",
-    patch_cmds = [
-        """VERSION=$(git rev-parse HEAD)
->>>>>>> 0411026233 (Adopt otp 25.0.4 (#5873))
 echo "Injecting ${VERSION} into Makefile..."
 sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
 echo "Injecting ${VERSION} into BUILD.bazel..."
@@ -228,7 +222,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
 """,
     ],
-    repository = "rabbitmq/osiris",
 )
 
 erlang_package.hex_package(
@@ -262,7 +255,6 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-<<<<<<< HEAD
     repository = "rabbitmq/ra",
     tag = "v2.3.0",
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
@@ -291,15 +283,6 @@ erlang_app(
     deps = DEPS,
 )
 """
-=======
-    branch = "main",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
-"""],
-    repository = "rabbitmq/ra",
->>>>>>> 0411026233 (Adopt otp 25.0.4 (#5873))
 )
 
 erlang_package.hex_package(
