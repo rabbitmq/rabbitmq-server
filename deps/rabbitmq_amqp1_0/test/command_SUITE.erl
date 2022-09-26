@@ -91,13 +91,8 @@ when_one_connection(_Config) ->
     Opts = #{node => A, timeout => 2000, verbose => true},
 
     [Connection,Sender] = open_amqp10_connection(_Config),
-
-    TrackedConnections =
-    rabbit_ct_broker_helpers:rpc(_Config, A,
-                                        rabbit_connection_tracking, list, []),
-    println("tracked connections", TrackedConnections),
-
-    println("list_amqp10", 'Elixir.Enum':to_list(?COMMAND:run([], Opts))),
+    
+    [ExpectedConnection] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
     close_amqp10_connection(Connection, Sender).
 
 when_one_amqp091_connection(_Config) ->
