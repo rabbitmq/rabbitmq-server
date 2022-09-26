@@ -449,9 +449,9 @@ r_arg(VHostPath, Kind, Table, Key) ->
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = topic, name = Name}) ->
-    format("'~s' in vhost '~s'", [Name, VHostPath]);
+    format("'~s' in vhost '~ts'", [Name, VHostPath]);
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
-    format("~s '~s' in vhost '~s'", [Kind, Name, VHostPath]).
+    format("~s '~s' in vhost '~ts'", [Kind, Name, VHostPath]).
 
 enable_cover() -> enable_cover(["."]).
 

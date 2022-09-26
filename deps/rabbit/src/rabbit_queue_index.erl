@@ -697,7 +697,7 @@ init_dirty(CleanShutdown, ContainsCheckFun, State, Context) ->
                 %% the process of converting from v2 to v1.
                 [_|_] ->
                     #resource{virtual_host = VHost, name = QName} = State2#qistate.queue_name,
-                    rabbit_log:info("Queue ~s in vhost ~s recovered ~b total messages before resuming convert",
+                    rabbit_log:info("Queue ~s in vhost ~ts recovered ~b total messages before resuming convert",
                                     [QName, VHost, Count]),
                     CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
                     State3 = recover_index_v2_dirty(State2, ContainsCheckFun, CountersRef),
@@ -715,14 +715,14 @@ recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
                                            on_sync_msg = OnSyncMsgFun },
                        ContainsCheckFun, CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting queue ~s in vhost ~s from v2 to v1 after unclean shutdown", [QName, VHost]),
+    rabbit_log:info("Converting queue ~s in vhost ~ts from v2 to v1 after unclean shutdown", [QName, VHost]),
     %% We cannot use the counts/bytes because some messages may be in both
     %% the v1 and v2 indexes after a crash.
     {_, _, V2State} = rabbit_classic_queue_index_v2:recover(Name, non_clean_shutdown, true,
                                                             ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                                             convert),
     State = recover_index_v2_common(State0, V2State, CountersRef),
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v2 to v1",
+    rabbit_log:info("Queue ~s in vhost ~ts converted ~b total messages from v2 to v1",
                     [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 

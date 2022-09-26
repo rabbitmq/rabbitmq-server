@@ -991,7 +991,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       flying_ets          = FlyingEts,
                                       clients             = Clients,
                                       dir                 = Dir }) ->
-    rabbit_log:info("Stopping message store for directory '~s'", [Dir]),
+    rabbit_log:info("Stopping message store for directory '~ts'", [Dir]),
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
@@ -1006,7 +1006,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
         ok           -> ok;
         {error, FSErr} ->
             rabbit_log:error("Unable to store file summary"
-                             " for vhost message store for directory ~p~n"
+                             " for vhost message store for directory ~tp~n"
                              "Error: ~p",
                              [Dir, FSErr])
     end,
@@ -1016,11 +1016,11 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     case store_recovery_terms([{client_refs, maps:keys(Clients)},
                                {index_module, IndexModule}], Dir) of
         ok           ->
-            rabbit_log:info("Message store for directory '~s' is stopped", [Dir]),
+            rabbit_log:info("Message store for directory '~ts' is stopped", [Dir]),
             ok;
         {error, RTErr} ->
             rabbit_log:error("Unable to save message store recovery terms"
-                             " for directory ~p~nError: ~p",
+                             " for directory ~tp~nError: ~p",
                              [Dir, RTErr])
     end,
     State3 #msstate { index_state         = undefined,
@@ -1773,7 +1773,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
 build_index_worker(Gatherer, State = #msstate { dir = Dir },
                    Left, File, Files) ->
     FileName = filenum_to_name(File),
-    rabbit_log:debug("Rebuilding message location index from ~p (~B file(s) remaining)",
+    rabbit_log:debug("Rebuilding message location index from ~ts (~B file(s) remaining)",
                      [form_filename(Dir, FileName), length(Files)]),
     {ok, Messages, FileSize} =
         scan_file_for_valid_messages(Dir, FileName),

@@ -240,7 +240,7 @@ i(sockets_used, State) ->
 i(sockets_total, State) ->
     {State, proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]))};
 i(os_pid, State) ->
-    {State, list_to_binary(os:getpid())};
+    {State, rabbit_data_coercion:to_utf8_binary(os:getpid())};
 i(mem_used, State) ->
     {State, vm_memory_monitor:get_process_memory()};
 i(mem_calculation_strategy, State) ->
@@ -273,11 +273,11 @@ i(rates_mode, State) ->
 i(exchange_types, State) ->
     {State, list_registry_plugins(exchange)};
 i(log_files, State) ->
-    {State, [list_to_binary(F) || F <- rabbit:log_locations()]};
+    {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:log_locations()]};
 i(db_dir, State) ->
-    {State, list_to_binary(rabbit_mnesia:dir())};
+    {State, rabbit_data_coercion:to_utf8_binary(rabbit_mnesia:dir())};
 i(config_files, State) ->
-    {State, [list_to_binary(F) || F <- rabbit:config_files()]};
+    {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:config_files()]};
 i(net_ticktime, State) ->
     {State, net_kernel:get_net_ticktime()};
 i(persister_stats, State) ->
@@ -334,11 +334,11 @@ registry_plugin_enabled(Desc, Fun) ->
 
 format_application({Application, Description, Version}) ->
     [{name, Application},
-     {description, list_to_binary(Description)},
-     {version, list_to_binary(Version)}].
+     {description, rabbit_data_coercion:to_utf8_binary(Description)},
+     {version, rabbit_data_coercion:to_utf8_binary(Version)}].
 
 set_plugin_name(Name, Module) ->
-    [{name, list_to_binary(atom_to_list(Name))} |
+    [{name, atom_to_binary(Name, utf8)} |
      proplists:delete(name, Module:description())].
 
 persister_stats(#state{fhc_stats = FHC}) ->
@@ -373,8 +373,8 @@ rabbit_web_dispatch_registry_list_all() ->
     end.
 
 format_context({Path, Description, Rest}) ->
-    [{description, list_to_binary(Description)},
-     {path,        list_to_binary("/" ++ Path)} |
+    [{description, rabbit_data_coercion:to_utf8_binary(Description)},
+     {path,        rabbit_data_coercion:to_utf8_binary("/" ++ Path)} |
      format_mochiweb_option_list(Rest)].
 
 format_mochiweb_option_list(C) ->
@@ -383,9 +383,9 @@ format_mochiweb_option_list(C) ->
 format_mochiweb_option(ssl_opts, V) ->
     format_mochiweb_option_list(V);
 format_mochiweb_option(_K, V) ->
-    case io_lib:printable_list(V) of
-        true  -> list_to_binary(V);
-        false -> list_to_binary(rabbit_misc:format("~w", [V]))
+    case io_lib:printable_unicode_list(V) of
+        true  -> rabbit_data_coercion:to_utf8_binary(V);
+        false -> rabbit_data_coercion:to_utf8_binary(rabbit_misc:format("~w", [V]))
     end.
 
 %%--------------------------------------------------------------------

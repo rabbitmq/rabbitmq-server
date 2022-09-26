@@ -367,7 +367,7 @@ reset_pending(State = #{dest := Dest}) ->
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~s' has no more URIs to try for connection",
+          "Shovel '~s' in vhost '~ts' has no more URIs to try for connection",
           [Name, VHost]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
@@ -401,7 +401,7 @@ do_make_conn_and_chan(URIs, ShovelName) ->
 
 log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~s' failed to connect (URI: ~s): ~s",
+          "Shovel '~s' in vhost '~ts' failed to connect (URI: ~s): ~s",
       [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(

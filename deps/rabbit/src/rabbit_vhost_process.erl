@@ -37,7 +37,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    rabbit_log:debug("Recovering data for VHost ~p", [VHost]),
+    rabbit_log:debug("Recovering data for VHost ~ts", [VHost]),
     try
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),

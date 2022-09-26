@@ -78,7 +78,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                             %% We must distinguish between a delete and restart
                             case is_restart(ReqData) of
                                 true ->
-                                    rabbit_log:info("Asked to restart shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
+                                    rabbit_log:info("Asked to restart shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {_, Msg} -> rabbit_log:error(Msg),
@@ -86,7 +86,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                                     end;
 
                                 _ ->
-                                    rabbit_log:info("Asked to delete shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
+                                    rabbit_log:info("Asked to delete shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {_, Msg} -> rabbit_log:error(Msg),
