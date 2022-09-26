@@ -12,6 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+        - erlang_version: "24.3"
+          name: '24'
         - erlang_version: "25.0"
           name: '25'
         #! - erlang_version: "25.1"
@@ -93,15 +95,12 @@ jobs:
            Automated changes created by
            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
            using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
-           GitHub action
-
-           Source workflow: `${{ github.action_path }}`
+           GitHub action in the ${{ github.workflow }} workflow.
         commit-message: |
           Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
           backport-v3.11.x
           backport-v3.10.x
           backport-v3.9.x
-          backport-v3.8.x
         branch: bump-otp-${{ matrix.erlang_version }}
         delete-branch: true
