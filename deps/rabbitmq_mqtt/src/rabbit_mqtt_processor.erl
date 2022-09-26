@@ -489,19 +489,19 @@ hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, Msg) ->
 
 maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos},
                             #proc_state{amqp2mqtt_fun = Amqp2MqttFun,
-                                        packet_id = PacketId} = PState0) ->
+                                        packet_id = PacketId0} = PState0) ->
     Topic1 = Amqp2MqttFun(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
-        undefined -> PState0;
-        Msg       ->
-            %% calculate effective QoS as the lower value of SUBSCRIBE frame QoS
-            %% and retained message QoS. The spec isn't super clear on this, we
-            %% do what Mosquitto does, per user feedback.
-            Qos = erlang:min(SubscribeQos, Msg#mqtt_msg.qos),
-            {Id, PState} = case Qos of
-                               ?QOS_0 -> {undefined, PState0};
-                               ?QOS_1 -> {PacketId, PState0#proc_state{packet_id = increment_packet_id(PacketId)}}
-                           end,
+        undefined ->
+            PState0;
+        Msg ->
+            Qos = effective_qos(Msg#mqtt_msg.qos, SubscribeQos),
+            {PacketId, PState} = case Qos of
+                                     ?QOS_0 ->
+                                         {undefined, PState0};
+                                     ?QOS_1 ->
+                                         {PacketId0, PState0#proc_state{packet_id = increment_packet_id(PacketId0)}}
+                                 end,
             serialise_and_send_to_client(
               #mqtt_frame{fixed = #mqtt_frame_fixed{
                                      type = ?PUBLISH,
@@ -509,7 +509,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
                                      dup  = false,
                                      retain = Msg#mqtt_msg.retain
                                     }, variable = #mqtt_frame_publish{
-                                                     message_id = Id,
+                                                     message_id = PacketId,
                                                      topic_name = Topic1
                                                     },
                           payload = Msg#mqtt_msg.payload},
@@ -517,17 +517,17 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
             PState
     end.
 
-make_will_msg(#mqtt_frame_connect{ will_flag   = false }) ->
+make_will_msg(#mqtt_frame_connect{will_flag   = false}) ->
     undefined;
-make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
-                                   will_qos    = Qos,
-                                   will_topic  = Topic,
-                                   will_msg    = Msg }) ->
-    #mqtt_msg{ retain  = Retain,
-               qos     = Qos,
-               topic   = Topic,
-               dup     = false,
-               payload = Msg }.
+make_will_msg(#mqtt_frame_connect{will_retain = Retain,
+                                  will_qos    = Qos,
+                                  will_topic  = Topic,
+                                  will_msg    = Msg}) ->
+    #mqtt_msg{retain  = Retain,
+              qos     = Qos,
+              topic   = Topic,
+              dup     = false,
+              payload = Msg}.
 
 process_login(_UserBin, _PassBin, _ClientId,
               #proc_state{peer_addr  = Addr,
@@ -999,9 +999,8 @@ binding_action(
                        key = RoutingKey},
     BindingFun(Binding, Username).
 
-send_will(PState = #proc_state{will_msg = undefined}) ->
-    PState;
-
+send_will(#proc_state{will_msg = undefined}) ->
+    ok;
 send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
                                                               topic = Topic},
                                retainer_pid = RPid,
@@ -1010,25 +1009,14 @@ send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
         ok ->
             publish_to_queues(WillMsg, PState),
             case Retain of
-                false -> ok;
-                true  ->
+                false ->
+                    ok;
+                true ->
                     hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, WillMsg)
             end;
-        Error  ->
-            rabbit_log:warning(
-                "Could not send last will: ~tp",
-                [Error])
-    end,
-    %%TODO cancel queue client?
-    % case ChQos1 of
-    %     undefined -> ok;
-    %     _         -> amqp_channel:close(ChQos1)
-    % end,
-    % case ChQos0 of
-    %     undefined -> ok;
-    %     _         -> amqp_channel:close(ChQos0)
-    % end,
-    PState.
+        {error, access_refused = Reason}  ->
+            rabbit_log:error("failed to send will message: ~p", [Reason])
+    end.
 
 publish_to_queues(undefined, PState) ->
     {ok, PState};
@@ -1105,6 +1093,11 @@ process_routing_confirm(#delivery{confirm = false}, [], PState) ->
     rabbit_global_counters:messages_unroutable_dropped(mqtt, 1),
     PState;
 process_routing_confirm(#delivery{confirm = true,
+                                  msg_seq_no = undefined}, [], PState) ->
+    %% unroutable will message with QoS > 0
+    rabbit_global_counters:messages_unroutable_dropped(mqtt, 1),
+    PState;
+process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = MsgId}, [], PState) ->
     rabbit_global_counters:messages_unroutable_returned(mqtt, 1),
     %% MQTT 5 spec:
@@ -1115,10 +1108,14 @@ process_routing_confirm(#delivery{confirm = true,
 process_routing_confirm(#delivery{confirm = false}, _, PState) ->
     PState;
 process_routing_confirm(#delivery{confirm = true,
+                                  msg_seq_no = undefined}, [_|_], PState) ->
+    %% routable will message with QoS > 0
+    PState;
+process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = MsgId},
                         Qs, PState = #proc_state{unacked_client_pubs = U0}) ->
     QNames = queue_names(Qs),
-    U = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
+    {ok, U} = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
     PState#proc_state{unacked_client_pubs = U}.
 
 send_puback(MsgIds, PState)
@@ -1250,10 +1247,7 @@ deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
                         false ->
                             ?QOS_0
                     end,
-    %% "The QoS of Application Messages sent in response to a Subscription MUST be the minimum
-    %% of the QoS of the originally published message and the Maximum QoS granted by the Server
-    %% [MQTT-3.8.4-8]."
-    QoS = min(PublisherQoS, SubscriberQoS),
+    QoS = effective_qos(PublisherQoS, SubscriberQoS),
     PState1 = maybe_publish_to_client(Msg, QoS, PState0),
     PState = maybe_ack(AckRequired, QoS, QName, QMsgId, PState1),
     %%TODO GC
@@ -1263,6 +1257,13 @@ deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
     % end,
     ok = maybe_notify_sent(QName, QPid, PState),
     PState.
+
+-spec effective_qos(qos(), qos()) -> qos().
+effective_qos(PublisherQoS, SubscriberQoS) ->
+    %% "The QoS of Application Messages sent in response to a Subscription MUST be the minimum
+    %% of the QoS of the originally published message and the Maximum QoS granted by the Server
+    %% [MQTT-3.8.4-8]."
+    erlang:min(PublisherQoS, SubscriberQoS).
 
 maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, PState) ->
     %% Do no redeliver to MQTT subscriber who gets message at most once.
@@ -1405,28 +1406,27 @@ check_topic_access(TopicName, Access,
             end
     end.
 
-info(unacked_client_pubs, #proc_state{unacked_client_pubs = Val}) -> Val;
-info(client_id, #proc_state{client_id = Val}) ->
-    rabbit_data_coercion:to_binary(Val);
-info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
-info(will_msg, #proc_state{will_msg = Val}) -> Val;
-info(exchange, #proc_state{exchange = #resource{name = Val}}) -> Val;
-info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
-info(retainer_pid, #proc_state{retainer_pid = Val}) -> Val;
-info(user, #proc_state{auth_state = #auth_state{username = Val}}) -> Val;
-info(vhost, #proc_state{auth_state = #auth_state{vhost = Val}}) -> Val;
+info(protocol, #proc_state{info = #info{proto_human = Val}}) -> Val;
 info(host, #proc_state{info = #info{host = Val}}) -> Val;
 info(port, #proc_state{info = #info{port = Val}}) -> Val;
 info(peer_host, #proc_state{info = #info{peer_host = Val}}) -> Val;
 info(peer_port, #proc_state{info = #info{peer_port = Val}}) -> Val;
-info(protocol, #proc_state{info = #info{proto_human = Val}}) -> Val;
-% info(frame_max, PState) -> additional_info(frame_max, PState);
-% info(client_properties, PState) -> additional_info(client_properties, PState);
-% info(ssl, PState) -> additional_info(ssl, PState);
-% info(ssl_protocol, PState) -> additional_info(ssl_protocol, PState);
-% info(ssl_key_exchange, PState) -> additional_info(ssl_key_exchange, PState);
-% info(ssl_cipher, PState) -> additional_info(ssl_cipher, PState);
-% info(ssl_hash, PState) -> additional_info(ssl_hash, PState);
+info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
+info(client_id, #proc_state{client_id = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
+info(vhost, #proc_state{auth_state = #auth_state{vhost = Val}}) -> Val;
+info(user, #proc_state{auth_state = #auth_state{username = Val}}) -> Val;
+info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
+info(will_msg, #proc_state{will_msg = Val}) -> Val;
+info(retainer_pid, #proc_state{retainer_pid = Val}) -> Val;
+info(exchange, #proc_state{exchange = #resource{name = Val}}) -> Val;
+info(subscriptions, #proc_state{subscriptions = Val}) ->
+    maps:keys(Val);
+info(prefetch, #proc_state{info = #info{prefetch = Val}}) -> Val;
+info(messages_unconfirmed, #proc_state{unacked_client_pubs = Val}) ->
+    rabbit_mqtt_confirms:size(Val);
+info(messages_unacknowledged, #proc_state{unacked_server_pubs = Val}) ->
+    maps:size(Val);
 info(Other, _) -> throw({bad_argument, Other}).
 
 -spec ssl_login_name(rabbit_net:socket()) ->

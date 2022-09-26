@@ -6,13 +6,11 @@
 
 
 -module(command_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
-
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
@@ -71,9 +69,8 @@ merge_defaults(_Config) ->
 
 
 run(Config) ->
-
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Opts = #{node => Node, timeout => 10000, verbose => false},
+    Opts = #{node => Node, timeout => 10_000, verbose => false},
 
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
@@ -85,7 +82,7 @@ run(Config) ->
                                  {proto_ver, v4},
                                  {ack_timeout, 1}]),
     {ok, _} = emqtt:connect(C1),
-    ct:sleep(100),
+    timer:sleep(100),
 
     [[{client_id, <<"simpleClient">>}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
@@ -99,7 +96,7 @@ run(Config) ->
                                  {password, <<"guest">>},
                                  {ack_timeout, 1}]),
     {ok, _} = emqtt:connect(C2),
-    ct:sleep(200),
+    timer:sleep(200),
 
     [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
      [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]] =
@@ -110,15 +107,15 @@ run(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     start_amqp_connection(network, Node, Port),
 
-    %% There are still just two connections
+    %% There are still just two MQTT connections
     [[{client_id, <<"simpleClient">>}],
      [{client_id, <<"simpleClient1">>}]] =
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     start_amqp_connection(direct, Node, Port),
-    ct:sleep(200),
+    timer:sleep(200),
 
-    %% Still two MQTT connections, one direct AMQP 0-9-1 connection
+    %% Still two MQTT connections
     [[{client_id, <<"simpleClient">>}],
      [{client_id, <<"simpleClient1">>}]] =
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),

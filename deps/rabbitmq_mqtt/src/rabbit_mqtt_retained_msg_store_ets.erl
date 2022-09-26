@@ -50,5 +50,4 @@ delete(Topic, #store_state{table = T}) ->
   ok.
 
 terminate(#store_state{table = T, filename = Path}) ->
-  ok = ets:tab2file(T, Path,
-                    [{extended_info, [object_count]}]).
+  ok = ets:tab2file(T, Path, [{extended_info, [object_count]}]).

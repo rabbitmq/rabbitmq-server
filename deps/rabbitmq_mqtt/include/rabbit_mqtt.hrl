@@ -11,6 +11,7 @@
 
 %% reader state
 -record(state, {socket,
+                proxy_socket,
                 conn_name,
                 await_recv,
                 deferred_recv,
@@ -42,7 +43,7 @@
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
          client_id,
-         clean_sess,
+         clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),
          ssl_login_name,
@@ -72,37 +73,41 @@
                peer_port,
                proto_human}).
 
-%% does not include vhost: it is used in
-%% the table name
+%% does not include vhost because vhost is used in the (D)ETS table name
 -record(retained_message, {topic,
                            mqtt_msg}).
 
 -define(INFO_ITEMS,
-    [host,
-     port,
-     peer_host,
-     peer_port,
-     protocol,
-     frame_max,
-     client_properties,
-     ssl,
-     ssl_protocol,
-     ssl_key_exchange,
-     ssl_cipher,
-     ssl_hash,
-     conn_name,
-     connection_state,
-     connection,
-     unacked_client_pubs,
-     unacked_server_pubs,
-     packet_id,
-     client_id,
-     clean_sess,
-     will_msg,
-     exchange,
-     ssl_login_name,
-     retainer_pid,
-     user,
-     vhost]).
+        [protocol,
+         host,
+         port,
+         peer_host,
+         peer_port,
+         connection,
+         conn_name,
+         connection_state,
+         ssl,
+         ssl_protocol,
+         ssl_key_exchange,
+         ssl_cipher,
+         ssl_hash,
+         ssl_login_name,
+         client_id,
+         vhost,
+         user,
+         recv_cnt,
+         recv_oct,
+         send_cnt,
+         send_oct,
+         send_pend,
+         clean_sess,
+         will_msg,
+         retainer_pid,
+         exchange,
+         subscriptions,
+         prefetch,
+         messages_unconfirmed,
+         messages_unacknowledged
+        ]).
 
 -define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).

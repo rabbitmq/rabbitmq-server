@@ -37,7 +37,7 @@ insert(PktId, _, State)
 insert(PktId, QNames, State)
   when is_integer(PktId) andalso PktId > 0 ->
     QMap = maps:from_keys(QNames, ok),
-    maps:put(PktId, QMap, State).
+    {ok, maps:put(PktId, QMap, State)}.
 
 -spec confirm([packet_id()], queue_name(), state()) ->
     {[packet_id()], state()}.

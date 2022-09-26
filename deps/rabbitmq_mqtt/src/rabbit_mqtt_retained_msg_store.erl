@@ -22,4 +22,13 @@ behaviour_info(_Other) ->
 table_name_for(VHost) ->
   rabbit_mqtt_util:vhost_name_to_table_name(VHost).
 
-%%TODO could add a rabbitmq_mqtt_retained_msg_store_khepri to have some replication
+%% TODO
+%% Support retained messages in RabbitMQ cluster:
+%% * SUBSCRIBE on a different node than PUBLISH with retain
+%% * replicate retained message for data safety
+%%
+%% Possible solutions:
+%% * rabbitmq_mqtt_retained_msg_store_mnesia
+%% * rabbitmq_mqtt_retained_msg_store_khepri
+%% * rabbitmq_mqtt_retained_msg_store_ra (implementing our own ra machine) or
+%% * use existing mqtt_machine

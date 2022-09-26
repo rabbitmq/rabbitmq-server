@@ -48,7 +48,10 @@ open_table(Dir, VHost) ->
     table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))).
 
 table_options(Path) ->
-  [{type, set}, {keypos, #retained_message.topic},
-    {file, Path}, {ram_file, true}, {repair, true},
-    {auto_save, rabbit_misc:get_env(rabbit_mqtt,
-                                    retained_message_store_dets_sync_interval, 2000)}].
+    [{type, set},
+     {keypos, #retained_message.topic},
+     {file, Path},
+     {ram_file, true},
+     {repair, true},
+     {auto_save, rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000)}
+    ].

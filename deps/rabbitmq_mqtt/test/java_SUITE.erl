@@ -6,12 +6,11 @@
 %%
 
 -module(java_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(BASE_CONF_RABBIT, {rabbit, [{ssl_options, [{fail_if_no_peer_cert, false}]}]}).
 -define(BASE_CONF_MQTT,
         {rabbitmq_mqtt, [
            {ssl_cert_login,   true},

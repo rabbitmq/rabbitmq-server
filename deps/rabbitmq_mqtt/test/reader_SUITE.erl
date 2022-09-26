@@ -24,10 +24,10 @@ groups() ->
                                 handle_invalid_frames,
                                 login_timeout,
                                 stats,
-                                quorum_session_false,
-                                quorum_session_true,
-                                classic_session_true,
-                                classic_session_false
+                                quorum_clean_session_false,
+                                quorum_clean_session_true,
+                                classic_clean_session_true,
+                                classic_clean_session_false
       ]}
     ].
 
@@ -199,10 +199,10 @@ stats(Config) ->
                               [connection_coarse_metrics, Pid]),
     ok = emqtt:disconnect(C).
 
-get_durable_queue_type(Server, Q0) ->
-    QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
-    {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
-    amqqueue:get_type(Q1).
+get_durable_queue_type(Server, QNameBin) ->
+    QName = rabbit_misc:r(<<"/">>, queue, QNameBin),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+    amqqueue:get_type(Q).
 
 set_env(QueueType) ->
     application:set_env(rabbitmq_mqtt, durable_queue_type, QueueType).
@@ -210,8 +210,7 @@ set_env(QueueType) ->
 get_env() ->
     rabbit_mqtt_util:env(durable_queue_type).
 
-
-validate_durable_queue_type(Config, ClientName, CleanSession, Expected) ->
+validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {ok, C} = emqtt:start_link([{host, "localhost"},
@@ -226,35 +225,29 @@ validate_durable_queue_type(Config, ClientName, CleanSession, Expected) ->
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicB">>),
     Prefix = <<"mqtt-subscription-">>,
     Suffix = <<"qos1">>,
-    Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
-    ?assertEqual(Expected,get_durable_queue_type(Server,Q)),
-    timer:sleep(500),
+    QNameBin = <<Prefix/binary, ClientName/binary, Suffix/binary>>,
+    ?assertEqual(ExpectedQueueType, get_durable_queue_type(Server, QNameBin)),
     ok = emqtt:disconnect(C).
 
-%% quorum queue test when enable
-quorum_session_false(Config) ->
-  %%  test if the quorum queue is enable after the setting
+quorum_clean_session_false(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),
     rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
+    validate_durable_queue_type(Config, <<"quorumCleanSessionFalse">>, false, rabbit_quorum_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
-quorum_session_true(Config) ->
-  %%  in case clean session == true must be classic since quorum
-  %% doesn't support auto-delete
+quorum_clean_session_true(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),
     rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionTrue">>, true, rabbit_classic_queue),
+    %% Since we use a clean session and quorum queues cannot be auto-delete or exclusive,
+    %% we expect a classic queue.
+    validate_durable_queue_type(Config, <<"quorumCleanSessionTrue">>, true, rabbit_classic_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
-classic_session_true(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionTrue">>, true, rabbit_classic_queue).
+classic_clean_session_true(Config) ->
+    validate_durable_queue_type(Config, <<"classicCleanSessionTrue">>, true, rabbit_classic_queue).
 
-classic_session_false(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionFalse">>, false, rabbit_classic_queue).
-
+classic_clean_session_false(Config) ->
+    validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->

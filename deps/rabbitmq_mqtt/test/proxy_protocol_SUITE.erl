@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(proxy_protocol_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").

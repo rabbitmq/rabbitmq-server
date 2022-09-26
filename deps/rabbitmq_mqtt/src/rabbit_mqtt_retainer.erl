@@ -16,8 +16,7 @@
 
 -export([retain/3, fetch/2, clear/2, store_module/0]).
 
--define(SERVER, ?MODULE).
--define(TIMEOUT, 30000).
+-define(TIMEOUT, 30_000).
 
 -record(retainer_state, {store_mod,
                          store}).

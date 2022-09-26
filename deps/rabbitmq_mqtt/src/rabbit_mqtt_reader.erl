@@ -71,6 +71,7 @@ init(Ref) ->
              rabbit_event:init_stats_timer(
               control_throttle(
                #state{socket                 = RealSocket,
+                      proxy_socket           = rabbit_net:maybe_get_proxy_socket(Sock),
                       conn_name              = ConnStr,
                       await_recv             = false,
                       connection_state       = running,
@@ -409,12 +410,17 @@ parse(Bytes, ParseState) ->
             {error, {cannot_parse, Reason, Stacktrace}}
     end.
 
+%% TODO Send will message in all abnormal shutdowns?
+%% => in terminate/2 depending on Reason
+%% "The Will Message MUST be published when the Network Connection is subsequently
+%% closed unless the Will Message has been deleted by the Server on receipt of a
+%% DISCONNECT Packet [MQTT-3.1.2-8]."
 send_will_and_terminate(PState, State) ->
     send_will_and_terminate(PState, {shutdown, conn_closed}, State).
 
 send_will_and_terminate(PState, Reason, State = #state{conn_name = ConnStr}) ->
-    rabbit_mqtt_processor:send_will(PState),
     rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~p", [ConnStr]),
+    rabbit_mqtt_processor:send_will(PState),
     {stop, Reason, State}.
 
 network_error(closed,
@@ -527,5 +533,23 @@ info_internal(connection_state, #state{connection_state = Val}) ->
     Val;
 info_internal(connection, _State) ->
     self();
+info_internal(ssl, #state{socket = Sock, proxy_socket = ProxySock}) ->
+    rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
+info_internal(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
+info_internal(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
+info_internal(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
+info_internal(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
 info_internal(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).
+
+ssl_info(F, #state{socket = Sock, proxy_socket = ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            #{cipher := C,
+              key_exchange := K,
+              mac := H} = proplists:get_value(selected_cipher_suite, Items),
+            F({P, {K, C, H}})
+    end.
