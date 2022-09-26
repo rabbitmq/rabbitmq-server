@@ -14,6 +14,7 @@
 -define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 -define(STREAM_OFFSET_HEADER, <<"x-stream-offset">>).
 -define(FOOTER, <<"x-amqp-1.0-footer">>).
+-define(X_DELIVERY_COUNT, <<"x-delivery-count">>).
 -define(CONVERT_AMQP091_HEADERS_TO_APP_PROPS, application:get_env(rabbitmq_amqp1_0, convert_amqp091_headers_to_app_props, false)).
 -define(CONVERT_APP_PROPS_TO_AMQP091_HEADERS, application:get_env(rabbitmq_amqp1_0, convert_app_props_to_amqp091_headers, false)).
 
@@ -211,7 +212,10 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        priority = wrap(ubyte, Props#'P_basic'.priority),
        ttl = from_expiration(Props),
        first_acquirer = not Redelivered,
-       delivery_count = undefined},
+       delivery_count = case Redelivered of
+                            true -> deliverycount_from_headers(Headers);
+                            false -> undefined
+                        end},
     HeadersBin = amqp10_framing:encode_bin(Header10),
     MsgAnnoBin0 =
         case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
@@ -349,5 +353,12 @@ type091_to_type10(Type, Value) ->
         rabbit_msg_record:from_091(Type, Value)
     catch
         _:function_clause -> undefined
+    end.
+
+deliverycount_from_headers(Headers) -> 
+    case table_lookup(Headers, ?X_DELIVERY_COUNT) of
+            undefined -> undefined;
+            {_, Value} when is_integer(Value) -> wrap(uint,Value);
+            _ -> undefined
     end.
 
