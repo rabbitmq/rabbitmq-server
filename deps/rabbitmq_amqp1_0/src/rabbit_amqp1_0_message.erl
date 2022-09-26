@@ -14,6 +14,13 @@
 -define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 -define(STREAM_OFFSET_HEADER, <<"x-stream-offset">>).
 -define(FOOTER, <<"x-amqp-1.0-footer">>).
+<<<<<<< HEAD
+=======
+-define(X_DELIVERY_COUNT, <<"x-delivery-count">>).
+-define(CONVERT_AMQP091_HEADERS_TO_APP_PROPS, application:get_env(rabbitmq_amqp1_0, convert_amqp091_headers_to_app_props, false)).
+-define(CONVERT_APP_PROPS_TO_AMQP091_HEADERS, application:get_env(rabbitmq_amqp1_0, convert_app_props_to_amqp091_headers, false)).
+
+>>>>>>> a46458f3cf (mapping deliverycount if present in headers)
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -200,7 +207,10 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        priority = wrap(ubyte, Props#'P_basic'.priority),
        ttl = from_expiration(Props),
        first_acquirer = not Redelivered,
-       delivery_count = undefined},
+       delivery_count = case Redelivered of
+                            true -> deliverycount_from_headers(Headers);
+                            false -> undefined
+                        end},
     HeadersBin = amqp10_framing:encode_bin(Header10),
     MsgAnnoBin0 =
         case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
@@ -282,3 +292,62 @@ map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
 map_add(KeyType, Key, Type, Value, Acc) ->
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
+<<<<<<< HEAD
+=======
+
+amqp10_app_props_to_amqp091_headers(CurrentHeaders, AppPropsBin) -> 
+    case amqp10_framing:decode_bin(AppPropsBin) of 
+        [#'v1_0.application_properties'{ content = AppProps}] when is_list(AppProps) -> 
+            Hs = case CurrentHeaders of 
+                undefined -> [];
+                Headers -> Headers
+            end,
+            lists:foldl(fun(Prop, Acc) -> 
+                            case Prop of 
+                                {{utf8, Key}, {ValueType, Value}} -> 
+                                    case type10_to_type091(Key, ValueType, Value) of 
+                                        undefined -> Acc;
+                                        Typed -> [Typed |Acc]
+                                    end;
+                                _ -> Acc
+                            end
+                         end, Hs, AppProps);
+        _ -> CurrentHeaders
+    end.
+type10_to_type091(Key, Type, Value) -> 
+    try
+        rabbit_msg_record:to_091(Key, {Type, Value})
+    catch
+        _:function_clause -> undefined
+    end.
+
+amqp091_headers_to_amqp10_app_props(undefined) -> undefined;
+amqp091_headers_to_amqp10_app_props(Headers) when is_list(Headers) -> 
+    AppPropsOut = lists:foldl(fun(H, Acc) -> 
+        case H of 
+            {Key, Type, Value} -> 
+                case type091_to_type10(Type, Value) of 
+                    undefined -> Acc;
+                    Typed -> 
+                        [{{utf8, Key}, Typed}|Acc]
+                end;
+            _ -> Acc
+        end
+    end, [], Headers),
+    #'v1_0.application_properties'{content = AppPropsOut}.
+    
+type091_to_type10(Type, Value) ->
+    try
+        rabbit_msg_record:from_091(Type, Value)
+    catch
+        _:function_clause -> undefined
+    end.
+
+deliverycount_from_headers(Headers) -> 
+    case table_lookup(Headers, ?X_DELIVERY_COUNT) of
+            undefined -> undefined;
+            {_, Value} when is_integer(Value) -> wrap(uint,Value);
+            _ -> undefined
+    end.
+
+>>>>>>> a46458f3cf (mapping deliverycount if present in headers)
