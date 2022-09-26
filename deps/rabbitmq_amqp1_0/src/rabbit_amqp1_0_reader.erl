@@ -750,6 +750,9 @@ info(Pid, InfoItems) ->
         UnknownItems -> throw({bad_argument, UnknownItems})
     end.
 
+info_internal(pid, #v1{}) -> self();
+info_internal(connection, #v1{connection = Val}) ->
+    Val;
 info_internal(node, #v1{}) -> node();
 info_internal(auth_mechanism, #v1{connection = #v1_connection{auth_mechanism = none}}) ->
     none;
@@ -764,11 +767,11 @@ info_internal(frame_max, #v1{connection = #v1_connection{frame_max = Val}}) ->
 info_internal(timeout, #v1{connection = #v1_connection{timeout_sec = Val}}) ->
     Val;
 info_internal(user,
-              #v1{connection = #v1_connection{user = #user{username = none}}}) ->
-    '';
-info_internal(username,
-              #v1{connection = #v1_connection{user = #user{username = Val}}}) ->
+              #v1{connection = #v1_connection{user = {user, Val, _, _}}}) ->
     Val;
+info_internal(user,
+              #v1{connection = #v1_connection{user = none}}) ->
+    '';
 info_internal(state, #v1{connection_state = Val}) ->
     Val;
 info_internal(SockStat, S) when SockStat =:= recv_oct;
