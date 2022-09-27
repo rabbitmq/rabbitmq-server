@@ -17,7 +17,7 @@
 
 all() ->
     [
-       {group, non_parallel_tests}
+     {group, non_parallel_tests}
     ].
 
 groups() ->
@@ -78,8 +78,6 @@ validate(_Config) ->
     {validation_failure,{bad_info_key,[other]}} =
         ?COMMAND:validate([<<"other">>], #{}).
 
-println(What, Value) -> io:format("~p : ~p~n", [What, Value]).
-
 when_no_connections(_Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(_Config, nodename),
     Opts = #{node => A, timeout => 2000, verbose => true},
@@ -139,7 +137,7 @@ open_amqp10_connection(Config) ->
 
     % wait for a delivery
     receive
-        {amqp10_msg, Receiver, _InMsg} -> println("Received amqp 1.0 message",_InMsg ), ok
+        {amqp10_msg, Receiver, _InMsg} -> ct:pal("Received amqp 1.0 message : ~w~n", [_InMsg]), ok
     after 2000 ->
               exit(delivery_timeout)
     end,
@@ -159,7 +157,7 @@ flush(Prefix) ->
 
 close_amqp10_connection(Connection, Sender) ->
   flush("final"),
-  println("Closing connection", Connection),
+  ct:pal("Closing connection ~w~n", [Connection]),
   ok = amqp10_client:detach_link(Sender),
   ok = amqp10_client:close_connection(Connection),
   ok.
