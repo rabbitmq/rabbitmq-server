@@ -1,5 +1,3 @@
-build --elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.12.0/lib/elixir
-
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
 # sandbox (https://github.com/bazelbuild/bazel/issues/7448)
 # adding "--spawn_strategy=local" to the invocation is a workaround
