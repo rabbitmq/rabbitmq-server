@@ -19,15 +19,15 @@
 
 start_link(Ref, Transport, CowboyOpts0) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
-    StartMFA = {?MODULE, start_keepalive_link, []},
-    ChildSpec = #{id => rabbit_web_stomp_keepalive_sup,
-                  start => StartMFA,
-                  restart => transient,
-                  significant => true,
-                  shutdown => infinity,
-                  type => supervisor,
-                  modules => [rabbit_keepalive_sup]},
-    {ok, KeepaliveSup} = supervisor:start_child(SupPid, ChildSpec),
+    KeepaliveStartMFA = {?MODULE, start_keepalive_link, []},
+    KeepaliveChildSpec = #{id => rabbit_web_stomp_keepalive_sup,
+                           start => KeepaliveStartMFA,
+                           restart => transient,
+                           significant => true,
+                           shutdown => infinity,
+                           type => supervisor,
+                           modules => [rabbit_keepalive_sup]},
+    {ok, KeepaliveSup} = supervisor:start_child(SupPid, KeepaliveChildSpec),
     %% In order for the Websocket handler to receive the KeepaliveSup
     %% variable, we need to pass it first through the environment and
     %% then have the middleware rabbit_web_mqtt_middleware place it
@@ -39,15 +39,15 @@ start_link(Ref, Transport, CowboyOpts0) ->
         ranch_tcp -> cowboy_clear;
         ranch_ssl -> cowboy_tls
     end,
-    StartMFA = {Protocol, start_link, [Ref, Transport, CowboyOpts]},
-    ChildSpec = #{id => Protocol,
-                  start => StartMFA,
-                  restart => transient,
-                  significant => true,
-                  shutdown => ?WORKER_WAIT,
-                  type => worker,
-                  modules => [Protocol]},
-    {ok, ReaderPid} = supervisor:start_child(SupPid, ChildSpec),
+    CowboyStartMFA = {Protocol, start_link, [Ref, Transport, CowboyOpts]},
+    CowboyChildSpec = #{id => Protocol,
+                        start => CowboyStartMFA,
+                        restart => transient,
+                        significant => true,
+                        shutdown => ?WORKER_WAIT,
+                        type => worker,
+                        modules => [Protocol]},
+    {ok, ReaderPid} = supervisor:start_child(SupPid, CowboyChildSpec),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
