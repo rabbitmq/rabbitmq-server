@@ -12,6 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 -compile(export_all).
 
 all() -> [
@@ -39,7 +40,11 @@ all() -> [
     consumer_tag_destination,
     consumer_tag_invalid,
     parse_valid_message_id,
-    parse_invalid_message_id
+    parse_invalid_message_id,
+    build_arguments_with_x_queue_type_header,
+    build_arguments_with_x_max_length_bytes_header,
+    build_arguments_with_x_max_age_header,
+    build_arguments_with_x_stream_max_segment_size_bytes_header
     ].
 
 
@@ -240,3 +245,22 @@ parse_invalid_message_id(_) ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id("blah").
 
+%%---
+%% Stream-related headers mapped into queue declaration arguments
+%%---
+
+build_arguments_with_x_queue_type_header(_) ->
+  Headers = [{"x-queue-type", "stream"}],
+  { arguments, [ {<<?HEADER_X_QUEUE_TYPE>>, longstr, <<"stream">>} ]} = rabbit_stomp_util:build_arguments(Headers).
+
+build_arguments_with_x_max_length_bytes_header(_) ->
+  Headers = [{"x-max-length-bytes", "100"}],
+  { arguments, [ {<<?HEADER_X_MAX_LENGTH_BYTES>>, long, 100} ]} = rabbit_stomp_util:build_arguments(Headers).
+
+build_arguments_with_x_max_age_header(_) ->
+  Headers = [{"x-max-age", "2D"}],
+  { arguments, [ {<<?HEADER_X_MAX_AGE>>, longstr, <<"2D">>} ]} = rabbit_stomp_util:build_arguments(Headers).
+
+build_arguments_with_x_stream_max_segment_size_bytes_header(_) ->
+  Headers = [{"x-stream-max-segment-size-bytes", "20000"}],
+  { arguments, [ {<<?HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES>>, long, 20000} ]} = rabbit_stomp_util:build_arguments(Headers).

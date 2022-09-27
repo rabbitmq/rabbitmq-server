@@ -48,6 +48,8 @@
 -define(HEADER_X_MESSAGE_TTL, "x-message-ttl").
 -define(HEADER_X_QUEUE_NAME, "x-queue-name").
 -define(HEADER_X_QUEUE_TYPE, "x-queue-type").
+-define(HEADER_X_MAX_AGE, "x-max-age").
+-define(HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES, "x-stream-max-segment-size-bytes").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
@@ -63,7 +65,9 @@
                            ?HEADER_X_MAX_LENGTH_BYTES,
                            ?HEADER_X_MAX_PRIORITY,
                            ?HEADER_X_MESSAGE_TTL,
-                           ?HEADER_X_QUEUE_TYPE
+                           ?HEADER_X_QUEUE_TYPE,
+                           ?HEADER_X_MAX_AGE,
+                           ?HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES
                           ]).
 
 -define(HEADER_PARAMS, [
