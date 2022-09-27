@@ -121,7 +121,9 @@ elixir_build = rule(
 )
 
 def _elixir_external_impl(ctx):
-    elixir_home = ctx.attr._elixir_home[BuildSettingInfo].value
+    elixir_home = ctx.attr.elixir_home
+    if elixir_home == "":
+        elixir_home = ctx.attr._elixir_home[BuildSettingInfo].value
 
     version_file = ctx.actions.declare_file(ctx.label.name + "_version")
 
@@ -163,6 +165,7 @@ elixir_external = rule(
     implementation = _elixir_external_impl,
     attrs = {
         "_elixir_home": attr.label(default = Label("//:elixir_home")),
+        "elixir_home": attr.string(),
     },
     toolchains = ["@rules_erlang//tools:toolchain_type"],
 )

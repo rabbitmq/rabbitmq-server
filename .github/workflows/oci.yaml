@@ -204,22 +204,17 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
-      - name: Further Configure Bazel
-        run: |
-          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
-          cat << EOF >> user.bazelrc
-            build --elixir_home=${ELIXIR_HOME}
-          EOF
-
       - name: Build
         run: |
           export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk build //packaging/docker-image:rabbitmq \
             --config=buildbuddy
 
       - name: Test
         run: |
           export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           OCI_TESTS=$(bazel query 'tests(//packaging/docker-image/...)')
           bazelisk test ${OCI_TESTS} \
             --config=buildbuddy
@@ -227,6 +222,7 @@ jobs:
       - name: Load
         run: |
           export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk run //packaging/docker-image:rabbitmq \
             --config=buildbuddy
 
