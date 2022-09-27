@@ -69,7 +69,6 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     ChildSpec = #{id => writer,
                   start => StartMFA,
                   restart => transient,
-                  significant => true,
                   shutdown => ?WORKER_WAIT,
                   type => worker,
                   modules => [rabbit_writer]},
