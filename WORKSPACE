@@ -132,8 +132,8 @@ erlang_config(
         ),
         internal_erlang_from_github_release(
             name = "24",
-            sha256 = "86dddc0de486acc320ed7557f12033af0b5045205290ee4926aa931b3d8b3ab2",
-            version = "24.3.4.4",
+            sha256 = "0b57d49e62958350676e8f32a39008d420dca4bc20f2d7e38c0671ab2ba62f14",
+            version = "24.3.4.5",
         ),
         internal_erlang_from_github_release(
             name = "25",
