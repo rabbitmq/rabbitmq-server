@@ -7,7 +7,7 @@
 
 -module(rabbit_amqp1_0_session_sup_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/0, start_session/2]).
 
@@ -25,10 +25,10 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    supervisor2:start_link(?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
 start_session(Pid, Args) ->
-    supervisor2:start_child(Pid, [Args]).
+    supervisor:start_child(Pid, [Args]).
 
 %%----------------------------------------------------------------------------
 

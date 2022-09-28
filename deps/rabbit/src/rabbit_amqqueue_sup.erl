@@ -7,7 +7,7 @@
 
 -module(rabbit_amqqueue_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/2]).
 
@@ -22,12 +22,16 @@
 
 start_link(Q, StartMode) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
-    ChildSpec = {rabbit_amqqueue,
-                 {rabbit_prequeue, start_link, [Q, StartMode, Marker]},
-                 intrinsic, ?CLASSIC_QUEUE_WORKER_WAIT, worker,
-                 [rabbit_amqqueue_process, rabbit_mirror_queue_slave]},
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, QPid} = supervisor2:start_child(SupPid, ChildSpec),
+    StartMFA = {rabbit_prequeue, start_link, [Q, StartMode, Marker]},
+    ChildSpec = #{id => rabbit_amqqueue,
+                  start => StartMFA,
+                  restart => transient,
+                  significant => true,
+                  shutdown => ?CLASSIC_QUEUE_WORKER_WAIT,
+                  type => worker,
+                  modules => [rabbit_amqqueue_process, rabbit_mirror_queue_slave]},
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    {ok, QPid} = supervisor:start_child(SupPid, ChildSpec),
     unlink(Marker),
     Marker ! stop,
     {ok, SupPid, QPid}.
@@ -37,4 +41,8 @@ init([]) ->
     %% that crash queue processes on purpose and may end up crashing
     %% the queues faster than we normally allow.
     {Intensity, Period} = application:get_env(rabbit, amqqueue_max_restart_intensity, {5, 10}),
-    {ok, {{one_for_one, Intensity, Period}, []}}.
+    SupFlags = #{strategy => one_for_one,
+                 intensity => Intensity,
+                 period => Period,
+                 auto_shutdown => any_significant},
+    {ok, {SupFlags, []}}.

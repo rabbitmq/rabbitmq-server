@@ -12,16 +12,14 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 -export([init/1]).
 -export([start_link/1]).
 -export([start_vhost_sup/1]).
 
 start_link(VHost) ->
-    %% Using supervisor, because supervisor2 does not stop a started child when
-    %% another one fails to start. Bug?
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
-        {ok, Pid}  ->
+        {ok, Pid} ->
             {error, {already_started, Pid}};
         {error, _} ->
             supervisor:start_link(?MODULE, [VHost])
@@ -29,25 +27,33 @@ start_link(VHost) ->
 
 init([VHost]) ->
     %% 2 restarts in 5 minutes. One per message store.
-    {ok, {{one_for_all, 2, 300},
-        [
-        %% rabbit_vhost_sup is an empty supervisor container for
-        %% all data processes.
-         {rabbit_vhost_sup,
-          {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
-           permanent, infinity, supervisor,
-           [rabbit_vhost_sup]},
-        %% rabbit_vhost_process is a vhost identity process, which
-        %% is responsible for data recovery and vhost aliveness status.
-        %% See the module comments for more info.
-         {rabbit_vhost_process,
-          {rabbit_vhost_process, start_link, [VHost]},
-           permanent, ?WORKER_WAIT, worker,
-           [rabbit_vhost_process]}]}}.
-
+    {ok,
+        {#{strategy => one_for_all, intensity => 2, period => 300}, [
+            %% rabbit_vhost_sup is an empty supervisor container for
+            %% all data processes.
+            #{
+                id => rabbit_vhost_sup,
+                start => {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
+                restart => permanent,
+                shutdown => infinity,
+                type => supervisor,
+                modules => [rabbit_vhost_sup]
+            },
+            %% rabbit_vhost_process is a vhost identity process, which
+            %% is responsible for data recovery and vhost aliveness status.
+            %% See the module comments for more info.
+            #{
+                id => rabbit_vhost_process,
+                start => {rabbit_vhost_process, start_link, [VHost]},
+                restart => permanent,
+                shutdown => ?WORKER_WAIT,
+                type => worker,
+                modules => [rabbit_vhost_process]
+            }
+        ]}}.
 
 start_vhost_sup(VHost) ->
-     case rabbit_vhost_sup:start_link(VHost) of
+    case rabbit_vhost_sup:start_link(VHost) of
         {ok, Pid} ->
             %% Save vhost sup record with wrapper pid and vhost sup pid.
             ok = rabbit_vhost_sup_sup:save_vhost_sup(VHost, self(), Pid),

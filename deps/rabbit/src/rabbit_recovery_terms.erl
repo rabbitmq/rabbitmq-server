@@ -35,7 +35,7 @@
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
       {ok, VHostSup} ->
-            {ok, _} = supervisor2:start_child(
+            {ok, _} = supervisor:start_child(
                         VHostSup,
                         {?MODULE,
                          {?MODULE, start_link, [VHost]},

@@ -227,7 +227,7 @@ queue_pid(Node, QName) ->
     end.
 
 sup_child(Node, Sup) ->
-    case rpc:call(Node, supervisor2, which_children, [Sup]) of
+    case rpc:call(Node, supervisor, which_children, [Sup]) of
         [{_, Child, _, _}]              -> {ok, Child};
         []                              -> {error, no_child};
         {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}

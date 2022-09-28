@@ -209,11 +209,11 @@ all_vhosts_children(Name) ->
         Pid when is_pid(Pid) ->
             lists:filtermap(
                 fun({_, VHostSupWrapper, _, _}) ->
-                    case supervisor2:find_child(VHostSupWrapper,
+                    case rabbit_misc:find_child(VHostSupWrapper,
                                                 rabbit_vhost_sup) of
                         []         -> false;
                         [VHostSup] ->
-                            case supervisor2:find_child(VHostSup, Name) of
+                            case rabbit_misc:find_child(VHostSup, Name) of
                                 [QSup] -> {true, QSup};
                                 []     -> false
                             end

@@ -16,11 +16,13 @@
 %%
 %% See also rabbit_heartbeat, rabbit_channel_sup_sup, rabbit_queue_collector.
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/0]).
--export([start_channel_sup_sup/1,
-         start_queue_collector/2]).
+-export([
+    start_channel_sup_sup/1,
+    start_queue_collector/2
+]).
 
 -export([init/1]).
 
@@ -31,27 +33,39 @@
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
-    supervisor2:start_link(?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
 -spec start_channel_sup_sup(pid()) -> rabbit_types:ok_pid_or_error().
 
 start_channel_sup_sup(SupPid) ->
-    supervisor2:start_child(
-          SupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}).
+    ChildSpec = #{id => channel_sup_sup,
+                  start => {rabbit_channel_sup_sup, start_link, []},
+                  restart => transient,
+                  significant => true,
+                  shutdown => infinity,
+                  type => supervisor,
+                  modules => [rabbit_channel_sup_sup]},
+    supervisor:start_child(SupPid, ChildSpec).
 
 -spec start_queue_collector(pid(), rabbit_types:proc_name()) ->
-          rabbit_types:ok_pid_or_error().
+    rabbit_types:ok_pid_or_error().
 
 start_queue_collector(SupPid, Identity) ->
-    supervisor2:start_child(
-      SupPid,
-      {collector, {rabbit_queue_collector, start_link, [Identity]},
-       intrinsic, ?WORKER_WAIT, worker, [rabbit_queue_collector]}).
+    ChildSpec = #{id => collector,
+                  start => {rabbit_queue_collector, start_link, [Identity]},
+                  restart => transient,
+                  significant => true,
+                  shutdown => ?WORKER_WAIT,
+                  type => worker,
+                  modules => [rabbit_queue_collector]},
+    supervisor:start_child(SupPid, ChildSpec).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
     ?LG_PROCESS_TYPE(connection_helper_sup),
-    {ok, {{one_for_one, 10, 10}, []}}.
+    SupFlags = #{strategy => one_for_one,
+                 intensity => 10,
+                 period => 10,
+                 auto_shutdown => any_significant},
+    {ok, {SupFlags, []}}.

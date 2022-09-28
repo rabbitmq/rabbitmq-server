@@ -591,15 +591,19 @@ start_1_0_connection0(Mode, State = #v1{connection = Connection,
                                         helper_sup = HelperSup}) ->
     ChannelSupSupPid =
         case Mode of
-            sasl -> undefined;
-            amqp -> {ok, Pid} =
-                        supervisor2:start_child(
-                          HelperSup,
-                          {channel_sup_sup,
-                           {rabbit_amqp1_0_session_sup_sup, start_link, []},
-                           intrinsic, infinity, supervisor,
-                           [rabbit_amqp1_0_session_sup_sup]}),
-                    Pid
+            sasl ->
+                undefined;
+            amqp ->
+                StartMFA = {rabbit_amqp1_0_session_sup_sup, start_link, []},
+                ChildSpec = #{id => channel_sup_sup,
+                              start => StartMFA,
+                              restart => transient,
+                              significant => true,
+                              shutdown => infinity,
+                              type => supervisor,
+                              modules => [rabbit_amqp1_0_session_sup_sup]},
+                {ok, Pid} = supervisor:start_child(HelperSup, ChildSpec),
+                Pid
         end,
     switch_callback(State#v1{connection = Connection#v1_connection{
                                             timeout_sec = ?NORMAL_TIMEOUT},

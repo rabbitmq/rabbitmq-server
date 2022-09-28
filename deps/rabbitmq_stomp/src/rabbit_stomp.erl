@@ -115,10 +115,10 @@ report_configuration(#stomp_configuration{
 
 list() ->
     [Client ||
-        {_, ListSup, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
-        {_, RanchEmbeddedSup, supervisor, _} <- supervisor2:which_children(ListSup),
+        {_, ListSup, _, _} <- supervisor:which_children(rabbit_stomp_sup),
+        {_, RanchEmbeddedSup, supervisor, _} <- supervisor:which_children(ListSup),
         {{ranch_listener_sup, _}, RanchListSup, _, _} <- supervisor:which_children(RanchEmbeddedSup),
-        {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor2:which_children(RanchListSup),
-        {_, RanchConnSup, supervisor, _} <- supervisor2:which_children(RanchConnsSup),
-        {_, StompClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
+        {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor:which_children(RanchListSup),
+        {_, RanchConnSup, supervisor, _} <- supervisor:which_children(RanchConnsSup),
+        {_, StompClientSup, supervisor, _} <- supervisor:which_children(RanchConnSup),
         {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(StompClientSup)].

@@ -12,7 +12,7 @@
 %%
 %% See also rabbit_channel_sup, rabbit_connection_helper_sup, rabbit_reader.
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/0, start_channel/2]).
 
@@ -25,18 +25,26 @@
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
-    supervisor2:start_link(?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
 -spec start_channel(pid(), rabbit_channel_sup:start_link_args()) ->
           {'ok', pid(), {pid(), any()}}.
 
 start_channel(Pid, Args) ->
-    supervisor2:start_child(Pid, [Args]).
+    supervisor:start_child(Pid, [Args]).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
     ?LG_PROCESS_TYPE(channel_sup_sup),
-    {ok, {{simple_one_for_one, 0, 1},
-          [{channel_sup, {rabbit_channel_sup, start_link, []},
-            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
+    SupFlags = #{strategy => simple_one_for_one,
+                 intensity => 0,
+                 period => 1,
+                 auto_shutdown => never},
+    ChildSpec = #{id => channel_sup,
+                  start => {rabbit_channel_sup, start_link, []},
+                  restart => transient,
+                  shutdown => infinity,
+                  type => supervisor,
+                  modules => [rabbit_channel_sup]},
+    {ok, {SupFlags, [ChildSpec]}}.

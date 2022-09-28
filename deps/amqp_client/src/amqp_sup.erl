@@ -10,7 +10,7 @@
 
 -include("amqp_client.hrl").
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/0, is_ready/0, start_connection_sup/1]).
 -export([init/1]).
@@ -20,19 +20,26 @@
 %%---------------------------------------------------------------------------
 
 start_link() ->
-    supervisor2:start_link({local, amqp_sup}, ?MODULE, []).
+    supervisor:start_link({local, amqp_sup}, ?MODULE, []).
 
 is_ready() ->
     whereis(amqp_sup) =/= undefined.
 
 start_connection_sup(AmqpParams) ->
-    supervisor2:start_child(amqp_sup, [AmqpParams]).
+    supervisor:start_child(amqp_sup, [AmqpParams]).
 
 %%---------------------------------------------------------------------------
-%% supervisor2 callbacks
+%% supervisor callbacks
 %%---------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{connection_sup, {amqp_connection_sup, start_link, []},
-           temporary, ?SUPERVISOR_WAIT, supervisor, [amqp_connection_sup]}]}}.
+    SupFlags = #{strategy => simple_one_for_one,
+                 intensity => 0,
+                 period => 1},
+    ChildSpec = #{id => connection_sup,
+                  start => {amqp_connection_sup, start_link, []},
+                  restart => temporary,
+                  shutdown => ?SUPERVISOR_WAIT,
+                  type => supervisor,
+                  modules => [amqp_connection_sup]},
+    {ok, {SupFlags, [ChildSpec]}}.

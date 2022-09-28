@@ -7,7 +7,7 @@
 
 -module(rabbit_client_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([start_link/1, start_link/2, start_link_worker/2]).
 
@@ -21,23 +21,39 @@
           rabbit_types:ok_pid_or_error().
 
 start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
+    supervisor:start_link(?MODULE, Callback).
 
 -spec start_link({'local', atom()}, rabbit_types:mfargs()) ->
           rabbit_types:ok_pid_or_error().
 
 start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
+    supervisor:start_link(SupName, ?MODULE, Callback).
 
 -spec start_link_worker({'local', atom()}, rabbit_types:mfargs()) ->
           rabbit_types:ok_pid_or_error().
 
 start_link_worker(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, {Callback, worker}).
+    supervisor:start_link(SupName, ?MODULE, {Callback, worker}).
 
-init({M,F,A}) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}};
-init({{M,F,A}, worker}) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{client, {M,F,A}, temporary, ?WORKER_WAIT, worker, [M]}]}}.
+init({M, F, A}) ->
+    SupFlags = #{strategy => simple_one_for_one,
+                 intensity => 0,
+                 period => 1},
+    ChildSpec = #{id => client,
+                  start => {M, F, A},
+                  restart => temporary,
+                  shutdown => infinity,
+                  type => supervisor,
+                  modules => [M]},
+    {ok, {SupFlags, [ChildSpec]}};
+init({{M, F, A}, worker}) ->
+    SupFlags = #{strategy => simple_one_for_one,
+                 intensity => 0,
+                 period => 1},
+    ChildSpec = #{id => client,
+                start => {M, F, A},
+                restart => temporary,
+                shutdown => ?WORKER_WAIT,
+                type => worker,
+                modules => [M]},
+    {ok, {SupFlags, [ChildSpec]}}.

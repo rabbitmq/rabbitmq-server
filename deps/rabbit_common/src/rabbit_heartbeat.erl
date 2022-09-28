@@ -105,7 +105,7 @@ start_heartbeater(0, _SupPid, _Sock, _TimeoutFun, _Name, _Callback,
     {ok, none};
 start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback,
                   Identity) ->
-    supervisor2:start_child(
+    supervisor:start_child(
       SupPid, {Name,
                {rabbit_heartbeat, Callback,
                 [Sock, TimeoutSec, TimeoutFun, {Name, Identity}]},
