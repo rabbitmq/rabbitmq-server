@@ -144,7 +144,7 @@ erlang_config(
             name = "git_master",
             strip_prefix = "otp-master",
             url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-            version = "master",
+            version = "26",
         ),
     ],
 )

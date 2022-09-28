@@ -30,8 +30,7 @@ jobs:
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
 
-          build:rbe --platforms=//bazel/platforms:erlang_git_master_platform
-          build:rbe --extra_execution_platforms=//bazel/platforms:erlang_git_master_platform
+          build:rbe --platforms=//bazel/platforms:erlang_linux_git_master_platform
         EOF
 
         bazelisk info release
