@@ -4,14 +4,15 @@ var _management_logger;
 
 function oauth_initialize_if_required() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
-    rabbit_base_uri = window.location.protocol + "//" + window.location.hostname + rabbit_port
+    rabbit_path_prefix = window.location.pathname.replace(/\/+$/, "")
+    rabbit_base_uri = window.location.protocol + "//" + window.location.hostname + rabbit_port + rabbit_path_prefix
 
     var request = new XMLHttpRequest();
-    request.open('GET', rabbit_base_uri + '/api/auth', false);
+    request.open("GET", rabbit_base_uri + "/api/auth", false);
     request.send(null);
     if (request.status === 200) {
         return oauth_initialize(JSON.parse(request.responseText));
-    }else {
+    } else {
         return { "enabled" : false };
     }
 
@@ -64,7 +65,7 @@ function oauth_initialize(authSettings) {
         scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
         redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri ,
+        post_logout_redirect_uri: rabbit_base_uri,
 
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
@@ -78,7 +79,7 @@ function oauth_initialize(authSettings) {
       // This is required for old versions of UAA because the newer ones do expose
       // the end_session_endpoint on the oidc discovery endpoint, .a.k.a. metadataUrl
       oidcSettings.metadataSeed = {
-        end_session_endpoint: authSettings.oauth_provider_url + '/logout.do'
+        end_session_endpoint: authSettings.oauth_provider_url + "/logout.do"
       }
     }
     oidc.Log.setLevel(oidc.Log.DEBUG);
@@ -135,7 +136,7 @@ function oauth_initiateLogin() {
     });
 }
 function oauth_redirectToHome(oauth) {
-  set_auth_pref(oauth.user_name + ':' + oauth.access_token);
+  set_auth_pref(oauth.user_name + ":" + oauth.access_token);
   location.href = "/"
 }
 function oauth_redirectToLogin(error) {
