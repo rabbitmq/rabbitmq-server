@@ -1,10 +1,10 @@
 load(
     "@rules_erlang//:util.bzl",
+    "msys2_path",
     "path_join",
 )
 
 ELIXIR_HOME_ENV_VAR = "ELIXIR_HOME"
-DEFAULT_IEX_PATH = "/usr/local/bin/iex"
 
 _DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME = "external"
 _ELIXIR_VERSION_UNKNOWN = "UNKNOWN"
@@ -118,16 +118,27 @@ elixir_config = repository_rule(
     ],
 )
 
+def _is_windows(repository_ctx):
+    return repository_ctx.os.name.lower().find("windows") != -1
+
 def _default_elixir_dict(repository_ctx):
-    if ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
-        elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
-    else:
-        if repository_ctx.os.name.find("windows") > 0:
-            iex_path = repository_ctx.which("iex.exe")
+    if _is_windows(repository_ctx):
+        if ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
+            elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
+            iex_path = elixir_home + "\\bin\\iex"
         else:
             iex_path = repository_ctx.which("iex")
+            if iex_path == None:
+                iex_path = repository_ctx.path("C:/Program Files (x86)/Elixir/bin/iex")
+            elixir_home = str(iex_path.dirname.dirname)
+        elixir_home = msys2_path(elixir_home)
+    elif ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
+        elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
+        iex_path = path_join(elixir_home, "bin", "elixir")
+    else:
+        iex_path = repository_ctx.which("iex")
         if iex_path == None:
-            iex_path = repository_ctx.path(DEFAULT_IEX_PATH)
+            iex_path = repository_ctx.path("/usr/local/bin/iex")
         elixir_home = str(iex_path.dirname.dirname)
 
     version = repository_ctx.execute(
