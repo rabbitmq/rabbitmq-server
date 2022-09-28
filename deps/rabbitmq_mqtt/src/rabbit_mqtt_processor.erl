@@ -8,8 +8,8 @@
 -module(rabbit_mqtt_processor).
 
 
--export([info/2, initial_state/2,
-         process_frame/2, send_will/1,
+-export([info/2, initial_state/2, initial_state/4,
+         process_frame/2, serialise/2, send_will/1,
          terminate/1, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2]).
 
@@ -35,14 +35,19 @@
 -define(CONSUMER_TAG, mqtt).
 
 initial_state(Socket, ConnectionName) ->
-    SSLLoginName = ssl_login_name(Socket),
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(Socket),
-    {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} =
-    rabbit_mqtt_util:get_topic_translation_funs(),
+    initial_state(Socket,
+                  ConnectionName,
+                  fun serialise_and_send_to_client/2,
+                  PeerAddr).
+
+initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
+    {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} = rabbit_mqtt_util:get_topic_translation_funs(),
     #proc_state{socket         = Socket,
                 conn_name      = ConnectionName,
-                ssl_login_name = SSLLoginName,
+                ssl_login_name = ssl_login_name(Socket),
                 peer_addr      = PeerAddr,
+                send_fun       = SendFun,
                 mqtt2amqp_fun  = M2A,
                 amqp2mqtt_fun  = A2M}.
 
@@ -139,7 +144,8 @@ process_request(?SUBSCRIBE,
                                  message_id  = SubscribeMsgId,
                                  topic_table = Topics},
                    payload = undefined},
-                #proc_state{retainer_pid = RPid} = PState0) ->
+                #proc_state{send_fun = SendFun,
+                            retainer_pid = RPid} = PState0) ->
     rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
     {QosResponse, PState1} =
     lists:foldl(fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
@@ -177,7 +183,7 @@ process_request(?SUBSCRIBE,
                                 {[?SUBACK_FAILURE | L], S0}
                         end
                 end, {[], PState0}, Topics),
-    serialise_and_send_to_client(
+    SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
                   variable = #mqtt_frame_suback{
                                 message_id = SubscribeMsgId,
@@ -198,7 +204,7 @@ process_request(?UNSUBSCRIBE,
                 #mqtt_frame{variable = #mqtt_frame_subscribe{message_id  = MessageId,
                                                              topic_table = Topics},
                             payload = undefined},
-                PState0) ->
+                PState0 = #proc_state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     PState = lists:foldl(
                fun(#mqtt_topic{name = TopicName},
@@ -218,15 +224,15 @@ process_request(?UNSUBSCRIBE,
                                S0
                        end
                end, PState0, Topics),
-    serialise_and_send_to_client(
+    SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
                   variable = #mqtt_frame_suback{message_id = MessageId}},
       PState),
     {ok, PState};
 
-process_request(?PINGREQ, #mqtt_frame{}, PState) ->
+process_request(?PINGREQ, #mqtt_frame{}, PState = #proc_state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received a PINGREQ"),
-    serialise_and_send_to_client(
+    SendFun(
       #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PINGRESP}},
       PState),
     rabbit_log_connection:debug("Sent a PINGRESP"),
@@ -243,7 +249,7 @@ process_connect(#mqtt_frame{
                                  clean_sess = CleanSess,
                                  client_id  = ClientId,
                                  keep_alive = Keepalive} = FrameConnect},
-                PState0) ->
+                PState0 = #proc_state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received a CONNECT, client ID: ~s, username: ~s, "
                                 "clean session: ~s, protocol version: ~p, keepalive: ~p",
                                 [ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
@@ -265,7 +271,7 @@ process_connect(#mqtt_frame{
                                 variable = #mqtt_frame_connack{
                                               session_present = SessionPresent,
                                               return_code = ReturnCode}},
-    serialise_and_send_to_client(ResponseFrame, PState),
+    SendFun(ResponseFrame, PState),
     return_connack(ReturnCode, PState).
 
 client_id([]) ->
@@ -489,7 +495,8 @@ hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, Msg) ->
 
 maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos},
                             #proc_state{amqp2mqtt_fun = Amqp2MqttFun,
-                                        packet_id = PacketId0} = PState0) ->
+                                        packet_id = PacketId0,
+                                        send_fun = SendFun} = PState0) ->
     Topic1 = Amqp2MqttFun(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
         undefined ->
@@ -502,7 +509,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
                                      ?QOS_1 ->
                                          {PacketId0, PState0#proc_state{packet_id = increment_packet_id(PacketId0)}}
                                  end,
-            serialise_and_send_to_client(
+            SendFun(
               #mqtt_frame{fixed = #mqtt_frame_fixed{
                                      type = ?PUBLISH,
                                      qos  = Qos,
@@ -1123,9 +1130,9 @@ send_puback(MsgIds, PState)
     lists:foreach(fun(Id) ->
                           send_puback(Id, PState)
                   end, MsgIds);
-send_puback(MsgId, PState) ->
+send_puback(MsgId, PState = #proc_state{send_fun = SendFun}) ->
     rabbit_global_counters:messages_confirmed(mqtt, 1),
-    serialise_and_send_to_client(
+    SendFun(
       #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PUBACK},
                   variable = #mqtt_frame_publish{message_id = MsgId}},
       PState).
@@ -1140,6 +1147,9 @@ serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = S
               rabbit_log_connection:debug("Failed to write to socket ~p, error: ~p, frame: ~p",
                                           [Sock, Error, Frame])
     end.
+
+serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
+    rabbit_mqtt_frame:serialise(Frame, ProtoVer).
 
 terminate(#proc_state{client_id = undefined}) ->
     ok;
@@ -1273,7 +1283,8 @@ maybe_publish_to_client(
    #basic_message{
       routing_keys = [RoutingKey | _CcRoutes],
       content = #content{payload_fragments_rev = FragmentsRev}}},
-  QoS, PState0 = #proc_state{amqp2mqtt_fun = Amqp2MqttFun}) ->
+  QoS, PState0 = #proc_state{amqp2mqtt_fun = Amqp2MqttFun,
+                             send_fun = SendFun}) ->
     {PacketId, PState} = queue_message_id_to_packet_id(QMsgId, QoS, PState0),
     %%TODO support iolists when sending to client
     Payload = list_to_binary(lists:reverse(FragmentsRev)),
@@ -1293,7 +1304,7 @@ maybe_publish_to_client(
                      message_id = PacketId,
                      topic_name = Amqp2MqttFun(RoutingKey)},
        payload = Payload},
-    serialise_and_send_to_client(Frame, PState),
+    SendFun(Frame, PState),
     PState.
 
 queue_message_id_to_packet_id(_, ?QOS_0, PState) ->

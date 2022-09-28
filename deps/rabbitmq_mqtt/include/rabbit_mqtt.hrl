@@ -52,7 +52,8 @@
          retainer_pid,
          auth_state,
          peer_addr,
-         %%TODO remove funs from state
+         send_fun :: fun((Frame :: tuple(), proc_state()) -> term()),
+         %%TODO remove funs from state?
          mqtt2amqp_fun,
          amqp2mqtt_fun,
          register_state,

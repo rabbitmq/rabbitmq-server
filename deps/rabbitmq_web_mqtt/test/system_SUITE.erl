@@ -10,7 +10,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("src/emqttc_packet.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 all() ->
     [
@@ -55,7 +55,7 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
--define(DEFAULT_TIMEOUT, 15000).
+-define(DEFAULT_TIMEOUT, 15_000).
 
 
 connection(Config) ->
