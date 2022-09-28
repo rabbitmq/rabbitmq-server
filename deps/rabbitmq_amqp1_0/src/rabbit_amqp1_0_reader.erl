@@ -766,7 +766,7 @@ info_internal(frame_max, #v1{connection = #v1_connection{frame_max = Val}}) ->
 info_internal(timeout, #v1{connection = #v1_connection{timeout_sec = Val}}) ->
     Val;
 info_internal(user,
-              #v1{connection = #v1_connection{user = {user, Val, _, _}}}) ->
+              #v1{connection = #v1_connection{user = #user{username = Val}}}) ->
     Val;
 info_internal(user,
               #v1{connection = #v1_connection{user = none}}) ->
