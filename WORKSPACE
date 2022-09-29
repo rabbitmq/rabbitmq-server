@@ -150,12 +150,6 @@ load("@erlang_config//:defaults.bzl", "register_defaults")
 
 register_defaults()
 
-<<<<<<< HEAD
-register_toolchains(
-    "//bazel/toolchains:elixir_toolchain_external",
-    "//bazel/toolchains:elixir_toolchain_1_13",
-    "//bazel/toolchains:elixir_toolchain_1_14",
-=======
 load(
     "//bazel/elixir:elixir.bzl",
     "elixir_config",
@@ -191,7 +185,6 @@ elixir_config(
 load(
     "@elixir_config//:defaults.bzl",
     register_elixir_defaults = "register_defaults",
->>>>>>> 502730b32d (Apply the @erlang_config pattern for elixir via the WORKSPACE)
 )
 
 register_elixir_defaults()

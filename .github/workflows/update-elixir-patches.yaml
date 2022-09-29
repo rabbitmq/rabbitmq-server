@@ -16,13 +16,9 @@ jobs:
         - elixir_version: "1.12"
           name: '1_12'
         - elixir_version: "1.13"
-<<<<<<< HEAD
-          name_suffix: '_1_13'
-=======
           name: '1_13'
         - elixir_version: "1.14"
           name: '1_14'
->>>>>>> 502730b32d (Apply the @erlang_config pattern for elixir via the WORKSPACE)
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -40,10 +36,6 @@ jobs:
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("v${{ matrix.elixir_version }}"))) | first | .name')
 
-<<<<<<< HEAD
-        wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz" && \
-        SHA=$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')
-=======
         if [[ -z "${TAG_NAME}" ]]; then
           echo "Failed to determine latest TAG_NAME for v${{ matrix.elixir_version }}"
           exit 1
@@ -52,7 +44,6 @@ jobs:
         ARCHIVE_URL="https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz"
         wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "${ARCHIVE_URL}" && \
         SHA="$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')"
->>>>>>> 502730b32d (Apply the @erlang_config pattern for elixir via the WORKSPACE)
 
         if [ -z "${SHA}" ]; then
           echo "Failed to determine SHA for ${TAG_NAME}"

@@ -41,13 +41,8 @@ platform(
 platform(
     name = "erlang_linux_git_master_platform",
     constraint_values = [
-<<<<<<< HEAD
-        "@erlang_config//:erlang_master",
-        ":elixir_1_14",
-=======
         "@erlang_config//:erlang_26",
         "@elixir_config//:elixir_1_14",
->>>>>>> 502730b32d (Apply the @erlang_config pattern for elixir via the WORKSPACE)
     ],
     parents = ["@rbe//config:platform"],
 )
