@@ -1,3 +1,7 @@
-# Deploy RabbitMQ on Kubernetes with the Kubernetes Peer Discovery Plugin to Kind
+# Recommended Deployment
 
-This example has graduated and moved to [a separate repository](https://github.com/rabbitmq/diy-kubernetes-examples/tree/master/kind).
+In Production, use the RabbitMQ Cluster Operator: [link](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html)
+
+## Deploy RabbitMQ on Kubernetes with the Kubernetes Peer Discovery Plugin to Kind
+
+This example has graduated and moved to [a separate repository](https://github.com/rabbitmq/diy-kubernetes-examples/tree/master/kind#production-non-suitability)

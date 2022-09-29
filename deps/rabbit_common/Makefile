@@ -6,7 +6,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbit_common"}
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbit_common"}
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
@@ -20,7 +20,7 @@ define HEX_TARBALL_EXTRA_METADATA
 	licenses => [<<"MPL-2.0">>],
 	links => #{
 		<<"Website">> => <<"https://www.rabbitmq.com">>,
-		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbit_common">>
+		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbit_common">>
 	}
 }
 endef
@@ -49,9 +49,17 @@ DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 
 PLT_APPS += mnesia crypto ssl
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk
 
-HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
+HEX_TARBALL_FILES += rabbitmq-components.mk \
+		     git-revisions.txt \
+		     mk/rabbitmq-build.mk \
+		     mk/rabbitmq-dist.mk \
+		     mk/rabbitmq-early-test.mk \
+		     mk/rabbitmq-hexpm.mk \
+		     mk/rabbitmq-macros.mk \
+		     mk/rabbitmq-test.mk \
+		     mk/rabbitmq-tools.mk
 
 -include development.post.mk
