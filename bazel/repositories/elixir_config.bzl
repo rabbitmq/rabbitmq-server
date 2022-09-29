@@ -118,6 +118,20 @@ elixir_config = repository_rule(
     ],
 )
 
+def _elixir_home_from_elixir_path(repository_ctx, elixir_path):
+    ehr = repository_ctx.execute(
+        [
+            elixir_path,
+            "-e",
+            "IO.puts Path.dirname(Path.dirname(Path.dirname(Path.dirname(Path.expand(:code.which(System))))))",
+        ],
+    )
+    if ehr.return_code == 0:
+        elixir_home = ehr.stdout.strip("\n")
+    else:
+        elixir_home = str(elixir_path.dirname.dirname)
+    return elixir_home
+
 def _is_windows(repository_ctx):
     return repository_ctx.os.name.lower().find("windows") != -1
 
@@ -125,21 +139,21 @@ def _default_elixir_dict(repository_ctx):
     if _is_windows(repository_ctx):
         if ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
             elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
-            iex_path = elixir_home + "\\bin\\iex"
+            elixir_path = elixir_home + "\\bin\\elixir"
         else:
-            iex_path = repository_ctx.which("iex")
-            if iex_path == None:
-                iex_path = repository_ctx.path("C:/Program Files (x86)/Elixir/bin/iex")
-            elixir_home = str(iex_path.dirname.dirname)
+            elixir_path = repository_ctx.which("elixir")
+            if elixir_path == None:
+                elixir_path = repository_ctx.path("C:/Program Files (x86)/Elixir/bin/elixir")
+            elixir_home = _elixir_home_from_elixir_path(repository_ctx, elixir_path)
         elixir_home = msys2_path(elixir_home)
     elif ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
         elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
-        iex_path = path_join(elixir_home, "bin", "elixir")
+        elixir_path = path_join(elixir_home, "bin", "elixir")
     else:
-        iex_path = repository_ctx.which("iex")
-        if iex_path == None:
-            iex_path = repository_ctx.path("/usr/local/bin/iex")
-        elixir_home = str(iex_path.dirname.dirname)
+        elixir_path = repository_ctx.which("elixir")
+        if elixir_path == None:
+            elixir_path = repository_ctx.path("/usr/local/bin/elixir")
+        elixir_home = _elixir_home_from_elixir_path(repository_ctx, elixir_path)
 
     version = repository_ctx.execute(
         [
