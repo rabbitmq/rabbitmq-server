@@ -15,6 +15,7 @@ platform(
     name = "erlang_linux_23_platform",
     constraint_values = [
         "@erlang_config//:erlang_23",
+        "@erlang_config//:erlang_23_any_minor",
         "@elixir_config//:elixir_1_10",
     ],
     parents = ["@rbe//config:platform"],
@@ -24,6 +25,7 @@ platform(
     name = "erlang_linux_24_platform",
     constraint_values = [
         "@erlang_config//:erlang_24",
+        "@erlang_config//:erlang_24_any_minor",
         "@elixir_config//:elixir_1_12",
     ],
     parents = ["@rbe//config:platform"],
@@ -33,6 +35,7 @@ platform(
     name = "erlang_linux_25_platform",
     constraint_values = [
         "@erlang_config//:erlang_25",
+        "@erlang_config//:erlang_25_any_minor",
         "@elixir_config//:elixir_1_14",
     ],
     parents = ["@rbe//config:platform"],
