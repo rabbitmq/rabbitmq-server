@@ -53,7 +53,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 PLT_APPS = ssl public_key
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk
 
-HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
+HEX_TARBALL_FILES += rabbitmq-components.mk \
+		     git-revisions.txt
