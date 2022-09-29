@@ -2,40 +2,11 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-constraint_setting(
-    name = "elixir_version",
-    default_constraint_value = ":elixir_external",
-)
-
-constraint_value(
-    name = "elixir_external",
-    constraint_setting = ":elixir_version",
-)
-
-constraint_value(
-    name = "elixir_1_10",
-    constraint_setting = ":elixir_version",
-)
-
-constraint_value(
-    name = "elixir_1_12",
-    constraint_setting = ":elixir_version",
-)
-
-constraint_value(
-    name = "elixir_1_13",
-    constraint_setting = ":elixir_version",
-)
-
-constraint_value(
-    name = "elixir_1_14",
-    constraint_setting = ":elixir_version",
-)
-
 platform(
     name = "erlang_internal_platform",
     constraint_values = [
         "@erlang_config//:erlang_internal",
+        "@elixir_config//:elixir_internal",
     ],
     parents = ["@rbe//config:platform"],
 )
@@ -44,7 +15,8 @@ platform(
     name = "erlang_linux_23_platform",
     constraint_values = [
         "@erlang_config//:erlang_23",
-        ":elixir_1_10",
+        "@erlang_config//:erlang_23_any_minor",
+        "@elixir_config//:elixir_1_10",
     ],
     parents = ["@rbe//config:platform"],
 )
@@ -53,7 +25,8 @@ platform(
     name = "erlang_linux_24_platform",
     constraint_values = [
         "@erlang_config//:erlang_24",
-        ":elixir_1_12",
+        "@erlang_config//:erlang_24_any_minor",
+        "@elixir_config//:elixir_1_12",
     ],
     parents = ["@rbe//config:platform"],
 )
@@ -62,7 +35,8 @@ platform(
     name = "erlang_linux_25_platform",
     constraint_values = [
         "@erlang_config//:erlang_25",
-        ":elixir_1_14",
+        "@erlang_config//:erlang_25_any_minor",
+        "@elixir_config//:elixir_1_14",
     ],
     parents = ["@rbe//config:platform"],
 )
@@ -70,8 +44,8 @@ platform(
 platform(
     name = "erlang_linux_git_master_platform",
     constraint_values = [
-        "@erlang_config//:erlang_master",
-        ":elixir_1_14",
+        "@erlang_config//:erlang_26",
+        "@elixir_config//:elixir_1_14",
     ],
     parents = ["@rbe//config:platform"],
 )
