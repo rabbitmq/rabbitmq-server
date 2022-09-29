@@ -12,11 +12,13 @@ jobs:
       matrix:
         include:
         - elixir_version: "1.10"
-          name_suffix: '_1_10'
+          name: '1_10'
         - elixir_version: "1.12"
-          name_suffix: '_1_12'
+          name: '1_12'
         - elixir_version: "1.13"
-          name_suffix: '_1_13'
+          name: '1_13'
+        - elixir_version: "1.14"
+          name: '1_14'
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -27,15 +29,21 @@ jobs:
         set +e
         git ls-remote --exit-code --heads origin bump-elixir-${{ matrix.elixir_version }}
         echo "::set-output name=c::$?"
-    - name: DETERMINE LATEST PATCH
+    - name: DETERMINE LATEST PATCH & SHA
       if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("v${{ matrix.elixir_version }}"))) | first | .name')
 
-        wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz" && \
-        SHA=$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')
+        if [[ -z "${TAG_NAME}" ]]; then
+          echo "Failed to determine latest TAG_NAME for v${{ matrix.elixir_version }}"
+          exit 1
+        fi
+
+        ARCHIVE_URL="https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz"
+        wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "${ARCHIVE_URL}" && \
+        SHA="$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')"
 
         if [ -z "${SHA}" ]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
@@ -49,13 +57,15 @@ jobs:
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
-        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
-        LINE=$(($LINE-1))
+        OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
+        OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
 
-        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
-          //bazel/toolchains:%${LINE} || test $? -eq 3
-        buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
-          //bazel/toolchains:%${LINE} || test $? -eq 3
+        echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
+        echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
+
+        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}/" WORKSPACE
+        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}/" WORKSPACE
+        rm *_orig
 
         set -x
         git diff

@@ -112,7 +112,7 @@ git_repository(
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.6.3",
+    tag = "3.7.0",
 )
 
 load(
@@ -150,11 +150,44 @@ load("@erlang_config//:defaults.bzl", "register_defaults")
 
 register_defaults()
 
-register_toolchains(
-    "//bazel/toolchains:elixir_toolchain_external",
-    "//bazel/toolchains:elixir_toolchain_1_13",
-    "//bazel/toolchains:elixir_toolchain_1_14",
+load(
+    "//bazel/elixir:elixir.bzl",
+    "elixir_config",
+    "internal_elixir_from_github_release",
 )
+
+elixir_config(
+    internal_elixir_configs = [
+        internal_elixir_from_github_release(
+            name = "1_10",
+            sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f",
+            version = "1.10.4",
+        ),
+        internal_elixir_from_github_release(
+            name = "1_12",
+            sha256 = "c5affa97defafa1fd89c81656464d61da8f76ccfec2ea80c8a528decd5cb04ad",
+            version = "1.12.3",
+        ),
+        internal_elixir_from_github_release(
+            name = "1_13",
+            sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
+            version = "1.13.4",
+        ),
+        internal_elixir_from_github_release(
+            name = "1_14",
+            sha256 = "ac129e266a1e04cdc389551843ec3dbdf36086bb2174d3d7e7936e820735003b",
+            version = "1.14.0",
+        ),
+    ],
+    rabbitmq_server_workspace = "@",
+)
+
+load(
+    "@elixir_config//:defaults.bzl",
+    register_elixir_defaults = "register_defaults",
+)
+
+register_elixir_defaults()
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
