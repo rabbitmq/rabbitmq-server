@@ -63,6 +63,43 @@ use_repo(
     "erlang_config",
 )
 
+<<<<<<< HEAD
+=======
+elixir_config = use_extension(
+    "//bazel/bzlmod:extensions.bzl",
+    "elixir_config",
+)
+
+elixir_config.internal_elixir_from_github_release(
+    name = "1_10",
+    sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f",
+    version = "1.10.4",
+)
+
+elixir_config.internal_elixir_from_github_release(
+    name = "1_12",
+    sha256 = "c5affa97defafa1fd89c81656464d61da8f76ccfec2ea80c8a528decd5cb04ad",
+    version = "1.12.3",
+)
+
+elixir_config.internal_elixir_from_github_release(
+    name = "1_13",
+    sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
+    version = "1.13.4",
+)
+
+elixir_config.internal_elixir_from_github_release(
+    name = "1_14",
+    sha256 = "ac129e266a1e04cdc389551843ec3dbdf36086bb2174d3d7e7936e820735003b",
+    version = "1.14.0",
+)
+
+use_repo(
+    elixir_config,
+    "elixir_config",
+)
+
+>>>>>>> 2d42a838cc (Adopt otp 24.3.4.5)
 register_toolchains(
     "@erlang_config//external:toolchain",
     "@erlang_config//23:toolchain",
