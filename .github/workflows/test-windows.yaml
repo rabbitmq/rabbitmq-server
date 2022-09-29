@@ -3,6 +3,9 @@ on:
   schedule:
   - cron: '0 2 * * *'
   workflow_dispatch:
+  push:
+    paths:
+    - .github/workflows/test-windows.yaml
 jobs:
   test:
     name: Test Windows
@@ -28,11 +31,9 @@ jobs:
     #!     path: "/home/runner/repo-cache/"
     #!     key: repo-cache
     - name: CONFIGURE BAZEL
+      id: configure
       shell: bash
       run: |
-        ERL_PATH="$(which erl)"
-        IEX_PATH="$(which iex)"
-        sed -i"_orig" 's/build --experimental_enable_bzlmod//' .bazelrc
         cat << EOF >> user.bazelrc
           startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
@@ -48,10 +49,6 @@ jobs:
           build:buildbuddy --disk_cache=
           build:buildbuddy --noexperimental_remote_cache_compression
           build:buildbuddy --noexperimental_remote_cache_async
-
-          build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@rules_erlang//:erlang_home="${ERL_PATH/\/bin\/erl/}"
-          build --//:elixir_home="${IEX_PATH/\/bin\/iex/}"
         EOF
 
         bazelisk info release
@@ -60,6 +57,7 @@ jobs:
       run: |
         bazelisk test //... ^
           --config=buildbuddy ^
+          --noexperimental_enable_bzlmod ^
           --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
           --build_tests_only ^
           --verbose_failures
