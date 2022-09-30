@@ -149,6 +149,11 @@ configure the plugin to use a CA and client certificate/key pair using the `rabb
 
 It is recommended to use TLS for authentication and enable peer verification.
 
+### Wildcard Certificates
+
+If the certificate of your Web Server should be matched against a wildcard certificate in your `cacertfile`, the following option must be added to the `ssl_options`:
+
+    {customize_hostname_check, [{match_fun,public_key:pkix_verify_hostname_match_fun(https)}]}
 
 ## Debugging
 
