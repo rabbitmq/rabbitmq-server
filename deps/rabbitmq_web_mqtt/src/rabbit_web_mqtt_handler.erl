@@ -25,8 +25,6 @@
 
 -record(state, {
     conn_name,
-    keepalive,
-    keepalive_sup,
     parse_state,
     proc_state,
     state,
@@ -43,6 +41,13 @@
 
 %%TODO move from deprecated callback results to new callback results
 %% see cowboy_websocket.erl
+
+%%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
+%% when need to force load the 'connection_created' event for the management plugin, see
+%% https://github.com/rabbitmq/rabbitmq-management-agent/issues/58
+%% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L536
+%% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L189
+%% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L72
 
 %% cowboy_sub_protcol
 upgrade(Req, Env, Handler, HandlerState) ->
@@ -64,7 +69,6 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 %% cowboy_websocket
 init(Req, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req),
-    {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
     SockInfo = maps:get(proxy_header, Req, undefined),
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
     %%TODO return idle_timeout?
@@ -83,8 +87,6 @@ init(Req, Opts) ->
                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
            end,
     {?MODULE, Req2, #state{
-                       keepalive          = {none, none},
-                       keepalive_sup      = KeepaliveSup,
                        parse_state        = rabbit_mqtt_frame:initial_state(),
                        state              = running,
                        conserve_resources = false,
@@ -101,7 +103,7 @@ websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
                       conn_name          = ConnStr,
                       socket             = Sock
                      },
-            rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)", [self(), ConnStr]),
+            rabbit_log_connection:info("Accepting Web MQTT connection ~p (~s)", [self(), ConnStr]),
             RealSocket = rabbit_net:unwrap_socket(Sock),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket,
                                                                  ConnStr,
@@ -184,18 +186,12 @@ websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_s
     rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~ts' (~tp), reason: ~ts",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     stop(State);
-websocket_info({start_keepalive, Keepalive},
-               State = #state{ socket = Sock, keepalive_sup = KeepaliveSup }) ->
-    %% Only the client has the responsibility for sending keepalives
-    SendFun = fun() -> ok end,
-    Parent = self(),
-    ReceiveFun = fun() -> Parent ! keepalive_timeout end,
-    Heartbeater = rabbit_heartbeat:start(
-                    KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
-    {ok, State #state { keepalive = Heartbeater }, hibernate};
-websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
-    rabbit_log_connection:error("closing Web MQTT connection ~tp (keepalive timeout)", [ConnStr]),
-    stop(State);
+websocket_info({start_keepalive, _Keepalive}, State) ->
+    %%TODO use timer as done in rabbit_mqtt_reader
+    {ok, State, hibernate};
+% websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
+%     rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)", [ConnStr]),
+%     stop(State);
 websocket_info(emit_stats, State) ->
     {ok, emit_stats(State), hibernate};
 websocket_info({ra_event, _From, Evt},
@@ -293,13 +289,13 @@ handle_credits(State0) ->
 control_throttle(State = #state{ state              = CS,
                                  conserve_resources = Mem }) ->
     case {CS, Mem orelse credit_flow:blocked()} of
-        {running,   true} -> ok = rabbit_heartbeat:pause_monitor(
-                                    State#state.keepalive),
-                             State #state{ state = blocked };
-        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
-                                    State#state.keepalive),
-                             State #state{ state = running };
-        {_,            _} -> State
+        %%TODO cancel / resume keepalive timer as done in rabbit_mqtt_reader
+        {running, true} ->
+            State #state{state = blocked};
+        {blocked,false} ->
+            State #state{state = running};
+        {_, _} ->
+            State
     end.
 
 send_reply(Frame, PState) ->
