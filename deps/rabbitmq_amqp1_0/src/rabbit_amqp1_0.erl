@@ -33,8 +33,10 @@ connection_info_local(Items) ->
 list() ->
     [ReaderPid
      || {_, TcpPid, _, [tcp_listener_sup]} <- supervisor:which_children(rabbit_sup),
-        {_, RanchLPid, _, [ranch_listener_sup]} <- supervisor:which_children(TcpPid),
-        {_, RanchCPid, _, [ranch_conns_sup]} <- supervisor:which_children(RanchLPid),
+        {_, RanchEPid, _, [ranch_embedded_sup]} <- supervisor:which_children(TcpPid),
+        {_, RanchLPid, _, [ranch_listener_sup]} <- supervisor:which_children(RanchEPid),
+        {_, RanchCSPid, _, [ranch_conns_sup_sup]} <- supervisor:which_children(RanchLPid),
+        {_, RanchCPid, _, [ranch_conns_sup]} <- supervisor:which_children(RanchCSPid),
         {rabbit_connection_sup, ConnPid, _, _} <- supervisor:which_children(RanchCPid),
         {reader, ReaderPid, _, _} <- supervisor:which_children(ConnPid)
     ].
