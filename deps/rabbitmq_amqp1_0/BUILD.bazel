@@ -80,6 +80,9 @@ suites = [
         PACKAGE,
         name = "command_SUITE",
         size = "medium",
+        runtime_deps = [
+            "//deps/amqp10_client:erlang_app",
+        ],
         deps = [
             "//deps/amqp10_common:erlang_app",
         ],
