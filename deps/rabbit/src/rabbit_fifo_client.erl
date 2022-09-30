@@ -386,14 +386,25 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
     %% ???
     Ack = maps:get(ack, Meta, true),
 
-    SDels = maps:update_with(ConsumerTag,
-                             fun (V) ->
-                                     V#consumer{ack = Ack}
-                             end,
-                             #consumer{last_msg_id = -1,
-                                       ack = Ack}, CDels0),
-    try_process_command(Servers, Cmd, State0#state{consumer_deliveries = SDels}).
-
+    case try_process_command(Servers, Cmd, State0) of
+        {ok, Reply, Leader} ->
+            LastMsgId = case Reply of
+                            ok ->
+                                %% this is the pre 3.11.1 / 3.10.9
+                                %% reply format
+                                -1;
+                            {ok, #{next_msg_id := NextMsgId}} ->
+                                NextMsgId - 1
+                        end,
+            SDels = maps:update_with(
+                      ConsumerTag, fun (C) -> C#consumer{ack = Ack} end,
+                      #consumer{last_msg_id = LastMsgId,
+                                ack = Ack}, CDels0),
+            {ok, State0#state{leader = Leader,
+                              consumer_deliveries = SDels}};
+        Err ->
+            Err
+    end.
 
 -spec query_single_active_consumer(state()) ->
     {ok, term()} | {error, term()} | {timeout, term()}.
@@ -448,7 +459,12 @@ cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
     ConsumerId = {ConsumerTag, self()},
     Cmd = rabbit_fifo:make_checkout(ConsumerId, cancel, #{}),
     State = State0#state{consumer_deliveries = maps:remove(ConsumerTag, CDels)},
-    try_process_command(Servers, Cmd, State).
+    case try_process_command(Servers, Cmd, State) of
+        {ok, _, Leader} ->
+            {ok, State#state{leader = Leader}};
+        Err ->
+            Err
+    end.
 
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
 %% of messages purged.
@@ -653,8 +669,8 @@ untracked_enqueue([Node | _], Msg) ->
 try_process_command([Server | Rem], Cmd,
                     #state{cfg = #cfg{timeout = Timeout}} = State) ->
     case ra:process_command(Server, Cmd, Timeout) of
-        {ok, _, Leader} ->
-            {ok, State#state{leader = Leader}};
+        {ok, _, _} = Res ->
+            Res;
         Err when length(Rem) =:= 0 ->
             Err;
         _ ->
