@@ -260,6 +260,7 @@ ensure_monitors_test(_) ->
     ?assertEqual(#{self() => sac}, Monitors2),
     ?assertEqual([{monitor, process, self()}, {monitor, node, node()}],
                  Effects2),
+
     Group2 = cgroup([consumer(self(), 1, true)]),
 
     Command2 =
@@ -277,6 +278,21 @@ ensure_monitors_test(_) ->
     assertSize(1, maps:get(self(), PidsGroups3)),
     ?assertEqual(#{self() => sac}, Monitors3),
     ?assertEqual([], Effects3),
+
+    %% trying with an unknown connection PID
+    %% the function should not change anything
+    UnknownConnectionPid = spawn(fun() -> ok end),
+    PassthroughCommand =
+        unregister_consumer_command(<<"stream">>,
+                                    <<"app">>,
+                                    UnknownConnectionPid,
+                                    0),
+
+    {State3, Monitors3, Effects3} =
+        rabbit_stream_sac_coordinator:ensure_monitors(PassthroughCommand,
+                                                      State3,
+                                                      Monitors3,
+                                                      []),
 
     Command3 =
         unregister_consumer_command(<<"stream">>, <<"app">>, self(), 1),
