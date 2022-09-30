@@ -18,6 +18,7 @@
 -import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
 -import(rabbit_misc, [pget/2]).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -252,6 +253,9 @@ queue_on_other_node(Config) ->
     ok.
 
 queue_with_multiple_consumers(Config) ->
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue),
+    %% this may not be supported in mixed mode
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, classic_queue_type_delivery_support),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Q = <<"multi-consumer-queue1">>,
     _ = queue_declare(Chan, Q),
