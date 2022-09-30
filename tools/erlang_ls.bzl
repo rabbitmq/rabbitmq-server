@@ -4,6 +4,7 @@ load(
 )
 load(
 <<<<<<< HEAD
+<<<<<<< HEAD
     "@rules_erlang//:util.bzl",
     "path_join",
 )
@@ -16,6 +17,8 @@ load(
 >>>>>>> 763cc758e2 (Add //tools:erlang_ls_files that generates a tree for Erlang LS)
 )
 load(
+=======
+>>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
     "@rules_erlang//:util.bzl",
     "path_join",
 )
@@ -26,17 +29,24 @@ load(
 
 def _erlang_ls_config(ctx):
 <<<<<<< HEAD
+<<<<<<< HEAD
     runtime_prefix = path_join(
         ctx.bin_dir.path,
+=======
+    runtime_prefix = path_join(
+>>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
         ctx.label.package,
         ctx.label.name + ".runfiles",
         ctx.workspace_name,
     )
+<<<<<<< HEAD
 =======
     out = ctx.actions.declare_file(ctx.label.name)
 
     (erlang_home, _, _) = erlang_dirs(ctx)
 >>>>>>> 763cc758e2 (Add //tools:erlang_ls_files that generates a tree for Erlang LS)
+=======
+>>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
 
     ctx.actions.write(
         output = ctx.outputs.executable,
@@ -44,6 +54,7 @@ def _erlang_ls_config(ctx):
 
 set -euo pipefail
 
+<<<<<<< HEAD
 BAZEL_OUT_ABSOLUTE_PATH="${{PWD%/{}}}/bazel-out"
 
 cat << EOF
@@ -56,10 +67,25 @@ include_dirs:
 - ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*/include
 - ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps
 - ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*/include
+=======
+BAZEL_BIN_ABSOLUTE_PATH="${{PWD%/{}}}"
+
+cat << EOF
+apps_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*
+deps_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*
+include_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*/include
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*/include
+>>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
 EOF
 """.format(runtime_prefix),
     )
 
+<<<<<<< HEAD
 erlang_ls_config = rule(
     implementation = _erlang_ls_config,
     executable = True,
@@ -117,6 +143,11 @@ erlang_ls_config = rule(
         "@rules_erlang//tools:toolchain_type",
     ],
 >>>>>>> 763cc758e2 (Add //tools:erlang_ls_files that generates a tree for Erlang LS)
+=======
+erlang_ls_config = rule(
+    implementation = _erlang_ls_config,
+    executable = True,
+>>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
 )
 
 def _erlang_app_files(ctx, app, directory):
