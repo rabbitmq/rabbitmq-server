@@ -87,7 +87,11 @@ jobs:
         repository: bazelbuild/bazel
         path: bazel
     - name: MOUNT BAZEL CACHE
+<<<<<<< HEAD
       uses: actions/cache@v3.0.10
+=======
+      uses: actions/cache@v3.0.9
+>>>>>>> a8a0710cdf (Bump actions/cache from 3.0.8 to 3.0.9)
       with:
         path: "/home/runner/.cache/bazel"
         key: bazel
