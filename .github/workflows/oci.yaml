@@ -32,9 +32,9 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_major: 25
+            otp_version_id: 25_0
           - image_tag_suffix: otp-max-bazel
-            otp_major: 25
+            otp_version_id: 25_1
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -72,7 +72,7 @@ jobs:
         id: load-info
         run: |
           bazelisk build :otp_version :elixir_version \
-            --config=rbe-${{ matrix.otp_major }}
+            --config=rbe-${{ matrix.otp_version_id }}
           echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
           echo "::set-output name=elixir::$(cat bazel-bin/elixir_version.txt)"
 
