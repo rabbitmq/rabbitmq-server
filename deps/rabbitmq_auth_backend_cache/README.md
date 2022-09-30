@@ -95,7 +95,7 @@ In the classic config format:
 ].
 ```
 
-The following example combines this backend with the [HTTP backend](https://github.com/rabbitmq/rabbitmq-auth-backend-http/tree/master) and its [example Spring Boot application](https://github.com/rabbitmq/rabbitmq-auth-backend-http/tree/master/examples):
+The following example combines this backend with the [HTTP backend](https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_auth_backend_http) and its [example Spring Boot application](https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_auth_backend_http/examples):
 
 
     auth_backends.1 = cache
