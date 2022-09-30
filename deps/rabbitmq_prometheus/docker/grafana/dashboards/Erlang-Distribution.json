@@ -134,7 +134,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -214,7 +214,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 3) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 3) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -294,7 +294,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 1) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 1) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -374,7 +374,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 2) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 2) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -466,7 +466,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_node_state * on(instance, job) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": " {{rabbitmq_node}} -> {{peer}}",
@@ -738,7 +738,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "erlang_vm_dist_node_queue_size_bytes * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_node_queue_size_bytes * on(instance, job) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1002,7 +1002,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1248,7 +1248,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_recv_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -1494,7 +1494,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_send_cnt[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1740,7 +1740,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_recv_cnt[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -1986,7 +1986,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "(rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "(rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_send_cnt[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2232,7 +2232,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "(rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "(rate(erlang_vm_dist_recv_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_recv_cnt[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -2495,7 +2495,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_port_memory_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2606,7 +2606,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2711,7 +2711,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} ",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance, job) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} ",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": " {{rabbitmq_node}} -> {{peer}}",
@@ -2848,7 +2848,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -3094,7 +3094,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance, job) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -3340,7 +3340,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
