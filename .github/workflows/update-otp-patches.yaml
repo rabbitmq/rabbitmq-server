@@ -12,9 +12,9 @@ jobs:
       matrix:
         include:
         - erlang_version: "25.0"
-          name: '25'
+          name: '25_0'
         - erlang_version: "25.1"
-          name: '25'
+          name: '25_1'
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY

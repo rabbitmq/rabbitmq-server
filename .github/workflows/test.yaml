@@ -33,8 +33,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        erlang_major:
-        - "25"
+        otp_version_id:
+        - 25_1
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -67,7 +67,7 @@ jobs:
         sudo sysctl -w net.ipv4.tcp_keepalive_time=60
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
-          --config=rbe-${{ matrix.erlang_major }} \
+          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=-exclusive,-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures
@@ -78,7 +78,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "25"
+        - erlang_version: "25.1"
           elixir_version: 1.14.0
     timeout-minutes: 60
     steps:
