@@ -80,6 +80,12 @@ suites = [
         PACKAGE,
         name = "command_SUITE",
         size = "medium",
+<<<<<<< HEAD
+=======
+        runtime_deps = [
+            "//deps/amqp10_client:erlang_app",
+        ],
+>>>>>>> 5c0f2d7a76 (Add //tools:erlang_ls_files that generates a tree for Erlang LS)
         deps = [
             "//deps/amqp10_common:erlang_app",
         ],
