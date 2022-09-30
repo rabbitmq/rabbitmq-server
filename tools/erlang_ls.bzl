@@ -3,10 +3,6 @@ load(
     "ErlangAppInfo",
 )
 load(
-    "@rules_erlang//tools:erlang_toolchain.bzl",
-    "erlang_dirs",
-)
-load(
     "@rules_erlang//:util.bzl",
     "path_join",
 )
@@ -16,40 +12,37 @@ load(
 )
 
 def _erlang_ls_config(ctx):
-    out = ctx.actions.declare_file(ctx.label.name)
-
-    (erlang_home, _, _) = erlang_dirs(ctx)
-
-    ctx.actions.write(
-        output = out,
-        content = """otp_path: {erlang_home}
-apps_dirs:
-  - deps/*
-  - deps/rabbit/apps/*
-deps_dirs:
-  - bazel-bin/external/*
-include_dirs:
-  - deps
-  - deps/*
-  - deps/*/include
-  - deps/*/src
-  - bazel-bin/external
-  - bazel-bin/external/*/include
-plt_path: bazel-bin/deps/rabbit/.base_plt.plt
-""".format(
-            erlang_home = erlang_home,
-        ),
+    runtime_prefix = path_join(
+        ctx.label.package,
+        ctx.label.name + ".runfiles",
+        ctx.workspace_name,
     )
 
-    return [
-        DefaultInfo(files = depset([out])),
-    ]
+    ctx.actions.write(
+        output = ctx.outputs.executable,
+        content = """#!/usr/bin/env bash
+
+set -euo pipefail
+
+BAZEL_BIN_ABSOLUTE_PATH="${{PWD%/{}}}"
+
+cat << EOF
+apps_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*
+deps_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*
+include_dirs:
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*/include
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps
+- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*/include
+EOF
+""".format(runtime_prefix),
+    )
 
 erlang_ls_config = rule(
     implementation = _erlang_ls_config,
-    toolchains = [
-        "@rules_erlang//tools:toolchain_type",
-    ],
+    executable = True,
 )
 
 def _erlang_app_files(ctx, app, directory):
