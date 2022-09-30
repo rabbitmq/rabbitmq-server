@@ -13,6 +13,7 @@ load(
 
 def _erlang_ls_config(ctx):
     runtime_prefix = path_join(
+        ctx.bin_dir.path,
         ctx.label.package,
         ctx.label.name + ".runfiles",
         ctx.workspace_name,
@@ -24,18 +25,18 @@ def _erlang_ls_config(ctx):
 
 set -euo pipefail
 
-BAZEL_BIN_ABSOLUTE_PATH="${{PWD%/{}}}"
+BAZEL_OUT_ABSOLUTE_PATH="${{PWD%/{}}}/bazel-out"
 
 cat << EOF
 apps_dirs:
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*
 deps_dirs:
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*
 include_dirs:
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*/include
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*/include
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*/include
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*/include
 EOF
 """.format(runtime_prefix),
     )
