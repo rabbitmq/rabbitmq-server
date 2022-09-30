@@ -80,11 +80,11 @@ suites = [
         PACKAGE,
         name = "command_SUITE",
         size = "medium",
-        deps = [
-            "//deps/amqp10_common:erlang_app",
-        ],
         runtime_deps = [
             "//deps/amqp10_client:erlang_app",
+        ],
+        deps = [
+            "//deps/amqp10_common:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
