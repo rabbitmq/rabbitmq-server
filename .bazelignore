@@ -1,1 +1,5 @@
-/.erlang.mk/
+# .bazelignore behaves differently than .gitignore
+# https://github.com/bazelbuild/bazel/issues/7093
+.erlang.mk
+deps/osiris
+deps/ra
