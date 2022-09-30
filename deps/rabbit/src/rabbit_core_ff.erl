@@ -103,6 +103,14 @@
                              {?MODULE, tracking_records_in_ets_post_enable}}
      }}).
 
+-rabbit_feature_flag(
+   {classic_queue_type_delivery_support,
+    #{desc          => "Bug fix for classic queue deliveries using mixed versions",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
+
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------

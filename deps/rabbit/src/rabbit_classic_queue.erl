@@ -297,6 +297,8 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
             {ok, State0#?STATE{unconfirmed = U},
              [{rejected, QRef, MsgIds} | Actions0]}
     end;
+handle_event({send_drained, _} = Action, State) ->
+    {ok, State, [Action]};
 handle_event({send_credit_reply, _} = Action, State) ->
     {ok, State, [Action]}.
 
@@ -542,7 +544,7 @@ send_rejection(Pid, QName, MsgSeqNo) ->
     end.
 
 deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
-    case rabbit_queue_type:is_supported() of
+    case  has_classic_queue_type_delivery_support() of
         true ->
             Deliver = {deliver, CTag, AckRequired, [Message]},
             Evt = {queue_event, QName, Deliver},
@@ -553,7 +555,7 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     end.
 
 send_drained(Pid, QName, CTagCredits) ->
-    case rabbit_queue_type:is_supported() of
+    case has_classic_queue_type_delivery_support() of
         true ->
             gen_server:cast(Pid, {queue_event, QName,
                                   {send_drained, CTagCredits}});
@@ -569,3 +571,9 @@ send_credit_reply(Pid, QName, Len) when is_integer(Len) ->
         false ->
             gen_server2:cast(Pid, {send_credit_reply, Len})
     end.
+
+has_classic_queue_type_delivery_support() ->
+    %% some queue_events were missed in the initial queue_type implementation
+    %% this feature flag enables those and completes the initial queue type
+    %% API for classic queues
+    rabbit_feature_flags:is_enabled(classic_queue_type_delivery_support).
