@@ -177,7 +177,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         version = "2.3.0",
         sha256 = "ce589a898173d6f1c768d54926079110a896aa48199afa9973f2621c954a08a9",
         deps = [
-            "@enough//:erlang_app",
+            "@gen_batch_server//:erlang_app",
         ],
         runtime_deps = [
             "@aten//:erlang_app",
