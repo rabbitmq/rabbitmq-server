@@ -15,7 +15,7 @@ are not in scope for this plugin.
 For a more comprehensive open source RabbitMQ on Kubernetes deployment solution,
 see the [RabbitMQ Cluster Operator for Kubernetes](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html).
 The Operator is developed [on GitHub](https://github.com/rabbitmq/cluster-operator/) and contains its
-own [set of examples](https://github.com/rabbitmq/cluster-operator/tree/master/docs/examples).
+own [set of examples](https://github.com/rabbitmq/cluster-operator/tree/main/docs/examples).
 
 
 ## Supported RabbitMQ Versions
