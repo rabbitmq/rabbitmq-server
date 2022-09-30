@@ -64,6 +64,13 @@
          make_garbage_collection/0
         ]).
 
+<<<<<<< HEAD
+=======
+-ifdef(TEST).
+-export([update_header/4]).
+-endif.
+
+>>>>>>> e0459d9c0d (Ensure consumer msg_id state is synchronised)
 %% command records representing all the protocol actions that are supported
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
@@ -305,6 +312,7 @@ apply(#{index := Index,
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
+<<<<<<< HEAD
         Ready ->
             State1 = update_consumer(ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, 0,
@@ -338,6 +346,40 @@ apply(#{index := Index,
                     update_smallest_raft_index(Index, Reply, State, Effects);
                 {State, false, Effects} ->
                     {State, Reply, Effects}
+=======
+        _ ->
+            {_, State1} = update_consumer(Meta, ConsumerId, ConsumerMeta,
+                                          {once, 1, simple_prefetch}, 0,
+                                          State0),
+            case checkout_one(Meta, false, State1, []) of
+                {success, _, MsgId, ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} ->
+                    {State4, Effects1} = case Settlement of
+                                             unsettled ->
+                                                 {_, Pid} = ConsumerId,
+                                                 {State2, [{monitor, process, Pid} | Effects0]};
+                                             settled ->
+                                                 %% immediately settle the checkout
+                                                 {State3, _, SettleEffects} =
+                                                 apply(Meta, make_settle(ConsumerId, [MsgId]),
+                                                       State2),
+                                                 {State3, SettleEffects ++ Effects0}
+                                         end,
+                    Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, messages_ready(State4), From) | Effects1],
+                    {State, DroppedMsg, Effects} = evaluate_limit(Index, false, State0, State4,
+                                                                  Effects2),
+                    Reply = '$ra_no_reply',
+                    case {DroppedMsg, ExpiredMsg} of
+                        {false, false} ->
+                            {State, Reply, Effects};
+                        _ ->
+                            update_smallest_raft_index(Index, Reply, State, Effects)
+                    end;
+                {nochange, _ExpiredMsg = true, State2, Effects0} ->
+                    %% All ready messages expired.
+                    State3 = State2#?MODULE{consumers = maps:remove(ConsumerId, State2#?MODULE.consumers)},
+                    {State, _, Effects} = evaluate_limit(Index, false, State0, State3, Effects0),
+                    update_smallest_raft_index(Index, {dequeue, empty}, State, Effects)
+>>>>>>> e0459d9c0d (Ensure consumer msg_id state is synchronised)
             end
     end;
 apply(#{index := Idx} = Meta,
@@ -351,8 +393,24 @@ apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
                       consumer_id = {_, Pid} = ConsumerId},
       State0) ->
     Priority = get_priority_from_args(ConsumerMeta),
+<<<<<<< HEAD
     State1 = update_consumer(ConsumerId, ConsumerMeta, Spec, Priority, State0),
     checkout(Meta, State0, State1, [{monitor, process, Pid}]);
+=======
+    {Consumer, State1} = update_consumer(Meta, ConsumerId, ConsumerMeta,
+                                         Spec, Priority, State0),
+    {State2, Effs} = activate_next_consumer(State1, []),
+    #consumer{checked_out = Checked,
+              credit = Credit,
+              delivery_count = DeliveryCount,
+              next_msg_id = NextMsgId} = Consumer,
+    %% reply with a consumer summary
+    Reply = {ok, #{next_msg_id => NextMsgId,
+                   credit => Credit,
+                   delivery_count => DeliveryCount,
+                   num_checked_out => map_size(Checked)}},
+    checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
+>>>>>>> e0459d9c0d (Ensure consumer msg_id state is synchronised)
 apply(#{index := Index}, #purge{},
       #?MODULE{ra_indexes = Indexes0,
                returns = Returns,
@@ -1545,6 +1603,7 @@ return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
     %% they were checked out
     Checked = lists:sort(maps:to_list(Checked0)),
     State = State0#?MODULE{consumers = Cons#{ConsumerId => Con}},
+<<<<<<< HEAD
     lists:foldl(fun ({MsgId, {'$prefix_msg', _} = Msg}, {S, E}) ->
                         return_one(Meta, MsgId, 0, Msg, S, E, ConsumerId);
                     ({MsgId, {'$empty_msg', _} = Msg}, {S, E}) ->
@@ -1578,6 +1637,31 @@ checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldS
                 false ->
                     {State, ok, Effects}
             end
+=======
+    lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
+                        return_one(Meta, MsgId, Msg, S, E, ConsumerId)
+                end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
+
+checkout(Meta, OldState, State0, Effects0) ->
+    checkout(Meta, OldState, State0, Effects0, ok).
+
+checkout(#{index := Index} = Meta,
+         #?MODULE{cfg = #cfg{resource = _QName}} = OldState,
+         State0, Effects0, Reply) ->
+    {#?MODULE{cfg = #cfg{dead_letter_handler = DLH},
+              dlx = DlxState0} = State1, ExpiredMsg, Effects1} =
+        checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
+    {DlxState, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DLH, DlxState0),
+    %% TODO: only update dlx state if it has changed?
+    State2 = State1#?MODULE{msg_cache = undefined, %% by this time the cache should be used
+                            dlx = DlxState},
+    Effects2 = DlxDeliveryEffects ++ Effects1,
+    case evaluate_limit(Index, false, OldState, State2, Effects2) of
+        {State, false, Effects} when ExpiredMsg == false ->
+            {State, Reply, Effects};
+        {State, _, Effects} ->
+            update_smallest_raft_index(Index, Reply, State, Effects)
+>>>>>>> e0459d9c0d (Ensure consumer msg_id state is synchronised)
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State},
@@ -1857,7 +1941,77 @@ uniq_queue_in(Key, #consumer{priority = P}, Queue) ->
         true ->
             Queue;
         false ->
+<<<<<<< HEAD
             priority_queue:in(Key, P, Queue)
+=======
+            priority_queue:in(Key, P, ServiceQueue)
+    end;
+uniq_queue_in(_Key, _Consumer, ServiceQueue) ->
+    ServiceQueue.
+
+update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
+                {Life, Credit, Mode} = Spec, Priority,
+                #?MODULE{cfg = #cfg{consumer_strategy = competing},
+                         consumers = Cons0} = State0) ->
+    Consumer = case Cons0 of
+                   #{ConsumerId := #consumer{} = Consumer0} ->
+                       merge_consumer(Consumer0, ConsumerMeta, Spec, Priority);
+                   _ ->
+                       #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                     pid = Pid,
+                                                     lifetime = Life,
+                                                     meta = ConsumerMeta,
+                                                     priority = Priority,
+                                                     credit_mode = Mode},
+                                 credit = Credit}
+               end,
+    {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
+update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
+                {Life, Credit, Mode} = Spec, Priority,
+                #?MODULE{cfg = #cfg{consumer_strategy = single_active},
+                         consumers = Cons0,
+                         waiting_consumers = Waiting,
+                         service_queue = _ServiceQueue0} = State0) ->
+    %% if it is the current active consumer, just update
+    %% if it is a cancelled active consumer, add to waiting unless it is the only
+    %% one, then merge
+    case active_consumer(Cons0) of
+        {ConsumerId, #consumer{status = up} = Consumer0} ->
+<<<<<<< HEAD
+            Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
+            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
+=======
+            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
+                                      Spec, Priority),
+            {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
+>>>>>>> 878160f8cb (Ensure consumer msg_id state is synchronised)
+        undefined when is_map_key(ConsumerId, Cons0) ->
+            %% there is no active consumer and the current consumer is in the
+            %% consumers map and thus must be cancelled, in this case we can just
+            %% merge and effectively make this the current active one
+            Consumer0 = maps:get(ConsumerId, Cons0),
+<<<<<<< HEAD
+            Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
+            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
+=======
+            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
+                                      Spec, Priority),
+            {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
+>>>>>>> 878160f8cb (Ensure consumer msg_id state is synchronised)
+        _ ->
+            %% add as a new waiting consumer
+            Consumer = #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                     pid = Pid,
+                                                     lifetime = Life,
+                                                     meta = ConsumerMeta,
+                                                     priority = Priority,
+                                                     credit_mode = Mode},
+                                 credit = Credit},
+
+            {Consumer,
+             State0#?MODULE{waiting_consumers =
+                            Waiting ++ [{ConsumerId, Consumer}]}}
+>>>>>>> e0459d9c0d (Ensure consumer msg_id state is synchronised)
     end.
 
 update_consumer(ConsumerId, Meta, Spec, Priority,
