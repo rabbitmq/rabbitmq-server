@@ -34,7 +34,11 @@ def _erlang_ls_config(ctx):
         ctx.bin_dir.path,
 =======
     runtime_prefix = path_join(
+<<<<<<< HEAD
 >>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
+=======
+        ctx.bin_dir.path,
+>>>>>>> b99f7644aa (Attempt to make generated erlang_ls.config more stable)
         ctx.label.package,
         ctx.label.name + ".runfiles",
         ctx.workspace_name,
@@ -55,6 +59,7 @@ def _erlang_ls_config(ctx):
 set -euo pipefail
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 BAZEL_OUT_ABSOLUTE_PATH="${{PWD%/{}}}/bazel-out"
 
 cat << EOF
@@ -69,18 +74,28 @@ include_dirs:
 - ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*/include
 =======
 BAZEL_BIN_ABSOLUTE_PATH="${{PWD%/{}}}"
+=======
+BAZEL_OUT_ABSOLUTE_PATH="${{PWD%/{}}}/bazel-out"
+>>>>>>> b99f7644aa (Attempt to make generated erlang_ls.config more stable)
 
 cat << EOF
 apps_dirs:
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*
 deps_dirs:
-- ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*
 include_dirs:
+<<<<<<< HEAD
 - ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps
 - ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/apps/*/include
 - ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps
 - ${{BAZEL_BIN_ABSOLUTE_PATH}}/tools/erlang_ls_files/deps/*/include
 >>>>>>> df45ece2aa (Turn the //tools:erlang_ls.config target into a generation script)
+=======
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*/include
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps
+- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*/include
+>>>>>>> b99f7644aa (Attempt to make generated erlang_ls.config more stable)
 EOF
 """.format(runtime_prefix),
     )
