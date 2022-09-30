@@ -123,10 +123,16 @@ def _erlang_app_files(ctx, app, directory):
     app_info = app[ErlangAppInfo]
     app_path = path_join(directory, app_info.app_name)
     files = []
-    for hdr in app_info.srcs + app_info.beam:
-        rp = additional_file_dest_relative_path(app.label, hdr)
-        dest = ctx.actions.declare_file(path_join(app_path, rp))
-        ctx.actions.symlink(output = dest, target_file = hdr)
+    for f in app_info.srcs + app_info.beam:
+        relative_path = additional_file_dest_relative_path(app.label, f)
+        dest = ctx.actions.declare_file(path_join(app_path, relative_path))
+
+        # ctx.actions.expand_template(
+        #     template = f,
+        #     output = dest,
+        #     substitutions = {},
+        # )
+        ctx.actions.symlink(output = dest, target_file = f)
         files.append(dest)
     return files
 
