@@ -379,7 +379,8 @@ ensure_monitors(#command_unregister_consumer{vhost = VirtualHost,
                 #?MODULE{groups = StreamGroups0, pids_groups = PidsGroups0} =
                     State0,
                 Monitors,
-                Effects) ->
+                Effects)
+    when is_map_key(Pid, PidsGroups0) ->
     GroupId = {VirtualHost, Stream, ConsumerName},
     #{Pid := PidGroup0} = PidsGroups0,
     PidGroup1 =
