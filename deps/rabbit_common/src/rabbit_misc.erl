@@ -64,7 +64,6 @@
 -export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
 -export([os_cmd/1]).
 -export([is_os_process_alive/1]).
--export([gb_sets_difference/2]).
 -export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0,
          rabbitmq_and_erlang_versions/0, which_applications/0]).
 -export([sequence_error/1]).
@@ -233,7 +232,6 @@
 -spec format_message_queue(any(), priority_queue:q()) -> term().
 -spec os_cmd(string()) -> string().
 -spec is_os_process_alive(non_neg_integer()) -> boolean().
--spec gb_sets_difference(gb_sets:set(), gb_sets:set()) -> gb_sets:set().
 -spec version() -> string().
 -spec otp_release() -> string().
 -spec otp_system_version() -> string().
@@ -1208,9 +1206,6 @@ exit_loop(Port) ->
         {Port, {exit_status, Rc}} -> Rc;
         {Port, _}                 -> exit_loop(Port)
     end.
-
-gb_sets_difference(S1, S2) ->
-    gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
 
 version() ->
     {ok, VSN} = application:get_key(rabbit, vsn),

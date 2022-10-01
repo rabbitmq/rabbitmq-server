@@ -257,11 +257,6 @@
                             [ack()], Acc, state())
                            -> Acc.
 
-%% Called when rabbit_amqqueue_process receives a message via
-%% handle_info and it should be processed by the backing
-%% queue
--callback handle_info(term(), state()) -> state().
-
 -spec info_keys() -> rabbit_types:info_keys().
 
 info_keys() -> ?INFO_KEYS.

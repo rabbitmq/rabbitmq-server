@@ -32,8 +32,7 @@
 %% they should be. What this effectively means is that the
 %% ?STORE:sync function is called right before the ?INDEX:sync
 %% function, and only if there are outstanding confirms in the
-%% index. As a result the store does not need to keep track of
-%% confirms.
+%% index.
 %%
 %% The old rabbit_msg_store has separate transient/persistent stores
 %% to make recovery of data on disk quicker. We do not need to
@@ -50,8 +49,8 @@
 
 -module(rabbit_classic_queue_store_v2).
 
--export([init/2, terminate/1,
-         write/4, sync/1, read/3, check_msg_on_disk/3,
+-export([init/1, terminate/1,
+         write/4, sync/1, read/3, read_many/2, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
 -define(SEGMENT_EXTENSION, ".qs").
@@ -63,9 +62,6 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-%% We need this to directly access the delayed file io pid.
--include_lib("kernel/include/file.hrl").
-
 %% Set to true to get an awful lot of debug logs.
 -if(false).
 -define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).
@@ -73,57 +69,41 @@
 -define(DEBUG(X,Y), _ = X, _ = Y, ok).
 -endif.
 
+-type buffer() :: #{
+    %% SeqId => {Offset, Size, Msg}
+    rabbit_variable_queue:seq_id() => {non_neg_integer(), non_neg_integer(), #basic_message{}}
+}.
+
 -record(qs, {
     %% Store directory - same as the queue index.
     dir :: file:filename(),
 
-    %% We keep up to one write fd open at any time.
-    %% Because queues are FIFO, writes are mostly sequential
-    %% and they occur only once, we do not need to worry
-    %% much about writing to multiple different segment
-    %% files.
-    %%
-    %% We keep track of which segment is open, its fd,
+    %% We keep track of which segment is open
     %% and the current offset in the file. This offset
     %% is the position at which the next message will
-    %% be written, and it will be kept track in the
-    %% queue (and potentially in the queue index) for
-    %% a later read.
+    %% be written. The offset will be returned to be
+    %% kept track of in the queue (or queue index) for
+    %% later reads.
     write_segment = undefined :: undefined | non_neg_integer(),
-    write_fd = undefined :: undefined | file:fd(),
     write_offset = ?HEADER_SIZE :: non_neg_integer(),
+
+    %% We must keep the offset, expected size and message in order
+    %% to write the message.
+    write_buffer = #{} :: buffer(),
+    write_buffer_size = 0 :: non_neg_integer(),
 
     %% We keep a cache of messages for faster reading
     %% for the cases where consumers can keep up with
-    %% producers. Messages are written to the case as
-    %% long as there is space available. Messages are
-    %% not removed from the cache until the message
-    %% is either acked or removed by the queue. This
-    %% means that only a subset of messages may make
-    %% it onto the store. We do not prune messages as
-    %% that could lead to caching messages and pruning
-    %% them before they can be read from the cache.
-    %%
-    %% The cache size is the size of the messages,
-    %% it does not include the metadata. The real
-    %% cache size will therefore potentially be larger
-    %% than the configured maximum size.
-    cache = #{} :: #{ rabbit_variable_queue:seq_id() => {non_neg_integer(), #basic_message{}}},
-    cache_size = 0 :: non_neg_integer(),
+    %% producers. The write_buffer becomes the cache
+    %% when it is written to disk.
+    cache = #{} :: buffer(),
 
     %% Similarly, we keep track of a single read fd.
     %% We cannot share this fd with the write fd because
     %% we are using file:pread/3 which leaves the file
     %% position undetermined.
     read_segment = undefined :: undefined | non_neg_integer(),
-    read_fd = undefined :: undefined | file:fd(),
-
-    %% Messages waiting for publisher confirms. The
-    %% publisher confirms will be sent at regular
-    %% intervals after the index has been flushed
-    %% to disk.
-    confirms = gb_sets:new() :: gb_sets:set(),
-    on_sync :: on_sync_fun()
+    read_fd = undefined :: undefined | file:fd()
 }).
 
 -type state() :: #qs{}.
@@ -131,38 +111,25 @@
 -type msg_location() :: {?MODULE, non_neg_integer(), non_neg_integer()}.
 -export_type([msg_location/0]).
 
--type on_sync_fun() :: fun ((gb_sets:set(), 'written' | 'ignored') -> any()).
+-spec init(rabbit_amqqueue:name()) -> state().
 
--spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
-
-init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
-    ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
+init(#resource{ virtual_host = VHost } = Name) ->
+    ?DEBUG("~0p", [Name]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = rabbit_classic_queue_index_v2:queue_dir(VHostDir, Name),
-    #qs{
-        dir = Dir,
-        on_sync = OnSyncFun
-    }.
+    #qs{dir = Dir}.
 
 -spec terminate(State) -> State when State::state().
 
-terminate(State = #qs{ write_fd = WriteFd,
-                       read_fd = ReadFd }) ->
-    ?DEBUG("~0p", [State]),
-    %% Fsync and close all FDs as needed.
-    maybe_sync_close_fd(WriteFd),
+terminate(State0 = #qs{ read_fd = ReadFd }) ->
+    ?DEBUG("~0p", [State0]),
+    State = flush_buffer(State0, fun(Fd) -> ok = file:sync(Fd) end),
     maybe_close_fd(ReadFd),
     State#qs{ write_segment = undefined,
-              write_fd = undefined,
               write_offset = ?HEADER_SIZE,
+              cache = #{},
               read_segment = undefined,
               read_fd = undefined }.
-
-maybe_sync_close_fd(undefined) ->
-    ok;
-maybe_sync_close_fd(Fd) ->
-    ok = file:sync(Fd),
-    ok = file:close(Fd).
 
 maybe_close_fd(undefined) ->
     ok;
@@ -173,105 +140,158 @@ maybe_close_fd(Fd) ->
             rabbit_types:message_properties(), State)
         -> {msg_location(), State} when State::state().
 
-write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
+%% @todo I think we can disable the old message store at the same
+%%       place where we create MsgId. If many queues receive the
+%%       message, then we create an MsgId. If not, we don't. But
+%%       we can only do this after removing support for v1.
+write(SeqId, Msg, Props, State0 = #qs{ write_buffer = WriteBuffer0,
+                                       write_buffer_size = WriteBufferSize }) ->
     ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
-    %% We simply append to the related segment file.
-    %% We will then return the offset and size. That
-    %% combined with the SeqId is enough to find the
-    %% message again.
-    {Fd, Offset, State1} = get_write_fd(Segment, State0),
-    %% @todo We could remove MsgId because we are not going to use it
-    %%       after reading it back from disk. But we have to support
-    %%       going back to v1 for the time being. When rolling back
-    %%       to v1 is no longer possible, set `id = undefined` here.
-    MsgIovec = term_to_iovec(Msg),
-    Size = iolist_size(MsgIovec),
-    %% Calculate the CRC for the data if configured to do so.
-    %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
-    {UseCRC32, CRC32} = case check_crc32() of
-        true -> {1, erlang:crc32(MsgIovec)};
-        false -> {0, 0}
+    Size = erlang:external_size(Msg),
+    {Offset, State1} = get_write_offset(Segment, Size, State0),
+    WriteBuffer = WriteBuffer0#{SeqId => {Offset, Size, Msg}},
+    State = State1#qs{ write_buffer = WriteBuffer,
+                       write_buffer_size = WriteBufferSize + Size },
+    {{?MODULE, Offset, Size}, maybe_flush_buffer(State)}.
+
+get_write_offset(Segment, Size, State = #qs{ write_segment = Segment,
+                                             write_offset = Offset }) ->
+    {Offset, State#qs{ write_offset = Offset + ?ENTRY_HEADER_SIZE + Size }};
+get_write_offset(Segment, Size, State = #qs{ write_segment = WriteSegment })
+        when Segment > WriteSegment ->
+    {?HEADER_SIZE, State#qs{ write_segment = Segment,
+                             write_offset = ?HEADER_SIZE + ?ENTRY_HEADER_SIZE + Size }};
+%% The first time we write we have to figure out the write_offset by
+%% looking at the segment file directly.
+get_write_offset(Segment, Size, State = #qs{ write_segment = undefined }) ->
+    Offset = case file:open(segment_file(Segment, State), [read, raw, binary]) of
+        {ok, Fd} ->
+            {ok, Offset0} = file:position(Fd, eof),
+            ok = file:close(Fd),
+            case Offset0 of
+                0 -> ?HEADER_SIZE;
+                _ -> Offset0
+            end;
+        {error, enoent} ->
+            ?HEADER_SIZE
     end,
-    %% Append to the buffer. A short entry header is prepended:
-    %% Size:32, Flags:8, CRC32:16, Unused:8.
-    ok = file:write(Fd, [<<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>, MsgIovec]),
-    %% Maybe cache the message.
-    State2 = maybe_cache(SeqId, Size, Msg, State1),
-    %% When publisher confirms have been requested for this
-    %% message we mark the message as unconfirmed.
-    State = maybe_mark_unconfirmed(MsgId, Props, State2),
-    %% Keep track of the offset we are at.
-    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size + ?ENTRY_HEADER_SIZE }}.
-
-get_write_fd(Segment, State = #qs{ write_fd = Fd,
-                                   write_segment = Segment,
-                                   write_offset = Offset }) ->
-    {Fd, Offset, State};
-get_write_fd(Segment, State = #qs{ write_fd = OldFd }) ->
-    maybe_close_fd(OldFd),
-    {ok, Fd} = file:open(segment_file(Segment, State), [read, append, raw, binary, {delayed_write, 512000, 10000}]),
-    {ok, Offset0} = file:position(Fd, eof),
-    %% If we are at offset 0, write the file header.
-    Offset = case Offset0 of
-        0 ->
-            SegmentEntryCount = segment_entry_count(),
-            FromSeqId = Segment * SegmentEntryCount,
-            ToSeqId = FromSeqId + SegmentEntryCount,
-            ok = file:write(Fd, << ?MAGIC:32,
-                                   ?VERSION:8,
-                                   FromSeqId:64/unsigned,
-                                   ToSeqId:64/unsigned,
-                                   0:344 >>),
-            ?HEADER_SIZE;
-        _ ->
-            Offset0
-    end,
-    {Fd, Offset, State#qs{ write_segment = Segment,
-                           write_fd = Fd }}.
-
-maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
-                                              cache_size = CacheSize }) ->
-    MaxCacheSize = max_cache_size(),
-    if
-        CacheSize + MsgSize > MaxCacheSize ->
-            State;
-        true ->
-            State#qs{ cache = Cache#{ SeqId => {MsgSize, Msg} },
-                      cache_size = CacheSize + MsgSize }
-    end.
-
-maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
-        State = #qs { confirms = Confirms }) ->
-    State#qs{ confirms = gb_sets:add_element(MsgId, Confirms) };
-maybe_mark_unconfirmed(_, _, State) ->
-    State.
+    {Offset, State#qs{ write_segment = Segment,
+                       write_offset = Offset + ?ENTRY_HEADER_SIZE + Size }}.
 
 -spec sync(State) -> State when State::state().
 
-sync(State = #qs{ confirms = Confirms,
-                  on_sync = OnSyncFun }) ->
+sync(State) ->
     ?DEBUG("~0p", [State]),
-    flush_write_fd(State),
-    case gb_sets:is_empty(Confirms) of
-        true ->
-            State;
-        false ->
-            OnSyncFun(Confirms, written),
-            State#qs{ confirms = gb_sets:new() }
+    flush_buffer(State, fun(_) -> ok end).
+
+maybe_flush_buffer(State = #qs{ write_buffer_size = WriteBufferSize }) ->
+    case WriteBufferSize >= max_cache_size() of
+        true -> flush_buffer(State, fun(_) -> ok end);
+        false -> State
     end.
+
+flush_buffer(State = #qs{ write_buffer_size = 0 }, _) ->
+    State;
+flush_buffer(State0 = #qs{ write_buffer = WriteBuffer }, FsyncFun) ->
+    CheckCRC32 = check_crc32(),
+    SegmentEntryCount = segment_entry_count(),
+    %% First we prepare the writes sorted by segment.
+    WriteList = lists:sort(maps:to_list(WriteBuffer)),
+    Writes = flush_buffer_build(WriteList, CheckCRC32, SegmentEntryCount),
+    %% Then we do the writes for each segment.
+    State = lists:foldl(fun({Segment, LocBytes}, FoldState) ->
+        {ok, Fd} = file:open(segment_file(Segment, FoldState), [read, write, raw, binary]),
+        case file:position(Fd, eof) of
+            {ok, 0} ->
+                %% We write the file header if it does not exist.
+                FromSeqId = Segment * SegmentEntryCount,
+                ToSeqId = FromSeqId + SegmentEntryCount,
+                ok = file:write(Fd,
+                    << ?MAGIC:32,
+                       ?VERSION:8,
+                       FromSeqId:64/unsigned,
+                       ToSeqId:64/unsigned,
+                       0:344 >>);
+             _ ->
+                ok
+        end,
+        ok = file:pwrite(Fd, lists:sort(LocBytes)),
+        FsyncFun(Fd),
+        ok = file:close(Fd),
+        FoldState
+    end, State0, Writes),
+    %% Finally we move the write_buffer to the cache.
+    State#qs{ write_buffer = #{},
+              write_buffer_size = 0,
+              cache = WriteBuffer }.
+
+flush_buffer_build(WriteBuffer = [{FirstSeqId, {Offset, _, _}}|_],
+                   CheckCRC32, SegmentEntryCount) ->
+    Segment = FirstSeqId div SegmentEntryCount,
+    SegmentThreshold = (1 + Segment) * SegmentEntryCount,
+    {Tail, LocBytes} = flush_buffer_build(WriteBuffer,
+        CheckCRC32, SegmentThreshold, ?HEADER_SIZE, Offset, [], []),
+    [{Segment, LocBytes}|flush_buffer_build(Tail, CheckCRC32, SegmentEntryCount)];
+flush_buffer_build([], _, _) ->
+    [].
+
+flush_buffer_build(Tail = [{SeqId, _}|_], _, SegmentThreshold, _, WriteOffset, WriteAcc, Acc)
+        when SeqId >= SegmentThreshold ->
+    case WriteAcc of
+        [] -> {Tail, Acc};
+        _ -> {Tail, [{WriteOffset, lists:reverse(WriteAcc)}|Acc]}
+    end;
+flush_buffer_build([{_, Entry = {Offset, Size, _}}|Tail],
+        CheckCRC32, SegmentThreshold, Offset, WriteOffset, WriteAcc, Acc) ->
+    flush_buffer_build(Tail, CheckCRC32, SegmentThreshold,
+        Offset + ?ENTRY_HEADER_SIZE + Size, WriteOffset,
+        [build_data(Entry, CheckCRC32)|WriteAcc], Acc);
+flush_buffer_build([{_, Entry = {Offset, Size, _}}|Tail],
+        CheckCRC32, SegmentThreshold, _, _, [], Acc) ->
+    flush_buffer_build(Tail, CheckCRC32, SegmentThreshold,
+        Offset + ?ENTRY_HEADER_SIZE + Size, Offset, [build_data(Entry, CheckCRC32)], Acc);
+flush_buffer_build([{_, Entry = {Offset, Size, _}}|Tail],
+        CheckCRC32, SegmentThreshold, _, WriteOffset, WriteAcc, Acc) ->
+    flush_buffer_build(Tail, CheckCRC32, SegmentThreshold,
+        Offset + ?ENTRY_HEADER_SIZE + Size, Offset, [build_data(Entry, CheckCRC32)],
+        [{WriteOffset, lists:reverse(WriteAcc)}|Acc]);
+flush_buffer_build([], _, _, _, _, [], Acc) ->
+    {[], Acc};
+flush_buffer_build([], _, _, _, WriteOffset, WriteAcc, Acc) ->
+    {[], [{WriteOffset, lists:reverse(WriteAcc)}|Acc]}.
+
+build_data({_, Size, Msg}, CheckCRC32) ->
+    MsgIovec = term_to_iovec(Msg),
+    Padding = (Size - iolist_size(MsgIovec)) * 8,
+    %% Calculate the CRC for the data if configured to do so.
+    %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
+    {UseCRC32, CRC32} = case CheckCRC32 of
+        true -> {1, erlang:crc32(MsgIovec)};
+        false -> {0, 0}
+    end,
+    [
+        <<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>,
+        MsgIovec, <<0:Padding>>
+    ].
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {rabbit_types:basic_message(), State} when State::state().
 
-read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
+read(SeqId, DiskLocation, State = #qs{ write_buffer = WriteBuffer,
+                                       cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [SeqId, DiskLocation, State]),
-    case Cache of
-        #{ SeqId := {_, Msg} } ->
+    case WriteBuffer of
+        #{ SeqId := {_, _, Msg} } ->
             {Msg, State};
         _ ->
-            read_from_disk(SeqId, DiskLocation, State)
+            case Cache of
+                #{ SeqId := {_, _, Msg} } ->
+                    {Msg, State};
+                _ ->
+                    read_from_disk(SeqId, DiskLocation, State)
+            end
     end.
 
 read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
@@ -286,33 +306,128 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
         0 ->
             ok;
         1 ->
-            %% We only want to check the CRC32 if configured to do so.
-            case check_crc32() of
-                false ->
-                    ok;
-                true ->
-                    CRC32 = erlang:crc32(MsgBin),
-                    %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
-                    try
-                        CRC32Expected = <<CRC32:16>>,
-                        ok
-                    catch C:E:S ->
-                        rabbit_log:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
-                                         [segment_file(Segment, State), SeqId, Offset, Size]),
-                        erlang:raise(C, E, S)
-                    end
+            %% Always check the CRC32 if it was computed on write.
+            CRC32 = erlang:crc32(MsgBin),
+            %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
+            try
+                CRC32Expected = <<CRC32:16>>,
+                ok
+            catch C:E:S ->
+                rabbit_log:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
+                                 [segment_file(Segment, State), SeqId, Offset, Size]),
+                erlang:raise(C, E, S)
             end
     end,
     Msg = binary_to_term(MsgBin),
     {Msg, State}.
 
+-spec read_many([{rabbit_variable_queue:seq_id(), msg_location()}], State)
+        -> {[rabbit_types:basic_message()], State} when State::state().
+
+read_many([], State) ->
+    {[], State};
+read_many(Reads0, State0 = #qs{ write_buffer = WriteBuffer,
+                                cache        = Cache }) ->
+    %% First we read what we can from memory.
+    %% Because the Reads0 list is ordered we start from the end
+    %% and stop when we get to a message that isn't in memory.
+    case read_many_from_memory(lists:reverse(Reads0), WriteBuffer, Cache, []) of
+        %% We've read everything, return.
+        {Msgs, []} ->
+            {Msgs, State0};
+        %% Everything else will be on disk.
+        {Msgs, Reads1} ->
+            %% We prepare the pread locations sorted by segment.
+            Reads2 = lists:reverse(Reads1),
+            SegmentEntryCount = segment_entry_count(),
+            [{FirstSeqId, _}|_] = Reads2,
+            FirstSegment = FirstSeqId div SegmentEntryCount,
+            SegmentThreshold = (1 + FirstSegment) * SegmentEntryCount,
+            Segs = consolidate_reads(Reads2, SegmentThreshold,
+                FirstSegment, SegmentEntryCount, [], #{}),
+            %% We read from disk and convert multiple messages at a time.
+            read_many_from_disk(Segs, Msgs, State0)
+    end.
+
+%% We only read from Map. If we don't find the entry in Map,
+%% we replace Map with NextMap and continue. If we then don't
+%% find an entry in NextMap, we are done.
+read_many_from_memory(Reads = [{SeqId, _}|Tail], Map, NextMap, Acc) ->
+    case Map of
+        #{ SeqId := {_, _, Msg} } ->
+            read_many_from_memory(Tail, Map, NextMap, [Msg|Acc]);
+        _ when NextMap =:= #{} ->
+            %% The Acc is in the order we want, no need to reverse.
+            {Acc, Reads};
+        _ ->
+            read_many_from_memory(Reads, NextMap, #{}, Acc)
+    end;
+read_many_from_memory([], _, _, Acc) ->
+    {Acc, []}.
+
+consolidate_reads(Reads = [{SeqId, _}|_], SegmentThreshold,
+        Segment, SegmentEntryCount, Acc, Segs)
+        when SeqId >= SegmentThreshold ->
+    %% We Segment + 1 because we expect reads to be contiguous.
+    consolidate_reads(Reads, SegmentThreshold + SegmentEntryCount,
+        Segment + 1, SegmentEntryCount, [], Segs#{Segment => lists:reverse(Acc)});
+%% NextSize does not include the entry header size.
+consolidate_reads([{_, {?MODULE, NextOffset, NextSize}}|Tail], SegmentThreshold,
+        Segment, SegmentEntryCount, [{Offset, Size}|Acc], Segs)
+        when Offset + Size =:= NextOffset ->
+    consolidate_reads(Tail, SegmentThreshold, Segment, SegmentEntryCount,
+        [{Offset, Size + NextSize + ?ENTRY_HEADER_SIZE}|Acc], Segs);
+consolidate_reads([{_, {?MODULE, Offset, Size}}|Tail], SegmentThreshold,
+        Segment, SegmentEntryCount, Acc, Segs) ->
+    consolidate_reads(Tail, SegmentThreshold, Segment, SegmentEntryCount,
+        [{Offset, Size + ?ENTRY_HEADER_SIZE}|Acc], Segs);
+consolidate_reads([], _, _, _, [], Segs) ->
+    Segs;
+consolidate_reads([], _, Segment, _, Acc, Segs) ->
+    %% We lists:reverse/1 because we need to preserve order.
+    Segs#{Segment => lists:reverse(Acc)}.
+
+read_many_from_disk(Segs, Msgs, State) ->
+    %% We read from segments in reverse order because
+    %% we need to control the order of returned messages.
+    Keys = lists:reverse(lists:sort(maps:keys(Segs))),
+    lists:foldl(fun(Segment, {Acc0, FoldState0}) ->
+        {ok, Fd, FoldState} = get_read_fd(Segment, FoldState0),
+        {ok, Bin} = file:pread(Fd, maps:get(Segment, Segs)),
+        Acc = parse_many_from_disk(Bin, Segment, FoldState, Acc0),
+        {Acc, FoldState}
+    end, {Msgs, State}, Keys).
+
+parse_many_from_disk([<<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits,
+                       _:8, MsgBin:Size/binary, R/bits>>|Tail], Segment, State, Acc) ->
+    case UseCRC32 of
+        0 ->
+            ok;
+        1 ->
+            %% Always check the CRC32 if it was computed on write.
+            CRC32 = erlang:crc32(MsgBin),
+            %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
+            try
+                CRC32Expected = <<CRC32:16>>,
+                ok
+            catch C:E:S ->
+                rabbit_log:error("Per-queue store CRC32 check failed in ~s",
+                                 [segment_file(Segment, State)]),
+                erlang:raise(C, E, S)
+            end
+    end,
+    Msg = binary_to_term(MsgBin),
+    [Msg|parse_many_from_disk([R|Tail], Segment, State, Acc)];
+parse_many_from_disk([<<>>], _, _, Acc) ->
+    Acc;
+parse_many_from_disk([<<>>|Tail], Segment, State, Acc) ->
+    parse_many_from_disk(Tail, Segment, State, Acc).
+
 get_read_fd(Segment, State = #qs{ read_segment = Segment,
                                   read_fd = Fd }) ->
-    maybe_flush_write_fd(Segment, State),
     {ok, Fd, State};
 get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
-    maybe_flush_write_fd(Segment, State),
     case file:open(segment_file(Segment, State), [read, raw, binary]) of
         {ok, Fd} ->
             case file:read(Fd, ?HEADER_SIZE) of
@@ -329,26 +444,9 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
                                                     read_fd = undefined }}
             end;
         {error, enoent} ->
-            {{error, no_file}, State}
+            {{error, no_file}, State#qs{ read_segment = undefined,
+                                         read_fd = undefined }}
     end.
-
-maybe_flush_write_fd(Segment, State = #qs{ write_segment = Segment }) ->
-    flush_write_fd(State);
-maybe_flush_write_fd(_, _) ->
-    ok.
-
-flush_write_fd(#qs{ write_fd = undefined }) ->
-    ok;
-flush_write_fd(#qs{ write_fd = Fd }) ->
-    %% We tell the pid handling delayed writes to flush to disk
-    %% without issuing a separate command to the fd. We need
-    %% to do this in order to read from a separate fd that
-    %% points to the same file.
-    #file_descriptor{
-        module = raw_file_io_delayed, %% assert
-        data = #{ pid := Pid }
-    } = Fd,
-    gen_statem:call(Pid, '$synchronous_flush').
 
 -spec check_msg_on_disk(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {ok | {error, any()}, State} when State::state().
@@ -368,16 +466,10 @@ check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
                                 0 ->
                                     {ok, State};
                                 1 ->
-                                    %% We only want to check the CRC32 if configured to do so.
-                                    case check_crc32() of
-                                        false ->
-                                            {ok, State};
-                                        true ->
-                                            CRC32 = erlang:crc32(MsgBin),
-                                            case <<CRC32:16>> of
-                                                CRC32Expected -> {ok, State};
-                                                _ -> {{error, bad_crc}, State}
-                                            end
+                                    CRC32 = erlang:crc32(MsgBin),
+                                    case <<CRC32:16>> of
+                                        CRC32Expected -> {ok, State};
+                                        _ -> {{error, bad_crc}, State}
                                     end
                             end;
                         _ ->
@@ -394,17 +486,18 @@ check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
 
 -spec remove(rabbit_variable_queue:seq_id(), State) -> State when State::state().
 
-%% We only remove the message from the cache. We will remove
-%% the message from the disk when we delete the segment file.
-remove(SeqId, State = #qs{ cache = Cache0,
-                           cache_size = CacheSize }) ->
+%% We only remove the message from the write_buffer. We will remove
+%% the message from the disk when we delete the segment file, and
+%% from the cache on the next write.
+remove(SeqId, State = #qs{ write_buffer = WriteBuffer0,
+                           write_buffer_size = WriteBufferSize }) ->
     ?DEBUG("~0p ~0p", [SeqId, State]),
-    case maps:take(SeqId, Cache0) of
+    case maps:take(SeqId, WriteBuffer0) of
         error ->
             State;
-        {{MsgSize, _}, Cache} ->
-            State#qs{ cache = Cache,
-                      cache_size = CacheSize - MsgSize }
+        {{_, MsgSize, _}, WriteBuffer} ->
+            State#qs{ write_buffer = WriteBuffer,
+                      write_buffer_size = WriteBufferSize - MsgSize }
     end.
 
 -spec delete_segments([non_neg_integer()], State) -> State when State::state().
@@ -414,32 +507,16 @@ remove(SeqId, State = #qs{ cache = Cache0,
 delete_segments([], State) ->
     ?DEBUG("[] ~0p", [State]),
     State;
-delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
-                                        write_fd = WriteFd,
+delete_segments(Segments, State0 = #qs{ write_buffer = WriteBuffer0,
+                                        write_buffer_size = WriteBufferSize0,
                                         read_segment = ReadSegment,
-                                        read_fd = ReadFd,
-                                        cache = Cache0,
-                                        cache_size = CacheSize0 }) ->
+                                        read_fd = ReadFd }) ->
     ?DEBUG("~0p ~0p", [Segments, State0]),
     %% First we have to close fds for the segments, if any.
     %% 'undefined' is never in Segments so we don't
     %% need to special case it.
-    CloseWrite = lists:member(WriteSegment, Segments),
     CloseRead = lists:member(ReadSegment, Segments),
     State = if
-        CloseWrite andalso CloseRead ->
-            ok = file:close(WriteFd),
-            ok = file:close(ReadFd),
-            State0#qs{ write_segment = undefined,
-                       write_fd = undefined,
-                       write_offset = ?HEADER_SIZE,
-                       read_segment = undefined,
-                       read_fd = undefined };
-        CloseWrite ->
-            ok = file:close(WriteFd),
-            State0#qs{ write_segment = undefined,
-                       write_fd = undefined,
-                       write_offset = ?HEADER_SIZE };
         CloseRead ->
             ok = file:close(ReadFd),
             State0#qs{ read_segment = undefined,
@@ -456,23 +533,20 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
             {error, enoent} -> ok
         end
     || Segment <- Segments],
-    %% Finally, we remove any entries from the cache that fall within
-    %% the segments that were deleted. For simplicity's sake, we take
-    %% the highest SeqId from these files and remove any SeqId lower
-    %% than or equal to this SeqId from the cache.
-    HighestSegment = lists:foldl(fun
-        (S, SAcc) when S > SAcc -> S;
-        (_, SAcc) -> SAcc
-    end, -1, Segments),
-    HighestSeqId = (1 + HighestSegment) * segment_entry_count(),
-    {Cache, CacheSize} = maps:fold(fun
-        (SeqId, {MsgSize, _}, {CacheAcc, CacheSize1}) when SeqId =< HighestSeqId ->
-            {CacheAcc, CacheSize1 - MsgSize};
-        (SeqId, Value, {CacheAcc, CacheSize1}) ->
-            {CacheAcc#{SeqId => Value}, CacheSize1}
-    end, {#{}, CacheSize0}, Cache0),
-    State#qs{ cache = Cache,
-              cache_size = CacheSize }.
+    %% Finally, we remove any entries from the buffer that fall within
+    %% the segments that were deleted.
+    SegmentEntryCount = segment_entry_count(),
+    {WriteBuffer, WriteBufferSize} = maps:fold(fun
+        (SeqId, Value = {_, MsgSize, _}, {WriteBufferAcc, WriteBufferSize1}) ->
+            case lists:member(SeqId div SegmentEntryCount, Segments) of
+                true ->
+                    {WriteBufferAcc, WriteBufferSize1 - MsgSize};
+                false ->
+                    {WriteBufferAcc#{SeqId => Value}, WriteBufferSize1}
+            end
+    end, {#{}, WriteBufferSize0}, WriteBuffer0),
+    State#qs{ write_buffer = WriteBuffer,
+              write_buffer_size = WriteBufferSize }.
 
 %% ----
 %%

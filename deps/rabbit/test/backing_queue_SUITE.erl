@@ -20,7 +20,6 @@
 -define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
-    variable_queue_dynamic_duration_change,
     variable_queue_partial_segments_delta_thing,
     variable_queue_all_the_bits_not_covered_elsewhere_A,
     variable_queue_all_the_bits_not_covered_elsewhere_B,
@@ -368,7 +367,7 @@ on_disk_capture([_|_], _Awaiting, Pid) ->
 on_disk_capture(OnDisk, Awaiting, Pid) ->
     receive
         {on_disk, MsgIdsS} ->
-            MsgIds = gb_sets:to_list(MsgIdsS),
+            MsgIds = sets:to_list(MsgIdsS),
             on_disk_capture(OnDisk ++ (MsgIds -- Awaiting), Awaiting -- MsgIds,
                             Pid);
         stop ->
@@ -481,7 +480,7 @@ test_msg_store_confirm_timer() ->
         ?PERSISTENT_MSG_STORE,
         Ref,
         fun (MsgIds, _ActionTaken) ->
-            case gb_sets:is_member(MsgId, MsgIds) of
+            case sets:is_element(MsgId, MsgIds) of
                 true  -> Self ! on_disk;
                 false -> ok
             end
@@ -934,42 +933,6 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-variable_queue_dynamic_duration_change(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dynamic_duration_change1, [Config]).
-
-variable_queue_dynamic_duration_change1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dynamic_duration_change2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_dynamic_duration_change2(VQ0, _QName) ->
-    IndexMod = index_mod(),
-    SegmentSize = IndexMod:next_segment_boundary(0),
-
-    %% start by sending in a couple of segments worth
-    Len = 2*SegmentSize,
-    VQ1 = variable_queue_publish(false, Len, VQ0),
-    %% squeeze and relax queue
-    Churn = Len div 32,
-    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
-
-    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
-    VQ7 = lists:foldl(
-            fun (Duration1, VQ4) ->
-                    {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
-                    VQ6 = variable_queue_set_ram_duration_target(
-                            Duration1, VQ5),
-                    publish_fetch_and_ack(Churn, Len, VQ6)
-            end, VQ3, [Duration / 4, 0, Duration / 4, infinity]),
-
-    %% drain
-    {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
-    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
-
-    VQ10.
-
 variable_queue_partial_segments_delta_thing(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, variable_queue_partial_segments_delta_thing1, [Config]).
@@ -988,26 +951,28 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
     VQ3 = check_variable_queue_status(
             variable_queue_set_ram_duration_target(0, VQ2),
-            %% one segment in q3, and half a segment in delta
-            [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
-             {q3, SegmentSize},
-             {len, SegmentSize + HalfSegment}]),
+            %% We only have one message in memory because the amount in memory
+            %% depends on the consume rate, which is nil in this test.
+            [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
+             {q3, 1},
+             {len, OneAndAHalfSegment}]),
     VQ4 = variable_queue_set_ram_duration_target(infinity, VQ3),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ4),
             %% one alpha, but it's in the same segment as the deltas
-            [{q1, 1},
-             {delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
-             {q3, SegmentSize},
-             {len, SegmentSize + HalfSegment + 1}]),
+            %% @todo That's wrong now! v1/v2
+            [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
+             {q3, 1},
+             {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% the half segment should now be in q3
-            [{q1, 1},
-             {delta, {delta, undefined, 0, undefined}},
-             {q3, HalfSegment},
+            %% We only read from delta up to the end of the segment, so
+            %% after fetching exactly one segment, we should have no
+            %% messages in memory.
+            [{delta, {delta, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
+             {q3, 0},
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
@@ -1305,20 +1270,11 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
-    VQ5 = check_variable_queue_status(
-            VQ4, [{len,                         Len div 2},
-                  {messages_unacknowledged_ram, Len div 2},
-                  {messages_ready_ram,          Len div 2},
-                  {messages_ram,                Len}]),
+    %% We only check the length anymore because
+    %% that's the only predictable stats we got.
+    VQ5 = check_variable_queue_status(VQ4, [{len, Len div 2}]),
 
-    %% ensure all acks go to disk on 0 duration target
-    VQ6 = check_variable_queue_status(
-            variable_queue_set_ram_duration_target(0, VQ5),
-            [{len,                         Len div 2},
-             {target_ram_count,            0},
-             {messages_unacknowledged_ram, 0},
-             {messages_ready_ram,          0},
-             {messages_ram,                0}]),
+    VQ6 = variable_queue_set_ram_duration_target(0, VQ5),
 
     VQ6.
 
@@ -1652,23 +1608,23 @@ publish_and_confirm(Q, Payload, Count) ->
               {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
               Acc
       end, QTState0, Seqs),
-    wait_for_confirms(gb_sets:from_list(Seqs)),
+    wait_for_confirms(sets:from_list(Seqs)),
     QTState.
 
 wait_for_confirms(Unconfirmed) ->
-    case gb_sets:is_empty(Unconfirmed) of
+    case sets:is_empty(Unconfirmed) of
         true  -> ok;
         false ->
             receive
                 {'$gen_cast',
                  {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)));
+                      sets:subtract(
+                        Unconfirmed, sets:from_list(Confirmed)));
                 {'$gen_cast', {confirm, Confirmed, _}} ->
                     wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)))
+                      sets:subtract(
+                        Unconfirmed, sets:from_list(Confirmed)))
             after ?TIMEOUT ->
                       flush(),
                       exit(timeout_waiting_for_confirm)
@@ -1687,10 +1643,9 @@ with_fresh_variable_queue(Fun, Mode) ->
                        S0 = variable_queue_status(VQ),
                        assert_props(S0, [{q1, 0}, {q2, 0},
                                          {delta,
-                                          {delta, undefined, 0, undefined}},
+                                          {delta, undefined, 0, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
-                       %% @todo Some tests probably don't keep this after restart (dropwhile_(sync)_restart, A2).
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
@@ -1708,10 +1663,7 @@ with_fresh_variable_queue(Fun, Mode) ->
     passed.
 
 set_queue_mode(Mode, VQ) ->
-    VQ1 = rabbit_variable_queue:set_queue_mode(Mode, VQ),
-    S1 = variable_queue_status(VQ1),
-    assert_props(S1, [{mode, Mode}]),
-    VQ1.
+    rabbit_variable_queue:set_queue_mode(Mode, VQ).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -1792,7 +1744,11 @@ assert_prop(List, Prop, Value) ->
     end.
 
 assert_props(List, PropVals) ->
-    [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
+    Res = [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals],
+    case lists:usort(Res) of
+        [ok] -> ok;
+        Error -> error(Error -- [ok])
+    end.
 
 variable_queue_set_ram_duration_target(Duration, VQ) ->
     variable_queue_wait_for_shuffling_end(
@@ -1866,9 +1822,7 @@ variable_queue_with_holes(VQ0) ->
             true, Count + 1, Interval,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
     %% assertions
-    Status = variable_queue_status(VQ8),
-
-    vq_with_holes_assertions(VQ8, proplists:get_value(mode, Status)),
+    vq_with_holes_assertions(VQ8),
     Depth = Count + Interval,
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
@@ -1876,21 +1830,14 @@ variable_queue_with_holes(VQ0) ->
 
     {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + Interval), VQ8}.
 
-vq_with_holes_assertions(VQ, default) ->
+vq_with_holes_assertions(VQ) ->
     [false =
          case V of
-             {delta, _, 0, _} -> true;
-             0                -> true;
-             _                -> false
+             {delta, _, 0, _, _} -> true;
+             0                   -> true;
+             _                   -> false
          end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [q1, delta, q3])];
-vq_with_holes_assertions(VQ, lazy) ->
-    [false =
-         case V of
-             {delta, _, 0, _} -> true;
-             _                -> false
-         end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [delta])].
+                lists:member(K, [delta, q3])].
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),

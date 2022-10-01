@@ -12,7 +12,7 @@
 -export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
-         publish/7, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
+         publish/7, publish/8, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
@@ -249,7 +249,7 @@
                                unacked            :: non_neg_integer()
                              }).
 -type seg_map() :: {map(), [segment()]}.
--type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
+-type on_sync_fun() :: fun ((sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_map(),
                               journal_handle      :: hdl(),
@@ -257,8 +257,8 @@
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
                               on_sync_msg         :: on_sync_fun(),
-                              unconfirmed         :: gb_sets:set(),
-                              unconfirmed_msg     :: gb_sets:set(),
+                              unconfirmed         :: sets:set(),
+                              unconfirmed_msg     :: sets:set(),
                               pre_publish_cache   :: list(),
                               delivered_cache     :: list()
                             }.
@@ -430,6 +430,9 @@ publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, Stat
       JournalSizeHint,
       add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
 
+publish(MsgOrId, SeqId, Location, MsgProps, IsPersistent, _, JournalSizeHint, State) ->
+    publish(MsgOrId, SeqId, Location, MsgProps, IsPersistent, JournalSizeHint, State).
+
 maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
                          unconfirmed_msg = UCM}) ->
@@ -439,9 +442,9 @@ maybe_needs_confirming(MsgProps, MsgOrId,
             end,
     ?MSG_ID_BYTES = size(MsgId),
     case {MsgProps#message_properties.needs_confirming, MsgOrId} of
-      {true,  MsgId} -> UC1  = gb_sets:add_element(MsgId, UC),
+      {true,  MsgId} -> UC1  = sets:add_element(MsgId, UC),
                         State#qistate{unconfirmed     = UC1};
-      {true,  _}     -> UCM1 = gb_sets:add_element(MsgId, UCM),
+      {true,  _}     -> UCM1 = sets:add_element(MsgId, UCM),
                         State#qistate{unconfirmed_msg = UCM1};
       {false, _}     -> State
     end.
@@ -474,7 +477,7 @@ needs_sync(#qistate{journal_handle = undefined}) ->
 needs_sync(#qistate{journal_handle  = JournalHdl,
                     unconfirmed     = UC,
                     unconfirmed_msg = UCM}) ->
-    case gb_sets:is_empty(UC) andalso gb_sets:is_empty(UCM) of
+    case sets:is_empty(UC) andalso sets:is_empty(UCM) of
         true  -> case file_handle_cache:needs_sync(JournalHdl) of
                      true  -> other;
                      false -> false
@@ -623,8 +626,8 @@ blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
                max_journal_entries = MaxJournal,
                on_sync             = OnSyncFun,
                on_sync_msg         = OnSyncMsgFun,
-               unconfirmed         = gb_sets:new(),
-               unconfirmed_msg     = gb_sets:new(),
+               unconfirmed         = sets:new([{version,2}]),
+               unconfirmed_msg     = sets:new([{version,2}]),
                pre_publish_cache   = [],
                delivered_cache     = [],
                queue_name          = Name }.
@@ -731,7 +734,7 @@ recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
 recover_index_v2_common(State0 = #qistate { queue_name = Name, dir = Dir },
                         V2State, CountersRef) ->
     %% Use a temporary per-queue store state to read embedded messages.
-    StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
+    StoreState0 = rabbit_classic_queue_store_v2:init(Name),
     %% Go through the v2 index and publish messages to v1 index.
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2State),
     %% When resuming after a crash we need to double check the messages that are both
@@ -1101,15 +1104,15 @@ notify_sync(State = #qistate{unconfirmed     = UC,
                              unconfirmed_msg = UCM,
                              on_sync         = OnSyncFun,
                              on_sync_msg     = OnSyncMsgFun}) ->
-    State1 = case gb_sets:is_empty(UC) of
+    State1 = case sets:is_empty(UC) of
                  true  -> State;
                  false -> OnSyncFun(UC),
-                          State#qistate{unconfirmed = gb_sets:new()}
+                          State#qistate{unconfirmed = sets:new([{version,2}])}
              end,
-    case gb_sets:is_empty(UCM) of
+    case sets:is_empty(UCM) of
         true  -> State1;
         false -> OnSyncMsgFun(UCM),
-                 State1#qistate{unconfirmed_msg = gb_sets:new()}
+                 State1#qistate{unconfirmed_msg = sets:new([{version,2}])}
     end.
 
 %%----------------------------------------------------------------------------

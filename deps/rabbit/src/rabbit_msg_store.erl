@@ -162,7 +162,7 @@
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A}).
 -type maybe_msg_id_fun() ::
-        'undefined' | fun ((gb_sets:set(), 'written' | 'ignored') -> any()).
+        'undefined' | fun ((sets:set(), 'written' | 'ignored') -> any()).
 -type maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok').
 -type deletion_thunk() :: fun (() -> boolean()).
 
@@ -757,8 +757,12 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
 
     FileHandlesEts  = ets:new(rabbit_msg_store_shared_file_handles,
                               [ordered_set, public]),
-    CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
-    FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public]),
+    CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public,
+                              {read_concurrency, true},
+                              {write_concurrency, true}]),
+    FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public,
+                              {read_concurrency, true},
+                              {write_concurrency, true}]),
 
     {ok, FileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
 
@@ -907,7 +911,7 @@ handle_cast({write, CRef, MsgId, Flow},
         ignore ->
             %% A 'remove' has already been issued and eliminated the
             %% 'write'.
-            State1 = blind_confirm(CRef, gb_sets:singleton(MsgId),
+            State1 = blind_confirm(CRef, sets:add_element(MsgId, sets:new([{version,2}])),
                                    ignored, State),
             %% If all writes get eliminated, cur_file_cache_ets could
             %% grow unbounded. To prevent that we delete the cache
@@ -938,7 +942,7 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                       ignore  -> {Removed, State2}
                   end
           end, {[], State}, MsgIds),
-    noreply(maybe_compact(client_confirm(CRef, gb_sets:from_list(RemovedMsgIds),
+    noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds),
                                          ignored, State1)));
 
 handle_cast({combine_files, Source, Destination, Reclaimed},
@@ -970,6 +974,12 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
+%% @todo When a CQ crashes the message store does not remove
+%%       the client information and clean up. This eventually
+%%       leads to the queue running a full recovery on the next
+%%       message store restart because the store will keep the
+%%       crashed queue's ref in its persistent state and fail
+%%       to find the corresponding ref during start.
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
     %% similar to what happens in
     %% rabbit_amqqueue_process:handle_ch_down but with a relation of
@@ -1066,7 +1076,7 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
     CGs = maps:fold(fun (CRef, MsgIds, NS) ->
-                            case gb_sets:is_empty(MsgIds) of
+                            case sets:is_empty(MsgIds) of
                                 true  -> NS;
                                 false -> [{CRef, MsgIds} | NS]
                             end
@@ -1156,7 +1166,7 @@ write_message(MsgId, Msg, CRef,
             true = ets:delete_object(CurFileCacheEts, {MsgId, Msg, 0}),
             update_pending_confirms(
               fun (MsgOnDiskFun, CTM) ->
-                      MsgOnDiskFun(gb_sets:singleton(MsgId), written),
+                      MsgOnDiskFun(sets:add_element(MsgId, sets:new([{version,2}])), written),
                       CTM
               end, CRef, State1)
     end.
@@ -1356,8 +1366,8 @@ record_pending_confirm(CRef, MsgId, State) ->
     update_pending_confirms(
       fun (_MsgOnDiskFun, CTM) ->
             NewMsgIds = case maps:find(CRef, CTM) of
-                error        -> gb_sets:singleton(MsgId);
-                {ok, MsgIds} -> gb_sets:add(MsgId, MsgIds)
+                error        -> sets:add_element(MsgId, sets:new([{version,2}]));
+                {ok, MsgIds} -> sets:add_element(MsgId, MsgIds)
             end,
             maps:put(CRef, NewMsgIds, CTM)
       end, CRef, State).
@@ -1366,11 +1376,10 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
     update_pending_confirms(
       fun (MsgOnDiskFun, CTM) ->
               case maps:find(CRef, CTM) of
-                  {ok, Gs} -> MsgOnDiskFun(gb_sets:intersection(Gs, MsgIds),
+                  {ok, Gs} -> MsgOnDiskFun(sets:intersection(Gs, MsgIds),
                                            ActionTaken),
-                              MsgIds1 = rabbit_misc:gb_sets_difference(
-                                          Gs, MsgIds),
-                              case gb_sets:is_empty(MsgIds1) of
+                              MsgIds1 = sets:subtract(Gs, MsgIds),
+                              case sets:is_empty(MsgIds1) of
                                   true  -> maps:remove(CRef, CTM);
                                   false -> maps:put(CRef, MsgIds1, CTM)
                               end;
