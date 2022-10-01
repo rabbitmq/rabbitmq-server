@@ -1,0 +1,13 @@
+load("//:rabbitmq.bzl", "all_plugins")
+load(":erlang_ls.bzl", "erlang_ls_config", "erlang_ls_tree")
+
+erlang_ls_tree(
+    name = "erlang_ls_files",
+    apps = all_plugins(
+        rabbitmq_workspace = "",
+    ),
+)
+
+erlang_ls_config(
+    name = "erlang_ls.config",
+)
