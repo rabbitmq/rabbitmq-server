@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ListUserTopicPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -35,14 +34,14 @@ defmodule ListUserTopicPermissionsCommandTest do
     }
   end
 
-## -------------------------------- Usage -------------------------------------
+  ## -------------------------------- Usage -------------------------------------
 
   test "validate: expect username argument" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["guest", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
-## ------------------------------- Username -----------------------------------
+  ## ------------------------------- Username -----------------------------------
 
   @tag test_timeout: :infinity, username: "guest"
   test "run: valid user returns a list of topic permissions", context do
@@ -53,10 +52,12 @@ defmodule ListUserTopicPermissionsCommandTest do
   @tag test_timeout: :infinity, username: "interloper"
   test "run: invalid user returns a no-such-user error", context do
     assert @command.run(
-      [context[:username]], context[:opts]) == context[:no_such_user]
+             [context[:username]],
+             context[:opts]
+           ) == context[:no_such_user]
   end
 
-## --------------------------------- Flags ------------------------------------
+  ## --------------------------------- Flags ------------------------------------
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
@@ -66,7 +67,7 @@ defmodule ListUserTopicPermissionsCommandTest do
 
   @tag test_timeout: :infinity
   test "banner", context do
-    assert @command.banner( [context[:username]], context[:opts])
-      =~ ~r/Listing topic permissions for user \"#{context[:username]}\" \.\.\./
+    assert @command.banner([context[:username]], context[:opts]) =~
+             ~r/Listing topic permissions for user \"#{context[:username]}\" \.\.\./
   end
 end

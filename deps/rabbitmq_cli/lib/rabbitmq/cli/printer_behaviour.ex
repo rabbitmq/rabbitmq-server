@@ -14,8 +14,9 @@ defmodule RabbitMQ.CLI.PrinterBehaviour do
   def module_name(nil) do
     nil
   end
+
   def module_name(printer) do
-    mod = printer |> String.downcase |> Macro.camelize
+    mod = printer |> String.downcase() |> Macro.camelize()
     String.to_atom("RabbitMQ.CLI.Printers." <> mod)
   end
 end

@@ -24,10 +24,11 @@ defmodule CheckLocalAlarmsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -44,7 +45,10 @@ defmodule CheckLocalAlarmsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: when target node has no alarms in effect, returns an empty list", context do
@@ -55,9 +59,11 @@ defmodule CheckLocalAlarmsCommandTest do
 
   test "run: when target node has a local alarm in effect, returns it", context do
     old_watermark = status()[:vm_memory_high_watermark]
-    on_exit(fn() ->
+
+    on_exit(fn ->
       set_vm_memory_high_watermark(old_watermark)
     end)
+
     # 2000 bytes will trigger an alarm
     set_vm_memory_high_watermark({:absolute, 2000})
 
@@ -81,16 +87,17 @@ defmodule CheckLocalAlarmsCommandTest do
           ],
           [
             :file_descriptor_limit,
-            {{:resource_limit, :disk,   get_rabbit_hostname()}, []},
+            {{:resource_limit, :disk, get_rabbit_hostname()}, []},
             {{:resource_limit, :memory, get_rabbit_hostname()}, []}
           ]
         ] do
-        assert match?({:error, _}, @command.output(input, context[:opts]))
+      assert match?({:error, _}, @command.output(input, context[:opts]))
     end
   end
 
   # note: it's run/2 that filters out non-local alarms
-  test "output: when target node has an alarm in effect and --silent is passed, returns a silent failure", _context do
+  test "output: when target node has an alarm in effect and --silent is passed, returns a silent failure",
+       _context do
     for input <- [
           [
             :file_descriptor_limit
@@ -101,11 +108,11 @@ defmodule CheckLocalAlarmsCommandTest do
           ],
           [
             :file_descriptor_limit,
-            {{:resource_limit, :disk,   get_rabbit_hostname()}, []},
+            {{:resource_limit, :disk, get_rabbit_hostname()}, []},
             {{:resource_limit, :memory, get_rabbit_hostname()}, []}
           ]
         ] do
-        assert {:error, :check_failed} == @command.output(input, %{silent: true})
+      assert {:error, :check_failed} == @command.output(input, %{silent: true})
     end
   end
 end

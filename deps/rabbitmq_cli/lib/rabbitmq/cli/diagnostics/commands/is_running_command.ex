@@ -18,19 +18,28 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
   end
 
   def output(true, %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result" => true, "message" => "RabbitMQ on node #{node_name} is fully booted and running"}}
+    {:ok,
+     %{"result" => true, "message" => "RabbitMQ on node #{node_name} is fully booted and running"}}
   end
+
   def output(false, %{node: node_name, formatter: "json"}) do
     {:ok,
-     %{"result" => false, "message" => "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}}
+     %{
+       "result" => false,
+       "message" =>
+         "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"
+     }}
   end
+
   def output(true, %{node: node_name}) do
     {:ok, "RabbitMQ on node #{node_name} is fully booted and running"}
   end
+
   def output(false, %{node: node_name}) do
     {:ok,
      "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks

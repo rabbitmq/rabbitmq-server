@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ListTopicPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -14,7 +13,7 @@ defmodule ListTopicPermissionsCommandTest do
   @vhost "test1"
   @user "user1"
   @password "password"
-  @root   "/"
+  @root "/"
   @default_timeout :infinity
   @default_options %{vhost: "/", table_headers: true}
 
@@ -29,7 +28,7 @@ defmodule ListTopicPermissionsCommandTest do
     on_exit([], fn ->
       clear_topic_permissions(@user, @vhost)
       delete_user(@user)
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -52,8 +51,9 @@ defmodule ListTopicPermissionsCommandTest do
 
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          table_headers: true}}
+
+    assert @command.merge_defaults([], %{vhost: "non_default"}) ==
+             {[], %{vhost: "non_default", table_headers: true}}
   end
 
   test "validate: does not expect any parameter" do
@@ -70,16 +70,18 @@ defmodule ListTopicPermissionsCommandTest do
   test "run: specifying a vhost returns the topic permissions for the targeted vhost", context do
     permissions = @command.run([], Map.merge(context[:opts], %{vhost: @vhost}))
     assert Enum.count(permissions) == 2
+
     assert Enum.sort(permissions) == [
-        [user: @user, exchange: "amq.topic", write: "^a", read: "^b"],
-        [user: @user, exchange: "topic1", write: "^a", read: "^b"]
-    ]
+             [user: @user, exchange: "amq.topic", write: "^a", read: "^b"],
+             [user: @user, exchange: "topic1", write: "^a", read: "^b"]
+           ]
   end
 
   @tag vhost: @root
   test "banner", context do
     ctx = Map.merge(context[:opts], %{vhost: @vhost})
-    assert @command.banner([], ctx )
-      =~ ~r/Listing topic permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
+
+    assert @command.banner([], ctx) =~
+             ~r/Listing topic permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
   end
 end

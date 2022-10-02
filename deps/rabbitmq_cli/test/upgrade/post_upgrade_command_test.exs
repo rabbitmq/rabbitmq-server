@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule PostUpgradeCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,10 +17,11 @@ defmodule PostUpgradeCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 5000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -45,5 +45,4 @@ defmodule PostUpgradeCommandTest do
   test "run: returns an OK", context do
     assert match?({:ok, _}, @command.run([], context[:opts]))
   end
-
 end

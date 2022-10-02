@@ -24,12 +24,15 @@ defmodule EnableAuthAttemptSourceTrackingCommandTest do
 
   test "validate: providing any arguments fails validation", context do
     assert @command.validate(["a"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
-    @tag test_timeout: 3000
+  @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   @tag test_timeout: 15000

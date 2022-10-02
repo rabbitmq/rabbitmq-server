@@ -43,7 +43,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
   end
 
   def run([], %{node: node_name, user: username}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :get_user_limits, [username]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :get_user_limits, [
+           username
+         ]) do
       :undefined ->
         {:error, {:no_such_user, username}}
 

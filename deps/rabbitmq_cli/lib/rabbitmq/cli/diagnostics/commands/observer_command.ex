@@ -15,16 +15,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
     {args, Map.merge(%{interval: 5}, opts)}
   end
 
-
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, interval: interval}) do
     case :observer_cli.start(node_name, [{:interval, interval * 1000}]) do
       # See zhongwencool/observer_cli#54
-      {:badrpc, _} = err   -> err
-      {:error, _} = err    -> err
+      {:badrpc, _} = err -> err
+      {:error, _} = err -> err
       {:error, _, _} = err -> err
-      :ok   -> {:ok, "Disconnected from #{node_name}."}
+      :ok -> {:ok, "Disconnected from #{node_name}."}
       :quit -> {:ok, "Disconnected from #{node_name}."}
       other -> other
     end

@@ -4,13 +4,12 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AuthenticateUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands. AuthenticateUserCommand
-  @user     "user1"
+  @command RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand
+  @user "user1"
   @password "password"
 
   setup_all do
@@ -31,7 +30,7 @@ defmodule AuthenticateUserCommandTest do
 
   test "validate: too many positional arguments fails" do
     assert @command.validate(["user", "password", "extra"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: one argument passes" do
@@ -54,28 +53,34 @@ defmodule AuthenticateUserCommandTest do
 
   @tag user: @user, password: "treachery"
   test "run: a valid username and invalid password returns refused", context do
-    assert {:refused, _, _, _} = @command.run([context[:user], context[:password]], context[:opts])
+    assert {:refused, _, _, _} =
+             @command.run([context[:user], context[:password]], context[:opts])
   end
 
   @tag user: "interloper", password: @password
   test "run: an invalid username returns refused", context do
-    assert {:refused, _, _, _} = @command.run([context[:user], context[:password]], context[:opts])
+    assert {:refused, _, _, _} =
+             @command.run([context[:user], context[:password]], context[:opts])
   end
 
   @tag user: @user, password: @password
   test "banner", context do
-    assert @command.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/Authenticating user/
-    assert @command.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/"#{context[:user]}"/
+    assert @command.banner([context[:user], context[:password]], context[:opts]) =~
+             ~r/Authenticating user/
+
+    assert @command.banner([context[:user], context[:password]], context[:opts]) =~
+             ~r/"#{context[:user]}"/
   end
 
   test "output: refused error", context do
     user = "example_user"
-    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_dataerr
-    assert match?({:error, ^exit_code,
-                   "Error: failed to authenticate user \"example_user\"\n" <>
-                   "Unable to foo"},
-                  @command.output({:refused, user, "Unable to ~s", ["foo"]}, context[:opts]))
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_dataerr()
+
+    assert match?(
+             {:error, ^exit_code,
+              "Error: failed to authenticate user \"example_user\"\n" <>
+                "Unable to foo"},
+             @command.output({:refused, user, "Unable to ~s", ["foo"]}, context[:opts])
+           )
   end
 end

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule EnableFeatureFlagCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -17,28 +16,47 @@ defmodule EnableFeatureFlagCommandTest do
 
     # Define an arbitrary feature flag for the test.
     node = get_rabbit_hostname()
+
     new_feature_flags = %{
-      @feature_flag =>
-      %{desc: "My feature flag",
+      @feature_flag => %{
+        desc: "My feature flag",
         provided_by: :EnableFeatureFlagCommandTest,
+<<<<<<< HEAD
         stability: :stable}}
     :ok = :rabbit_misc.rpc_call(
       node, :rabbit_feature_flags, :initialize_registry, [new_feature_flags])
+=======
+        stability: :stable
+      }
+    }
+
+    :ok =
+      :rabbit_misc.rpc_call(
+        node,
+        :rabbit_feature_flags,
+        :inject_test_feature_flags,
+        [new_feature_flags]
+      )
+>>>>>>> 059978e6fa (mix format rabbitmq_cli)
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname()},
-      feature_flag: @feature_flag
+      opts: %{node: get_rabbit_hostname()}, feature_flag: @feature_flag
     }
   end
 
   test "validate: wrong number of arguments results in arg count errors" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["ff_from_enable_ff_testsuite", "whoops"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["ff_from_enable_ff_testsuite", "whoops"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: passing an empty string for feature_flag name is an arg error", context do
-    assert match?({:validation_failure, {:bad_argument, _}}, @command.validate([""], context[:opts]))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([""], context[:opts])
+           )
   end
 
   test "run: passing a valid feature_flag name to a running RabbitMQ node succeeds", context do
@@ -52,19 +70,19 @@ defmodule EnableFeatureFlagCommandTest do
   end
 
   test "run: enabling the same feature flag twice is idempotent", context do
-    enable_feature_flag context[:feature_flag]
+    enable_feature_flag(context[:feature_flag])
     assert @command.run([Atom.to_string(context[:feature_flag])], context[:opts]) == :ok
     assert list_feature_flags(:enabled) |> Map.has_key?(context[:feature_flag])
   end
 
   test "run: enabling all feature flags succeeds", context do
-    enable_feature_flag context[:feature_flag]
+    enable_feature_flag(context[:feature_flag])
     assert @command.run(["all"], context[:opts]) == :ok
     assert list_feature_flags(:enabled) |> Map.has_key?(context[:feature_flag])
   end
 
   test "banner", context do
-    assert @command.banner([context[:feature_flag]], context[:opts])
-      =~ ~r/Enabling feature flag \"#{context[:feature_flag]}\" \.\.\./
+    assert @command.banner([context[:feature_flag]], context[:opts]) =~
+             ~r/Enabling feature flag \"#{context[:feature_flag]}\" \.\.\./
   end
 end

@@ -31,7 +31,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists TLS versions supported (but not necessarily allowed) on the target node"
+  def description(),
+    do: "Lists TLS versions supported (but not necessarily allowed) on the target node"
 
   def usage, do: "tls_versions"
 

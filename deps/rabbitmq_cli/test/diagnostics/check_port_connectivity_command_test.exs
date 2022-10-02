@@ -17,10 +17,11 @@ defmodule CheckPortConnectivityCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: provides a default timeout" do
@@ -37,13 +38,15 @@ defmodule CheckPortConnectivityCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: tries to connect to every inferred active listener", context do
     assert match?({true, _}, @command.run([], context[:opts]))
   end
-
 
   test "output: when all connections succeeded, returns a success", context do
     assert match?({:ok, _}, @command.output({true, []}, context[:opts]))
@@ -51,9 +54,10 @@ defmodule CheckPortConnectivityCommandTest do
 
   # note: it's run/2 that filters out non-local alarms
   test "output: when target node has a local alarm in effect, returns a failure", context do
-    failure = {:listener, :rabbit@mercurio, :lolz, 'mercurio',
-                  {0, 0, 0, 0, 0, 0, 0, 0}, 7761613,
-                  [backlog: 128, nodelay: true]}
+    failure =
+      {:listener, :rabbit@mercurio, :lolz, 'mercurio', {0, 0, 0, 0, 0, 0, 0, 0}, 7_761_613,
+       [backlog: 128, nodelay: true]}
+
     assert match?({:error, _}, @command.output({false, [failure]}, context[:opts]))
   end
 end

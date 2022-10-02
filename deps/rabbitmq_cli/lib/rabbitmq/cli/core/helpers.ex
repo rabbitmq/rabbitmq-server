@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def normalise_node(name, node_name_type) do
     case NodeName.create(name, node_name_type) do
       {:ok, node_name} -> node_name
-      other            -> other
+      other -> other
     end
   end
 
@@ -27,9 +27,11 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def normalise_node_option(options) do
     node_opt = Config.get_option(:node, options)
     longnames_opt = Config.get_option(:longnames, options)
+
     case NodeName.create(node_opt, longnames_opt) do
       {:error, _} = err ->
         err
+
       {:ok, val} ->
         {:ok, Map.put(options, :node, val)}
     end
@@ -38,10 +40,12 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def normalise_node_option(nil, _, _) do
     nil
   end
+
   def normalise_node_option(node_opt, longnames_opt, options) do
     case NodeName.create(node_opt, longnames_opt) do
       {:error, _} = err ->
         err
+
       {:ok, val} ->
         {:ok, Map.put(options, :node, val)}
     end
@@ -50,6 +54,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def case_insensitive_format(%{format: format} = opts) do
     %{opts | format: String.downcase(format)}
   end
+
   def case_insensitive_format(opts), do: opts
 
   def nodes_in_cluster(node, timeout \\ :infinity) do
@@ -116,17 +121,17 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def atomize_values(map, keys) do
-    Enum.reduce(map, %{},
-                fn({k, v}, acc) ->
-                  case Enum.member?(keys, k) do
-                    false -> Map.put(acc, k, v)
-                    true  -> Map.put(acc, k, DataCoercion.to_atom(v))
-                  end
-                end)
+    Enum.reduce(map, %{}, fn {k, v}, acc ->
+      case Enum.member?(keys, k) do
+        false -> Map.put(acc, k, v)
+        true -> Map.put(acc, k, DataCoercion.to_atom(v))
+      end
+    end)
   end
 
   def apply_if_exported(mod, fun, args, default) do
     Code.ensure_loaded(mod)
+
     case function_exported?(mod, fun, length(args)) do
       true -> apply(mod, fun, args)
       false -> default
