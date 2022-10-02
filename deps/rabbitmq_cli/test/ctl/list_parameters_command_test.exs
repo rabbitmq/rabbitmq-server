@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ListParametersCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -12,7 +11,7 @@ defmodule ListParametersCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListParametersCommand
 
   @vhost "test1"
-  @root   "/"
+  @root "/"
   @component_name "federation-upstream"
   @key "reconnect-delay"
   @value "{\"uri\":\"amqp://\"}"
@@ -22,29 +21,31 @@ defmodule ListParametersCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname()
 
-    {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
-                                                :application, :get_env,
-                                                [:rabbit, :enabled_plugins_file])
-    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
-                                               :application, :get_env,
-                                               [:rabbit, :plugins_dir])
+    {:ok, plugins_file} =
+      :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :enabled_plugins_file])
+
+    {:ok, plugins_dir} =
+      :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :plugins_dir])
+
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
 
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
 
-    opts = %{enabled_plugins_file: plugins_file,
-             plugins_dir: plugins_dir,
-             rabbitmq_home: rabbitmq_home}
+    opts = %{
+      enabled_plugins_file: plugins_file,
+      plugins_dir: plugins_dir,
+      rabbitmq_home: rabbitmq_home
+    }
 
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, node, opts)
 
-    add_vhost @vhost
+    add_vhost(@vhost)
 
     enable_federation_plugin()
 
     on_exit(fn ->
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -52,13 +53,14 @@ defmodule ListParametersCommandTest do
 
   setup context do
     on_exit(fn ->
-      clear_parameter context[:vhost], context[:component_name], context[:key]
+      clear_parameter(context[:vhost], context[:component_name], context[:key])
     end)
+
     {
       :ok,
       opts: %{
         node: get_rabbit_hostname(),
-        timeout: (context[:timeout] || :infinity),
+        timeout: context[:timeout] || :infinity,
         vhost: context[:vhost]
       }
     }
@@ -66,18 +68,21 @@ defmodule ListParametersCommandTest do
 
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          table_headers: true}}
+
+    assert @command.merge_defaults([], %{vhost: "non_default"}) ==
+             {[], %{vhost: "non_default", table_headers: true}}
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
-    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["this", "is", "too", "many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "run: a well-formed, host-specific command returns list of parameters", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
+
     @command.run([], vhost_opts)
     |> assert_parameter_list(context)
   end
@@ -90,8 +95,8 @@ defmodule ListParametersCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
   test "run: a well-formed command with no vhost runs against the default", context do
-
     set_parameter("/", context[:component_name], context[:key], @value)
+
     on_exit(fn ->
       clear_parameter("/", context[:component_name], context[:key])
     end)
@@ -111,9 +116,9 @@ defmodule ListParametersCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [],
-      vhost_opts
-    ) == {:error, {:no_such_vhost, context[:vhost]}}
+             [],
+             vhost_opts
+           ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag vhost: @vhost
@@ -122,14 +127,15 @@ defmodule ListParametersCommandTest do
       %{component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
       %{component: "exchange-delete-in-progress", name: "my-key", value: "{\"foo\":\"bar\"}"}
     ]
+
     parameters
-    |> Enum.map(
-        fn(%{component: component, name: name, value: value}) ->
-          set_parameter(context[:vhost], component, name, value)
-          on_exit(fn ->
-            clear_parameter(context[:vhost], component, name)
-          end)
-        end)
+    |> Enum.map(fn %{component: component, name: name, value: value} ->
+      set_parameter(context[:vhost], component, name, value)
+
+      on_exit(fn ->
+        clear_parameter(context[:vhost], component, name)
+      end)
+    end)
 
     params = for param <- @command.run([], context[:opts]), do: Map.new(param)
 
@@ -140,15 +146,19 @@ defmodule ListParametersCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([], vhost_opts)
-      =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
+    assert @command.banner([], vhost_opts) =~
+             ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values
   defp assert_parameter_list(params, context) do
     [param] = params
-    assert MapSet.new(param) == MapSet.new([component: context[:component_name],
-                                            name: context[:key],
-                                            value: context[:value]])
+
+    assert MapSet.new(param) ==
+             MapSet.new(
+               component: context[:component_name],
+               name: context[:key],
+               value: context[:value]
+             )
   end
 end

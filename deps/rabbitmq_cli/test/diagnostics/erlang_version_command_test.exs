@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ErlangVersionCommandTest do
   use ExUnit.Case
   import TestHelper
@@ -18,12 +17,13 @@ defmodule ErlangVersionCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        details: false,
-        offline: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       details: false,
+       offline: false
+     }}
   end
 
   test "merge_defaults: defaults to remote version and abbreviated output" do
@@ -52,7 +52,10 @@ defmodule ErlangVersionCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, details: false})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, details: false}))
+           )
   end
 
   test "run: returns Erlang/OTP version on the target node", context do

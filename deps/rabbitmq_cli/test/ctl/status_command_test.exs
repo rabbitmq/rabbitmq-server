@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper

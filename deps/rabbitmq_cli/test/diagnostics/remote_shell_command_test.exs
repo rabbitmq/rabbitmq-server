@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule RemoteShellCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,10 +17,11 @@ defmodule RemoteShellCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 15000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 15000
+     }}
   end
 
   test "merge_defaults: nothing to do" do

@@ -10,13 +10,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands. ClearPasswordCommand
-  @user     "user1"
+  @command RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand
+  @user "user1"
   @password "password"
 
   setup_all do
@@ -34,8 +33,9 @@ defmodule ClearPasswordCommandTest do
   test "validate: argument count is correct" do
     assert @command.validate(["username"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+
     assert @command.validate(["username", "extra"], %{}) ==
-        {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, password: @password
@@ -51,7 +51,8 @@ defmodule ClearPasswordCommandTest do
 
   @tag user: "interloper"
   test "run: An invalid username returns a no-such-user error message", context do
-    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    assert @command.run([context[:user]], context[:opts]) ==
+             {:error, {:no_such_user, "interloper"}}
   end
 
   @tag user: @user

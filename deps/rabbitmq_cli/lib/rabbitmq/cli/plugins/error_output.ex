@@ -12,9 +12,7 @@ defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
     quote do
       def output({:error, {:enabled_plugins_mismatch, cli_path, node_path}}, opts) do
         {:error, ExitCodes.exit_dataerr(),
-         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{
-           node_path
-         })"}
+         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{node_path})"}
       end
 
       def output({:error, {:cannot_read_enabled_plugins_file, path, :eacces}}, _opts) do

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule PurgeQueueCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -20,11 +19,12 @@ defmodule PurgeQueueCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        vhost: @vhost,
-        timeout: context[:test_timeout]
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       vhost: @vhost,
+       timeout: context[:test_timeout]
+     }}
   end
 
   test "merge_defaults: defaults can be overridden" do
@@ -34,8 +34,8 @@ defmodule PurgeQueueCommandTest do
 
   @tag test_timeout: 30000
   test "request to an existent queue on active node succeeds", context do
-    add_vhost @vhost
-    set_permissions @user, @vhost, [".*", ".*", ".*"]
+    add_vhost(@vhost)
+    set_permissions(@user, @vhost, [".*", ".*", ".*"])
     on_exit(context, fn -> delete_vhost(@vhost) end)
 
     q = "foo"
@@ -71,7 +71,8 @@ defmodule PurgeQueueCommandTest do
   end
 
   test "validate: with extra arguments returns an arg count error" do
-    assert @command.validate(["queue-name", "extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["queue-name", "extra"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: with no arguments returns an arg count error" do
@@ -83,6 +84,7 @@ defmodule PurgeQueueCommandTest do
   end
 
   test "banner informs that vhost's queue is purged" do
-    assert @command.banner(["my-q"], %{vhost: "/foo"}) == "Purging queue 'my-q' in vhost '/foo' ..."
+    assert @command.banner(["my-q"], %{vhost: "/foo"}) ==
+             "Purging queue 'my-q' in vhost '/foo' ..."
   end
 end

@@ -65,14 +65,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortListenerCommand do
   def output({false, port, listeners}, %{node: node_name}) do
     ports = Enum.map(listeners, fn %{port: p} -> p end) |> Enum.sort() |> Enum.join(", ")
 
-    {:error,  :check_failed,
+    {:error, :check_failed,
      "No listener for port #{port} is active on node #{node_name}. " <>
        "Found listeners that use the following ports: #{ports}"}
   end
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Health check that exits with a non-zero code if target node does not have an active listener for given port"
+  def description(),
+    do:
+      "Health check that exits with a non-zero code if target node does not have an active listener for given port"
 
   def usage, do: "check_port_listener <port>"
 

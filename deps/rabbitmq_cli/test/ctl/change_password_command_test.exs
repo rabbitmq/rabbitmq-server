@@ -10,13 +10,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ChangePasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands. ChangePasswordCommand
-  @user     "user1"
+  @command RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand
+  @user "user1"
   @password "password"
 
   setup_all do
@@ -37,7 +36,7 @@ defmodule ChangePasswordCommandTest do
 
   test "validate: too many positional arguments fails" do
     assert @command.validate(["user", "password", "extra"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: two arguments passes" do
@@ -67,14 +66,16 @@ defmodule ChangePasswordCommandTest do
 
   @tag user: "interloper", password: "new_password"
   test "run: an invalid user returns an error", context do
-    assert @command.run([context[:user], context[:password]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    assert @command.run([context[:user], context[:password]], context[:opts]) ==
+             {:error, {:no_such_user, "interloper"}}
   end
 
   @tag user: @user, password: @password
   test "banner", context do
-    assert @command.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/Changing password for user/
-    assert @command.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/"#{context[:user]}"/
+    assert @command.banner([context[:user], context[:password]], context[:opts]) =~
+             ~r/Changing password for user/
+
+    assert @command.banner([context[:user], context[:password]], context[:opts]) =~
+             ~r/"#{context[:user]}"/
   end
 end

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule RestartVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -20,27 +19,32 @@ defmodule RestartVhostCommandTest do
   @timeout 10000
 
   setup do
-    {:ok, opts: %{
-      node: get_rabbit_hostname(),
-      vhost: @vhost,
-      timeout: @timeout
-    }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       vhost: @vhost,
+       timeout: @timeout
+     }}
   end
 
   test "validate: specifying arguments is reported as an error", context do
     assert @command.validate(["a"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
+
     assert @command.validate(["a", "b"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
+
     assert @command.validate(["a", "b", "c"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: request to a non-existent node returns a badrpc", _context do
     opts = %{node: :jake@thedog, vhost: @vhost, timeout: @timeout}
+
     assert match?(
-      {:badrpc, _},
-      @command.run([], opts))
+             {:badrpc, _},
+             @command.run([], opts)
+           )
   end
 
   test "banner", context do
@@ -67,11 +71,12 @@ defmodule RestartVhostCommandTest do
   #
 
   defp setup_vhosts do
-    add_vhost @vhost
+    add_vhost(@vhost)
     # give the vhost a chance to fully start and initialise
     :timer.sleep(1000)
+
     on_exit(fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
   end
 
@@ -79,15 +84,17 @@ defmodule RestartVhostCommandTest do
     case :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost]) do
       {:ok, sup} ->
         case :lists.keyfind(:msg_store_persistent, 1, :supervisor.which_children(sup)) do
-        {_, pid, _, _} ->
-          Process.exit(pid, :foo)
-          :timer.sleep(5000)
-          force_vhost_failure(node_name, vhost);
-        false ->
-          Process.exit(sup, :foo)
-          :timer.sleep(5000)
-          force_vhost_failure(node_name, vhost)
-        end;
+          {_, pid, _, _} ->
+            Process.exit(pid, :foo)
+            :timer.sleep(5000)
+            force_vhost_failure(node_name, vhost)
+
+          false ->
+            Process.exit(sup, :foo)
+            :timer.sleep(5000)
+            force_vhost_failure(node_name, vhost)
+        end
+
       {:error, {:vhost_supervisor_not_running, _}} ->
         :ok
     end

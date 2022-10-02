@@ -13,15 +13,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     {args, Map.merge(%{all: false, format: "openssl"}, Helpers.case_insensitive_format(opts))}
   end
 
-  def switches(), do: [timeout: :integer,
-                       format: :string,
-                       all: :boolean]
+  def switches(), do: [timeout: :integer, format: :string, all: :boolean]
   def aliases(), do: [t: :timeout]
 
   def validate(_, %{format: format})
       when format != "openssl" and format != "erlang" and format != "map" do
     {:validation_failure, {:bad_argument, "Format should be either openssl, erlang or map"}}
   end
+
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
@@ -29,27 +28,33 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout, format: format} = opts) do
-    {mod, function} = case format do
-      "openssl" -> {:rabbit_ssl, :cipher_suites_openssl};
-      "erlang"  -> {:rabbit_ssl, :cipher_suites_erlang};
-      "map"     -> {:rabbit_ssl, :cipher_suites}
-    end
-    args = case opts do
-      %{all: true} -> [:all];
-      %{}          -> [:default]
-    end
+    {mod, function} =
+      case format do
+        "openssl" -> {:rabbit_ssl, :cipher_suites_openssl}
+        "erlang" -> {:rabbit_ssl, :cipher_suites_erlang}
+        "map" -> {:rabbit_ssl, :cipher_suites}
+      end
+
+    args =
+      case opts do
+        %{all: true} -> [:all]
+        %{} -> [:default]
+      end
+
     :rabbit_misc.rpc_call(node_name, mod, function, args, timeout)
   end
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in OpenSSL format"
+  def banner([], %{format: "openssl"}), do: "Listing available cipher suites in OpenSSL format"
   def banner([], %{format: "erlang"}), do: "Listing available cipher suites in Erlang term format"
   def banner([], %{format: "map"}), do: "Listing available cipher suites in map format"
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists cipher suites enabled by default. To list all available cipher suites, add the --all argument."
+  def description(),
+    do:
+      "Lists cipher suites enabled by default. To list all available cipher suites, add the --all argument."
 
   def usage, do: "cipher_suites [--format <openssl | erlang | map>] [--all]"
 

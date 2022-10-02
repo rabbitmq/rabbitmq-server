@@ -40,7 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Instructs the broker to close the connection associated with the Erlang process id"
+  def description(),
+    do: "Instructs the broker to close the connection associated with the Erlang process id"
 
   def banner([pid, explanation], _), do: "Closing connection #{pid}, reason: #{explanation}..."
 end
