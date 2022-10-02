@@ -22,12 +22,13 @@ defmodule ArgsProcessingTest do
 
   defp all_commands() do
     RabbitMQ.CLI.Core.CommandModules.load_commands(:all, %{})
-    |> Map.values
+    |> Map.values()
   end
 
   defp line_filter([_, description]) do
     Regex.match?(~r/must be one of/, description)
   end
+
   defp line_filter(line) do
     Regex.match?(~r/must be one of/, line)
   end
@@ -44,8 +45,10 @@ defmodule ArgsProcessingTest do
 
   test "defaults are merged with positinal args", _context do
     commands = all_commands()
-    Enum.each(commands,
-      fn(command) ->
+
+    Enum.each(
+      commands,
+      fn command ->
         command.merge_defaults([], %{})
         command.merge_defaults(["arg"], %{})
         command.merge_defaults(["two", "args"], %{})
@@ -53,7 +56,8 @@ defmodule ArgsProcessingTest do
 
         command.merge_defaults([], %{unknown: "option"})
         command.merge_defaults(["arg"], %{unknown: "option"})
-      end)
+      end
+    )
   end
 
   # this test parses info keys mentioned in the usage_additional section
@@ -61,19 +65,26 @@ defmodule ArgsProcessingTest do
   # or a mix of commas and spaces
   test "comma-separated info items are supported", context do
     commands = list_commands()
-    Enum.each(commands, fn(command) ->
-      items_usage = case command.usage_additional() do
-        # find the line with info items, ignore the rest
-        list when is_list(list) ->
-          # list items can be strings or pairs
-          Enum.filter(list, &line_filter/1) |> List.first |> Enum.join(" ")
-        string ->
-          string
-      end
+
+    Enum.each(commands, fn command ->
+      items_usage =
+        case command.usage_additional() do
+          # find the line with info items, ignore the rest
+          list when is_list(list) ->
+            # list items can be strings or pairs
+            Enum.filter(list, &line_filter/1) |> List.first() |> Enum.join(" ")
+
+          string ->
+            string
+        end
+
       # info_item, info_item2, …
-      case Regex.run(~r/.*one of (.*)$/, items_usage, [capture: :all_but_first]) do
-        nil          ->
-          throw "Command #{command} does not list info items in usage_additional or the format has changed. Output: #{items_usage}"
+      case Regex.run(~r/.*one of (.*)$/, items_usage, capture: :all_but_first) do
+        nil ->
+          throw(
+            "Command #{command} does not list info items in usage_additional or the format has changed. Output: #{items_usage}"
+          )
+
         [info_items] ->
           :ok = command.validate([info_items], context[:opts])
           :ok = command.validate(String.split(info_items, " "), context[:opts])

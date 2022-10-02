@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ErlangCookieHashCommandTest do
   use ExUnit.Case
   import TestHelper
@@ -18,10 +17,11 @@ defmodule ErlangCookieHashCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 5000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -46,5 +46,4 @@ defmodule ErlangCookieHashCommandTest do
     res = @command.run([], context[:opts])
     assert is_bitstring(res)
   end
-
 end

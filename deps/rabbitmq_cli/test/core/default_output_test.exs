@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule DefaultOutputTest do
   use ExUnit.Case, async: false
 
@@ -14,15 +13,19 @@ defmodule DefaultOutputTest do
 
   test "ok with message is passed as is" do
     assert match?({:ok, :message}, ExampleCommand.output({:ok, :message}, %{}))
-    assert match?({:ok, {:complex, "message"}}, ExampleCommand.output({:ok, {:complex, "message"}}, %{}))
+
+    assert match?(
+             {:ok, {:complex, "message"}},
+             ExampleCommand.output({:ok, {:complex, "message"}}, %{})
+           )
   end
 
   test "enumerable is passed as stream" do
     assert match?({:stream, 'list'}, ExampleCommand.output({:ok, 'list'}, %{}))
     assert match?({:stream, 'list'}, ExampleCommand.output('list', %{}))
 
-    assert match?({:stream, [1,2,3]}, ExampleCommand.output({:ok, [1,2,3]}, %{}))
-    assert match?({:stream, [1,2,3]}, ExampleCommand.output([1,2,3], %{}))
+    assert match?({:stream, [1, 2, 3]}, ExampleCommand.output({:ok, [1, 2, 3]}, %{}))
+    assert match?({:stream, [1, 2, 3]}, ExampleCommand.output([1, 2, 3], %{}))
 
     stream = Stream.timer(10000)
     assert match?({:stream, ^stream}, ExampleCommand.output({:ok, stream}, %{}))
@@ -30,11 +33,9 @@ defmodule DefaultOutputTest do
   end
 
   test "badrpc is an error" do
-    {:error, {:badrpc, :nodedown}} =
-      ExampleCommand.output({:badrpc, :nodedown}, %{})
+    {:error, {:badrpc, :nodedown}} = ExampleCommand.output({:badrpc, :nodedown}, %{})
 
-    {:error, {:badrpc, :timeout}} =
-      ExampleCommand.output({:badrpc, :timeout}, %{})
+    {:error, {:badrpc, :timeout}} = ExampleCommand.output({:badrpc, :timeout}, %{})
   end
 
   test "unknown atom is error" do
@@ -50,8 +51,10 @@ defmodule DefaultOutputTest do
   end
 
   test "error_string is converted to string" do
-    assert match?({:error, "I am charlist"},
-                  ExampleCommand.output({:error_string, 'I am charlist'}, %{}))
+    assert match?(
+             {:error, "I am charlist"},
+             ExampleCommand.output({:error_string, 'I am charlist'}, %{})
+           )
   end
 
   test "error is formatted" do
@@ -71,25 +74,30 @@ defmodule DefaultOutputTest do
   end
 
   test "custom output function can be defined" do
-    assert {:error, 125, "Non standard"} == ExampleCommandWithCustomOutput.output(:non_standard_output, %{})
+    assert {:error, 125, "Non standard"} ==
+             ExampleCommandWithCustomOutput.output(:non_standard_output, %{})
   end
 
   test "default output works even if custom output is defined" do
     assert :ok == ExampleCommandWithCustomOutput.output(:ok, %{})
-    assert {:ok, {:complex, "message"}} == ExampleCommandWithCustomOutput.output({:ok, {:complex, "message"}}, %{})
 
-    assert {:stream, [1,2,3]} == ExampleCommandWithCustomOutput.output({:ok, [1,2,3]}, %{})
-    assert {:stream, [1,2,3]} == ExampleCommandWithCustomOutput.output([1,2,3], %{})
+    assert {:ok, {:complex, "message"}} ==
+             ExampleCommandWithCustomOutput.output({:ok, {:complex, "message"}}, %{})
+
+    assert {:stream, [1, 2, 3]} == ExampleCommandWithCustomOutput.output({:ok, [1, 2, 3]}, %{})
+    assert {:stream, [1, 2, 3]} == ExampleCommandWithCustomOutput.output([1, 2, 3], %{})
 
     assert {:error, {:badrpc, :nodedown}} ==
-      ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{})
+             ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{})
+
     assert {:error, {:badrpc, :timeout}} ==
-      ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{})
+             ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{})
 
     error = %{i: [am: "arbitrary", error: 1]}
     {:error, ^error} = ExampleCommandWithCustomOutput.output({:error, error}, %{})
 
-    assert {:error, "I am string"} == ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{})
+    assert {:error, "I am string"} ==
+             ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{})
 
     val = "foo"
     assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))
@@ -110,5 +118,6 @@ defmodule ExampleCommandWithCustomOutput do
   def output(:non_standard_output, _) do
     {:error, 125, "Non standard"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

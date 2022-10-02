@@ -17,16 +17,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       iterations: :integer
     ]
   end
+
   @atomized_keys [:cipher, :hash]
 
   def distribution(_), do: :none
 
   def merge_defaults(args, opts) do
-    with_defaults = Map.merge(%{
-         cipher: :rabbit_pbe.default_cipher(),
-         hash: :rabbit_pbe.default_hash(),
-         iterations: :rabbit_pbe.default_iterations()
-       }, opts)
+    with_defaults =
+      Map.merge(
+        %{
+          cipher: :rabbit_pbe.default_cipher(),
+          hash: :rabbit_pbe.default_hash(),
+          iterations: :rabbit_pbe.default_iterations()
+        },
+        opts
+      )
+
     {args, Helpers.atomize_values(with_defaults, @atomized_keys)}
   end
 
@@ -52,14 +58,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def run([], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
     case Input.consume_single_line_string_with_prompt("Value to encode: ", opts) do
-      :eof  -> {:error, :not_enough_args}
+      :eof ->
+        {:error, :not_enough_args}
+
       value ->
         case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
-          :eof  -> {:error, :not_enough_args}
+          :eof ->
+            {:error, :not_enough_args}
+
           passphrase ->
             try do
               term_value = Helpers.evaluate_input_as_term(value)
-              result = {:encrypted, _} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
+              result =
+                {:encrypted, _} =
+                :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
               {:ok, result}
             catch
               _, _ ->
@@ -71,11 +85,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
     case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
-      :eof -> {:error, :not_enough_args}
+      :eof ->
+        {:error, :not_enough_args}
+
       passphrase ->
         try do
           term_value = Helpers.evaluate_input_as_term(value)
-          result = {:encrypted, _} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
+          result =
+            {:encrypted, _} =
+            :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
           {:ok, result}
         catch
           _, _ ->
@@ -87,7 +107,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
-      result = {:encrypted, _} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
+      result =
+        {:encrypted, _} =
+        :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
       {:ok, result}
     catch
       _, _ ->
@@ -101,7 +125,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     "Encrypting value ..."
   end
 
-  def usage, do: "encode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+  def usage,
+    do: "encode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [

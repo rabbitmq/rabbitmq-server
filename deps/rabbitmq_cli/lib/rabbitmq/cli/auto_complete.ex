@@ -28,6 +28,7 @@ defmodule RabbitMQ.CLI.AutoComplete do
   def suggest_command(_cmd_name, empty) when empty == %{} do
     nil
   end
+
   def suggest_command(typed, module_map) do
     suggestion =
       module_map
@@ -40,6 +41,7 @@ defmodule RabbitMQ.CLI.AutoComplete do
     case suggestion do
       {cmd, distance} when distance >= @jaro_distance_limit ->
         {:suggest, cmd}
+
       _ ->
         nil
     end

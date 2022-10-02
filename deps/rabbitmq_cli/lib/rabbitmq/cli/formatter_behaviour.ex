@@ -28,14 +28,16 @@ defmodule RabbitMQ.CLI.FormatterBehaviour do
   def module_name(nil) do
     nil
   end
+
   def module_name(formatter) do
-    mod = formatter |> String.downcase |> Macro.camelize
+    mod = formatter |> String.downcase() |> Macro.camelize()
     Module.safe_concat("RabbitMQ.CLI.Formatters", mod)
   end
 
   def machine_readable?(nil) do
     false
   end
+
   def machine_readable?(formatter) do
     Helpers.apply_if_exported(module_name(formatter), :machine_readable?, [], false)
   end

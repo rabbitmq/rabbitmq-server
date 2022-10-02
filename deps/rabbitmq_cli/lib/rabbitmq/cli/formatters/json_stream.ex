@@ -29,6 +29,7 @@ defmodule RabbitMQ.CLI.Formatters.JsonStream do
     # we just emit the empty string as the last value for the stream in this case
     ""
   end
+
   def format_output(output, _opts) do
     {:ok, json} = JSON.encode(keys_to_atoms(output))
     json
@@ -41,7 +42,7 @@ defmodule RabbitMQ.CLI.Formatters.JsonStream do
         fn
           [first | _] = element ->
             case FormatterHelpers.proplist?(first) or is_map(first) do
-              true  -> element
+              true -> element
               false -> [element]
             end
 
@@ -60,11 +61,16 @@ defmodule RabbitMQ.CLI.Formatters.JsonStream do
   end
 
   def keys_to_atoms(enum) do
-    Enum.map(enum,
-             fn({k, v}) when is_binary(k) or is_list(k) ->
-                 {String.to_atom(k), v}
-               (other) -> other
-             end)
+    Enum.map(
+      enum,
+      fn
+        {k, v} when is_binary(k) or is_list(k) ->
+          {String.to_atom(k), v}
+
+        other ->
+          other
+      end
+    )
   end
 
   def format_element(val, options) do

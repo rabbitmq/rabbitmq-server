@@ -19,12 +19,14 @@ defmodule DistributionTest do
       :net_kernel.stop()
       System.delete_env("RABBITMQ_ERLANG_COOKIE")
     end)
+
     try do
       :nocookie = Node.get_cookie()
     catch
       # one of net_kernel processes is not running ¯\_(ツ)_/¯
       :exit, _ -> :ok
     end
+
     System.put_env("RABBITMQ_ERLANG_COOKIE", "mycookie")
     opts = %{}
     Distribution.start(opts)
@@ -35,12 +37,14 @@ defmodule DistributionTest do
     on_exit(fn ->
       :net_kernel.stop()
     end)
+
     try do
       :nocookie = Node.get_cookie()
     catch
       # one of net_kernel processes is not running ¯\_(ツ)_/¯
       :exit, _ -> :ok
     end
+
     opts = %{erlang_cookie: :mycookie}
     Distribution.start(opts)
     :mycookie = Node.get_cookie()

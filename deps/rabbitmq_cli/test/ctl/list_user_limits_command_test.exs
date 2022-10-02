@@ -55,21 +55,24 @@ defmodule ListUserLimitsCommandTest do
   end
 
   test "run: a well-formed user specific command returns an empty json object if there are no limits" do
-    assert @command.run([], %{node: get_rabbit_hostname(),
-                              user: @user}) == "{}"
+    assert @command.run([], %{node: get_rabbit_hostname(), user: @user}) == "{}"
   end
 
   test "run: list limits for all users", context do
     add_user(@user1, @password1)
-    on_exit(fn() ->
+
+    on_exit(fn ->
       delete_user(@user1)
     end)
+
     set_user_limits(@user, @connection_limit_defn)
     set_user_limits(@user1, @channel_limit_defn)
 
     assert Enum.sort(@command.run([], context[:opts])) ==
-           Enum.sort([[user: @user,  limits: @connection_limit_defn],
-                      [user: @user1, limits: @channel_limit_defn]])
+             Enum.sort([
+               [user: @user, limits: @connection_limit_defn],
+               [user: @user1, limits: @channel_limit_defn]
+             ])
   end
 
   test "run: list limits for a single user", context do
@@ -77,7 +80,7 @@ defmodule ListUserLimitsCommandTest do
     set_user_limits(@user, @connection_limit_defn)
 
     assert @command.run([], user_opts) ==
-           [[user: @user, limits: @connection_limit_defn]]
+             [[user: @user, limits: @connection_limit_defn]]
   end
 
   test "run: an unreachable node throws a badrpc" do
@@ -90,14 +93,15 @@ defmodule ListUserLimitsCommandTest do
   test "run: providing a non-existent user reports an error", _context do
     s = "non-existent-user"
 
-    assert @command.run([], %{node: get_rabbit_hostname(),
-                              user: s}) == {:error, {:no_such_user, s}}
+    assert @command.run([], %{node: get_rabbit_hostname(), user: s}) ==
+             {:error, {:no_such_user, s}}
   end
 
   test "banner", context do
-    assert @command.banner([], %{user: context[:user]})
-      == "Listing limits for user \"#{context[:user]}\" ..."
-    assert @command.banner([], %{global: true})
-      == "Listing limits for all users ..."
+    assert @command.banner([], %{user: context[:user]}) ==
+             "Listing limits for user \"#{context[:user]}\" ..."
+
+    assert @command.banner([], %{global: true}) ==
+             "Listing limits for all users ..."
   end
 end

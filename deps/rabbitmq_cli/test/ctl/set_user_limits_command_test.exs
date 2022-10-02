@@ -19,10 +19,10 @@ defmodule SetUserLimitsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_user @user, @password
+    add_user(@user, @password)
 
     on_exit([], fn ->
-      delete_user @user
+      delete_user(@user)
     end)
 
     :ok
@@ -53,34 +53,34 @@ defmodule SetUserLimitsCommandTest do
 
   test "validate: providing too many arguments fails validation" do
     assert @command.validate(["is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["this", "is", "too", "many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "run: a well-formed, host-specific command returns okay", context do
     assert @command.run(
-      [context[:user],
-      @conn_definition],
-      context[:opts]
-    ) == :ok
+             [context[:user], @conn_definition],
+             context[:opts]
+           ) == :ok
 
     assert_limits(context, @conn_definition)
     clear_user_limits(context[:user])
 
     assert @command.run(
-      [context[:user],
-      @channel_definition],
-      context[:opts]
-    ) == :ok
+             [context[:user], @channel_definition],
+             context[:opts]
+           ) == :ok
 
     assert_limits(context, @channel_definition)
   end
 
-  test "run: a well-formed command to set both max-connections and max-channels returns okay", context do
+  test "run: a well-formed command to set both max-connections and max-channels returns okay",
+       context do
     assert @command.run(
-      [context[:user],
-      @definition],
-      context[:opts]
-    ) == :ok
+             [context[:user], @definition],
+             context[:opts]
+           ) == :ok
 
     assert_limits(context, @definition)
   end
@@ -93,37 +93,36 @@ defmodule SetUserLimitsCommandTest do
 
   @tag user: "non-existent-user"
   test "run: providing a non-existent user reports an error", context do
-
     assert @command.run(
-      [context[:user],
-      @conn_definition],
-      context[:opts]
-    ) == {:error, {:no_such_user, context[:user]}}
+             [context[:user], @conn_definition],
+             context[:opts]
+           ) == {:error, {:no_such_user, context[:user]}}
   end
 
   test "run: an invalid definition returns a JSON decoding error", context do
-    assert match?({:error_string, _},
-      @command.run(
-        [context[:user],
-        ["this_is_not_json"]],
-        context[:opts]))
+    assert match?(
+             {:error_string, _},
+             @command.run(
+               [context[:user], ["this_is_not_json"]],
+               context[:opts]
+             )
+           )
 
     assert get_user_limits(context[:user]) == %{}
   end
 
   test "run: invalid limit returns an error", context do
     assert @command.run(
-      [context[:user],
-      "{\"foo\":\"bar\"}"],
-      context[:opts]
-    ) == {:error_string, 'Unrecognised terms [{<<"foo">>,<<"bar">>}] in user-limits'}
+             [context[:user], "{\"foo\":\"bar\"}"],
+             context[:opts]
+           ) == {:error_string, 'Unrecognised terms [{<<"foo">>,<<"bar">>}] in user-limits'}
 
     assert get_user_limits(context[:user]) == %{}
   end
 
   test "banner", context do
-    assert @command.banner([context[:user], context[:conn_definition]], context[:opts])
-      == "Setting user limits to \"#{context[:conn_definition]}\" for user \"#{context[:user]}\" ..."
+    assert @command.banner([context[:user], context[:conn_definition]], context[:opts]) ==
+             "Setting user limits to \"#{context[:conn_definition]}\" for user \"#{context[:user]}\" ..."
   end
 
   #

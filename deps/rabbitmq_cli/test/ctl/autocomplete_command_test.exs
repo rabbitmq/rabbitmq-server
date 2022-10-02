@@ -4,17 +4,17 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AutocompleteCommandTest do
   use ExUnit.Case, async: true
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.AutocompleteCommand
   setup do
-    {:ok, opts: %{
-      script_name: "rabbitmqctl",
-      node: get_rabbit_hostname()
-    }}
+    {:ok,
+     opts: %{
+       script_name: "rabbitmqctl",
+       node: get_rabbit_hostname()
+     }}
   end
 
   test "shows up in help" do

@@ -32,7 +32,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Displays the name and value of each variable in the application environment for each running application"
+  def description(),
+    do:
+      "Displays the name and value of each variable in the application environment for each running application"
 
   def banner(_, %{node: node_name}), do: "Application environment of node #{node_name} ..."
 end

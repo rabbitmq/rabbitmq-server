@@ -12,6 +12,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
   def merge_defaults(["-"] = args, opts) do
     {args, Map.merge(%{format: "json", silent: true}, Helpers.case_insensitive_format(opts))}
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{format: "json"}, Helpers.case_insensitive_format(opts))}
   end
@@ -23,23 +24,29 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
       when format != "json" and format != "JSON" and format != "erlang" do
     {:validation_failure, {:bad_argument, "Format should be either json or erlang"}}
   end
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
+
   # output to stdout
   def validate(["-"], _) do
     :ok
   end
+
   def validate([path], _) do
     dir = Path.dirname(path)
-    case File.exists?(dir, [raw: true]) do
-      true  -> :ok
+
+    case File.exists?(dir, raw: true) do
+      true -> :ok
       false -> {:validation_failure, {:bad_argument, "Directory #{dir} does not exist"}}
     end
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -51,46 +58,66 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
       result -> {:ok, result}
     end
   end
+
   def run([path], %{node: node_name, timeout: timeout, format: format}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :all_definitions, [], timeout) do
-      {:badrpc, _} = err -> err
-      {:error, _} = err -> err
-      {:error, _, _} = err -> err
-      result ->
-         # write to the file in run/2 because output/2 is not meant to
-         # produce side effects
-         body = serialise(result, format)
-         abs_path = Path.absname(path)
+      {:badrpc, _} = err ->
+        err
 
-         File.rm(abs_path)
-         case File.write(abs_path, body) do
-           # no output
-           :ok -> {:ok, nil}
-           {:error, :enoent}  ->
-             {:error, ExitCodes.exit_dataerr(), "Parent directory or file #{path} does not exist"}
-           {:error, :enotdir} ->
-             {:error, ExitCodes.exit_dataerr(), "Parent directory of file #{path} is not a directory"}
-           {:error, :enospc} ->
-             {:error, ExitCodes.exit_dataerr(), "No space left on device hosting #{path}"}
-           {:error, :eacces} ->
-             {:error, ExitCodes.exit_dataerr(), "No permissions to write to file #{path} or its parent directory"}
-           {:error, :eisdir} ->
-             {:error, ExitCodes.exit_dataerr(), "Path #{path} is a directory"}
-           {:error, err}     ->
-             {:error, ExitCodes.exit_dataerr(), "Could not write to file #{path}: #{err}"}
-         end
+      {:error, _} = err ->
+        err
+
+      {:error, _, _} = err ->
+        err
+
+      result ->
+        # write to the file in run/2 because output/2 is not meant to
+        # produce side effects
+        body = serialise(result, format)
+        abs_path = Path.absname(path)
+
+        File.rm(abs_path)
+
+        case File.write(abs_path, body) do
+          # no output
+          :ok ->
+            {:ok, nil}
+
+          {:error, :enoent} ->
+            {:error, ExitCodes.exit_dataerr(), "Parent directory or file #{path} does not exist"}
+
+          {:error, :enotdir} ->
+            {:error, ExitCodes.exit_dataerr(),
+             "Parent directory of file #{path} is not a directory"}
+
+          {:error, :enospc} ->
+            {:error, ExitCodes.exit_dataerr(), "No space left on device hosting #{path}"}
+
+          {:error, :eacces} ->
+            {:error, ExitCodes.exit_dataerr(),
+             "No permissions to write to file #{path} or its parent directory"}
+
+          {:error, :eisdir} ->
+            {:error, ExitCodes.exit_dataerr(), "Path #{path} is a directory"}
+
+          {:error, err} ->
+            {:error, ExitCodes.exit_dataerr(), "Could not write to file #{path}: #{err}"}
+        end
     end
   end
 
   def output({:ok, nil}, _) do
     {:ok, nil}
   end
+
   def output({:ok, result}, %{format: "json"}) when is_map(result) do
     {:ok, serialise(result, "json")}
   end
+
   def output({:ok, result}, %{format: "erlang"}) when is_map(result) do
     {:ok, serialise(result, "erlang")}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
@@ -114,7 +141,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
 
   def description(), do: "Exports definitions in JSON or compressed Erlang Term Format."
 
-  def banner([path], %{format: fmt}), do: "Exporting definitions in #{human_friendly_format(fmt)} to a file at \"#{path}\" ..."
+  def banner([path], %{format: fmt}),
+    do: "Exporting definitions in #{human_friendly_format(fmt)} to a file at \"#{path}\" ..."
 
   #
   # Implementation
@@ -124,11 +152,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
     # make sure all runtime parameter values are maps, otherwise
     # they will end up being a list of pairs (a keyword list/proplist)
     # in the resulting JSON document
-    map = Map.update!(raw_map, :parameters, fn(params) ->
-      Enum.map(params, fn(param) ->
-        Map.update!(param, "value", &:rabbit_data_coercion.to_map/1)
+    map =
+      Map.update!(raw_map, :parameters, fn params ->
+        Enum.map(params, fn param ->
+          Map.update!(param, "value", &:rabbit_data_coercion.to_map/1)
+        end)
       end)
-    end)
+
     {:ok, json} = JSON.encode(map)
     json
   end

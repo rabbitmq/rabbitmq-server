@@ -19,7 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StartAppCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Starts the RabbitMQ application but leaves the runtime (Erlang VM) running"
+  def description(),
+    do: "Starts the RabbitMQ application but leaves the runtime (Erlang VM) running"
 
   def banner(_, %{node: node_name}), do: "Starting node #{node_name} ..."
 end
