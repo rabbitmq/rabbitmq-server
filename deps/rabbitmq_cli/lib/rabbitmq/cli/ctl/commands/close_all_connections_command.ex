@@ -62,18 +62,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
         per_connection_delay: delay,
         limit: limit
       }) do
-        run(args, %{
-              node: node_name,
-              vhost: nil,
-              global: global_opt,
-              per_connection_delay: delay,
-              limit: limit
-            })
+    run(args, %{
+      node: node_name,
+      vhost: nil,
+      global: global_opt,
+      per_connection_delay: delay,
+      limit: limit
+    })
   end
 
   def output({:stream, stream}, _opts) do
     {:stream, Stream.filter(stream, fn x -> x != :ok end)}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([explanation], %{node: node_name, global: true}) do
@@ -108,7 +109,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
+  def description(),
+    do:
+      "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
 
   #
   # Implementation

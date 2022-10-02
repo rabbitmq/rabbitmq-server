@@ -26,41 +26,69 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineQuorumPlusOneCommand do
     {args, Map.put(opts, :timeout, timeout)}
   end
 
-
   def run([], %{node: node_name, timeout: timeout}) do
     rpc_timeout = timeout + 500
+
     case :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :is_single_node_cluster, [], rpc_timeout) do
       # if target node is the only one in the cluster, the command makes little sense
       # and false positives can be misleading
-      true  -> {:ok, :single_node_cluster}
-      false ->
-        case :rabbit_misc.rpc_call(node_name, :rabbit_upgrade_preparation, :await_online_quorum_plus_one, [timeout], rpc_timeout) do
-          {:error, _} = err -> err
-          {:error, _, _} = err -> err
-          {:badrpc, _} = err -> err
+      true ->
+        {:ok, :single_node_cluster}
 
-          true  -> :ok
-          false -> {:error, "time is up, no quorum + 1 online replicas came online for at least some quorum queues"}
+      false ->
+        case :rabbit_misc.rpc_call(
+               node_name,
+               :rabbit_upgrade_preparation,
+               :await_online_quorum_plus_one,
+               [timeout],
+               rpc_timeout
+             ) do
+          {:error, _} = err ->
+            err
+
+          {:error, _, _} = err ->
+            err
+
+          {:badrpc, _} = err ->
+            err
+
+          true ->
+            :ok
+
+          false ->
+            {:error,
+             "time is up, no quorum + 1 online replicas came online for at least some quorum queues"}
         end
-      other -> other
+
+      other ->
+        other
     end
   end
 
   def output({:ok, :single_node_cluster}, %{formatter: "json"}) do
-    {:ok, %{
-      "result"  => "ok",
-      "message" => "Target node seems to be the only one in a single node cluster, the check does not apply"
-    }}
+    {:ok,
+     %{
+       "result" => "ok",
+       "message" =>
+         "Target node seems to be the only one in a single node cluster, the check does not apply"
+     }}
   end
+
   def output({:error, msg}, %{node: node_name, formatter: "json"}) do
     {:error, %{"result" => "error", "node" => node_name, "message" => msg}}
   end
+
   def output({:ok, :single_node_cluster}, opts) do
     case output_less?(opts) do
-      true  -> :ok;
-      false -> {:ok, "Target node seems to be the only one in a single node cluster, the command does not apply"}
+      true ->
+        :ok
+
+      false ->
+        {:ok,
+         "Target node seems to be the only one in a single node cluster, the command does not apply"}
     end
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "await_online_quorum_plus_one"
@@ -76,10 +104,10 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineQuorumPlusOneCommand do
 
   def description() do
     "Waits for all quorum queues to have an above minimum online quorum. " <>
-    "This makes sure that no queues would lose their quorum if the target node is shut down"
+      "This makes sure that no queues would lose their quorum if the target node is shut down"
   end
 
   def banner([], %{timeout: timeout}) do
-    "Will wait for a quorum + 1 of nodes to be online for all quorum queues for #{round(timeout/1000)} seconds..."
+    "Will wait for a quorum + 1 of nodes to be online for all quorum queues for #{round(timeout / 1000)} seconds..."
   end
 end

@@ -62,6 +62,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: timed out while waiting for a response from #{node_name}."}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
@@ -76,12 +77,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it"
+  def description(),
+    do:
+      "Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it"
 
   def banner([], %{node: node_name, timeout: timeout}) when is_number(timeout) do
-    "Will ping #{node_name}. This only checks if the OS process is running and registered with epmd. Timeout: #{
-      timeout
-    } ms."
+    "Will ping #{node_name}. This only checks if the OS process is running and registered with epmd. Timeout: #{timeout} ms."
   end
 
   def banner([], %{node: node_name, timeout: _timeout}) do

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule CipherSuitesCommandTest do
   use ExUnit.Case
   import TestHelper
@@ -18,12 +17,13 @@ defmodule CipherSuitesCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        format: context[:format] || "openssl",
-        all: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       format: context[:format] || "openssl",
+       all: false
+     }}
   end
 
   test "merge_defaults: defaults to the OpenSSL format" do
@@ -31,8 +31,12 @@ defmodule CipherSuitesCommandTest do
   end
 
   test "merge_defaults: format is case insensitive" do
-    assert @command.merge_defaults([], %{format: "OpenSSL"}) == {[], %{format: "openssl", all: false}}
-    assert @command.merge_defaults([], %{format: "Erlang"}) == {[], %{format: "erlang", all: false}}
+    assert @command.merge_defaults([], %{format: "OpenSSL"}) ==
+             {[], %{format: "openssl", all: false}}
+
+    assert @command.merge_defaults([], %{format: "Erlang"}) ==
+             {[], %{format: "erlang", all: false}}
+
     assert @command.merge_defaults([], %{format: "Map"}) == {[], %{format: "map", all: false}}
   end
 
@@ -41,7 +45,8 @@ defmodule CipherSuitesCommandTest do
   end
 
   test "validate: treats positional arguments as a failure", context do
-    assert @command.validate(["extra-arg"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra-arg"], context[:opts]) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: treats empty positional arguments and default switches as a success", context do
@@ -56,13 +61,16 @@ defmodule CipherSuitesCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   @tag format: "openssl"
   test "run: returns a list of cipher suites in OpenSSL format", context do
     res = @command.run([], context[:opts])
-    for cipher <- res, do: assert true == is_list(cipher)
+    for cipher <- res, do: assert(true == is_list(cipher))
     # the list is long and its values are environment-specific,
     # so we simply assert that it is non-empty. MK.
     assert length(res) > 0
@@ -72,7 +80,7 @@ defmodule CipherSuitesCommandTest do
   test "run: returns a list of cipher suites in erlang format", context do
     res = @command.run([], context[:opts])
 
-    for cipher <- res, do: assert true = is_tuple(cipher)
+    for cipher <- res, do: assert(true = is_tuple(cipher))
     # the list is long and its values are environment-specific,
     # so we simply assert that it is non-empty. MK.
     assert length(res) > 0
@@ -81,7 +89,7 @@ defmodule CipherSuitesCommandTest do
   @tag format: "map"
   test "run: returns a list of cipher suites in map format", context do
     res = @command.run([], context[:opts])
-    for cipher <- res, do: assert true = is_map(cipher)
+    for cipher <- res, do: assert(true = is_map(cipher))
     # the list is long and its values are environment-specific,
     # so we simply assert that it is non-empty. MK.
     assert length(res) > 0
@@ -97,5 +105,4 @@ defmodule CipherSuitesCommandTest do
     assert length(all_suites) > length(default_suites)
     assert length(default_suites -- all_suites) == 0
   end
-
 end

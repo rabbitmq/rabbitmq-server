@@ -25,17 +25,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   end
 
   def output({:error, {:no_such_user, username}}, %{node: node_name, formatter: "json"}) do
-    {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exist"}}
+    {:error,
+     %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exist"}}
   end
+
   def output({:error, {:no_such_vhost, vhost}}, %{node: node_name, formatter: "json"}) do
-    {:error, %{"result" => "error", "node" => node_name, "message" => "Virtual host #{vhost} does not exist"}}
+    {:error,
+     %{
+       "result" => "error",
+       "node" => node_name,
+       "message" => "Virtual host #{vhost} does not exist"
+     }}
   end
+
   def output({:error, {:no_such_user, username}}, _) do
     {:error, ExitCodes.exit_nouser(), "User #{username} does not exist"}
   end
+
   def output({:error, {:no_such_vhost, vhost}}, _) do
     {:error, "Virtual host #{vhost} does not exist"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "clear_permissions [--vhost <vhost>] <username>"

@@ -29,7 +29,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
 
   def help_section(), do: :operations
 
-  def description, do: "Makes all Erlang processes on the target node perform/schedule a full sweep garbage collection"
+  def description,
+    do:
+      "Makes all Erlang processes on the target node perform/schedule a full sweep garbage collection"
 
-  def banner([], %{node: node_name}), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
+  def banner([], %{node: node_name}),
+    do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
 end

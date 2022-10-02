@@ -31,6 +31,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
        "message" => "Target queue was not found in virtual host '#{vhost}'"
      }}
   end
+
   def output({:error, error}, %{formatter: "json"}) do
     {:error,
      %{
@@ -38,9 +39,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
        "message" => "Failed to perform the operation: #{error}"
      }}
   end
+
   def output({:error, :not_found}, %{vhost: vhost}) do
     {:error, "Target queue was not found in virtual host '#{vhost}'"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
@@ -62,7 +65,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
+  def description(),
+    do:
+      "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
 
   def banner([name], %{}),
     do: "Will flush Raft WAL of quorum queue #{name} ..."

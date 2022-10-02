@@ -24,10 +24,11 @@ defmodule AlarmsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -44,7 +45,10 @@ defmodule AlarmsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100}))
+           )
   end
 
   test "run: when target node has no alarms in effect, returns an empty list", context do
@@ -55,9 +59,11 @@ defmodule AlarmsCommandTest do
 
   test "run: when target node has an alarm in effect, returns it", context do
     old_watermark = status()[:vm_memory_high_watermark]
-    on_exit(fn() ->
+
+    on_exit(fn ->
       set_vm_memory_high_watermark(old_watermark)
     end)
+
     # 2000 bytes will trigger an alarm
     set_vm_memory_high_watermark({:absolute, 2000})
 

@@ -33,7 +33,6 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.PostUpgradeCommand do
 
   def banner([], _) do
     "Executing post upgrade tasks...\n" <>
-    "Rebalancing queue masters..."
+      "Rebalancing queue masters..."
   end
-
 end

@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
       "This command does not rotate logs anymore [deprecated]"
     }
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "rotate_logs"

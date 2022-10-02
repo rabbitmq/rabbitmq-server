@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 # This file is responsible for configuring your application
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
@@ -25,7 +24,7 @@ use Mix.Config
 #
 # Or configure a 3rd-party app:
 #
-config :logger, [level: :warn, console: [device: :standard_error]]
+config :logger, level: :warn, console: [device: :standard_error]
 #
 
 # It is also possible to import configuration files, relative to this

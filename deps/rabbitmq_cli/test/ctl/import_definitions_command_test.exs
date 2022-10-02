@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ImportDefinitionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,11 +17,12 @@ defmodule ImportDefinitionsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        format: context[:format] || "json"
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       format: context[:format] || "json"
+     }}
   end
 
   test "merge_defaults: defaults to JSON for format" do
@@ -36,7 +36,12 @@ defmodule ImportDefinitionsCommandTest do
 
   test "merge_defaults: format is case insensitive" do
     assert @command.merge_defaults([valid_file_path()], %{format: "JSON"}) ==
+<<<<<<< HEAD
              {[valid_file_path()], %{format: "json"}}
+=======
+             {[valid_file_path()], %{format: "json", skip_if_unchanged: false}}
+
+>>>>>>> 66e65175d8 (mix format rabbitmq_cli)
     assert @command.merge_defaults([valid_file_path()], %{format: "Erlang"}) ==
              {[valid_file_path()], %{format: "erlang"}}
   end
@@ -51,8 +56,10 @@ defmodule ImportDefinitionsCommandTest do
   end
 
   test "validate: unsupported format fails validation", context do
-    assert match?({:validation_failure, {:bad_argument, _}},
-                  @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"})))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"}))
+           )
   end
 
   test "validate: more than one positional argument fails validation", context do
@@ -61,16 +68,21 @@ defmodule ImportDefinitionsCommandTest do
   end
 
   test "validate: supports JSON and Erlang formats", context do
-    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "json"})) == :ok
-    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "erlang"})) == :ok
+    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "json"})) ==
+             :ok
+
+    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "erlang"})) ==
+             :ok
   end
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    result = @command.run([valid_file_path()],
-                          %{node: :jake@thedog,
-                            timeout: context[:test_timeout],
-                            format: "json"})
+    result =
+      @command.run(
+        [valid_file_path()],
+        %{node: :jake@thedog, timeout: context[:test_timeout], format: "json"}
+      )
+
     assert match?({:badrpc, _}, result)
   end
 
@@ -82,6 +94,21 @@ defmodule ImportDefinitionsCommandTest do
     clear_parameter("/", "federation-upstream", "up-1")
   end
 
+<<<<<<< HEAD
+=======
+  @tag format: "json"
+  test "run: imports definitions from a file when --skip-if-unchanged is provided", context do
+    assert :ok ==
+             @command.run(
+               [valid_file_path()],
+               Map.merge(context[:opts], %{skip_if_unchanged: true})
+             )
+
+    # clean up the state we've modified
+    clear_parameter("/", "federation-upstream", "up-1")
+  end
+
+>>>>>>> 66e65175d8 (mix format rabbitmq_cli)
   defp valid_file_path() do
     Path.join([File.cwd!(), "test", "fixtures", "files", "definitions.json"])
   end

@@ -9,7 +9,6 @@ defmodule RabbitMQ.CLI.Core.Validators do
   alias RabbitMQ.CLI.Core.Helpers
   import RabbitMQ.CLI.Core.{CodePath, Paths}
 
-
   def chain([validator | rest], args) do
     case apply(validator, args) do
       :ok -> chain(rest, args)

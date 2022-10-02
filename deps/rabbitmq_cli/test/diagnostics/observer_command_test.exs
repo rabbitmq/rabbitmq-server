@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ObserverCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,11 +17,12 @@ defmodule ObserverCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        interval: 5,
-        timeout: context[:test_timeout] || 15000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       interval: 5,
+       timeout: context[:test_timeout] || 15000
+     }}
   end
 
   test "merge_defaults: injects a default interval of 5s" do

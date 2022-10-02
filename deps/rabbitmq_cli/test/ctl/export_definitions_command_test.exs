@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ExportDefinitionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,11 +17,12 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        format: context[:format] || "json"
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       format: context[:format] || "json"
+     }}
   end
 
   test "merge_defaults: defaults to JSON for format" do
@@ -37,6 +37,7 @@ defmodule ExportDefinitionsCommandTest do
   test "merge_defaults: format is case insensitive" do
     assert @command.merge_defaults([valid_file_path()], %{format: "JSON"}) ==
              {[valid_file_path()], %{format: "json"}}
+
     assert @command.merge_defaults([valid_file_path()], %{format: "Erlang"}) ==
              {[valid_file_path()], %{format: "erlang"}}
   end
@@ -55,11 +56,13 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   test "validate: unsupported format fails validation", context do
-    assert match?({:validation_failure, {:bad_argument, _}},
-                  @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"})))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"}))
+           )
   end
 
-    test "validate: no positional arguments fails validation", context do
+  test "validate: no positional arguments fails validation", context do
     assert @command.validate([], context[:opts]) ==
              {:validation_failure, :not_enough_args}
   end
@@ -70,16 +73,21 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   test "validate: supports JSON and Erlang formats", context do
-    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "json"})) == :ok
-    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "erlang"})) == :ok
+    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "json"})) ==
+             :ok
+
+    assert @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "erlang"})) ==
+             :ok
   end
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    result = @command.run([valid_file_path()],
-                          %{node: :jake@thedog,
-                            timeout: context[:test_timeout],
-                            format: "json"})
+    result =
+      @command.run(
+        [valid_file_path()],
+        %{node: :jake@thedog, timeout: context[:test_timeout], format: "json"}
+      )
+
     assert match?({:badrpc, _}, result)
   end
 
@@ -90,13 +98,15 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   @tag format: "erlang"
-  test "run: returns a list of definitions when target is stdout and format is Erlang Terms", context do
+  test "run: returns a list of definitions when target is stdout and format is Erlang Terms",
+       context do
     {:ok, map} = @command.run(["-"], context[:opts])
     assert Map.has_key?(map, :rabbitmq_version)
   end
 
   @tag format: "json"
-  test "run: writes to a file and returns nil when target is a file and format is JSON", context do
+  test "run: writes to a file and returns nil when target is a file and format is JSON",
+       context do
     File.rm(valid_file_path())
     {:ok, nil} = @command.run([valid_file_path()], context[:opts])
 
@@ -125,7 +135,8 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   @tag format: "erlang"
-  test "run: writes to a file and returns nil when target is a file and format is Erlang Terms", context do
+  test "run: writes to a file and returns nil when target is a file and format is Erlang Terms",
+       context do
     File.rm(valid_file_path())
     {:ok, nil} = @command.run([valid_file_path()], context[:opts])
 

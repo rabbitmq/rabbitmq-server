@@ -14,9 +14,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
   def validate(args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning

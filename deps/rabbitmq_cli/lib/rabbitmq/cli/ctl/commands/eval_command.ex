@@ -29,7 +29,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def run([], %{node: node_name} = opts) do
     case Input.consume_multiline_string() do
-      :eof -> {:error, :not_enough_args}
+      :eof ->
+        {:error, :not_enough_args}
+
       expr ->
         case ErlEval.parse_expr(expr) do
           {:ok, parsed} ->
@@ -37,13 +39,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
             case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
               {:value, value, _} -> {:ok, value}
-              err                -> err
+              err -> err
             end
 
-          {:error, msg} -> {:error, msg}
+          {:error, msg} ->
+            {:error, msg}
         end
     end
   end
+
   def run([expr | arguments], %{node: node_name} = opts) do
     case ErlEval.parse_expr(expr) do
       {:ok, parsed} ->
@@ -51,19 +55,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
         case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
           {:value, value, _} -> {:ok, value}
-          err                -> err
+          err -> err
         end
 
-      {:error, msg} -> {:error, msg}
+      {:error, msg} ->
+        {:error, msg}
     end
   end
 
   def output({:error, :not_enough_args}, _) do
-    {:error, ExitCodes.exit_dataerr(), "Expression to evaluate is not provided via argument or stdin"}
+    {:error, ExitCodes.exit_dataerr(),
+     "Expression to evaluate is not provided via argument or stdin"}
   end
+
   def output({:error, msg}, _) do
     {:error, ExitCodes.exit_dataerr(), "Evaluation failed: #{msg}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang

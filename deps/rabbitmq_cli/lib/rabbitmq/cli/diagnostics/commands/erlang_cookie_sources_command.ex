@@ -19,22 +19,30 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     switch_cookie = opts[:erlang_cookie]
     home_dir = get_home_dir()
     cookie_file_path = Path.join(home_dir, ".erlang.cookie")
-    cookie_file_stat = case File.stat(Path.join(home_dir, ".erlang.cookie")) do
-      {:error, :enoent} -> nil
-      {:ok, value}     -> value
-    end
-    cookie_file_type = case cookie_file_stat do
-      nil   -> nil
-      value -> value.type
-    end
-    cookie_file_access = case cookie_file_stat do
-      nil   -> nil
-      value -> value.access
-    end
-    cookie_file_size = case cookie_file_stat do
-      nil   -> nil
-      value -> value.size
-    end
+
+    cookie_file_stat =
+      case File.stat(Path.join(home_dir, ".erlang.cookie")) do
+        {:error, :enoent} -> nil
+        {:ok, value} -> value
+      end
+
+    cookie_file_type =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.type
+      end
+
+    cookie_file_access =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.access
+      end
+
+    cookie_file_size =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.size
+      end
 
     %{
       os_env_cookie_set: System.get_env("RABBITMQ_ERLANG_COOKIE") != nil,
@@ -66,7 +74,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
       "Cookie file exists? #{result[:cookie_file_exists]}",
       "Cookie file type: #{result[:cookie_file_type] || "(n/a)"}",
       "Cookie file access: #{result[:cookie_file_access] || "(n/a)"}",
-      "Cookie file size: #{result[:cookie_file_size] || "(n/a)"}",
+      "Cookie file size: #{result[:cookie_file_size] || "(n/a)"}"
     ]
 
     switch_lines = [
@@ -106,11 +114,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
   """
   def get_home_dir() do
     homedrive = System.get_env("HOMEDRIVE")
-    homepath  = System.get_env("HOMEPATH")
+    homepath = System.get_env("HOMEPATH")
 
     case {homedrive != nil, homepath != nil} do
       {true, true} -> "#{homedrive}#{homepath}"
-      _            -> System.get_env("HOME")
+      _ -> System.get_env("HOME")
     end
   end
 end

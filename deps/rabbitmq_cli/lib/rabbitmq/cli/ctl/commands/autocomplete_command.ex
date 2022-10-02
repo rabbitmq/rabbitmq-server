@@ -26,11 +26,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AutocompleteCommand do
   def run(args, %{script_name: script_name}) do
     {:stream, RabbitMQ.CLI.AutoComplete.complete(script_name, args)}
   end
+
   def run(args, opts) do
     script_name = Config.get_system_option(:script_name, opts)
 
     {:stream, RabbitMQ.CLI.AutoComplete.complete(script_name, args)}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do

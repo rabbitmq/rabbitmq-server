@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule StopAppCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -44,6 +43,7 @@ defmodule StopAppCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Stopping rabbit application on node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Stopping rabbit application on node #{get_rabbit_hostname()}/
   end
 end

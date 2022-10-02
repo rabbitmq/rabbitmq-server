@@ -61,8 +61,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   def description(), do: "Sets a runtime parameter."
 
   def banner([component_name, name, value], %{vhost: vhost}) do
-    "Setting runtime parameter \"#{name}\" for component \"#{component_name}\" to \"#{value}\" in vhost \"#{
-      vhost
-    }\" ..."
+    "Setting runtime parameter \"#{name}\" for component \"#{component_name}\" to \"#{value}\" in vhost \"#{vhost}\" ..."
   end
 end

@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
     {:error, ExitCodes.exit_software(),
-              RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
 
   use RabbitMQ.CLI.DefaultOutput

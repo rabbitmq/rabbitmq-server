@@ -20,15 +20,18 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, %{unit: unit}) do
     case TU.known_unit?(unit) do
       true ->
         :ok
 
       false ->
-        {:validation_failure, "unit '#{unit}' is not supported. Please use one of: days, weeks, months, years"}
+        {:validation_failure,
+         "unit '#{unit}' is not supported. Please use one of: days, weeks, months, years"}
     end
   end
+
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, unit: unit, within: within, timeout: timeout}) do
@@ -45,10 +48,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
       xs when is_list(xs) ->
         listeners = listeners_on(xs, node_name)
         seconds = TU.convert(within, unit)
-        Enum.reduce(listeners, [], fn (listener, acc) -> case listener_expiring_within(listener, seconds) do
-                                                           false -> acc
-                                                           expiring -> [expiring | acc]
-                                                         end
+
+        Enum.reduce(listeners, [], fn listener, acc ->
+          case listener_expiring_within(listener, seconds) do
+            false -> acc
+            expiring -> [expiring | acc]
+          end
         end)
     end
   end
@@ -63,7 +68,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   end
 
   def output(listeners, %{formatter: "json"}) do
-    {:error, :check_failed, %{"result" => "error", "expired" => Enum.map(listeners, &expired_listener_map/1)}}
+    {:error, :check_failed,
+     %{"result" => "error", "expired" => Enum.map(listeners, &expired_listener_map/1)}}
   end
 
   def output(listeners, %{}) do
@@ -73,6 +79,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   def unit_label(1, unit) do
     unit |> String.slice(0..-2)
   end
+
   def unit_label(_within, unit) do
     unit
   end
@@ -82,7 +89,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   def usage_additional() do
     [
       ["<period>", "period of time to check. Default is four (weeks)."],
-      ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is weeks."],
+      ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is weeks."]
     ]
   end
 
@@ -95,7 +102,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Checks the expiration date on the certificates for every listener configured to use TLS"
+  def description(),
+    do: "Checks the expiration date on the certificates for every listener configured to use TLS"
 
-  def banner(_, %{node: node_name}), do: "Checking certificate expiration on node #{node_name} ..."
+  def banner(_, %{node: node_name}),
+    do: "Checking certificate expiration on node #{node_name} ..."
 end

@@ -20,16 +20,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsBootingCommand do
       "result" => true,
       "message" => "RabbitMQ on node #{node_name} is booting"
     }
+
     {:ok, m}
   end
 
   def output(false, %{node: node_name, formatter: "json"}) do
     m = %{
       "result" => false,
-      "message" => "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"
+      "message" =>
+        "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"
     }
+
     {:ok, m}
   end
+
   def output(true, %{node: node_name}) do
     {:ok, "RabbitMQ on node #{node_name} is booting"}
   end

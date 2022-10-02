@@ -21,13 +21,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
   def run([], %{formatter: "json"}) do
     {:ok, %{version: Version.local_version()}}
   end
+
   def run([], %{formatter: "csv"}) do
     row = [version: Version.local_version()]
     {:ok, [row]}
   end
+
   def run([], _opts) do
     {:ok, Version.local_version()}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section, do: :help

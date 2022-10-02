@@ -23,11 +23,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   end
 
   def output({:error, {:no_such_user, username}}, %{node: node_name, formatter: "json"}) do
-    {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exists"}}
+    {:error,
+     %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exists"}}
   end
+
   def output({:error, {:no_such_user, username}}, _) do
     {:error, ExitCodes.exit_nouser(), "User \"#{username}\" does not exist"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_user <username>"
@@ -46,7 +49,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
 
   def help_section(), do: :user_management
 
-  def description(), do: "Removes a user from the internal database. Has no effect on users provided by external backends such as LDAP"
+  def description(),
+    do:
+      "Removes a user from the internal database. Has no effect on users provided by external backends such as LDAP"
 
   def banner([arg], _), do: "Deleting user \"#{arg}\" ..."
 end

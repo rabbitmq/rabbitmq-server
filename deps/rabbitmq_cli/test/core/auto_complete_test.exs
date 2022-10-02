@@ -4,16 +4,17 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AutoCompleteTest do
   use ExUnit.Case, async: false
 
   @subject RabbitMQ.CLI.AutoComplete
 
-
   test "Auto-completes a command" do
     ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis"])
-    ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis_"])
+
+    ["canis_aureus", "canis_latrans", "canis_lupus"] =
+      @subject.complete("rabbitmqctl", ["canis_"])
+
     ["canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis_l"])
     ["canis_latrans"] = @subject.complete("rabbitmqctl", ["canis_la"])
     ["canis_aureus"] = @subject.complete("rabbitmqctl", ["canis_a"])
@@ -38,11 +39,13 @@ defmodule AutoCompleteTest do
     scopes = Application.get_env(:rabbitmqctl, :scopes)
     scopes_with_wolf = Keyword.put(scopes, :rabbitmq_wolf, :wolf)
     Application.put_env(:rabbitmqctl, :scopes, scopes_with_wolf)
-    on_exit(fn() ->
+
+    on_exit(fn ->
       Application.put_env(:rabbitmqctl, :scopes, scopes)
     end)
 
-    ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmq_wolf", ["canis"])
+    ["canis_aureus", "canis_latrans", "canis_lupus"] =
+      @subject.complete("rabbitmq_wolf", ["canis"])
   end
 
   test "Auto-completes scoped command with --script-name flag" do
@@ -54,10 +57,10 @@ defmodule RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["canis_lupus"]
-  def validate(_,_), do: :ok
-  def merge_defaults(_,_), do: {[], %{}}
-  def banner(_,_), do: ""
-  def run(_,_), do: :ok
+  def validate(_, _), do: :ok
+  def merge_defaults(_, _), do: {[], %{}}
+  def banner(_, _), do: ""
+  def run(_, _), do: :ok
   def switches(), do: [colour: :string, dingo: :boolean, dog: :boolean]
   def scopes, do: [:ctl, :wolf]
 end
@@ -66,10 +69,10 @@ defmodule RabbitMQ.CLI.Wolf.Commands.CanisLatransCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["canis_latrans"]
-  def validate(_,_), do: :ok
-  def merge_defaults(_,_), do: {[], %{}}
-  def banner(_,_), do: ""
-  def run(_,_), do: :ok
+  def validate(_, _), do: :ok
+  def merge_defaults(_, _), do: {[], %{}}
+  def banner(_, _), do: ""
+  def run(_, _), do: :ok
   def scopes, do: [:ctl, :wolf]
 end
 
@@ -77,9 +80,9 @@ defmodule RabbitMQ.CLI.Wolf.Commands.CanisAureusCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["canis_aureus"]
-  def validate(_,_), do: :ok
-  def merge_defaults(_,_), do: {[], %{}}
-  def banner(_,_), do: ""
-  def run(_,_), do: :ok
+  def validate(_, _), do: :ok
+  def merge_defaults(_, _), do: {[], %{}}
+  def banner(_, _), do: ""
+  def run(_, _), do: :ok
   def scopes, do: [:ctl, :wolf]
 end

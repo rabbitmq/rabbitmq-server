@@ -99,7 +99,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   def usage_additional() do
     [
       ["<plugin1> [ <plugin2>]", "names of plugins to check separated by a space"],
-      ["--online", "contact target node to perform the check. Requires the node to be running and reachable."],
+      [
+        "--online",
+        "contact target node to perform the check. Requires the node to be running and reachable."
+      ],
       ["--offline", "check enabled plugins file directly without contacting target node."]
     ]
   end
@@ -120,7 +123,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Health check that exits with a non-zero code if provided plugins are not enabled on target node"
+  def description(),
+    do:
+      "Health check that exits with a non-zero code if provided plugins are not enabled on target node"
 
   #
   # Implementation

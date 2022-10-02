@@ -55,12 +55,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def usage_additional() do
     [
-      ["<pidfile>", "node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'"],
+      [
+        "<pidfile>",
+        "node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'"
+      ],
       ["--idempotent", "return success if target node is not running (cannot be contacted)"]
     ]
   end
 
-  def description(), do: "Stops RabbitMQ and its runtime (Erlang VM). Requires a local node pid file path to monitor progress."
+  def description(),
+    do:
+      "Stops RabbitMQ and its runtime (Erlang VM). Requires a local node pid file path to monitor progress."
 
   def help_section(), do: :node_management
 

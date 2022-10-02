@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule CloseAllConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -36,7 +35,9 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "validate: with an invalid number of arguments returns an arg count error", context do
-    assert @command.validate(["random", "explanation"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["random", "explanation"], context[:opts]) ==
+             {:validation_failure, :too_many_args}
+
     assert @command.validate([], context[:opts]) == {:validation_failure, :not_enough_args}
   end
 
@@ -44,8 +45,9 @@ defmodule CloseAllConnectionsCommandTest do
     assert @command.validate(["explanation"], context[:opts]) == :ok
   end
 
-  test "run: a close connections request in an existing vhost with all defaults closes all connections", context do
-    with_connection(@vhost, fn(_) ->
+  test "run: a close connections request in an existing vhost with all defaults closes all connections",
+       context do
+    with_connection(@vhost, fn _ ->
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
@@ -57,8 +59,9 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: close a limited number of connections in an existing vhost closes a subset of connections", context do
-    with_connections([@vhost, @vhost, @vhost], fn(_) ->
+  test "run: close a limited number of connections in an existing vhost closes a subset of connections",
+       context do
+    with_connections([@vhost, @vhost, @vhost], fn _ ->
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost], [vhost: @vhost], [vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
@@ -70,18 +73,27 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: a close connections request for a non-existing vhost does nothing", context do
-    with_connection(@vhost, fn(_) ->
+    with_connection(@vhost, fn _ ->
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
-      opts = %{node: node, vhost: "non_existent-9288737", global: false, per_connection_delay: 0, limit: 0}
+
+      opts = %{
+        node: node,
+        vhost: "non_existent-9288737",
+        global: false,
+        per_connection_delay: 0,
+        limit: 0
+      }
+
       assert {:ok, "Closed 0 connections"} == @command.run(["test"], opts)
       assert fetch_connection_vhosts(node, nodes) == [[vhost: @vhost]]
     end)
   end
 
-  test "run: a close connections request to an existing node with --global (all vhosts)", context do
-    with_connection(@vhost, fn(_) ->
+  test "run: a close connections request to an existing node with --global (all vhosts)",
+       context do
+    with_connection(@vhost, fn _ ->
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
@@ -93,7 +105,15 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: a close_all_connections request to non-existent RabbitMQ node returns a badrpc" do
-    opts = %{node: :jake@thedog, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0, timeout: 200}
+    opts = %{
+      node: :jake@thedog,
+      vhost: @vhost,
+      global: true,
+      per_connection_delay: 0,
+      limit: 0,
+      timeout: 200
+    }
+
     assert match?({:badrpc, _}, @command.run(["test"], opts))
   end
 
@@ -114,7 +134,14 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "banner for global option" do
-    opts = %{node: :test@localhost, vhost: "burrow", global: true, per_connection_delay: 0, limit: 0}
+    opts = %{
+      node: :test@localhost,
+      vhost: "burrow",
+      global: true,
+      per_connection_delay: 0,
+      limit: 0
+    }
+
     s = @command.banner(["some reason"], opts)
     assert s =~ ~r/Closing all connections to node test@localhost/
     assert s =~ ~r/some reason/
@@ -125,23 +152,29 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   defp fetch_connection_vhosts(node, nodes, retries) do
-      stream = RpcStream.receive_list_items(node,
-                                            :rabbit_networking,
-                                            :emit_connection_info_all,
-                                            [nodes, [:vhost]],
-                                            :infinity,
-                                            [:vhost],
-                                            Kernel.length(nodes))
-      xs = Enum.to_list(stream)
+    stream =
+      RpcStream.receive_list_items(
+        node,
+        :rabbit_networking,
+        :emit_connection_info_all,
+        [nodes, [:vhost]],
+        :infinity,
+        [:vhost],
+        Kernel.length(nodes)
+      )
 
-      case {xs, retries} do
-        {xs, 0} ->
-          xs
-        {[], n} when n >= 0 ->
-          Process.sleep(10)
-          fetch_connection_vhosts(node, nodes, retries - 1)
-        _ ->
-          xs
-      end
+    xs = Enum.to_list(stream)
+
+    case {xs, retries} do
+      {xs, 0} ->
+        xs
+
+      {[], n} when n >= 0 ->
+        Process.sleep(10)
+        fetch_connection_vhosts(node, nodes, retries - 1)
+
+      _ ->
+        xs
+    end
   end
 end

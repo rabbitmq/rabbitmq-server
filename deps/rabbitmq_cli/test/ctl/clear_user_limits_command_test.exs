@@ -19,10 +19,10 @@ defmodule ClearUserLimitsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_user @user, @password
+    add_user(@user, @password)
 
     on_exit([], fn ->
-      delete_user @user
+      delete_user(@user)
     end)
 
     :ok
@@ -48,7 +48,9 @@ defmodule ClearUserLimitsCommandTest do
 
   test "validate: providing too many arguments fails validation" do
     assert @command.validate(["is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["this", "is", "too", "many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "run: an unreachable node throws a badrpc" do
@@ -63,9 +65,9 @@ defmodule ClearUserLimitsCommandTest do
     assert get_user_limits(@user) != []
 
     assert @command.run(
-      [@user, @limittype],
-      context[:opts]
-    ) == :ok
+             [@user, @limittype],
+             context[:opts]
+           ) == :ok
 
     assert get_user_limits(@user) == %{}
   end
@@ -76,40 +78,38 @@ defmodule ClearUserLimitsCommandTest do
     assert get_user_limits(@user) != []
 
     assert @command.run(
-      [@user, "all"],
-      context[:opts]
-    ) == :ok
+             [@user, "all"],
+             context[:opts]
+           ) == :ok
 
     assert get_user_limits(@user) == %{}
   end
 
   @tag user: "bad-user"
   test "run: a non-existent user returns an error", context do
-
     assert @command.run(
-      [context[:user], @limittype],
-      context[:opts]
-    ) == {:error, {:no_such_user, "bad-user"}}
+             [context[:user], @limittype],
+             context[:opts]
+           ) == {:error, {:no_such_user, "bad-user"}}
   end
 
   test "banner: for a limit type", context do
-
-    s = @command.banner(
-      [@user, @limittype],
-      context[:opts]
-    )
+    s =
+      @command.banner(
+        [@user, @limittype],
+        context[:opts]
+      )
 
     assert s == "Clearing \"#{@limittype}\" limit for user \"#{@user}\" ..."
   end
 
   test "banner: for all", context do
-
-    s = @command.banner(
-      [@user, "all"],
-      context[:opts]
-    )
+    s =
+      @command.banner(
+        [@user, "all"],
+        context[:opts]
+      )
 
     assert s == "Clearing all limits for user \"#{@user}\" ..."
   end
-
 end

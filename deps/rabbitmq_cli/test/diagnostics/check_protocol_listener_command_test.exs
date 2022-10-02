@@ -17,10 +17,11 @@ defmodule CheckProtocolListenerCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -41,7 +42,10 @@ defmodule CheckProtocolListenerCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run(["stomp"], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run(["stomp"], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: when a listener for the protocol is active, returns a success", context do
@@ -54,7 +58,8 @@ defmodule CheckProtocolListenerCommandTest do
     end
   end
 
-  test "run: when a listener for the protocol is not active or unknown, returns an error", context do
+  test "run: when a listener for the protocol is not active or unknown, returns an error",
+       context do
     assert match?({false, _, _}, @command.run(["non-existent-proto"], context[:opts]))
   end
 
