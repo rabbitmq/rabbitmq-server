@@ -84,13 +84,18 @@ when_no_connections(_Config) ->
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)).
 
 when_one_connection(_Config) ->
-    [A] = rabbit_ct_broker_helpers:get_node_configs(_Config, nodename),
-    Opts = #{node => A, timeout => 2000, verbose => true},
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            [A] = rabbit_ct_broker_helpers:get_node_configs(_Config, nodename),
+            Opts = #{node => A, timeout => 2000, verbose => true},
 
-    [Connection,Sender] = open_amqp10_connection(_Config),
+            [Connection,Sender] = open_amqp10_connection(_Config),
 
-    [_] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
-    close_amqp10_connection(Connection, Sender).
+            [_] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
+            close_amqp10_connection(Connection, Sender);
+        true ->
+            {skip, "stream tests are skipped in mixed mode"}
+    end.
 
 open_amqp10_connection(Config) ->
     Host = ?config(rmq_hostname, Config),
