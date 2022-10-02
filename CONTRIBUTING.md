@@ -52,7 +52,11 @@ cd deps/rabbitmq_cli
 mix format
 ```
 
-Running `make` in `deps/rabbitmq_cli` will validate the CLI formatting and issue any necessary warnings.
+Running `make` will validate the CLI formatting and issue any necessary warnings. Alternatively, run the format checker in the `deps/rabbitmq_cli` directory:
+
+```
+mix format --check-formatted
+```
 
 ## Code of Conduct
 
