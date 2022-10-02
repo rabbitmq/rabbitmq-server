@@ -199,18 +199,21 @@ defmodule RabbitMQCtl.MixfileBase do
         "deps.compile"
       ],
       make_app: [
+        "format --check-formatted",
         "compile",
         "escript.build"
       ],
       make_all: [
         "deps.get",
         "deps.compile",
+        "format --check-formatted",
         "compile",
         "escript.build"
       ],
       make_all_in_src_archive: [
         "deps.get --only prod",
         "deps.compile",
+        "format --check-formatted",
         "compile",
         "escript.build"
       ]
