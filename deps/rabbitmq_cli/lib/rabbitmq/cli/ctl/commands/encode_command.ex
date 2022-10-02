@@ -61,6 +61,57 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     end
   end
 
+<<<<<<< HEAD
+=======
+  def run([], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+    case Input.consume_single_line_string_with_prompt("Value to encode: ", opts) do
+      :eof ->
+        {:error, :not_enough_args}
+
+      value ->
+        case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+          :eof ->
+            {:error, :not_enough_args}
+
+          passphrase ->
+            try do
+              term_value = Helpers.evaluate_input_as_term(value)
+
+              result =
+                {:encrypted, _} =
+                :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
+              {:ok, result}
+            catch
+              _, _ ->
+                {:error, "Error during cipher operation"}
+            end
+        end
+    end
+  end
+
+  def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+    case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+      :eof ->
+        {:error, :not_enough_args}
+
+      passphrase ->
+        try do
+          term_value = Helpers.evaluate_input_as_term(value)
+
+          result =
+            {:encrypted, _} =
+            :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+
+          {:ok, result}
+        catch
+          _, _ ->
+            {:error, "Error during cipher operation"}
+        end
+    end
+  end
+
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)

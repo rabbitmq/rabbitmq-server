@@ -37,6 +37,15 @@ defmodule AddVhostCommandTest do
              description: "Used by team A for QA purposes",
              tags: "qa,team-a"
            }) == :ok
+<<<<<<< HEAD
+=======
+
+    assert @command.validate(["new-vhost"], %{
+             description: "Used by team A for QA purposes",
+             tags: "qa,team-a",
+             default_queue_type: "quorum"
+           }) == :ok
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
   end
 
   @tag vhost: @vhost

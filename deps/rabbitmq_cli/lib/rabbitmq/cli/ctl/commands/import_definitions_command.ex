@@ -14,7 +14,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   end
 
   def merge_defaults(args, opts) do
+<<<<<<< HEAD
     {args, Map.merge(%{format: "json"}, Helpers.case_insensitive_format(opts))}
+=======
+    {args,
+     Map.merge(%{format: "json", skip_if_unchanged: false}, Helpers.case_insensitive_format(opts))}
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
   end
 
   def switches(), do: [timeout: :integer, format: :string]
@@ -52,12 +57,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
              "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
 
           {:ok, map} ->
+<<<<<<< HEAD
             :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
+=======
+            skip? = Map.get(map, :skip_if_unchanged, false)
+
+            fun =
+              case skip? do
+                true -> :import_parsed_with_hashing
+                false -> :import_parsed
+              end
+
+            :rabbit_misc.rpc_call(node_name, :rabbit_definitions, fun, [map], timeout)
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
         end
     end
   end
 
+<<<<<<< HEAD
   def run([path], %{node: node_name, timeout: timeout, format: format}) do
+=======
+  def run([path], %{node: node_name, format: format, timeout: timeout}) do
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
     abs_path = Path.absname(path)
 
     case File.read(abs_path) do
@@ -71,7 +92,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
              "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
 
           {:ok, map} ->
+<<<<<<< HEAD
             :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
+=======
+            skip? = Map.get(map, :skip_if_unchanged, false)
+
+            fun =
+              case skip? do
+                true -> :import_parsed_with_hashing
+                false -> :import_parsed
+              end
+
+            :rabbit_misc.rpc_call(node_name, :rabbit_definitions, fun, [map], timeout)
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
         end
 
       {:error, :enoent} ->
@@ -112,12 +145,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
 
   def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
 
+<<<<<<< HEAD
   def usage, do: "import_definitions <file_path | \"-\"> [--format <json | erlang>]"
 
   def usage_additional() do
     [
       ["[file]", "Local file path to import from. If omitted will be read from standard input."],
       ["--format", "input format to use: json or erlang"]
+=======
+  def usage,
+    do: "import_definitions <file_path | \"-\"> [--format <json | erlang>] [--skip-if-unchanged]"
+
+  def usage_additional() do
+    [
+      ["[file]", "Local file path to import from. If omitted will be read from standard input"],
+      ["--format", "input format to use: json or erlang"],
+      [
+        "--skip-if-unchanged",
+        "Avoids repetitive definition imports when file contents are unchanged. Target node must be configured accordingly"
+      ]
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
     ]
   end
 

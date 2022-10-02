@@ -28,6 +28,16 @@ defmodule ListFeatureFlagsCommandTest do
       @flag2 => %{
         desc: "My feature flag #2",
         provided_by: :ListFeatureFlagsCommandTest,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        stability: :stable}}
+    :ok = :rabbit_misc.rpc_call(
+      node, :rabbit_feature_flags, :initialize_registry, [new_feature_flags])
+    :ok = :rabbit_misc.rpc_call(
+      node, :rabbit_feature_flags, :enable_all, [])
+=======
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
         stability: :stable
       }
     }
@@ -36,7 +46,11 @@ defmodule ListFeatureFlagsCommandTest do
       :rabbit_misc.rpc_call(
         node,
         :rabbit_feature_flags,
+<<<<<<< HEAD
         :initialize_registry,
+=======
+        :inject_test_feature_flags,
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
         [new_feature_flags]
       )
 
@@ -47,6 +61,10 @@ defmodule ListFeatureFlagsCommandTest do
         :enable_all,
         []
       )
+<<<<<<< HEAD
+=======
+>>>>>>> 059978e6fa (mix format rabbitmq_cli)
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
 
     name_result = [
       [{:name, @flag1}],

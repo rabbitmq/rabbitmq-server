@@ -23,13 +23,26 @@ defmodule ReviveCommandTest do
   end
 
   setup context do
+<<<<<<< HEAD
     enable_feature_flag(:maintenance_mode_status)
 
+<<<<<<< HEAD
+=======
+    {:ok, opts: %{
+        node: get_rabbit_hostname(),
+        timeout: context[:test_timeout] || 5000
+      }}
+=======
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
     {:ok,
      opts: %{
        node: get_rabbit_hostname(),
        timeout: context[:test_timeout] || 5000
      }}
+<<<<<<< HEAD
+=======
+>>>>>>> 059978e6fa (mix format rabbitmq_cli)
+>>>>>>> 0f89101de0 (mix format rabbitmq_cli)
   end
 
   test "merge_defaults: nothing to do" do
