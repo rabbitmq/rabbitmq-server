@@ -30,6 +30,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
   def run([], %{offline: true}) do
     Networking.inetrc_map(:inet.get_rc())
   end
+
   def run([], %{node: node_name, timeout: timeout, offline: false}) do
     case :rabbit_misc.rpc_call(node_name, :inet, :get_rc, [], timeout) do
       {:error, _} = err -> err
@@ -40,12 +41,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
   end
 
   def output(info, %{node: node_name, formatter: "json"}) do
-    {:ok, %{
-      "result"   => "ok",
-      "node"     => node_name,
-      "resolver" => info
-    }}
+    {:ok,
+     %{
+       "result" => "ok",
+       "node" => node_name,
+       "resolver" => info
+     }}
   end
+
   def output(info, _opts) do
     main_section = [
       "#{bright("Runtime Hostname Resolver (inetrc) Settings")}\n",
@@ -54,13 +57,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
       "Resolver conf file: #{info["resolv_conf"]}",
       "Cache size: #{info["cache_size"]}"
     ]
-    hosts_section = [
-      "\n#{bright("inetrc File Host Entries")}\n"
-    ] ++ case info["hosts"] do
-      []  -> ["(none)"]
-      nil -> ["(none)"]
-      hs  -> Enum.reduce(hs, [], fn {k, v}, acc -> ["#{k} #{Enum.join(v, ", ")}" | acc] end)
-    end
+
+    hosts_section =
+      [
+        "\n#{bright("inetrc File Host Entries")}\n"
+      ] ++
+        case info["hosts"] do
+          [] -> ["(none)"]
+          nil -> ["(none)"]
+          hs -> Enum.reduce(hs, [], fn {k, v}, acc -> ["#{k} #{Enum.join(v, ", ")}" | acc] end)
+        end
 
     lines = main_section ++ hosts_section
 
@@ -73,11 +79,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Displays effective hostname resolver (inetrc) configuration on target node"
+  def description(),
+    do: "Displays effective hostname resolver (inetrc) configuration on target node"
 
   def banner(_, %{node: node_name, offline: false}) do
     "Asking node #{node_name} for its effective hostname resolver (inetrc) configuration..."
   end
+
   def banner(_, %{offline: true}) do
     "Displaying effective hostname resolver (inetrc) configuration used by CLI tools..."
   end

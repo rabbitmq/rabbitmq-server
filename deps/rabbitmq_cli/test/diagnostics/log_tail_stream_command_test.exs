@@ -15,7 +15,7 @@ defmodule LogTailStreamCommandTest do
 
     start_rabbitmq_app()
 
-    ExUnit.configure([max_cases: 1])
+    ExUnit.configure(max_cases: 1)
 
     on_exit([], fn ->
       start_rabbitmq_app()
@@ -25,11 +25,12 @@ defmodule LogTailStreamCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        duration: :infinity
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       duration: :infinity
+     }}
   end
 
   test "merge_defaults: duration defaults to infinity" do
@@ -46,7 +47,10 @@ defmodule LogTailStreamCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100}))
+           )
   end
 
   test "run: streams messages for N seconds", context do
@@ -81,16 +85,19 @@ defmodule LogTailStreamCommandTest do
   end
 
   def ensure_log_file() do
-    [log|_] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
+    [log | _] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
     ensure_file(log, 100)
   end
 
   def ensure_file(log, 0) do
     flunk("timed out trying to ensure the log file #{log}")
   end
+
   def ensure_file(log, attempts) do
     case File.exists?(log) do
-      true -> :ok
+      true ->
+        :ok
+
       false ->
         :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Ping")])
         :timer.sleep(100)
@@ -99,8 +106,9 @@ defmodule LogTailStreamCommandTest do
   end
 
   def delete_log_files() do
-    [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
-    Enum.map(logs, fn(log) ->
+    [_ | _] = logs = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
+
+    Enum.map(logs, fn log ->
       File.rm(log)
     end)
   end

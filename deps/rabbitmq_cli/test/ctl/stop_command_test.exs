@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule StopCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,8 +17,7 @@ defmodule StopCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname(),
-                  idempotent: false}}
+    {:ok, opts: %{node: get_rabbit_hostname(), idempotent: false}}
   end
 
   test "validate accepts no arguments", context do
@@ -31,7 +29,8 @@ defmodule StopCommandTest do
   end
 
   test "validate: with extra arguments returns an arg count error", context do
-    assert @command.validate(["/path/to/pidfile.pid", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["/path/to/pidfile.pid", "extra"], context[:opts]) ==
+             {:validation_failure, :too_many_args}
   end
 
   # NB: as this commands shuts down the Erlang vm it isn't really practical to test it here
@@ -47,6 +46,7 @@ defmodule StopCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Stopping and halting node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Stopping and halting node #{get_rabbit_hostname()}/
   end
 end

@@ -30,7 +30,7 @@ defmodule AwaitStartupCommandTest do
 
   test "validate: with extra arguments returns an arg count error", context do
     assert @command.validate(["extra"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: request to a non-existent node returns a badrpc" do

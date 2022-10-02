@@ -46,19 +46,31 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
     atom_name = to_atom(node_to_remove)
-    args      = [atom_name, false]
+    args = [atom_name, false]
+
     case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args) do
       {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
-        {:error, "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"};
-      {:error, _}  = error -> error;
-      {:badrpc, _} = error -> error;
+        {:error,
+         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
+      {:error, _} = error ->
+        error
+
+      {:badrpc, _} = error ->
+        error
+
       :ok ->
         case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name]) do
           {:error, _} ->
-            {:error, "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"};
-          _ -> :ok
+            {:error,
+             "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
+
+          _ ->
+            :ok
         end
-      other                -> other
+
+      other ->
+        other
     end
   end
 
@@ -70,7 +82,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def usage_additional() do
     [
-      ["--offline", "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."]
+      [
+        "--offline",
+        "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."
+      ]
     ]
   end
 
@@ -88,6 +103,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def banner([node_to_remove], %{offline: true}) do
     "Removing node #{node_to_remove} from the cluster. Warning: quorum queues cannot be shrunk in offline mode"
   end
+
   def banner([node_to_remove], _) do
     "Removing node #{node_to_remove} from the cluster"
   end

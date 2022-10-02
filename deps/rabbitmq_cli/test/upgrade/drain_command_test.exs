@@ -23,12 +23,20 @@ defmodule DrainCommandTest do
   end
 
   setup context do
+<<<<<<< HEAD
     enable_feature_flag(:maintenance_mode_status)
 
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 5000
       }}
+=======
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
+>>>>>>> 059978e6fa (mix format rabbitmq_cli)
   end
 
   test "merge_defaults: nothing to do" do

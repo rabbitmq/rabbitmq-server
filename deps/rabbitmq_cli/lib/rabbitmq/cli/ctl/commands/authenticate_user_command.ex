@@ -24,15 +24,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
     # Credential validators can be used to require passwords of a certain length
     # or following a certain pattern. This is a core server responsibility. MK.
     case Input.infer_password("Password: ", opts) do
-      :eof     -> {:error, :not_enough_args}
-      password -> :rabbit_misc.rpc_call(
-                    node_name,
-                    :rabbit_access_control,
-                    :check_user_pass_login,
-                    [user, password]
-                  )
+      :eof ->
+        {:error, :not_enough_args}
+
+      password ->
+        :rabbit_misc.rpc_call(
+          node_name,
+          :rabbit_access_control,
+          :check_user_pass_login,
+          [user, password]
+        )
     end
   end
+
   def run([user, password], %{node: node_name}) do
     :rabbit_misc.rpc_call(
       node_name,
@@ -59,18 +63,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
 
   def help_section(), do: :user_management
 
-  def description(), do: "Attempts to authenticate a user. Exits with a non-zero code if authentication fails."
+  def description(),
+    do: "Attempts to authenticate a user. Exits with a non-zero code if authentication fails."
 
   def banner([username | _], _), do: "Authenticating user \"#{username}\" ..."
 
   def output({:error, :not_enough_args}, _) do
     {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
   end
+
   def output({:refused, user, msg, args}, _) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr(),
      "Error: failed to authenticate user \"#{user}\"\n" <>
        to_string(:io_lib.format(msg, args))}
   end
+
   def output({:ok, _user}, _) do
     {:ok, "Success"}
   end

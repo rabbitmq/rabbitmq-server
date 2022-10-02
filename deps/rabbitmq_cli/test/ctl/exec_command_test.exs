@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ExecCommandTest do
   use ExUnit.Case, async: false
 
@@ -43,5 +42,4 @@ defmodule ExecCommandTest do
     {:ok, ^opts} = @command.run(["options"], opts)
     {:ok, 123} = @command.run(["options[:option]"], opts)
   end
-
 end

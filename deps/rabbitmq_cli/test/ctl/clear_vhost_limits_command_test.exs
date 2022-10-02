@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearVhostLimitsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -16,10 +15,10 @@ defmodule ClearVhostLimitsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_vhost @vhost
+    add_vhost(@vhost)
 
     on_exit([], fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -61,7 +60,6 @@ defmodule ClearVhostLimitsCommandTest do
     assert match?({:badrpc, _}, @command.run([], opts))
   end
 
-
   @tag vhost: @vhost
   test "run: if limits exist, returns ok and clears them", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
@@ -71,9 +69,9 @@ defmodule ClearVhostLimitsCommandTest do
     assert get_vhost_limits(context[:vhost]) != []
 
     assert @command.run(
-      [],
-      vhost_opts
-    ) == :ok
+             [],
+             vhost_opts
+           ) == :ok
 
     assert get_vhost_limits(context[:vhost]) == %{}
   end
@@ -83,21 +81,21 @@ defmodule ClearVhostLimitsCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+             [],
+             vhost_opts
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   @tag vhost: @vhost
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    s = @command.banner(
-      [],
-      vhost_opts
-    )
+    s =
+      @command.banner(
+        [],
+        vhost_opts
+      )
 
     assert s =~ ~r/Clearing vhost \"#{context[:vhost]}\" limits .../
   end
-
 end

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AddUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -28,7 +27,7 @@ defmodule AddUserCommandTest do
 
   test "validate: too many positional arguments fails" do
     assert @command.validate(["user", "password", "extra"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: two arguments passes" do
@@ -41,7 +40,10 @@ defmodule AddUserCommandTest do
 
   @tag user: "", password: "password"
   test "validate: an empty username fails", context do
-    assert match?({:validation_failure, {:bad_argument, _}}, @command.validate([context[:user], context[:password]], context[:opts]))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([context[:user], context[:password]], context[:opts])
+           )
   end
 
   # Blank passwords are currently allowed, they make sense
@@ -62,20 +64,23 @@ defmodule AddUserCommandTest do
   @tag user: "someone", password: "password"
   test "run: default case completes successfully", context do
     assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
-    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+    assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
   test "run: adding an existing user returns an error", context do
     add_user(context[:user], context[:password])
-    assert @command.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
-    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+
+    assert @command.run([context[:user], context[:password]], context[:opts]) ==
+             {:error, {:user_already_exists, context[:user]}}
+
+    assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
   test "banner", context do
-    assert @command.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
+    assert @command.banner([context[:user], context[:password]], context[:opts]) =~
+             ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 
   @tag user: "someone"

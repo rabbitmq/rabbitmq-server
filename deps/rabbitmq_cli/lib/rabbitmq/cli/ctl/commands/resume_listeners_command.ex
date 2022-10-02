@@ -21,7 +21,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResumeListenersCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_maintenance, :resume_all_client_listeners, [], timeout)
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_maintenance,
+      :resume_all_client_listeners,
+      [],
+      timeout
+    )
   end
 
   use RabbitMQ.CLI.DefaultOutput
@@ -36,10 +42,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResumeListenersCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Resumes client connection listeners making them accept client connections again"
+  def description(),
+    do: "Resumes client connection listeners making them accept client connections again"
 
   def banner(_, %{node: node_name}) do
-    "Will resume client connection listeners on node #{node_name}. "
-    <> "The node will now accept client connections"
+    "Will resume client connection listeners on node #{node_name}. " <>
+      "The node will now accept client connections"
   end
 end

@@ -8,18 +8,20 @@ defmodule RabbitMQ.CLI.Core.Input do
   alias RabbitMQ.CLI.Core.Config
 
   def consume_single_line_string_with_prompt(prompt, opts) do
-    val = case Config.output_less?(opts) do
-      true  ->
-        IO.read(:stdio, :line)
-      false ->
-        IO.puts(prompt)
-        IO.read(:stdio, :line)
-    end
+    val =
+      case Config.output_less?(opts) do
+        true ->
+          IO.read(:stdio, :line)
+
+        false ->
+          IO.puts(prompt)
+          IO.read(:stdio, :line)
+      end
 
     case val do
       :eof -> :eof
-      ""   -> :eof
-      s    -> String.trim(s)
+      "" -> :eof
+      s -> String.trim(s)
     end
   end
 
@@ -28,8 +30,8 @@ defmodule RabbitMQ.CLI.Core.Input do
 
     case val do
       :eof -> :eof
-      ""   -> :eof
-      s    -> String.trim(s)
+      "" -> :eof
+      s -> String.trim(s)
     end
   end
 

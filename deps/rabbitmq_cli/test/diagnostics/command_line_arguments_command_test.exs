@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule CommandLineArgumentsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -21,13 +20,14 @@ defmodule CommandLineArgumentsCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname(), timeout: :infinity}}
   end
 
-  test "validate: with extra arguments, command line arguments returns an arg count error", context do
+  test "validate: with extra arguments, command line arguments returns an arg count error",
+       context do
     assert @command.validate(["extra"], context[:opts]) ==
-    {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: command line arguments request to a reachable node succeeds", context do
-    output = @command.run([], context[:opts]) |> Enum.to_list
+    output = @command.run([], context[:opts]) |> Enum.to_list()
 
     assert_stream_without_errors(output)
   end
@@ -38,7 +38,7 @@ defmodule CommandLineArgumentsCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts])
-      =~ ~r/Command line arguments of node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Command line arguments of node #{get_rabbit_hostname()}/
   end
 end
