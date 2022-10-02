@@ -52,11 +52,15 @@ cd deps/rabbitmq_cli
 mix format
 ```
 
+<<<<<<< HEAD
 Running `make` will validate the CLI formatting and issue any necessary warnings. Alternatively, run the format checker in the `deps/rabbitmq_cli` directory:
 
 ```
 mix format --check-formatted
 ```
+=======
+Running `make` in `deps/rabbitmq_cli` will validate the CLI formatting and issue any necessary warnings.
+>>>>>>> 075df4027c (update contribution notes with rabbitmq_cli formatting instructions)
 
 ## Code of Conduct
 
