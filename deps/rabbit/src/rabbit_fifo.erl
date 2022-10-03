@@ -1029,6 +1029,28 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
         _ ->
             {no_reply, Aux0, Log0}
     end;
+handle_aux(_, _, {get_checked_out, ConsumerId, MsgIds},
+           Aux0, Log0, #?MODULE{cfg = #cfg{},
+                                consumers = Consumers}) ->
+    case Consumers of
+        #{ConsumerId := #consumer{checked_out = Checked}} ->
+            {Log, IdMsgs} =
+                maps:fold(
+                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                          %% it is possible this is not found if the consumer
+                          %% crashed and the message got removed
+                          case ra_log:fetch(Idx, L0) of
+                              {{_, _, {_, _, Cmd, _}}, L} ->
+                                  Msg = get_msg(Cmd),
+                                  {L, [{MsgId, {Header, Msg}} | Acc]};
+                              {undefined, L} ->
+                                  {L, Acc}
+                          end
+                  end, {Log0, []}, maps:with(MsgIds, Checked)),
+            {reply, {ok,  IdMsgs}, Aux0, Log};
+        _ ->
+            {reply, {error, consumer_not_found}, Aux0, Log0}
+    end;
 handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
            Aux0, Log, #?MODULE{}) ->
     %% for returns with a delivery limit set we can just return as before
