@@ -84,10 +84,10 @@ http_file(
 )
 
 http_file(
-    name = "otp_src_25_1",
-    downloaded_file_path = "OTP-25.1.tar.gz",
-    sha256 = "e00b2e02350688ee4ac83c41ec25c210774fe73b7f806860c46b185457ae135e",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.1.tar.gz"],
+    name = "otp_src_25.1.1",
+    downloaded_file_path = "OTP-25.1.1.1.tar.gz",
+    sha256 = "3348616450868fa8b39bddf0b528030e4525afef5b30e3a4b54c375add7d3f4f",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.1.1.1.tar.gz"],
 )
 
 http_archive(
@@ -148,9 +148,9 @@ erlang_config(
             version = "25.0.4",
         ),
         internal_erlang_from_github_release(
-            name = "25_1",
-            sha256 = "a5ea27c1e07511a84bdd869c37f5e254f198c1cecf68ee9c8fedd23010750c31",
-            version = "25.1",
+            name = "25.1.1",
+            sha256 = "42840c32e13a27bdb2c376d69aa22466513d441bfe5eb882de23baf8218308d3",
+            version = "25.1.1",
         ),
         internal_erlang_from_http_archive(
             name = "git_master",
@@ -177,7 +177,7 @@ elixir_config(
     internal_elixir_configs = [
         internal_elixir_from_github_release(
             name = "1_10",
-            sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f",
+            sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025.1.114f3f4adbb48e04ef63f1d9f",
             version = "1.10.4",
         ),
         internal_elixir_from_github_release(
