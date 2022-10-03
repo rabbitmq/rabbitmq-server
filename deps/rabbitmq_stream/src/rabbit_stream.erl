@@ -207,8 +207,7 @@ emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
 
 list(VHost) ->
     [Client
-     || {_, ListSup, _, _}
-            <- supervisor:which_children(rabbit_stream_sup),
+     || {_, ListSup, _, _} <- supervisor:which_children(rabbit_stream_sup),
         {_, RanchEmbeddedSup, supervisor, _}
             <- supervisor:which_children(ListSup),
         {{ranch_listener_sup, _}, RanchListSup, _, _}

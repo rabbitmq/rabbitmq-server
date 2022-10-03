@@ -1880,7 +1880,6 @@ handle_frame_post_auth(Transport,
                                               Properties]),
                             Sac = single_active_consumer(Properties),
                             ConsumerName = consumer_name(Properties),
-                            %% TODO check consumer name is defined when SAC
                             case {Sac, rabbit_stream_utils:is_sac_ff_enabled(),
                                   ConsumerName}
                             of
@@ -2425,35 +2424,25 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {route, RoutingKey, SuperStream}}) ->
-    {ResponseCode, StreamBin} =
+    {ResponseCode, Streams} =
         case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream)
         of
             {ok, no_route} ->
-                {?RESPONSE_CODE_OK, <<0:32>>};
-            {ok, Streams} ->
-                StreamCount = length(Streams),
-                Bin = lists:foldl(fun(Stream, Acc) ->
-                                     StreamSize = byte_size(Stream),
-                                     <<Acc/binary, StreamSize:16,
-                                       Stream:StreamSize/binary>>
-                                  end,
-                                  <<StreamCount:32>>, Streams),
-                {?RESPONSE_CODE_OK, Bin};
+                {?RESPONSE_CODE_OK, []};
+            {ok, Strs} ->
+                {?RESPONSE_CODE_OK, Strs};
             {error, _} ->
                 rabbit_global_counters:increase_protocol_counter(stream,
                                                                  ?STREAM_DOES_NOT_EXIST,
                                                                  1),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
+                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
         end,
 
     Frame =
-        <<?COMMAND_ROUTE:16,
-          ?VERSION_1:16,
-          CorrelationId:32,
-          ResponseCode:16,
-          StreamBin/binary>>,
-    FrameSize = byte_size(Frame),
-    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {route, ResponseCode, Streams}}),
+
+    Transport:send(S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
@@ -2461,34 +2450,22 @@ handle_frame_post_auth(Transport,
                            Connection,
                        State,
                        {request, CorrelationId, {partitions, SuperStream}}) ->
-    {ResponseCode, PartitionsBin} =
+    {ResponseCode, Partitions} =
         case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
-            {ok, []} ->
-                {?RESPONSE_CODE_OK, <<0:32>>};
             {ok, Streams} ->
-                StreamCount = length(Streams),
-                Bin = lists:foldl(fun(Stream, Acc) ->
-                                     StreamSize = byte_size(Stream),
-                                     <<Acc/binary, StreamSize:16,
-                                       Stream:StreamSize/binary>>
-                                  end,
-                                  <<StreamCount:32>>, Streams),
-                {?RESPONSE_CODE_OK, Bin};
+                {?RESPONSE_CODE_OK, Streams};
             {error, _} ->
                 rabbit_global_counters:increase_protocol_counter(stream,
                                                                  ?STREAM_DOES_NOT_EXIST,
                                                                  1),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
+                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
         end,
 
     Frame =
-        <<?COMMAND_PARTITIONS:16,
-          ?VERSION_1:16,
-          CorrelationId:32,
-          ResponseCode:16,
-          PartitionsBin/binary>>,
-    FrameSize = byte_size(Frame),
-    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {partitions, ResponseCode, Partitions}}),
+
+    Transport:send(S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{transport = ConnTransport,
@@ -3367,10 +3344,8 @@ send_chunks(DeliverVersion,
 
 emit_stats(#stream_connection{publishers = Publishers} = Connection,
            #stream_connection_state{consumers = Consumers} = ConnectionState) ->
-    [{_, Pid},
-     {_, Recv_oct},
-     {_, Send_oct},
-     {_, Reductions}] = infos(?SIMPLE_METRICS, Connection, ConnectionState),
+    [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] =
+        infos(?SIMPLE_METRICS, Connection, ConnectionState),
     Infos = infos(?OTHER_METRICS, Connection, ConnectionState),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid,
