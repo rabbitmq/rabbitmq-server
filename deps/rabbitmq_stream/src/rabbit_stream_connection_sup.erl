@@ -28,6 +28,7 @@
 start_link(Ref, Transport, Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, KeepaliveSup} =
+<<<<<<< HEAD
         supervisor2:start_child(SupPid,
                                 {rabbit_stream_keepalive_sup,
                                  {rabbit_stream_connection_sup,
@@ -45,6 +46,29 @@ start_link(Ref, Transport, Opts) ->
                                  ?WORKER_WAIT,
                                  worker,
                                  [rabbit_stream_reader]}),
+=======
+        supervisor:start_child(SupPid,
+                               #{id => rabbit_stream_keepalive_sup,
+                                 start =>
+                                     {rabbit_stream_connection_sup,
+                                      start_keepalive_link, []},
+                                 restart => transient,
+                                 significant => true,
+                                 shutdown => infinity,
+                                 type => supervisor,
+                                 modules => [rabbit_keepalive_sup]}),
+    {ok, ReaderPid} =
+        supervisor:start_child(SupPid,
+                               #{id => rabbit_stream_reader,
+                                 start =>
+                                     {rabbit_stream_reader, start_link,
+                                      [KeepaliveSup, Transport, Ref, Opts]},
+                                 restart => transient,
+                                 significant => true,
+                                 shutdown => ?WORKER_WAIT,
+                                 type => worker,
+                                 modules => [rabbit_stream_reader]}),
+>>>>>>> 0c1eeab92b (Fix keys for route and partitions responses)
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
@@ -53,4 +77,13 @@ start_keepalive_link() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+<<<<<<< HEAD
     {ok, {{one_for_all, 0, 1}, []}}.
+=======
+    {ok,
+     {#{strategy => one_for_all,
+        intensity => 0,
+        period => 1,
+        auto_shutdown => any_significant},
+      []}}.
+>>>>>>> 0c1eeab92b (Fix keys for route and partitions responses)

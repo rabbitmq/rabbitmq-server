@@ -134,7 +134,7 @@
      {tune, FrameMax :: non_neg_integer(),
       HeartBeat :: non_neg_integer()} |
      {credit, response_code(), subscription_id()} |
-     {route, response_code(), stream_name()} |
+     {route, response_code(), [stream_name()]} |
      {partitions, response_code(), [stream_name()]} |
      {consumer_update, response_code(), none | offset_spec()} |
      {exchange_command_versions, response_code(),
@@ -442,8 +442,9 @@ response_body({metadata = Tag, Endpoints, Metadata}) ->
 
     NumStreams = map_size(Metadata),
     {command_id(Tag), [EndpointsBin, <<NumStreams:32>>, MetadataBin]};
-response_body({route = Tag, Code, Stream}) ->
-    {command_id(Tag), <<Code:16, ?STRING(Stream)>>};
+response_body({route = Tag, Code, Streams}) ->
+    StreamsBin = [<<?STRING(Stream)>> || Stream <- Streams],
+    {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]};
 response_body({partitions = Tag, Code, Streams}) ->
     StreamsBin = [<<?STRING(Stream)>> || Stream <- Streams],
     {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]};
@@ -934,8 +935,9 @@ parse_response_body(?COMMAND_SASL_AUTHENTICATE,
         end,
     {sasl_authenticate, ResponseCode, Challenge};
 parse_response_body(?COMMAND_ROUTE,
-                    <<ResponseCode:16, ?STRING(StreamSize, Stream)>>) ->
-    {route, ResponseCode, Stream};
+                    <<ResponseCode:16, _Count:32, StreamsBin/binary>>) ->
+    Streams = list_of_strings(StreamsBin),
+    {route, ResponseCode, Streams};
 parse_response_body(?COMMAND_PARTITIONS,
                     <<ResponseCode:16, _Count:32, PartitionsBin/binary>>) ->
     Partitions = list_of_strings(PartitionsBin),
