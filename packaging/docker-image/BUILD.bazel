@@ -1,8 +1,4 @@
 load(
-    "@bazel_skylib//lib:selects.bzl",
-    "selects",
-)
-load(
     "@io_bazel_rules_docker//container:container.bzl",
     "container_image",
     "container_layer",
@@ -112,38 +108,6 @@ container_run_and_commit_layer(
     tags = ["manual"],
 )
 
-selects.config_setting_group(
-    name = "erlang_23_internal",
-    match_all = [
-        "@erlang_config//:erlang_internal",
-        "@erlang_config//:erlang_23",
-    ],
-)
-
-selects.config_setting_group(
-    name = "erlang_24_internal",
-    match_all = [
-        "@erlang_config//:erlang_internal",
-        "@erlang_config//:erlang_24",
-    ],
-)
-
-selects.config_setting_group(
-    name = "erlang_25_0_internal",
-    match_all = [
-        "@erlang_config//:erlang_internal",
-        "@erlang_config//:erlang_25_0",
-    ],
-)
-
-selects.config_setting_group(
-    name = "erlang_25_1_internal",
-    match_all = [
-        "@erlang_config//:erlang_internal",
-        "@erlang_config//:erlang_25_1",
-    ],
-)
-
 container_image(
     name = "otp_source",
     base = ":otp_pkgs_image",
@@ -156,11 +120,10 @@ container_image(
     ],
     tags = ["manual"],
     tars = select({
-        ":erlang_23_internal": ["@otp_src_23//file"],
-        ":erlang_24_internal": ["@otp_src_24//file"],
-        ":erlang_25_0_internal": ["@otp_src_25_0//file"],
-        ":erlang_25_1_internal": ["@otp_src_25_1//file"],
-        "//conditions:default": ["@otp_src_25_1//file"],
+        "@erlang_config//:erlang_23": ["@otp_src_23//file"],
+        "@erlang_config//:erlang_24": ["@otp_src_24//file"],
+        "@erlang_config//:erlang_25_0": ["@otp_src_25_0//file"],
+        "@erlang_config//:erlang_25_1": ["@otp_src_25_1//file"],
     }),
 )
 
