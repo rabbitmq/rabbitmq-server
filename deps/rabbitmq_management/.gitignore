@@ -30,3 +30,5 @@ test/config_schema_SUITE_data/schema/
 selenium/node_modules
 selenium/package-lock.json
 selenium/screens/*/*
+selenium/logs
+

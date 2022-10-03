@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+SUITE=${SUITE:?"missing SUITE"}
+
+init_suite() {
+  TEST_DIR=${SCRIPT}/../test
+  TEST_CASES_DIR=${TEST_DIR}${TEST_CASES_PATH:?"missing TEST_CASES_PATH"}
+  TEST_CONFIG_DIR=${TEST_DIR}${TEST_CONFIG_PATH:?"missing TEST_CONFIG_PATH"}
+  DOCKER_NETWORK=${DOCKER_NETWORK:-rabbitmq_net}
+
+  echo "TEST_CASES_DIR: ${TEST_CASES_DIR} "
+  echo "TEST_CONFIG_DIR: ${TEST_CONFIG_DIR} "
+  echo "DOCKER_NETWORK: ${DOCKER_NETWORK} "
+}
+
+BIN=${SCRIPT}/../bin
+LOGS=$PWD/logs/${SUITE}
+SCREENS=$PWD/screens/${SUITE}
+
+build_mocha_image() {
+  if [[ "$(docker images -q mocha-test 2> /dev/null)" == "" ]]; then
+    docker build -t mocha-test  --target test $SCRIPT/..
+  fi
+}
+
+start_selenium() {
+  echo "Selenimum starting ..."
+
+  kill_container_if_exist selenium
+
+  docker run \
+    --detach \
+    --name selenium \
+    --net ${DOCKER_NETWORK} \
+    -p 4444:4444 \
+    --shm-size=2g \
+    selenium/standalone-chrome:103.0
+
+  wait_for_message selenium "Started Selenium Standalone"
+  echo "Selenimum ready"
+}
+
+kill_container_if_exist() {
+  docker stop $1 &> /dev/null || true && docker rm $1 &> /dev/null || true
+}
+wait_for_message() {
+  while ! docker logs $1 | grep -q "$2";
+  do
+      sleep 5
+      echo "Waiting 5sec for $1 to start ..."
+  done
+
+}
+
+init_rabbitmq() {
+  RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
+  RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
+  RABBITMQ_URL=${RABBITMQ_URL:-http://rabbitmq:15672}
+  RABBITMQ_CONFIG_FILENAME=${RABBITMQ_CONFIG_FILENAME:-rabbitmq.config}
+  RABBITMQ_CONFIG_FILE=${RABBITMQ_CONFIG_DIR}/${RABBITMQ_CONFIG_FILENAME}
+
+  echo "RABBITMQ_CONFIG_DIR: ${RABBITMQ_CONFIG_DIR}"
+  echo "RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}"
+  echo "RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
+  echo "RABBITMQ_URL: ${RABBITMQ_URL}"
+}
+
+start_rabbitmq () {
+  init_rabbitmq
+  kill_container_if_exist rabbitmq
+
+  echo "RabbitMQ starting ..."
+
+  docker run \
+    --detach \
+    --name rabbitmq \
+    --net ${DOCKER_NETWORK} \
+    -p 15672:15672 -p 5672:5672 \
+    -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
+    -v ${RABBITMQ_CONFIG_FILE}:/etc/rabbitmq/rabbitmq.config:ro \
+    -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
+    ${RABBITMQ_DOCKER_IMAGE}
+
+  wait_for_message rabbitmq "Server startup complete"
+  echo "RabbitMQ ready"
+}
+init_uaa() {
+  UAA_CONFIG_PATH=${UAA_CONFIG_PATH:?"missing UAA_CONFIG_PATH"}
+  UAA_CONFIG_DIR=${TEST_CONFIG_DIR}${UAA_CONFIG_PATH}
+
+  echo "UAA_CONFIG: ${UAA_CONFIG_DIR}"
+}
+start_uaa() {
+  init_uaa
+  kill_container_if_exist uaa
+
+  docker run \
+    --detach \
+    --name uaa \
+    --net ${DOCKER_NETWORK} \
+    --publish 8080:8080 \
+    --mount "type=bind,source=${UAA_CONFIG_DIR},target=/uaa" \
+    --env UAA_CONFIG_PATH="/uaa" \
+    --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
+    cloudfoundry/uaa:75.21.0
+
+  wait_for_uaa
+}
+wait_for_uaa() {
+  max_retry=10
+  counter=0
+  until (docker run --net rabbitmq_net --rm curlimages/curl:7.85.0 -L -v http://uaa:8080/.well-known/openid-configuration >/dev/null 2>&1)
+  echo "Waiting for UAA to start"
+  do
+    sleep 5
+    [[ counter -eq $max_retry ]] && echo "Failed!" && exit 1
+    echo "Trying again. Try #$counter"
+    ((counter++))
+  done
+  sleep 20 # There is something else not fully initialized in UAA that even after getting a 200 OK it is not ready 
+  echo "UAA is ready"
+
+}
+
+test () {
+  kill_container_if_exist mocha
+  docker run \
+    --rm \
+    --name mocha \
+    --net ${DOCKER_NETWORK} \
+    --env RABBITMQ_URL=${RABBITMQ_URL} \
+    --env RUN_LOCAL=false \
+    -v ${TEST_DIR}:/code/test \
+    -v ${SCREENS}:/screens \
+    mocha-test /code/test${TEST_CASES_PATH}
+}
+
+save_logs() {
+  mkdir -p $LOGS
+  save_container_logs selenium
+  save_container_logs mocha
+}
+save_container_logs() {
+  docker container ls | grep $1 && docker logs $1 > $LOGS/$1.log || echo "$1 not running"
+}
+
+run() {
+  init_suite
+
+  build_mocha_image
+  start_selenium
+
+  echo "Set up ..."
+  [[ $(type -t _setup) == function ]] &&  _setup
+
+  echo "Running test cases ..."
+  test
+  TEST_RESULT=$?
+
+  echo "Saving Logs to $LOGS ..."
+  save_logs
+  [[ $(type -t _save_logs) == function ]] &&  _save_logs
+
+  echo "Tear down ..."
+  [[ $(type -t _teardown) == function ]] &&  _teardown
+
+  kill_container_if_exist selenium
+
+  exit $TEST_RESULT
+
+}

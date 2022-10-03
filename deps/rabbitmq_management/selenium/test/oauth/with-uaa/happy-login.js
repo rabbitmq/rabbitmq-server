@@ -11,7 +11,8 @@ describe("An UAA user with administrator tag", function() {
   var homePage;
   var uaaLogin;
   var overview;
-
+  var captureScreen;
+  
   before(async function() {
     driver = buildDriver();
     await goToHome(driver);

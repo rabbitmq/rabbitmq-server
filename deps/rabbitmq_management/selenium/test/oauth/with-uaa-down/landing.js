@@ -8,6 +8,7 @@ var SSOHomePage = require('../../pageobjects/SSOHomePage')
 describe("Management UI without UAA running", function() {
   var driver;
   var homePage;
+  var captureScreen;
 
   before(async function() {
     driver = buildDriver();
