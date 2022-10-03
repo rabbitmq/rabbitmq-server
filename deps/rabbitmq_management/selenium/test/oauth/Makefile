@@ -2,7 +2,7 @@
 SHELL = bash# we depend on bash expansion for e.g. queue patterns
 
 .DEFAULT_GOAL = help
-RABBITMQ_SERVER_ROOT = ../../../../../../
+RABBITMQ_SERVER_ROOT = ../../../../../
 
 
 ### TARGETS ###
@@ -14,10 +14,10 @@ start-rabbitmq: ## Start RabbitMQ
 	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
 	@(gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
 		RABBITMQ_ENABLED_PLUGINS="rabbitmq_auth_backend_oauth2,rabbitmq_management" \
-		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
+		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/rabbitmq-localhost.config)
 
 start-uaa: ## Start UAA
-	@(UAA_CONFIG=${PWD}/uaa ./start-uaa.sh)
+	@(UAA_CONFIG=${PWD}/uaa-localhost ./start-uaa.sh)
 stop-uaa: ## Stop UAA
 	@(./stop-uaa.sh)
 

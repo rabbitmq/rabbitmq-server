@@ -13,8 +13,8 @@ describe("When a logged in user", function() {
   var captureScreen
 
   before(async function() {
-    driver = buildDriver();
-    await goToHome(driver);
+    driver = buildDriver()
+    await goToHome(driver)
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
     overview = new OverviewPage(driver)
@@ -23,16 +23,10 @@ describe("When a logged in user", function() {
 
   it("logs out", async function() {
     await homePage.clickToLogin();
-    // await takeAndSaveScreenshot(driver, require('path').basename(__filename), '01-beforeLogin');
     await uaaLogin.login("rabbit_admin", "rabbit_admin");
-    // await takeAndSaveScreenshot(driver, require('path').basename(__filename), '02-afterLogin');
     await overview.isLoaded()
-    // await takeAndSaveScreenshot(driver, require('path').basename(__filename), '03-overview');
-
     await overview.logout()
-
     await homePage.isLoaded()
-    // await takeAndSaveScreenshot(driver, require('path').basename(__filename), '05-afterUaaLogin');
   });
 
   after(async function() {
