@@ -24,20 +24,17 @@
          takeover/7]).
 
 -record(state, {
-    conn_name,
-    parse_state,
-    proc_state,
-    state,
-    conserve_resources,
-    socket,
-    peername,
-    stats_timer,
-    received_connect_frame
-}).
-
-%%TODO Use 1 Erlang process per connection
-%% => remove rabbit_heartbeat processes
-%% => partly revert https://github.com/rabbitmq/rabbitmq-server/commit/9c153b2d405 ?
+          conn_name,
+          parse_state,
+          proc_state,
+          state,
+          conserve_resources,
+          socket,
+          peername,
+          stats_timer,
+          received_connect_frame,
+          keepalive :: rabbit_mqtt_keepalive:state()
+         }).
 
 %%TODO move from deprecated callback results to new callback results
 %% see cowboy_websocket.erl
@@ -71,11 +68,6 @@ init(Req, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req),
     SockInfo = maps:get(proxy_header, Req, undefined),
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-    %%TODO return idle_timeout?
-    %% Do we need both MQTT Keepalives and WebSocket pings or is the latter just enough to determine
-    %% when we need to close the connection?
-    %% Check how other MQTT over WebSocket brokers handle it.
-    %%
     %%TODO is compress needed?
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
     Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
@@ -177,21 +169,29 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
             stop(State#state{proc_state = PState})
     end;
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
-                                                                 conn_name = ConnName }) ->
-    rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~ts' (~tp)",
+                                                            conn_name = ConnName }) ->
+    rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     stop(State);
 websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
-                                                                 conn_name = ConnName }) ->
-    rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~ts' (~tp), reason: ~ts",
+                                                                          conn_name = ConnName }) ->
+    rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     stop(State);
-websocket_info({start_keepalive, _Keepalive}, State) ->
-    %%TODO use timer as done in rabbit_mqtt_reader
-    {ok, State, hibernate};
-% websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
-%     rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)", [ConnStr]),
-%     stop(State);
+websocket_info({keepalive, Req}, State = #state{keepalive = KState0,
+                                                conn_name = ConnName}) ->
+    case rabbit_mqtt_keepalive:handle(Req, KState0) of
+        {ok, KState} ->
+            {ok, State#state{keepalive = KState}, hibernate};
+        {error, timeout} ->
+            rabbit_log_connection:error("keepalive timeout in Web MQTT connection ~p",
+                                        [ConnName]),
+            stop(State, 1000, <<"MQTT keepalive timeout">>);
+        {error, Reason} ->
+            rabbit_log_connection:error("keepalive error in Web MQTT connection ~p: ~p",
+                                        [ConnName, Reason]),
+            stop(State)
+    end;
 websocket_info(emit_stats, State) ->
     {ok, emit_stats(State), hibernate};
 websocket_info({ra_event, _From, Evt},
@@ -202,11 +202,15 @@ websocket_info(Msg, State) ->
     rabbit_log_connection:warning("Web MQTT: unexpected message ~p", [Msg]),
     {ok, State, hibernate}.
 
-terminate(_, _, #state{ proc_state = undefined }) ->
-    ok;
-terminate(_, _, State) ->
-    _ = stop_rabbit_mqtt_processor(State),
-    ok.
+terminate(_Reason, _Request,
+          #state{conn_name = ConnName,
+                 proc_state = PState,
+                 keepalive = KState} = State) ->
+    rabbit_log_connection:info("closing Web MQTT connection ~p (~s)", [self(), ConnName]),
+    maybe_emit_stats(State),
+    rabbit_mqtt_keepalive:cancel_timer(KState),
+    ok = file_handle_cache:release(),
+    stop_rabbit_mqtt_processor(PState).
 
 %% Internal.
 
@@ -255,28 +259,24 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
             Other
     end.
 
-stop(State) ->
-    stop(State, 1000, "MQTT died").
-
-stop(State, CloseCode, Error0) ->
-    ok = file_handle_cache:release(),
-    _ = stop_rabbit_mqtt_processor(State),
-    Error1 = rabbit_data_coercion:to_binary(Error0),
-    {[{close, CloseCode, Error1}], State}.
-
 stop_with_framing_error(State, Error0, ConnStr) ->
     Error1 = rabbit_misc:format("~tp", [Error0]),
     rabbit_log_connection:error("MQTT detected framing error '~ts' for connection ~tp",
                                 [Error1, ConnStr]),
     stop(State, 1007, Error1).
 
-stop_rabbit_mqtt_processor(State = #state{state = running,
-                                          proc_state = ProcState,
-                                          conn_name = ConnName}) ->
-    maybe_emit_stats(State),
-    rabbit_log_connection:info("closing Web MQTT connection ~tp (~ts)", [self(), ConnName]),
-    rabbit_mqtt_processor:send_will(ProcState),
-    rabbit_mqtt_processor:terminate(ProcState).
+stop(State) ->
+    stop(State, 1000, "MQTT died").
+
+stop(State, CloseCode, Error0) ->
+    Error1 = rabbit_data_coercion:to_binary(Error0),
+    {[{close, CloseCode, Error1}], State}.
+
+stop_rabbit_mqtt_processor(undefined) ->
+    ok;
+stop_rabbit_mqtt_processor(PState) ->
+    rabbit_mqtt_processor:send_will(PState),
+    rabbit_mqtt_processor:terminate(PState).
 
 handle_credits(State0) ->
     case control_throttle(State0) of
@@ -286,14 +286,16 @@ handle_credits(State0) ->
             {ok, State}
     end.
 
-control_throttle(State = #state{ state              = CS,
-                                 conserve_resources = Mem }) ->
+control_throttle(State = #state{state = CS,
+                                conserve_resources = Mem,
+                                keepalive = KState}) ->
     case {CS, Mem orelse credit_flow:blocked()} of
-        %%TODO cancel / resume keepalive timer as done in rabbit_mqtt_reader
         {running, true} ->
-            State #state{state = blocked};
+            State#state{state = blocked,
+                        keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};
         {blocked,false} ->
-            State #state{state = running};
+            State#state{state = running,
+                        keepalive = rabbit_mqtt_keepalive:start_timer(KState)};
         {_, _} ->
             State
     end.

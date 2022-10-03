@@ -260,6 +260,7 @@ process_connect(#mqtt_frame{
                                fun login/2,
                                fun register_client/2,
                                fun notify_connection_created/2,
+                               fun start_keepalive/2,
                                fun handle_clean_session/2],
                               FrameConnect, PState0) of
         {ok, SessionPresent0, PState1} ->
@@ -333,18 +334,14 @@ login({UserBin, PassBin,
 
 register_client(already_connected, _PState) ->
     ok;
-register_client(Frame = #mqtt_frame_connect{
-                           keep_alive = Keepalive,
-                           proto_ver = ProtoVersion},
+register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
                 PState = #proc_state{client_id = ClientId,
                                      socket = Socket,
-                                     auth_state = #auth_state{
-                                                     vhost = VHost}}) ->
+                                     auth_state = #auth_state{vhost = VHost}}) ->
     case rabbit_mqtt_collector:register(ClientId, self()) of
         {ok, Corr} ->
             RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
             Prefetch = rabbit_mqtt_util:env(prefetch),
-            rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
             {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Socket, inbound),
             ExchangeBin = rabbit_mqtt_util:env(exchange),
             ExchangeName = rabbit_misc:r(VHost, exchange, ExchangeBin),
@@ -420,6 +417,10 @@ return_connack(?CONNACK_ID_REJECTED, S) ->
     {error, invalid_client_id, S};
 return_connack(?CONNACK_UNACCEPTABLE_PROTO_VER, S) ->
     {error, unsupported_protocol_version, S}.
+
+start_keepalive(#mqtt_frame_connect{keep_alive = Seconds},
+                #proc_state{socket = Socket}) ->
+    ok = rabbit_mqtt_keepalive:start(Seconds, Socket).
 
 handle_clean_session(_, PState0 = #proc_state{clean_sess = false}) ->
     case get_queue(?QOS_1, PState0) of

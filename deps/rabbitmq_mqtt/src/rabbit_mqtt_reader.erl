@@ -17,7 +17,7 @@
 %%TODO check where to best 'hibernate' when returning from callback
 %%TODO use rabbit_global_counters for MQTT protocol
 
--export([conserve_resources/3, start_keepalive/2,
+-export([conserve_resources/3,
          close_connection/2]).
 
 -export([info/2]).
@@ -166,61 +166,14 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     maybe_process_deferred_recv(control_throttle(State));
 
-handle_info({start_keepalive, KeepaliveSec},
-            State = #state{socket = Sock,
-                           keepalive = undefined})
-  when is_number(KeepaliveSec), KeepaliveSec > 0 ->
-    case rabbit_net:getstat(Sock, [recv_oct]) of
-        {ok, [{recv_oct, RecvOct}]} ->
-            %% "If the Keep Alive value is non-zero and the Server does not receive a Control
-            %% Packet from the Client within one and a half times the Keep Alive time period,
-            %% it MUST disconnect the Network Connection to the Client as if the network had
-            %% failed" [MQTT-3.1.2-24]
-            %% 0.75 * 2 = 1.5
-            IntervalMs = timer:seconds(round(0.75 * KeepaliveSec)),
-            Ref = start_keepalive_timer(#keepalive{interval_ms = IntervalMs}),
-            {noreply, State#state{keepalive = #keepalive{timer = Ref,
-                                                         interval_ms = IntervalMs,
-                                                         recv_oct = RecvOct,
-                                                         received = true}}};
-        {error, einval} ->
-            %% the socket is dead, most likely because the connection is being shut down
-            {stop, {shutdown, cannot_get_socket_stats}, State};
-        {error, Reason} ->
-            {stop, Reason, State}
-    end;
-
-handle_info({timeout, Ref, keepalive},
-            State = #state {socket = Sock,
-                            conn_name = ConnStr,
-                            proc_state = PState,
-                            keepalive = #keepalive{timer = Ref,
-                                                   recv_oct = SameRecvOct,
-                                                   received = ReceivedPreviously} = KeepAlive}) ->
-    case rabbit_net:getstat(Sock, [recv_oct]) of
-        {ok, [{recv_oct, SameRecvOct}]}
-          when ReceivedPreviously ->
-            %% Did not receive from socket for the 1st time.
-            Ref1 = start_keepalive_timer(KeepAlive),
-            {noreply,
-             State#state{keepalive = KeepAlive#keepalive{timer = Ref1,
-                                                         received = false}},
-             hibernate};
-        {ok, [{recv_oct, SameRecvOct}]} ->
-            %% Did not receive from socket for 2nd time successively.
-            rabbit_log_connection:error("closing MQTT connection ~tp (keepalive timeout)", [ConnStr]),
-            send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
-        {ok, [{recv_oct, RecvOct}]} ->
-            %% Received from socket.
-            Ref1 = start_keepalive_timer(KeepAlive),
-            {noreply,
-             State#state{keepalive = KeepAlive#keepalive{timer = Ref1,
-                                                         recv_oct = RecvOct,
-                                                         received = true}},
-             hibernate};
-        {error, einval} ->
-            %% the socket is dead, most likely because the connection is being shut down
-            {stop, {shutdown, cannot_get_socket_stats}, State};
+handle_info({keepalive, Req}, State = #state{keepalive = KState0,
+                                             conn_name = ConnName}) ->
+    case rabbit_mqtt_keepalive:handle(Req, KState0) of
+        {ok, KState} ->
+            {noreply, State#state{keepalive = KState}, hibernate};
+        {error, timeout} ->
+            rabbit_log_connection:error("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
+            send_will_and_terminate({shutdown, keepalive_timeout}, State);
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -254,14 +207,9 @@ handle_info({'DOWN', _MRef, process, _Pid, _Reason} = Evt,
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-start_keepalive_timer(#keepalive{interval_ms = Time}) ->
-    erlang:start_timer(Time, self(), keepalive).
-
-cancel_keepalive_timer(#keepalive{timer = Ref}) ->
-    erlang:cancel_timer(Ref, [{async, true}, {info, false}]).
-
-terminate(Reason, State) ->
-    maybe_emit_stats(State),
+terminate(Reason, State = #state{keepalive = KState0}) ->
+    KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
+    maybe_emit_stats(State#state{keepalive = KState}),
     do_terminate(Reason, State).
 
 handle_pre_hibernate(State) ->
@@ -300,7 +248,7 @@ do_terminate({network_error, Reason}, _State) ->
     rabbit_log_connection:error("MQTT detected network error: ~tp", [Reason]);
 
 do_terminate(normal, #state{proc_state = ProcState,
-                         conn_name  = ConnName}) ->
+                            conn_name  = ConnName}) ->
     rabbit_mqtt_processor:terminate(ProcState),
     rabbit_log_connection:info("closing MQTT connection ~p (~s)", [self(), ConnName]),
     ok;
@@ -395,9 +343,6 @@ callback_reply(State, {ok, ProcState}) ->
 callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
-start_keepalive(_,   0        ) -> ok;
-start_keepalive(Pid, Keepalive) -> Pid ! {start_keepalive, Keepalive}.
-
 pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
 
@@ -415,17 +360,17 @@ parse(Bytes, ParseState) ->
 %% "The Will Message MUST be published when the Network Connection is subsequently
 %% closed unless the Will Message has been deleted by the Server on receipt of a
 %% DISCONNECT Packet [MQTT-3.1.2-8]."
-send_will_and_terminate(PState, State) ->
-    send_will_and_terminate(PState, {shutdown, conn_closed}, State).
+send_will_and_terminate(State) ->
+    send_will_and_terminate({shutdown, conn_closed}, State).
 
-send_will_and_terminate(PState, Reason, State = #state{conn_name = ConnStr}) ->
+send_will_and_terminate(Reason, State = #state{conn_name = ConnStr,
+                                               proc_state = PState}) ->
     rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~p", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
     {stop, Reason, State}.
 
 network_error(closed,
               State = #state{conn_name  = ConnStr,
-                             proc_state = PState,
                              received_connect_frame = Connected}) ->
     Fmt = "MQTT connection ~p will terminate because peer closed TCP connection",
     Args = [ConnStr],
@@ -433,14 +378,13 @@ network_error(closed,
         true -> rabbit_log_connection:info(Fmt, Args);
         false  -> rabbit_log_connection:debug(Fmt, Args)
     end,
-    send_will_and_terminate(PState, State);
+    send_will_and_terminate(State);
 
 network_error(Reason,
-              State = #state{conn_name  = ConnStr,
-                             proc_state = PState}) ->
-    rabbit_log_connection:info("MQTT detected network error for ~tp: ~tp",
+              State = #state{conn_name  = ConnStr}) ->
+    rabbit_log_connection:info("MQTT detected network error for ~p: ~p",
                                [ConnStr, Reason]),
-    send_will_and_terminate(PState, State).
+    send_will_and_terminate(State).
 
 run_socket(State = #state{ connection_state = blocked }) ->
     State;
@@ -454,24 +398,14 @@ run_socket(State = #state{ socket = Sock }) ->
 
 control_throttle(State = #state{connection_state = Flow,
                                 conserve = Conserve,
-                                keepalive = KeepAlive}) ->
+                                keepalive = KState}) ->
     case {Flow, Conserve orelse credit_flow:blocked()} of
-        {running, true}
-          when KeepAlive =:= undefined ->
-            State#state{connection_state = blocked};
         {running, true} ->
-            %%TODO Instead of cancelling / setting the timer every time the connection
-            %% gets blocked / unblocked, restart the timer when it expires and
-            %% the connection_state is blocked.
-            ok = cancel_keepalive_timer(KeepAlive),
-            State#state{connection_state = blocked};
-        {blocked, false}
-          when KeepAlive =:= undefined ->
-            run_socket(State #state{connection_state = running});
+            State#state{connection_state = blocked,
+                        keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};
         {blocked, false} ->
-            Ref = start_keepalive_timer(KeepAlive),
-            run_socket(State #state{connection_state = running,
-                                    keepalive = KeepAlive#keepalive{timer = Ref}});
+            run_socket(State#state{connection_state = running,
+                                   keepalive = rabbit_mqtt_keepalive:start_timer(KState)});
         {_, _} ->
             run_socket(State)
     end.

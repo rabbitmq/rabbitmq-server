@@ -10,23 +10,19 @@
 -include("rabbit_mqtt_types.hrl").
 
 %% reader state
--record(state, {socket,
-                proxy_socket,
-                conn_name,
-                await_recv,
-                deferred_recv,
-                received_connect_frame,
-                connection_state,
-                conserve,
-                parse_state,
-                proc_state,
-                stats_timer,
-                keepalive}).
-
--record(keepalive, {timer :: reference(),
-                    interval_ms :: pos_integer(),
-                    recv_oct :: non_neg_integer(),
-                    received :: boolean()}).
+-record(state,
+        {socket,
+         proxy_socket,
+         conn_name,
+         await_recv,
+         deferred_recv,
+         received_connect_frame,
+         connection_state,
+         conserve,
+         parse_state,
+         proc_state,
+         stats_timer,
+         keepalive :: rabbit_mqtt_keepalive:state()}).
 
 %% processor state
 -record(proc_state,

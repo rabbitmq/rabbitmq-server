@@ -11,6 +11,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-import(rabbit_ct_broker_helpers, [rpc/5]).
+
 all() ->
     [
       {group, non_parallel_tests}
@@ -23,6 +25,7 @@ groups() ->
                                 block_connack_timeout,
                                 handle_invalid_frames,
                                 login_timeout,
+                                keepalive,
                                 stats,
                                 quorum_clean_session_false,
                                 quorum_clean_session_true,
@@ -178,6 +181,41 @@ login_timeout(Config) ->
     after
         rpc(Config, application, unset_env, [rabbitmq_mqtt, login_timeout])
     end.
+
+keepalive(Config) ->
+    KeepaliveSecs = 1,
+    KeepaliveMs = timer:seconds(KeepaliveSecs),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
+                                {host, "localhost"},
+                                {port, P},
+                                {clientid, <<"simpleClient">>},
+                                {proto_ver, v4}
+                               ]),
+    {ok, _Properties} = emqtt:connect(C),
+
+    %% Connection should stay up when client sends PING requests.
+    timer:sleep(KeepaliveMs),
+
+    %% Mock the server socket to not have received any bytes.
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_net,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]} ]),
+
+    process_flag(trap_exit, true),
+    receive
+        {'EXIT', C, {shutdown, tcp_closed}} ->
+            ok
+    after
+        ceil(3 * 0.75 * KeepaliveMs) ->
+            ct:fail("server did not respect keepalive")
+    end,
+    %%TODO Introduce Prometheus counter for number of connections closed
+    %% due to keepalive timeout and assert here that this counter is 1.
+
+    true = rpc(Config, 0, meck, validate, [Mod]),
+    ok = rpc(Config, 0, meck, unload, [Mod]).
 
 stats(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),

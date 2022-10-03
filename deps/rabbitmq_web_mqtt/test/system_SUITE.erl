@@ -26,6 +26,7 @@ groups() ->
         , last_will_enabled
         , last_will_disabled
         , disconnect
+        , keepalive
         ]}
     ].
 
@@ -227,6 +228,33 @@ disconnect(Config) ->
 
     ok.
 
+keepalive(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    PortStr = integer_to_list(Port),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+
+    KeepaliveSecs = 1,
+    KeepaliveMs = timer:seconds(KeepaliveSecs),
+    ok = raw_send(WS,
+                  ?CONNECT_PACKET(
+                     #mqtt_packet_connect{
+                        keep_alive = KeepaliveSecs,
+                        clean_sess = true,
+                        client_id  = <<"web-mqtt-tests-disconnect">>,
+                        username   = <<"guest">>,
+                        password   = <<"guest">>})),
+    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS),
+
+    %% Sanity check that MQTT ping request and ping response work.
+    timer:sleep(KeepaliveMs),
+    ok = raw_send(WS, #mqtt_packet{header = #mqtt_packet_header{type = ?PINGREQ}}),
+    {ok, #mqtt_packet{header = #mqtt_packet_header{type = ?PINGRESP}}, <<>>} = raw_recv(WS),
+
+    %% Stop sending any data to the server (including ping requests).
+    %% The server should disconnect us.
+    ?assertEqual({close, {1000, <<"MQTT keepalive timeout">>}},
+                 rfc6455_client:recv(WS, ceil(3 * 0.75 * KeepaliveMs))).
 
 raw_send(WS, Packet) ->
     Frame = emqttc_serialiser:serialise(Packet),
