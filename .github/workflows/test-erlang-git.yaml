@@ -13,10 +13,14 @@ jobs:
       uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
 <<<<<<< HEAD
+<<<<<<< HEAD
       uses: actions/cache@v3.0.10
 =======
       uses: actions/cache@v3.0.9
 >>>>>>> a8a0710cdf (Bump actions/cache from 3.0.8 to 3.0.9)
+=======
+      uses: actions/cache@v3.0.10
+>>>>>>> be5d092860 (Bump actions/cache from 3.0.9 to 3.0.10)
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
