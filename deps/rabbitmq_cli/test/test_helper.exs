@@ -5,10 +5,12 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 four_hours = 240 * 60 * 1000
+
 ExUnit.configure(
   exclude: [disabled: true],
   module_load_timeout: four_hours,
-  timeout: four_hours)
+  timeout: four_hours
+)
 
 ExUnit.start()
 
@@ -64,13 +66,18 @@ defmodule TestHelper do
   end
 
   def add_user(name, password) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :add_user,
-      [name, password, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :add_user, [
+      name,
+      password,
+      "acting-user"
+    ])
   end
 
   def delete_user(name) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :delete_user,
-      [name, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :delete_user, [
+      name,
+      "acting-user"
+    ])
   end
 
   def list_users() do
@@ -86,7 +93,11 @@ defmodule TestHelper do
   end
 
   def set_user_tags(name, tags) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags, [name, tags, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags, [
+      name,
+      tags,
+      "acting-user"
+    ])
   end
 
   def set_vhost_tags(name, tags) do
@@ -94,15 +105,30 @@ defmodule TestHelper do
   end
 
   def authenticate_user(name, password) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_access_control,:check_user_pass_login, [name, password])
+    :rpc.call(get_rabbit_hostname(), :rabbit_access_control, :check_user_pass_login, [
+      name,
+      password
+    ])
   end
 
   def set_parameter(vhost, component_name, key, value) do
-    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :parse_set, [vhost, component_name, key, value, :nouser])
+    :ok =
+      :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :parse_set, [
+        vhost,
+        component_name,
+        key,
+        value,
+        :nouser
+      ])
   end
 
   def clear_parameter(vhost, component_name, key) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :clear, [vhost, component_name, key, <<"acting-user">>])
+    :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :clear, [
+      vhost,
+      component_name,
+      key,
+      <<"acting-user">>
+    ])
   end
 
   def list_parameters(vhost) do
@@ -110,13 +136,19 @@ defmodule TestHelper do
   end
 
   def set_global_parameter(key, value) do
-    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :parse_set_global,
-      [key, value, "acting-user"])
+    :ok =
+      :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :parse_set_global, [
+        key,
+        value,
+        "acting-user"
+      ])
   end
 
   def clear_global_parameter(key) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :clear_global,
-      [key, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :clear_global, [
+      key,
+      "acting-user"
+    ])
   end
 
   def list_global_parameters() do
@@ -124,7 +156,14 @@ defmodule TestHelper do
   end
 
   def set_permissions(user, vhost, [conf, write, read]) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_permissions, [
+      user,
+      vhost,
+      conf,
+      write,
+      read,
+      "acting-user"
+    ])
   end
 
   def list_policies(vhost) do
@@ -134,7 +173,17 @@ defmodule TestHelper do
   def set_policy(vhost, name, pattern, value) do
     {:ok, decoded} = :rabbit_json.try_decode(value)
     parsed = :maps.to_list(decoded)
-    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
+
+    :ok =
+      :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set, [
+        vhost,
+        name,
+        pattern,
+        parsed,
+        0,
+        "all",
+        "acting-user"
+      ])
   end
 
   def clear_policy(vhost, key) do
@@ -148,18 +197,41 @@ defmodule TestHelper do
   def set_operator_policy(vhost, name, pattern, value) do
     {:ok, decoded} = :rabbit_json.try_decode(value)
     parsed = :maps.to_list(decoded)
-    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set_op, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
+
+    :ok =
+      :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set_op, [
+        vhost,
+        name,
+        pattern,
+        parsed,
+        0,
+        "all",
+        "acting-user"
+      ])
   end
 
   def clear_operator_policy(vhost, key) do
     :rpc.call(get_rabbit_hostname(), :rabbit_policy, :delete_op, [vhost, key, "acting-user"])
   end
 
-  def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
+  def declare_queue(
+        name,
+        vhost,
+        durable \\ false,
+        auto_delete \\ false,
+        args \\ [],
+        owner \\ :none
+      ) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_amqqueue, :declare,
-              [queue_name, durable, auto_delete, args, owner, "acting-user"])
+
+    :rpc.call(get_rabbit_hostname(), :rabbit_amqqueue, :declare, [
+      queue_name,
+      durable,
+      auto_delete,
+      args,
+      owner,
+      "acting-user"
+    ])
   end
 
   def declare_stream(name, vhost) do
@@ -168,23 +240,40 @@ defmodule TestHelper do
 
   def delete_queue(name, vhost) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_amqqueue, :delete,
-              [queue_name, false, false, "acting-user"])
+
+    :rpc.call(get_rabbit_hostname(), :rabbit_amqqueue, :delete, [
+      queue_name,
+      false,
+      false,
+      "acting-user"
+    ])
   end
 
   def lookup_queue(name, vhost) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_amqqueue, :lookup,
-              [queue_name])
+    :rpc.call(get_rabbit_hostname(), :rabbit_amqqueue, :lookup, [queue_name])
   end
 
-  def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
+  def declare_exchange(
+        name,
+        vhost,
+        type \\ :direct,
+        durable \\ false,
+        auto_delete \\ false,
+        internal \\ false,
+        args \\ []
+      ) do
     exchange_name = :rabbit_misc.r(vhost, :exchange, name)
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_exchange, :declare,
-              [exchange_name, type, durable, auto_delete, internal, args, "acting-user"])
+
+    :rpc.call(get_rabbit_hostname(), :rabbit_exchange, :declare, [
+      exchange_name,
+      type,
+      durable,
+      auto_delete,
+      internal,
+      args,
+      "acting-user"
+    ])
   end
 
   def list_permissions(vhost) do
@@ -199,11 +288,11 @@ defmodule TestHelper do
 
   def set_topic_permissions(user, vhost, exchange, writePerm, readPerm) do
     :rpc.call(
-        get_rabbit_hostname(),
-        :rabbit_auth_backend_internal,
-        :set_topic_permissions,
-        [user, vhost, exchange, writePerm, readPerm, "acting-user"],
-        :infinity
+      get_rabbit_hostname(),
+      :rabbit_auth_backend_internal,
+      :set_topic_permissions,
+      [user, vhost, exchange, writePerm, readPerm, "acting-user"],
+      :infinity
     )
   end
 
@@ -218,14 +307,14 @@ defmodule TestHelper do
   end
 
   def clear_topic_permissions(user, vhost) do
-      :rpc.call(
-        get_rabbit_hostname(),
-        :rabbit_auth_backend_internal,
-        :clear_topic_permissions,
-        [user, vhost, "acting-user"],
-        :infinity
-      )
-    end
+    :rpc.call(
+      get_rabbit_hostname(),
+      :rabbit_auth_backend_internal,
+      :clear_topic_permissions,
+      [user, vhost, "acting-user"],
+      :infinity
+    )
+  end
 
   def set_vm_memory_high_watermark(limit) do
     :rpc.call(get_rabbit_hostname(), :vm_memory_monitor, :set_vm_memory_high_watermark, [limit])
@@ -234,7 +323,6 @@ defmodule TestHelper do
   def set_disk_free_limit(limit) do
     :rpc.call(get_rabbit_hostname(), :rabbit_disk_monitor, :set_disk_free_limit, [limit])
   end
-
 
   #
   # App lifecycle
@@ -245,15 +333,20 @@ defmodule TestHelper do
   end
 
   def await_rabbitmq_startup_with_retries(0) do
-    throw({:error, "Failed to call rabbit.await_startup/0 with retries: node #{get_rabbit_hostname()} was down"})
+    throw(
+      {:error,
+       "Failed to call rabbit.await_startup/0 with retries: node #{get_rabbit_hostname()} was down"}
+    )
   end
+
   def await_rabbitmq_startup_with_retries(retries_left) do
     case :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :await_startup, []) do
       :ok ->
-          :ok
+        :ok
+
       {:badrpc, :nodedown} ->
-          :timer.sleep(50)
-          await_rabbitmq_startup_with_retries(retries_left - 1)
+        :timer.sleep(50)
+        await_rabbitmq_startup_with_retries(retries_left - 1)
     end
   end
 
@@ -265,12 +358,15 @@ defmodule TestHelper do
   def await_condition_with_retries(_fun, 0) do
     throw({:error, "Condition did not materialize"})
   end
+
   def await_condition_with_retries(fun, retries_left) do
     case fun.() do
-      true -> :ok
-      _    ->
-          :timer.sleep(50)
-          await_condition_with_retries(fun, retries_left - 1)
+      true ->
+        :ok
+
+      _ ->
+        :timer.sleep(50)
+        await_condition_with_retries(fun, retries_left - 1)
     end
   end
 
@@ -311,17 +407,20 @@ defmodule TestHelper do
   end
 
   def with_channel(vhost, fun) do
-    with_connection(vhost,
-      fn(conn) ->
+    with_connection(
+      vhost,
+      fn conn ->
         {:ok, chan} = AMQP.Channel.open(conn)
         AMQP.Confirm.select(chan)
         fun.(chan)
-      end)
+      end
+    )
   end
 
   def with_connection(vhost, fun) do
     Application.ensure_all_started(:amqp)
     {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
+
     ExUnit.Callbacks.on_exit(fn ->
       try do
         :amqp_connection.close(conn, 1000)
@@ -329,15 +428,19 @@ defmodule TestHelper do
         :exit, _ -> :ok
       end
     end)
+
     fun.(conn)
   end
 
   def with_connections(vhosts, fun) do
     Application.ensure_all_started(:amqp)
-    conns = for v <- vhosts do
-      {:ok, conn} = AMQP.Connection.open(virtual_host: v)
-      conn
-    end
+
+    conns =
+      for v <- vhosts do
+        {:ok, conn} = AMQP.Connection.open(virtual_host: v)
+        conn
+      end
+
     ExUnit.Callbacks.on_exit(fn ->
       try do
         for c <- conns, do: :amqp_connection.close(c, 1000)
@@ -345,23 +448,25 @@ defmodule TestHelper do
         :exit, _ -> :ok
       end
     end)
+
     fun.(conns)
   end
 
   def message_count(vhost, queue_name) do
-    with_channel(vhost, fn(channel) ->
+    with_channel(vhost, fn channel ->
       {:ok, %{message_count: mc}} = AMQP.Queue.declare(channel, queue_name)
       mc
     end)
   end
 
   def publish_messages(vhost, queue_name, count) do
-    with_channel(vhost, fn(channel) ->
+    with_channel(vhost, fn channel ->
       AMQP.Queue.purge(channel, queue_name)
+
       for i <- 1..count do
-        AMQP.Basic.publish(channel, "", queue_name,
-                           "test_message" <> Integer.to_string(i))
+        AMQP.Basic.publish(channel, "", queue_name, "test_message" <> Integer.to_string(i))
       end
+
       AMQP.Confirm.wait_for_confirms(channel, 30)
     end)
   end
@@ -372,11 +477,14 @@ defmodule TestHelper do
   end
 
   def await_no_client_connections_with_iterations(_node, n) when n <= 0 do
-    flunk "Ran out of retries, still have active client connections"
+    flunk("Ran out of retries, still have active client connections")
   end
+
   def await_no_client_connections_with_iterations(node, n) when n > 0 do
     case :rpc.call(node, :rabbit_networking, :connections_local, []) do
-      [] -> :ok
+      [] ->
+        :ok
+
       _xs ->
         :timer.sleep(10)
         await_no_client_connections_with_iterations(node, n - 1)
@@ -401,12 +509,14 @@ defmodule TestHelper do
     for pid <- :rpc.call(node, :rabbit_networking, :connections_local, []) do
       :rpc.call(node, :rabbit_networking, :close_connection, [pid, :force_closed])
     end
+
     await_no_client_connections(node, 5000)
   end
 
   def expect_client_connection_failure() do
     expect_client_connection_failure("/")
   end
+
   def expect_client_connection_failure(vhost) do
     Application.ensure_all_started(:amqp)
     assert {:error, :econnrefused} == AMQP.Connection.open(virtual_host: vhost)
@@ -459,12 +569,14 @@ defmodule TestHelper do
   end
 
   def emit_list_multiple_sources(list1, list2, ref, pid) do
-    pids = for list <- [list1, list2], do: Kernel.spawn_link(TestHelper, :emit_list, [list, ref, pid])
+    pids =
+      for list <- [list1, list2], do: Kernel.spawn_link(TestHelper, :emit_list, [list, ref, pid])
+
     :rabbit_control_misc.await_emitters_termination(pids)
   end
 
   def emit_list(list, ref, pid) do
-    emit_list_map(list, &(&1), ref, pid)
+    emit_list_map(list, & &1, ref, pid)
   end
 
   def emit_list_map(list, fun, ref, pid) do
@@ -473,14 +585,15 @@ defmodule TestHelper do
 
   def run_command_to_list(command, args) do
     res = Kernel.apply(command, :run, args)
+
     case Enumerable.impl_for(res) do
-      nil -> res;
-      _   -> Enum.to_list(res)
+      nil -> res
+      _ -> Enum.to_list(res)
     end
   end
 
   def vhost_exists?(vhost) do
-    Enum.any?(list_vhosts(), fn(v) -> v[:name] == vhost end)
+    Enum.any?(list_vhosts(), fn v -> v[:name] == vhost end)
   end
 
   def set_enabled_plugins(plugins, mode, node, opts) do
@@ -495,35 +608,51 @@ defmodule TestHelper do
 
   def enable_federation_plugin() do
     node = get_rabbit_hostname()
-    {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
-                                                :application, :get_env,
-                                                [:rabbit, :enabled_plugins_file])
-    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
-                                               :application, :get_env,
-                                               [:rabbit, :plugins_dir])
+
+    {:ok, plugins_file} =
+      :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :enabled_plugins_file])
+
+    {:ok, plugins_dir} =
+      :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :plugins_dir])
+
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
     {:ok, [_enabled_plugins]} = :file.consult(plugins_file)
 
-    opts = %{enabled_plugins_file: plugins_file,
-             plugins_dir: plugins_dir,
-             rabbitmq_home: rabbitmq_home,
-             online: true, offline: false}
+    opts = %{
+      enabled_plugins_file: plugins_file,
+      plugins_dir: plugins_dir,
+      rabbitmq_home: rabbitmq_home,
+      online: true,
+      offline: false
+    }
 
     plugins = currently_active_plugins(%{opts: %{node: node}})
+
     case Enum.member?(plugins, :rabbitmq_federation) do
-      true  -> :ok
+      true ->
+        :ok
+
       false ->
-        set_enabled_plugins(plugins ++ [:rabbitmq_federation], :online, get_rabbit_hostname(), opts)
+        set_enabled_plugins(
+          plugins ++ [:rabbitmq_federation],
+          :online,
+          get_rabbit_hostname(),
+          opts
+        )
     end
   end
 
   def set_vhost_limits(vhost, limits) do
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_vhost_limit, :parse_set, [vhost, limits, <<"acting-user">>])
+    :rpc.call(get_rabbit_hostname(), :rabbit_vhost_limit, :parse_set, [
+      vhost,
+      limits,
+      <<"acting-user">>
+    ])
   end
+
   def get_vhost_limits(vhost) do
     :rpc.call(get_rabbit_hostname(), :rabbit_vhost_limit, :list, [vhost])
-    |> Map.new
+    |> Map.new()
   end
 
   def clear_vhost_limits(vhost) do
@@ -539,23 +668,29 @@ defmodule TestHelper do
   end
 
   def set_user_limits(user, limits) do
-    :rpc.call(get_rabbit_hostname(),
-              :rabbit_auth_backend_internal, :set_user_limits, [user, limits, <<"acting-user">>])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_user_limits, [
+      user,
+      limits,
+      <<"acting-user">>
+    ])
   end
 
   def get_user_limits(user) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :get_user_limits, [user])
-    |> Map.new
+    |> Map.new()
   end
 
   def clear_user_limits(user) do
-    clear_user_limits user, "max-connections"
-    clear_user_limits user, "max-channels"
+    clear_user_limits(user, "max-connections")
+    clear_user_limits(user, "max-channels")
   end
 
   def clear_user_limits(user, limittype) do
-    :rpc.call(get_rabbit_hostname(),
-        :rabbit_auth_backend_internal, :clear_user_limits, [user, limittype, <<"acting-user">>])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :clear_user_limits, [
+      user,
+      limittype,
+      <<"acting-user">>
+    ])
   end
 
   def set_scope(scope) do
@@ -566,11 +701,18 @@ defmodule TestHelper do
   end
 
   def switch_plugins_directories(old_value, new_value) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-            [:rabbit, :plugins_dir, new_value])
+    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env, [
+      :rabbit,
+      :plugins_dir,
+      new_value
+    ])
+
     ExUnit.Callbacks.on_exit(fn ->
-        :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-                [:rabbit, :plugins_dir, old_value])
+      :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env, [
+        :rabbit,
+        :plugins_dir,
+        old_value
+      ])
     end)
   end
 
@@ -588,9 +730,11 @@ defmodule TestHelper do
   def get_opts_with_existing_plugins_directory(context) do
     extra_plugin_directory = System.tmp_dir!() |> Path.join("existing_rabbitmq_dummy_plugins")
     File.mkdir!(extra_plugin_directory)
+
     ExUnit.Callbacks.on_exit(fn ->
       File.rm_rf(extra_plugin_directory)
     end)
+
     get_opts_with_plugins_directories(context, [extra_plugin_directory])
   end
 
@@ -606,30 +750,40 @@ defmodule TestHelper do
   end
 
   def assert_stream_without_errors(stream) do
-    true = Enum.all?(stream, fn({:error, _}) -> false;
-                               ({:error, _, _}) -> false;
-                               (_) -> true end)
+    true =
+      Enum.all?(stream, fn
+        {:error, _} -> false
+        {:error, _, _} -> false
+        _ -> true
+      end)
   end
 
   def wait_for_log_message(message, file \\ nil, attempts \\ 100) do
     ## Assume default log is the first one
-    log_file = case file do
-      nil ->
-        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
-        default_log
-      _ -> file
-    end
+    log_file =
+      case file do
+        nil ->
+          [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
+          default_log
+
+        _ ->
+          file
+      end
+
     case File.read(log_file) do
       {:ok, data} ->
         case String.match?(data, Regex.compile!(message)) do
-          true -> :ok
+          true ->
+            :ok
+
           false ->
             :timer.sleep(100)
             wait_for_log_message(message, log_file, attempts - 1)
         end
+
       _ ->
         :timer.sleep(100)
-            wait_for_log_message(message, log_file, attempts - 1)
+        wait_for_log_message(message, log_file, attempts - 1)
     end
   end
 end

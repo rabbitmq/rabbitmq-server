@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule SetPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -13,24 +12,23 @@ defmodule SetPermissionsCommandTest do
 
   @vhost "test1"
   @user "guest"
-  @root   "/"
+  @root "/"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_vhost @vhost
+    add_vhost(@vhost)
 
     on_exit([], fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
   end
 
   setup context do
-
     on_exit(context, fn ->
-      set_permissions context[:user], context[:vhost], [".*", ".*", ".*"]
+      set_permissions(context[:user], context[:vhost], [".*", ".*", ".*"])
     end)
 
     {
@@ -51,8 +49,12 @@ defmodule SetPermissionsCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["not", "quite", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["this", "is", "way", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["not", "quite", "enough"], %{}) ==
+             {:validation_failure, :not_enough_args}
+
+    assert @command.validate(["this", "is", "way", "too", "many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, vhost: @vhost
@@ -60,11 +62,11 @@ defmodule SetPermissionsCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      vhost_opts
-    ) == :ok
+             [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+             vhost_opts
+           ) == :ok
 
-    u = Enum.find(list_permissions(context[:vhost]), fn(x) -> x[:user] == context[:user] end)
+    u = Enum.find(list_permissions(context[:vhost]), fn x -> x[:user] == context[:user] end)
     assert u[:configure] == "^#{context[:user]}-.*"
   end
 
@@ -77,9 +79,9 @@ defmodule SetPermissionsCommandTest do
   @tag user: "interloper", vhost: @root
   test "run: an invalid user returns a no-such-user error", context do
     assert @command.run(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      context[:opts]
-    ) == {:error, {:no_such_user, context[:user]}}
+             [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+             context[:opts]
+           ) == {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user, vhost: "wintermute"
@@ -87,20 +89,20 @@ defmodule SetPermissionsCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      vhost_opts
-    ) == {:error, {:no_such_vhost, context[:vhost]}}
+             [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+             vhost_opts
+           ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @root
   test "run: invalid regex patterns returns an error", context do
     assert @command.run(
-      [context[:user], "^#{context[:user]}-.*", ".*", "*"],
-      context[:opts]
-    ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
+             [context[:user], "^#{context[:user]}-.*", ".*", "*"],
+             context[:opts]
+           ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
 
     # asserts that the failed command didn't change anything
-    u = Enum.find(list_permissions(context[:vhost]), fn(x) -> x[:user] == context[:user] end)
+    u = Enum.find(list_permissions(context[:vhost]), fn x -> x[:user] == context[:user] end)
     assert u == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
   end
 
@@ -108,7 +110,7 @@ defmodule SetPermissionsCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([context[:user], "^#{context[:user]}-.*", ".*", ".*"], vhost_opts)
-      =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+    assert @command.banner([context[:user], "^#{context[:user]}-.*", ".*", ".*"], vhost_opts) =~
+             ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

@@ -18,12 +18,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.AddReplicaCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
-
 
   test "validate: when no arguments are provided, returns a failure" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
@@ -34,8 +34,13 @@ defmodule RabbitMQ.CLI.Streams.Commands.AddReplicaCommandTest do
   end
 
   test "validate: when three or more arguments are provided, returns a failure" do
-    assert @command.validate(["stream-queue-a", "rabbit@new-node", "one-extra-arg"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["stream-queue-a", "rabbit@new-node", "extra-arg", "another-extra-arg"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["stream-queue-a", "rabbit@new-node", "one-extra-arg"], %{}) ==
+             {:validation_failure, :too_many_args}
+
+    assert @command.validate(
+             ["stream-queue-a", "rabbit@new-node", "extra-arg", "another-extra-arg"],
+             %{}
+           ) == {:validation_failure, :too_many_args}
   end
 
   test "validate: treats two positional arguments and default switches as a success" do
@@ -44,7 +49,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.AddReplicaCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run(["stream-queue-a", "rabbit@new-node"],
-                                             %{node: :jake@thedog, vhost: "/", timeout: 200}))
+    assert match?(
+             {:badrpc, _},
+             @command.run(
+               ["stream-queue-a", "rabbit@new-node"],
+               %{node: :jake@thedog, vhost: "/", timeout: 200}
+             )
+           )
   end
 end

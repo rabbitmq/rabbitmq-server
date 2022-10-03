@@ -16,6 +16,7 @@ defmodule SuspendListenersCommandTest do
     resume_all_client_listeners()
 
     node_name = get_rabbit_hostname()
+
     on_exit(fn ->
       resume_all_client_listeners()
       close_all_connections(node_name)
@@ -38,7 +39,7 @@ defmodule SuspendListenersCommandTest do
 
   test "validate: with extra arguments returns an arg count error", context do
     assert @command.validate(["extra"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: request to a non-existent node returns a badrpc" do

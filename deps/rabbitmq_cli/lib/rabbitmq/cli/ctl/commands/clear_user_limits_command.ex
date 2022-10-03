@@ -45,6 +45,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
   def banner([username, "all"], %{}) do
     "Clearing all limits for user \"#{username}\" ..."
   end
+
   def banner([username, limit_type], %{}) do
     "Clearing \"#{limit_type}\" limit for user \"#{username}\" ..."
   end

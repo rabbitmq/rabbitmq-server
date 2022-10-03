@@ -19,16 +19,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
       iterations: :integer
     ]
   end
+
   @atomized_keys [:cipher, :hash]
 
   def distribution(_), do: :none
 
   def merge_defaults(args, opts) do
-    with_defaults = Map.merge(%{
-         cipher: :rabbit_pbe.default_cipher(),
-         hash: :rabbit_pbe.default_hash(),
-         iterations: :rabbit_pbe.default_iterations()
-       }, opts)
+    with_defaults =
+      Map.merge(
+        %{
+          cipher: :rabbit_pbe.default_cipher(),
+          hash: :rabbit_pbe.default_hash(),
+          iterations: :rabbit_pbe.default_iterations()
+        },
+        opts
+      )
+
     {args, Helpers.atomize_values(with_defaults, @atomized_keys)}
   end
 
@@ -60,7 +66,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
   def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
     case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
-      :eof -> {:error, :not_enough_args}
+      :eof ->
+        {:error, :not_enough_args}
+
       passphrase ->
         try do
           term_value = Helpers.evaluate_input_as_term(value)
@@ -69,6 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
             case term_value do
               {:encrypted, _} = encrypted ->
                 encrypted
+
               _ ->
                 {:encrypted, term_value}
             end
@@ -91,6 +100,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
         case term_value do
           {:encrypted, _} = encrypted ->
             encrypted
+
           _ ->
             {:encrypted, term_value}
         end
@@ -110,7 +120,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
     "Decrypting value..."
   end
 
-  def usage, do: "decode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+  def usage,
+    do: "decode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [

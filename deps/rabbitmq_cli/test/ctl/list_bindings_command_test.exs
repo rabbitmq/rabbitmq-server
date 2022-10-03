@@ -14,11 +14,13 @@ defmodule ListBindingsCommandTest do
   end
 
   setup context do
-    add_vhost @vhost
-    set_permissions @user, @vhost, [".*", ".*", ".*"]
+    add_vhost(@vhost)
+    set_permissions(@user, @vhost, [".*", ".*", ".*"])
+
     on_exit(fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
+
     {
       :ok,
       opts: %{
@@ -30,7 +32,9 @@ defmodule ListBindingsCommandTest do
   end
 
   test "merge_defaults: adds all keys if none specificed", context do
-    default_keys = ~w(source_name source_kind destination_name destination_kind routing_key arguments)
+    default_keys =
+      ~w(source_name source_kind destination_name destination_kind routing_key arguments)
+
     declare_queue("test_queue", @vhost)
     :timer.sleep(100)
 
@@ -45,27 +49,29 @@ defmodule ListBindingsCommandTest do
 
   test "validate: returns bad_info_key on a single bad arg", context do
     assert @command.validate(["quack"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:quack]}}
+             {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: returns multiple bad args return a list of bad info key values", context do
     assert @command.validate(["quack", "oink"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:oink, :quack]}}
+             {:validation_failure, {:bad_info_key, [:oink, :quack]}}
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do
     assert @command.validate(["quack", "source_name"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:quack]}}
+             {:validation_failure, {:bad_info_key, [:quack]}}
+
     assert @command.validate(["source_name", "oink"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:oink]}}
+             {:validation_failure, {:bad_info_key, [:oink]}}
+
     assert @command.validate(["source_kind", "oink", "source_name"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:oink]}}
+             {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
   test "run: timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["source_name"], context[:opts]]) ==
-      [{:badrpc, {:timeout, 0.0}}]
+             [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: no bindings for no queues", context do
@@ -75,8 +81,9 @@ defmodule ListBindingsCommandTest do
   test "run: can filter info keys", context do
     wanted_keys = ~w(source_name destination_name routing_key)
     declare_queue("test_queue", @vhost)
+
     assert run_command_to_list(@command, [wanted_keys, context[:opts]]) ==
-            [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
+             [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
   end
 
   test "banner" do

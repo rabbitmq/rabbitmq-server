@@ -27,14 +27,16 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.ReviveCommand do
     case :rabbit_misc.rpc_call(node_name, :rabbit_maintenance, :revive, [], timeout) do
       # Server does not support maintenance mode
       {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
-      {:badrpc, _} = err    -> err
-      other                 -> other
+      {:badrpc, _} = err -> err
+      other -> other
     end
   end
 
   def output({:error, :unsupported}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage, "Maintenance mode is not supported by node #{node_name}"}
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(),
+     "Maintenance mode is not supported by node #{node_name}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "revive"
@@ -47,10 +49,12 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.ReviveCommand do
 
   def help_section(), do: :upgrade
 
-  def description(), do: "Puts the node out of maintenance and into regular operating mode. Such nodes will again serve client traffic and host primary queue replicas"
+  def description(),
+    do:
+      "Puts the node out of maintenance and into regular operating mode. Such nodes will again serve client traffic and host primary queue replicas"
 
   def banner(_, %{node: node_name}) do
-    "Will put node #{node_name} back into regular operating mode. "
-    <> "The node will again serve client traffic and host primary queue replicas."
+    "Will put node #{node_name} back into regular operating mode. " <>
+      "The node will again serve client traffic and host primary queue replicas."
   end
 end

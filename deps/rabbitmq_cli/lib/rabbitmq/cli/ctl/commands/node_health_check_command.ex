@@ -70,9 +70,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   end
 
   def help_section(), do: :deprecated
+
   def description() do
     "DEPRECATED. Performs intrusive, opinionated health checks on a fully booted node. " <>
-    "See https://www.rabbitmq.com/monitoring.html#health-checks instead"
+      "See https://www.rabbitmq.com/monitoring.html#health-checks instead"
   end
 
   def banner(_, %{node: node_name, timeout: timeout}) do

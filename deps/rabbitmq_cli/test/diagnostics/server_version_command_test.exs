@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ServerVersionCommandTest do
   use ExUnit.Case
   import TestHelper
@@ -18,10 +17,11 @@ defmodule ServerVersionCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -38,7 +38,10 @@ defmodule ServerVersionCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: returns RabbitMQ version on the target node", context do

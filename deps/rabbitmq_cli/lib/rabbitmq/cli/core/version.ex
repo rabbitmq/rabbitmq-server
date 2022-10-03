@@ -11,14 +11,14 @@ defmodule RabbitMQ.CLI.Core.Version do
     to_string(:rabbit_misc.version())
   end
 
-
   def remote_version(node_name) do
     remote_version(node_name, @default_timeout)
   end
+
   def remote_version(node_name, timeout) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout) do
       {:badrpc, _} = err -> err
-      val                -> val
+      val -> val
     end
   end
 end

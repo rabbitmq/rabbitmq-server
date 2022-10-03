@@ -22,8 +22,8 @@ defmodule ListCiphersCommandTest do
 
   test "run: lists ciphers", _context do
     assert match?(
-      {:ok, _},
-      @command.run([], %{})
-    )
+             {:ok, _},
+             @command.run([], %{})
+           )
   end
 end

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
@@ -17,9 +16,9 @@ defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand do
 
   def run([name, retention_policy], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :set_retention_policy, [
-          name,
-          vhost,
-          retention_policy
+      name,
+      vhost,
+      retention_policy
     ])
   end
 

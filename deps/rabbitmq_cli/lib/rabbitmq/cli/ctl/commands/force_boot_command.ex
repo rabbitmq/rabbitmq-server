@@ -51,7 +51,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Forces node to start even if it cannot contact or rejoin any of its previously known peers"
+  def description(),
+    do:
+      "Forces node to start even if it cannot contact or rejoin any of its previously known peers"
 
   def banner(_, _), do: nil
 end

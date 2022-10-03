@@ -13,7 +13,7 @@ defmodule RabbitMQ.CLI.Core.FeatureFlags do
 
   def is_enabled_remotely(node_name, feature_flag) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :is_enabled, [feature_flag]) do
-      true  -> true
+      true -> true
       false -> false
       {:error, _} = error -> error
     end
@@ -21,10 +21,13 @@ defmodule RabbitMQ.CLI.Core.FeatureFlags do
 
   def assert_feature_flag_enabled(node_name, feature_flag, success_fun) do
     case is_enabled_remotely(node_name, feature_flag) do
-      true  ->
+      true ->
         success_fun.()
+
       false ->
-        {:error, ExitCodes.exit_dataerr(), "The #{feature_flag} feature flag is not enabled on the target node"}
+        {:error, ExitCodes.exit_dataerr(),
+         "The #{feature_flag} feature flag is not enabled on the target node"}
+
       {:error, _} = error ->
         error
     end

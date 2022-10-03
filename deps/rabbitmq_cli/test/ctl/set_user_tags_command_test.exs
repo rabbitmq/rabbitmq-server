@@ -4,20 +4,19 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule SetUserTagsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand
 
-  @user     "user1"
+  @user "user1"
   @password "password"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_user @user, @password
+    add_user(@user, @password)
 
     on_exit([], fn ->
       delete_user(@user)
@@ -27,7 +26,8 @@ defmodule SetUserTagsCommandTest do
   end
 
   setup context do
-    context[:user] # silences warnings
+    # silences warnings
+    context[:user]
     on_exit([], fn -> set_user_tags(context[:user], []) end)
 
     {:ok, opts: %{node: get_rabbit_hostname()}}
@@ -44,16 +44,17 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: @user, tags: [:emperor]
-  test "run: on a single optional argument, add a flag to the user", context  do
+  test "run: on a single optional argument, add a flag to the user", context do
     @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     )
 
-    result = Enum.find(
-      list_users(),
-      fn(record) -> record[:user] == context[:user] end
-    )
+    result =
+      Enum.find(
+        list_users(),
+        fn record -> record[:user] == context[:user] end
+      )
 
     assert result[:tags] == context[:tags]
   end
@@ -61,84 +62,84 @@ defmodule SetUserTagsCommandTest do
   @tag user: "interloper", tags: [:emperor]
   test "run: when user does not exist, returns an error", context do
     assert @command.run(
-      [context[:user] | context[:tags]],
-      context[:opts]
-    ) == {:error, {:no_such_user, context[:user]}}
+             [context[:user] | context[:tags]],
+             context[:opts]
+           ) == {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user, tags: [:emperor, :generalissimo]
-  test "run: with multiple optional arguments, adds multiple tags", context  do
+  test "run: with multiple optional arguments, adds multiple tags", context do
     @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     )
 
-    result = Enum.find(
-      list_users(),
-      fn(record) -> record[:user] == context[:user] end
-    )
+    result =
+      Enum.find(
+        list_users(),
+        fn record -> record[:user] == context[:user] end
+      )
 
     assert result[:tags] == context[:tags]
   end
 
   @tag user: @user, tags: [:emperor]
-  test "run: without optional arguments, clears user tags", context  do
-
+  test "run: without optional arguments, clears user tags", context do
     set_user_tags(context[:user], context[:tags])
 
     @command.run([context[:user]], context[:opts])
 
-    result = Enum.find(
-      list_users(),
-      fn(record) -> record[:user] == context[:user] end
-    )
+    result =
+      Enum.find(
+        list_users(),
+        fn record -> record[:user] == context[:user] end
+      )
 
     assert result[:tags] == []
   end
 
   @tag user: @user, tags: [:emperor]
-  test "run: identical calls are idempotent", context  do
-
+  test "run: identical calls are idempotent", context do
     set_user_tags(context[:user], context[:tags])
 
     assert @command.run(
-      [context[:user] | context[:tags]],
-      context[:opts]
-    ) == :ok
+             [context[:user] | context[:tags]],
+             context[:opts]
+           ) == :ok
 
-    result = Enum.find(
-      list_users(),
-      fn(record) -> record[:user] == context[:user] end
-    )
+    result =
+      Enum.find(
+        list_users(),
+        fn record -> record[:user] == context[:user] end
+      )
 
     assert result[:tags] == context[:tags]
   end
 
   @tag user: @user, old_tags: [:emperor], new_tags: [:generalissimo]
-  test "run: overwrites existing tags", context  do
-
+  test "run: overwrites existing tags", context do
     set_user_tags(context[:user], context[:old_tags])
 
     assert @command.run(
-      [context[:user] | context[:new_tags]],
-      context[:opts]
-    ) == :ok
+             [context[:user] | context[:new_tags]],
+             context[:opts]
+           ) == :ok
 
-    result = Enum.find(
-      list_users(),
-      fn(record) -> record[:user] == context[:user] end
-    )
+    result =
+      Enum.find(
+        list_users(),
+        fn record -> record[:user] == context[:user] end
+      )
 
     assert result[:tags] == context[:new_tags]
   end
 
   @tag user: @user, tags: ["imperator"]
-  test "banner", context  do
+  test "banner", context do
     assert @command.banner(
-        [context[:user] | context[:tags]],
-        context[:opts]
-      )
-      =~ ~r/Setting tags for user \"#{context[:user]}\" to \[#{context[:tags]}\] \.\.\./
+             [context[:user] | context[:tags]],
+             context[:opts]
+           ) =~
+             ~r/Setting tags for user \"#{context[:user]}\" to \[#{context[:tags]}\] \.\.\./
   end
-
 end
