@@ -129,10 +129,18 @@ selects.config_setting_group(
 )
 
 selects.config_setting_group(
-    name = "erlang_25_internal",
+    name = "erlang_25_0_internal",
     match_all = [
         "@erlang_config//:erlang_internal",
-        "@erlang_config//:erlang_25",
+        "@erlang_config//:erlang_25_0",
+    ],
+)
+
+selects.config_setting_group(
+    name = "erlang_25_1_internal",
+    match_all = [
+        "@erlang_config//:erlang_internal",
+        "@erlang_config//:erlang_25_1",
     ],
 )
 
@@ -150,8 +158,9 @@ container_image(
     tars = select({
         ":erlang_23_internal": ["@otp_src_23//file"],
         ":erlang_24_internal": ["@otp_src_24//file"],
-        ":erlang_25_internal": ["@otp_src_25//file"],
-        "//conditions:default": ["@otp_src_25//file"],
+        ":erlang_25_0_internal": ["@otp_src_25_0//file"],
+        ":erlang_25_1_internal": ["@otp_src_25_1//file"],
+        "//conditions:default": ["@otp_src_25_1//file"],
     }),
 )
 
