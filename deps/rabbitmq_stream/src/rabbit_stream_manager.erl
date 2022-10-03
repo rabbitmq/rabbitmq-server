@@ -194,6 +194,14 @@ validate_stream_queue_arguments([{<<"x-queue-leader-locator">>,
 validate_stream_queue_arguments([_ | T]) ->
     validate_stream_queue_arguments(T).
 
+default_super_stream_arguments(Arguments) ->
+    case Arguments of
+        #{<<"queue-leader-locator">> := _} ->
+            Arguments;
+        _ ->
+            Arguments#{<<"queue-leader-locator">> => <<"balanced">>}
+    end.
+
 handle_call({create, VirtualHost, Reference, Arguments, Username},
             _From, State) ->
     {reply, create_stream(VirtualHost, Reference, Arguments, Username),
@@ -222,9 +230,11 @@ handle_call({create_super_stream,
                          end],
                     QueueCreationsResult =
                         lists:foldl(fun (Partition, {ok, RollbackOps}) ->
+                                            Args =
+                                                default_super_stream_arguments(Arguments),
                                             case create_stream(VirtualHost,
                                                                Partition,
-                                                               Arguments,
+                                                               Args,
                                                                Username)
                                             of
                                                 {ok, _} ->
