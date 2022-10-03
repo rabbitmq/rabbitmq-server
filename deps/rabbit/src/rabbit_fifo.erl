@@ -838,6 +838,7 @@ init_aux(Name) when is_atom(Name) ->
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
+<<<<<<< HEAD
     #aux{name = Name,
          capacity = {inactive, Now, 1, 1.0}}.
 
@@ -848,6 +849,91 @@ handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
     % ra_log_wal:force_roll_over(ra_log_wal),
     {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
+=======
+    #?AUX{name = Name,
+          capacity = {inactive, Now, 1, 1.0}}.
+
+handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
+                                     capacity = Cap,
+                                     gc = Gc}, Log, MacState) ->
+    %% convert aux state to new version
+    Aux = #?AUX{name = Name,
+                capacity = Cap,
+                gc = Gc},
+    handle_aux(RaftState, Tag, Cmd, Aux, Log, MacState);
+handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
+    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
+handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
+    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
+handle_aux(leader, cast, {#return{msg_ids = MsgIds,
+                                  consumer_id = ConsumerId}, Corr, Pid},
+           Aux0, Log0, #?MODULE{cfg = #cfg{delivery_limit = undefined},
+                                consumers = Consumers}) ->
+    case Consumers of
+        #{ConsumerId := #consumer{checked_out = Checked}} ->
+            {Log, ToReturn} =
+                maps:fold(
+                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                          %% it is possible this is not found if the consumer
+                          %% crashed and the message got removed
+                          case ra_log:fetch(Idx, L0) of
+                              {{_, _, {_, _, Cmd, _}}, L} ->
+                                  Msg = get_msg(Cmd),
+                                  {L, [{MsgId, Idx, Header, Msg} | Acc]};
+                              {undefined, L} ->
+                                  {L, Acc}
+                          end
+                  end, {Log0, []}, maps:with(MsgIds, Checked)),
+
+            Appends = make_requeue(ConsumerId, {notify, Corr, Pid},
+                                   lists:sort(ToReturn), []),
+            {no_reply, Aux0, Log, Appends};
+        _ ->
+            {no_reply, Aux0, Log0}
+    end;
+handle_aux(_, _, {get_checked_out, ConsumerId, MsgIds},
+           Aux0, Log0, #?MODULE{cfg = #cfg{},
+                                consumers = Consumers}) ->
+    case Consumers of
+        #{ConsumerId := #consumer{checked_out = Checked}} ->
+            {Log, IdMsgs} =
+                maps:fold(
+                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                          %% it is possible this is not found if the consumer
+                          %% crashed and the message got removed
+                          case ra_log:fetch(Idx, L0) of
+                              {{_, _, {_, _, Cmd, _}}, L} ->
+                                  Msg = get_msg(Cmd),
+                                  {L, [{MsgId, {Header, Msg}} | Acc]};
+                              {undefined, L} ->
+                                  {L, Acc}
+                          end
+                  end, {Log0, []}, maps:with(MsgIds, Checked)),
+            {reply, {ok,  IdMsgs}, Aux0, Log};
+        _ ->
+            {reply, {error, consumer_not_found}, Aux0, Log0}
+    end;
+handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
+           Aux0, Log, #?MODULE{}) ->
+    %% for returns with a delivery limit set we can just return as before
+    {no_reply, Aux0, Log, [{append, Ret, {notify, Corr, Pid}}]};
+handle_aux(leader, cast, eval, #?AUX{last_decorators_state = LastDec} = Aux0,
+           Log, #?MODULE{cfg = #cfg{resource = QName}} = MacState) ->
+    %% this is called after each batch of commands have been applied
+    %% set timer for message expire
+    %% should really be the last applied index ts but this will have to do
+    Ts = erlang:system_time(millisecond),
+    Effects0 = timer_effect(Ts, MacState, []),
+    case query_notify_decorators_info(MacState) of
+        LastDec ->
+            {no_reply, Aux0, Log, Effects0};
+        {MaxActivePriority, IsEmpty} = NewLast ->
+            Effects = [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
+                       | Effects0],
+            {no_reply, Aux0#?AUX{last_decorators_state = NewLast}, Log, Effects}
+    end;
+handle_aux(_RaftState, cast, eval, Aux0, Log, _MacState) ->
+>>>>>>> 5d04545821 (Change rabbit_fifo_client get_missing_deliveries to use aux_command)
     {no_reply, Aux0, Log};
 handle_aux(_RaState, cast, Cmd, #aux{capacity = Use0} = Aux0,
            Log, _MacState)

@@ -776,7 +776,7 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
             %% When the node is disconnected the leader will return all checked
             %% out messages to the main queue to ensure they don't get stuck in
             %% case the node never comes back.
-            case get_missing_deliveries(Leader, Prev+1, FstId-1, Tag) of
+            case get_missing_deliveries(State0, Prev+1, FstId-1, Tag) of
                 {protocol_error, _, _, _} = Err ->
                     Err;
                 Missing ->
@@ -836,22 +836,22 @@ update_consumer(Tag, LastId, DelCntIncr,
              Consumers).
 
 
-get_missing_deliveries(Leader, From, To, ConsumerTag) ->
+get_missing_deliveries(State, From, To, ConsumerTag) ->
+    %% find local server
     ConsumerId = consumer_id(ConsumerTag),
-    % ?INFO("get_missing_deliveries for ~w from ~b to ~b",
-    %       [ConsumerId, From, To]),
-    Query = fun (State) ->
-                    rabbit_fifo:get_checked_out(ConsumerId, From, To, State)
-            end,
-    case ra:local_query(Leader, Query, ?COMMAND_TIMEOUT) of
-        {ok, {_, Missing}, _} ->
+    rabbit_log:debug("get_missing_deliveries for ~w from ~b to ~b",
+                     [ConsumerId, From, To]),
+    Cmd = {get_checked_out, ConsumerId, lists:seq(From, To)},
+    ServerId = find_local_or_leader(State),
+    case ra:aux_command(ServerId, Cmd) of
+        {ok, Missing} ->
             Missing;
         {error, Error} ->
             {protocol_error, internal_error, "Cannot query missing deliveries from ~p: ~p",
-             [Leader, Error]};
+             [ServerId, Error]};
         {timeout, _} ->
             {protocol_error, internal_error, "Cannot query missing deliveries from ~p: timeout",
-             [Leader]}
+             [ServerId]}
     end.
 
 pick_server(#state{leader = undefined,
@@ -923,6 +923,23 @@ cancel_timer(#state{timer_state = undefined} = State) ->
 cancel_timer(#state{timer_state = Ref} = State) ->
     erlang:cancel_timer(Ref, [{async, true}, {info, false}]),
     State#state{timer_state = undefined}.
+
+find_local_or_leader(#state{leader = Leader,
+                            cfg = #cfg{servers = Servers}}) ->
+    case find_local(Servers) of
+        undefined ->
+            Leader;
+        ServerId ->
+            ServerId
+    end.
+
+find_local([{_, N} = ServerId | _]) when N == node() ->
+    ServerId;
+find_local([_ | Rem]) ->
+    find_local(Rem);
+find_local([]) ->
+    undefined.
+
 
 find_leader([]) ->
     undefined;
