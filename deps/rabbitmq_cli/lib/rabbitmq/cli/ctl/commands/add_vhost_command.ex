@@ -24,6 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
   def run([vhost], %{node: node_name, description: desc, tags: tags, default_queue_type: default_qt}) do
@@ -32,6 +33,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
              default_queue_type: default_qt}
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
 =======
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
   def run([vhost], %{
         node: node_name,
         description: desc,
@@ -39,34 +42,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
         default_queue_type: default_qt
       }) do
     meta = %{description: desc, tags: parse_tags(tags), default_queue_type: default_qt}
-    # check if the respective feature flag is enabled
-    case default_qt do
-      "quorum" ->
-        FeatureFlags.assert_feature_flag_enabled(node_name, :quorum_queue, fn ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-            vhost,
-            meta,
-            Helpers.cli_acting_user()
-          ])
-        end)
 
-      "stream" ->
-        FeatureFlags.assert_feature_flag_enabled(node_name, :stream_queue, fn ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-            vhost,
-            meta,
-            Helpers.cli_acting_user()
-          ])
-        end)
-
-      _ ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-          vhost,
-          meta,
-          Helpers.cli_acting_user()
-        ])
-    end
->>>>>>> 059978e6fa (mix format rabbitmq_cli)
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
   end
 
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
@@ -99,13 +76,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
   end
 
-<<<<<<< HEAD
-=======
-  def output({:error, :invalid_queue_type}, _opts) do
-    {:error, ExitCodes.exit_usage(), "Unsupported default queue type"}
-  end
-
->>>>>>> 059978e6fa (mix format rabbitmq_cli)
   use RabbitMQ.CLI.DefaultOutput
 
 <<<<<<< HEAD

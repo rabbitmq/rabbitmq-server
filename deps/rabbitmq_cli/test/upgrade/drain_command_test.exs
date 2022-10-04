@@ -23,9 +23,9 @@ defmodule DrainCommandTest do
   end
 
   setup context do
-<<<<<<< HEAD
     enable_feature_flag(:maintenance_mode_status)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
     {:ok, opts: %{
@@ -34,15 +34,20 @@ defmodule DrainCommandTest do
       }}
 =======
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
     {:ok,
      opts: %{
        node: get_rabbit_hostname(),
        timeout: context[:test_timeout] || 5000
      }}
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 059978e6fa (mix format rabbitmq_cli)
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
   end
 
   test "merge_defaults: nothing to do" do

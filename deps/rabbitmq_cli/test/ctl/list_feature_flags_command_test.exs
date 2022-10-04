@@ -29,6 +29,7 @@ defmodule ListFeatureFlagsCommandTest do
         desc: "My feature flag #2",
         provided_by: :ListFeatureFlagsCommandTest,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
         stability: :stable}}
@@ -38,6 +39,8 @@ defmodule ListFeatureFlagsCommandTest do
       node, :rabbit_feature_flags, :enable_all, [])
 =======
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
         stability: :stable
       }
     }
@@ -47,10 +50,14 @@ defmodule ListFeatureFlagsCommandTest do
         node,
         :rabbit_feature_flags,
 <<<<<<< HEAD
+<<<<<<< HEAD
         :initialize_registry,
 =======
         :inject_test_feature_flags,
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+        :initialize_registry,
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
         [new_feature_flags]
       )
 
@@ -62,9 +69,12 @@ defmodule ListFeatureFlagsCommandTest do
         []
       )
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 059978e6fa (mix format rabbitmq_cli)
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
 
     name_result = [
       [{:name, @flag1}],

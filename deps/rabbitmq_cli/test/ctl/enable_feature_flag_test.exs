@@ -22,6 +22,7 @@ defmodule EnableFeatureFlagCommandTest do
         desc: "My feature flag",
         provided_by: :EnableFeatureFlagCommandTest,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
         stability: :stable}}
@@ -29,6 +30,8 @@ defmodule EnableFeatureFlagCommandTest do
       node, :rabbit_feature_flags, :initialize_registry, [new_feature_flags])
 =======
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
         stability: :stable
       }
     }
@@ -37,6 +40,7 @@ defmodule EnableFeatureFlagCommandTest do
       :rabbit_misc.rpc_call(
         node,
         :rabbit_feature_flags,
+<<<<<<< HEAD
 <<<<<<< HEAD
         :initialize_registry,
         [new_feature_flags]
@@ -47,6 +51,11 @@ defmodule EnableFeatureFlagCommandTest do
       )
 >>>>>>> 059978e6fa (mix format rabbitmq_cli)
 >>>>>>> 0f89101de0 (mix format rabbitmq_cli)
+=======
+        :initialize_registry,
+        [new_feature_flags]
+      )
+>>>>>>> 2b0855f335 (CLI: resolve conflicts and reformat)
 
     {
       :ok,
