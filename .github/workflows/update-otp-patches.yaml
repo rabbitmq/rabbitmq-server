@@ -77,7 +77,7 @@ jobs:
         echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
         echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
 
-        cat << EOF > replacer.js
+        cat << EOF > replacer.mjs
         import { readFile } from 'node:fs/promises';
         let [_node, _script, s, p, r] = process.argv;
         let source = await readFile(s, 'utf-8');
