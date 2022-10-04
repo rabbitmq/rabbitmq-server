@@ -548,7 +548,18 @@ tick_test(_) ->
 
     [{mod_call, rabbit_quorum_queue, handle_tick,
       [#resource{},
+<<<<<<< HEAD
        {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3},
+=======
+            #{config := #{name := ?FUNCTION_NAME},
+              num_consumers := 1,
+              num_checked_out := 1,
+              num_ready_messages := 1,
+              num_messages := 2,
+              enqueue_message_bytes := 3,
+              checkout_message_bytes := 3,
+              num_discarded := _Discards},
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
        [_Node]
       ]}] = rabbit_fifo:tick(1, S4),
     ok.
@@ -720,6 +731,7 @@ single_active_consumer_basic_get_test(_) ->
     {_State, {error, {unsupported, single_active_consumer}}} =
         apply(meta(2), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State1),
+
     ok.
 
 single_active_consumer_test(_) ->
@@ -751,10 +763,21 @@ single_active_consumer_test(_) ->
     % the first registered consumer is the active one, the others are waiting
     ?assertEqual(1, map_size(State1#rabbit_fifo.consumers)),
     ?assertMatch(#{C1 := _}, State1#rabbit_fifo.consumers),
+<<<<<<< HEAD
     ?assertEqual(3, length(State1#rabbit_fifo.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind(C2, 1, State1#rabbit_fifo.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind(C3, 1, State1#rabbit_fifo.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind(C4, 1, State1#rabbit_fifo.waiting_consumers)),
+=======
+
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 3},
+                 rabbit_fifo:overview(State1)),
+    ?assertEqual(3, length(rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C2, 1, rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C3, 1, rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C4, 1, rabbit_fifo:query_waiting_consumers(State1))),
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
 
     % cancelling a waiting consumer
     {State2, _, Effects1} = apply(meta(2),
@@ -764,9 +787,18 @@ single_active_consumer_test(_) ->
     ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
     ?assertMatch(#{C1 := _}, State2#rabbit_fifo.consumers),
     % the cancelled consumer has been removed from waiting consumers
+<<<<<<< HEAD
     ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind(C2, 1, State2#rabbit_fifo.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind(C4, 1, State2#rabbit_fifo.waiting_consumers)),
+=======
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 2},
+                 rabbit_fifo:overview(State2)),
+    ?assertEqual(2, length(rabbit_fifo:query_waiting_consumers(State2))),
+    ?assertNotEqual(false, lists:keyfind(C2, 1, rabbit_fifo:query_waiting_consumers(State2))),
+    ?assertNotEqual(false, lists:keyfind(C4, 1, rabbit_fifo:query_waiting_consumers(State2))),
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
     % there are some effects to unregister the consumer
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  cancel_consumer_handler, [_, C]}, C == C3, Effects1),

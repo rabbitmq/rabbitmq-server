@@ -413,7 +413,22 @@ spawn_notify_decorators(QName, Fun, Args) ->
           end).
 
 handle_tick(QName,
+<<<<<<< HEAD
             {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack},
+=======
+            #{config := #{name := Name},
+              num_active_consumers := NumConsumers,
+              num_checked_out := NumCheckedOut,
+              num_ready_messages := NumReadyMsgs,
+              num_messages := NumMessages,
+              enqueue_message_bytes := EnqueueBytes,
+              checkout_message_bytes := CheckoutBytes,
+              num_discarded := NumDiscarded,
+              num_discard_checked_out  :=  NumDiscardedCheckedOut,
+              discard_message_bytes := DiscardBytes,
+              discard_checkout_message_bytes := DiscardCheckoutBytes,
+              smallest_raft_index := _} = Overview,
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -421,15 +436,28 @@ handle_tick(QName,
     _ = spawn(
           fun() ->
                   try
-                      R = reductions(Name),
-                      rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
-                      Util = case C of
+                      Reductions = reductions(Name),
+                      rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
+                                                      NumCheckedOut, NumMessages,
+                                                      Reductions),
+                      Util = case NumConsumers of
                                  0 -> 0;
                                  _ -> rabbit_fifo:usage(Name)
                              end,
-                      Infos = [{consumers, C},
+                      Keys = ?STATISTICS_KEYS -- [consumers,
+                                                  messages_dlx,
+                                                  message_bytes_dlx,
+                                                  single_active_consumer_pid,
+                                                  single_active_consumer_ctag
+                                                 ],
+                      {SacTag, SacPid} = maps:get(single_active_consumer_id,
+                                                  Overview, {'', ''}),
+                      MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
+                      MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
+                      Infos = [{consumers, NumConsumers},
                                {consumer_capacity, Util},
                                {consumer_utilisation, Util},
+<<<<<<< HEAD
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
                                {message_bytes, MsgBytesReady + MsgBytesUnack},
@@ -437,6 +465,18 @@ handle_tick(QName,
                                {messages_persistent, M}
 
                                | infos(QName, ?STATISTICS_KEYS -- [consumers])],
+=======
+                               {message_bytes_ready, EnqueueBytes},
+                               {message_bytes_unacknowledged, CheckoutBytes},
+                               {message_bytes, MsgBytes},
+                               {message_bytes_persistent, MsgBytes},
+                               {messages_persistent, NumMessages},
+                               {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
+                               {message_bytes_dlx, MsgBytesDiscarded},
+                               {single_active_consumer_ctag, SacTag},
+                               {single_active_consumer_pid, SacPid}
+                               | infos(QName, Keys)],
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       rabbit_event:notify(queue_stats,
                                           Infos ++ [{name, QName},
@@ -865,8 +905,6 @@ deliver(QSs, #delivery{confirm = Confirm} = Delivery0) ->
 state_info(S) ->
     #{pending_raft_commands => rabbit_fifo_client:pending_size(S)}.
 
-
-
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 infos(QName) ->
     infos(QName, ?STATISTICS_KEYS).
@@ -957,9 +995,11 @@ cluster_state(Name) ->
     case whereis(Name) of
         undefined -> down;
         _ ->
-            case ets:lookup(ra_state, Name) of
-                [{_, recover}] -> recovering;
-                _ -> running
+            case ets_lookup_element(ra_state, Name, 2, undefined) of
+                recover ->
+                    recovering;
+                _ ->
+                    running
             end
     end.
 
@@ -1213,7 +1253,8 @@ queue_length(Q) ->
     Name = amqqueue:get_name(Q),
     case ets:lookup(ra_metrics, Name) of
         [] -> 0;
-        [{_, _, SnapIdx, _, _, LastIdx, _}] -> LastIdx - SnapIdx
+        [{_, _, SnapIdx, _, _, LastIdx, _}] ->
+            LastIdx - SnapIdx
     end.
 
 get_replicas(Q) ->
@@ -1319,20 +1360,10 @@ i(messages, Q) when ?is_amqqueue(Q) ->
     quorum_messages(QName);
 i(messages_ready, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    case ets:lookup(queue_coarse_metrics, QName) of
-        [{_, MR, _, _, _}] ->
-            MR;
-        [] ->
-            0
-    end;
+    ets_lookup_element(queue_coarse_metrics, QName, 2, 0);
 i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    case ets:lookup(queue_coarse_metrics, QName) of
-        [{_, _, MU, _, _}] ->
-            MU;
-        [] ->
-            0
-    end;
+    ets_lookup_element(queue_coarse_metrics, QName, 3, 0);
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -1350,12 +1381,8 @@ i(effective_policy_definition, Q) ->
     end;
 i(consumers, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    case ets:lookup(queue_metrics, QName) of
-        [{_, M, _}] ->
-            proplists:get_value(consumers, M, 0);
-        [] ->
-            0
-    end;
+    Consumers = ets_lookup_element(queue_metrics, QName, 2, []),
+    proplists:get_value(consumers, Consumers, 0);
 i(memory, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     try
@@ -1374,10 +1401,7 @@ i(state, Q) when ?is_amqqueue(Q) ->
     end;
 i(local_state, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
-    case ets:lookup(ra_state, Name) of
-        [{_, State}] -> State;
-        _ -> not_member
-    end;
+    ets_lookup_element(ra_state, Name, 2, not_member);
 i(garbage_collection, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     try
@@ -1422,20 +1446,30 @@ i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
     end;
 i(type, _) -> quorum;
 i(messages_ram, Q) when ?is_amqqueue(Q) ->
+    0;
+i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
+<<<<<<< HEAD
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid,
                         fun rabbit_fifo:query_in_memory_usage/1) of
-        {ok, {_, {Length, _}}, _} ->
-            Length;
+=======
+    0;
+i(messages_dlx, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_stat_dlx/1) of
+        {ok, {_, {Num, _}}, _} ->
+            Num;
         {error, _} ->
             0;
         {timeout, _} ->
             0
     end;
-i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
+i(message_bytes_dlx, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid,
-                        fun rabbit_fifo:query_in_memory_usage/1) of
+                        fun rabbit_fifo:query_stat_dlx/1) of
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
         {ok, {_, {_, Bytes}}, _} ->
             Bytes;
         {error, _} ->
@@ -1447,11 +1481,10 @@ i(_K, _Q) -> ''.
 
 open_files(Name) ->
     case whereis(Name) of
-        undefined -> {node(), 0};
-        Pid -> case ets:lookup(ra_open_file_metrics, Pid) of
-                   [] -> {node(), 0};
-                   [{_, Count}] -> {node(), Count}
-               end
+        undefined ->
+            {node(), 0};
+        Pid ->
+            {node(), ets_lookup_element(ra_open_file_metrics, Pid, 2, 0)}
     end.
 
 leader(Q) when ?is_amqqueue(Q) ->
@@ -1505,12 +1538,7 @@ is_process_alive(Name, Node) ->
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
 quorum_messages(QName) ->
-    case ets:lookup(queue_coarse_metrics, QName) of
-        [{_, _, _, M, _}] ->
-            M;
-        [] ->
-            0
-    end.
+    ets_lookup_element(queue_coarse_metrics, QName, 4, 0).
 
 quorum_ctag(Int) when is_integer(Int) ->
     integer_to_binary(Int);
@@ -1632,6 +1660,7 @@ notify_decorators(QName, F, A) ->
     end.
 
 %% remove any data that a quorum queue doesn't need
+<<<<<<< HEAD
 clean_delivery(#delivery{message =
                          #basic_message{content = Content0} = Msg} = Delivery) ->
     Content = case Content0 of
@@ -1648,3 +1677,33 @@ clean_delivery(#delivery{message =
     %% TODO: we could also consider clearing out the message id here
     Delivery#delivery{message = Msg#basic_message{content = Content}}.
 
+=======
+prepare_content(#content{properties = none} = Content) ->
+    Content;
+prepare_content(#content{protocol = none} = Content) ->
+    Content;
+prepare_content(#content{properties = #'P_basic'{expiration = undefined} = Props,
+                         protocol = Proto} = Content) ->
+    Content#content{properties = none,
+                    properties_bin = Proto:encode_properties(Props)};
+prepare_content(Content) ->
+    %% expiration is set. Therefore, leave properties decoded so that
+    %% rabbit_fifo can directly parse it without having to decode again.
+    Content.
+
+erpc_timeout(Node, _)
+  when Node =:= node() ->
+    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
+    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
+    infinity;
+erpc_timeout(_, Timeout) ->
+    Timeout.
+
+ets_lookup_element(Tbl, Key, Pos, Default) ->
+    try ets:lookup_element(Tbl, Key, Pos) of
+        V -> V
+    catch
+        _:badarg ->
+            Default
+    end.
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)

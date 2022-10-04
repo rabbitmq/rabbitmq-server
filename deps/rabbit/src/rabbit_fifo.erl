@@ -753,14 +753,20 @@ state_enter(State, #?MODULE{cfg = #cfg{resource = _Resource}}) when State =/= le
 
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
+<<<<<<< HEAD
 tick(Ts, #?MODULE{cfg = #cfg{name = Name,
                              resource = QName},
                    msg_bytes_enqueue = EnqueueBytes,
                    msg_bytes_checkout = CheckoutBytes} = State) ->
+=======
+tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
+                             resource = QName}} = State) ->
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
     case is_expired(Ts, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
         false ->
+<<<<<<< HEAD
             Metrics = {Name,
                        messages_ready(State),
                        num_checked_out(State), % checked out
@@ -768,8 +774,10 @@ tick(Ts, #?MODULE{cfg = #cfg{name = Name,
                        query_consumer_count(State), % Consumers
                        EnqueueBytes,
                        CheckoutBytes},
+=======
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
             [{mod_call, rabbit_quorum_queue,
-              handle_tick, [QName, Metrics, all_nodes(State)]}]
+              handle_tick, [QName, overview(State), all_nodes(State)]}]
     end.
 
 -spec overview(state()) -> map().
@@ -779,8 +787,14 @@ overview(#?MODULE{consumers = Cons,
                   enqueue_count = EnqCount,
                   msg_bytes_enqueue = EnqueueBytes,
                   msg_bytes_checkout = CheckoutBytes,
+<<<<<<< HEAD
                   ra_indexes = Indexes,
                   cfg = Cfg} = State) ->
+=======
+                  cfg = Cfg,
+                  dlx = DlxState,
+                  waiting_consumers = WaitingConsumers} = State) ->
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
              release_cursor_interval => Cfg#cfg.release_cursor_interval,
@@ -792,6 +806,7 @@ overview(#?MODULE{consumers = Cons,
              max_in_memory_bytes => Cfg#cfg.max_in_memory_bytes,
              expires => Cfg#cfg.expires,
              delivery_limit => Cfg#cfg.delivery_limit
+<<<<<<< HEAD
              },
     Smallest = rabbit_fifo_index:smallest(Indexes),
     #{type => ?MODULE,
@@ -808,6 +823,36 @@ overview(#?MODULE{consumers = Cons,
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes,
       smallest_raft_index => Smallest}.
+=======
+            },
+    SacOverview = case active_consumer(Cons) of
+                      {SacConsumerId, _} ->
+                          NumWaiting = length(WaitingConsumers),
+                          #{single_active_consumer_id => SacConsumerId,
+                            single_active_num_waiting_consumers => NumWaiting};
+                      _ ->
+                          #{}
+                  end,
+    Overview = #{type => ?MODULE,
+                 config => Conf,
+                 num_consumers => map_size(Cons),
+                 num_active_consumers => query_consumer_count(State),
+                 num_checked_out => num_checked_out(State),
+                 num_enqueuers => maps:size(Enqs),
+                 num_ready_messages => messages_ready(State),
+                 num_in_memory_ready_messages => 0, %% backwards compat
+                 num_messages => messages_total(State),
+                 num_release_cursors => lqueue:len(Cursors),
+                 release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
+                 release_cursor_enqueue_counter => EnqCount,
+                 enqueue_message_bytes => EnqueueBytes,
+                 checkout_message_bytes => CheckoutBytes,
+                 in_memory_message_bytes => 0, %% backwards compat
+                 smallest_raft_index => smallest_raft_index(State)
+                 },
+    DlxOverview = rabbit_fifo_dlx:overview(DlxState),
+    maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
+>>>>>>> 6209a9e23b (Refactor quorum queue periodic metric emission)
 
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
