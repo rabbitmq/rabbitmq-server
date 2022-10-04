@@ -75,11 +75,6 @@
 -export([update_header/4]).
 -endif.
 
--define(SETTLE_V2, '$s').
--define(RETURN_V2, '$r').
--define(DISCARD_V2, '$d').
--define(CREDIT_V2, '$c').
-
 %% command records representing all the protocol actions that are supported
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
@@ -362,9 +357,9 @@ apply(#{index := Index,
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
         _ ->
-            State1 = update_consumer(Meta, ConsumerId, ConsumerMeta,
-                                     {once, 1, simple_prefetch}, 0,
-                                     State0),
+            {_, State1} = update_consumer(Meta, ConsumerId, ConsumerMeta,
+                                          {once, 1, simple_prefetch}, 0,
+                                          State0),
             case checkout_one(Meta, false, State1, []) of
                 {success, _, MsgId, ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} ->
                     {State4, Effects1} = case Settlement of
@@ -405,9 +400,19 @@ apply(#{index := Idx} = Meta,
 apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
                       consumer_id = {_, Pid} = ConsumerId}, State0) ->
     Priority = get_priority_from_args(ConsumerMeta),
-    State1 = update_consumer(Meta, ConsumerId, ConsumerMeta, Spec, Priority, State0),
+    {Consumer, State1} = update_consumer(Meta, ConsumerId, ConsumerMeta,
+                                         Spec, Priority, State0),
     {State2, Effs} = activate_next_consumer(State1, []),
-    checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs]);
+    #consumer{checked_out = Checked,
+              credit = Credit,
+              delivery_count = DeliveryCount,
+              next_msg_id = NextMsgId} = Consumer,
+    %% reply with a consumer summary
+    Reply = {ok, #{next_msg_id => NextMsgId,
+                   credit => Credit,
+                   delivery_count => DeliveryCount,
+                   num_checked_out => map_size(Checked)}},
+    checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
 apply(#{index := Index}, #purge{},
       #?MODULE{messages_total = Total,
                returns = Returns,
@@ -998,6 +1003,28 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
             {no_reply, Aux0, Log, Appends};
         _ ->
             {no_reply, Aux0, Log0}
+    end;
+handle_aux(_, _, {get_checked_out, ConsumerId, MsgIds},
+           Aux0, Log0, #?MODULE{cfg = #cfg{},
+                                consumers = Consumers}) ->
+    case Consumers of
+        #{ConsumerId := #consumer{checked_out = Checked}} ->
+            {Log, IdMsgs} =
+                maps:fold(
+                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                          %% it is possible this is not found if the consumer
+                          %% crashed and the message got removed
+                          case ra_log:fetch(Idx, L0) of
+                              {{_, _, {_, _, Cmd, _}}, L} ->
+                                  Msg = get_msg(Cmd),
+                                  {L, [{MsgId, {Header, Msg}} | Acc]};
+                              {undefined, L} ->
+                                  {L, Acc}
+                          end
+                  end, {Log0, []}, maps:with(MsgIds, Checked)),
+            {reply, {ok,  IdMsgs}, Aux0, Log};
+        _ ->
+            {reply, {error, consumer_not_found}, Aux0, Log0}
     end;
 handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
            Aux0, Log, #?MODULE{}) ->
@@ -1785,9 +1812,12 @@ return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
                         return_one(Meta, MsgId, Msg, S, E, ConsumerId)
                 end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
 
+checkout(Meta, OldState, State0, Effects0) ->
+    checkout(Meta, OldState, State0, Effects0, ok).
+
 checkout(#{index := Index} = Meta,
          #?MODULE{cfg = #cfg{resource = _QName}} = OldState,
-         State0, Effects0) ->
+         State0, Effects0, Reply) ->
     {#?MODULE{cfg = #cfg{dead_letter_handler = DLH},
               dlx = DlxState0} = State1, ExpiredMsg, Effects1} =
         checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
@@ -1798,9 +1828,9 @@ checkout(#{index := Index} = Meta,
     Effects2 = DlxDeliveryEffects ++ Effects1,
     case evaluate_limit(Index, false, OldState, State2, Effects2) of
         {State, false, Effects} when ExpiredMsg == false ->
-            {State, ok, Effects};
+            {State, Reply, Effects};
         {State, _, Effects} ->
-            update_smallest_raft_index(Index, State, Effects)
+            update_smallest_raft_index(Index, Reply, State, Effects)
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId,
@@ -2094,7 +2124,7 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                                                      credit_mode = Mode},
                                  credit = Credit}
                end,
-    update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
+    {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
 update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                 {Life, Credit, Mode} = Spec, Priority,
                 #?MODULE{cfg = #cfg{consumer_strategy = single_active},
@@ -2107,14 +2137,14 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
     case active_consumer(Cons0) of
         {ConsumerId, #consumer{status = up} = Consumer0} ->
             Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
-            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
+            {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
         undefined when is_map_key(ConsumerId, Cons0) ->
             %% there is no active consumer and the current consumer is in the
             %% consumers map and thus must be cancelled, in this case we can just
             %% merge and effectively make this the current active one
             Consumer0 = maps:get(ConsumerId, Cons0),
             Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
-            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
+            {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
         _ ->
             %% add as a new waiting consumer
             Consumer = #consumer{cfg = #consumer_cfg{tag = Tag,
@@ -2125,7 +2155,9 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                                                      credit_mode = Mode},
                                  credit = Credit},
 
-            State0#?MODULE{waiting_consumers = Waiting ++ [{ConsumerId, Consumer}]}
+            {Consumer,
+             State0#?MODULE{waiting_consumers =
+                            Waiting ++ [{ConsumerId, Consumer}]}}
     end.
 
 merge_consumer(#consumer{cfg = CCfg, checked_out = Checked} = Consumer,
