@@ -9,12 +9,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-<<<<<<< HEAD
-  def switches(), do: [description: :string,
-                       tags: :string]
-=======
-  def switches(), do: [description: :string, tags: :string, default_queue_type: :string]
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
+  def switches(), do: [description: :string, tags: :string]
   def aliases(), do: [d: :description]
 
   def merge_defaults(args, opts) do
@@ -24,42 +19,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  def run([vhost], %{node: node_name, description: desc, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, parse_tags(tags), Helpers.cli_acting_user()])
-  end
-  def run([vhost], %{node: node_name, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, "", parse_tags(tags), Helpers.cli_acting_user()])
-=======
-<<<<<<< HEAD
-  def run([vhost], %{node: node_name, description: desc, tags: tags, default_queue_type: default_qt}) do
-    meta = %{description: desc,
-             tags: parse_tags(tags),
-             default_queue_type: default_qt}
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
-=======
-=======
->>>>>>> 3dbf7dd1e5 (CLI: resolve conflicts and reformat)
-  def run([vhost], %{
-        node: node_name,
-        description: desc,
-        tags: tags,
-        default_queue_type: default_qt
-      }) do
-    meta = %{description: desc, tags: parse_tags(tags), default_queue_type: default_qt}
-
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
-  end
-
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
       vhost,
       desc,
-      tags,
+      parse_tags(tags),
       Helpers.cli_acting_user()
     ])
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
+  end
+
+  def run([vhost], %{node: node_name, tags: tags}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
+      vhost,
+      "",
+      parse_tags(tags),
+      Helpers.cli_acting_user()
+    ])
   end
 
   def run([vhost], %{node: node_name}) do
@@ -68,27 +43,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-<<<<<<< HEAD
   def usage, do: "add_vhost <vhost> [--description <description> --tags \"<tag1>,<tag2>,<...>\"]"
-=======
-  def usage,
-    do:
-      "add_vhost <vhost> [--description <description> --tags \"<tag1>,<tag2>,<...>\" --default-queue-type <quorum|classic|stream>]"
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
 
   def usage_additional() do
     [
       ["<vhost>", "Virtual host name"],
       ["--description <description>", "Virtual host description"],
-<<<<<<< HEAD
       ["--tags <tags>", "Command separated list of tags"]
-=======
-      ["--tags <tags>", "Command separated list of tags"],
-      [
-        "--default-queue-type <quorum|classic|stream>",
-        "Queue type to use if no type is explicitly provided by the client"
-      ]
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
     ]
   end
 

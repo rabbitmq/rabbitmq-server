@@ -64,37 +64,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
     end
   end
 
-<<<<<<< HEAD
-=======
-  def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
-    case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
-      :eof ->
-        {:error, :not_enough_args}
-
-      passphrase ->
-        try do
-          term_value = Helpers.evaluate_input_as_term(value)
-
-          term_to_decrypt =
-            case term_value do
-              {:encrypted, _} = encrypted ->
-                encrypted
-
-              _ ->
-                {:encrypted, term_value}
-            end
-
-          result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
-          {:ok, result}
-        catch
-          _, _ ->
-            {:error,
-             "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
-        end
-    end
-  end
-
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)

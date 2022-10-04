@@ -21,23 +21,16 @@ defmodule DecodeCommandTest do
     assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
-<<<<<<< HEAD
   test "validate: providing zero or one positional argument fails", context do
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate([], context[:opts]))
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate(["value"], context[:opts]))
-=======
-  test "validate: providing no positional arguments fails", context do
     assert match?(
              {:validation_failure, {:not_enough_args, _}},
              @command.validate([], context[:opts])
            )
-  end
 
-  test "validate: providing one positional argument passes", context do
-    assert :ok == @command.validate(["value"], context[:opts])
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
+    assert match?(
+             {:validation_failure, {:not_enough_args, _}},
+             @command.validate(["value"], context[:opts])
+           )
   end
 
   test "validate: providing three or more positional argument fails", context do

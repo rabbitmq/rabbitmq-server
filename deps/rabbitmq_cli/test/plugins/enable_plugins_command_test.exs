@@ -275,23 +275,12 @@ defmodule EnablePluginsCommandTest do
     opts = get_opts_with_plugins_directories(context, [plugins_directory])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
 
-<<<<<<< HEAD
-    {:stream, _} =
-      @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
     check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
 
     # Not changed
     {:error, _version_error} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
     check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
-
-=======
-    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_9"], opts)
-    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_9], context)
-
-    # Not changed
-    {:error, _version_error} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
-    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_9], context)
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
   end
 
   test "run: does not enable plugins with unmet version requirements even when enabling all plugins",

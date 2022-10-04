@@ -36,12 +36,8 @@ defmodule ImportDefinitionsCommandTest do
 
   test "merge_defaults: format is case insensitive" do
     assert @command.merge_defaults([valid_file_path()], %{format: "JSON"}) ==
-<<<<<<< HEAD
              {[valid_file_path()], %{format: "json"}}
-=======
-             {[valid_file_path()], %{format: "json", skip_if_unchanged: false}}
 
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
     assert @command.merge_defaults([valid_file_path()], %{format: "Erlang"}) ==
              {[valid_file_path()], %{format: "erlang"}}
   end
@@ -94,21 +90,6 @@ defmodule ImportDefinitionsCommandTest do
     clear_parameter("/", "federation-upstream", "up-1")
   end
 
-<<<<<<< HEAD
-=======
-  @tag format: "json"
-  test "run: imports definitions from a file when --skip-if-unchanged is provided", context do
-    assert :ok ==
-             @command.run(
-               [valid_file_path()],
-               Map.merge(context[:opts], %{skip_if_unchanged: true})
-             )
-
-    # clean up the state we've modified
-    clear_parameter("/", "federation-upstream", "up-1")
-  end
-
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
   defp valid_file_path() do
     Path.join([File.cwd!(), "test", "fixtures", "files", "definitions.json"])
   end

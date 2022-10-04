@@ -32,21 +32,11 @@ defmodule AddVhostCommandTest do
   test "validate: one argument passes validation" do
     assert @command.validate(["new-vhost"], %{}) == :ok
     assert @command.validate(["new-vhost"], %{description: "Used by team A"}) == :ok
-<<<<<<< HEAD
-    assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa,team-a"}) == :ok
-=======
 
     assert @command.validate(["new-vhost"], %{
              description: "Used by team A for QA purposes",
              tags: "qa,team-a"
            }) == :ok
-
-    assert @command.validate(["new-vhost"], %{
-             description: "Used by team A for QA purposes",
-             tags: "qa,team-a",
-             default_queue_type: "quorum"
-           }) == :ok
->>>>>>> 66e65175d8 (mix format rabbitmq_cli)
   end
 
   @tag vhost: @vhost
