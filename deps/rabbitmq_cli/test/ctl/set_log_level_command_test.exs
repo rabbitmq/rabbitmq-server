@@ -12,9 +12,7 @@ defmodule SetLogLevelCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    {:ok,
-      log_level: "debug",
-      opts: %{node: get_rabbit_hostname()}}
+    {:ok, log_level: "debug", opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: with a single known level succeeds", context do
@@ -26,7 +24,8 @@ defmodule SetLogLevelCommandTest do
   end
 
   test "validate: with extra arguments returns an arg count error", context do
-    assert @command.validate([context[:log_level], "whoops"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate([context[:log_level], "whoops"], context[:opts]) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "run: request to a named, active node succeeds", context do
@@ -39,6 +38,7 @@ defmodule SetLogLevelCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([context[:log_level]], context[:opts]) == "Setting log level to \"debug\" ..."
+    assert @command.banner([context[:log_level]], context[:opts]) ==
+             "Setting log level to \"debug\" ..."
   end
 end

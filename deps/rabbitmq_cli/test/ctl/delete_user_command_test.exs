@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -36,7 +35,7 @@ defmodule DeleteUserCommandTest do
   test "run: A valid username returns ok", context do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
-    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
+    assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 0
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do

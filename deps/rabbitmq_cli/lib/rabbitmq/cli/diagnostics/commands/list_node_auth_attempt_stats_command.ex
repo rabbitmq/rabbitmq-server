@@ -26,30 +26,45 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptStatsCommand do
 
   def run([], %{node: node_name, timeout: timeout, by_source: by_source}) do
     case by_source do
-      :true ->
+      true ->
         :rabbit_misc.rpc_call(
-          node_name, :rabbit_core_metrics, :get_auth_attempts_by_source, [], timeout)
-      :false ->
+          node_name,
+          :rabbit_core_metrics,
+          :get_auth_attempts_by_source,
+          [],
+          timeout
+        )
+
+      false ->
         :rabbit_misc.rpc_call(
-          node_name, :rabbit_core_metrics, :get_auth_attempts, [], timeout)
+          node_name,
+          :rabbit_core_metrics,
+          :get_auth_attempts,
+          [],
+          timeout
+        )
     end
   end
 
   def output([], %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "node" => node_name, "attempts" => []}}
   end
-  def output([], %{node: node_name})  do
+
+  def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no authentication attempt stats"}
   end
+
   def output(rows, %{node: node_name, formatter: "json"}) do
     maps = Enum.map(rows, &Map.new/1)
+
     {:ok,
      %{
-       "result"   => "ok",
-       "node"     => node_name,
+       "result" => "ok",
+       "node" => node_name,
        "attempts" => maps
      }}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "list_node_auth_attempts [--by-source]"

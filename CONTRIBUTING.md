@@ -10,7 +10,7 @@ The process is fairly standard:
  * Fork the repository or repositories you plan on contributing to
  * Run `make`
  * Create a branch with a descriptive name in the relevant repositories
- * Make your changes, run tests, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
+ * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
  * Submit a filled out and signed [Contributor Agreement](https://cla.pivotal.io/) if needed (see below)
  * Be patient. We will get to your pull request eventually
@@ -42,6 +42,21 @@ make ct-cluster_rename t=cluster_size_3:partial_one_by_one
 ```
 
 Test output is in the `logs/` subdirectory.
+
+## Formatting the RabbitMQ CLI
+
+The RabbitMQ CLI uses the standard [Elixir code formatter](https://hexdocs.pm/mix/main/Mix.Tasks.Format.html). To ensure correct code formatting of the CLI:
+
+```
+cd deps/rabbitmq_cli
+mix format
+```
+
+Running `make` will validate the CLI formatting and issue any necessary warnings. Alternatively, run the format checker in the `deps/rabbitmq_cli` directory:
+
+```
+mix format --check-formatted
+```
 
 ## Code of Conduct
 

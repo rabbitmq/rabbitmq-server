@@ -25,25 +25,26 @@ defmodule CancelSyncQueueCommandTest do
   end
 
   setup do
-    {:ok, opts: %{
-      node: get_rabbit_hostname(),
-      vhost: @vhost
-    }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       vhost: @vhost
+     }}
   end
 
   test "validate: specifying no queue name is reported as an error", context do
     assert @command.validate([], context[:opts]) ==
-      {:validation_failure, :not_enough_args}
+             {:validation_failure, :not_enough_args}
   end
 
   test "validate: specifying two queue names is reported as an error", context do
     assert @command.validate(["q1", "q2"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: specifying three queue names is reported as an error", context do
     assert @command.validate(["q1", "q2", "q3"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: specifying one queue name succeeds", context do

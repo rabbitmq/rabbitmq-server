@@ -77,8 +77,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   def usage_additional() do
     [
       ["<existing_cluster_member>", "Existing cluster member (node) to join"],
-      ["--disc", "new node should be a disk one (stores its schema on disk). Highly recommended, used by default."],
-      ["--ram", "new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first."]
+      [
+        "--disc",
+        "new node should be a disk one (stores its schema on disk). Highly recommended, used by default."
+      ],
+      [
+        "--ram",
+        "new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first."
+      ]
     ]
   end
 
@@ -91,5 +97,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Instructs the node to become a member of the cluster that the specified node is in"
+  def description(),
+    do: "Instructs the node to become a member of the cluster that the specified node is in"
 end

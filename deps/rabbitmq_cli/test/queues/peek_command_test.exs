@@ -18,12 +18,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
-
 
   test "validate: treats no arguments as a failure" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
@@ -35,6 +35,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommandTest do
 
   test "validate: when two or more arguments are provided, returns a failure" do
     assert @command.validate(["quorum-queue-a", "1"], %{}) == :ok
+
     assert @command.validate(["quorum-queue-a", "extra-arg", "another-extra-arg"], %{}) ==
              {:validation_failure, :too_many_args}
   end
@@ -53,7 +54,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run(["quorum-queue-a", "1"],
-                                             %{node: :jake@thedog, vhost: "/", timeout: 200}))
+    assert match?(
+             {:badrpc, _},
+             @command.run(
+               ["quorum-queue-a", "1"],
+               %{node: :jake@thedog, vhost: "/", timeout: 200}
+             )
+           )
   end
 end

@@ -22,7 +22,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SuspendListenersCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_maintenance, :suspend_all_client_listeners, [], timeout)
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_maintenance,
+      :suspend_all_client_listeners,
+      [],
+      timeout
+    )
   end
 
   use RabbitMQ.CLI.DefaultOutput
@@ -37,10 +43,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SuspendListenersCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Suspends client connection listeners so that no new client connections are accepted"
+  def description(),
+    do: "Suspends client connection listeners so that no new client connections are accepted"
 
   def banner(_, %{node: node_name}) do
-    "Will suspend client connection listeners on node #{node_name}. "
-    <> "The node will no longer accept client connections!"
+    "Will suspend client connection listeners on node #{node_name}. " <>
+      "The node will no longer accept client connections!"
   end
 end

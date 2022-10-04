@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AwaitOnlineNodesCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -32,13 +31,12 @@ defmodule AwaitOnlineNodesCommandTest do
   end
 
   test "run: a call to an unreachable RabbitMQ node returns a nodedown" do
-    opts   = %{node: :jake@thedog, timeout: 200}
+    opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run(["1"], opts))
   end
 
   test "banner", context do
-    assert @command.banner(["1"], context[:opts])
-      =~ ~r/Will wait for at least 1 nodes to join the cluster of #{context[:opts][:node]}. Timeout: 300 seconds./
+    assert @command.banner(["1"], context[:opts]) =~
+             ~r/Will wait for at least 1 nodes to join the cluster of #{context[:opts][:node]}. Timeout: 300 seconds./
   end
-
 end

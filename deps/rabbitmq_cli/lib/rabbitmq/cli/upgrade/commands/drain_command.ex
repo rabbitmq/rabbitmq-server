@@ -25,14 +25,16 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.DrainCommand do
     case :rabbit_misc.rpc_call(node_name, :rabbit_maintenance, :drain, [], timeout) do
       # Server does not support maintenance mode
       {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
-      {:badrpc, _} = err    -> err
-      other                 -> other
+      {:badrpc, _} = err -> err
+      other -> other
     end
   end
 
   def output({:error, :unsupported}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage, "Maintenance mode is not supported by node #{node_name}"}
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(),
+     "Maintenance mode is not supported by node #{node_name}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "drain"
@@ -45,10 +47,12 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.DrainCommand do
 
   def help_section(), do: :upgrade
 
-  def description(), do: "Puts the node in maintenance mode. Such nodes will not serve any client traffic or host any primary queue replicas"
+  def description(),
+    do:
+      "Puts the node in maintenance mode. Such nodes will not serve any client traffic or host any primary queue replicas"
 
   def banner(_, %{node: node_name}) do
-    "Will put node #{node_name} into maintenance mode. "
-    <> "The node will no longer serve any client traffic!"
+    "Will put node #{node_name} into maintenance mode. " <>
+      "The node will no longer serve any client traffic!"
   end
 end

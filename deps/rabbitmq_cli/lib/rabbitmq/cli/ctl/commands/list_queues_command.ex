@@ -26,12 +26,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             leader members online)a
 
   def description(), do: "Lists queues and their properties"
-  def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
+
+  def usage(),
+    do:
+      "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
+
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [offline: :boolean,
-                       online: :boolean,
-                       local: :boolean,
-                       timeout: :integer]
+  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean, timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def info_keys(), do: @info_keys

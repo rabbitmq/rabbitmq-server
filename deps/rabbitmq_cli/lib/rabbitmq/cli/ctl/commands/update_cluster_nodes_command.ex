@@ -13,9 +13,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
-  def run([seed_node], options=%{node: node_name}) do
+  def run([seed_node], options = %{node: node_name}) do
     long_or_short_names = Config.get_option(:longnames, options)
     seed_node_normalised = Helpers.normalise_node(seed_node, long_or_short_names)
+
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_mnesia,
@@ -42,7 +43,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Instructs a cluster member node to sync the list of known cluster members from <seed_node>"
+  def description(),
+    do:
+      "Instructs a cluster member node to sync the list of known cluster members from <seed_node>"
 
   def banner([seed_node], %{node: node_name}) do
     "Will seed #{node_name} from #{seed_node} on next start"

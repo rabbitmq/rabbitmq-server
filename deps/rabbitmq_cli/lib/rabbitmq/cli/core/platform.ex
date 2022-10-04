@@ -14,7 +14,7 @@ defmodule RabbitMQ.CLI.Core.Platform do
 
   def line_separator() do
     case :os.type() do
-      {:unix, _}  -> "\n"
+      {:unix, _} -> "\n"
       {:win32, _} -> "\r\n"
     end
   end
@@ -22,15 +22,19 @@ defmodule RabbitMQ.CLI.Core.Platform do
   def os_name({:unix, :linux}) do
     "Linux"
   end
+
   def os_name({:unix, :darwin}) do
     "macOS"
   end
+
   def os_name({:unix, :freebsd}) do
     "FreeBSD"
   end
+
   def os_name({:unix, name}) do
-    name |> to_string |> String.capitalize
+    name |> to_string |> String.capitalize()
   end
+
   def os_name({:win32, _}) do
     "Windows"
   end

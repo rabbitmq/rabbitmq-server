@@ -17,20 +17,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-      node: get_rabbit_hostname(),
-      timeout: context[:test_timeout] || 30000,
-      vhost_pattern: ".*",
-      queue_pattern: ".*",
-      errors_only: false
-    }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       vhost_pattern: ".*",
+       queue_pattern: ".*",
+       errors_only: false
+     }}
   end
 
   test "merge_defaults: defaults to reporting complete results" do
     assert @command.merge_defaults([], %{}) ==
-      {[], %{vhost_pattern: ".*",
-             queue_pattern: ".*",
-             errors_only: false}}
+             {[], %{vhost_pattern: ".*", queue_pattern: ".*", errors_only: false}}
   end
 
   test "validate: when no arguments are provided, returns a failure" do
@@ -51,17 +50,22 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
 
   test "validate: when a node and something else is provided, returns a failure" do
     assert @command.validate(["quorum-queue-a", "banana"], %{}) ==
-      {:validation_failure, "strategy 'banana' is not recognised."}
+             {:validation_failure, "strategy 'banana' is not recognised."}
   end
 
   test "validate: when three arguments are provided, returns a failure" do
     assert @command.validate(["quorum-queue-a", "extra-arg", "another-extra-arg"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run(["quorum-queue-a", "all"],
-                                             Map.merge(context[:opts], %{node: :jake@thedog, timeout: 200})))
+    assert match?(
+             {:badrpc, _},
+             @command.run(
+               ["quorum-queue-a", "all"],
+               Map.merge(context[:opts], %{node: :jake@thedog, timeout: 200})
+             )
+           )
   end
 end

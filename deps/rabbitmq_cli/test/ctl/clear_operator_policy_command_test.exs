@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearOperatorPolicyCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,10 +17,10 @@ defmodule ClearOperatorPolicyCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_vhost @vhost
+    add_vhost(@vhost)
 
     on_exit([], fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -66,16 +65,15 @@ defmodule ClearOperatorPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+             [context[:key]],
+             vhost_opts
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   test "run: an unreachable node throws a badrpc" do
     opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
     assert match?({:badrpc, _}, @command.run([@key], opts))
   end
-
 
   @tag pattern: @pattern, key: @key, vhost: @vhost
   test "run: if policy exists, returns ok and removes it", context do
@@ -84,9 +82,9 @@ defmodule ClearOperatorPolicyCommandTest do
     set_operator_policy(context[:vhost], context[:key], context[:pattern], @value)
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == :ok
+             [context[:key]],
+             vhost_opts
+           ) == :ok
 
     assert_operator_policy_does_not_exist(context)
   end
@@ -96,9 +94,9 @@ defmodule ClearOperatorPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+             [context[:key]],
+             vhost_opts
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @vhost
@@ -106,22 +104,25 @@ defmodule ClearOperatorPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_operator_policy(context[:vhost], context[:key], context[:pattern], @value)
 
-    s = @command.banner(
-      [context[:key]],
-      vhost_opts
-    )
+    s =
+      @command.banner(
+        [context[:key]],
+        vhost_opts
+      )
 
     assert s =~ ~r/Clearing operator policy/
     assert s =~ ~r/"#{context[:key]}"/
   end
 
   defp assert_operator_policy_does_not_exist(context) do
-    policy = context[:vhost]
-                |> list_operator_policies
-                |> Enum.filter(fn(param) ->
-                    param[:pattern] == context[:pattern] and
-                    param[:key] == context[:key]
-                    end)
+    policy =
+      context[:vhost]
+      |> list_operator_policies
+      |> Enum.filter(fn param ->
+        param[:pattern] == context[:pattern] and
+          param[:key] == context[:key]
+      end)
+
     assert policy === []
   end
 end

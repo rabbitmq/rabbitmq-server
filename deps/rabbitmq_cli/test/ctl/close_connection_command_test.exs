@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule CloseConnectionCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -32,7 +31,9 @@ defmodule CloseConnectionCommandTest do
   end
 
   test "validate: with an invalid number of arguments returns an arg count error", context do
-    assert @command.validate(["pid", "explanation", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["pid", "explanation", "extra"], context[:opts]) ==
+             {:validation_failure, :too_many_args}
+
     assert @command.validate(["pid"], context[:opts]) == {:validation_failure, :not_enough_args}
   end
 
@@ -41,7 +42,7 @@ defmodule CloseConnectionCommandTest do
   end
 
   test "run: a close connection request on an existing connection", context do
-    with_connection("/", fn(_) ->
+    with_connection("/", fn _ ->
       Process.sleep(500)
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
@@ -52,9 +53,14 @@ defmodule CloseConnectionCommandTest do
     end)
   end
 
-  test "run: a close connection request on for a non existing connection returns successfully", context do
-    assert match?(:ok,
-      @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.normalise_node(context[:node], :shortnames)}))
+  test "run: a close connection request on for a non existing connection returns successfully",
+       context do
+    assert match?(
+             :ok,
+             @command.run(["<#{node()}.2.121.12>", "test"], %{
+               node: @helpers.normalise_node(context[:node], :shortnames)
+             })
+           )
   end
 
   test "run: a close_connection request on nonexistent RabbitMQ node returns a badrpc" do
@@ -73,24 +79,29 @@ defmodule CloseConnectionCommandTest do
   end
 
   defp fetch_connection_pids(node, nodes, retries) do
-      stream = RpcStream.receive_list_items(node,
-                                            :rabbit_networking,
-                                            :emit_connection_info_all,
-                                            [nodes, [:pid]],
-                                            :infinity,
-                                            [:pid],
-                                            Kernel.length(nodes))
-      xs = Enum.to_list(stream)
+    stream =
+      RpcStream.receive_list_items(
+        node,
+        :rabbit_networking,
+        :emit_connection_info_all,
+        [nodes, [:pid]],
+        :infinity,
+        [:pid],
+        Kernel.length(nodes)
+      )
 
-      case {xs, retries} do
-        {xs, 0} ->
-          xs
-        {[], n} when n >= 0 ->
-          Process.sleep(100)
-          fetch_connection_pids(node, nodes, retries - 1)
-        _ ->
-          xs
-      end
+    xs = Enum.to_list(stream)
+
+    case {xs, retries} do
+      {xs, 0} ->
+        xs
+
+      {[], n} when n >= 0 ->
+        Process.sleep(100)
+        fetch_connection_pids(node, nodes, retries - 1)
+
+      _ ->
+        xs
+    end
   end
-
 end

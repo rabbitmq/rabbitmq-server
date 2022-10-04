@@ -35,6 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def validate_execution_environment([], %{pid: _} = opts) do
     Validators.rabbit_is_loaded([], opts)
   end
+
   def validate_execution_environment([_pid_file], opts) do
     Validators.rabbit_is_loaded([], opts)
   end
@@ -102,7 +103,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Waits for RabbitMQ node startup by monitoring a local PID file. See also 'rabbitmqctl await_online_nodes'"
+  def description(),
+    do:
+      "Waits for RabbitMQ node startup by monitoring a local PID file. See also 'rabbitmqctl await_online_nodes'"
 
   #
   # Implementation
@@ -253,7 +256,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
               {pid, _} ->
                 case check_distribution(pid, node_name) do
                   :ok -> {:ok, pid}
-                  _   -> {:error, :loop}
+                  _ -> {:error, :loop}
                 end
             end
 

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearGlobalParameterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -21,7 +20,7 @@ defmodule ClearGlobalParameterCommandTest do
 
   setup context do
     on_exit(context, fn ->
-      clear_global_parameter context[:key]
+      clear_global_parameter(context[:key])
     end)
 
     {
@@ -35,15 +34,17 @@ defmodule ClearGlobalParameterCommandTest do
   test "validate: expects a single argument" do
     assert @command.validate(["one"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["this is", "too many"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["this is", "too many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   @tag key: @key
   test "run: when global parameter does not exist, returns an error", context do
     assert @command.run(
-      [context[:key]],
-      context[:opts]
-    ) == {:error_string, 'Parameter does not exist'}
+             [context[:key]],
+             context[:opts]
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
@@ -56,9 +57,9 @@ defmodule ClearGlobalParameterCommandTest do
     set_global_parameter(context[:key], @value)
 
     assert @command.run(
-      [context[:key]],
-      context[:opts]
-    ) == :ok
+             [context[:key]],
+             context[:opts]
+           ) == :ok
 
     assert_parameter_empty(context)
   end
@@ -67,20 +68,23 @@ defmodule ClearGlobalParameterCommandTest do
   test "banner", context do
     set_global_parameter(context[:key], @value)
 
-    s = @command.banner(
-      [context[:key]],
-      context[:opts]
-    )
+    s =
+      @command.banner(
+        [context[:key]],
+        context[:opts]
+      )
 
     assert s =~ ~r/Clearing global runtime parameter/
     assert s =~ ~r/"#{context[:key]}"/
   end
 
   defp assert_parameter_empty(context) do
-    parameter = list_global_parameters()
-                |> Enum.filter(fn(param) ->
-                    param[:key] == context[:key]
-                    end)
+    parameter =
+      list_global_parameters()
+      |> Enum.filter(fn param ->
+        param[:key] == context[:key]
+      end)
+
     assert parameter === []
   end
 end

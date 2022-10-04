@@ -10,15 +10,16 @@ defmodule JsonStreamTest do
   @formatter RabbitMQ.CLI.Formatters.JsonStream
 
   test "format_output map with atom keys is converted to JSON object" do
-    assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) == "{\"a\":\"apple\",\"b\":\"beer\"}"
+    assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) ==
+             "{\"a\":\"apple\",\"b\":\"beer\"}"
   end
 
   test "format_output map with binary keys is converted to JSON object" do
-    assert @formatter.format_output(%{"a" => :apple, "b" => :beer}, %{}) == "{\"a\":\"apple\",\"b\":\"beer\"}"
+    assert @formatter.format_output(%{"a" => :apple, "b" => :beer}, %{}) ==
+             "{\"a\":\"apple\",\"b\":\"beer\"}"
   end
 
   test "format_output empty binary is converted to empty JSON array" do
     assert @formatter.format_output("", %{}) == ""
   end
-
 end

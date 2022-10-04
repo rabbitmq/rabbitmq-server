@@ -14,25 +14,37 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostTagsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([vhost | tags], %{node: node_name}) do
     case :rabbit_misc.rpc_call(
-      node_name, :rabbit_vhost, :update_tags, [vhost, tags, Helpers.cli_acting_user()]) do
-      {:error, _}  = err -> err
+           node_name,
+           :rabbit_vhost,
+           :update_tags,
+           [vhost, tags, Helpers.cli_acting_user()]
+         ) do
+      {:error, _} = err -> err
       {:badrpc, _} = err -> err
-      _                  -> :ok
+      _ -> :ok
     end
   end
 
   def output({:error, {:no_such_vhost, vhost}}, %{node: node_name, formatter: "json"}) do
-    {:error, %{"result" => "error", "node" => node_name, "message" => "Virtual host \"#{vhost}\" does not exists"}}
+    {:error,
+     %{
+       "result" => "error",
+       "node" => node_name,
+       "message" => "Virtual host \"#{vhost}\" does not exists"
+     }}
   end
+
   def output({:error, {:no_such_vhost, vhost}}, _) do
     {:error, ExitCodes.exit_dataerr(), "Virtual host \"#{vhost}\" does not exist"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_vhost_tags <vhost> <tag> [...]"

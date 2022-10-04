@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ForceGcCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -26,7 +25,6 @@ defmodule ForceGcCommandTest do
   setup do
     {:ok, opts: %{node: get_rabbit_hostname(), timeout: 200}}
   end
-
 
   test "merge_defaults: merge not defaults" do
     assert @command.merge_defaults([], %{}) == {[], %{}}

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ShutdownCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -30,8 +29,10 @@ defmodule ShutdownCommandTest do
   end
 
   test "validate: in wait mode, checks if local and target node hostnames match" do
-    assert match?({:validation_failure, {:unsupported_target, _}},
-                  @command.validate([], %{wait: true, node: :'rabbit@some.remote.hostname'}))
+    assert match?(
+             {:validation_failure, {:unsupported_target, _}},
+             @command.validate([], %{wait: true, node: :"rabbit@some.remote.hostname"})
+           )
   end
 
   test "validate: in wait mode, always assumes @localhost nodes are local" do

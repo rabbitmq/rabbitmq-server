@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearPolicyCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,12 +17,12 @@ defmodule ClearPolicyCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_vhost @vhost
+    add_vhost(@vhost)
 
     enable_federation_plugin()
 
     on_exit([], fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -31,7 +30,7 @@ defmodule ClearPolicyCommandTest do
 
   setup context do
     on_exit(context, fn ->
-      clear_policy context[:vhost], context[:key]
+      clear_policy(context[:vhost], context[:key])
     end)
 
     {
@@ -68,16 +67,15 @@ defmodule ClearPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+             [context[:key]],
+             vhost_opts
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   test "run: an unreachable node throws a badrpc" do
     opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
     assert match?({:badrpc, _}, @command.run([@key], opts))
   end
-
 
   @tag pattern: @pattern, key: @key, vhost: @vhost
   test "run: if policy exists, returns ok and removes it", context do
@@ -86,9 +84,9 @@ defmodule ClearPolicyCommandTest do
     set_policy(context[:vhost], context[:key], context[:pattern], @value)
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == :ok
+             [context[:key]],
+             vhost_opts
+           ) == :ok
 
     assert_policy_does_not_exist(context)
   end
@@ -98,9 +96,9 @@ defmodule ClearPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+             [context[:key]],
+             vhost_opts
+           ) == {:error_string, 'Parameter does not exist'}
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @vhost
@@ -108,22 +106,25 @@ defmodule ClearPolicyCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_policy(context[:vhost], context[:key], context[:pattern], @value)
 
-    s = @command.banner(
-      [context[:key]],
-      vhost_opts
-    )
+    s =
+      @command.banner(
+        [context[:key]],
+        vhost_opts
+      )
 
     assert s =~ ~r/Clearing policy/
     assert s =~ ~r/"#{context[:key]}"/
   end
 
   defp assert_policy_does_not_exist(context) do
-    policy = context[:vhost]
-                |> list_policies
-                |> Enum.filter(fn(param) ->
-                    param[:pattern] == context[:pattern] and
-                    param[:key] == context[:key]
-                    end)
+    policy =
+      context[:vhost]
+      |> list_policies
+      |> Enum.filter(fn param ->
+        param[:pattern] == context[:pattern] and
+          param[:key] == context[:key]
+      end)
+
     assert policy === []
   end
 end

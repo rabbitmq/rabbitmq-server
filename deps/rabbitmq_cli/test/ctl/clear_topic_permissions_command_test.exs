@@ -10,13 +10,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearTopicPermissionsTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands. ClearTopicPermissionsCommand
-  @user     "user1"
+  @command RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand
+  @user "user1"
   @password "password"
   @specific_vhost "vhost1"
 
@@ -38,6 +37,7 @@ defmodule ClearTopicPermissionsTest do
   setup context do
     set_topic_permissions(@user, @specific_vhost, "amq.topic", "^a", "^b")
     set_topic_permissions(@user, @specific_vhost, "topic1", "^a", "^b")
+
     {
       :ok,
       opts: %{node: get_rabbit_hostname(), vhost: context[:vhost]}
@@ -53,17 +53,21 @@ defmodule ClearTopicPermissionsTest do
     assert @command.validate(["username"], %{}) == :ok
     assert @command.validate(["username", "exchange"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["this is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["this is", "too", "many"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   @tag user: "fake_user"
   test "run: can't clear topic permissions for non-existing user", context do
-    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
+    assert @command.run([context[:user]], context[:opts]) ==
+             {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user, vhost: "bad_vhost"
   test "run: on an invalid vhost, return no_such_vhost error", context do
-    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_vhost, context[:vhost]}}
+    assert @command.run([context[:user]], context[:opts]) ==
+             {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @specific_vhost
@@ -93,15 +97,15 @@ defmodule ClearTopicPermissionsTest do
   test "banner with username only", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([context[:user]], vhost_opts)
-          =~ ~r/Clearing topic permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+    assert @command.banner([context[:user]], vhost_opts) =~
+             ~r/Clearing topic permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "banner with username and exchange name", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([context[:user], "amq.topic"], vhost_opts)
-          =~ ~r/Clearing topic permissions on \"amq.topic\" for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+    assert @command.banner([context[:user], "amq.topic"], vhost_opts) =~
+             ~r/Clearing topic permissions on \"amq.topic\" for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

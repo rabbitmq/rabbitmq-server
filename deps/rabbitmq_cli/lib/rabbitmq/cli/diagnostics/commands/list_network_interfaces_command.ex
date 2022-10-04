@@ -22,6 +22,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
   def run([], %{offline: true}) do
     :rabbit_net.getifaddrs()
   end
+
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_net, :getifaddrs, [], timeout)
   end
@@ -29,11 +30,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
   def output(nic_map, %{node: node_name, formatter: "json"}) when map_size(nic_map) == 0 do
     {:ok, %{"result" => "ok", "node" => node_name, "interfaces" => %{}}}
   end
+
   def output(nic_map, %{node: node_name}) when map_size(nic_map) == 0 do
     {:ok, "Node #{node_name} reported no network interfaces"}
   end
+
   def output(nic_map0, %{node: node_name, formatter: "json"}) do
-    nic_map = Enum.map(nic_map0, fn ({k, v}) -> {to_string(k), v} end)
+    nic_map = Enum.map(nic_map0, fn {k, v} -> {to_string(k), v} end)
+
     {:ok,
      %{
        "result" => "ok",
@@ -41,11 +45,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
        "message" => "Node #{node_name} reported network interfaces"
      }}
   end
+
   def output(nic_map, _) when is_map(nic_map) do
     lines = nic_lines(nic_map)
 
     {:ok, Enum.join(lines, line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks
@@ -63,15 +69,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
   #
 
   defp nic_lines(nic_map) do
-    Enum.reduce(nic_map, [],
-      fn({iface, props}, acc) ->
-        iface_lines = Enum.reduce(props, [],
-          fn({prop, val}, inner_acc) ->
-            ["#{prop}: #{val}" | inner_acc]
-          end)
+    Enum.reduce(nic_map, [], fn {iface, props}, acc ->
+      iface_lines =
+        Enum.reduce(props, [], fn {prop, val}, inner_acc ->
+          ["#{prop}: #{val}" | inner_acc]
+        end)
 
-        header = "#{bright("Interface #{iface}")}\n"
-        acc ++ [header | iface_lines] ++ ["\n"]
-      end)
+      header = "#{bright("Interface #{iface}")}\n"
+      acc ++ [header | iface_lines] ++ ["\n"]
+    end)
   end
 end

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   alias RabbitMQ.CLI.Ctl.InfoKeys
@@ -41,15 +40,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
     )
   end
 
-  def run([_|_] = args, %{node: node_name, timeout: timeout}) do
+  def run([_ | _] = args, %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], timeout) do
       # Server does not support feature flags, consider none are available.
       # See rabbitmq/rabbitmq-cli#344 for context. MK.
       {:badrpc, {:EXIT, {:undef, _}}} -> []
-      {:badrpc, _} = err    -> err
-      val                   -> filter_by_arg(val, args)
+      {:badrpc, _} = err -> err
+      val -> filter_by_arg(val, args)
     end
-
   end
 
   def banner(_, _), do: "Listing feature flags ..."
@@ -81,13 +79,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
     ff_info
   end
 
-  defp filter_by_arg(ff_info, [_|_] = args) when is_list(ff_info) do
+  defp filter_by_arg(ff_info, [_ | _] = args) when is_list(ff_info) do
     symbol_args = InfoKeys.prepare_info_keys(args)
-    Enum.map(ff_info,
-      fn(ff) ->
+
+    Enum.map(
+      ff_info,
+      fn ff ->
         symbol_args
-        |> Enum.filter(fn(arg) -> ff[arg] != nil end)
-        |> Enum.map(fn(arg) -> {arg, ff[arg]} end)
+        |> Enum.filter(fn arg -> ff[arg] != nil end)
+        |> Enum.map(fn arg -> {arg, ff[arg]} end)
       end
     )
   end

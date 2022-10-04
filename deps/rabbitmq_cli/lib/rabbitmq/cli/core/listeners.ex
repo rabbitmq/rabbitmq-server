@@ -13,9 +13,17 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   # API
   #
 
-  defrecord :certificate, :Certificate, extract(:Certificate, from_lib: "public_key/include/public_key.hrl")
-  defrecord :tbscertificate, :TBSCertificate, extract(:TBSCertificate, from_lib: "public_key/include/public_key.hrl")
-  defrecord :validity, :Validity, extract(:Validity, from_lib: "public_key/include/public_key.hrl")
+  defrecord :certificate,
+            :Certificate,
+            extract(:Certificate, from_lib: "public_key/include/public_key.hrl")
+
+  defrecord :tbscertificate,
+            :TBSCertificate,
+            extract(:TBSCertificate, from_lib: "public_key/include/public_key.hrl")
+
+  defrecord :validity,
+            :Validity,
+            extract(:Validity, from_lib: "public_key/include/public_key.hrl")
 
   def listeners_on(listeners, target_node) do
     Enum.filter(listeners, fn listener(node: node) ->
@@ -33,24 +41,22 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     listeners
     |> listener_maps
     |> Enum.map(fn %{interface: interface, port: port, protocol: protocol} ->
-      "Interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{
-        protocol_label(to_atom(protocol))
-      }"
+      "Interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{protocol_label(to_atom(protocol))}"
     end)
   end
+
   def listener_lines(listeners, node) do
     listeners
     |> listener_maps
     |> Enum.map(fn %{interface: interface, port: port, protocol: protocol} ->
-      "Node: #{node}, interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{
-        protocol_label(to_atom(protocol))
-      }"
+      "Node: #{node}, interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{protocol_label(to_atom(protocol))}"
     end)
   end
 
   def listener_map(listener) when is_map(listener) do
     listener
   end
+
   def listener_map(listener) do
     # Listener options are left out intentionally: they can contain deeply nested values
     # that are impossible to serialise to JSON.
@@ -74,7 +80,8 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   end
 
   def listener_certs(listener) do
-    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) = listener
+    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) =
+      listener
 
     %{
       node: node,
@@ -90,29 +97,36 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def read_cert(nil) do
     nil
   end
+
   def read_cert({:pem, pem}) do
     pem
   end
+
   def read_cert(path) do
     case File.read(path) do
       {:ok, bin} ->
         bin
+
       {:error, _} = err ->
         err
     end
   end
 
   def listener_expiring_within(listener, seconds) do
-    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) = listener
+    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) =
+      listener
+
     certfile = Keyword.get(opts, :certfile)
     cacertfile = Keyword.get(opts, :cacertfile)
     now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
     expiry_date = now + seconds
     certfile_expires_on = expired(cert_validity(read_cert(certfile)), expiry_date)
     cacertfile_expires_on = expired(cert_validity(read_cert(cacertfile)), expiry_date)
+
     case {certfile_expires_on, cacertfile_expires_on} do
       {[], []} ->
         false
+
       _ ->
         %{
           node: node,
@@ -123,11 +137,20 @@ defmodule RabbitMQ.CLI.Core.Listeners do
           cacertfile: cacertfile,
           certfile_expires_on: certfile_expires_on,
           cacertfile_expires_on: cacertfile_expires_on
-    }
+        }
     end
   end
 
-  def expired_listener_map(%{node: node, protocol: protocol, interface: interface, port: port, certfile_expires_on: certfile_expires_on, cacertfile_expires_on: cacertfile_expires_on, certfile: certfile, cacertfile: cacertfile}) do
+  def expired_listener_map(%{
+        node: node,
+        protocol: protocol,
+        interface: interface,
+        port: port,
+        certfile_expires_on: certfile_expires_on,
+        cacertfile_expires_on: cacertfile_expires_on,
+        certfile: certfile,
+        cacertfile: cacertfile
+      }) do
     %{
       node: node,
       protocol: protocol,
@@ -144,6 +167,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def expires_on_list({:error, _} = error) do
     [error]
   end
+
   def expires_on_list(expires) do
     Enum.map(expires, &expires_on/1)
   end
@@ -151,6 +175,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def expires_on({:error, _} = error) do
     error
   end
+
   def expires_on(seconds) do
     {:ok, naive} = NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(seconds))
     NaiveDateTime.to_string(naive)
@@ -159,38 +184,52 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def expired(nil, _) do
     []
   end
+
   def expired({:error, _} = error, _) do
     error
   end
+
   def expired(expires, expiry_date) do
-    Enum.filter(expires, fn ({:error, _}) -> true
-      (seconds) -> seconds < expiry_date end)
+    Enum.filter(expires, fn
+      {:error, _} -> true
+      seconds -> seconds < expiry_date
+    end)
   end
 
   def cert_validity(nil) do
     nil
   end
+
   def cert_validity(cert) do
     dsa_entries = :public_key.pem_decode(cert)
+
     case dsa_entries do
       [] ->
         {:error, "The certificate file provided does not contain any PEM entry."}
+
       _ ->
         now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
-        Enum.map(dsa_entries, fn ({:Certificate, _, _} = dsa_entry) ->
-          certificate(tbsCertificate: tbs_certificate) = :public_key.pem_entry_decode(dsa_entry)
-          tbscertificate(validity: validity) = tbs_certificate
-          validity(notAfter: not_after, notBefore: not_before) = validity
-          start = :pubkey_cert.time_str_2_gregorian_sec(not_before)
-          case start > now do
-            true ->
-              {:ok, naive} = NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(start))
-              startdate = NaiveDateTime.to_string(naive)
-              {:error, "Certificate is not yet valid. It starts on #{startdate}"}
-            false ->
-              :pubkey_cert.time_str_2_gregorian_sec(not_after)
-          end
-          ({type, _, _}) ->
+
+        Enum.map(dsa_entries, fn
+          {:Certificate, _, _} = dsa_entry ->
+            certificate(tbsCertificate: tbs_certificate) = :public_key.pem_entry_decode(dsa_entry)
+            tbscertificate(validity: validity) = tbs_certificate
+            validity(notAfter: not_after, notBefore: not_before) = validity
+            start = :pubkey_cert.time_str_2_gregorian_sec(not_before)
+
+            case start > now do
+              true ->
+                {:ok, naive} =
+                  NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(start))
+
+                startdate = NaiveDateTime.to_string(naive)
+                {:error, "Certificate is not yet valid. It starts on #{startdate}"}
+
+              false ->
+                :pubkey_cert.time_str_2_gregorian_sec(not_after)
+            end
+
+          {type, _, _} ->
             {:error, "The certificate file provided contains a #{type} entry."}
         end)
     end
@@ -209,13 +248,13 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     end
   end
 
-  def protocol_label(:amqp),       do: "AMQP 0-9-1 and AMQP 1.0"
-  def protocol_label(:'amqp/ssl'), do: "AMQP 0-9-1 and AMQP 1.0 over TLS"
-  def protocol_label(:mqtt),       do: "MQTT"
-  def protocol_label(:'mqtt/ssl'), do: "MQTT over TLS"
-  def protocol_label(:stomp),       do: "STOMP"
-  def protocol_label(:'stomp/ssl'), do: "STOMP over TLS"
-  def protocol_label(:http),  do: "HTTP API"
+  def protocol_label(:amqp), do: "AMQP 0-9-1 and AMQP 1.0"
+  def protocol_label(:"amqp/ssl"), do: "AMQP 0-9-1 and AMQP 1.0 over TLS"
+  def protocol_label(:mqtt), do: "MQTT"
+  def protocol_label(:"mqtt/ssl"), do: "MQTT over TLS"
+  def protocol_label(:stomp), do: "STOMP"
+  def protocol_label(:"stomp/ssl"), do: "STOMP over TLS"
+  def protocol_label(:http), do: "HTTP API"
   def protocol_label(:https), do: "HTTP API over TLS (HTTPS)"
   def protocol_label(:"http/web-mqtt"), do: "MQTT over WebSockets"
   def protocol_label(:"https/web-mqtt"), do: "MQTT over WebSockets and TLS (HTTPS)"
@@ -245,9 +284,9 @@ defmodule RabbitMQ.CLI.Core.Listeners do
       "mqtt311" -> "mqtt"
       "mqtt3_1" -> "mqtt"
       "mqtt3_1_1" -> "mqtt"
-      "mqtts"     -> "mqtt/ssl"
-      "mqtt+tls"  -> "mqtt/ssl"
-      "mqtt+ssl"  -> "mqtt/ssl"
+      "mqtts" -> "mqtt/ssl"
+      "mqtt+tls" -> "mqtt/ssl"
+      "mqtt+ssl" -> "mqtt/ssl"
       "stomp1.0" -> "stomp"
       "stomp1.1" -> "stomp"
       "stomp1.2" -> "stomp"
@@ -257,7 +296,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
       "stomp1_0" -> "stomp"
       "stomp1_1" -> "stomp"
       "stomp1_2" -> "stomp"
-      "stomps"    -> "stomp/ssl"
+      "stomps" -> "stomp/ssl"
       "stomp+tls" -> "stomp/ssl"
       "stomp+ssl" -> "stomp/ssl"
       "https" -> "https"
@@ -304,6 +343,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     # networks address ranges, etc actually works better
     # for the kind of values we can get here than :inet functions. MK.
     regex = Regex.recompile!(~r/:/)
+
     case value =~ regex do
       true -> "[#{value}]"
       false -> value

@@ -10,11 +10,12 @@ defmodule EncodeCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.EncodeCommand
 
   setup _context do
-    {:ok, opts: %{
-      cipher: :rabbit_pbe.default_cipher,
-      hash: :rabbit_pbe.default_hash,
-      iterations: :rabbit_pbe.default_iterations
-    }}
+    {:ok,
+     opts: %{
+       cipher: :rabbit_pbe.default_cipher(),
+       hash: :rabbit_pbe.default_hash(),
+       iterations: :rabbit_pbe.default_iterations()
+     }}
   end
 
   test "validate: providing exactly 2 positional arguments passes", context do
@@ -27,35 +28,51 @@ defmodule EncodeCommandTest do
   end
 
   test "validate: providing three or more positional argument fails", context do
-    assert match?({:validation_failure, :too_many_args},
-                  @command.validate(["value", "secret", "incorrect"], context[:opts]))
+    assert match?(
+             {:validation_failure, :too_many_args},
+             @command.validate(["value", "secret", "incorrect"], context[:opts])
+           )
   end
 
   test "validate: hash and cipher must be supported", context do
     assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(context[:opts], %{cipher: :funny_cipher}))
-    )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(
+               ["value", "secret"],
+               Map.merge(context[:opts], %{cipher: :funny_cipher})
+             )
+           )
+
     assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(context[:opts], %{hash: :funny_hash}))
-    )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(
+               ["value", "secret"],
+               Map.merge(context[:opts], %{hash: :funny_hash})
+             )
+           )
+
     assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(context[:opts], %{cipher: :funny_cipher, hash: :funny_hash}))
-    )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(
+               ["value", "secret"],
+               Map.merge(context[:opts], %{cipher: :funny_cipher, hash: :funny_hash})
+             )
+           )
+
     assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
   test "validate: number of iterations must greater than 0", context do
     assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: 0}))
-    )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: 0}))
+           )
+
     assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: -1}))
-    )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: -1}))
+           )
+
     assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
@@ -79,9 +96,18 @@ defmodule EncodeCommandTest do
     {:ok, output} = @command.run([secret_as_erlang_term, passphrase], context[:opts])
     {:encrypted, encrypted} = output
     # decode plain value
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, {:plaintext, secret})
+    assert secret ===
+             :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, {:plaintext, secret})
+
     # decode {encrypted, ...} tuple form
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, {:encrypted, encrypted})
+    assert secret ===
+             :rabbit_pbe.decrypt_term(
+               cipher,
+               hash,
+               iterations,
+               passphrase,
+               {:encrypted, encrypted}
+             )
   end
 
   defp format_as_erlang_term(value) do
