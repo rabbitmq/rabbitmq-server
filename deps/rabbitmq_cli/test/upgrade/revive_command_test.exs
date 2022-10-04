@@ -25,10 +25,11 @@ defmodule ReviveCommandTest do
   setup context do
     enable_feature_flag(:maintenance_mode_status)
 
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 5000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
   end
 
   test "merge_defaults: nothing to do" do

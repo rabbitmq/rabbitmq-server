@@ -14,7 +14,8 @@ defmodule ResolveHostnameCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     start_rabbitmq_app()
 
-    ExUnit.configure([max_cases: 1])
+    ExUnit.configure(max_cases: 1)
+
     on_exit([], fn ->
       start_rabbitmq_app()
     end)
@@ -23,12 +24,13 @@ defmodule ResolveHostnameCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        address_family: "ipv4",
-        offline: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       address_family: "ipv4",
+       offline: false
+     }}
   end
 
   test "merge_defaults: defaults to IPv4 address family" do
@@ -40,15 +42,20 @@ defmodule ResolveHostnameCommandTest do
   end
 
   test "validate: treats positional arguments as a failure" do
-    assert @command.validate(["elixir-lang.org", "extra-arg"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["elixir-lang.org", "extra-arg"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: address family other than IPv4 or IPv6 fails validation" do
-    assert match?({:validation_failure, {:bad_argument, _}},
-                  @command.validate(["elixir-lang.org"], %{address_family: "ipv5"}))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["elixir-lang.org"], %{address_family: "ipv5"})
+           )
 
-    assert match?({:validation_failure, {:bad_argument, _}},
-                  @command.validate(["elixir-lang.org"], %{address_family: "IPv5"}))
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["elixir-lang.org"], %{address_family: "IPv5"})
+           )
   end
 
   test "validate: IPv4 for address family passes validation" do
@@ -69,7 +76,7 @@ defmodule ResolveHostnameCommandTest do
 
   test "run: returns a resolution result", context do
     case @command.run(["github.com"], context[:opts]) do
-      {:ok, _hostent}     -> :ok
+      {:ok, _hostent} -> :ok
       {:error, :nxdomain} -> :ok
       other -> flunk("hostname resolution returned #{other}")
     end
@@ -77,7 +84,7 @@ defmodule ResolveHostnameCommandTest do
 
   test "run with --offline: returns a resolution result", context do
     case @command.run(["github.com"], Map.merge(context[:opts], %{offline: true})) do
-      {:ok, _hostent}     -> :ok
+      {:ok, _hostent} -> :ok
       {:error, :nxdomain} -> :ok
       other -> flunk("hostname resolution returned #{other}")
     end

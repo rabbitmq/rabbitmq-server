@@ -9,22 +9,34 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [description: :string,
-                       tags: :string]
+  def switches(), do: [description: :string, tags: :string]
   def aliases(), do: [d: :description]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{description: "", tags: ""}, opts)}
   end
+
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, parse_tags(tags), Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
+      vhost,
+      desc,
+      parse_tags(tags),
+      Helpers.cli_acting_user()
+    ])
   end
+
   def run([vhost], %{node: node_name, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, "", parse_tags(tags), Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
+      vhost,
+      "",
+      parse_tags(tags),
+      Helpers.cli_acting_user()
+    ])
   end
+
   def run([vhost], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
   end

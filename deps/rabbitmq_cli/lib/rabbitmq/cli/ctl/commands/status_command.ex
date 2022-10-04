@@ -32,6 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, %{unit: unit}) do
     case IU.known_unit?(unit) do
       true ->
@@ -41,6 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
     end
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -67,45 +69,52 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
 
-    product_name_section = case m do
-      %{:product_name => product_name} when product_name != "" ->
-        ["Product name: #{product_name}"]
-      _ ->
-        []
-    end
-    product_version_section = case m do
-      %{:product_version => product_version} when product_version != "" ->
-        ["Product version: #{product_version}"]
-      _ ->
-        []
-    end
+    product_name_section =
+      case m do
+        %{:product_name => product_name} when product_name != "" ->
+          ["Product name: #{product_name}"]
 
-    runtime_section = [
-      "#{bright("Runtime")}\n",
-      "OS PID: #{m[:pid]}",
-      "OS: #{m[:os]}",
-      # TODO: format
-      "Uptime (seconds): #{m[:uptime]}",
-      "Is under maintenance?: #{m[:is_under_maintenance]}"
-    ] ++
-    product_name_section ++
-    product_version_section ++
-    [
-      "RabbitMQ version: #{m[:rabbitmq_version]}",
-      "RabbitMQ release series support status: #{m[:release_series_support_status]}",
-      "Node name: #{node_name}",
-      "Erlang configuration: #{m[:erlang_version]}",
-      "Crypto library: #{m[:crypto_lib_version]}",
-      "Erlang processes: #{m[:processes][:used]} used, #{m[:processes][:limit]} limit",
-      "Scheduler run queue: #{m[:run_queue]}",
-      "Cluster heartbeat timeout (net_ticktime): #{m[:net_ticktime]}"
-    ]
+        _ ->
+          []
+      end
 
-    plugin_section = [
-      "\n#{bright("Plugins")}\n",
-      "Enabled plugin file: #{m[:enabled_plugin_file]}",
-      "Enabled plugins:\n"
-    ] ++ Enum.map(m[:active_plugins], fn pl -> " * #{pl}" end)
+    product_version_section =
+      case m do
+        %{:product_version => product_version} when product_version != "" ->
+          ["Product version: #{product_version}"]
+
+        _ ->
+          []
+      end
+
+    runtime_section =
+      [
+        "#{bright("Runtime")}\n",
+        "OS PID: #{m[:pid]}",
+        "OS: #{m[:os]}",
+        # TODO: format
+        "Uptime (seconds): #{m[:uptime]}",
+        "Is under maintenance?: #{m[:is_under_maintenance]}"
+      ] ++
+        product_name_section ++
+        product_version_section ++
+        [
+          "RabbitMQ version: #{m[:rabbitmq_version]}",
+          "RabbitMQ release series support status: #{m[:release_series_support_status]}",
+          "Node name: #{node_name}",
+          "Erlang configuration: #{m[:erlang_version]}",
+          "Crypto library: #{m[:crypto_lib_version]}",
+          "Erlang processes: #{m[:processes][:used]} used, #{m[:processes][:limit]} limit",
+          "Scheduler run queue: #{m[:run_queue]}",
+          "Cluster heartbeat timeout (net_ticktime): #{m[:net_ticktime]}"
+        ]
+
+    plugin_section =
+      [
+        "\n#{bright("Plugins")}\n",
+        "Enabled plugin file: #{m[:enabled_plugin_file]}",
+        "Enabled plugins:\n"
+      ] ++ Enum.map(m[:active_plugins], fn pl -> " * #{pl}" end)
 
     data_directory_section = [
       "\n#{bright("Data directory")}\n",
@@ -113,36 +122,46 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "Raft data directory: #{m[:raft_data_directory]}"
     ]
 
-    config_section = [
-      "\n#{bright("Config files")}\n"
-    ] ++ Enum.map(m[:config_files], fn path -> " * #{path}" end)
+    config_section =
+      [
+        "\n#{bright("Config files")}\n"
+      ] ++ Enum.map(m[:config_files], fn path -> " * #{path}" end)
 
-    log_section = [
-      "\n#{bright("Log file(s)")}\n"
-    ] ++ Enum.map(m[:log_files], fn path -> " * #{path}" end)
+    log_section =
+      [
+        "\n#{bright("Log file(s)")}\n"
+      ] ++ Enum.map(m[:log_files], fn path -> " * #{path}" end)
 
-    alarms_section = [
-      "\n#{bright("Alarms")}\n",
-    ] ++ case m[:alarms] do
-           [] -> ["(none)"]
-           xs -> alarm_lines(xs, node_name)
-         end
+    alarms_section =
+      [
+        "\n#{bright("Alarms")}\n"
+      ] ++
+        case m[:alarms] do
+          [] -> ["(none)"]
+          xs -> alarm_lines(xs, node_name)
+        end
 
     breakdown = compute_relative_values(m[:memory])
     memory_calculation_strategy = to_atom(m[:vm_memory_calculation_strategy])
     total_memory = get_in(m[:memory], [:total, memory_calculation_strategy])
 
-    readable_watermark_setting = case m[:vm_memory_high_watermark_setting] do
-      %{:relative => val} -> "#{val} of available memory"
-      # absolute value
-      %{:absolute => val} -> "#{IU.convert(val, unit)} #{unit}"
-    end
-    memory_section = [
-      "\n#{bright("Memory")}\n",
-      "Total memory used: #{IU.convert(total_memory, unit)} #{unit}",
-      "Calculation strategy: #{memory_calculation_strategy}",
-      "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}\n"
-    ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)" end)
+    readable_watermark_setting =
+      case m[:vm_memory_high_watermark_setting] do
+        %{:relative => val} -> "#{val} of available memory"
+        # absolute value
+        %{:absolute => val} -> "#{IU.convert(val, unit)} #{unit}"
+      end
+
+    memory_section =
+      [
+        "\n#{bright("Memory")}\n",
+        "Total memory used: #{IU.convert(total_memory, unit)} #{unit}",
+        "Calculation strategy: #{memory_calculation_strategy}",
+        "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}\n"
+      ] ++
+        Enum.map(breakdown, fn {category, val} ->
+          "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)"
+        end)
 
     file_descriptors = [
       "\n#{bright("File Descriptors")}\n",
@@ -163,15 +182,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "Virtual host count: #{m[:totals][:virtual_host_count]}"
     ]
 
-    listeners_section = [
-      "\n#{bright("Listeners")}\n",
-    ] ++ case m[:listeners] do
-           [] -> ["(none)"]
-           xs -> listener_lines(xs)
-         end
-    lines = runtime_section ++ plugin_section ++ data_directory_section ++
-            config_section ++ log_section ++ alarms_section ++ memory_section ++
-            file_descriptors ++ disk_space_section ++ totals_section ++ listeners_section
+    listeners_section =
+      [
+        "\n#{bright("Listeners")}\n"
+      ] ++
+        case m[:listeners] do
+          [] -> ["(none)"]
+          xs -> listener_lines(xs)
+        end
+
+    lines =
+      runtime_section ++
+        plugin_section ++
+        data_directory_section ++
+        config_section ++
+        log_section ++
+        alarms_section ++
+        memory_section ++
+        file_descriptors ++ disk_space_section ++ totals_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -206,10 +234,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   #
 
   defp result_map(result) do
-    crypto_lib_version = case Keyword.get(result, :crypto_lib_info) do
-      {_, _, version} -> version
-      other           -> other
-    end
+    crypto_lib_version =
+      case Keyword.get(result, :crypto_lib_info) do
+        {_, _, version} -> version
+        other -> other
+      end
 
     %{
       os: os_name(Keyword.get(result, :os)),
@@ -217,7 +246,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       product_name: Keyword.get(result, :product_name) |> to_string,
       product_version: Keyword.get(result, :product_version) |> to_string,
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
-      erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
+      erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing(),
       crypto_lib_version: crypto_lib_version,
       release_series_support_status: Keyword.get(result, :release_series_support_status, true),
       uptime: Keyword.get(result, :uptime),
@@ -225,38 +254,31 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       processes: Enum.into(Keyword.get(result, :processes), %{}),
       run_queue: Keyword.get(result, :run_queue),
       net_ticktime: net_ticktime(result),
-
       vm_memory_calculation_strategy: Keyword.get(result, :vm_memory_calculation_strategy),
-      vm_memory_high_watermark_setting: Keyword.get(result, :vm_memory_high_watermark) |> formatted_watermark,
+      vm_memory_high_watermark_setting:
+        Keyword.get(result, :vm_memory_high_watermark) |> formatted_watermark,
       vm_memory_high_watermark_limit: Keyword.get(result, :vm_memory_limit),
-
       disk_free_limit: Keyword.get(result, :disk_free_limit),
       disk_free: Keyword.get(result, :disk_free),
-
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
-
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
-
       data_directory: Keyword.get(result, :data_directory) |> to_string,
       raft_data_directory: Keyword.get(result, :raft_data_directory) |> to_string,
-
       config_files: Keyword.get(result, :config_files) |> Enum.map(&to_string/1),
       log_files: Keyword.get(result, :log_files) |> Enum.map(&to_string/1),
-
       active_plugins: Keyword.get(result, :active_plugins) |> Enum.map(&to_string/1),
       enabled_plugin_file: Keyword.get(result, :enabled_plugin_file) |> to_string,
-
       totals: Keyword.get(result, :totals)
     }
   end
 
   defp net_ticktime(result) do
     case Keyword.get(result, :kernel) do
-      {:net_ticktime, n}   -> n
+      {:net_ticktime, n} -> n
       n when is_integer(n) -> n
-      _                    -> :undefined
+      _ -> :undefined
     end
   end
 end

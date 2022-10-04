@@ -31,6 +31,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
 
       {:error, :last_stream_member} ->
         {:error, "Cannot delete the last member of a stream"}
+
       other ->
         other
     end

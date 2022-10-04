@@ -112,7 +112,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   def usage_doc_guides() do
     [
       DocGuide.alarms(),
-      DocGuide.memory_use(),
+      DocGuide.memory_use()
     ]
   end
 

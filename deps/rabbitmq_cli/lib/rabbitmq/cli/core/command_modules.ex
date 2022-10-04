@@ -189,6 +189,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
         |> to_snake_case
         |> String.to_atom()
         |> List.wrap()
+
       scopes ->
         scopes
     end

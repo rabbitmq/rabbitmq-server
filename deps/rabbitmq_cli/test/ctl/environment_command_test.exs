@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -39,7 +38,7 @@ defmodule EnvironmentCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts])
-      =~ ~r/Application environment of node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Application environment of node #{get_rabbit_hostname()}/
   end
 end

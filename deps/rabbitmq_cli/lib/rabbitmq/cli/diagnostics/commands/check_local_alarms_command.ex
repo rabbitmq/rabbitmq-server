@@ -75,7 +75,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Health check that exits with a non-zero code if the target node reports any local alarms"
+  def description(),
+    do: "Health check that exits with a non-zero code if the target node reports any local alarms"
 
   def usage, do: "check_local_alarms"
 

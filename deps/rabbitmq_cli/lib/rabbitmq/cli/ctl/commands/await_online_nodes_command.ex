@@ -37,9 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([count], %{node: node_name, timeout: timeout}) when is_number(timeout) do
-    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{
-      trunc(timeout / 1000)
-    } seconds."
+    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{trunc(timeout / 1000)} seconds."
   end
 
   def banner([count], %{node: node_name, timeout: _timeout}) do
@@ -52,7 +50,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
 
   def usage_additional() do
     [
-      ["<count>", "how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."]
+      [
+        "<count>",
+        "how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."
+      ]
     ]
   end
 

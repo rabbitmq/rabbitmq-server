@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ListPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -13,18 +12,18 @@ defmodule ListPermissionsCommandTest do
 
   @vhost "test1"
   @user "guest"
-  @root   "/"
+  @root "/"
   @default_timeout :infinity
   @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    add_vhost @vhost
-    set_permissions @user, @vhost, ["^guest-.*", ".*", ".*"]
+    add_vhost(@vhost)
+    set_permissions(@user, @vhost, ["^guest-.*", ".*", ".*"])
 
     on_exit([], fn ->
-      delete_vhost @vhost
+      delete_vhost(@vhost)
     end)
 
     :ok
@@ -47,8 +46,9 @@ defmodule ListPermissionsCommandTest do
 
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          table_headers: true}}
+
+    assert @command.merge_defaults([], %{vhost: "non_default"}) ==
+             {[], %{vhost: "non_default", table_headers: true}}
   end
 
   test "validate: invalid parameters yield an arg count error" do
@@ -64,29 +64,31 @@ defmodule ListPermissionsCommandTest do
   @tag test_timeout: @default_timeout, vhost: @vhost
   test "run: specifying a vhost returns the targeted vhost permissions", context do
     assert @command.run(
-      [],
-      Map.merge(context[:opts], %{vhost: @vhost})
-    ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
+             [],
+             Map.merge(context[:opts], %{vhost: @vhost})
+           ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
   end
 
   @tag test_timeout: 30000
   test "run: sufficiently long timeouts don't interfere with results", context do
     results = @command.run([], context[:opts])
-    Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->
-      Enum.find(results, fn(found) -> found == perm end)
+
+    Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn perm ->
+      Enum.find(results, fn found -> found == perm end)
     end)
   end
 
   @tag test_timeout: 0
   test "run: timeout causes command to return a bad RPC", context do
     assert @command.run([], context[:opts]) ==
-      {:badrpc, :timeout}
+             {:badrpc, :timeout}
   end
 
   @tag vhost: @root
   test "banner", context do
     ctx = Map.merge(context[:opts], %{vhost: @vhost})
-    assert @command.banner([], ctx )
-      =~ ~r/Listing permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
+
+    assert @command.banner([], ctx) =~
+             ~r/Listing permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
   end
 end

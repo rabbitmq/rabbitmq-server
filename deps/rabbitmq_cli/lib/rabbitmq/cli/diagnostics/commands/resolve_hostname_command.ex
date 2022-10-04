@@ -28,20 +28,32 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
 
   def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
   def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+
   def validate([_], %{address_family: family}) do
     case Networking.valid_address_family?(family) do
-      true  -> :ok
-      false -> {:validation_failure, {:bad_argument, "unsupported IP address family #{family}. Valid values are: ipv4, ipv6"}}
+      true ->
+        :ok
+
+      false ->
+        {:validation_failure,
+         {:bad_argument, "unsupported IP address family #{family}. Valid values are: ipv4, ipv6"}}
     end
   end
+
   def validate([_], _), do: :ok
 
   def run([hostname], %{address_family: family, offline: true}) do
     :inet.gethostbyname(to_charlist(hostname), Networking.address_family(family))
   end
+
   def run([hostname], %{node: node_name, address_family: family, offline: false, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :inet, :gethostbyname,
-           [to_charlist(hostname), Networking.address_family(family)], timeout) do
+    case :rabbit_misc.rpc_call(
+           node_name,
+           :inet,
+           :gethostbyname,
+           [to_charlist(hostname), Networking.address_family(family)],
+           timeout
+         ) do
       {:error, _} = err -> err
       {:error, _, _} = err -> err
       {:ok, result} -> {:ok, result}
@@ -51,30 +63,38 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
 
   def output({:error, :nxdomain}, %{node: node_name, formatter: "json"}) do
     m = %{
-      "result"  => "error",
-      "node"    => node_name,
+      "result" => "error",
+      "node" => node_name,
       "message" => "Hostname does not resolve (resolution failed with an nxdomain)"
     }
+
     {:error, ExitCodes.exit_dataerr(), m}
   end
+
   def output({:error, :nxdomain}, _opts) do
-    {:error, ExitCodes.exit_dataerr(), "Hostname does not resolve (resolution failed with an nxdomain)"}
+    {:error, ExitCodes.exit_dataerr(),
+     "Hostname does not resolve (resolution failed with an nxdomain)"}
   end
+
   def output({:ok, result}, %{node: node_name, address_family: family, formatter: "json"}) do
-    hostname  = hostent(result, :h_name)
+    hostname = hostent(result, :h_name)
     addresses = hostent(result, :h_addr_list)
-    {:ok, %{
-      "result"         => "ok",
-      "node"           => node_name,
-      "hostname"       => to_string(hostname),
-      "address_family" => family,
-      "addresses"      => Networking.format_addresses(addresses)
-    }}
+
+    {:ok,
+     %{
+       "result" => "ok",
+       "node" => node_name,
+       "hostname" => to_string(hostname),
+       "address_family" => family,
+       "addresses" => Networking.format_addresses(addresses)
+     }}
   end
+
   def output({:ok, result}, _opts) do
     addresses = hostent(result, :h_addr_list)
     {:ok, Enum.join(Networking.format_addresses(addresses), "\n")}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
@@ -83,11 +103,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Resolves a hostname to a set of addresses. Takes Erlang's inetrc file into account."
+  def description(),
+    do: "Resolves a hostname to a set of addresses. Takes Erlang's inetrc file into account."
 
   def banner([hostname], %{offline: false, node: node_name, address_family: family}) do
     "Asking node #{node_name} to resolve hostname #{hostname} to #{family} addresses..."
   end
+
   def banner([hostname], %{offline: true, address_family: family}) do
     "Resolving hostname #{hostname} to #{family} addresses..."
   end

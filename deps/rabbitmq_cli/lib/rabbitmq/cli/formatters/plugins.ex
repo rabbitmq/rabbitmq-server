@@ -162,9 +162,11 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   defp legend(_, :minimal, _) do
     []
   end
+
   defp legend(_, _, %{quiet: true}) do
     []
   end
+
   defp legend(_, _, %{silent: true}) do
     []
   end

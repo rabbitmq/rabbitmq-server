@@ -17,10 +17,11 @@ defmodule TlsVersionsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: is a no-op" do
@@ -37,11 +38,15 @@ defmodule TlsVersionsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
-  test "run when formatter is set to JSON: return a document with a list of supported TLS versions", context do
-    m  = @command.run([], Map.merge(context[:opts], %{formatter: "json"})) |> Map.new
+  test "run when formatter is set to JSON: return a document with a list of supported TLS versions",
+       context do
+    m = @command.run([], Map.merge(context[:opts], %{formatter: "json"})) |> Map.new()
     xs = Map.get(m, :available)
 
     # assert that we have a list and tlsv1.2 is included
@@ -50,7 +55,7 @@ defmodule TlsVersionsCommandTest do
   end
 
   test "run and output: return a list of supported TLS versions", context do
-    m          = @command.run([], context[:opts])
+    m = @command.run([], context[:opts])
     {:ok, res} = @command.output(m, context[:opts])
 
     # assert that we have a list and tlsv1.2 is included

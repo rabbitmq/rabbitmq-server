@@ -22,6 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def validate([], _), do: :ok
   def validate([_command], _), do: :ok
+
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
@@ -30,15 +31,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     CommandModules.load(opts)
 
     module_map = CommandModules.module_map()
+
     case module_map[command_name] do
       nil ->
         # command not found
         # {:error, all_usage(opts)}
         case RabbitMQ.CLI.AutoComplete.suggest_command(command_name, module_map) do
           {:suggest, suggested} ->
-            suggest_message = "\nCommand '#{command_name}' not found. \n" <>
-              "Did you mean '#{suggested}'? \n"
+            suggest_message =
+              "\nCommand '#{command_name}' not found. \n" <>
+                "Did you mean '#{suggested}'? \n"
+
             {:error, ExitCodes.exit_usage(), suggest_message}
+
           nil ->
             {:error, ExitCodes.exit_usage(), "\nCommand '#{command_name}' not found."}
         end
@@ -54,6 +59,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     case opts[:list_commands] do
       true ->
         {:ok, commands_description()}
+
       _ ->
         {:ok, all_usage(opts)}
     end
@@ -62,9 +68,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def output({:ok, result}, _) do
     {:ok, result}
   end
+
   def output({:error, result}, _) do
     {:error, ExitCodes.exit_usage(), result}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def banner(_, _), do: nil
@@ -81,25 +89,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     ]
   end
 
-
   #
   # Implementation
   #
 
   def all_usage(opts) do
     tool_name = program_name(opts)
+
     tool_usage(tool_name) ++
-        ["\n\nAvailable commands:\n"] ++ commands_description() ++
-        help_footer(tool_name)
+      ["\n\nAvailable commands:\n"] ++
+      commands_description() ++
+      help_footer(tool_name)
   end
 
   def command_usage(command, opts) do
-    Enum.join([base_usage(command, opts)] ++
-              command_description(command) ++
-              additional_usage(command) ++
-              relevant_doc_guides(command) ++
-              general_options_usage(),
-              "\n\n") <> "\n"
+    Enum.join(
+      [base_usage(command, opts)] ++
+        command_description(command) ++
+        additional_usage(command) ++
+        relevant_doc_guides(command) ++
+        general_options_usage(),
+      "\n\n"
+    ) <> "\n"
   end
 
   defp tool_usage(tool_name) do
@@ -137,7 +148,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   defp general_options_usage() do
     [
-    "#{bright("General Options")}
+      "#{bright("General Options")}
 
 The following options are accepted by most or all commands.
 
@@ -154,12 +165,13 @@ short            | long          | description
                  |               | virtual host to use
                  | --formatter   | alternative result formatter to use
                                  | if supported: json, pretty_table, table, csv, erlang
-                                   not all commands support all (or any) alternative formatters."]
+                                   not all commands support all (or any) alternative formatters."
+    ]
   end
 
   defp command_description(command) do
     case CommandBehaviour.description(command) do
-      ""    -> []
+      "" -> []
       other -> [other <> ".\n"]
     end
   end
@@ -167,9 +179,11 @@ short            | long          | description
   defp list_item_formatter([option, description]) do
     "#{option}\n\t#{description}\n"
   end
+
   defp list_item_formatter({option, description}) do
     "#{option}\n\t#{description}\n"
   end
+
   defp list_item_formatter(line) do
     "#{line}\n"
   end
@@ -180,8 +194,11 @@ short            | long          | description
         list when is_list(list) -> list |> Enum.map(&list_item_formatter/1)
         bin when is_binary(bin) -> ["#{bin}\n"]
       end
+
     case command_usage do
-      []    -> []
+      [] ->
+        []
+
       usage ->
         [flatten_string(["#{bright("Arguments and Options")}\n" | usage], "")]
     end
@@ -193,8 +210,11 @@ short            | long          | description
         list when is_list(list) -> list |> Enum.map(fn ln -> " * #{ln}\n" end)
         bin when is_binary(bin) -> [" * #{bin}\n"]
       end
+
     case guide_list do
-      []    -> []
+      [] ->
+        []
+
       usage ->
         [flatten_string(["#{bright("Relevant Doc Guides")}\n" | usage], "")]
     end
@@ -211,25 +231,25 @@ short            | long          | description
   defp commands_description() do
     module_map = CommandModules.module_map()
 
-    pad_commands_to = Enum.reduce(module_map, 0,
-      fn({name, _}, longest) ->
+    pad_commands_to =
+      Enum.reduce(module_map, 0, fn {name, _}, longest ->
         name_length = String.length(name)
+
         case name_length > longest do
-          true  -> name_length
+          true -> name_length
           false -> longest
         end
       end)
 
-    lines = module_map
-    |> Enum.map(
-      fn({name, cmd}) ->
+    lines =
+      module_map
+      |> Enum.map(fn {name, cmd} ->
         description = CommandBehaviour.description(cmd)
         help_section = CommandBehaviour.help_section(cmd)
         {name, {description, help_section}}
       end)
-    |> Enum.group_by(fn({_, {_, help_section}}) -> help_section end)
-    |> Enum.sort_by(
-      fn({help_section, _}) ->
+      |> Enum.group_by(fn {_, {_, help_section}} -> help_section end)
+      |> Enum.sort_by(fn {help_section, _} ->
         case help_section do
           :deprecated -> 999
           :other -> 100
@@ -247,19 +267,16 @@ short            | long          | description
           _ -> 98
         end
       end)
-    |> Enum.map(
-      fn({help_section, section_helps}) ->
+      |> Enum.map(fn {help_section, section_helps} ->
         [
-          "\n" <> bright(section_head(help_section)) <> ":\n\n" |
-          Enum.sort(section_helps)
-          |> Enum.map(
-            fn({name, {description, _}}) ->
+          "\n" <> bright(section_head(help_section)) <> ":\n\n"
+          | Enum.sort(section_helps)
+            |> Enum.map(fn {name, {description, _}} ->
               "   #{String.pad_trailing(name, pad_commands_to)}  #{description}\n"
             end)
         ]
-
       end)
-    |> Enum.concat()
+      |> Enum.concat()
 
     lines ++ ["\n"]
   end
@@ -268,34 +285,49 @@ short            | long          | description
     case help_section do
       :help ->
         "Help"
+
       :user_management ->
         "Users"
+
       :cluster_management ->
         "Cluster"
+
       :replication ->
         "Replication"
+
       :node_management ->
         "Nodes"
+
       :queues ->
         "Queues"
+
       :observability_and_health_checks ->
         "Monitoring, observability and health checks"
+
       :virtual_hosts ->
-          "Virtual hosts"
+        "Virtual hosts"
+
       :access_control ->
         "Access Control"
+
       :parameters ->
         "Parameters"
+
       :policies ->
         "Policies"
+
       :configuration ->
         "Configuration and Environment"
+
       :feature_flags ->
         "Feature flags"
+
       :other ->
         "Other"
+
       {:plugin, plugin} ->
         plugin_section(plugin) <> " plugin"
+
       custom ->
         snake_case_to_capitalized_string(custom)
     end
@@ -307,16 +339,16 @@ short            | long          | description
 
   defp format_known_plugin_name_fragments(value) do
     case value do
-      ["amqp1.0"]    -> "AMQP 1.0"
+      ["amqp1.0"] -> "AMQP 1.0"
       ["amqp1", "0"] -> "AMQP 1.0"
-      ["management"]  -> "Management"
-      ["management", "agent"]  -> "Management"
-      ["mqtt"]       -> "MQTT"
-      ["stomp"]      -> "STOMP"
-      ["web", "mqtt"]  -> "Web MQTT"
+      ["management"] -> "Management"
+      ["management", "agent"] -> "Management"
+      ["mqtt"] -> "MQTT"
+      ["stomp"] -> "STOMP"
+      ["web", "mqtt"] -> "Web MQTT"
       ["web", "stomp"] -> "Web STOMP"
-      [other]        -> snake_case_to_capitalized_string(other)
-      fragments      -> snake_case_to_capitalized_string(Enum.join(fragments, "_"))
+      [other] -> snake_case_to_capitalized_string(other)
+      fragments -> snake_case_to_capitalized_string(Enum.join(fragments, "_"))
     end
   end
 

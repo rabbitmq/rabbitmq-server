@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
         :infinity -> @default_timeout
         other -> other
       end
+
     {args, Map.merge(%{vhost: "/", timeout: timeout}, opts)}
   end
 

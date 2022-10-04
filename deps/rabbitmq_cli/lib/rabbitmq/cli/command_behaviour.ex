@@ -48,7 +48,11 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
   @callback help_section() :: String.t()
-  @callback usage_additional() :: String.t() | [String.t()] | nonempty_list(pair_of_strings()) | [{String.t(), String.t()}]
+  @callback usage_additional() ::
+              String.t()
+              | [String.t()]
+              | nonempty_list(pair_of_strings())
+              | [{String.t(), String.t()}]
   @callback usage_doc_guides() :: String.t() | [String.t()]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name
@@ -57,46 +61,93 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback distribution(map()) :: :cli | :none | {:fun, (map() -> :ok | {:error, any()})}
 
   defmacro defcmd(map) do
-    usage_q = case map[:usage] do
-      nil -> :ok
-      usage ->
-        quote do def usage(), do: unquote(usage) end
-    end
-    scopes_q = case map[:scopes] do
-      nil -> :ok
-      scopes ->
-        quote do def scopes(), do: unquote(scopes) end
-    end
-    description_q = case map[:description] do
-      nil -> :ok
-      description ->
-        quote do def description(), do: unquote(description) end
-    end
-    help_section_q = case map[:help_section] do
-      nil -> :ok
-      help_section ->
-        quote do def help_section(), do: unquote(help_section) end
-    end
-    usage_additional_q = case map[:usage_additional] do
-      nil -> :ok
-      usage_additional ->
-        quote do def usage_additional(), do: unquote(usage_additional) end
-    end
-    formatter_q = case map[:formatter] do
-      nil -> :ok
-      formatter ->
-        quote do def formatter(), do: unquote(formatter) end
-    end
-    switches_q = case map[:switches] do
-      nil -> :ok
-      switches ->
-        quote do def switches(), do: unquote(switches) end
-    end
-    aliases_q = case map[:aliases] do
-      nil -> :ok
-      aliases ->
-        quote do def aliases(), do: unquote(aliases) end
-    end
+    usage_q =
+      case map[:usage] do
+        nil ->
+          :ok
+
+        usage ->
+          quote do
+            def usage(), do: unquote(usage)
+          end
+      end
+
+    scopes_q =
+      case map[:scopes] do
+        nil ->
+          :ok
+
+        scopes ->
+          quote do
+            def scopes(), do: unquote(scopes)
+          end
+      end
+
+    description_q =
+      case map[:description] do
+        nil ->
+          :ok
+
+        description ->
+          quote do
+            def description(), do: unquote(description)
+          end
+      end
+
+    help_section_q =
+      case map[:help_section] do
+        nil ->
+          :ok
+
+        help_section ->
+          quote do
+            def help_section(), do: unquote(help_section)
+          end
+      end
+
+    usage_additional_q =
+      case map[:usage_additional] do
+        nil ->
+          :ok
+
+        usage_additional ->
+          quote do
+            def usage_additional(), do: unquote(usage_additional)
+          end
+      end
+
+    formatter_q =
+      case map[:formatter] do
+        nil ->
+          :ok
+
+        formatter ->
+          quote do
+            def formatter(), do: unquote(formatter)
+          end
+      end
+
+    switches_q =
+      case map[:switches] do
+        nil ->
+          :ok
+
+        switches ->
+          quote do
+            def switches(), do: unquote(switches)
+          end
+      end
+
+    aliases_q =
+      case map[:aliases] do
+        nil ->
+          :ok
+
+        aliases ->
+          quote do
+            def aliases(), do: unquote(aliases)
+          end
+      end
 
     quote do
       unquote(usage_q)
@@ -129,6 +180,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
           :rabbitmqctl -> :other
           plugin -> {:plugin, plugin}
         end
+
       section ->
         section
     end
@@ -159,9 +211,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   end
 
   def validate_execution_environment(cmd, args, options) do
-    Helpers.apply_if_exported(cmd,
-                              :validate_execution_environment, [args, options],
-                              :ok)
+    Helpers.apply_if_exported(cmd, :validate_execution_environment, [args, options], :ok)
   end
 
   def distribution(cmd, options) do

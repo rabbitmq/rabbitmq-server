@@ -75,7 +75,13 @@ jobs:
       matrix:
         include:
         - erlang_version: "24"
+<<<<<<< HEAD
           elixir_version: 1.12.3
+=======
+          elixir_version: 1.13.4
+        #! - erlang_version: "25"
+        #!   elixir_version: 1.13.4
+>>>>>>> 3e7d067207 (Bump elixir version in actions)
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY

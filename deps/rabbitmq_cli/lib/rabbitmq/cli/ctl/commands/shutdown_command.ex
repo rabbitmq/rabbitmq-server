@@ -9,8 +9,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   alias RabbitMQ.CLI.Core.{OsPid, NodeName}
 
   def switches() do
-    [timeout: :integer,
-     wait: :boolean]
+    [timeout: :integer, wait: :boolean]
   end
 
   def aliases(), do: [timeout: :t]
@@ -26,16 +25,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   def validate([], %{node: node_name, wait: true}) do
     local_hostname = NodeName.hostname_from_node(Node.self())
     remote_hostname = NodeName.hostname_from_node(node_name)
+
     case addressing_local_node?(local_hostname, remote_hostname) do
-      true  -> :ok;
+      true ->
+        :ok
+
       false ->
-        msg = "\nThis command can only --wait for shutdown of local nodes " <>
-              "but node #{node_name} seems to be remote " <>
-              "(local hostname: #{local_hostname}, remote: #{remote_hostname}).\n" <>
-              "Pass --no-wait to shut node #{node_name} down without waiting.\n"
+        msg =
+          "\nThis command can only --wait for shutdown of local nodes " <>
+            "but node #{node_name} seems to be remote " <>
+            "(local hostname: #{local_hostname}, remote: #{remote_hostname}).\n" <>
+            "Pass --no-wait to shut node #{node_name} down without waiting.\n"
+
         {:validation_failure, {:unsupported_target, msg}}
     end
   end
+
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, wait: false, timeout: timeout}) do
@@ -46,6 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->
         shut_down_node_and_wait_pid_to_stop(node_name, pid, timeout)
+
       other ->
         other
     end
@@ -57,25 +63,30 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
 
   def usage_additional() do
     [
-      ["--wait", "if set, will wait for target node to terminate (by inferring and monitoring its PID file). Only works for local nodes."],
+      [
+        "--wait",
+        "if set, will wait for target node to terminate (by inferring and monitoring its PID file). Only works for local nodes."
+      ],
       ["--no-wait", "if set, will not wait for target node to terminate"]
     ]
   end
 
   def help_section(), do: :node_management
 
-  def description(), do: "Stops RabbitMQ and its runtime (Erlang VM). Monitors progress for local nodes. Does not require a PID file path."
+  def description(),
+    do:
+      "Stops RabbitMQ and its runtime (Erlang VM). Monitors progress for local nodes. Does not require a PID file path."
 
   def banner(_, _), do: nil
-
 
   #
   # Implementation
   #
 
-  def addressing_local_node?(_, remote_hostname) when remote_hostname == :localhost , do: :true
-  def addressing_local_node?(_, remote_hostname) when remote_hostname == 'localhost', do: :true
-  def addressing_local_node?(_, remote_hostname) when remote_hostname == "localhost", do: :true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == :localhost, do: true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == 'localhost', do: true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == "localhost", do: true
+
   def addressing_local_node?(local_hostname, remote_hostname) do
     local_hostname == remote_hostname
   end

@@ -14,7 +14,7 @@ defmodule HelpersTest do
   ## --------------------- get_rabbit_hostname()/0 tests -------------------------
 
   test "RabbitMQ hostname is properly formed" do
-    assert Helpers.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/
+    assert Helpers.get_rabbit_hostname() |> Atom.to_string() =~ ~r/rabbit@\w+/
   end
 
   ## ------------------- memory_unit* tests --------------------
@@ -24,21 +24,23 @@ defmodule HelpersTest do
   end
 
   test "an invalid number fails " do
-    assert memory_unit_absolute("lots", "gigantibytes") == {:bad_argument, ["lots", "gigantibytes"]}
+    assert memory_unit_absolute("lots", "gigantibytes") ==
+             {:bad_argument, ["lots", "gigantibytes"]}
+
     assert memory_unit_absolute(-1, "gigantibytes") == {:bad_argument, [-1, "gigantibytes"]}
   end
 
   test "valid number and unit returns a valid result  " do
-      assert memory_unit_absolute(10, "k") == 10240
-      assert memory_unit_absolute(10, "kiB") == 10240
-      assert memory_unit_absolute(10, "M") == 10485760
-      assert memory_unit_absolute(10, "MiB") == 10485760
-      assert memory_unit_absolute(10, "G") == 10737418240
-      assert memory_unit_absolute(10, "GiB")== 10737418240
-      assert memory_unit_absolute(10, "kB")== 10000
-      assert memory_unit_absolute(10, "MB")== 10000000
-      assert memory_unit_absolute(10, "GB")== 10000000000
-      assert memory_unit_absolute(10, "")  == 10
+    assert memory_unit_absolute(10, "k") == 10240
+    assert memory_unit_absolute(10, "kiB") == 10240
+    assert memory_unit_absolute(10, "M") == 10_485_760
+    assert memory_unit_absolute(10, "MiB") == 10_485_760
+    assert memory_unit_absolute(10, "G") == 10_737_418_240
+    assert memory_unit_absolute(10, "GiB") == 10_737_418_240
+    assert memory_unit_absolute(10, "kB") == 10000
+    assert memory_unit_absolute(10, "MB") == 10_000_000
+    assert memory_unit_absolute(10, "GB") == 10_000_000_000
+    assert memory_unit_absolute(10, "") == 10
   end
 
   ## ------------------- Helpers.normalise_node_option tests --------------------
@@ -118,12 +120,14 @@ defmodule HelpersTest do
   test "locate plugin with version number in filename" do
     plugins_directory_03 = fixture_plugins_path("plugins-subdirectory-03")
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
-    opts = %{plugins_dir: to_string(plugins_directory_03),
-             rabbitmq_home: rabbitmq_home}
+    opts = %{plugins_dir: to_string(plugins_directory_03), rabbitmq_home: rabbitmq_home}
 
     desc = 'A mock RabbitMQ plugin to be used in tests'
     vsn = '0.1.0'
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn}) == false
+
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn}) ==
+             false
+
     require_rabbit_and_plugins(opts)
     Application.load(:mock_rabbitmq_plugins_03)
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn})
@@ -132,15 +136,16 @@ defmodule HelpersTest do
   test "locate plugin without version number in filename" do
     plugins_directory_04 = fixture_plugins_path("plugins-subdirectory-04")
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
-    opts = %{plugins_dir: to_string(plugins_directory_04),
-             rabbitmq_home: rabbitmq_home}
+    opts = %{plugins_dir: to_string(plugins_directory_04), rabbitmq_home: rabbitmq_home}
 
     desc = 'A mock RabbitMQ plugin to be used in tests'
     vsn = 'rolling'
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn}) == false
+
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn}) ==
+             false
+
     require_rabbit_and_plugins(opts)
     Application.load(:mock_rabbitmq_plugins_04)
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn})
   end
-
 end

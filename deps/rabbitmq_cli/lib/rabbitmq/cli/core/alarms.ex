@@ -54,9 +54,11 @@ defmodule RabbitMQ.CLI.Core.Alarms do
   def alarm_type(val) when is_atom(val) do
     val
   end
+
   def alarm_type({:resource_limit, val, _node}) do
     val
   end
+
   def alarm_type({{:resource_limit, val, _node}, []}) do
     val
   end
@@ -64,6 +66,7 @@ defmodule RabbitMQ.CLI.Core.Alarms do
   def alarm_maps(xs) do
     Enum.map(xs, &alarm_map/1)
   end
+
   def alarm_map(:file_descriptor_limit) do
     %{
       type: :resource_limit,
@@ -71,6 +74,7 @@ defmodule RabbitMQ.CLI.Core.Alarms do
       node: node()
     }
   end
+
   def alarm_map({{:resource_limit, resource, node}, _}) do
     %{
       type: :resource_limit,
@@ -78,6 +82,7 @@ defmodule RabbitMQ.CLI.Core.Alarms do
       node: node
     }
   end
+
   def alarm_map({:resource_limit, resource, node}) do
     %{
       type: :resource_limit,
