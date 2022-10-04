@@ -319,32 +319,34 @@ validate_plugins(Plugins) ->
     validate_plugins(Plugins, RabbitVersion).
 
 validate_plugins(Plugins, BrokerVersion) ->
-    lists:foldl(
-        fun(#plugin{name = Name,
-                    broker_version_requirements = BrokerVersionReqs,
-                    dependency_version_requirements = DepsVersions} = Plugin,
-            {Plugins0, Errors}) ->
-            case is_version_supported(BrokerVersion, BrokerVersionReqs) of
-                true  ->
-                    case BrokerVersion of
-                        "0.0.0" ->
-                            rabbit_log:warning(
-                                "Running development version of the broker."
-                                " Requirement ~p for plugin ~p is ignored.",
-                                [BrokerVersionReqs, Name]);
-                        _ -> ok
-                    end,
-                    case check_plugins_versions(Name, Plugins0, DepsVersions) of
-                        ok           -> {[Plugin | Plugins0], Errors};
-                        {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
-                    end;
-                false ->
-                    Error = [{broker_version_mismatch, BrokerVersion, BrokerVersionReqs}],
-                    {Plugins0, [{Name, Error} | Errors]}
-            end
-        end,
-        {[],[]},
-        Plugins).
+    {ValidPlugins, Problems} =
+        lists:foldl(
+          fun(#plugin{name = Name,
+                      broker_version_requirements = BrokerVersionReqs,
+                      dependency_version_requirements = DepsVersions} = Plugin,
+              {Plugins0, Errors}) ->
+                  case is_version_supported(BrokerVersion, BrokerVersionReqs) of
+                      true  ->
+                          case BrokerVersion of
+                              "0.0.0" ->
+                                  rabbit_log:warning(
+                                    "Running development version of the broker."
+                                    " Requirement ~p for plugin ~p is ignored.",
+                                    [BrokerVersionReqs, Name]);
+                              _ -> ok
+                          end,
+                          case check_plugins_versions(Name, Plugins0, DepsVersions) of
+                              ok           -> {[Plugin | Plugins0], Errors};
+                              {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
+                          end;
+                      false ->
+                          Error = [{broker_version_mismatch, BrokerVersion, BrokerVersionReqs}],
+                          {Plugins0, [{Name, Error} | Errors]}
+                  end
+          end,
+          {[],[]},
+          Plugins),
+    {lists:reverse(ValidPlugins), Problems}.
 
 check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
     ExistingVersions = [{Name, Vsn}
