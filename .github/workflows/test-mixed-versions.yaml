@@ -81,8 +81,11 @@ jobs:
         include:
         - erlang_version: "24"
 <<<<<<< HEAD
+<<<<<<< HEAD
           elixir_version: 1.12.3
 =======
+=======
+>>>>>>> 667bda6fd4 (Bump elixir version in actions)
           elixir_version: 1.13.4
         #! - erlang_version: "25"
         #!   elixir_version: 1.13.4
