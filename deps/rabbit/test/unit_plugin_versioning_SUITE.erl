@@ -149,10 +149,10 @@ plugin_validation(_Config) ->
             {Valid, Invalid} = rabbit_plugins:validate_plugins(Plugins,
                                                                RabbitVersion),
             Errors = lists:reverse(Invalid),
-            ExpectedValid = lists:reverse(lists:map(fun(#plugin{name = Name}) ->
-                                                        Name
-                                                    end,
-                                                    Valid))
+            ExpectedValid = lists:map(fun(#plugin{name = Name}) ->
+                                              Name
+                                      end,
+                                      Valid)
         end,
         Examples),
     ok.
