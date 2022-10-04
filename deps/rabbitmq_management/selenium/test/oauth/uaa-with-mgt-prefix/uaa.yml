@@ -2,7 +2,7 @@ logging:
   config: /uaa/log4j2.properties
 
 issuer:
-  uri: http://localhost:8080/
+  uri: http://uaa:8080/
 
 encryption:
   active_key_label: CHANGE-THIS-KEY
@@ -15,7 +15,7 @@ logout:
     parameter:
       disable: false
       whitelist:
-        http://localhost:15672/*
+        http://rabbitmq:15672/*
 login:
   serviceProviderKey: |
     -----BEGIN RSA PRIVATE KEY-----
@@ -62,7 +62,7 @@ jwt:
   token:
     policy:
       # Will override global validity policies for the default zone only.
-      accessTokenValiditySeconds: 1500
+      accessTokenValiditySeconds: 15
       keys:
         legacy-token-key:
           signingKey: |
@@ -131,8 +131,7 @@ oauth:
       authorized-grant-types: authorization_code
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
-      #redirect-uri: http://localhost:15672
-      redirect-uri: http://localhost:15672/my-prefix/another-prefix/
+      redirect-uri: http://rabbitmq:15672/my-prefix/another-prefix/
       autoapprove: true
 
     mgt_api_client_2:
