@@ -1,0 +1,5 @@
+        internal_erlang_from_http_archive(
+            name = "24",
+            sha256 = "0b57d49e62958350676e8f32a39008d420dca4bc20f2d7e38c0671ab2ba62f14",
+            version = "24.3.4.5",
+        ),
