@@ -10,21 +10,11 @@ defmodule RabbitMQCtl.MixfileBase do
   def project do
     [
       app: :rabbitmqctl,
-<<<<<<< HEAD
-      version: "3.10.0-dev",
-      elixir: ">= 1.10.4 and < 1.15.0",
-      build_embedded: Mix.env == :prod,
-      start_permanent: Mix.env == :prod,
-      escript: [main_module: RabbitMQCtl,
-                emu_args: "-hidden",
-                path: "escript/rabbitmqctl"],
-=======
-      version: "3.11.0",
+      version: "3.10.9",
       elixir: ">= 1.13.4 and < 1.15.0",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
->>>>>>> 059978e6fa (mix format rabbitmq_cli)
       deps: deps(),
       aliases: aliases(),
       xref: [
