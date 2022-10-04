@@ -29,26 +29,22 @@ start_link(Ref, Transport, Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, KeepaliveSup} =
         supervisor2:start_child(SupPid,
-                               #{id => rabbit_stream_keepalive_sup,
-                                 start =>
-                                     {rabbit_stream_connection_sup,
-                                      start_keepalive_link, []},
-                                 restart => transient,
-                                 significant => true,
-                                 shutdown => infinity,
-                                 type => supervisor,
-                                 modules => [rabbit_keepalive_sup]}),
+                                {rabbit_stream_keepalive_sup,
+                                 {rabbit_stream_connection_sup,
+                                  start_keepalive_link, []},
+                                 intrinsic,
+                                 infinity,
+                                 supervisor,
+                                 [rabbit_keepalive_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(SupPid,
-                               #{id => rabbit_stream_reader,
-                                 start =>
-                                     {rabbit_stream_reader, start_link,
-                                      [KeepaliveSup, Transport, Ref, Opts]},
-                                 restart => transient,
-                                 significant => true,
-                                 shutdown => ?WORKER_WAIT,
-                                 type => worker,
-                                 modules => [rabbit_stream_reader]}),
+                                {rabbit_stream_reader,
+                                 {rabbit_stream_reader, start_link,
+                                  [KeepaliveSup, Transport, Ref, Opts]},
+                                 intrinsic,
+                                 ?WORKER_WAIT,
+                                 worker,
+                                 [rabbit_stream_reader]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
