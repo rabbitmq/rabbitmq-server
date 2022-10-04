@@ -56,6 +56,7 @@ ln -s ${{PWD}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 ln -s ${{PWD}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 ln -s ${{PWD}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 ln -s ${{PWD}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+ln -s ${{PWD}}/{package_dir}/.formatter.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
 INITIAL_DIR=${{PWD}}
 cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
@@ -73,6 +74,7 @@ if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
     cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
 fi
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
+"${{ABS_ELIXIR_HOME}}"/bin/mix format --check-formatted
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
 
 # due to https://github.com/elixir-lang/elixir/issues/7699 we
