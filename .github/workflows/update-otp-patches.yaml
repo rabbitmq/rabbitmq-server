@@ -103,7 +103,7 @@ jobs:
                 ),
         EOF
 
-        node replacer.mjs WORKSPACE old.txt new.txt > WORKSPACE
+        node replacer.mjs WORKSPACE old.txt new.txt
 
         set -x
         git diff
