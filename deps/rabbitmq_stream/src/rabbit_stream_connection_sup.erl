@@ -53,4 +53,8 @@ start_keepalive_link() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok,
+     {#{strategy => one_for_all,
+        intensity => 0,
+        period => 1},
+      []}}.

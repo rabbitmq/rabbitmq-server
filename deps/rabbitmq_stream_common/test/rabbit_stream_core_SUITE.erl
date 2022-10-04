@@ -135,7 +135,8 @@ roundtrip(_Config) ->
     test_roundtrip({response, 0, {tune, 10000, 12345}}),
     %  %% NB: does not write correlation id
     test_roundtrip({response, 0, {credit, 98, 200}}),
-    test_roundtrip({response, 99, {route, 1, <<"stream_name">>}}),
+    test_roundtrip({response, 99,
+                    {route, 1, [<<"stream1">>, <<"stream2">>]}}),
     test_roundtrip({response, 99,
                     {partitions, 1, [<<"stream1">>, <<"stream2">>]}}),
     test_roundtrip({response, 99, {consumer_update, 1, none}}),
