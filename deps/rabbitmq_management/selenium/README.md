@@ -6,20 +6,18 @@ And Mocha as the testing framework for Javascript.
 To run the tests we need:
 - make
 - docker
-- Ruby (needed to install `uaac` via `gem`)
 
 # How tests are organized
 
-All test cases are under the `test` folder and grouped into subfolders based on the area of functionality
-they are testing. For instance, under `oauth` folder, we have test cases about OAuth 2.0.
+All test cases and their configuration files are under the `test` folder and grouped into subfolders based on the area of functionality they are testing. For instance, under `oauth` folder, we have test cases about OAuth 2.0.
 Furthermore, within an area of functionality like OAuth 2.0 we want to test under different configuration.
 For instance under `test/oauth/with-uaa` we group all test cases which run against UAA. Whereas
 under `test/oauth/with-uaa-down` we group all test cases which run against a UAA which is down.
 
-Under the `test` folder we have test cases and some configuration files. And under `suites` folder we have
-the test suites where we literally script the following:
+And under `suites` folder we have the test suites where we literally script the following:
   - the suite's **setup**, e.g. start RabbitMQ and UAA with a specific configuration
-  - the test cases, e.g. run all tests under `test/oauth/with-uaa`
+  - the path to the test cases
+  - the path to the test case configuration
   - the suite's **teardown**, e.g. stop RabbitMQ and UAA
   - and save all logs and screen captures if any
 
@@ -41,14 +39,12 @@ name, e.g. `rabbitmq` or `uaa`. Whereas in interactive mode, we run most of the 
 
 ## Run tests in headless-mode
 
-In this mode, we are run suite of tests, not individual tests.
-
-If we want to run just one particular suite, run it directly:
+In this mode, we run suite of tests. This is how to run one suite:
 ```
 suites/oauth-with-uaa.sh
 ```
 
-Or we can run all suites:
+And this is how we run all suites:
 ```
 run-suites.sh
 ```

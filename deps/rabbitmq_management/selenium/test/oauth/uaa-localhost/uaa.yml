@@ -132,6 +132,7 @@ oauth:
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
       redirect-uri: http://localhost:15672
+      # redirect-uri: http://localhost:15672/my-prefix/
       autoapprove: true
 
     mgt_api_client_2:
