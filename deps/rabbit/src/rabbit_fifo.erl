@@ -2063,27 +2063,15 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
     %% one, then merge
     case active_consumer(Cons0) of
         {ConsumerId, #consumer{status = up} = Consumer0} ->
-<<<<<<< HEAD
             Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
-            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
-=======
-            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
-                                      Spec, Priority),
             {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
->>>>>>> 878160f8cb (Ensure consumer msg_id state is synchronised)
         undefined when is_map_key(ConsumerId, Cons0) ->
             %% there is no active consumer and the current consumer is in the
             %% consumers map and thus must be cancelled, in this case we can just
             %% merge and effectively make this the current active one
             Consumer0 = maps:get(ConsumerId, Cons0),
-<<<<<<< HEAD
             Consumer = merge_consumer(Consumer0, ConsumerMeta, Spec, Priority),
-            update_or_remove_sub(Meta, ConsumerId, Consumer, State0);
-=======
-            Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
-                                      Spec, Priority),
             {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
->>>>>>> 878160f8cb (Ensure consumer msg_id state is synchronised)
         _ ->
             %% add as a new waiting consumer
             Consumer = #consumer{cfg = #consumer_cfg{tag = Tag,
