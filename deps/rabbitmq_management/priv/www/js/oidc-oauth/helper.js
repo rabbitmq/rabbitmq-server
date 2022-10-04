@@ -4,8 +4,9 @@ var _management_logger;
 
 function oauth_initialize_if_required() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
+    rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
     rabbit_base_uri = window.location.protocol + "//" + window.location.hostname
-      + rabbit_port + rabbit_path_prefix()
+      + rabbit_port + rabbit_path_prefix
 
     var request = new XMLHttpRequest();
     request.open("GET", rabbit_base_uri + "/api/auth", false);
@@ -17,10 +18,7 @@ function oauth_initialize_if_required() {
     }
 
 }
-function rabbit_path_prefix() {
-  paths = window.location.pathname.split("/")
-  return paths[1] === "js" || paths[1] === "" ? "" : "/" + paths[1]
-}
+
 
 function auth_settings_apply_defaults(authSettings) {
   if (authSettings.enable_uaa == "true") {
@@ -144,13 +142,13 @@ function oauth_initiateLogin() {
 
 function oauth_redirectToHome(oauth) {
   set_auth_pref(oauth.user_name + ":" + oauth.access_token);
-  location.href = "/"
+  location.href = rabbit_path_prefix + "/"
 }
 function oauth_redirectToLogin(error) {
   _management_logger.debug("oauth_redirectToLogin called");
-  if (!error) location.href = "/"
+  if (!error) location.href = rabbit_path_prefix + "/"
   else {
-    location.href = "/?error=" + error
+    location.href = rabbit_path_prefix + "/?error=" + error
   }
 }
 function oauth_completeLogin() {

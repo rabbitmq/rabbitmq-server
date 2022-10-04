@@ -49,6 +49,24 @@ And this is how we run all suites:
 run-suites.sh
 ```
 
+If you want to test your local changes, you can still build an image with these 2 commands from the
+root folder of the `rabbitmq-server` repo:
+```
+cd ../../../../
+make package-generic-unix
+make docker-image
+```
+
+The last command prints something like this:
+```
+ => => naming to docker.io/pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty                                                                            0.0s
+```
+
+To run a suite with a particular docker image we do it like this:
+```
+cd deps/rabbitmq_management/selenium/suites
+RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty ./oauth-with-uaa-with-mgt-prefix.sh
+```
 
 ## Run tests interactively using your local chrome browser
 

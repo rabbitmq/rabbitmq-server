@@ -131,7 +131,7 @@ oauth:
       authorized-grant-types: authorization_code
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
-      redirect-uri: http://rabbitmq:15672/my-prefix/
+      redirect-uri: http://rabbitmq:15672/my-prefix/another-prefix/
       autoapprove: true
 
     mgt_api_client_2:
