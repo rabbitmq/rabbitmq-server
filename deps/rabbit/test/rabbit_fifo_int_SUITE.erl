@@ -30,6 +30,7 @@ all_tests() ->
      dequeue,
      discard,
      cancel_checkout,
+     lost_delivery,
      credit,
      untracked_enqueue,
      flow,
@@ -411,6 +412,38 @@ cancel_checkout(Config) ->
     {ok, _, {_, _, _, _, m1}, F5} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F5),
     ok.
 
+lost_delivery(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
+    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
+    {_, _, F2} = process_ra_events(
+                   receive_ra_events(1, 0), F1, [], [], fun (_, S) -> S end),
+    {ok, F3} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F2),
+    %% drop a delivery, simulating e.g. a full distribution buffer
+    receive
+        {ra_event, _, Evt} ->
+            ct:pal("dropping event ~p", [Evt]),
+            ok
+    after 500 ->
+              exit(await_ra_event_timeout)
+    end,
+    % send another message
+    {ok, F4} = rabbit_fifo_client:enqueue(m2, F3),
+    %% this hsould trigger the fifo client to fetch any missing messages
+    %% from the server
+    {_, _, _F5} = process_ra_events(
+                    receive_ra_events(1, 1), F4, [], [],
+                    fun ({deliver, _, _, Dels}, S) ->
+                            [{_, _, _, _, M1},
+                             {_, _, _, _, M2}] = Dels,
+                            ?assertEqual(m1, M1),
+                            ?assertEqual(m2, M2),
+                            S
+                    end),
+    ok.
+
 credit(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
@@ -593,7 +626,8 @@ process_ra_events(Events, State) ->
 
 process_ra_events([], State0, Acc, Actions0, _DeliveryFun) ->
     {Acc, Actions0, State0};
-process_ra_events([{ra_event, From, Evt} | Events], State0, Acc, Actions0, DeliveryFun) ->
+process_ra_events([{ra_event, From, Evt} | Events], State0, Acc,
+                  Actions0, DeliveryFun) ->
     case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
         {ok, State1, Actions1} ->
             {Msgs, Actions, State} =
