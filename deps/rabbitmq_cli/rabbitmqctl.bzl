@@ -76,8 +76,8 @@ export LC_ALL="en_US.UTF-8"
 
 MIX_INVOCATION_DIR="{mix_invocation_dir}"
 
-cp -R {package_dir}/config ${{MIX_INVOCATION_DIR}}/config
-cp -R {package_dir}/lib ${{MIX_INVOCATION_DIR}}/lib
+cp -r {package_dir}/config ${{MIX_INVOCATION_DIR}}/config
+cp -r {package_dir}/lib ${{MIX_INVOCATION_DIR}}/lib
 cp    {package_dir}/mix.exs ${{MIX_INVOCATION_DIR}}/mix.exs
 
 cd ${{MIX_INVOCATION_DIR}}
