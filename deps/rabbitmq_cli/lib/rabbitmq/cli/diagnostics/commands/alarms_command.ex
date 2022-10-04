@@ -67,7 +67,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists resource alarms (local or cluster-wide) in effect on the target node"
+  def description(),
+    do: "Lists resource alarms (local or cluster-wide) in effect on the target node"
 
   def usage, do: "alarms"
 

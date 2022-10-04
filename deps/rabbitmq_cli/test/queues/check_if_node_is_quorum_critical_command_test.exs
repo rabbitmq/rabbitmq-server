@@ -17,10 +17,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "validate: accepts no positional arguments" do
@@ -29,8 +30,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommandTest do
 
   test "validate: any positional arguments fail validation" do
     assert @command.validate(["quorum-queue-a"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["quorum-queue-a", "two"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["quorum-queue-a", "two", "three"], %{}) == {:validation_failure, :too_many_args}
+
+    assert @command.validate(["quorum-queue-a", "two"], %{}) ==
+             {:validation_failure, :too_many_args}
+
+    assert @command.validate(["quorum-queue-a", "two", "three"], %{}) ==
+             {:validation_failure, :too_many_args}
   end
 
   @tag test_timeout: 3000

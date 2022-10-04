@@ -44,5 +44,4 @@ defmodule RabbitMQ.CLI.TimeUnit do
   defp do_convert(time, "years") do
     time * @years_seconds
   end
-
 end

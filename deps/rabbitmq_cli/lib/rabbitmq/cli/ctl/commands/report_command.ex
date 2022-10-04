@@ -6,6 +6,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   alias RabbitMQ.CLI.Core.DocGuide
+
   alias RabbitMQ.CLI.Ctl.Commands.{
     ClusterStatusCommand,
     EnvironmentCommand,
@@ -20,6 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     ListQueuesCommand,
     StatusCommand
   }
+
   alias RabbitMQ.CLI.Diagnostics.Commands.{
     CommandLineArgumentsCommand,
     OsEnvCommand
@@ -73,8 +75,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
               run_command(ListPermissionsCommand, [], opts),
               run_command(ListPoliciesCommand, [], opts),
               run_command(ListGlobalParametersCommand, [], opts),
-              run_command(ListParametersCommand, [], opts),
-
+              run_command(ListParametersCommand, [], opts)
             ]
           end)
 
@@ -96,7 +97,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Generate a server status report containing a concatenation of all server status information for support purposes"
+  def description(),
+    do:
+      "Generate a server status report containing a concatenation of all server status information for support purposes"
 
   def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 

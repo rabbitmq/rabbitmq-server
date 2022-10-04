@@ -24,13 +24,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalFileCommand do
     case File.read(file_path) do
       {:ok, expr} ->
         case ErlEval.parse_expr(expr) do
-          {:ok, _}      -> :ok
+          {:ok, _} -> :ok
           {:error, err} -> {:validation_failure, err}
         end
+
       {:error, :enoent} ->
         {:validation_failure, "File #{file_path} does not exist"}
+
       {:error, :eacces} ->
         {:validation_failure, "Insufficient permissions to read file #{file_path}"}
+
       {:error, err} ->
         {:validation_failure, err}
     end
@@ -38,15 +41,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalFileCommand do
 
   def run([file_path], opts) do
     case File.read(file_path) do
-      {:ok, expr}   -> EvalCommand.run([expr], opts)
+      {:ok, expr} -> EvalCommand.run([expr], opts)
       {:error, err} -> {:error, err}
     end
-
   end
 
   def output({:error, msg}, _) do
     {:error, ExitCodes.exit_dataerr(), "Evaluation failed: #{msg}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
@@ -69,7 +72,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalFileCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Evaluates a file that contains a snippet of Erlang code on the target node"
+  def description(),
+    do: "Evaluates a file that contains a snippet of Erlang code on the target node"
 
   def banner(_, _), do: nil
 end

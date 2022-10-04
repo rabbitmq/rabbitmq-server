@@ -23,19 +23,20 @@ defmodule MemoryBreakdownCommandTest do
   end
 
   setup do
-    {:ok, opts: %{
-      node: get_rabbit_hostname(),
-      timeout: 5000,
-      unit: "gb"
-    }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: 5000,
+       unit: "gb"
+     }}
   end
 
   test "validate: specifying a positional argument fails validation", context do
     assert @command.validate(["abc"], context[:opts]) ==
-    {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
 
     assert @command.validate(["abc", "def"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: specifying no positional arguments and no options succeeds", context do
@@ -56,7 +57,8 @@ defmodule MemoryBreakdownCommandTest do
 
   test "validate: specifying glip-glops as a --unit fails validation", context do
     assert @command.validate([], Map.merge(context[:opts], %{unit: "glip-glops"})) ==
-    {:validation_failure, "unit 'glip-glops' is not supported. Please use one of: bytes, mb, gb"}
+             {:validation_failure,
+              "unit 'glip-glops' is not supported. Please use one of: bytes, mb, gb"}
   end
 
   test "run: request to a non-existent RabbitMQ node returns a nodedown" do

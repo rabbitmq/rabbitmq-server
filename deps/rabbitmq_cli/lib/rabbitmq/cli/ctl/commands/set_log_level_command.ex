@@ -26,6 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
@@ -36,7 +37,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
         :ok
 
       false ->
-        {:error, "level #{level} is not supported. Try one of debug, info, warning, error, critical, none"}
+        {:error,
+         "level #{level} is not supported. Try one of debug, info, warning, error, critical, none"}
     end
   end
 

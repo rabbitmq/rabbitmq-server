@@ -15,6 +15,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
 
   import RabbitMQ.CLI.Diagnostics.Helpers,
     only: [check_listener_connectivity: 3]
+
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
   import RabbitMQ.CLI.Core.Listeners
 
@@ -87,7 +88,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
     {:error, Enum.join(lines, line_separator())}
   end
 
-  def description(), do: "Basic TCP connectivity health check for each listener's port on the target node"
+  def description(),
+    do: "Basic TCP connectivity health check for each listener's port on the target node"
 
   def help_section(), do: :observability_and_health_checks
 

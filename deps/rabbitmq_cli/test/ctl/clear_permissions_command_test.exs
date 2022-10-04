@@ -10,13 +10,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ClearPermissionsTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands. ClearPermissionsCommand
-  @user     "user1"
+  @command RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand
+  @user "user1"
   @password "password"
   @default_vhost "/"
   @specific_vhost "vhost1"
@@ -58,7 +57,8 @@ defmodule ClearPermissionsTest do
 
   @tag user: "fake_user"
   test "run: can't clear permissions for non-existing user", context do
-    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
+    assert @command.run([context[:user]], context[:opts]) ==
+             {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user, vhost: @default_vhost
@@ -66,7 +66,7 @@ defmodule ClearPermissionsTest do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
     assert list_permissions(@default_vhost)
-    |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
+           |> Enum.filter(fn record -> record[:user] == context[:user] end) == []
   end
 
   test "run: on an invalid node, return a badrpc message" do
@@ -81,12 +81,13 @@ defmodule ClearPermissionsTest do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
     assert list_permissions(context[:vhost])
-    |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
+           |> Enum.filter(fn record -> record[:user] == context[:user] end) == []
   end
 
   @tag user: @user, vhost: "bad_vhost"
   test "run: on an invalid vhost, return no_such_vhost error", context do
-    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_vhost, context[:vhost]}}
+    assert @command.run([context[:user]], context[:opts]) ==
+             {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @specific_vhost

@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AwaitOnlineQuorumPlusOneCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -18,10 +17,11 @@ defmodule AwaitOnlineQuorumPlusOneCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 5000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
   end
 
   test "merge_defaults: overrides a timeout" do
@@ -41,5 +41,4 @@ defmodule AwaitOnlineQuorumPlusOneCommandTest do
     opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], opts)))
   end
-
 end

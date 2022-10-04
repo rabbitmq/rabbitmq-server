@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule TraceOffCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -72,7 +71,7 @@ defmodule TraceOffCommandTest do
 
   @tag vhost: @default_vhost
   test "banner", context do
-    assert @command.banner([], context[:opts])
-      =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
+    assert @command.banner([], context[:opts]) =~
+             ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
   end
 end

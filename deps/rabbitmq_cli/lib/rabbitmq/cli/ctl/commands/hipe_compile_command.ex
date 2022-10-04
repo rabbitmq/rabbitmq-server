@@ -60,6 +60,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   def run([_target_dir], _opts) do
     :ok
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "hipe_compile <directory>"

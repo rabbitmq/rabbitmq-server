@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule SetClusterNameCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -59,5 +58,4 @@ defmodule SetClusterNameCommandTest do
     s = @command.banner(["annoyyou"], %{})
     assert s == "Setting cluster name to annoyyou ..."
   end
-
 end

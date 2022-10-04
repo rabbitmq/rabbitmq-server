@@ -15,11 +15,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand do
   def validate(_, %{formatter: "json"}) do
     {:validation_failure, :unsupported_formatter}
   end
+
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :init, :get_arguments, [])
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
@@ -35,7 +37,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Displays target node's command-line arguments and flags as reported by the runtime"
+  def description(),
+    do: "Displays target node's command-line arguments and flags as reported by the runtime"
 
   def banner(_, %{node: node_name}), do: "Command line arguments of node #{node_name} ..."
 end

@@ -15,7 +15,7 @@ defmodule OsEnvCommandTest do
 
     start_rabbitmq_app()
 
-    ExUnit.configure([max_cases: 1])
+    ExUnit.configure(max_cases: 1)
 
     on_exit([], fn ->
       start_rabbitmq_app()
@@ -25,11 +25,12 @@ defmodule OsEnvCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        all: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       all: false
+     }}
   end
 
   test "merge_defaults: merges no defaults" do
@@ -46,7 +47,10 @@ defmodule OsEnvCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100}))
+           )
   end
 
   test "run: returns defined RabbitMQ-specific environment variables", context do
@@ -55,8 +59,8 @@ defmodule OsEnvCommandTest do
     # Only variables that are used by RABBITMQ are returned.
     # They can be prefixed with RABBITMQ_ or not, rabbit_env tries both
     # when filtering env variables down.
-    assert Enum.any?(vars, fn({k, _v}) ->
-      String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
-    end)
+    assert Enum.any?(vars, fn {k, _v} ->
+             String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
+           end)
   end
 end

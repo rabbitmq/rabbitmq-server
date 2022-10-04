@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule DeleteVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -35,14 +34,14 @@ defmodule DeleteVhostCommandTest do
   test "run: A valid name to an active RabbitMQ node is successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
 
-    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts() |> Enum.count(fn record -> record[:name] == context[:vhost] end) == 0
   end
 
   @tag vhost: ""
   test "run: An empty string to an active RabbitMQ node is successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
 
-    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts() |> Enum.count(fn record -> record[:name] == context[:vhost] end) == 0
   end
 
   test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do
@@ -54,8 +53,9 @@ defmodule DeleteVhostCommandTest do
   @tag vhost: @vhost
   test "run: Deleting the same host twice results in a host not found message", context do
     @command.run([context[:vhost]], context[:opts])
+
     assert @command.run([context[:vhost]], context[:opts]) ==
-      {:error, {:no_such_vhost, context[:vhost]}}
+             {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag vhost: @vhost
