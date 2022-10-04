@@ -56,6 +56,5 @@ init([]) ->
     {ok,
      {#{strategy => one_for_all,
         intensity => 0,
-        period => 1,
-        auto_shutdown => any_significant},
+        period => 1},
       []}}.
