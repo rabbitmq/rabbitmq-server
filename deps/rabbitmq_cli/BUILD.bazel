@@ -52,6 +52,7 @@ rabbitmqctl_test(
     srcs = [
         "mix.exs",
         "config/config.exs",
+        ".formatter.exs",
     ] + glob([
         "lib/**/*.ex",
         "test/**/*.exs",
