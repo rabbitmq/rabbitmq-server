@@ -187,7 +187,7 @@ enqueue(Correlation, Msg,
     Server = pick_server(State0),
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
-    ok = ra:pipeline_command(Server, Cmd, Seq, low),
+    ok = ra:pipeline_command(Server, Cmd, Seq, normal),
     Tag = case map_size(Pending) >= SftLmt of
               true -> slow;
               false -> ok
