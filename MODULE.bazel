@@ -165,8 +165,8 @@ erlang_package.git_package(
 
 erlang_package.hex_package(
     name = "cuttlefish",
-    sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
-    version = "3.0.1",
+    sha256 = "d3ef90bd2f5923477ab772fbda5cd5ad088438e4fd56801b455b87ada9f46fa3",
+    version = "3.1.0",
 )
 
 erlang_package.hex_package(
