@@ -28,6 +28,17 @@ bazel_dep(
     version = "3.8.3",
 )
 
+git_override(
+    module_name = "rules_erlang",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
+    commit = "57ca51e73ba36fd35b5814d8628137920e9f9e58",
+)
+
+bazel_dep(
+    name = "accept",
+    version = "0.3.5",
+)
+
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
@@ -102,12 +113,6 @@ register_toolchains(
 erlang_package = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_package",
-)
-
-erlang_package.hex_package(
-    name = "accept",
-    sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
-    version = "0.3.5",
 )
 
 erlang_package.hex_package(
@@ -351,7 +356,6 @@ erlang_app(
 
 use_repo(
     erlang_package,
-    "accept",
     "aten",
     "base64url",
     "cowboy",

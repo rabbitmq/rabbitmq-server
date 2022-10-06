@@ -6,12 +6,6 @@ load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_erlang_app(
-        name = "accept",
-        version = "0.3.5",
-        sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
-    )
-
-    hex_pm_erlang_app(
         name = "aten",
         sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
         version = "0.5.8",
