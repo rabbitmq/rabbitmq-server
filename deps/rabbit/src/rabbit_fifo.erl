@@ -888,26 +888,14 @@ state_enter0(_, _, Effects) ->
     Effects.
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
-tick(Ts, #?MODULE{cfg = #cfg{name = Name,
-                             resource = QName},
-                  msg_bytes_enqueue = EnqueueBytes,
-                  msg_bytes_checkout = CheckoutBytes,
-                  dlx = DlxState} = State) ->
+tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
+                             resource = QName}} = State) ->
     case is_expired(Ts, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
         false ->
-            {_, MsgBytesDiscard} = rabbit_fifo_dlx:stat(DlxState),
-            Metrics = {Name,
-                       messages_ready(State),
-                       num_checked_out(State), % checked out
-                       messages_total(State),
-                       query_consumer_count(State), % Consumers
-                       EnqueueBytes,
-                       CheckoutBytes,
-                       MsgBytesDiscard},
             [{mod_call, rabbit_quorum_queue,
-              handle_tick, [QName, Metrics, all_nodes(State)]}]
+              handle_tick, [QName, overview(State), all_nodes(State)]}]
     end.
 
 -spec overview(state()) -> map().
@@ -918,7 +906,8 @@ overview(#?MODULE{consumers = Cons,
                   msg_bytes_enqueue = EnqueueBytes,
                   msg_bytes_checkout = CheckoutBytes,
                   cfg = Cfg,
-                  dlx = DlxState} = State) ->
+                  dlx = DlxState,
+                  waiting_consumers = WaitingConsumers} = State) ->
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
              release_cursor_interval => Cfg#cfg.release_cursor_interval,
@@ -930,9 +919,18 @@ overview(#?MODULE{consumers = Cons,
              msg_ttl => Cfg#cfg.msg_ttl,
              delivery_limit => Cfg#cfg.delivery_limit
             },
+    SacOverview = case active_consumer(Cons) of
+                      {SacConsumerId, _} ->
+                          NumWaiting = length(WaitingConsumers),
+                          #{single_active_consumer_id => SacConsumerId,
+                            single_active_num_waiting_consumers => NumWaiting};
+                      _ ->
+                          #{}
+                  end,
     Overview = #{type => ?MODULE,
                  config => Conf,
-                 num_consumers => maps:size(Cons),
+                 num_consumers => map_size(Cons),
+                 num_active_consumers => query_consumer_count(State),
                  num_checked_out => num_checked_out(State),
                  num_enqueuers => maps:size(Enqs),
                  num_ready_messages => messages_ready(State),
@@ -944,9 +942,10 @@ overview(#?MODULE{consumers = Cons,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
                  in_memory_message_bytes => 0, %% backwards compat
-                 smallest_raft_index => smallest_raft_index(State)},
+                 smallest_raft_index => smallest_raft_index(State)
+                 },
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
-    maps:merge(Overview, DlxOverview).
+    maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
 
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
