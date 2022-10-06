@@ -919,9 +919,11 @@ noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
 
 next_state(State) -> ensure_stats_timer(send_confirms_and_nacks(State)).
 
-noreply_coalesce(State = #ch{confirmed = C, rejected = R}) ->
-    Timeout = case {C, R} of {[], []} -> hibernate; _ -> 0 end,
-    {noreply, ensure_stats_timer(State), Timeout}.
+noreply_coalesce(#ch{confirmed = [], rejected = []} = State) ->
+    {noreply, ensure_stats_timer(State), hibernate};
+noreply_coalesce(#ch{} = State) ->
+    % Immediately process 'timeout' info message
+    {noreply, ensure_stats_timer(State), 0}.
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
