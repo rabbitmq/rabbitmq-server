@@ -305,11 +305,14 @@ find_blocked_global_peers() ->
     Snapshot1 = snapshot_global_dict(),
     timer:sleep(10000),
     Snapshot2 = snapshot_global_dict(),
+    logger:debug("global's sync tags 10s ago: ~p~n"
+                 "global's sync tags now: ~p",
+                 [Snapshot1, Snapshot2]),
     find_blocked_global_peers1(Snapshot2, Snapshot1).
 
 snapshot_global_dict() ->
-    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
-    [E || {{sync_tag_his, _}, _} = E <- Dict].
+    {status, _Pid, _Mod, [PDict | _]} = sys:get_status(global_name_server),
+    [E || {{sync_tag_his, _}, _} = E <- PDict].
 
 find_blocked_global_peers1([{{sync_tag_his, Peer}, _} = Item | Rest],
   OlderSnapshot) ->
@@ -323,6 +326,7 @@ find_blocked_global_peers1([], _) ->
 
 unblock_global_peer(PeerNode) ->
     ThisNode = node(),
+<<<<<<< HEAD
     PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
     logger:info(
       "Global hang workaround: global state on ~s seems broken~n"
@@ -335,7 +339,54 @@ unblock_global_peer(PeerNode) ->
     {global_name_server, PeerNode} ! {nodedown, ThisNode},
     {global_name_server, ThisNode} ! {nodeup, PeerNode},
     {global_name_server, PeerNode} ! {nodeup, ThisNode},
+=======
+
+    {status, _, _, [_, _, _, _, PeerState]} = PeerStatus =
+        erpc:call(PeerNode, sys, get_status, [global_name_server]),
+    {status, _, _, [_, _, _, _, ThisState]} = ThisStatus =
+        sys:get_status(global_name_server),
+
+    PeerToThisCid = connection_id(PeerState, ThisNode),
+    ThisToPeerCid = connection_id(ThisState, PeerNode),
+
+    logger:info(
+      "global hang workaround: faking nodedown / nodeup between peer node ~s "
+      "(connection ID to us: ~p) and our node ~s (connection ID to peer: ~p)",
+      [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
+    logger:debug(
+      "peer global state: ~p~nour global state: ~p",
+      [PeerStatus, ThisStatus]),
+
+    {ThisDownMsg, ThisUpMsg} = messages(ThisToPeerCid, PeerNode),
+    {PeerDownMsg, PeerUpMsg} = messages(PeerToThisCid, ThisNode),
+    {global_name_server, ThisNode} ! ThisDownMsg,
+    {global_name_server, PeerNode} ! PeerDownMsg,
+    {global_name_server, ThisNode} ! ThisUpMsg,
+    {global_name_server, PeerNode} ! PeerUpMsg,
+>>>>>>> bfcdeec2cd (Make "global hang workaround" support OTP >= 25.1)
     ok.
+
+connection_id(Misc, Node) ->
+    [State] = [S || {data, [{"State", S}]} <- Misc],
+    state = element(1, State),
+    case element(3, State) of
+        Known when is_map(Known) ->
+            maps:get({connection_id, Node}, Known, undefined);
+        _ ->
+            undefined
+    end.
+
+%% The nodedown and nodeup message format handled by global differs due to
+%% https://github.com/erlang/otp/commit/9274e89857d294f85702e0d5d42fb196e8e12d6a
+messages(undefined, Node) ->
+    %% OTP < 25.1
+    {{nodedown, Node},
+     {nodeup, Node}};
+messages(ConnectionId, Node) ->
+    %% OTP >= 25.1
+    Cid = #{connection_id => ConnectionId},
+    {{nodedown, Node, Cid},
+     {nodeup, Node, Cid}}.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
