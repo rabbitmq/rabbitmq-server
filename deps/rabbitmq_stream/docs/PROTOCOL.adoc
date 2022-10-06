@@ -543,7 +543,6 @@ SaslHandshakeRequest => Key Version CorrelationId Mechanism
   Key => uint16 // 0x0012
   Version => uint16
   CorrelationId => uint32
-  Mechanism => string
 
 SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanisms]
   Key => uint16 // 0x8012
