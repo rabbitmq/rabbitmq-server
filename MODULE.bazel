@@ -252,6 +252,41 @@ erlang_package.hex_package(
     version = "1.7.3",
 )
 
+erlang_package.hex_package(
+    name = "opentelemetry_api",
+    version = "1.0.3",
+    sha256 = "4293e06bd369bc004e6fad5edbb56456d891f14bd3f9f1772b18f1923e0678ea",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "opentelemetry_api",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+)
+""",
+)
+
+erlang_package.hex_package(
+    name = "opentelemetry_cowboy",
+    sha256 = "e42b216920ad80c7b7bf2c45a58880864bb28ccd8941e4e9910beed76349e15d",
+    version = "0.2.0",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "opentelemetry_cowboy",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@opentelemetry_api//:erlang_app",
+    ],
+)
+""",
+)
+
 erlang_package.git_package(
     branch = "main",
     patch_cmds = [
@@ -385,6 +420,8 @@ use_repo(
     "jose",
     "meck",
     "observer_cli",
+    "opentelemetry_api",
+    "opentelemetry_cowboy",
     "osiris",
     "prometheus",
     "proper",

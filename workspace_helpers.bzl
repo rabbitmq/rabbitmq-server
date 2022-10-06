@@ -133,6 +133,41 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
+    hex_pm_erlang_app(
+        name = "opentelemetry_api",
+        version = "1.0.3",
+        sha256 = "4293e06bd369bc004e6fad5edbb56456d891f14bd3f9f1772b18f1923e0678ea",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "opentelemetry_api",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+)
+""",
+    )
+
+    hex_pm_erlang_app(
+        name = "opentelemetry_cowboy",
+        version = "0.2.0",
+        sha256 = "e42b216920ad80c7b7bf2c45a58880864bb28ccd8941e4e9910beed76349e15d",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "opentelemetry_cowboy",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@opentelemetry_api//:erlang_app",
+    ],
+)
+""",
+    )
+
     git_repository(
         name = "osiris",
         branch = "main",
