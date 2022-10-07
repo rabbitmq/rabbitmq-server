@@ -255,7 +255,11 @@ handle_call({init, Overall}, _From,
     case Rest of
         [] ->
             rabbit_log:debug("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+<<<<<<< HEAD
             delete_all(Group);
+=======
+            TxFun(fun() -> delete_all(Group) end);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         _  -> ok
     end,
     [begin
@@ -279,6 +283,7 @@ handle_call({start_child, ChildSpec}, _From,
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
     rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~tp", [Group]),
+<<<<<<< HEAD
     Result = case maybe_start(Group, Overall, Delegate, ChildSpec) of
                  already_in_store ->
                      rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
@@ -287,6 +292,16 @@ handle_call({start_child, ChildSpec}, _From,
                  {already_in_store, Pid} ->
                      rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
                                       " overall ~p returned 'already running: ~tp'", [Group, Overall, Pid]),
+=======
+    Result = case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
+                 already_in_mnesia ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned 'record already present'", [Group, Overall]),
+                     {error, already_present};
+                 {already_in_mnesia, Pid} ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned 'already running: ~tp'", [Group, Overall, Pid]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                      {error, {already_started, Pid}};
                  Else ->
                      rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
@@ -366,10 +381,16 @@ code_change(_OldVsn, State, _Extra) ->
 tell_all_peers_to_die(Group, Reason) ->
     [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
 
+<<<<<<< HEAD
 maybe_start(Group, Overall, Delegate, ChildSpec) ->
     rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~tp",
                      [Group]),
     try check_start(Group, Overall, Delegate, ChildSpec) of
+=======
+maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~tp", [Group]),
+    try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         start      ->
             rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
                              " overall ~tp returned 'do start'", [Group, Overall]),
@@ -377,18 +398,27 @@ maybe_start(Group, Overall, Delegate, ChildSpec) ->
         undefined  ->
             rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
                              " overall ~tp returned 'undefined'", [Group, Overall]),
+<<<<<<< HEAD
             already_in_store;
         Pid ->
             rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
                              " overall ~tp returned 'already running (~tp)'",
                              [Group, Overall, Pid]),
             {already_in_store, Pid}
+=======
+            already_in_mnesia;
+        Pid        ->
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'already running (~tp)'", [Group, Overall, Pid]),
+            {already_in_mnesia, Pid}
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     catch
         %% If we are torn down while in the transaction...
         {error, E} -> {error, E}
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
+<<<<<<< HEAD
     Id = id(ChildSpec),
     rabbit_log:debug("Mirrored supervisor: check_start for group ~tp, id: ~tp, "
                      "overall: ~tp", [Group, Id, Overall]),
@@ -397,6 +427,33 @@ check_start(Group, Overall, Delegate, ChildSpec) ->
             child(Delegate0, Id);
         Other ->
             Other
+=======
+    rabbit_log:debug("Mirrored supervisor: check_start for group ~tp, id: ~tp, overall: ~tp",
+                     [Group, id(ChildSpec), Overall]),
+    ReadResult = mnesia:wread({?TABLE, {Group, id(ChildSpec)}}),
+    rabbit_log:debug("Mirrored supervisor: check_start table ~ts read for key ~tp returned ~tp",
+                     [?TABLE, {Group, id(ChildSpec)}, ReadResult]),
+    case ReadResult of
+        []  -> _ = write(Group, Overall, ChildSpec),
+               start;
+        [S] -> #mirrored_sup_childspec{key           = {Group, Id},
+                                       mirroring_pid = Pid} = S,
+               case Overall of
+                   Pid ->
+                       rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~tp", [Pid]),
+                       child(Delegate, Id);
+                   _   ->
+                       rabbit_log:debug("Mirrored supervisor: overall ~tp did not match mirrored pid ~tp", [Overall, Pid]),
+                       rabbit_log:debug("Mirrored supervisor: supervisor(~tp) returned ~tp", [Pid, supervisor(Pid)]),
+                       case supervisor(Pid) of
+                          dead      ->
+                              _ = write(Group, Overall, ChildSpec),
+                              start;
+                          Delegate0 ->
+                              child(Delegate0, Id)
+                       end
+               end
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end.
 
 supervisor(Pid) -> with_exit_handler(fun() -> dead end,

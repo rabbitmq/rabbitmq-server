@@ -452,6 +452,28 @@ node_client_listeners(Node) ->
                          end, Xs)
     end.
 
+<<<<<<< HEAD
+=======
+-spec on_node_down(node()) -> 'ok'.
+
+on_node_down(Node) ->
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> ok;
+        false -> on_node_down_mnesia(Node)
+    end.
+
+on_node_down_mnesia(Node) ->
+    case lists:member(Node, nodes()) of
+        false ->
+            rabbit_log:info(
+              "Node ~ts is down, deleting its listeners", [Node]),
+            ok = mnesia:dirty_delete(rabbit_listener, Node);
+        true  ->
+            rabbit_log:info(
+              "Keeping ~ts listeners: the node is already back", [Node])
+    end.
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 -spec register_connection(pid()) -> ok.
 
 register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).

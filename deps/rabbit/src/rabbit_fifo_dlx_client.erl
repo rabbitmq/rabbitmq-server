@@ -46,10 +46,17 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
     case ra:process_command(Leader, Cmd, 60_000) of
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
+<<<<<<< HEAD
         {ok, ok, NonLocalLeader} ->
             rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
                                [Cmd, Leader, NonLocalLeader]),
             {error, non_local_leader};
+=======
+        {ok, ok, L} ->
+            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
+                               [Cmd, Leader, L]),
+            {error, ra_command_failed};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         Err ->
             rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",

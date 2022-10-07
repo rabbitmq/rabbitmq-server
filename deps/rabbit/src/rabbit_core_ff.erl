@@ -106,6 +106,7 @@
      }}).
 
 
+<<<<<<< HEAD
 -rabbit_feature_flag(
    {stream_sac_coordinator_unblock_group,
     #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
@@ -113,3 +114,117 @@
       stability     => stable,
       depends_on    => [stream_single_active_consumer]
      }}).
+=======
+-spec direct_exchange_routing_v2_enable(Args) -> Ret when
+      Args :: rabbit_feature_flags:enable_callback_args(),
+      Ret :: rabbit_feature_flags:enable_callback_ret().
+direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
+    TableName = rabbit_index_route,
+    ok = rabbit_table:wait([rabbit_route], _Retry = true),
+    try
+        ok = rabbit_table:create(
+               TableName, rabbit_table:rabbit_index_route_definition()),
+        case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
+            ok ->
+                ok = rabbit_binding:populate_index_route_table();
+            {error, Err} = Error ->
+                rabbit_log_feature_flags:error(
+                  "Feature flags: `~ts`: failed to add copy of table ~ts to "
+                  "node ~tp: ~tp",
+                  [FeatureName, TableName, node(), Err]),
+                Error
+        end
+    catch throw:{error, Reason} ->
+              rabbit_log_feature_flags:error(
+                "Feature flags: `~ts`: enable callback failure: ~tp",
+                [FeatureName, Reason]),
+              {error, Reason}
+    end.
+
+%% -------------------------------------------------------------------
+%% Listener records moved from Mnesia to ETS.
+%% -------------------------------------------------------------------
+
+listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
+    try
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  mnesia:lock({table, rabbit_listener}, read),
+                  Listeners = mnesia:select(
+                                rabbit_listener, [{'$1',[],['$1']}]),
+                  lists:foreach(
+                    fun(Listener) ->
+                            ets:insert(rabbit_listener_ets, Listener)
+                    end, Listeners)
+          end)
+    catch
+        throw:{error, {no_exists, rabbit_listener}} ->
+            ok;
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: `~ts`: failed to migrate Mnesia table: ~tp",
+              [FeatureName, Reason]),
+            {error, Reason}
+    end.
+
+listener_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
+    try
+        case mnesia:delete_table(rabbit_listener) of
+            {atomic, ok} ->
+                ok;
+            {aborted, {no_exists, _}} ->
+                ok;
+            {aborted, Err} ->
+                rabbit_log_feature_flags:error(
+                  "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
+                  [FeatureName, Err]),
+                ok
+        end
+    catch
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
+              [FeatureName, Reason]),
+            ok
+    end.
+
+tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
+    try
+        rabbit_connection_tracking:migrate_tracking_records(),
+        rabbit_channel_tracking:migrate_tracking_records()
+    catch
+        throw:{error, {no_exists, _}} ->
+            ok;
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
+                                           [FeatureName, Reason]),
+            {error, Reason}
+    end.
+
+tracking_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
+    try
+        [delete_table(FeatureName, Tab) ||
+            Tab <- rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(node())],
+        [delete_table(FeatureName, Tab) ||
+            Tab <- rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(node())]
+    catch
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
+                                           [FeatureName, Reason]),
+            %% adheres to the callback interface
+            ok
+    end.
+
+delete_table(FeatureName, Tab) ->
+    case mnesia:delete_table(Tab) of
+        {atomic, ok} ->
+            ok;
+        {aborted, {no_exists, _}} ->
+            ok;
+        {aborted, Err} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed to delete mnesia table ~tp: ~tp",
+                                           [FeatureName, Tab, Err]),
+            %% adheres to the callback interface
+            ok
+    end.
+>>>>>>> 7fe159edef (Yolo-replace format strings)

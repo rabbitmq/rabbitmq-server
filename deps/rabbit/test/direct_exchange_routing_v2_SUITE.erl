@@ -60,6 +60,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+<<<<<<< HEAD
 init_per_group(Group = cluster_size_1, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodes_count, 1}),
     start_broker(Group, Config);
@@ -73,6 +74,50 @@ init_per_group(Group = unclustered_cluster_size_2, Config0) ->
 
 start_broker(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodename_suffix, Group}),
+=======
+init_per_group(cluster_size_1, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
+init_per_group(cluster_size_2, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 2});
+init_per_group(cluster_size_3, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 3});
+init_per_group(unclustered_cluster_size_2, Config0) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "This test group won't work in mixed mode with pre 3.11 releases"};
+        false ->
+            rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 2},
+                                                   {rmq_nodes_clustered, false}])
+    end;
+init_per_group(start_feature_flag_enabled = Group, Config0) ->
+    Config = start_broker(Group, Config0),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG) of
+        ok ->
+            Config;
+        {skip, _} = Skip ->
+            end_per_group(Group, Config),
+            Skip
+    end;
+init_per_group(start_feature_flag_disabled = Group, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    Config = start_broker(Group, Config1),
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, ?FEATURE_FLAG) of
+        true ->
+            assert_no_index_table(Config),
+            Config;
+        false ->
+            end_per_group(Group, Config),
+            {skip, io_lib:format("'~ts' feature flag is unsupported", [?FEATURE_FLAG])}
+    end.
+
+start_broker(Group, Config0) ->
+    Size = rabbit_ct_helpers:get_config(Config0, rmq_nodes_count),
+    Clustered = rabbit_ct_helpers:get_config(Config0, rmq_nodes_clustered, true),
+    Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodename_suffix,
+                                                    io_lib:format("cluster_size_~b-clustered_~tp-~ts",
+                                                                  [Size, Clustered, Group])}),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).

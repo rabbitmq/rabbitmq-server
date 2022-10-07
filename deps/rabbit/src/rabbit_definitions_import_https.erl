@@ -74,7 +74,11 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
                 PreviousHash -> PreviousHash;
                 Other        ->
                     rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+<<<<<<< HEAD
                     _ = import_raw(Body),
+=======
+                    import_raw(Body),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                     Other
             end;
         {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->

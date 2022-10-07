@@ -100,7 +100,23 @@ handle_cast({user_deleted, Details}) ->
     %% Schedule user entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_channel_user_entry, [Username]),
+<<<<<<< HEAD
     ok.
+=======
+    ok;
+handle_cast({node_deleted, Details}) ->
+    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
+        true ->
+            ok;
+        false ->
+            Node = pget(node, Details),
+            rabbit_log_channel:info(
+              "Node '~ts' was removed from the cluster, deleting"
+              " its channel tracking tables...", [Node]),
+            delete_tracked_channels_table_for_node(Node),
+            delete_per_user_tracked_channels_table_for_node(Node)
+    end.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 -spec register_tracked(rabbit_types:tracked_channel()) -> ok.
 -dialyzer([{nowarn_function, [register_tracked/1]}]).
@@ -199,17 +215,81 @@ ensure_tracked_tables_for_this_node() ->
     ok.
 
 %% Create tables
+<<<<<<< HEAD
 ensure_tracked_channels_table_for_this_node() ->
+=======
+ensure_tracked_channels_table_for_this_node_ets() ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
                                      {keypos, #tracked_channel.pid}]).
 
+<<<<<<< HEAD
 ensure_per_user_tracked_channels_table_for_this_node() ->
+=======
+ensure_tracked_channels_table_for_this_node_mnesia() ->
+    Node = node(),
+    TableName = tracked_channel_table_name_for(Node),
+    case mnesia:create_table(TableName, [{record_name, tracked_channel},
+                                         {attributes, record_info(fields, tracked_channel)}]) of
+        {atomic, ok}                   ->
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, {already_exists, _}} ->
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a tracked channel table for node ~tp: ~tp", [Node, Error]),
+            ok
+    end.
+
+ensure_per_user_tracked_channels_table_for_this_node_ets() ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 
+<<<<<<< HEAD
+=======
+ensure_per_user_tracked_channels_table_for_this_node_mnesia() ->
+    Node = node(),
+    TableName = tracked_channel_per_user_table_name_for(Node),
+    case mnesia:create_table(TableName, [{record_name, tracked_channel_per_user},
+                                         {attributes, record_info(fields, tracked_channel_per_user)}]) of
+        {atomic, ok}                   ->
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, {already_exists, _}} ->
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a per-user tracked channel table for node ~tp: ~tp", [Node, Error]),
+            ok
+    end.
+
+clear_tracked_channel_tables_for_this_node() ->
+    [rabbit_tracking:clear_tracking_table(T)
+        || T <- get_all_tracked_channel_table_names_for_node(node())].
+
+delete_tracked_channels_table_for_node(Node) ->
+    TableName = tracked_channel_table_name_for(Node),
+    rabbit_tracking:delete_tracking_table(TableName, Node, "tracked channel").
+
+delete_per_user_tracked_channels_table_for_node(Node) ->
+    TableName = tracked_channel_per_user_table_name_for(Node),
+    rabbit_tracking:delete_tracking_table(TableName, Node,
+        "per-user tracked channels").
+
+get_all_tracked_channel_table_names_for_node(Node) ->
+    [tracked_channel_table_name_for(Node),
+        tracked_channel_per_user_table_name_for(Node)].
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 get_tracked_channels_by_connection_pid(ConnPid) ->
     rabbit_tracking:match_tracked_items_local(
       ?TRACKED_CHANNEL_TABLE,

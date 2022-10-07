@@ -93,22 +93,45 @@ websocket_init(State0 = #state{socket = Sock}) ->
     ok = file_handle_cache:obtain(),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
+<<<<<<< HEAD
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
             _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             State1 = State0#state{conn_name = ConnName},
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+=======
+            State = State0#state{
+                      conn_name          = ConnStr,
+                      socket             = Sock
+                     },
+            rabbit_log_connection:info("accepting Web MQTT connection ~tp (~ts)", [self(), ConnStr]),
+            AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+            RealSocket = rabbit_net:unwrap_socket(Sock),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
+                                                                 rabbit_mqtt_reader:ssl_login_name(RealSocket),
+                                                                 AdapterInfo,
+                                                                 fun send_reply/2,
+                                                                 PeerAddr),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             process_flag(trap_exit, true),
             {[], State, hibernate};
         {error, Reason} ->
             {[{shutdown_reason, Reason}], State0}
     end.
 
+<<<<<<< HEAD
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
                          rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
+=======
+-spec close_connection(pid(), string()) -> 'ok'.
+close_connection(Pid, Reason) ->
+    rabbit_log_connection:info("Web MQTT: will terminate connection process ~tp, reason: ~ts",
+                               [Pid, Reason]),
+    sys:terminate(Pid, Reason),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     ok.
 
 -spec websocket_handle(ping | pong | {text | binary | ping | pong, binary()}, State) ->
@@ -125,8 +148,14 @@ websocket_handle(Ping, State)
     {[], State, hibernate};
 %% Log and close connection when receiving any other unexpected frames.
 websocket_handle(Frame, State) ->
+<<<<<<< HEAD
     ?LOG_INFO("Web MQTT: unexpected WebSocket frame ~tp", [Frame]),
     stop(State, ?CLOSE_UNACCEPTABLE_DATA_TYPE, <<"unexpected WebSocket frame">>).
+=======
+    rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~tp",
+                    [Frame]),
+    {ok, State, hibernate}.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 -spec websocket_info(any(), State) ->
     {cowboy_websocket:commands(), State} |
@@ -153,6 +182,7 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
             stop(State#state{proc_state = PState})
     end;
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
+<<<<<<< HEAD
                                                             conn_name = ConnName }) ->
     ?LOG_WARNING("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
@@ -186,6 +216,29 @@ websocket_info({keepalive, Req}, State = #state{keepalive = KState0,
                        [ConnName, Reason]),
             stop(State)
     end;
+=======
+                                                                 conn_name = ConnName }) ->
+    rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~ts' (~tp)",
+                 [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
+    stop(State);
+websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
+                                                                 conn_name = ConnName }) ->
+    rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~ts' (~tp), reason: ~ts",
+                 [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
+    stop(State);
+websocket_info({start_keepalives, Keepalive},
+               State = #state{ socket = Sock, keepalive_sup = KeepaliveSup }) ->
+    %% Only the client has the responsibility for sending keepalives
+    SendFun = fun() -> ok end,
+    Parent = self(),
+    ReceiveFun = fun() -> Parent ! keepalive_timeout end,
+    Heartbeater = rabbit_heartbeat:start(
+                    KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
+    {ok, State #state { keepalive = Heartbeater }, hibernate};
+websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
+    rabbit_log_connection:error("closing Web MQTT connection ~tp (keepalive timeout)", [ConnStr]),
+    stop(State);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 websocket_info(emit_stats, State) ->
     {[], emit_stats(State), hibernate};
 websocket_info({ra_event, _From, Evt},
@@ -213,8 +266,14 @@ websocket_info(connection_created, State) ->
     rabbit_event:notify(connection_created, Infos),
     {[], State, hibernate};
 websocket_info(Msg, State) ->
+<<<<<<< HEAD
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
     {[], State, hibernate}.
+=======
+    rabbit_log_connection:info("Web MQTT: unexpected message ~tp",
+                    [Msg]),
+    {ok, State, hibernate}.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 terminate(Reason, Request, #state{} = State) ->
     terminate(Reason, Request, {true, State});
@@ -257,6 +316,7 @@ handle_data1(Data, State = #state{socket = Socket,
                                   conn_name = ConnName}) ->
     case parse(Data, ParseState) of
         {more, ParseState1} ->
+<<<<<<< HEAD
             {ok, ensure_stats_timer(
                    control_throttle(
                      State#state{parse_state = ParseState1})), hibernate};
@@ -288,6 +348,27 @@ handle_data1(Data, State = #state{socket = Socket,
                         {stop, disconnect, ProcState1} ->
                             stop({_SendWill = false, State#state{proc_state = ProcState1}})
                     end
+=======
+            {ok, ensure_stats_timer(control_throttle(
+                State #state{ parse_state = ParseState1 })), hibernate};
+        {ok, Frame, Rest} ->
+            case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
+                {ok, ProcState1, ConnPid} ->
+                    PS = rabbit_mqtt_frame:initial_state(),
+                    handle_data1(
+                      Rest,
+                      State #state{ parse_state = PS,
+                                    proc_state = ProcState1,
+                                    connection = ConnPid });
+                {error, Reason, _} ->
+                    rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
+                        [Reason, ConnStr]),
+                    stop(State, 1002, Reason);
+                {error, Error} ->
+                    stop_with_framing_error(State, Error, ConnStr);
+                {stop, _} ->
+                    stop(State)
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             end;
         {error, Reason} ->
             stop_mqtt_protocol_error(State, Reason, ConnName)
@@ -312,8 +393,29 @@ stop(State) ->
     stop(State, ?CLOSE_NORMAL, "MQTT died").
 
 stop(State, CloseCode, Error0) ->
+<<<<<<< HEAD
     Error = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error}], State}.
+=======
+    ok = file_handle_cache:release(),
+    stop_rabbit_mqtt_processor(State),
+    Error1 = rabbit_data_coercion:to_binary(Error0),
+    {[{close, CloseCode, Error1}], State}.
+
+stop_with_framing_error(State, Error0, ConnStr) ->
+    Error1 = rabbit_misc:format("~tp", [Error0]),
+    rabbit_log_connection:error("MQTT detected framing error '~ts' for connection ~tp",
+                                [Error1, ConnStr]),
+    stop(State, 1007, Error1).
+
+stop_rabbit_mqtt_processor(State = #state{state = running,
+                                          proc_state = ProcState,
+                                          conn_name = ConnName}) ->
+    maybe_emit_stats(State),
+    rabbit_log_connection:info("closing Web MQTT connection ~tp (~ts)", [self(), ConnName]),
+    rabbit_mqtt_processor:send_will(ProcState),
+    rabbit_mqtt_processor:close_connection(ProcState).
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 handle_credits(State0) ->
     State = #state{connection_state = CS} = control_throttle(State0),

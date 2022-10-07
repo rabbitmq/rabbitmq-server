@@ -209,8 +209,13 @@ switch_callback(State, Callback, Length) ->
 
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
+<<<<<<< HEAD
                               error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                           "Connection forced: ~tp", [Reason]))};
+=======
+                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                               "Connection forced: ~tp", [Reason]})};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -252,7 +257,12 @@ handle_dependent_exit(ChPid, Reason, State) ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
+<<<<<<< HEAD
             R = error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Session error: ~tp~n~tp", [RealReason, Trace]),
+=======
+            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                 "Session error: ~tp~n~tp", [RealReason, Trace]},
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 

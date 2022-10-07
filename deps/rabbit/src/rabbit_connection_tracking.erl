@@ -192,16 +192,128 @@ ensure_tracked_connections_table_for_this_node() ->
     rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE]).
 
+<<<<<<< HEAD
 ensure_per_vhost_tracked_connections_table_for_this_node() ->
+=======
+ensure_tracked_connections_table_for_this_node_mnesia() ->
+    Node = node(),
+    TableName = tracked_connection_table_name_for(Node),
+    case mnesia:create_table(TableName, [{record_name, tracked_connection},
+                                         {attributes, record_info(fields, tracked_connection)}]) of
+        {atomic, ok}                   ->
+            rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, {already_exists, _}} ->
+            rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
+                            [TableName]);
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a tracked connection table for node ~tp: ~tp", [Node, Error]),
+            ok
+    end.
+
+-spec ensure_per_vhost_tracked_connections_table_for_this_node() -> ok.
+
+ensure_per_vhost_tracked_connections_table_for_this_node() ->
+    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
+        true ->
+            ok;
+        false ->
+            ensure_per_vhost_tracked_connections_table_for_this_node_mnesia()
+    end.
+
+ensure_per_vhost_tracked_connections_table_for_this_node_ets() ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
     ets:new(?TRACKED_CONNECTION_TABLE_PER_VHOST, [named_table, public, {write_concurrency, true}]).
 
+<<<<<<< HEAD
 ensure_per_user_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
     rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
+=======
+ensure_per_vhost_tracked_connections_table_for_this_node_mnesia() ->
+    Node = node(),
+    TableName = tracked_connection_per_vhost_table_name_for(Node),
+    case mnesia:create_table(TableName, [{record_name, tracked_connection_per_vhost},
+                                         {attributes, record_info(fields, tracked_connection_per_vhost)}]) of
+        {atomic, ok}                   ->
+            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, {already_exists, _}} ->
+            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~tp: ~tp", [Node, Error]),
+            ok
+    end.
+
+-spec ensure_per_user_tracked_connections_table_for_this_node() -> ok.
+
+ensure_per_user_tracked_connections_table_for_this_node() ->
+    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
+        true ->
+            ok;
+        false ->
+            ensure_per_user_tracked_connections_table_for_this_node_mnesia()
+    end.
+
+ensure_per_user_tracked_connections_table_for_this_node_ets() ->
+    ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
+    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
+                    [?TRACKED_CONNECTION_TABLE_PER_USER]).
+
+ensure_per_user_tracked_connections_table_for_this_node_mnesia() ->
+    Node = node(),
+    TableName = tracked_connection_per_user_table_name_for(Node),
+    case mnesia:create_table(TableName, [{record_name, tracked_connection_per_user},
+                                         {attributes, record_info(fields, tracked_connection_per_user)}]) of
+        {atomic, ok}                   ->
+            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, {already_exists, _}} ->
+            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
+                            [TableName]),
+            ok;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a per-user tracked connection table for node ~tp: ~tp", [Node, Error]),
+            ok
+    end.
+
+-spec clear_tracked_connection_tables_for_this_node() -> ok.
+
+clear_tracked_connection_tables_for_this_node() ->
+    [rabbit_tracking:clear_tracking_table(T)
+        || T <- get_all_tracked_connection_table_names_for_node(node())],
+    ok.
+
+-spec delete_tracked_connections_table_for_node(node()) -> ok.
+
+delete_tracked_connections_table_for_node(Node) ->
+    TableName = tracked_connection_table_name_for(Node),
+    rabbit_tracking:delete_tracking_table(TableName, Node, "tracked connection").
+
+-spec delete_per_vhost_tracked_connections_table_for_node(node()) -> ok.
+
+delete_per_vhost_tracked_connections_table_for_node(Node) ->
+    TableName = tracked_connection_per_vhost_table_name_for(Node),
+    rabbit_tracking:delete_tracking_table(TableName, Node,
+        "per-vhost tracked connection").
+
+-spec delete_per_user_tracked_connections_table_for_node(node()) -> ok.
+
+delete_per_user_tracked_connections_table_for_node(Node) ->
+    TableName = tracked_connection_per_user_table_name_for(Node),
+    rabbit_tracking:delete_tracking_table(TableName, Node,
+                                          "per-user tracked connection").
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 -spec tracked_connection_table_name_for(node()) -> atom().
 
 tracked_connection_table_name_for(Node) ->

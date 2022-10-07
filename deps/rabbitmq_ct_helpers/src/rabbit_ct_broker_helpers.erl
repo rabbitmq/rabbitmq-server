@@ -737,7 +737,11 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~ts", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
+<<<<<<< HEAD
       {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
+=======
+      "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}

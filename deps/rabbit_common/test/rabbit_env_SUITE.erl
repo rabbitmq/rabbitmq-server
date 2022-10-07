@@ -352,7 +352,11 @@ check_values_from_reachable_remote_node(Config) ->
             "-pa", filename:dirname(code:which(rabbit)),
             "-pa", RabbitEbinDir,
             "-mnesia", "dir",
+<<<<<<< HEAD
             rabbit_misc:format("~tp", [DataDir]),
+=======
+            rabbit_misc:format("~tp", [MnesiaDir]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             "-rabbit", "feature_flags_file",
             rabbit_misc:format("~tp", [FeatureFlagsFile]),
             "-rabbit", "plugins_dir",

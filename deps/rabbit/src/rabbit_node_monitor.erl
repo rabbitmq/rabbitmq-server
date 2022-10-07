@@ -341,6 +341,7 @@ unblock_global_peer(PeerNode) ->
       "(connection ID to us: ~p) and our node ~s (connection ID to peer: ~p)",
       [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
     logger:debug(
+<<<<<<< HEAD
       "peer global state: ~tp~nour global state: ~tp",
       [erpc:call(PeerNode, sys, get_status, [global_name_server]),
        sys:get_status(global_name_server)]),
@@ -351,6 +352,18 @@ unblock_global_peer(PeerNode) ->
     {global_name_server, PeerNode} ! PeerDownMsg,
     {global_name_server, ThisNode} ! ThisUpMsg,
     {global_name_server, PeerNode} ! PeerUpMsg,
+=======
+      "Global hang workaround: global state on ~ts seems inconsistent~n"
+      " * Peer global state:  ~tp~n"
+      " * Local global state: ~tp~n"
+      "Faking nodedown/nodeup between ~ts and ~ts",
+      [PeerNode, PeerState, sys:get_status(global_name_server),
+       PeerNode, ThisNode]),
+    {global_name_server, ThisNode} ! {nodedown, PeerNode},
+    {global_name_server, PeerNode} ! {nodedown, ThisNode},
+    {global_name_server, ThisNode} ! {nodeup, PeerNode},
+    {global_name_server, PeerNode} ! {nodeup, ThisNode},
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     ok.
 
 connection_id(State, Node) ->

@@ -430,6 +430,17 @@ decode_body(?CONTENT_JSON, Body) ->
 parse_response({error, Reason}) ->
   ?LOG_DEBUG("HTTP error ~tp", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, lists:flatten(io_lib:format("~tp", [Reason]))};
+<<<<<<< HEAD
+=======
+
+parse_response({ok, 200, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
+parse_response({ok, 201, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
+parse_response({ok, 204, _})     -> {ok, []};
+parse_response({ok, Code, Body}) ->
+  ?LOG_DEBUG("HTTP Response (~tp) ~ts", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  {error, integer_to_list(Code)};
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 parse_response({ok, {{_,200,_}, Headers, Body}}) ->
   {ok, decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body)};
 parse_response({ok,{{_,201,_}, Headers, Body}}) ->

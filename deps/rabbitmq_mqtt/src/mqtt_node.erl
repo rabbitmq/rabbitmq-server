@@ -59,9 +59,15 @@ start(Delay, AttemptsLeft) ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
+<<<<<<< HEAD
                       rabbit_log:info("MQTT: discovered cluster peers that support client ID tracking: ~p", [Peers]),
                       ok = start_server(),
                       _ = join_peers(NodeId, Peers),
+=======
+                      rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
+                      start_server(),
+                      join_peers(NodeId, Peers),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
               end;
           _ ->

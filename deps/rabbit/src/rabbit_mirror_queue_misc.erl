@@ -801,6 +801,7 @@ validate_pof(PromoteOnShutdown) ->
         none              -> ok;
         Mode              -> {error, "ha-promote-on-failure must be "
                               "\"always\" or \"when-synced\", got ~tp", [Mode]}
+<<<<<<< HEAD
     end.
 
 merge_policy_value(<<"ha-mode">>, Val, Val) ->
@@ -836,4 +837,6 @@ merge_policy_value(<<"ha-params">>, Val, OpVal) ->
             Val;
        true ->
             OpVal
+=======
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end.

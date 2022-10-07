@@ -719,8 +719,13 @@ open(info, {resource_alarm, IsThereAlarm},
             {false, EnoughCredits} ->
                 not EnoughCredits
         end,
+<<<<<<< HEAD
     rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, "
                                 "new blocked status is now ~tp",
+=======
+    rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, new "
+                                "blocked status is now ~tp",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
@@ -814,6 +819,11 @@ open(info,
                   connection = #stream_connection{virtual_host = VirtualHost} = Connection0,
                   connection_state = ConnState0} =
          State) ->
+<<<<<<< HEAD
+=======
+    rabbit_log:debug("Subscription ~tp instructed to become active: ~tp",
+                     [SubId, Active]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     #stream_connection_state{consumers = Consumers0} = ConnState0,
     Stream = case Msg of
                  #{stream := S} ->
@@ -903,7 +913,11 @@ open(info, {Closed, Socket}, #statem_data{connection = Connection})
 open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
+<<<<<<< HEAD
     _ = demonitor_all_streams(Connection),
+=======
+    demonitor_all_streams(Connection),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_log_connection:error("Socket error ~tp [~w] [~w]",
                                 [Reason, Socket, self()]),
     stop;
@@ -1028,6 +1042,16 @@ open({call, From}, {publishers_info, Items},
      #statem_data{connection = Connection}) ->
     {keep_state_and_data,
      {reply, From, publishers_infos(Items, Connection)}};
+<<<<<<< HEAD
+=======
+open({call, From}, {shutdown, Explanation},
+     #statem_data{connection = Connection}) ->
+    % likely closing call from the management plugin
+    rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
+                               [self(), Explanation]),
+    demonitor_all_streams(Connection),
+    {stop_and_reply, normal, {reply, From, ok}};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 open(cast,
      {queue_event, _, {osiris_written, _, undefined, CorrelationList}},
      #statem_data{transport = Transport,
@@ -1257,8 +1281,13 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
+<<<<<<< HEAD
     rabbit_log_connection:error("Stream protocol connection socket error: ~tp "
                                 "[~w] [~w]",
+=======
+    rabbit_log_connection:error("Stream protocol connection socket error: ~tp [~w] "
+                                "[~w]",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
@@ -1956,8 +1985,13 @@ handle_frame_post_auth(Transport,
                                                                              1),
                             {Connection, State};
                         false ->
+<<<<<<< HEAD
                             rabbit_log:debug("Creating subscription ~tp to ~tp, with offset "
                                              "specification ~tp, properties ~0p",
+=======
+                            rabbit_log:debug("Creating subscription ~tp to ~tp, with offset specificat"
+                                             "ion ~tp, properties ~0p",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                              [SubscriptionId,
                                               Stream,
                                               OffsetSpec,
@@ -1966,7 +2000,24 @@ handle_frame_post_auth(Transport,
                             ConsumerName = consumer_name(Properties),
                             case {Sac, ConsumerName}
                             of
+<<<<<<< HEAD
                                 {true, undefined} ->
+=======
+                                {true, false, _} ->
+                                    rabbit_log:warning("Cannot create subcription ~tp, stream single active "
+                                                       "consumer feature flag is not enabled",
+                                                       [SubscriptionId]),
+                                    response(Transport,
+                                             Connection,
+                                             subscribe,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                     ?PRECONDITION_FAILED,
+                                                                                     1),
+                                    {Connection, State};
+                                {true, _, undefined} ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                     rabbit_log:warning("Cannot create subcription ~tp, a single active "
                                                        "consumer must have a name",
                                                        [SubscriptionId]),
@@ -2087,8 +2138,12 @@ handle_frame_post_auth(Transport,
     case Consumers of
         #{SubscriptionId := #consumer{log = undefined} = Consumer} ->
             %% the consumer is not active, it's likely to be credit leftovers
+<<<<<<< HEAD
             %% from a formerly active consumer. Taking the credits,
             %% logging and sending an error
+=======
+            %% from a formerly active consumer, just logging and send an error
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             rabbit_log:debug("Giving credit to an inactive consumer: ~tp",
                              [SubscriptionId]),
             #consumer{credit = AvailableCredit} = Consumer,
@@ -2157,8 +2212,12 @@ handle_frame_post_auth(_Transport,
         ok ->
             case lookup_leader(Stream, Connection) of
                 {error, Error} ->
+<<<<<<< HEAD
                     rabbit_log:warning("Could not find leader to store offset on ~tp: "
                                        "~tp",
+=======
+                    rabbit_log:warning("Could not find leader to store offset on ~tp: ~tp",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                        [Stream, Error]),
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
@@ -2570,11 +2629,17 @@ handle_frame_post_auth(Transport,
                             [RC])
     end,
     case maps:take(CorrelationId, Requests0) of
+<<<<<<< HEAD
         {#request{content = #{subscription_id := SubscriptionId} = Msg}, Rs} ->
             Stream = stream_from_consumers(SubscriptionId, Consumers),
             rabbit_log:debug("Received consumer update response for subscription "
                              "~tp on stream ~tp, correlation ID ~tp",
                              [SubscriptionId, Stream, CorrelationId]),
+=======
+        {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
+            rabbit_log:debug("Received consumer update response for subscription ~tp",
+                             [SubscriptionId]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             Consumers1 =
                 case Consumers of
                     #{SubscriptionId :=
@@ -2600,10 +2665,16 @@ handle_frame_post_auth(Transport,
                                     ROS
                             end,
 
+<<<<<<< HEAD
                         rabbit_log:debug("Initializing reader for active consumer "
                                          "(subscription ~tp, stream ~tp), offset "
                                          "spec is ~tp",
                                          [SubscriptionId, Stream, OffsetSpec]),
+=======
+                        rabbit_log:debug("Initializing reader for active consumer, offset "
+                                         "spec is ~tp",
+                                         [OffsetSpec]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                         QueueResource =
                             #resource{name = Stream,
                                       kind = queue,
@@ -2652,6 +2723,7 @@ handle_frame_post_auth(Transport,
                         #consumer{log = Log2} = Consumer2,
                         ConsumerOffset = osiris_log:next_offset(Log2),
 
+<<<<<<< HEAD
                         ConsumedMessagesAfter = messages_consumed(ConsumerCounters),
                         rabbit_log:debug("Subscription ~tp (stream ~tp) is now at offset ~tp with ~tp "
                                          "message(s) distributed after subscription",
@@ -2659,6 +2731,12 @@ handle_frame_post_auth(Transport,
                                           Stream,
                                           ConsumerOffset,
                                           ConsumedMessagesAfter - ConsumedMessagesBefore]),
+=======
+                        rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp message(s) "
+                                         "distributed after subscription",
+                                         [SubscriptionId, ConsumerOffset,
+                                          messages_consumed(ConsumerCounters)]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
                         Consumers#{SubscriptionId => Consumer2};
                     #{SubscriptionId :=
@@ -2851,9 +2929,14 @@ maybe_dispatch_on_subscription(Transport,
                                SubscriptionProperties,
                                SendFileOct,
                                false = _Sac) ->
+<<<<<<< HEAD
     rabbit_log:debug("Distributing existing messages to subscription "
                      "~tp on ~tp",
                      [SubscriptionId, Stream]),
+=======
+    rabbit_log:debug("Distributing existing messages to subscription ~tp",
+                     [SubscriptionId]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     case send_chunks(DeliverVersion,
                      Transport,
                      ConsumerState,
@@ -2875,9 +2958,15 @@ maybe_dispatch_on_subscription(Transport,
             ConsumerOffset = osiris_log:next_offset(Log1),
             ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
 
+<<<<<<< HEAD
             rabbit_log:debug("Subscription ~tp on ~tp is now at offset ~tp with ~tp "
                              "message(s) distributed after subscription",
                              [SubscriptionId, Stream, ConsumerOffset,
+=======
+            rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp message(s) "
+                             "distributed after subscription",
+                             [SubscriptionId, ConsumerOffset,
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                               messages_consumed(ConsumerCounters1)]),
 
             rabbit_stream_metrics:consumer_created(self(),
@@ -2901,9 +2990,15 @@ maybe_dispatch_on_subscription(_Transport,
                                SubscriptionProperties,
                                _SendFileOct,
                                true = _Sac) ->
+<<<<<<< HEAD
     rabbit_log:debug("No initial dispatch for subscription ~tp for "
                      "now, waiting for consumer update response from "
                      "client (single active consumer)",
+=======
+    rabbit_log:debug("No initial dispatch for subscription ~tp for now, "
+                     "waiting for consumer update response from client "
+                     "(single active consumer)",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                      [SubscriptionId]),
     #consumer{credit = Credit,
               configuration =
@@ -2948,6 +3043,7 @@ maybe_send_consumer_update(Transport,
                                            correlation_id_sequence = CorrIdSeq},
                            Consumer,
                            Active,
+<<<<<<< HEAD
                            Msg) ->
     #consumer{configuration =
               #consumer_configuration{subscription_id = SubscriptionId}} = Consumer,
@@ -2955,6 +3051,15 @@ maybe_send_consumer_update(Transport,
                                       {consumer_update, SubscriptionId, Active}}),
 
     Connection1 = register_request(Connection, Msg),
+=======
+                           true = _Sac,
+                           Extra) ->
+    rabbit_log:debug("SAC subscription ~tp, active = ~tp",
+                     [SubscriptionId, Active]),
+    Frame =
+        rabbit_stream_core:frame({request, CorrIdSeq,
+                                  {consumer_update, SubscriptionId, Active}}),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
     send(Transport, S, Frame),
     Connection1.

@@ -74,12 +74,15 @@ validate_policy0(<<"alternate-exchange">>, Value)
     ok;
 validate_policy0(<<"alternate-exchange">>, Value) ->
     {error, "~tp is not a valid alternate exchange name", [Value]};
+<<<<<<< HEAD
 
 validate_policy0(<<"consumer-timeout">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
 validate_policy0(<<"consumer-timeout">>, Value) ->
     {error, "~tp is not a valid consumer timeout", [Value]};
+=======
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 validate_policy0(<<"dead-letter-exchange">>, Value)
   when is_binary(Value) ->

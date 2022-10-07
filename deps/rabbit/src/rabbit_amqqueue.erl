@@ -458,7 +458,11 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
                             rabbit_log:info("Queue ~tp migrated to ~tp", [Name, NewNode]),
+<<<<<<< HEAD
                             {migrated, update_migrated_queue(NewNode, N, Queue, Queues, ByNode)};
+=======
+                            {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                         {not_migrated, Reason} ->
                             rabbit_log:warning("Error migrating queue ~tp: ~tp", [Name, Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
@@ -643,7 +647,11 @@ priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
 priv_absent(QueueName, QPid, _IsDurable, alive) ->
     rabbit_misc:protocol_error(
       not_found,
+<<<<<<< HEAD
       "failed to perform operation on ~ts: its leader ~w may be stopping or being demoted",
+=======
+      "failed to perform operation on ~ts: its master replica ~w may be stopping or being demoted",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
       [rabbit_misc:rs(QueueName), QPid]).
 
 -spec assert_equivalence
@@ -1306,7 +1314,30 @@ list_down(VHostPath) ->
     end.
 
 count(VHost) ->
+<<<<<<< HEAD
     rabbit_db_queue:count(VHost).
+=======
+  try
+    %% this is certainly suboptimal but there is no way to count
+    %% things using a secondary index in Mnesia. Our counter-table-per-node
+    %% won't work here because with master migration of mirrored queues
+    %% the "ownership" of queues by nodes becomes a non-trivial problem
+    %% that requires a proper consensus algorithm.
+    length(list_for_count(VHost))
+  catch _:Err ->
+    rabbit_log:error("Failed to fetch number of queues in vhost ~tp:~n~tp",
+                     [VHost, Err]),
+    0
+  end.
+
+list_for_count(VHost) ->
+    list_with_possible_retry(
+      fun() ->
+              mnesia:dirty_index_read(rabbit_queue,
+                                      VHost,
+                                      amqqueue:field_vhost())
+      end).
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 -spec info_keys() -> rabbit_types:info_keys().
 
@@ -1911,6 +1942,7 @@ maybe_clear_recoverable_node(Node) ->
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
+<<<<<<< HEAD
     {Time, Ret} = timer:tc(fun() -> rabbit_db_queue:delete_transient(filter_transient_queues_to_delete(Node)) end),
     case Ret of
         ok -> ok;
@@ -1924,6 +1956,17 @@ on_node_down(Node) ->
             notify_transient_queues_deleted(QueueNames),
             ok
     end.
+=======
+    {Time, {QueueNames, QueueDeletions}} = timer:tc(fun() -> delete_queues_on_node_down(Node) end),
+    case length(QueueNames) of
+        0 -> ok;
+        _ -> rabbit_log:info("~tp transient queues from an old incarnation of node ~tp deleted in ~fs", [length(QueueNames), Node, Time/1000000])
+    end,
+    notify_queue_binding_deletions(QueueDeletions),
+    rabbit_core_metrics:queues_deleted(QueueNames),
+    notify_queues_deleted(QueueNames),
+    ok.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 filter_transient_queues_to_delete(Node) ->
     fun(Q) ->

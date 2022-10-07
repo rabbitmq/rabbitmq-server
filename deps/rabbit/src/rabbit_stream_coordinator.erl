@@ -810,8 +810,13 @@ handle_aux(leader, _, fail_active_actions,
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
     Exclude = maps:from_list([{S, ok}
+<<<<<<< HEAD
                               || {P, {S, _, _}} <- maps_to_list(Actions),
                              is_process_alive(P)]),
+=======
+                              || {P, {S, _, _}} <- maps:to_list(Monitors),
+                             not is_process_alive(P)]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
     fail_active_actions(Streams, Exclude),
     {no_reply, Aux, LogState, []};
@@ -1845,11 +1850,19 @@ fail_active_actions(Streams, Exclude) ->
 
 fail_action(_StreamId, _, #member{current = undefined}) ->
     ok;
+<<<<<<< HEAD
 fail_action(StreamId, Node, #member{role = {_, E},
                                     current = {Action, Idx}}) ->
     rabbit_log:debug("~ts: failing stale action to trigger retry. "
                      "Stream ID: ~ts, node: ~w, action: ~w",
                      [?MODULE, StreamId, node(), Action]),
+=======
+fail_action(StreamId, #member{role = {_, E},
+                              current = {Action, Idx},
+                              node = Node}) ->
+    rabbit_log:debug("~ts: failing active action for ~ts node ~w Action ~w",
+                     [?MODULE, StreamId, Node, Action]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     %% if we have an action send failure message
     send_self_command({action_failed, StreamId,
                        #{action => Action,

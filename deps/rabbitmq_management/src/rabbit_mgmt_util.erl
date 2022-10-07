@@ -260,6 +260,7 @@ is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
     is_authorized(ReqData, Context, Username, Password, Msg, Fun, ReplyWhenFailed).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
+<<<<<<< HEAD
     is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, true).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFailed) ->
@@ -270,6 +271,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
                        true -> not_authorised(Msg, ReqData, Context);
                        false -> {false, ReqData, "Not_Authorized"}
                      end
+=======
+    ErrFun = fun (Msg) ->
+                     rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
+                                        [Username, Msg]),
+                     not_authorised(Msg, ReqData, Context)
+>>>>>>> 7fe159edef (Yolo-replace format strings)
              end,
     AuthProps = [{password, Password}] ++ case vhost(ReqData) of
         VHost when is_binary(VHost) -> [{vhost, VHost}];
@@ -301,7 +308,11 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
                     ErrFun(ResolvedUsername, <<"User can only log in via localhost">>)
             end;
         {refused, _Username, Msg, Args} ->
+<<<<<<< HEAD
             rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
+=======
+            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             rabbit_log:warning("HTTP access denied: ~ts",
                                [rabbit_misc:format(Msg, Args)]),
             case ReplyWhenFailed of

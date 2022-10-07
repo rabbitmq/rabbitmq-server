@@ -625,12 +625,17 @@ username_from(PreferredUsernameClaims, DecodedToken) ->
       [lists:flatten(io_lib:format("~p",[ResolvedUsernameClaims])), Username]),
     Username.
 
+<<<<<<< HEAD
 append_or_return_default(ListOrBinary, Default) ->
   case ListOrBinary of
     VarList when is_list(VarList) -> VarList ++ Default;
     VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
     _ -> Default
   end.
+=======
+    rabbit_log:debug("Computing username from client's JWT token, client ID: '~ts', sub: '~ts'",
+                     [ClientId, Sub]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 find_claim_in_token(Claim, Token) ->
   case maps:get(Claim, Token, undefined) of

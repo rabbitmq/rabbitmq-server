@@ -1909,6 +1909,14 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             rabbit_amqqueue:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
             rabbit_amqqueue:absent(Q, Reason);
+<<<<<<< HEAD
+=======
+        {error, binding_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no binding ~ts between ~ts and ~ts",
+              [RoutingKey, rabbit_misc:rs(ExchangeName),
+               rabbit_misc:rs(DestinationName)]);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         {error, {binding_invalid, Fmt, Args}} ->
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
@@ -2805,6 +2813,7 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
+<<<<<<< HEAD
 get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 			   _State = #ch{cfg = #conf{consumer_timeout = GCT}}) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -2816,6 +2825,30 @@ get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 	    end;
 	_ ->
 	    GCT
+=======
+evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
+                                                   consumer_timeout = Timeout},
+                                       unacked_message_q = UAMQ}) ->
+    Now = os:system_time(millisecond),
+    case ?QUEUE:get(UAMQ, empty) of
+        #pending_ack{delivery_tag = ConsumerTag,
+                     delivered_at = Time}
+          when is_integer(Timeout)
+               andalso Time < Now - Timeout ->
+            rabbit_log_channel:warning("Consumer ~ts on channel ~w has timed out "
+                                       "waiting for delivery acknowledgement. Timeout used: ~tp ms. "
+                                       "This timeout value can be configured, see consumers doc guide to learn more",
+                                       [rabbit_data_coercion:to_binary(ConsumerTag),
+                                        Channel, Timeout]),
+            Ex = rabbit_misc:amqp_error(precondition_failed,
+                                        "delivery acknowledgement on channel ~w timed out. "
+                                        "Timeout value used: ~tp ms. "
+                                        "This timeout value can be configured, see consumers doc guide to learn more",
+                                        [Channel, Timeout], none),
+            handle_exception(Ex, State0);
+        _ ->
+            {noreply, State0}
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end.
 
 get_consumer_timeout(PA = #pending_ack{tag  = CTag},

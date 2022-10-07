@@ -63,8 +63,31 @@ read_ets_counter(Tab, Key) ->
         [{_, Val}] -> Val
     end.
 
+<<<<<<< HEAD
 -spec match_tracked_items(atom(), tuple()) -> term().
 match_tracked_items(Tab, MatchSpec) ->
+=======
+count_tracked_items_mnesia(TableNameFun, CountRecPosition, Key, ContextMsg) ->
+    lists:foldl(fun (Node, Acc) ->
+                        Tab = TableNameFun(Node),
+                        try
+                            N = case mnesia:dirty_read(Tab, Key) of
+                                    []    -> 0;
+                                    [Val] ->
+                                        element(CountRecPosition, Val)
+                                end,
+                            Acc + N
+                        catch _:Err  ->
+                                rabbit_log:error(
+                                  "Failed to fetch number of ~tp ~tp on node ~tp:~n~tp",
+                                  [ContextMsg, Key, Node, Err]),
+                                Acc
+                        end
+                end, 0, rabbit_nodes:all_running()).
+
+-spec match_tracked_items_ets(atom(), tuple()) -> term().
+match_tracked_items_ets(Tab, MatchSpec) ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     lists:foldl(
       fun (Node, Acc) when Node == node() ->
               Acc ++ match_tracked_items_local(Tab, MatchSpec);
@@ -81,6 +104,37 @@ match_tracked_items(Tab, MatchSpec) ->
 match_tracked_items_local(Tab, MatchSpec) ->
     ets:match_object(Tab, MatchSpec).
 
+<<<<<<< HEAD
+=======
+match_tracked_items_mnesia(TableNameFun, MatchSpec) ->
+    lists:foldl(
+        fun (Node, Acc) ->
+                Tab = TableNameFun(Node),
+                Acc ++ mnesia:dirty_match_object(
+                         Tab,
+                         MatchSpec)
+        end, [], rabbit_nodes:all_running()).
+
+-spec clear_tracking_table(atom()) -> ok.
+clear_tracking_table(TableName) ->
+    case mnesia:clear_table(TableName) of
+        {atomic, ok} -> ok;
+        {aborted, _} -> ok
+    end.
+
+-spec delete_tracking_table(atom(), node(), string()) -> ok.
+
+delete_tracking_table(TableName, Node, ContextMsg) ->
+    case mnesia:delete_table(TableName) of
+        {atomic, ok}              -> ok;
+        {aborted, {no_exists, _}} -> ok;
+        {aborted, Error} ->
+            rabbit_log:error("Failed to delete a ~tp table for node ~tp: ~tp",
+                [ContextMsg, Node, Error]),
+            ok
+    end.
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 -spec delete_tracked_entry({atom(), atom(), list()}, atom(), function(), term()) -> ok.
 delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableName, TableNameFun, Key) ->
     ClusterNodes = rabbit_nodes:list_running(),

@@ -706,6 +706,7 @@ lock(TRef, SessionId, _, EndTime) ->
                         ok ->
                             lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
                         {error, Reason} ->
+<<<<<<< HEAD
                             _ = timer:cancel(TRef),
                             {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
                     end;
@@ -715,6 +716,17 @@ lock(TRef, SessionId, _, EndTime) ->
             end;
         {error, Reason} ->
             _ = timer:cancel(TRef),
+=======
+                            timer:cancel(TRef),
+                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
+                    end;
+                {error, Reason} ->
+                    timer:cancel(TRef),
+                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~ts", [Reason]))}
+            end;
+        {error, Reason} ->
+            timer:cancel(TRef),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~ts", [Reason]))}
     end.
 

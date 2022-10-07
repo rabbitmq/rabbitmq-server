@@ -30,6 +30,7 @@
 
 -spec acquire_state_change_lock() -> boolean().
 acquire_state_change_lock() ->
+<<<<<<< HEAD
     ?LOG_DEBUG(
       "Feature flags: acquiring lock ~tp",
       [?FF_STATE_CHANGE_LOCK],
@@ -39,14 +40,29 @@ acquire_state_change_lock() ->
       "Feature flags: acquired lock ~tp",
       [?FF_STATE_CHANGE_LOCK],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquiring lock ~tp",
+      [?FF_STATE_CHANGE_LOCK]),
+    Ret = global:set_lock(?FF_STATE_CHANGE_LOCK),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquired lock ~tp",
+      [?FF_STATE_CHANGE_LOCK]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     Ret.
 
 -spec release_state_change_lock() -> true.
 release_state_change_lock() ->
+<<<<<<< HEAD
     ?LOG_DEBUG(
       "Feature flags: releasing lock ~tp",
       [?FF_STATE_CHANGE_LOCK],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:debug(
+      "Feature flags: releasing lock ~tp",
+      [?FF_STATE_CHANGE_LOCK]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     global:del_lock(?FF_STATE_CHANGE_LOCK).
 
 -spec initialize_registry() -> ok | {error, any()} | no_return().
@@ -277,7 +293,11 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                       %% downgraded to enable the feature
                                       %% flag.
                                       ?assertNotEqual(state_changing, State),
+<<<<<<< HEAD
                                       ?LOG_ERROR(
+=======
+                                      rabbit_log_feature_flags:error(
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                         "Feature flags: `~ts`: required "
                                         "feature flag not enabled! It must "
                                         "be enabled before upgrading "
@@ -307,10 +327,16 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
 
     case Proceed of
         true ->
+<<<<<<< HEAD
             ?LOG_DEBUG(
               "Feature flags: (re)initialize registry (~tp)",
               [self()],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+            rabbit_log_feature_flags:debug(
+              "Feature flags: (re)initialize registry (~tp)",
+              [self()]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             T0 = erlang:timestamp(),
             Ret = do_initialize_registry(RegistryVsn,
                                          AllFeatureFlags,
@@ -318,10 +344,16 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                          Inventory,
                                          WrittenToDisk),
             T1 = erlang:timestamp(),
+<<<<<<< HEAD
             ?LOG_DEBUG(
               "Feature flags: time to regen registry: ~tp us",
               [timer:now_diff(T1, T0)],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+            rabbit_log_feature_flags:debug(
+              "Feature flags: time to regen registry: ~tp us",
+              [timer:now_diff(T1, T0)]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             Ret;
         false ->
             ?LOG_DEBUG(
@@ -398,7 +430,11 @@ do_initialize_registry(RegistryVsn,
     ?LOG_DEBUG(
       "Feature flags: list of feature flags found:\n" ++
       lists:flatten(
+<<<<<<< HEAD
         [io_lib:format(
+=======
+        [rabbit_misc:format(
+>>>>>>> 7fe159edef (Yolo-replace format strings)
            "Feature flags:   [~ts] ~ts~n",
            [case maps:get(FeatureName, FeatureStates, false) of
                 true           -> "x";
@@ -407,7 +443,11 @@ do_initialize_registry(RegistryVsn,
             end,
             FeatureName])
          || FeatureName <- lists:sort(maps:keys(AllFeatureFlags))] ++
+<<<<<<< HEAD
         [io_lib:format(
+=======
+        [rabbit_misc:format(
+>>>>>>> 7fe159edef (Yolo-replace format strings)
            "Feature flags: scanned applications: ~tp~n"
            "Feature flags: feature flag states written to disk: ~ts",
            [ScannedApps,
@@ -635,8 +675,12 @@ regen_registry_mod(RegistryVsn,
               "Feature flags: registry compilation failure:~n"
               "Errors: ~tp~n"
               "Warnings: ~tp",
+<<<<<<< HEAD
               [Errors, Warnings],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+              [Errors, Warnings]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             {error, {compilation_failure, Errors, Warnings}};
         error ->
             ?LOG_ERROR(
@@ -669,18 +713,30 @@ registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
 %% @private
 
 load_registry_mod(RegistryVsn, Mod, Bin) ->
+<<<<<<< HEAD
     ?LOG_DEBUG(
       "Feature flags: registry module ready, loading it (~tp)...",
       [self()],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:debug(
+      "Feature flags: registry module ready, loading it (~tp)...",
+      [self()]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+<<<<<<< HEAD
     ?LOG_DEBUG(
       "Feature flags: acquired lock before reloading registry module (~tp)",
      [self()],
      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquired lock before reloading registry module (~tp)",
+     [self()]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     %% We want to make sure that the old registry (not the one being
     %% currently in use) is purged by the code server. It means no
     %% process lingers on that old code.
@@ -699,6 +755,7 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               RegistryVsn -> code:load_binary(Mod, FakeFilename, Bin);
               OtherVsn    -> {error, {restart, RegistryVsn, OtherVsn}}
           end,
+<<<<<<< HEAD
     ?LOG_DEBUG(
       "Feature flags: releasing lock after reloading registry module (~tp)",
      [self()],
@@ -710,6 +767,17 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               "Feature flags: registry module loaded (vsn: ~tp -> ~tp)",
               [RegistryVsn, registry_vsn()],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:debug(
+      "Feature flags: releasing lock after reloading registry module (~tp)",
+     [self()]),
+    global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+    case Ret of
+        {module, _} ->
+            rabbit_log_feature_flags:debug(
+              "Feature flags: registry module loaded (vsn: ~tp -> ~tp)",
+              [RegistryVsn, registry_vsn()]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             ok;
         {error, {restart, Expected, Current}} ->
             ?LOG_ERROR(
@@ -720,10 +788,16 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             restart;
         {error, Reason} ->
+<<<<<<< HEAD
             ?LOG_ERROR(
               "Feature flags: failed to load registry module: ~tp",
               [Reason],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+            rabbit_log_feature_flags:error(
+              "Feature flags: failed to load registry module: ~tp",
+              [Reason]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
             throw({feature_flag_registry_reload_failure, Reason})
     end.
 

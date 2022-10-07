@@ -63,7 +63,11 @@ init([SupHelperPid, Ref, Configuration]) ->
                                                              ProcInitArgs),
 
             rabbit_log_connection:info("accepting STOMP connection ~tp (~ts)",
+<<<<<<< HEAD
                 [self(), ConnName]),
+=======
+                [self(), ConnStr]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
             ParseState = rabbit_stomp_frame:initial_state(),
             _ = register_resource_alarm(),
@@ -302,9 +306,15 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
+<<<<<<< HEAD
 log_reason({network_error, {ssl_upgrade_error, closed}, ConnName}, _State) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: connection closed",
         [ConnName]);
+=======
+log_reason({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: connection closed",
+        [ConnStr]);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 
 log_reason({network_error,
@@ -321,6 +331,7 @@ log_reason({network_error,
     log_tls_alert(Err, ConnName);
 log_reason({network_error,
             {ssl_upgrade_error,
+<<<<<<< HEAD
              {tls_alert, Alert}}, ConnName}, _State) ->
     log_tls_alert(Alert, ConnName);
 log_reason({network_error, {ssl_upgrade_error, Reason}, ConnName}, _State) ->
@@ -330,6 +341,17 @@ log_reason({network_error, {ssl_upgrade_error, Reason}, ConnName}, _State) ->
 log_reason({network_error, Reason, ConnName}, _State) ->
     rabbit_log_connection:error("STOMP detected network error on ~ts: ~tp",
         [ConnName, Reason]);
+=======
+             {tls_alert, Alert}}, ConnStr}, _State) ->
+    log_tls_alert(Alert, ConnStr);
+log_reason({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: ~tp",
+        [ConnStr, Reason]);
+
+log_reason({network_error, Reason, ConnStr}, _State) ->
+    rabbit_log_connection:error("STOMP detected network error on ~ts: ~tp",
+        [ConnStr, Reason]);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 log_reason({network_error, Reason}, _State) ->
     rabbit_log_connection:error("STOMP detected network error: ~tp", [Reason]);
@@ -356,6 +378,7 @@ log_reason(Reason, #reader_state{processor_state = ProcState}) ->
     rabbit_log_connection:warning("STOMP connection ~ts terminated"
                                   " with reason ~tp, closing it", [AdapterName, Reason]).
 
+<<<<<<< HEAD
 log_tls_alert(handshake_failure, ConnName) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: handshake failure",
         [ConnName]);
@@ -365,6 +388,17 @@ log_tls_alert(unknown_ca, ConnName) ->
 log_tls_alert(Alert, ConnName) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: alert ~ts",
         [ConnName, Alert]).
+=======
+log_tls_alert(handshake_failure, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: handshake failure",
+        [ConnStr]);
+log_tls_alert(unknown_ca, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS certificate verification error on ~ts: alert 'unknown CA'",
+        [ConnStr]);
+log_tls_alert(Alert, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: alert ~ts",
+        [ConnStr, Alert]).
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 
 %%----------------------------------------------------------------------------

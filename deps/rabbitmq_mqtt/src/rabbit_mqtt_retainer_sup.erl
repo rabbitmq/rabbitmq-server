@@ -39,10 +39,20 @@ delete_child_for_vhost(VHost) ->
     {ok, {supervisor:sup_flags(),
           [supervisor:child_spec()]}}.
 init([]) ->
+<<<<<<< HEAD
     {ok, {#{intensity => 5,
             period => 5},
           child_specs(rabbit_vhost:list_names())
          }}.
+=======
+  Mod = rabbit_mqtt_retainer:store_module(),
+  rabbit_log:info("MQTT retained message store: ~tp",
+    [Mod]),
+  {ok, {
+      #{strategy => one_for_one, intensity => 5, period => 5},
+      child_specs(Mod, rabbit_vhost:list_names())
+  }}.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 -spec child_specs([rabbit_types:vhost()]) ->
     [supervisor:child_spec()].

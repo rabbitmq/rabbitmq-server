@@ -569,5 +569,10 @@ apply_to_validation(_Name, <<"classic_queues">>)    -> ok;
 apply_to_validation(_Name, <<"quorum_queues">>)    -> ok;
 apply_to_validation(_Name, <<"streams">>)    -> ok;
 apply_to_validation(_Name, Term) ->
+<<<<<<< HEAD
     {error, "apply-to '~ts' unrecognised; should be one of: 'queues', 'classic_queues', "
      " 'quorum_queues', 'streams', 'exchanges', or 'all'", [Term]}.
+=======
+    {error, "apply-to '~ts' unrecognised; should be 'queues', 'exchanges' "
+     "or 'all'", [Term]}.
+>>>>>>> 7fe159edef (Yolo-replace format strings)

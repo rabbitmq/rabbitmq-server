@@ -970,6 +970,7 @@ wait_log(Config, Clauses) ->
 
 wait_log(Config, Clauses, Deadline) ->
     {ok, Content} = file:read_file(?config(log_location, Config)),
+<<<<<<< HEAD
     case erlang:monotonic_time(millisecond) of
         T when T =< Deadline ->
             case wait_log_check_clauses(Content, Clauses) of
@@ -986,6 +987,23 @@ wait_log(Config, Clauses, Deadline) ->
                       ct:pal("Wait log clause status: ~s", [Matches])
               end, Clauses),
             ct:fail(expected_logs_not_found)
+=======
+    case erlang:system_time(microsecond) of
+        T when T > Deadline ->
+            lists:foreach(fun
+                              ({REs, _}) ->
+                                  Matches = [ io_lib:format("~tp - ~ts~n", [RE, re:run(Content, RE, [{capture, none}])]) || RE <- REs ],
+                                  ct:pal("Wait log clause status: ~ts", [Matches])
+                          end, Clauses),
+            exit(no_log_lines_detected);
+        _ -> ok
+    end,
+    case wait_log_check_clauses(Content, Clauses) of
+        stop -> ok;
+        continue ->
+            timer:sleep(50),
+            wait_log(Config, Deadline, Clauses)
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end,
     ok.
 

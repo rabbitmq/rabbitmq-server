@@ -456,7 +456,11 @@ notify_user_tags_set(Username, ConvertedTags, ActingUser) ->
             'ok'.
 
 set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
+<<<<<<< HEAD
     rabbit_log:debug("Asked to set permissions for user "
+=======
+    rabbit_log:debug("Asked to set permissions for "
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                      "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                      [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
     _ = lists:map(
@@ -472,6 +476,7 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
     try
+<<<<<<< HEAD
         UserPermission = #user_permission{
                             user_vhost = #user_vhost{
                                             username     = Username,
@@ -482,6 +487,23 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                                             read       = ReadPerm}},
         R = rabbit_db_user:set_user_permissions(UserPermission),
         rabbit_log:info("Successfully set permissions for user "
+=======
+        R = rabbit_misc:execute_mnesia_transaction(
+             rabbit_vhost:with_user_and_vhost(
+                Username, VirtualHost,
+                fun () -> ok = mnesia:write(
+                                 rabbit_user_permission,
+                                 #user_permission{user_vhost = #user_vhost{
+                                                      username     = Username,
+                                                      virtual_host = VirtualHost},
+                                                  permission = #permission{
+                                                      configure  = ConfigurePerm,
+                                                      write      = WritePerm,
+                                                      read       = ReadPerm}},
+                                 write)
+                end)),
+        rabbit_log:info("Successfully set permissions for "
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                         "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                         [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
         rabbit_event:notify(permission_created, [{user,      Username},
@@ -567,7 +589,11 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                             },
         R = rabbit_db_user:set_topic_permissions(TopicPermission),
         rabbit_log:info("Successfully set topic permissions on exchange '~ts' for "
+<<<<<<< HEAD
                          "user '~ts' in virtual host '~ts' to '~ts', '~ts'",
+=======
+                         "'~ts' in virtual host '~ts' to '~ts', '~ts'",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                          [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
         rabbit_event:notify(topic_permission_created, [
             {user,      Username},

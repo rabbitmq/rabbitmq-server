@@ -429,6 +429,7 @@ recover(VHost, Qs) ->
                        T = amqqueue:get_type(Q),
                        maps:update_with(T, fun (X) ->
                                                    [Q | X]
+<<<<<<< HEAD
                                            end, [Q], Acc)
                end, ByType0, Qs),
     maps:fold(fun (Mod, Queues, {R0, F0}) ->
@@ -437,6 +438,16 @@ recover(VHost, Qs) ->
                                       [length(Queues), Mod, Taken div 1000]),
                       {R0 ++ R, F0 ++ F}
               end, {[], []}, ByType).
+=======
+                                           end, Acc)
+               end, ByType1, Qs),
+   maps:fold(fun (Mod, Queues, {R0, F0}) ->
+                     {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
+                     rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
+                                    [length(Queues), Mod, Taken div 1000]),
+                     {R0 ++ R, F0 ++ F}
+             end, {[], []}, ByType).
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 -spec handle_down(pid(), queue_name(), term(), state()) ->
     {ok, state(), actions()} | {eol, state(), queue_name()} | {error, term()}.

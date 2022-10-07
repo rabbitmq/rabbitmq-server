@@ -303,3 +303,28 @@ num_received(Topic, Payload, N) ->
     after 1000 ->
               N
     end.
+<<<<<<< HEAD
+=======
+
+rpc(Config, M, F, A) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
+
+publish_qos1(Client, Topic, Payload) ->
+    Mref = erlang:monitor(process, Client),
+    ok = emqtt:publish_async(Client, Topic, #{}, Payload, [{qos, 1}], infinity,
+                             {fun ?MODULE:sync_publish_result/3, [self(), Mref]}),
+    receive
+        {Mref, Reply} ->
+            erlang:demonitor(Mref, [flush]),
+            Reply;
+        {'DOWN', Mref, process, Client, Reason} ->
+            ct:fail("client is down: ~tp", [Reason])
+    after
+        1000 ->
+            erlang:demonitor(Mref, [flush]),
+            puback_timeout
+    end.
+
+sync_publish_result(Caller, Mref, Result) ->
+    erlang:send(Caller, {Mref, Result}).
+>>>>>>> 7fe159edef (Yolo-replace format strings)

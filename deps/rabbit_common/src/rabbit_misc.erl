@@ -1061,8 +1061,18 @@ is_os_process_alive(Pid) ->
                              PidS = rabbit_data_coercion:to_list(Pid),
                              case os:find_executable("tasklist.exe") of
                                  false ->
+<<<<<<< HEAD
                                      Cmd = format("(Get-Process -Id ~ts).ProcessName", [PidS]),
                                      {ok, [Res]} = pwsh_cmd(Cmd),
+=======
+                                     Cmd =
+                                     format(
+                                       "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
+                                       "\"(Get-Process -Id ~ts).ProcessName\"",
+                                       [PidS]),
+                                     Res =
+                                     os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                      case Res of
                                          "erl"  -> true;
                                          "werl" -> true;

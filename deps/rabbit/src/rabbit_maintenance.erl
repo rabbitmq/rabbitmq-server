@@ -50,7 +50,23 @@
         {requires,    networking}]}).
 
 boot() ->
+<<<<<<< HEAD
     rabbit_db_maintenance:setup_schema().
+=======
+    TableName = status_table_name(),
+    rabbit_log:info(
+      "Creating table ~ts for maintenance mode status",
+      [TableName]),
+    try
+        _ = rabbit_table:create(
+              TableName,
+              status_table_definition())
+    catch throw:Reason  ->
+              rabbit_log:error(
+                "Failed to create maintenance status table: ~tp",
+                [Reason])
+    end.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 %%
 %% API

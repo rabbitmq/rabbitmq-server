@@ -160,7 +160,12 @@ create_stream(Q0) ->
                                           ActingUser}]),
                     {new, Q};
                 Error ->
+<<<<<<< HEAD
                     _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
+=======
+
+                    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                     {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
                      [rabbit_misc:rs(QName), node(), Error]}
             end;
@@ -401,8 +406,13 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                          correlation = Correlation,
                          slow = Slow}, Actions}.
 
+<<<<<<< HEAD
 -spec dequeue(_, _, _, _, client()) -> no_return().
 dequeue(_, _, _, _, #stream_client{name = Name}) ->
+=======
+-spec dequeue(_, _, _, client()) -> no_return().
+dequeue(_, _, _, #stream_client{name = Name}) ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     {protocol_error, not_implemented, "basic.get not supported by stream queues ~ts",
      [rabbit_misc:rs(Name)]}.
 

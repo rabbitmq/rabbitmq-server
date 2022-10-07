@@ -37,6 +37,37 @@ end_per_suite(Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+<<<<<<< HEAD
+=======
+%% R16B03 defaults term_to_binary version to 0, this test would always fail
+ensure_term_to_binary_defaults_to_version_1(Config) ->
+    CurrentERTS = erlang:system_info(version),
+    MinimumTestedERTS = "6.0",
+    case rabbit_misc:version_compare(CurrentERTS, MinimumTestedERTS, gte) of
+        true ->
+            Property = fun () ->
+                        prop_ensure_term_to_binary_defaults_to_version_1(Config)
+                       end,
+            rabbit_ct_proper_helpers:run_proper(
+                Property, [],
+                ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT);
+        false ->
+            ct:pal(
+              ?LOW_IMPORTANCE,
+              "This test require ERTS ~tp or above, running on ~tp~n"
+              "Skipping test...",
+              [MinimumTestedERTS, CurrentERTS])
+    end.
+
+prop_ensure_term_to_binary_defaults_to_version_1(_Config) ->
+    ?FORALL(Term, any(),
+        begin
+            Current = term_to_binary(Term),
+            Compat = term_to_binary_compat:term_to_binary_1(Term),
+            Current =:= Compat
+        end).
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 term_to_binary_latin_atom(Config) ->
     Property = fun () -> prop_term_to_binary_latin_atom(Config) end,
     rabbit_ct_proper_helpers:run_proper(Property, [],

@@ -1130,6 +1130,7 @@ this_node_first(Nodes) ->
       Ret :: term() | {error, term()}.
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
+<<<<<<< HEAD
     try
         erpc:call(Node, Module, Function, Args, Timeout)
     catch
@@ -1145,6 +1146,35 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
                "Feature flags: on node `~ts`:~n" ++
                Message3,
                [Module, Function, Args, Node],
+=======
+    case rpc:call(Node, Module, Function, Args, Timeout) of
+        {badrpc, {'EXIT',
+                  {undef,
+                   [{rabbit_feature_flags, Function, Args, []}
+                    | _]}}} ->
+            %% If rabbit_feature_flags:Function() is undefined
+            %% on the remote node, we consider it to be a 3.7.x
+            %% pre-feature-flags node.
+            %%
+            %% Theoretically, it could be an older version (3.6.x and
+            %% older). But the RabbitMQ version consistency check
+            %% (rabbit_misc:version_minor_equivalent/2) called from
+            %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
+            %% this situation from happening before we reach this point.
+            ?LOG_DEBUG(
+               "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
+               "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
+               [?MODULE, Function, Args, Node],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            {error, pre_feature_flags_rabbitmq};
+        {badrpc, Reason} = Error ->
+            ?LOG_ERROR(
+               "Feature flags: error while running:~n"
+               "Feature flags:   ~ts:~ts~tp~n"
+               "Feature flags: on node `~ts`:~n"
+               "Feature flags:   ~tp",
+               [?MODULE, Function, Args, Node, Reason],
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, Reason}
     end.

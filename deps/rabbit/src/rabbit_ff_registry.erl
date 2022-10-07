@@ -204,7 +204,11 @@ on_load() ->
      _ = (catch ?LOG_DEBUG(
                   "Feature flags: Loading initial (uninitialized) registry "
                   "module (~tp)",
+<<<<<<< HEAD
                   [self()],
                   #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})),
+=======
+                  [self()])),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     ok.
 -endif.

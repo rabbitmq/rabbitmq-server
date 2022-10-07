@@ -123,12 +123,17 @@ recover() ->
     case list_exchanges() of
         {error, Reason} ->
             rabbit_log:error(
+<<<<<<< HEAD
               "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~tp",
               [Reason]);
         Xs ->
             rabbit_log:debug("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
             %% TODO we need to know if we're first on the cluster to reset storage. In mnesia it's a ram table
             [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)]
+=======
+                "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~tp",
+                [Reason])
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end.
 
 list_exchanges() ->
@@ -136,6 +141,7 @@ list_exchanges() ->
     rabbit_db_exchange:match(Pattern).
 
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
+<<<<<<< HEAD
     rabbit_log:debug("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
     create(none, X),
     rabbit_log:debug("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
@@ -145,6 +151,20 @@ recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     [add_binding(none, X, B) || B <- lists:usort(Bindings)],
     rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~ts",
                      [rabbit_misc:rs(XName)]).
+=======
+    mnesia:transaction(
+        fun () ->
+            rabbit_log:debug("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
+            create(transaction, X),
+            rabbit_log:debug("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
+            Bindings = rabbit_binding:list_for_source(XName),
+            rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",
+                             [length(Bindings), rabbit_misc:rs(XName)]),
+            [add_binding(transaction, X, B) || B <- lists:usort(Bindings)],
+            rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~ts",
+                             [rabbit_misc:rs(XName)])
+    end).
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 create(_Serial, X) ->
     maybe_initialise_hash_ring_state(X).
@@ -171,6 +191,7 @@ add_binding(_Serial, _X, #binding{source = S, destination = D, key = K}) ->
                              [rabbit_misc:rs(S), rabbit_misc:rs(D), K])
     end.
 
+<<<<<<< HEAD
 chx_hash_ring_update_fun(#chx_hash_ring{bucket_map = BM0,
                                         next_bucket_number = NexN0} = Chx0,
                          Dst, Weight) ->
@@ -187,6 +208,30 @@ chx_hash_ring_update_fun(#chx_hash_ring{bucket_map = BM0,
             Chx0#chx_hash_ring{bucket_map = BM,
                                next_bucket_number = NextN}
     end.
+=======
+    case mnesia:read(?HASH_RING_STATE_TABLE, S) of
+        [State0 = #chx_hash_ring{bucket_map = BM0,
+                                 next_bucket_number = NexN0}] ->
+            case map_has_value(BM0, D) of
+                true ->
+                    rabbit_log:debug("Consistent hashing exchange: NOT adding binding from "
+                                     "exchange ~ts to destination ~ts with routing key '~ts' "
+                                     "because this binding (possibly with a different "
+                                     "routing key) already exists",
+                                     [rabbit_misc:rs(S), rabbit_misc:rs(D), K]);
+                false ->
+                    rabbit_log:debug("Consistent hashing exchange: adding binding from "
+                                     "exchange ~ts to destination ~ts with routing key '~ts'",
+                                     [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
+                    NextN    = NexN0 + Weight,
+                    %% hi/lo bucket counters are 0-based but weight is 1-based
+                    Range   = lists:seq(NexN0, (NextN - 1)),
+                    BM      = lists:foldl(fun(Key, Acc) ->
+                                                  maps:put(Key, D, Acc)
+                                          end, BM0, Range),
+                    State   = State0#chx_hash_ring{bucket_map = BM,
+                                                   next_bucket_number = NextN},
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 remove_bindings(_Serial, _X, Bindings) ->
     Ret = rabbit_db_ch_exchange:delete_bindings(Bindings, fun ch_hash_ring_delete_fun/2),
@@ -211,6 +256,7 @@ ch_hash_ring_delete_fun(#chx_hash_ring{bucket_map = BM0,
             BucketsDownTheRing = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
             UnchangedBuckets   = maps:filter(fun (K, _) -> K < FirstBucket end, BM0),
 
+<<<<<<< HEAD
             %% final state with "down the ring" buckets updated
             NewBucketsDownTheRing = maps:fold(
                                       fun(K0, V, Acc)  ->
@@ -220,6 +266,52 @@ ch_hash_ring_delete_fun(#chx_hash_ring{bucket_map = BM0,
             NextN = NexN0 - N,
             Chx0#chx_hash_ring{bucket_map = BM1,
                                next_bucket_number = NextN}
+=======
+    ok;
+remove_bindings(none, X, Bindings) ->
+    rabbit_misc:execute_mnesia_transaction(
+     fun() -> remove_bindings(transaction, X, Bindings) end),
+    ok.
+
+-spec remove_binding(#binding{}) -> ok.
+remove_binding(#binding{source = S, destination = D, key = RK}) ->
+    rabbit_log:debug("Consistent hashing exchange: removing binding "
+                     "from exchange ~ts to destination ~ts with routing key '~ts'",
+                     [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
+
+    case mnesia:read(?HASH_RING_STATE_TABLE, S) of
+        [State0 = #chx_hash_ring{bucket_map = BM0,
+                                 next_bucket_number = NexN0}] ->
+            %% Buckets with lower numbers stay as is; buckets that
+            %% belong to this binding are removed; buckets with
+            %% greater numbers are updated (their numbers are adjusted downwards)
+            BucketsOfThisBinding = maps:filter(fun (_K, V) -> V =:= D end, BM0),
+            case maps:size(BucketsOfThisBinding) of
+                0             -> ok;
+                N when N >= 1 ->
+                    KeysOfThisBinding  = lists:usort(maps:keys(BucketsOfThisBinding)),
+                    LastBucket         = lists:last(KeysOfThisBinding),
+                    FirstBucket        = hd(KeysOfThisBinding),
+                    BucketsDownTheRing = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
+                    UnchangedBuckets   = maps:filter(fun (K, _) -> K < FirstBucket end, BM0),
+
+                    %% final state with "down the ring" buckets updated
+                    NewBucketsDownTheRing = maps:fold(
+                                              fun(K0, V, Acc)  ->
+                                                      maps:put(K0 - N, V, Acc)
+                                              end, #{}, BucketsDownTheRing),
+                    BM1 = maps:merge(UnchangedBuckets, NewBucketsDownTheRing),
+                    NextN = NexN0 - N,
+                    State = State0#chx_hash_ring{bucket_map = BM1,
+                                                 next_bucket_number = NextN},
+
+                    ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write)
+            end;
+        [] ->
+            rabbit_log:warning("Can't remove binding: hash ring state for exchange ~ts wasn't found",
+                               [rabbit_misc:rs(S)]),
+            ok
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     end.
 
 -spec ring_state(vhost:name(), rabbit_misc:resource_name()) ->

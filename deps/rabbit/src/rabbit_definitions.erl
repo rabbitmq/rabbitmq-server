@@ -268,11 +268,19 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
 
             case should_skip_if_unchanged() of
                 false ->
+<<<<<<< HEAD
                     rabbit_log:debug("Will re-import definitions even if they have not changed"),
                     Mod:load(IsDir, Path);
                 true ->
                     Algo = rabbit_definitions_hashing:hashing_algorithm(),
                     rabbit_log:debug("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
+=======
+                    rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
+                    Mod:load(IsDir, Path);
+                true ->
+                    Algo = rabbit_definitions_hashing:hashing_algorithm(),
+                    rabbit_log:debug("Will use module ~ts to import definitions (if definition file/directory has changed, hashing algo: ~ts)", [Mod, Algo]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
                     rabbit_log:debug("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
@@ -466,6 +474,47 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
         rabbit_runtime:gc_all_processes()
     end.
 
+<<<<<<< HEAD
+=======
+-spec apply_defs(Map :: #{atom() => any()},
+                ActingUser :: rabbit_types:username(),
+                SuccessFun :: fun(() -> 'ok'),
+                ErrorFun :: fun((any()) -> 'ok'),
+                VHost :: vhost:name()) -> 'ok' | {error, term()}.
+
+apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
+    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~tp, acting user: ~tp",
+                    [VHost, ActingUser]),
+    try
+        validate_limits(Map, VHost),
+
+        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+        sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
+        %% importing policies concurrently can be unsafe as queues will be getting
+        %% potentially out of order notifications of applicable policy changes
+        sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
+
+        rabbit_nodes:if_reached_target_cluster_size(
+            fun() ->
+                concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+                concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3)
+            end,
+
+            fun() ->
+                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
+                                " skipping queue and binding import from definitions",
+                                [rabbit_nodes:target_cluster_size_hint()])
+            end
+        ),
+
+        SuccessFun()
+    catch {error, E} -> ErrorFun(format(E));
+          exit:E     -> ErrorFun(format(E))
+    after
+        rabbit_runtime:gc_all_processes()
+    end.
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 sequential_for_all(Category, ActingUser, Definitions, Fun) ->
     try
         sequential_for_all0(Category, ActingUser, Definitions, Fun),
@@ -697,7 +746,11 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     Name = R#resource.name,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
+<<<<<<< HEAD
 add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
+=======
+add_queue_int(Queue, Name, ActingUser) ->
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     case rabbit_amqqueue:exists(Name) of
         true ->
             ok;

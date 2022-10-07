@@ -132,7 +132,11 @@ start_slave_nodes(Config, Testcase) ->
 
 start_slave_node(Parent, Config, Testcase, N) ->
     Name = list_to_atom(
+<<<<<<< HEAD
              rabbit_misc:format("~ts-~b", [Testcase, N])),
+=======
+             rabbit_misc:format("~ts-~ts-~b", [Prefix, Testcase, N])),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     ct:pal("- Starting slave node `~ts@...`", [Name]),
     {ok, Node} = slave:start(net_adm:localhost(), Name),
     ct:pal("- Slave node `~ts` started", [Node]),
@@ -204,9 +208,15 @@ setup_feature_flags_file(Config) ->
     %% directory.
     PrivDir = ?config(priv_dir, Config),
     FeatureFlagsFile = filename:join(
+<<<<<<< HEAD
                          PrivDir,
                          rabbit_misc:format("feature_flags-~ts", [node()])),
     ?LOG_INFO("Setting `feature_flags_file` to \"~ts\"", [FeatureFlagsFile]),
+=======
+                         ?config(priv_dir, Config),
+                         rabbit_misc:format("feature_flags-~ts", [node()])),
+    ?LOG_INFO("Setting `feature_flags_file to \"~ts\"", [FeatureFlagsFile]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     case application:load(rabbit) of
         ok                           -> ok;
         {error, {already_loaded, _}} -> ok
@@ -221,6 +231,20 @@ start_controller() ->
     ok = rabbit_feature_flags:override_running_nodes([ThisNode]),
     {ok, Pid} = rabbit_ff_controller:start(),
     ?LOG_INFO("Feature flags controller: ~tp", [Pid]),
+<<<<<<< HEAD
+=======
+    ok.
+
+maybe_enable_feature_flags_v2(Config) ->
+    EnableFFv2 = ?config(enable_feature_flags_v2, Config),
+    case EnableFFv2 of
+        true  -> ok = rabbit_feature_flags:enable(feature_flags_v2);
+        false -> ok
+    end,
+    IsEnabled = rabbit_feature_flags:is_enabled(feature_flags_v2),
+    ?LOG_INFO("`feature_flags_v2` enabled: ~ts", [IsEnabled]),
+    ?assertEqual(EnableFFv2, IsEnabled),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     ok.
 
 override_running_nodes(Nodes) when is_list(Nodes) ->
@@ -285,7 +309,20 @@ bump_runs() ->
     persistent_term:put(?PT_MIGRATION_FUN_RUNS, Count + 1),
     ok.
 
+<<<<<<< HEAD
 mf_count_runs(#{command := enable}) ->
+=======
+mf_count_runs(_FeatureName, _FeatureProps, enable) ->
+    bump_runs(),
+    ok.
+
+mf_wait_and_count_runs(_FeatureName, _FeatureProps, enable) ->
+    Peer = get_peer_proc(),
+    Peer ! {node(), self(), waiting},
+    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
+    receive proceed -> ok end,
+    ?LOG_NOTICE("Migration function: unblocked!", []),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     bump_runs(),
     ok.
 
@@ -678,6 +715,206 @@ enable_feature_flag_in_cluster_and_add_member_after(Config) ->
          || Node <- AllNodes],
     ok.
 
+<<<<<<< HEAD
+=======
+enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
+    AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => ?MODULE,
+                       stability => stable,
+                       migration_fun => {?MODULE, mf_wait_and_count_runs}}},
+    inject_on_nodes(AllNodes, FeatureFlags),
+
+    ct:pal(
+      "Checking the feature flag is supported but disabled on all nodes"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+
+    ct:pal(
+      "Enabling the feature flag in the cluster (in a separate process)"),
+    Peer = self(),
+    Enabler = spawn_link(
+                fun() ->
+                        ok =
+                        run_on_node(
+                          FirstNode,
+                          fun() ->
+                                  %% The migration function uses the `Peer'
+                                  %% PID (the process executing the testcase)
+                                  %% to notify its own PID and wait for a
+                                  %% signal from `Peer' to proceed and finish
+                                  %% the migration.
+                                  record_peer_proc(Peer),
+                                  ?assertEqual(
+                                     ok,
+                                     rabbit_feature_flags:enable(
+                                       FeatureName)),
+                                  ok
+                          end,
+                          [])
+                end),
+
+    %% By waiting for the message from one of the migration function
+    %% instances, we make sure the feature flags controller on `FirstNode' is
+    %% blocked and waits for a message from this process. Therefore, we are
+    %% sure the feature flag is in the `state_changing' state and we can try
+    %% to add a new node and sync its feature flags.
+    FirstNodeMigFunPid = receive
+                             {FirstNode, MigFunPid1, waiting} -> MigFunPid1
+                         end,
+
+    %% Check compatibility between NewNodes and Nodes. This doesn't block.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode)),
+                   ok
+           end, []),
+
+    %% Add node to cluster and synchronize feature flags. The synchronization
+    %% blocks.
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+    ct:pal(
+      "Synchronizing feature flags in the expanded cluster (in a separate "
+      "process)~n"
+      "~n"
+      "NOTE: Error messages about crashed migration functions can be "
+      "ignored for feature~n"
+      "      flags other than `~ts`~n"
+      "      because they assume they run inside RabbitMQ.",
+      [FeatureName]),
+    Syncer = spawn_link(
+               fun() ->
+                       ok =
+                       run_on_node(
+                         NewNode,
+                         fun() ->
+                                 record_peer_proc(Peer),
+                                 ?assertEqual(
+                                    ok,
+                                    rabbit_feature_flags:
+                                    sync_feature_flags_with_cluster(
+                                      Nodes, true)),
+                                 ok
+                         end, [])
+               end),
+
+    ct:pal(
+      "Checking the feature flag state is changing in the initial cluster"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(
+                      state_changing,
+                      rabbit_feature_flags:is_enabled(
+                        FeatureName, non_blocking)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    ct:pal("Checking the feature flag is still disabled on the new node"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           []),
+
+    %% Unblock the migration functions on `Nodes'.
+    UsingFFv1 = not ?config(enable_feature_flags_v2, Config),
+    EnablerMRef = erlang:monitor(process, Enabler),
+    SyncerMRef = erlang:monitor(process, Syncer),
+    unlink(Enabler),
+    unlink(Syncer),
+    ExpectedNodes = case UsingFFv1 of
+                        true ->
+                            %% With v1, the migration function runs on a
+                            %% single node in the cluster only in this
+                            %% scenario.
+                            %%
+                            %% The reason is that the new node joined during
+                            %% the migration and the feature flag was marked
+                            %% as enabled there as well, even though the
+                            %% migration function possibly didn't know about
+                            %% it. This is one of the problems
+                            %% `feature_flags_v2' fixes.
+                            [FirstNode];
+                        false ->
+                            %% With v2 but still using the old migration
+                            %% function API (taking 3 arguments), the
+                            %% migration function is executed on the node
+                            %% where `enable()' was called, and then on the
+                            %% node joining the cluster, thanks to the
+                            %% synchronization.
+                            [FirstNode, NewNode]
+                    end,
+
+    %% Unblock the migration function for which we already consumed the
+    %% `waiting' notification.
+    FirstMigratedNode = node(FirstNodeMigFunPid),
+    ?assertEqual(FirstNode, FirstMigratedNode),
+    ct:pal(
+      "Unblocking first node (~tp @ ~ts)",
+      [FirstNodeMigFunPid, FirstMigratedNode]),
+    FirstNodeMigFunPid ! proceed,
+
+    %% Unblock the rest and collect the node names of all migration functions
+    %% which ran.
+    ct:pal("Unblocking other nodes, including the joining one"),
+    OtherMigratedNodes = [receive
+                              {Node, MigFunPid2, waiting} ->
+                                  MigFunPid2 ! proceed,
+                                  Node
+                          end || Node <- ExpectedNodes -- [FirstMigratedNode]],
+    MigratedNodes = [FirstMigratedNode | OtherMigratedNodes],
+    ?assertEqual(lists:sort(ExpectedNodes), lists:sort(MigratedNodes)),
+
+    ct:pal("Waiting for spawned processes to terminate"),
+    receive
+        {'DOWN', EnablerMRef, process, Enabler, EnablerReason} ->
+            ?assertEqual(normal, EnablerReason)
+    end,
+    receive
+        {'DOWN', SyncerMRef, process, Syncer, SyncerReason} ->
+            ?assertEqual(normal, SyncerReason)
+    end,
+
+    ct:pal("Checking the feature flag is enabled in the expanded cluster"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assert(
+                      not lists:member(Node, MigratedNodes) orelse
+                      1 =:= persistent_term:get(?PT_MIGRATION_FUN_RUNS, 0)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+    ok.
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
     AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
     connect_nodes(Nodes),
@@ -863,6 +1100,116 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
          || Node <- AllNodes],
     ok.
 
+<<<<<<< HEAD
+=======
+enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv1(Config) ->
+    AllNodes = [LeavingNode | [FirstNode | _] = Nodes] = ?config(
+                                                            nodes, Config),
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => ?MODULE,
+                       stability => stable,
+                       migration_fun => {?MODULE, mf_wait_and_count_runs}}},
+    inject_on_nodes(AllNodes, FeatureFlags),
+
+    ct:pal(
+      "Checking the feature flag is supported but disabled on all nodes"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+
+    UsingFFv1 = not ?config(enable_feature_flags_v2, Config),
+    ExpectedRet = case UsingFFv1 of
+                      true  -> ok;
+                      false -> {error, {badrpc, nodedown}}
+                  end,
+    ct:pal(
+      "Enabling the feature flag in the cluster (in a separate process)"),
+    Peer = self(),
+    Enabler = spawn_link(
+                fun() ->
+                        ok =
+                        run_on_node(
+                          FirstNode,
+                          fun() ->
+                                  %% The migration function uses the `Peer'
+                                  %% PID (the process executing the testcase)
+                                  %% to notify its own PID and wait for a
+                                  %% signal from `Peer' to proceed and finish
+                                  %% the migration.
+                                  record_peer_proc(Peer),
+                                  ?assertEqual(
+                                     ExpectedRet,
+                                     rabbit_feature_flags:enable(
+                                       FeatureName)),
+                                  ok
+                          end,
+                          [])
+                end),
+
+    %% By waiting for the message from one of the migration function
+    %% instances, we make sure the feature flags controller on `FirstNode' is
+    %% blocked and waits for a message from this process. Therefore, we are
+    %% sure the feature flag is in the `state_changing' state and we can try
+    %% to add a new node and sync its feature flags.
+    FirstNodeMigFunPid = receive
+                             {_Node, MigFunPid1, waiting} -> MigFunPid1
+                         end,
+
+    %% Remove node from cluster.
+    stop_slave_node(LeavingNode),
+    override_running_nodes(Nodes),
+
+    %% Unblock the migration functions on `Nodes'.
+    EnablerMRef = erlang:monitor(process, Enabler),
+    unlink(Enabler),
+
+    %% Unblock the migration function for which we already consumed the
+    %% `waiting' notification.
+    FirstMigratedNode = node(FirstNodeMigFunPid),
+    ct:pal(
+      "Unblocking first node (~tp @ ~ts)",
+      [FirstNodeMigFunPid, FirstMigratedNode]),
+    FirstNodeMigFunPid ! proceed,
+
+    ct:pal("Waiting for spawned processes to terminate"),
+    receive
+        {'DOWN', EnablerMRef, process, Enabler, EnablerReason} ->
+            ?assertEqual(normal, EnablerReason)
+    end,
+
+    ct:pal(
+      "Checking the feature flag is enabled (v1) or disabled (v2) in the "
+      "cluster"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   case UsingFFv1 of
+                       true ->
+                           ?assert(
+                              rabbit_feature_flags:is_enabled(FeatureName));
+                       false ->
+                           ?assertNot(
+                              rabbit_feature_flags:is_enabled(FeatureName))
+                   end,
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+    ok.
+
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
     AllNodes = [LeavingNode | [FirstNode | _] = Nodes] = ?config(
                                                             nodes, Config),

@@ -119,8 +119,12 @@ init() ->
         {leader_waiting, Winner, _} ->
             rabbit_log:info(
               "Autoheal: in progress, requesting report from ~tp", [Winner]),
+<<<<<<< HEAD
             _ = send(Winner, report_autoheal_status),
             ok;
+=======
+            send(Winner, report_autoheal_status);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         _ ->
             ok
     end,
@@ -129,7 +133,11 @@ init() ->
 maybe_start(not_healing) ->
     case enabled() of
         true  -> Leader = leader(),
+<<<<<<< HEAD
                  _ = send(Leader, {request_start, node()}),
+=======
+                 send(Leader, {request_start, node()}),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                  rabbit_log:info("Autoheal request sent to ~tp", [Leader]),
                  not_healing;
         false -> not_healing

@@ -236,7 +236,11 @@ declare_queue_error(Error, Queue, Leader, ActingUser) ->
     _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
     {protocol_error, internal_error,
      "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
+<<<<<<< HEAD
      [rabbit_misc:rs(amqqueue:get_name(Queue)), node(), Leader, Error]}.
+=======
+     [rabbit_misc:rs(QName), node(), Leader, Error]}.
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
@@ -1323,8 +1327,23 @@ dlh(undefined, _, Strategy, _, QName) ->
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
+<<<<<<< HEAD
 dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
     at_least_once;
+=======
+dlh(Exchange, RoutingKey, <<"at-least-once">>, reject_publish, QName) ->
+    %% Feature flag stream_queue includes the rabbit_queue_type refactor
+    %% which is required by rabbit_fifo_dlx_worker.
+    case rabbit_queue_type:is_supported() of
+        true ->
+            at_least_once;
+        false ->
+            rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
+                               "because feature flag stream_queue is disabled.",
+                               [rabbit_misc:rs(QName)]),
+            dlh_at_most_once(Exchange, RoutingKey, QName)
+    end;
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
     rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "

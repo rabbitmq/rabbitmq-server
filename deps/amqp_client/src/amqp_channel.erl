@@ -774,7 +774,11 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler = ReturnHandler}) ->
+<<<<<<< HEAD
     _ = case ReturnHandler of
+=======
+    case ReturnHandler of
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         none        -> ?LOG_WARN("Channel (~tp): received {~tp, ~tp} but there is "
                                  "no return handler registered",
                                  [self(), BasicReturn, AmqpMsg]);

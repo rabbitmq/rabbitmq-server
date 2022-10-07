@@ -149,7 +149,11 @@ log_open(FileName) ->
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
     logger:info("opening log file: ~tp", [LogName]),
+<<<<<<< HEAD
     _ = filelib:ensure_dir(LogName),
+=======
+    filelib:ensure_dir(LogName),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     {ok, FD} = file:open(LogName, [read, write, raw]),
     {ok, Location} = file:position(FD, eof),
     fix_log(FD, Location),

@@ -288,8 +288,12 @@ handle_call({delete_super_stream, VirtualHost, SuperStream, Username},
                 ok ->
                     ok;
                 {error, Error} ->
+<<<<<<< HEAD
                     rabbit_log:warning("Error while deleting super stream exchange ~tp, "
                                        "~tp",
+=======
+                    rabbit_log:warning("Error while deleting super stream exchange ~tp, ~tp",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                        [SuperStream, Error]),
                     ok
             end,
@@ -443,8 +447,13 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
 handle_call({partition_index, VirtualHost, SuperStream, Stream},
             _From, State) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+<<<<<<< HEAD
     rabbit_log:debug("Looking for partition index of stream ~tp in "
                      "super stream ~tp (virtual host ~tp)",
+=======
+    rabbit_log:debug("Looking for partition index of stream ~tp in super "
+                     "stream ~tp (virtual host ~tp)",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                      [Stream, SuperStream, VirtualHost]),
     Res = try
               _ = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -733,8 +742,12 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
             catch
                 exit:ExitError ->
                     % likely to be a problem of inequivalent args on an existing stream
+<<<<<<< HEAD
                     rabbit_log:error("Error while creating ~tp super stream exchange: "
                                      "~tp",
+=======
+                    rabbit_log:error("Error while creating ~tp super stream exchange: ~tp",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                      [Name, ExitError]),
                     {error, validation_failed}
             end;
@@ -816,6 +829,15 @@ add_super_stream_binding(VirtualHost,
             {error,
              {stream_not_found,
               rabbit_misc:format("stream ~ts does not exists (absent)", [Q])}};
+<<<<<<< HEAD
+=======
+        {error, binding_not_found} ->
+            {error,
+             {not_found,
+              rabbit_misc:format("no binding ~ts between ~ts and ~ts",
+                                 [RoutingKey, rabbit_misc:rs(ExchangeName),
+                                  rabbit_misc:rs(QueueName)])}};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         {error, {binding_invalid, Fmt, Args}} ->
             {error, {binding_invalid, rabbit_misc:format(Fmt, Args)}};
         {error, #amqp_error{} = Error} ->

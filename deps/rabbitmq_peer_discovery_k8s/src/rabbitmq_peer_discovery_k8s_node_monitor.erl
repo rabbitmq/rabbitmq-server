@@ -35,11 +35,19 @@ handle_cast(_Msg, State) ->
 
 handle_info({nodeup, Node}, State) ->
     Details = io_lib:format("Node ~ts is up ", [Node]),
+<<<<<<< HEAD
     _ = rabbit_peer_discovery_k8s:send_event("Normal", "NodeUp", Details),
     {noreply, State};
 handle_info({nodedown, Node}, State) ->
     Details = io_lib:format("Node ~ts is down or disconnected ", [Node]),
     _ = rabbit_peer_discovery_k8s:send_event("Warning", "NodeDown", Details),
+=======
+    rabbit_peer_discovery_k8s:send_event("Normal", "NodeUp", Details),
+    {noreply, State};
+handle_info({nodedown, Node}, State) ->
+    Details = io_lib:format("Node ~ts is down or disconnected ", [Node]),
+    rabbit_peer_discovery_k8s:send_event("Warning", "NodeDown", Details),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     {noreply, State}.
 
 terminate(_Arg, _State) ->

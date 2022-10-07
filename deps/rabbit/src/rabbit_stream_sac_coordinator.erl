@@ -250,7 +250,11 @@ apply(#command_activate_consumer{vhost = VirtualHost,
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
+<<<<<<< HEAD
                 rabbit_log:warning("Trying to activate consumer in group ~tp, but "
+=======
+                rabbit_log:warning("trying to activate consumer in group ~tp, but "
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};

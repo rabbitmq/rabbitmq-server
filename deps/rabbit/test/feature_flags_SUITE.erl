@@ -203,6 +203,7 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+<<<<<<< HEAD
     Config1 = case Testcase of
                   required_plugin_feature_flag_enabled_after_activation ->
                       rabbit_ct_helpers:set_config(
@@ -212,6 +213,19 @@ init_per_testcase(Testcase, Config) ->
                       Config
               end,
     case ?config(tc_group_properties, Config1) of
+=======
+    UsingFFv2 = rabbit_ct_helpers:get_config(
+                  Config, enable_feature_flags_v2, false),
+    ForcedFFs = case UsingFFv2 of
+                    true  -> [feature_flags_v2];
+                    false -> []
+                end,
+    Suffix = case UsingFFv2 of
+                 false -> rabbit_misc:format("~ts-v1", [Testcase]);
+                 true  -> rabbit_misc:format("~ts-v2", [Testcase])
+             end,
+    case ?config(tc_group_properties, Config) of
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         [{name, registry} | _] ->
             logger:set_primary_config(level, debug),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config1),
@@ -492,10 +506,16 @@ registry_concurrent_reloads(_Config) ->
                     maps:keys(FeatureFlags) ++
                     [MakeName(I) || I <- ProcIs]),
     Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
+<<<<<<< HEAD
     ?LOG_INFO(
       ?MODULE_STRING ": Started registry spammer (~tp)",
       [self()],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+=======
+    rabbit_log_feature_flags:info(
+      ?MODULE_STRING ": Started registry spammer (~tp)",
+      [self()]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
     %% We acquire the lock from the main process to synchronize the test
     %% processes we are about to spawn.
