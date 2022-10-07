@@ -49,7 +49,7 @@
 
 -module(rabbit_classic_queue_store_v2).
 
--export([init/1, terminate/1,
+-export([init/1, terminate/1, info/1,
          write/4, sync/1, read/3, read_many/2, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
@@ -135,6 +135,11 @@ maybe_close_fd(undefined) ->
     ok;
 maybe_close_fd(Fd) ->
     ok = file:close(Fd).
+
+-spec info(state()) -> [{atom(), non_neg_integer()}].
+
+info(#qs{ write_buffer = WriteBuffer }) ->
+    [{qs_buffer_size, map_size(WriteBuffer)}].
 
 -spec write(rabbit_variable_queue:seq_id(), rabbit_types:basic_message(),
             rabbit_types:message_properties(), State)
