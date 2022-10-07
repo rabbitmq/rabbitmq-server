@@ -30,9 +30,6 @@ test/config_schema_SUITE_data/schema/
 selenium/node_modules
 selenium/package-lock.json
 selenium/screens/*/*
-<<<<<<< HEAD
-=======
 selenium/logs
 selenium/suites/logs/*
 selenium/suites/screens/*
->>>>>>> d46566099f (Support management path prefix when using OAuth2)
