@@ -49,7 +49,7 @@ fmt_all(Info) -> [{K, fmt(V)} || {K, V} <- Info].
 fmt(Pid) when is_pid(Pid) ->
     list_to_binary(pid_to_list(Pid));
 fmt(Other) ->
-    list_to_binary(rabbit_misc:format("~p", [Other])).
+    list_to_binary(rabbit_misc:format("~tp", [Other])).
 
 obtain_name(Pid) ->
     lists:foldl(fun(Fun,  fail) -> Fun(Pid);

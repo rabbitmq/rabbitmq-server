@@ -137,7 +137,7 @@ handle_go(Q0) when ?is_amqqueue(Q0) ->
             {ok, State};
         {stale, StalePid} ->
             rabbit_mirror_queue_misc:log_warning(
-              QName, "Detected stale classic mirrored queue leader: ~p", [StalePid]),
+              QName, "Detected stale classic mirrored queue leader: ~tp", [StalePid]),
             gm:leave(GM),
             {error, {stale_master_pid, StalePid}};
         duplicate_live_master ->
@@ -189,7 +189,7 @@ init_it(Self, GM, Node, QName) ->
 stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
-           QName, "Detected a non-responsive classic queue mirror, stopping it: ~p", [Pid]),
+           QName, "Detected a non-responsive classic queue mirror, stopping it: ~tp", [Pid]),
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->
@@ -638,7 +638,7 @@ promote_me(From, #state { q                   = Q0,
                           msg_id_status       = MS,
                           known_senders       = KS}) when ?is_amqqueue(Q0) ->
     QName = amqqueue:get_name(Q0),
-    rabbit_mirror_queue_misc:log_info(QName, "Promoting mirror ~s to leader",
+    rabbit_mirror_queue_misc:log_info(QName, "Promoting mirror ~ts to leader",
                                       [rabbit_misc:pid_to_string(self())]),
     Q1 = amqqueue:set_pid(Q0, self()),
     DeathFun = rabbit_mirror_queue_master:sender_death_fun(),

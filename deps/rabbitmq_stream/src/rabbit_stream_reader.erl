@@ -188,7 +188,7 @@ terminate(Reason, State,
     close(Transport, Connection, ConnectionState),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(StatemData),
-    rabbit_log:debug("~s terminating in state '~s' with reason '~W'",
+    rabbit_log:debug("~ts terminating in state '~ts' with reason '~W'",
                      [?MODULE, State, Reason, 10]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
@@ -285,7 +285,7 @@ init([KeepaliveSup,
                                                                       ConnectionNegotiationStepTimeout}});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
-            rabbit_log_connection:warning("Closing connection because of ~p ~p",
+            rabbit_log_connection:warning("Closing connection because of ~tp ~tp",
                                           [Error, Reason])
     end.
 
@@ -462,7 +462,7 @@ tuned(info, Msg, StateData) ->
 
 state_timeout(State, Transport, Socket) ->
     rabbit_log_connection:warning("Closing connection because of timeout in state "
-                                  "'~s' likely due to lack of client action.",
+                                  "'~ts' likely due to lack of client action.",
                                   [State]),
     close_immediately(Transport, Socket),
     stop.
@@ -488,7 +488,7 @@ handle_info(Msg,
             Transport:setopts(S, [{active, once}]),
             #stream_connection{connection_step = NewConnectionStep} =
                 Connection1,
-            rabbit_log_connection:debug("Transitioned from ~s to ~s",
+            rabbit_log_connection:debug("Transitioned from ~ts to ~ts",
                                         [PreviousConnectionStep,
                                          NewConnectionStep]),
             Transition(NewConnectionStep, StatemData, Connection1, State1);
@@ -497,7 +497,7 @@ handle_info(Msg,
                                         [S]),
             stop;
         {Error, S, Reason} ->
-            rabbit_log_connection:warning("Socket error ~p [~w]", [Reason, S]),
+            rabbit_log_connection:warning("Socket error ~tp [~w]", [Reason, S]),
             stop;
         {resource_alarm, IsThereAlarm} ->
             {keep_state,
@@ -509,7 +509,7 @@ handle_info(Msg,
                                         State#stream_connection_state{blocked =
                                                                           true}}};
         Unknown ->
-            rabbit_log:warning("Received unknown message ~p", [Unknown]),
+            rabbit_log:warning("Received unknown message ~tp", [Unknown]),
             close_immediately(Transport, S),
             stop
     end.
@@ -541,8 +541,8 @@ transition_to_opened(Transport,
                   config = Configuration}}.
 
 invalid_transition(Transport, Socket, From, To) ->
-    rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~s "
-                                  "to ~s.",
+    rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~ts "
+                                  "to ~ts.",
                                   [Socket, From, To]),
     close_immediately(Transport, Socket),
     stop.
@@ -562,7 +562,7 @@ socket_op(Sock, Fun) ->
         {ok, Res} ->
             Res;
         {error, Reason} ->
-            rabbit_log_connection:warning("Error during socket operation ~p",
+            rabbit_log_connection:warning("Error during socket operation ~tp",
                                           [Reason]),
             rabbit_net:fast_close(RealSocket),
             exit(normal)
@@ -693,8 +693,8 @@ open(info, {resource_alarm, IsThereAlarm},
                       #configuration{credits_required_for_unblocking =
                                          CreditsRequiredForUnblocking}} =
          StatemData) ->
-    rabbit_log_connection:debug("Connection ~p received resource alarm. Alarm "
-                                "on? ~p",
+    rabbit_log_connection:debug("Connection ~tp received resource alarm. Alarm "
+                                "on? ~tp",
                                 [ConnectionName, IsThereAlarm]),
     EnoughCreditsToUnblock =
         has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking),
@@ -705,18 +705,18 @@ open(info, {resource_alarm, IsThereAlarm},
             {false, EnoughCredits} ->
                 not EnoughCredits
         end,
-    rabbit_log_connection:debug("Connection ~p had blocked status set to ~p, new "
-                                "blocked status is now ~p",
+    rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, new "
+                                "blocked status is now ~tp",
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
             Transport:setopts(S, [{active, once}]),
             ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-            rabbit_log_connection:debug("Unblocking connection ~p",
+            rabbit_log_connection:debug("Unblocking connection ~tp",
                                         [ConnectionName]);
         {false, true} ->
             ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-            rabbit_log_connection:debug("Blocking connection ~p after resource alarm",
+            rabbit_log_connection:debug("Blocking connection ~tp after resource alarm",
                                         [ConnectionName]);
         _ ->
             ok
@@ -786,7 +786,7 @@ open(info,
                   connection = Connection0,
                   connection_state = ConnState0} =
          State) ->
-    rabbit_log:debug("Subscription ~p instructed to become active: ~p",
+    rabbit_log:debug("Subscription ~tp instructed to become active: ~tp",
                      [SubId, Active]),
     #stream_connection_state{consumers = Consumers0} = ConnState0,
     {Connection1, ConnState1} =
@@ -805,7 +805,7 @@ open(info,
                                 {false, undefined} ->
                                     undefined;
                                 {false, L} ->
-                                    rabbit_log:debug("Closing Osiris segment of subscription ~p for "
+                                    rabbit_log:debug("Closing Osiris segment of subscription ~tp for "
                                                      "now",
                                                      [SubId]),
                                     osiris_log:close(L),
@@ -833,7 +833,7 @@ open(info,
                                                                                 =>
                                                                                 Consumer1}}};
                     false ->
-                        rabbit_log:warning("Received SAC event for subscription ~p, which "
+                        rabbit_log:warning("Received SAC event for subscription ~tp, which "
                                            "is not a SAC. Not doing anything.",
                                            [SubId]),
                         {Connection0, ConnState0}
@@ -854,7 +854,7 @@ open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
     demonitor_all_streams(Connection),
-    rabbit_log_connection:error("Socket error ~p [~w] [~w]",
+    rabbit_log_connection:error("Socket error ~tp [~w] [~w]",
                                 [Reason, Socket, self()]),
     stop;
 open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
@@ -899,7 +899,7 @@ open(info, heartbeat_send,
         ok ->
             keep_state_and_data;
         Unexpected ->
-            rabbit_log_connection:info("Heartbeat send error ~p, closing connection",
+            rabbit_log_connection:info("Heartbeat send error ~tp, closing connection",
                                        [Unexpected]),
             _C1 = demonitor_all_streams(Connection),
             stop
@@ -921,7 +921,7 @@ open(info, emit_stats,
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
 open(info, Unknown, _StatemData) ->
-    rabbit_log_connection:warning("Received unknown message ~p in state ~s",
+    rabbit_log_connection:warning("Received unknown message ~tp in state ~ts",
                                   [Unknown, ?FUNCTION_NAME]),
     %% FIXME send close
     keep_state_and_data;
@@ -942,7 +942,7 @@ open({call, From}, {publishers_info, Items},
 open({call, From}, {shutdown, Explanation},
      #statem_data{connection = Connection}) ->
     % likely closing call from the management plugin
-    rabbit_log_connection:info("Forcing stream connection ~p closing: ~p",
+    rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
                                [self(), Explanation]),
     demonitor_all_streams(Connection),
     {stop_and_reply, normal, {reply, From, ok}};
@@ -1050,7 +1050,7 @@ open(cast,
       {osiris_offset, _QueueResource, -1}},
      _StatemData) ->
     rabbit_log:debug("Stream protocol connection received osiris offset "
-                     "event for ~p with offset ~p",
+                     "event for ~tp with offset ~tp",
                      [StreamName, -1]),
     keep_state_and_data;
 open(cast,
@@ -1071,13 +1071,13 @@ open(cast,
         case maps:get(StreamName, StreamSubscriptions, undefined) of
             undefined ->
                 rabbit_log:debug("Stream protocol connection: osiris offset event "
-                                 "for ~p, but no subscription (leftover messages "
+                                 "for ~tp, but no subscription (leftover messages "
                                  "after unsubscribe?)",
                                  [StreamName]),
                 {Connection, State};
             [] ->
                 rabbit_log:debug("Stream protocol connection: osiris offset event "
-                                 "for ~p, but no registered consumers!",
+                                 "for ~tp, but no registered consumers!",
                                  [StreamName]),
                 {Connection#stream_connection{stream_subscriptions =
                                                   maps:remove(StreamName,
@@ -1106,7 +1106,7 @@ open(cast,
                                                                                   []),
                                                        throw({stop, normal});
                                                    {error, Reason} ->
-                                                       rabbit_log_connection:info("Error while sending chunks: ~p",
+                                                       rabbit_log_connection:info("Error while sending chunks: ~tp",
                                                                                   [Reason]),
                                                        %% likely a connection problem
                                                        Consumer;
@@ -1144,7 +1144,7 @@ close_sent(enter, _OldState,
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{}) ->
     rabbit_log_connection:warning("Closing connection because of timeout in state "
-                                  "'~s' likely due to lack of client action.",
+                                  "'~ts' likely due to lack of client action.",
                                   [?FUNCTION_NAME]),
     stop;
 close_sent(info, {tcp, S, Data},
@@ -1156,7 +1156,7 @@ close_sent(info, {tcp, S, Data},
     {Connection1, State1} =
         handle_inbound_data_post_close(Transport, Connection, State, Data),
     #stream_connection{connection_step = Step} = Connection1,
-    rabbit_log_connection:debug("Stream reader has transitioned from ~s to ~s",
+    rabbit_log_connection:debug("Stream reader has transitioned from ~ts to ~ts",
                                 [?FUNCTION_NAME, Step]),
     case Step of
         closing_done ->
@@ -1172,21 +1172,21 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
-    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
+    rabbit_log_connection:error("Stream protocol connection socket error: ~tp [~w] "
                                 "[~w]",
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
            StatemData = #statem_data{connection = Connection}) ->
     rabbit_log:warning("Stream protocol connection ignored a resource "
-                       "alarm ~p in state ~s",
+                       "alarm ~tp in state ~ts",
                        [IsThereAlarm, ?FUNCTION_NAME]),
     {keep_state,
      StatemData#statem_data{connection =
                                 Connection#stream_connection{resource_alarm =
                                                                  IsThereAlarm}}};
 close_sent(info, Msg, _StatemData) ->
-    rabbit_log_connection:warning("Ignored unknown message ~p in state ~s",
+    rabbit_log_connection:warning("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
     keep_state_and_data.
 
@@ -1378,7 +1378,7 @@ handle_frame_pre_auth(Transport,
                                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
                                                                             Username,
                                                                             stream),
-                                    rabbit_log_connection:warning("User '~s' can only connect via localhost",
+                                    rabbit_log_connection:warning("User '~ts' can only connect via localhost",
                                                                   [Username]),
                                     {C1#stream_connection{connection_step =
                                                               failure},
@@ -1416,7 +1416,7 @@ handle_frame_pre_auth(_Transport,
                           Connection,
                       #stream_connection_state{blocked = Blocked} = State,
                       {tune, FrameMax, Heartbeat}) ->
-    rabbit_log_connection:debug("Tuning response ~p ~p ",
+    rabbit_log_connection:debug("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
@@ -1456,7 +1456,7 @@ handle_frame_pre_auth(Transport,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
-    rabbit_log:debug("Open frame received for ~s", [VirtualHost]),
+    rabbit_log:debug("Open frame received for ~ts", [VirtualHost]),
     Connection1 =
         try
             rabbit_access_control:check_vhost_access(User,
@@ -1484,7 +1484,7 @@ handle_frame_pre_auth(Transport,
                 #{<<"advertised_host">> => AdvertisedHost,
                   <<"advertised_port">> => AdvertisedPort},
 
-            rabbit_log:debug("sending open response ok ~s", [VirtualHost]),
+            rabbit_log:debug("sending open response ok ~ts", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,
@@ -1553,7 +1553,7 @@ handle_frame_post_auth(Transport,
                          PublisherId,
                          _WriterRef,
                          Stream}}) ->
-    rabbit_log_connection:info("Cannot create publisher ~p on stream ~p, connection "
+    rabbit_log_connection:info("Cannot create publisher ~tp on stream ~tp, connection "
                                "is blocked because of resource alarm",
                                [PublisherId, Stream]),
     response(Transport,
@@ -1872,8 +1872,8 @@ handle_frame_post_auth(Transport,
                                                                              1),
                             {Connection, State};
                         false ->
-                            rabbit_log:debug("Creating subscription ~p to ~p, with offset specificat"
-                                             "ion ~p, properties ~0p",
+                            rabbit_log:debug("Creating subscription ~tp to ~tp, with offset specificat"
+                                             "ion ~tp, properties ~0p",
                                              [SubscriptionId,
                                               Stream,
                                               OffsetSpec,
@@ -1884,7 +1884,7 @@ handle_frame_post_auth(Transport,
                                   ConsumerName}
                             of
                                 {true, false, _} ->
-                                    rabbit_log:warning("Cannot create subcription ~p, stream single active "
+                                    rabbit_log:warning("Cannot create subcription ~tp, stream single active "
                                                        "consumer feature flag is not enabled",
                                                        [SubscriptionId]),
                                     response(Transport,
@@ -1897,7 +1897,7 @@ handle_frame_post_auth(Transport,
                                                                                      1),
                                     {Connection, State};
                                 {true, _, undefined} ->
-                                    rabbit_log:warning("Cannot create subcription ~p, a single active "
+                                    rabbit_log:warning("Cannot create subcription ~tp, a single active "
                                                        "consumer must have a name",
                                                        [SubscriptionId]),
                                     response(Transport,
@@ -2016,7 +2016,7 @@ handle_frame_post_auth(Transport,
         #{SubscriptionId := #consumer{log = undefined}} ->
             %% the consumer is not active, it's likely to be credit leftovers
             %% from a formerly active consumer, just logging and send an error
-            rabbit_log:debug("Giving credit to an inactive consumer: ~p",
+            rabbit_log:debug("Giving credit to an inactive consumer: ~tp",
                              [SubscriptionId]),
 
             Code = ?RESPONSE_CODE_PRECONDITION_FAILED,
@@ -2051,7 +2051,7 @@ handle_frame_post_auth(Transport,
                                                                       Consumer1}}}
             end;
         _ ->
-            rabbit_log:warning("Giving credit to unknown subscription: ~p",
+            rabbit_log:warning("Giving credit to unknown subscription: ~tp",
                                [SubscriptionId]),
 
             Code = ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST,
@@ -2080,7 +2080,7 @@ handle_frame_post_auth(_Transport,
         ok ->
             case lookup_leader(Stream, Connection) of
                 {error, Error} ->
-                    rabbit_log:warning("Could not find leader to store offset on ~p: ~p",
+                    rabbit_log:warning("Could not find leader to store offset on ~tp: ~tp",
                                        [Stream, Error]),
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
@@ -2090,7 +2090,7 @@ handle_frame_post_auth(_Transport,
             end;
         error ->
             %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:warning("Not authorized to store offset on stream ~p",
+            rabbit_log:warning("Not authorized to store offset on stream ~tp",
                                [Stream]),
             {Connection, State}
     end;
@@ -2195,8 +2195,8 @@ handle_frame_post_auth(Transport,
                         {ok,
                          #{leader_node := LeaderPid,
                            replica_nodes := ReturnedReplicas}} ->
-                            rabbit_log:debug("Created stream cluster with leader on ~p and "
-                                             "replicas on ~p",
+                            rabbit_log:debug("Created stream cluster with leader on ~tp and "
+                                             "replicas on ~tp",
                                              [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport,
                                         Connection,
@@ -2377,7 +2377,7 @@ handle_frame_post_auth(Transport,
                        case {is_binary(Host), is_integer(Port)} of
                            {true, true} -> Acc#{Node => {Host, Port}};
                            _ ->
-                               rabbit_log:warning("Error when retrieving broker metadata: ~p ~p",
+                               rabbit_log:warning("Error when retrieving broker metadata: ~tp ~tp",
                                                   [Host, Port]),
                                Acc
                        end
@@ -2481,12 +2481,12 @@ handle_frame_post_auth(Transport,
         ?RESPONSE_CODE_OK ->
             ok;
         RC ->
-            rabbit_log:info("Unexpected consumer update response code: ~p",
+            rabbit_log:info("Unexpected consumer update response code: ~tp",
                             [RC])
     end,
     case maps:take(CorrelationId, Requests0) of
         {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
-            rabbit_log:debug("Received consumer update response for subscription ~p",
+            rabbit_log:debug("Received consumer update response for subscription ~tp",
                              [SubscriptionId]),
             Consumers1 =
                 case Consumers of
@@ -2516,7 +2516,7 @@ handle_frame_post_auth(Transport,
                             end,
 
                         rabbit_log:debug("Initializing reader for active consumer, offset "
-                                         "spec is ~p",
+                                         "spec is ~tp",
                                          [OffsetSpec]),
                         QueueResource =
                             #resource{name = Stream,
@@ -2543,7 +2543,7 @@ handle_frame_post_auth(Transport,
                                                                []),
                                     throw({stop, normal});
                                 {error, Reason} ->
-                                    rabbit_log_connection:info("Error while sending chunks: ~p",
+                                    rabbit_log_connection:info("Error while sending chunks: ~tp",
                                                                [Reason]),
                                     %% likely a connection problem
                                     Consumer;
@@ -2557,7 +2557,7 @@ handle_frame_post_auth(Transport,
                             Consumer2,
                         ConsumerOffset = osiris_log:next_offset(Log2),
 
-                        rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                        rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp message(s) "
                                          "distributed after subscription",
                                          [SubscriptionId, ConsumerOffset,
                                           messages_consumed(ConsumerCounters)]),
@@ -2583,7 +2583,7 @@ handle_frame_post_auth(Transport,
 
                         Consumers;
                     _ ->
-                        rabbit_log:debug("No consumer found for subscription ~p",
+                        rabbit_log:debug("No consumer found for subscription ~tp",
                                          [SubscriptionId]),
                         Consumers
                 end,
@@ -2592,12 +2592,12 @@ handle_frame_post_auth(Transport,
              State#stream_connection_state{consumers = Consumers1}};
         {V, _Rs} ->
             rabbit_log:warning("Unexpected outstanding requests for correlation "
-                               "ID ~p: ~p",
+                               "ID ~tp: ~tp",
                                [CorrelationId, V]),
             {Connection, State};
         error ->
             rabbit_log:warning("Could not find outstanding consumer update request "
-                               "with correlation ID ~p. No actions taken for "
+                               "with correlation ID ~tp. No actions taken for "
                                "the subscription.",
                                [CorrelationId]),
             {Connection, State}
@@ -2669,7 +2669,7 @@ handle_frame_post_auth(Transport,
                        {request, CorrelationId,
                         {close, ClosingCode, ClosingReason}}) ->
     rabbit_log:debug("Stream protocol reader received close command "
-                     "~p ~p",
+                     "~tp ~tp",
                      [ClosingCode, ClosingReason]),
     Frame =
         rabbit_stream_core:frame({response, CorrelationId,
@@ -2684,7 +2684,7 @@ handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        Command) ->
-    rabbit_log:warning("unknown command ~p, sending close command.",
+    rabbit_log:warning("unknown command ~tp, sending close command.",
                        [Command]),
     CloseReason = <<"unknown frame">>,
     Frame =
@@ -2718,7 +2718,7 @@ init_reader(ConnectionTransport,
           chunk_selector => get_chunk_selector(Properties)},
     {ok, Segment} =
         osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
-    rabbit_log:debug("Next offset for subscription ~p is ~p",
+    rabbit_log:debug("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
 
@@ -2745,7 +2745,7 @@ maybe_dispatch_on_subscription(Transport,
                                SubscriptionProperties,
                                SendFileOct,
                                false = _Sac) ->
-    rabbit_log:debug("Distributing existing messages to subscription ~p",
+    rabbit_log:debug("Distributing existing messages to subscription ~tp",
                      [SubscriptionId]),
     case send_chunks(DeliverVersion,
                      Transport,
@@ -2768,7 +2768,7 @@ maybe_dispatch_on_subscription(Transport,
             ConsumerOffset = osiris_log:next_offset(Log1),
             ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
 
-            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+            rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp message(s) "
                              "distributed after subscription",
                              [SubscriptionId, ConsumerOffset,
                               messages_consumed(ConsumerCounters1)]),
@@ -2794,7 +2794,7 @@ maybe_dispatch_on_subscription(_Transport,
                                SubscriptionProperties,
                                _SendFileOct,
                                true = _Sac) ->
-    rabbit_log:debug("No initial dispatch for subscription ~p for now, "
+    rabbit_log:debug("No initial dispatch for subscription ~tp for now, "
                      "waiting for consumer update response from client "
                      "(single active consumer)",
                      [SubscriptionId]),
@@ -2848,7 +2848,7 @@ maybe_send_consumer_update(Transport,
                            Active,
                            true = _Sac,
                            Extra) ->
-    rabbit_log:debug("SAC subscription ~p, active = ~p",
+    rabbit_log:debug("SAC subscription ~tp, active = ~tp",
                      [SubscriptionId, Active]),
     Frame =
         rabbit_stream_core:frame({request, CorrIdSeq,
@@ -2935,7 +2935,7 @@ handle_frame_post_close(_Transport, Connection, State, heartbeat) ->
     rabbit_log_connection:debug("Received heartbeat command post close"),
     {Connection, State};
 handle_frame_post_close(_Transport, Connection, State, Command) ->
-    rabbit_log_connection:warning("ignored command on close ~p .",
+    rabbit_log_connection:warning("ignored command on close ~tp .",
                                   [Command]),
     {Connection, State}.
 

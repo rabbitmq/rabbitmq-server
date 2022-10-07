@@ -129,7 +129,7 @@ start_slave_nodes(Config, Testcase) ->
               [receive
                    {node, Starter, Node} -> Node
                end || Starter <- Starters]),
-    ct:pal("Started ~b slave node(s): ~p", [NodesCount, Nodes]),
+    ct:pal("Started ~b slave node(s): ~tp", [NodesCount, Nodes]),
     rabbit_ct_helpers:set_config(Config, {nodes, Nodes}).
 
 start_slave_node(Parent, Config, Testcase, N) ->
@@ -138,15 +138,15 @@ start_slave_node(Parent, Config, Testcase, N) ->
                  true  -> "ffv2"
              end,
     Name = list_to_atom(
-             rabbit_misc:format("~s-~s-~b", [Prefix, Testcase, N])),
-    ct:pal("- Starting slave node `~s@...`", [Name]),
+             rabbit_misc:format("~ts-~ts-~b", [Prefix, Testcase, N])),
+    ct:pal("- Starting slave node `~ts@...`", [Name]),
     {ok, Node} = slave:start(net_adm:localhost(), Name),
-    ct:pal("- Slave node `~s` started", [Node]),
+    ct:pal("- Slave node `~ts` started", [Node]),
 
     TestCodePath = filename:dirname(code:which(?MODULE)),
     true = rpc:call(Node, code, add_path, [TestCodePath]),
     ok = run_on_node(Node, fun setup_slave_node/1, [Config]),
-    ct:pal("- Slave node `~s` configured", [Node]),
+    ct:pal("- Slave node `~ts` configured", [Node]),
     Parent ! {node, self(), Node}.
 
 stop_slave_nodes(Config) ->
@@ -156,7 +156,7 @@ stop_slave_nodes(Config) ->
     rabbit_ct_helpers:delete_config(Config, nodes).
 
 stop_slave_node(Node) ->
-    ct:pal("- Stopping slave node `~s`...", [Node]),
+    ct:pal("- Stopping slave node `~ts`...", [Node]),
     ok = slave:stop(Node).
 
 connect_nodes([FirstNode | OtherNodes] = Nodes) ->
@@ -193,7 +193,7 @@ setup_feature_flags_file(Config) ->
     %% directory.
     FeatureFlagsFile = filename:join(
                          ?config(priv_dir, Config),
-                         rabbit_misc:format("feature_flags-~s", [node()])),
+                         rabbit_misc:format("feature_flags-~ts", [node()])),
     ?LOG_INFO("Setting `feature_flags_file to \"~ts\"", [FeatureFlagsFile]),
     case application:load(rabbit) of
         ok                           -> ok;
@@ -205,7 +205,7 @@ setup_feature_flags_file(Config) ->
 start_controller() ->
     ?LOG_INFO("Starting feature flags controller"),
     {ok, Pid} = rabbit_ff_controller:start(),
-    ?LOG_INFO("Feature flags controller: ~p", [Pid]),
+    ?LOG_INFO("Feature flags controller: ~tp", [Pid]),
     ok.
 
 maybe_enable_feature_flags_v2(Config) ->
@@ -215,12 +215,12 @@ maybe_enable_feature_flags_v2(Config) ->
         false -> ok
     end,
     IsEnabled = rabbit_feature_flags:is_enabled(feature_flags_v2),
-    ?LOG_INFO("`feature_flags_v2` enabled: ~s", [IsEnabled]),
+    ?LOG_INFO("`feature_flags_v2` enabled: ~ts", [IsEnabled]),
     ?assertEqual(EnableFFv2, IsEnabled),
     ok.
 
 override_running_nodes(Nodes) when is_list(Nodes) ->
-    ct:pal("Overriding (running) remote nodes for ~p", [Nodes]),
+    ct:pal("Overriding (running) remote nodes for ~tp", [Nodes]),
     _ = [begin
              ok = rpc:call(
                     Node, rabbit_feature_flags, override_nodes,
@@ -253,8 +253,8 @@ override_running_nodes(Nodes) when is_list(Nodes) ->
 inject_on_nodes(Nodes, FeatureFlags) ->
     ct:pal(
       "Injecting feature flags on nodes~n"
-      "  Nodes:         ~p~n"
-      "  Feature flags: ~p~n",
+      "  Nodes:         ~tp~n"
+      "  Feature flags: ~tp~n",
      [Nodes, FeatureFlags]),
     _ = [ok =
          run_on_node(
@@ -288,7 +288,7 @@ mf_count_runs(_FeatureName, _FeatureProps, enable) ->
 mf_wait_and_count_runs(_FeatureName, _FeatureProps, enable) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
-    ?LOG_NOTICE("Migration function: waiting for signal from ~p...", [Peer]),
+    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
     receive proceed -> ok end,
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
@@ -297,7 +297,7 @@ mf_wait_and_count_runs(_FeatureName, _FeatureProps, enable) ->
 mf_wait_and_count_runs_v2_enable(_Args) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
-    ?LOG_NOTICE("Migration function: waiting for signal from ~p...", [Peer]),
+    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
     receive proceed -> ok end,
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
@@ -306,7 +306,7 @@ mf_wait_and_count_runs_v2_enable(_Args) ->
 mf_wait_and_count_runs_v2_post_enable(_Args) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
-    ?LOG_NOTICE("Migration function: waiting for signal from ~p...", [Peer]),
+    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
     receive proceed -> ok end,
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
@@ -315,7 +315,7 @@ mf_wait_and_count_runs_v2_post_enable(_Args) ->
 -define(PT_PEER_PROC, {?MODULE, peer_proc}).
 
 record_peer_proc(Peer) ->
-    ?LOG_ALERT("Recording peer=~p", [Peer]),
+    ?LOG_ALERT("Recording peer=~tp", [Peer]),
     persistent_term:put(?PT_PEER_PROC, Peer).
 
 get_peer_proc() ->
@@ -680,7 +680,7 @@ enable_feature_flag_in_cluster_and_add_member_after(Config) ->
       "~n"
       "NOTE: Error messages about crashed migration functions can be "
       "ignored for feature~n"
-      "      flags other than `~s`~n"
+      "      flags other than `~ts`~n"
       "      because they assume they run inside RabbitMQ.",
       [FeatureName]),
     ok = run_on_node(
@@ -796,7 +796,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
       "~n"
       "NOTE: Error messages about crashed migration functions can be "
       "ignored for feature~n"
-      "      flags other than `~s`~n"
+      "      flags other than `~ts`~n"
       "      because they assume they run inside RabbitMQ.",
       [FeatureName]),
     Syncer = spawn_link(
@@ -873,7 +873,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
     FirstMigratedNode = node(FirstNodeMigFunPid),
     ?assertEqual(FirstNode, FirstMigratedNode),
     ct:pal(
-      "Unblocking first node (~p @ ~s)",
+      "Unblocking first node (~tp @ ~ts)",
       [FirstNodeMigFunPid, FirstMigratedNode]),
     FirstNodeMigFunPid ! proceed,
 
@@ -1002,7 +1002,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
       "~n"
       "NOTE: Error messages about crashed migration functions can be "
       "ignored for feature~n"
-      "      flags other than `~s`~n"
+      "      flags other than `~ts`~n"
       "      because they assume they run inside RabbitMQ.",
       [FeatureName]),
     Syncer = spawn_link(
@@ -1064,7 +1064,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
     %% `waiting' notification.
     FirstMigratedNode = node(FirstNodeMigFunPid),
     ct:pal(
-      "Unblocking first node (~p @ ~s)",
+      "Unblocking first node (~tp @ ~ts)",
       [FirstNodeMigFunPid, FirstMigratedNode]),
     FirstNodeMigFunPid ! proceed,
 
@@ -1180,7 +1180,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv1(Config) ->
     %% `waiting' notification.
     FirstMigratedNode = node(FirstNodeMigFunPid),
     ct:pal(
-      "Unblocking first node (~p @ ~s)",
+      "Unblocking first node (~tp @ ~ts)",
       [FirstNodeMigFunPid, FirstMigratedNode]),
     FirstNodeMigFunPid ! proceed,
 
@@ -1303,7 +1303,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
     FirstMigratedNode = node(FirstNodeMigFunPid),
     ?assertEqual(FirstNode, FirstMigratedNode),
     ct:pal(
-      "Unblocking first node (~p @ ~s)",
+      "Unblocking first node (~tp @ ~ts)",
       [FirstNodeMigFunPid, FirstMigratedNode]),
     FirstNodeMigFunPid ! proceed,
 
@@ -1434,7 +1434,7 @@ enable_feature_flag_with_post_enable(Config) ->
       "~n"
       "NOTE: Error messages about crashed migration functions can be "
       "ignored for feature~n"
-      "      flags other than `~s`~n"
+      "      flags other than `~ts`~n"
       "      because they assume they run inside RabbitMQ.",
       [FeatureName]),
     Syncer = spawn_link(
@@ -1495,7 +1495,7 @@ enable_feature_flag_with_post_enable(Config) ->
     %% `waiting' notification.
     FirstMigratedNode = node(FirstNodeMigFunPid),
     ct:pal(
-      "Unblocking first node (~p @ ~s)",
+      "Unblocking first node (~tp @ ~ts)",
       [FirstNodeMigFunPid, FirstMigratedNode]),
     FirstNodeMigFunPid ! proceed,
 

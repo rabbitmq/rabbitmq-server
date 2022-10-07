@@ -90,8 +90,8 @@ declare_queue(XName, Durable, N, Node) ->
             ok
     catch
         _Error:Reason ->
-            rabbit_log:error("sharding failed to declare queue for exchange ~p"
-                             " - soft error:~n~p",
+            rabbit_log:error("sharding failed to declare queue for exchange ~tp"
+                             " - soft error:~n~tp",
                              [exchange_bin(XName), Reason]),
             error
     end.
@@ -99,14 +99,14 @@ declare_queue(XName, Durable, N, Node) ->
 bind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:add/3,
                    XName, RoutingKey, N, Node,
-                   "sharding failed to bind queue ~p to exchange ~p"
-                   " - soft error:~n~p~n").
+                   "sharding failed to bind queue ~tp to exchange ~tp"
+                   " - soft error:~n~tp~n").
 
 unbind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:remove/3,
                    XName, RoutingKey, N, Node,
-                   "sharding failed to unbind queue ~p to exchange ~p"
-                   " - soft error:~n~p~n").
+                   "sharding failed to unbind queue ~tp to exchange ~tp"
+                   " - soft error:~n~tp~n").
 
 binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),

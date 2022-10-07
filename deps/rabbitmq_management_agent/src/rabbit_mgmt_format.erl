@@ -154,7 +154,7 @@ ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 ipb(unknown) -> unknown;
 ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
-addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~s", S);
+addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~ts", S);
 addr(Addr) when is_tuple(Addr)                       -> ip(Addr).
 
 port(Port) when is_number(Port) -> Port;
@@ -177,9 +177,9 @@ protocol(unknown) ->
 protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
-    print("~s ~s", [Family, protocol_version(Version)]);
+    print("~ts ~ts", [Family, protocol_version(Version)]);
 protocol(Protocol) when is_binary(Protocol) ->
-    print("~s", [Protocol]).
+    print("~ts", [Protocol]).
 
 protocol_version(Arbitrary)
   when is_list(Arbitrary)                  -> Arbitrary;

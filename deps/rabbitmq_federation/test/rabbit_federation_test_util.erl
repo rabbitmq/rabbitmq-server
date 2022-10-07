@@ -186,12 +186,12 @@ expect(Payloads, Timeout) ->
         {#'basic.deliver'{delivery_tag = DTag}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
                 true  ->
-                    ct:pal("Consumed a message: ~p ~p left: ~p", [Payload, DTag, length(Payloads) - 1]),
+                    ct:pal("Consumed a message: ~tp ~tp left: ~tp", [Payload, DTag, length(Payloads) - 1]),
                     expect(Payloads -- [Payload], Timeout);
-                false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~p", [Payload]))
+                false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~tp", [Payload]))
             end
     after Timeout ->
-        ?assert(false, rabbit_misc:format("Did not receive expected payloads ~p in time", [Payloads]))
+        ?assert(false, rabbit_misc:format("Did not receive expected payloads ~tp in time", [Payloads]))
     end.
 
 expect_empty(Ch, Q) ->
@@ -293,8 +293,8 @@ assert_status(Config, Node, XorQs, Names) ->
 
 assert_status1(XorQs, Names) ->
     [begin
-         ct:pal("links(XorQ) for ~p: ~p", [XorQ, links(XorQ)]),
-         ct:pal("rabbit_federation_status:status(): ~p", [rabbit_federation_status:status()])
+         ct:pal("links(XorQ) for ~tp: ~tp", [XorQ, links(XorQ)]),
+         ct:pal("rabbit_federation_status:status(): ~tp", [rabbit_federation_status:status()])
      end || XorQ <- XorQs],
     Links = lists:append([links(XorQ) || XorQ <- XorQs]),
     Remaining = lists:foldl(fun (Link, Status) ->

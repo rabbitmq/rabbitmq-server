@@ -85,11 +85,11 @@ init(Args) ->
 callback_mode() -> [state_functions, state_enter].
 
 terminate(Reason, State, Data) ->
-    rabbit_log:debug("etcd v3 API client will terminate in state ~p, reason: ~p",
+    rabbit_log:debug("etcd v3 API client will terminate in state ~tp, reason: ~tp",
                      [State, Reason]),
     disconnect(?ETCD_CONN_NAME, Data),
     rabbit_log:debug("etcd v3 API client has disconnected"),
-    rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~p", [length(eetcd_conn_sup:info())]),
+    rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
     ok.
 
 register() ->
@@ -133,11 +133,11 @@ unlock(ServerRef, LockKey) ->
 %%
 
 recover(enter, _PrevState, #statem_data{endpoints = Endpoints}) ->
-    rabbit_log:debug("etcd v3 API client has entered recovery state, endpoints: ~s",
+    rabbit_log:debug("etcd v3 API client has entered recovery state, endpoints: ~ts",
                      [string:join(Endpoints, ",")]),
     keep_state_and_data;
 recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_monitor = Ref}) ->
-    rabbit_log:debug("etcd v3 API client will attempt to connect, endpoints: ~s",
+    rabbit_log:debug("etcd v3 API client will attempt to connect, endpoints: ~ts",
                      [string:join(Endpoints, ",")]),
     maybe_demonitor(Ref),
     {Transport, TransportOpts} = pick_transport(Data),
@@ -148,15 +148,15 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
     ConnName = ?ETCD_CONN_NAME,
     case connect(ConnName, Endpoints, Transport, TransportOpts, Data) of
         {ok, Pid} ->
-            rabbit_log:debug("etcd v3 API client connection: ~p", [Pid]),
-            rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~p", [length(eetcd_conn_sup:info())]),
+            rabbit_log:debug("etcd v3 API client connection: ~tp", [Pid]),
+            rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
             {next_state, connected, Data#statem_data{
                 connection_name = ConnName,
                 connection_pid = Pid,
                 connection_monitor = monitor(process, Pid)
             }};
         {error, Errors} ->
-            [rabbit_log:error("etcd peer discovery: failed to connect to endpoint ~p: ~p", [Endpoint, Err]) || {Endpoint, Err} <- Errors],
+            [rabbit_log:error("etcd peer discovery: failed to connect to endpoint ~tp: ~tp", [Endpoint, Err]) || {Endpoint, Err} <- Errors],
             ensure_disconnected(?ETCD_CONN_NAME, Data),
             Actions = [{state_timeout, reconnection_interval(), recover}],
             {keep_state, reset_statem_data(Data), Actions}
@@ -166,7 +166,7 @@ recover(state_timeout, _PrevState, Data) ->
     ensure_disconnected(?ETCD_CONN_NAME, Data),
     {next_state, recover, reset_statem_data(Data)};
 recover({call, From}, Req, _Data) ->
-    rabbit_log:error("etcd v3 API: client received a call ~p while not connected, will do nothing", [Req]),
+    rabbit_log:error("etcd v3 API: client received a call ~tp while not connected, will do nothing", [Req]),
     gen_statem:reply(From, {error, not_connected}),
     keep_state_and_data.
 
@@ -179,34 +179,34 @@ connected(info, {'DOWN', ConnRef, process, ConnPid, Reason}, Data = #statem_data
                                                                connection_pid = ConnPid,
                                                                connection_monitor = ConnRef
                                                              }) ->
-    rabbit_log:debug("etcd peer discovery: connection to etcd ~p is down: ~p", [ConnPid, Reason]),
+    rabbit_log:debug("etcd peer discovery: connection to etcd ~tp is down: ~tp", [ConnPid, Reason]),
     maybe_demonitor(ConnRef),
     {next_state, recover, reset_statem_data(Data)};
 connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Conn, lock_ttl_in_seconds = TTL}) ->
     case eetcd_lease:grant(eetcd_kv:new(Conn), TTL) of
         {ok, #{'ID' := LeaseID}} ->
             Key = lock_key_base(Data),
-            rabbit_log:debug("etcd peer discovery: granted a lease ~p for registration lock ~s with TTL = ~p", [LeaseID, Key, TTL]),
+            rabbit_log:debug("etcd peer discovery: granted a lease ~tp for registration lock ~ts with TTL = ~tp", [LeaseID, Key, TTL]),
             case eetcd_lock:lock(lock_context(Conn, Data), Key, LeaseID) of
                 {ok, #{key := GeneratedKey}} ->
-                    rabbit_log:debug("etcd peer discovery: successfully acquired a lock, lock owner key: ~s", [GeneratedKey]),
+                    rabbit_log:debug("etcd peer discovery: successfully acquired a lock, lock owner key: ~ts", [GeneratedKey]),
                     reply_and_retain_state(From, {ok, GeneratedKey});
                 {error, _} = Error ->
-                    rabbit_log:debug("etcd peer discovery: failed to acquire a lock using key ~s: ~p", [Key, Error]),
+                    rabbit_log:debug("etcd peer discovery: failed to acquire a lock using key ~ts: ~tp", [Key, Error]),
                     reply_and_retain_state(From, Error)
             end;
         {error, _} = Error ->
-            rabbit_log:debug("etcd peer discovery: failed to get a lease for registration lock: ~p", [Error]),
+            rabbit_log:debug("etcd peer discovery: failed to get a lease for registration lock: ~tp", [Error]),
             reply_and_retain_state(From, Error)
     end;
 connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_name = Conn}) ->
     Ctx = unlock_context(Conn, Data),
     case eetcd_lock:unlock(Ctx, GeneratedKey) of
         {ok, _} ->
-            rabbit_log:debug("etcd peer discovery: successfully released lock, lock owner key: ~s", [GeneratedKey]),
+            rabbit_log:debug("etcd peer discovery: successfully released lock, lock owner key: ~ts", [GeneratedKey]),
             reply_and_retain_state(From, ok);
         {error, _} = Error ->
-            rabbit_log:debug("etcd peer discovery: failed to release registration lock, lock owner key: ~s, error ~p",
+            rabbit_log:debug("etcd peer discovery: failed to release registration lock, lock owner key: ~ts, error ~tp",
                              [GeneratedKey, Error]),
             reply_and_retain_state(From, Error)
     end;
@@ -214,7 +214,7 @@ connected({call, From}, register, Data = #statem_data{connection_name = Conn}) -
     Ctx = registration_context(Conn, Data),
     Key = node_key(Data),
     eetcd_kv:put(Ctx, Key, registration_value(Data)),
-    rabbit_log:debug("etcd peer discovery: put key ~p, done with registration", [Key]),
+    rabbit_log:debug("etcd peer discovery: put key ~tp, done with registration", [Key]),
     gen_statem:reply(From, ok),
     keep_state_and_data;
 connected({call, From}, unregister, Data = #statem_data{connection_name = Conn}) ->
@@ -227,9 +227,9 @@ connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) 
     Prefix = node_key_base(Data),
     C1 = eetcd_kv:new(Conn),
     C2 = eetcd_kv:with_prefix(eetcd_kv:with_key(C1, Prefix)),
-    rabbit_log:debug("etcd peer discovery: will use prefix ~s to query for node keys", [Prefix]),
+    rabbit_log:debug("etcd peer discovery: will use prefix ~ts to query for node keys", [Prefix]),
     {ok, #{kvs := Result}} = eetcd_kv:get(C2),
-    rabbit_log:debug("etcd peer discovery returned keys: ~p", [Result]),
+    rabbit_log:debug("etcd peer discovery returned keys: ~tp", [Result]),
     Values = [maps:get(value, M) || M <- Result],
     case Values of
         Xs when is_list(Xs) ->
@@ -237,14 +237,14 @@ connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) 
             ParsedNodes = lists:map(fun extract_node/1, Xs),
             {Successes, Failures} = lists:partition(fun filter_node/1, ParsedNodes),
             JoinedString = lists:join(",", [rabbit_data_coercion:to_list(Node) || Node <- lists:usort(Successes)]),
-            rabbit_log:error("etcd peer discovery: successfully extracted nodes: ~s", [JoinedString]),
+            rabbit_log:error("etcd peer discovery: successfully extracted nodes: ~ts", [JoinedString]),
             lists:foreach(fun(Val) ->
-                rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~p", [Val])
+                rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~tp", [Val])
             end, Failures),
             gen_statem:reply(From, lists:usort(Successes)),
             keep_state_and_data;
         Other ->
-            rabbit_log:debug("etcd peer discovery: listing node keys returned ~p", [Other]),
+            rabbit_log:debug("etcd peer discovery: listing node keys returned ~tp", [Other]),
             gen_statem:reply(From, []),
             keep_state_and_data
     end.
@@ -262,7 +262,7 @@ acquire_node_key_lease_grant(Data = #statem_data{connection_name = Name, node_ke
     %% acquire a lease for TTL
     {ok, #{'ID' := LeaseID}} = eetcd_lease:grant(Name, TTL),
     {ok, KeepalivePid} = eetcd_lease:keep_alive(Name, LeaseID),
-    rabbit_log:debug("etcd peer discovery: acquired a lease ~p for node key ~s with TTL = ~p", [LeaseID, node_key(Data), TTL]),
+    rabbit_log:debug("etcd peer discovery: acquired a lease ~tp for node key ~ts with TTL = ~tp", [LeaseID, node_key(Data), TTL]),
     Data#statem_data{
         node_key_lease_id = LeaseID,
         node_lease_keepalive_pid = KeepalivePid
@@ -285,13 +285,13 @@ unlock_context(ConnName, #statem_data{lock_ttl_in_seconds = Timeout}) ->
     eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout * 1000).
 
 node_key_base(#statem_data{cluster_name = ClusterName, key_prefix = Prefix}) ->
-    to_binary(rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName])).
+    to_binary(rabbit_misc:format("/rabbitmq/discovery/~ts/clusters/~ts/nodes", [Prefix, ClusterName])).
 
 node_key(Data) ->
-    to_binary(rabbit_misc:format("~s/~s", [node_key_base(Data), node()])).
+    to_binary(rabbit_misc:format("~ts/~ts", [node_key_base(Data), node()])).
 
 lock_key_base(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
-    Key = rabbit_misc:format("/rabbitmq/locks/~s/clusters/~s/registration",
+    Key = rabbit_misc:format("/rabbitmq/locks/~ts/clusters/~ts/registration",
                              [Prefix, ClusterName]),
     to_binary(Key).
 
@@ -337,7 +337,7 @@ connect(Name, Endpoints, Transport, TransportOpts, Data) ->
 do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{username = Username}) ->
     case Username of
         undefined -> rabbit_log:info("etcd peer discovery: will connect to etcd without authentication (no credentials configured)");
-        _         -> rabbit_log:info("etcd peer discovery: will connect to etcd as user '~s'", [Username])
+        _         -> rabbit_log:info("etcd peer discovery: will connect to etcd as user '~ts'", [Username])
     end,
     case eetcd:open(Name, Endpoints, connection_options(Data), Transport, TransportOpts) of
         {ok, Pid} -> {ok, Pid};
@@ -346,9 +346,9 @@ do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{userna
                          true  -> Errors0;
                          false -> [Errors0]
                      end,
-            rabbit_log:debug("etcd peer discovery: connection errors: ~p",
+            rabbit_log:debug("etcd peer discovery: connection errors: ~tp",
                              [Errors]),
-            rabbit_log:debug("etcd peer discovery: are all connection errors benign?: ~p",
+            rabbit_log:debug("etcd peer discovery: are all connection errors benign?: ~tp",
                              [lists:all(fun error_is_already_started/1, Errors)]),
             %% If all errors are already_started we can ignore them.
             %% eetcd registers connections under a name
@@ -386,10 +386,10 @@ unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_kee
     Ctx = unregistration_context(Conn, Data),
     Key = node_key(Data),
     eetcd_kv:delete(Ctx, Key),
-    rabbit_log:debug("etcd peer discovery: deleted key ~s, done with unregistration", [Key]),
+    rabbit_log:debug("etcd peer discovery: deleted key ~ts, done with unregistration", [Key]),
     eetcd_lease:revoke(Ctx, LeaseID),
     exit(KAPid, normal),
-    rabbit_log:debug("etcd peer discovery: revoked a lease ~p for node key ~s", [LeaseID, Key]),
+    rabbit_log:debug("etcd peer discovery: revoked a lease ~tp for node key ~ts", [LeaseID, Key]),
     ok.
 
 reply_and_retain_state(From, Value) ->
@@ -428,7 +428,7 @@ normalize_settings(Map) when is_map(Map) ->
         undefined -> [];
         Hostname ->
             Port = maps:get(etcd_port, Map, 2379),
-            [rabbit_misc:format("~s:~p", [Hostname, Port])]
+            [rabbit_misc:format("~ts:~tp", [Hostname, Port])]
     end,
 
     AllEndpoints = Endpoints ++ LegacyEndpoints,

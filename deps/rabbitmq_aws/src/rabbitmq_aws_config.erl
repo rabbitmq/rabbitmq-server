@@ -654,7 +654,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
-  rabbit_log:debug("Querying instance metadata service: ~p", [URL]),
+  rabbit_log:debug("Querying instance metadata service: ~tp", [URL]),
   httpc:request(get, {URL, instance_metadata_request_headers()},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
 
@@ -738,7 +738,7 @@ region_from_availability_zone(Value) ->
 %% @end
 load_imdsv2_token() ->
   TokenUrl = imdsv2_token_url(),
-  rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~p ...", [TokenUrl]),
+  rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
   case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}]},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of
     {ok, {{_, 200, _}, _, Value}} ->
@@ -749,7 +749,7 @@ load_imdsv2_token() ->
       undefined;
     Other ->
       rabbit_log:warning(
-        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~p. "
+        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
         "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
       undefined
   end.

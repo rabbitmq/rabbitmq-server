@@ -131,7 +131,7 @@ open_table(VHost, RetriesLeft) ->
                     _ = file:delete(File),
                     %% Wait before retrying
                     DelayInMs = 1000,
-                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~p. Will delete it and retry in ~p ms (~p retries left)",
+                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~tp. Will delete it and retry in ~tp ms (~tp retries left)",
                                        [File, DelayInMs, RetriesLeft]),
                     timer:sleep(DelayInMs),
                     open_table(VHost, RetriesLeft - 1)

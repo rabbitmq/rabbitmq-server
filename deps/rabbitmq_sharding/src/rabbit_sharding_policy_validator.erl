@@ -49,13 +49,13 @@ validate_shards_per_node(Term) when is_number(Term) ->
         true  ->
             ok;
         false ->
-            {error, "shards-per-node should be greater than 0, actually was ~p",
+            {error, "shards-per-node should be greater than 0, actually was ~tp",
              [Term]}
     end;
 validate_shards_per_node(Term) ->
-    {error, "shards-per-node should be a number, actually was ~p", [Term]}.
+    {error, "shards-per-node should be a number, actually was ~tp", [Term]}.
 
 validate_routing_key(Term) when is_binary(Term) ->
     ok;
 validate_routing_key(Term) ->
-    {error, "routing-key should be binary, actually was ~p", [Term]}.
+    {error, "routing-key should be binary, actually was ~tp", [Term]}.

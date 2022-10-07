@@ -100,7 +100,7 @@ init([]) ->
                           false -> "will remove nodes not known to the discovery backend"
                       end,
             ?LOG_INFO(
-               "Peer discovery: enabling node cleanup (~s). Check interval: ~p seconds.",
+               "Peer discovery: enabling node cleanup (~ts). Check interval: ~tp seconds.",
                [WarnMsg, State#state.interval],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             {ok, State}
@@ -238,21 +238,21 @@ maybe_cleanup(_, []) ->
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
 maybe_cleanup(State, UnreachableNodes) ->
     ?LOG_DEBUG(
-       "Peer discovery: cleanup discovered unreachable nodes: ~p",
+       "Peer discovery: cleanup discovered unreachable nodes: ~tp",
        [UnreachableNodes],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     case lists:subtract(UnreachableNodes, service_discovery_nodes()) of
         [] ->
             ?LOG_DEBUG(
                "Peer discovery: all unreachable nodes are still "
-               "registered with the discovery backend ~p",
+               "registered with the discovery backend ~tp",
                [rabbit_peer_discovery:backend()],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             ok;
         Nodes ->
             ?LOG_DEBUG(
                "Peer discovery: unreachable nodes are not registered "
-               "with the discovery backend ~p", [Nodes],
+               "with the discovery backend ~tp", [Nodes],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             maybe_remove_nodes(Nodes, State#state.warn_only)
     end.
@@ -270,12 +270,12 @@ maybe_cleanup(State, UnreachableNodes) ->
 maybe_remove_nodes([], _) -> ok;
 maybe_remove_nodes([Node | Nodes], true) ->
     ?LOG_WARNING(
-       "Peer discovery: node ~s is unreachable", [Node],
+       "Peer discovery: node ~ts is unreachable", [Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     maybe_remove_nodes(Nodes, true);
 maybe_remove_nodes([Node | Nodes], false) ->
     ?LOG_WARNING(
-       "Peer discovery: removing unknown node ~s from the cluster", [Node],
+       "Peer discovery: removing unknown node ~ts from the cluster", [Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     rabbit_mnesia:forget_cluster_node(Node, false),
     maybe_remove_nodes(Nodes, false).
@@ -308,13 +308,13 @@ service_discovery_nodes() ->
     case rabbit_peer_discovery:normalize(Module:list_nodes()) of
         {ok, {Nodes, _Type}} ->
             ?LOG_DEBUG(
-               "Peer discovery cleanup: ~p returned ~p",
+               "Peer discovery cleanup: ~tp returned ~tp",
                [Module, Nodes],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             Nodes;
         {error, Reason} ->
             ?LOG_DEBUG(
-               "Peer discovery cleanup: ~p returned error ~p",
+               "Peer discovery cleanup: ~tp returned error ~tp",
                [Module, Reason],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []

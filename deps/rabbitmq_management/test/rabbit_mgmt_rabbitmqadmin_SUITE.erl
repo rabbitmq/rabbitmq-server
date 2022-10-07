@@ -136,7 +136,7 @@ config_file(Config) ->
     ?assertMatch({error, _, _}, run(Config, ["--config", TestConf, "show", "overview"])),
 
     %% overrides hostname and port using --base-uri
-    BaseURI = rabbit_misc:format("http://localhost:~s", [MgmtPort]),
+    BaseURI = rabbit_misc:format("http://localhost:~ts", [MgmtPort]),
     ?assertMatch({ok, _}, run(Config, ["--config", TestConf, "--base-uri", BaseURI, "show", "overview"])),
 
     %% overrides --host and --port on the command line

@@ -47,8 +47,8 @@ init([VHost]) ->
         {ok, VHost}
     catch _:Reason:Stacktrace ->
         rabbit_amqqueue:mark_local_durable_queues_stopped(VHost),
-        rabbit_log:error("Unable to recover vhost ~p data. Reason ~p~n"
-                         " Stacktrace ~p",
+        rabbit_log:error("Unable to recover vhost ~tp data. Reason ~tp~n"
+                         " Stacktrace ~tp",
                          [VHost, Reason, Stacktrace]),
         {stop, Reason}
     end.
@@ -63,7 +63,7 @@ handle_info(check_vhost, VHost) ->
     case rabbit_vhost:exists(VHost) of
         true  -> {noreply, VHost};
         false ->
-            rabbit_log:warning("Virtual host '~s' is gone. "
+            rabbit_log:warning("Virtual host '~ts' is gone. "
                                "Stopping its top level supervisor.",
                                [VHost]),
             %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:

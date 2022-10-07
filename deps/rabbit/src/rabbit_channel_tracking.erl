@@ -79,12 +79,12 @@ handle_cast({channel_created, Details}) ->
                 register_tracked(TrackedCh)
             catch
                 error:{no_exists, _} ->
-                    Msg = "Could not register channel ~p for tracking, "
+                    Msg = "Could not register channel ~tp for tracking, "
                           "its table is not ready yet or the channel terminated prematurely",
                     rabbit_log_connection:warning(Msg, [TrackedChId]),
                     ok;
                 error:Err ->
-                    Msg = "Could not register channel ~p for tracking: ~p",
+                    Msg = "Could not register channel ~tp for tracking: ~tp",
                     rabbit_log_connection:warning(Msg, [TrackedChId, Err]),
                     ok
             end;
@@ -103,7 +103,7 @@ handle_cast({connection_closed, ConnDetails}) ->
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
             rabbit_log_channel:debug(
-                "Closing all channels from connection '~s' "
+                "Closing all channels from connection '~ts' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             %% Shutting down channels will take care of unregistering the
             %% corresponding tracking.
@@ -125,7 +125,7 @@ handle_cast({node_deleted, Details}) ->
         false ->
             Node = pget(node, Details),
             rabbit_log_channel:info(
-              "Node '~s' was removed from the cluster, deleting"
+              "Node '~ts' was removed from the cluster, deleting"
               " its channel tracking tables...", [Node]),
             delete_tracked_channels_table_for_node(Node),
             delete_per_user_tracked_channels_table_for_node(Node)
@@ -317,13 +317,13 @@ list_on_node_mnesia(Node) ->
 -spec tracked_channel_table_name_for(node()) -> atom().
 
 tracked_channel_table_name_for(Node) ->
-    list_to_atom(rabbit_misc:format("tracked_channel_on_node_~s", [Node])).
+    list_to_atom(rabbit_misc:format("tracked_channel_on_node_~ts", [Node])).
 
 -spec tracked_channel_per_user_table_name_for(node()) -> atom().
 
 tracked_channel_per_user_table_name_for(Node) ->
     list_to_atom(rabbit_misc:format(
-        "tracked_channel_table_per_user_on_node_~s", [Node])).
+        "tracked_channel_table_per_user_on_node_~ts", [Node])).
 
 ensure_tracked_tables_for_this_node() ->
     ensure_tracked_channels_table_for_this_node_ets(),
@@ -348,7 +348,7 @@ ensure_per_user_tracked_channels_table_for_node() ->
 
 %% Create tables
 ensure_tracked_channels_table_for_this_node_ets() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
                                      {keypos, #tracked_channel.pid}]).
@@ -359,20 +359,20 @@ ensure_tracked_channels_table_for_this_node_mnesia() ->
     case mnesia:create_table(TableName, [{record_name, tracked_channel},
                                          {attributes, record_info(fields, tracked_channel)}]) of
         {atomic, ok}                   ->
-            rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, {already_exists, _}} ->
-            rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a tracked channel table for node ~p: ~p", [Node, Error]),
+            rabbit_log:error("Failed to create a tracked channel table for node ~tp: ~tp", [Node, Error]),
             ok
     end.
 
 ensure_per_user_tracked_channels_table_for_this_node_ets() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 
@@ -382,15 +382,15 @@ ensure_per_user_tracked_channels_table_for_this_node_mnesia() ->
     case mnesia:create_table(TableName, [{record_name, tracked_channel_per_user},
                                          {attributes, record_info(fields, tracked_channel_per_user)}]) of
         {atomic, ok}                   ->
-            rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, {already_exists, _}} ->
-            rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-user tracked channel table for node ~p: ~p", [Node, Error]),
+            rabbit_log:error("Failed to create a per-user tracked channel table for node ~tp: ~tp", [Node, Error]),
             ok
     end.
 

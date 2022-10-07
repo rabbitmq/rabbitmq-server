@@ -301,13 +301,13 @@ write_state_fun(XName, BFuns) ->
 % state error
 exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
-                            , "exchange named '~s' has no saved state or incorrect saved state"
+                            , "exchange named '~ts' has no saved state or incorrect saved state"
                             , [XName] ).
 
 % parsing error
 parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
-                            , "cannot parse selector '~p' binding destination '~s' to exchange '~s'"
+                            , "cannot parse selector '~tp' binding destination '~ts' to exchange '~ts'"
                             , [S, DestName, XName] ).
 
 %%----------------------------------------------------------------------------

@@ -54,7 +54,7 @@ run([Node], #{node := NodeName,
         {badrpc, _} = Error ->
             Error;
         nodedown ->
-            {ok, list_to_binary(io_lib:format("Node ~s is down but has been successfully removed"
+            {ok, list_to_binary(io_lib:format("Node ~ts is down but has been successfully removed"
                                          " from the cluster", [Node]))};
         Result ->
             %% 'ok' or 'timeout'
@@ -62,7 +62,7 @@ run([Node], #{node := NodeName,
             Result
     end.
 
-banner([Node], _) -> list_to_binary(io_lib:format("Removing node ~s from the list of MQTT nodes...", [Node])).
+banner([Node], _) -> list_to_binary(io_lib:format("Removing node ~ts from the list of MQTT nodes...", [Node])).
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

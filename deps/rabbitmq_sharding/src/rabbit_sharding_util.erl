@@ -42,7 +42,7 @@ exchange_bin(#resource{name = XBin}) -> XBin.
 
 make_queue_name(QBin, NodeBin, QNum) ->
     %% we do this to prevent unprintable characters in queue names
-    QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
+    QNumBin = list_to_binary(lists:flatten(io_lib:format("~tp", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).

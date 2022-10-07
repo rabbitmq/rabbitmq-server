@@ -42,7 +42,7 @@ maybe_add_verify(Options) ->
             % NB: user has explicitly set 'verify'
             Options;
         _ ->
-            ?LOG_WARN("Connection (~p): certificate chain verification is not enabled for this TLS connection. "
+            ?LOG_WARN("Connection (~tp): certificate chain verification is not enabled for this TLS connection. "
                     "Please see https://rabbitmq.com/ssl.html for more information.", [self()]),
             Options
     end.

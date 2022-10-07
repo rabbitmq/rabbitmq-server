@@ -121,7 +121,7 @@ handle_call(clear, _From, S) ->
 
 handle_call(Request, From, S) ->
     error_logger:warning_msg("The pg_local server received an unexpected message:\n"
-                             "handle_call(~p, ~p, _)\n",
+                             "handle_call(~tp, ~tp, _)\n",
                              [Request, From]),
     {noreply, S}.
 

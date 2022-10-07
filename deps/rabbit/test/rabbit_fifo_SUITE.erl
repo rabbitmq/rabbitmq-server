@@ -104,7 +104,7 @@ enq_enq_checkout_test(C) ->
         apply(meta(C, 3),
               rabbit_fifo:make_checkout(Cid, {once, 2, simple_prefetch}, #{}),
               State2),
-    ct:pal("~p", [Effects]),
+    ct:pal("~tp", [Effects]),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({log, [1,2], _Fun, _Local}, Effects),
     ok.
@@ -127,7 +127,7 @@ credit_enq_enq_checkout_settled_credit_test(C) ->
     %% granting credit (3) should deliver the second msg if the receivers
     %% delivery count is (1)
     {State5, CreditEffects} = credit(C, Cid, 5, 1, 1, false, State4),
-    % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
+    % ?debugFmt("CreditEffects  ~tp ~n~tp", [CreditEffects, State4]),
     ?ASSERT_EFF({log, [2], _, _}, CreditEffects),
     {_State6, FinalEffects} = enq(C, 6, 3, third, State5),
     ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
@@ -192,7 +192,7 @@ enq_enq_deq_test(C) ->
       {monitor, _, _}]} =
         apply(meta(C, 3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
-    ct:pal("Out ~p", [Fun([Msg1])]),
+    ct:pal("Out ~tp", [Fun([Msg1])]),
     ok.
 
 enq_enq_deq_deq_settle_test(C) ->
@@ -796,7 +796,7 @@ single_active_consumer_revive_test(C) ->
     {S4, _, _} = rabbit_fifo:apply(meta(C, 4), make_checkout(Cid1, cancel, #{}), S3),
     {S5, _} = check_auto(C, Cid1, 5, S4),
 
-    ct:pal("S5 ~p", [S5]),
+    ct:pal("S5 ~tp", [S5]),
     ?assertEqual(1, rabbit_fifo:query_messages_checked_out(S5)),
     ?assertEqual(1, rabbit_fifo:query_messages_total(S5)),
     Consumers = S5#rabbit_fifo.consumers,
@@ -1453,7 +1453,7 @@ register_enqueuer_test(C) ->
 
     {State4, ok, _} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 2, two), State3),
     {State5, ok, Efx} = apply(meta(C, 5), rabbit_fifo:make_enqueue(Pid1, 3, three), State4),
-    % ct:pal("Efx ~p", [Efx]),
+    % ct:pal("Efx ~tp", [Efx]),
     %% validate all registered enqueuers are notified of overflow state
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid2, Efx),
@@ -1471,13 +1471,13 @@ register_enqueuer_test(C) ->
               rabbit_fifo:make_checkout({<<"a">>, Pid3}, {dequeue, settled}, #{}),
               State6),
     ?ASSERT_EFF({log, [_], _}, Efx7),
-    % ct:pal("Efx7 ~p", [_Efx7]),
+    % ct:pal("Efx7 ~tp", [_Efx7]),
     {State8, _, Efx8} =
         apply(meta(C, 8),
               rabbit_fifo:make_checkout({<<"a">>, Pid3}, {dequeue, settled}, #{}),
               State7),
     ?ASSERT_EFF({log, [_], _}, Efx8),
-    % ct:pal("Efx8 ~p", [Efx8]),
+    % ct:pal("Efx8 ~tp", [Efx8]),
     %% validate all registered enqueuers are notified of overflow state
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx8),
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid2, Efx8),
@@ -1503,7 +1503,7 @@ reject_publish_purge_test(C) ->
     {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
     {State3, ok, _} = apply(meta(C, 3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
     {State4, ok, Efx} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
-    % ct:pal("Efx ~p", [Efx]),
+    % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     {_State5, {purge, 3}, Efx1} = apply(meta(C, 5), rabbit_fifo:make_purge(), State4),
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx1),
@@ -1522,7 +1522,7 @@ reject_publish_applied_after_limit_test(C) ->
     {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
     {State3, ok, _} = apply(meta(C, 3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
     {State4, ok, Efx} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
-    % ct:pal("Efx ~p", [Efx]),
+    % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_NO_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     %% apply new config
     Conf = #{name => ?FUNCTION_NAME,
@@ -1893,7 +1893,7 @@ checkout_priority_test(C) ->
                                         #{args => []}),
               S1),
     {S3, E3} = enq(C, 1, 1, first, S2),
-    ct:pal("E3 ~p ~p", [E3, self()]),
+    ct:pal("E3 ~tp ~tp", [E3, self()]),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E3),
     {S4, E4} = enq(C, 2, 2, second, S3),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E4),

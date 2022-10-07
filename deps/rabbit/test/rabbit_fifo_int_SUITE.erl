@@ -424,7 +424,7 @@ lost_delivery(Config) ->
     %% drop a delivery, simulating e.g. a full distribution buffer
     receive
         {ra_event, _, Evt} ->
-            ct:pal("dropping event ~p", [Evt]),
+            ct:pal("dropping event ~tp", [Evt]),
             ok
     after 500 ->
               exit(await_ra_event_timeout)

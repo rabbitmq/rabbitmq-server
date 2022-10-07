@@ -282,7 +282,7 @@ publish_qos1(Client, Topic, Payload) ->
             erlang:demonitor(Mref, [flush]),
             Reply;
         {'DOWN', Mref, process, Client, Reason} ->
-            ct:fail("client is down: ~p", [Reason])
+            ct:fail("client is down: ~tp", [Reason])
     after
         1000 ->
             erlang:demonitor(Mref, [flush]),

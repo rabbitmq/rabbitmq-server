@@ -36,7 +36,7 @@ delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:direct_request(
       'queue.purge',
       fun rabbit_mgmt_format:format_accept_content/1,
-      [{queue, Name}], "Error purging queue: ~s", ReqData, Context).
+      [{queue, Name}], "Error purging queue: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

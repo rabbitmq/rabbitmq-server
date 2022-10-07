@@ -334,7 +334,7 @@ load_credentials(#state{region = Region}) ->
                   security_token = SecurityToken,
                   imdsv2_token = undefined}};
     {error, Reason} ->
-      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set~n", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
@@ -505,7 +505,7 @@ expired_imdsv2_token({_, _, undefined}) ->
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
   HasExpired = Now >= Expiration,
-  rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
+  rabbit_log:debug("EC2 IMDSv2 token has expired: ~tp", [HasExpired]),
   HasExpired.
 
 
@@ -542,7 +542,7 @@ ensure_credentials_valid() ->
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
-  rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  rabbit_log:debug("Invoking AWS request {Service: ~tp; Path: ~tp}...", [Service, Path]),
   api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
 
 
@@ -555,12 +555,12 @@ api_get_request_with_retries(_, _, 0, _) ->
 api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
   ensure_credentials_valid(),
   case get(Service, Path) of
-    {ok, {_Headers, Payload}}  -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
+    {ok, {_Headers, Payload}}  -> rabbit_log:debug("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
                                   {ok, Payload};
     {error, {credentials, _}}  -> {error, credentials};
-    {error, Message, Response} -> rabbit_log:warning("Error occurred: ~s", [Message]),
+    {error, Message, Response} -> rabbit_log:warning("Error occurred: ~ts", [Message]),
                                   case Response of
-                                      {_, Payload} -> rabbit_log:warning("Failed AWS request: ~s~nResponse: ~p", [Path, Payload]);
+                                      {_, Payload} -> rabbit_log:warning("Failed AWS request: ~ts~nResponse: ~tp", [Path, Payload]);
                                       _            -> ok
                                   end,
                                   rabbit_log:warning("Will retry AWS request, remaining retries: ~b", [Retries]),

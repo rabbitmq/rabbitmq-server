@@ -43,8 +43,8 @@ find_upstreams(Name, Upstreams) ->
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
         {Type, _} -> ok;
-        undefined -> fail("Argument ~s missing", [Name]);
-        _         -> fail("Argument ~s must be of type ~s", [Name, Type])
+        undefined -> fail("Argument ~ts missing", [Name]);
+        _         -> fail("Argument ~ts must be of type ~ts", [Name, Type])
     end.
 
 -spec fail(io:format(), [term()]) -> no_return().

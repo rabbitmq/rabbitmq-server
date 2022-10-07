@@ -62,7 +62,7 @@ validate(#exchange{arguments = Args}) ->
                     ok;
                 _ ->
                     rabbit_misc:protocol_error(precondition_failed,
-                                               "Invalid argument ~p, "
+                                               "Invalid argument ~tp, "
                                                "'x-recent-history-length' "
                                                "must be a positive integer",
                                                [Val])
@@ -195,7 +195,7 @@ deliver_messages(Qs, Msgs) ->
 destination_not_found_error(DestName) ->
     rabbit_misc:protocol_error(
       internal_error,
-      "could not find queue/exchange '~s'",
+      "could not find queue/exchange '~ts'",
       [DestName]).
 
 %% adapted from rabbit_amqqueue.erl

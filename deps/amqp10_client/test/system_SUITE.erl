@@ -217,10 +217,10 @@ open_connection_plain_sasl_parse_uri(Config) ->
     Uri = case ?config(sasl, Config) of
               anon ->
                   lists:flatten(
-                    io_lib:format("amqp://~s:~b", [Hostname, Port]));
+                    io_lib:format("amqp://~ts:~b", [Hostname, Port]));
               {plain, Usr, Pwd} ->
                   lists:flatten(
-                    io_lib:format("amqp://~s:~s@~s:~b?sasl=plain",
+                    io_lib:format("amqp://~ts:~ts@~ts:~b?sasl=plain",
                                   [Usr, Pwd, Hostname, Port]))
           end,
 
@@ -252,7 +252,7 @@ open_connection_plain_sasl_failure(Config) ->
         {amqp10_event, {connection, Connection, {closed, shutdown}}} -> ok
 
     after 5000 ->
-              ct:pal("Connection process is alive? = ~p~n",
+              ct:pal("Connection process is alive? = ~tp~n",
                      [erlang:is_process_alive(Connection)]),
               exit(connection_timeout)
     end,
@@ -347,7 +347,7 @@ roundtrip(OpenConf, Body) ->
     {ok, OutMsg} = amqp10_client:get_msg(Receiver, 60000 * 5),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
-    % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~p~nIn: ~p~n", [OutMsg, Msg]),
+    % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     #{creation_time := Now} = amqp10_msg:properties(OutMsg),
     #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
@@ -690,7 +690,7 @@ incoming_heartbeat(Config) ->
 
 receive_messages(Receiver, Num) ->
     [begin
-         ct:pal("receive_messages ~p", [T]),
+         ct:pal("receive_messages ~tp", [T]),
          ok = receive_one(Receiver)
      end || T <- lists:seq(1, Num)].
 
@@ -735,7 +735,7 @@ to_bin(X) when is_list(X) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok

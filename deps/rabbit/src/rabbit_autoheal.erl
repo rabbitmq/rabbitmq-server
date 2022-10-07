@@ -118,7 +118,7 @@ init() ->
     case State of
         {leader_waiting, Winner, _} ->
             rabbit_log:info(
-              "Autoheal: in progress, requesting report from ~p", [Winner]),
+              "Autoheal: in progress, requesting report from ~tp", [Winner]),
             send(Winner, report_autoheal_status);
         _ ->
             ok
@@ -129,7 +129,7 @@ maybe_start(not_healing) ->
     case enabled() of
         true  -> Leader = leader(),
                  send(Leader, {request_start, node()}),
-                 rabbit_log:info("Autoheal request sent to ~p", [Leader]),
+                 rabbit_log:info("Autoheal request sent to ~tp", [Leader]),
                  not_healing;
         false -> not_healing
     end;
@@ -173,25 +173,25 @@ node_down(Node, {winner_waiting, _, Notify}) ->
 
 node_down(Node, {leader_waiting, Node, _Notify}) ->
     %% The winner went down, we don't know what to do so we simply abort.
-    rabbit_log:info("Autoheal: aborting - winner ~p went down", [Node]),
+    rabbit_log:info("Autoheal: aborting - winner ~tp went down", [Node]),
     not_healing;
 
 node_down(Node, {leader_waiting, _, _} = St) ->
     %% If it is a partial partition, the winner might continue with the
     %% healing process. If it is a full partition, the winner will also
     %% see it and abort. Let's wait for it.
-    rabbit_log:info("Autoheal: ~p went down, waiting for winner decision ", [Node]),
+    rabbit_log:info("Autoheal: ~tp went down, waiting for winner decision ", [Node]),
     St;
 
 node_down(Node, _State) ->
-    rabbit_log:info("Autoheal: aborting - ~p went down", [Node]),
+    rabbit_log:info("Autoheal: aborting - ~tp went down", [Node]),
     not_healing.
 
 %% If the process that has to restart the node crashes for an unexpected reason,
 %% we go back to a not healing state so the node is able to recover.
 process_down({'EXIT', Pid, Reason}, {restarting, Pid}) when Reason =/= normal ->
     rabbit_log:info("Autoheal: aborting - the process responsible for restarting the "
-                    "node terminated with reason: ~p", [Reason]),
+                    "node terminated with reason: ~tp", [Reason]),
     not_healing;
 
 process_down(_, State) ->
@@ -201,17 +201,17 @@ process_down(_, State) ->
 %% TODO should we try to debounce this?
 handle_msg({request_start, Node},
            not_healing, Partitions) ->
-    rabbit_log:info("Autoheal request received from ~p", [Node]),
+    rabbit_log:info("Autoheal request received from ~tp", [Node]),
     case check_other_nodes(Partitions) of
         {error, E} ->
-            rabbit_log:info("Autoheal request denied: ~s", [fmt_error(E)]),
+            rabbit_log:info("Autoheal request denied: ~ts", [fmt_error(E)]),
             not_healing;
         {ok, AllPartitions} ->
             {Winner, Losers} = make_decision(AllPartitions),
             rabbit_log:info("Autoheal decision~n"
-                            "  * Partitions: ~p~n"
-                            "  * Winner:     ~p~n"
-                            "  * Losers:     ~p",
+                            "  * Partitions: ~tp~n"
+                            "  * Winner:     ~tp~n"
+                            "  * Losers:     ~tp",
                             [AllPartitions, Winner, Losers]),
             case node() =:= Winner of
                 true  -> handle_msg({become_winner, Losers},
@@ -223,13 +223,13 @@ handle_msg({request_start, Node},
 
 handle_msg({request_start, Node},
            State, _Partitions) ->
-    rabbit_log:info("Autoheal request received from ~p when healing; "
+    rabbit_log:info("Autoheal request received from ~tp when healing; "
                     "ignoring", [Node]),
     State;
 
 handle_msg({become_winner, Losers},
            not_healing, _Partitions) ->
-    rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop",
+    rabbit_log:info("Autoheal: I am the winner, waiting for ~tp to stop",
                     [Losers]),
     stop_partition(Losers);
 
@@ -238,7 +238,7 @@ handle_msg({become_winner, Losers},
     %% The leader has aborted the healing, might have seen us down but
     %% we didn't see the same. Let's try again as it is the same partition.
     rabbit_log:info("Autoheal: I am the winner and received a duplicated "
-		    "request, waiting again for ~p to stop", [Losers]),
+		    "request, waiting again for ~tp to stop", [Losers]),
     stop_partition(Losers);
 
 handle_msg({become_winner, _},
@@ -246,7 +246,7 @@ handle_msg({become_winner, _},
     %% Something has happened to the leader, it might have seen us down but we
     %% are still alive. Partitions have changed, cannot continue.
     rabbit_log:info("Autoheal: I am the winner and received another healing "
-		    "request, partitions have changed to ~p. Aborting ", [Losers]),
+		    "request, partitions have changed to ~tp. Aborting ", [Losers]),
     winner_finish(Losers),
     not_healing;
 
@@ -263,7 +263,7 @@ handle_msg({winner_is, Winner}, State = {leader_waiting, Winner, _},
 
 handle_msg(Request, {restarting, Pid} = St, _Partitions) ->
     %% ignore, we can contribute no further
-    rabbit_log:info("Autoheal: Received the request ~p while waiting for ~p "
+    rabbit_log:info("Autoheal: Received the request ~tp while waiting for ~tp "
                     "to restart the node. Ignoring it ", [Request, Pid]),
     St;
 
@@ -286,21 +286,21 @@ handle_msg({autoheal_finished, Winner},
     %% The winner is finished with the autoheal process and notified us
     %% (the leader). We can transition to the "not_healing" state and
     %% accept new requests.
-    rabbit_log:info("Autoheal finished according to winner ~p", [Winner]),
+    rabbit_log:info("Autoheal finished according to winner ~tp", [Winner]),
     not_healing;
 
 handle_msg({autoheal_finished, Winner}, not_healing, _Partitions)
            when Winner =:= node() ->
     %% We are the leader and the winner. The state already transitioned
     %% to "not_healing" at the end of the autoheal process.
-    rabbit_log:info("Autoheal finished according to winner ~p", [node()]),
+    rabbit_log:info("Autoheal finished according to winner ~tp", [node()]),
     not_healing;
 
 handle_msg({autoheal_finished, Winner}, not_healing, _Partitions) ->
     %% We might have seen the winner down during a partial partition and
     %% transitioned to not_healing. However, the winner was still able
     %% to finish. Let it pass.
-    rabbit_log:info("Autoheal finished according to winner ~p."
+    rabbit_log:info("Autoheal finished according to winner ~tp."
 		    " Unexpected, I might have previously seen the winner down", [Winner]),
     not_healing.
 
@@ -309,7 +309,7 @@ handle_msg({autoheal_finished, Winner}, not_healing, _Partitions) ->
 send(Node, Msg) -> {?SERVER, Node} ! {autoheal_msg, Msg}.
 
 abort(Down, Notify) ->
-    rabbit_log:info("Autoheal: aborting - ~p down", [Down]),
+    rabbit_log:info("Autoheal: aborting - ~tp down", [Down]),
     %% Make sure any nodes waiting for us start - it won't necessarily
     %% heal the partition but at least they won't get stuck.
     %% If we are executing this, we are not stopping. Thus, don't wait
@@ -353,7 +353,7 @@ wait_for_supervisors(Monitors) ->
 	    after
 		60000 ->
 		    AliveLosers = [Node || {_, Node} <- pmon:monitored(Monitors)],
-		    rabbit_log:info("Autoheal: mnesia in nodes ~p is still up, sending "
+		    rabbit_log:info("Autoheal: mnesia in nodes ~tp is still up, sending "
 				    "winner notification again to these ", [AliveLosers]),
 		    [send(L, {winner_is, node()}) || L <- AliveLosers],
 		    wait_for_mnesia_shutdown(AliveLosers)
@@ -361,7 +361,7 @@ wait_for_supervisors(Monitors) ->
     end.
 
 restart_loser(State, Winner) ->
-    rabbit_log:warning("Autoheal: we were selected to restart; winner is ~p", [Winner]),
+    rabbit_log:warning("Autoheal: we were selected to restart; winner is ~tp", [Winner]),
     NextStateTimeout = application:get_env(rabbit, autoheal_state_transition_timeout, 60000),
     rabbit_node_monitor:run_outside_applications(
       fun () ->
@@ -374,7 +374,7 @@ restart_loser(State, Winner) ->
                       State
                   after NextStateTimeout ->
                       rabbit_log:warning(
-                          "Autoheal: timed out waiting for a safe-to-start message from the winner (~p); will retry",
+                          "Autoheal: timed out waiting for a safe-to-start message from the winner (~tp); will retry",
                           [Winner]),
                       not_healing
               end,
@@ -440,9 +440,9 @@ all_partitions([{Node, CantSee} | Rest], Partitions) ->
     all_partitions(Rest, Partitions1).
 
 fmt_error({remote_down, RemoteDown}) ->
-    rabbit_misc:format("Remote nodes disconnected:~n ~p", [RemoteDown]);
+    rabbit_misc:format("Remote nodes disconnected:~n ~tp", [RemoteDown]);
 fmt_error({nodes_down, NodesDown}) ->
-    rabbit_misc:format("Local nodes down: ~p", [NodesDown]).
+    rabbit_misc:format("Local nodes down: ~tp", [NodesDown]).
 
 stop_partition(Losers) ->
     %% The leader said everything was ready - do we agree? If not then

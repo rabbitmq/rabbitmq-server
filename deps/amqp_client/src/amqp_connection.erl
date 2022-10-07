@@ -414,8 +414,8 @@ maybe_update_call_timeout(BaseTimeout, CallTimeout)
     ok;
 maybe_update_call_timeout(BaseTimeout, CallTimeout) ->
     EffectiveSafeCallTimeout = amqp_util:safe_call_timeout(BaseTimeout),
-    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~p ms, is updated to a safe effective "
-              "value of ~p ms", [CallTimeout, EffectiveSafeCallTimeout]),
+    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~tp ms, is updated to a safe effective "
+              "value of ~tp ms", [CallTimeout, EffectiveSafeCallTimeout]),
     amqp_util:update_call_timeout(EffectiveSafeCallTimeout),
     ok.
 

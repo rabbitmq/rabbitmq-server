@@ -208,7 +208,7 @@ handle_exit(Conn, {shutdown, {connection_closing,
             State = #proc_state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
 handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
-    _ = send_error("AMQP connection died", "Reason: ~p", [Reason], State),
+    _ = send_error("AMQP connection died", "Reason: ~tp", [Reason], State),
     {stop, {conn_died, Reason}, State};
 
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
@@ -216,7 +216,7 @@ handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
     amqp_death(Code, Explanation, State);
 
 handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
-    _ = send_error("AMQP channel died", "Reason: ~p", [Reason], State),
+    _ = send_error("AMQP channel died", "Reason: ~tp", [Reason], State),
     {stop, {channel_died, Reason}, State};
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
             State = #proc_state{channel = Ch}) ->
@@ -287,7 +287,7 @@ process_connect(Implicit, Frame,
                       end;
                   {error, no_common_version} ->
                       error("Version mismatch",
-                            "Supported versions are ~s~n",
+                            "Supported versions are ~ts~n",
                             [string:join(?SUPPORTED_VERSIONS, ",")],
                             StateN)
               end
@@ -383,7 +383,7 @@ handle_frame("ABORT", Frame, State) ->
 
 handle_frame(Command, _Frame, State) ->
     error("Bad command",
-          "Could not interpret command ~p~n",
+          "Could not interpret command ~tp~n",
           [Command],
           State).
 
@@ -415,19 +415,19 @@ ack_action(Command, Frame,
                             end;
                         error ->
                             error("Subscription not found",
-                                  "Message with id ~p has no subscription",
+                                  "Message with id ~tp has no subscription",
                                   [AckValue],
                                   State)
                     end;
                 _ ->
                    error("Invalid header",
-                         "~p must include a valid ~p header~n",
+                         "~tp must include a valid ~tp header~n",
                          [Command, AckHeader],
                          State)
             end;
         not_found ->
             error("Missing header",
-                  "~p must include the ~p header~n",
+                  "~tp must include the ~tp header~n",
                   [Command, AckHeader],
                   State)
     end.
@@ -440,7 +440,7 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
     case maps:find(ConsumerTag, Subs) of
         error ->
             error("Server cancelled unknown subscription",
-                  "Consumer tag ~p is not associated with a subscription.~n",
+                  "Consumer tag ~tp is not associated with a subscription.~n",
                   [ConsumerTag],
                   State);
         {ok, Subscription = #subscription{description = Description}} ->
@@ -451,7 +451,7 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
             _ = send_error_frame("Server cancelled subscription",
                                  [{?HEADER_SUBSCRIPTION, Id}],
                                  "The server has canceled a subscription.~n"
-                                 "No more messages will be delivered for ~p.~n",
+                                 "No more messages will be delivered for ~tp.~n",
                                  [Description],
                                  State),
             tidy_canceled_subscription(ConsumerTag, Subscription,
@@ -460,7 +460,7 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
 
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
     error("Invalid id",
-          "UNSUBSCRIBE 'id' may not start with ~s~n",
+          "UNSUBSCRIBE 'id' may not start with ~ts~n",
           [?TEMP_QUEUE_ID_PREFIX],
           State);
 
@@ -476,7 +476,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
         error ->
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription.~n"
-                  "Subscription to ~p not found.~n",
+                  "Subscription to ~tp not found.~n",
                   [Description],
                   State);
         {ok, Subscription = #subscription{description = Descr}} ->
@@ -488,7 +488,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                                                Frame, State);
                 _ ->
                     error("Failed to cancel subscription",
-                          "UNSUBSCRIBE to ~p failed.~n",
+                          "UNSUBSCRIBE to ~tp failed.~n",
                           [Descr],
                           State)
             end
@@ -533,12 +533,12 @@ with_destination(Command, Frame, State, Fun) ->
                     case Fun(Destination, DestHdr, Frame, State) of
                         {error, invalid_endpoint} ->
                             error("Invalid destination",
-                                  "'~s' is not a valid destination for '~s'~n",
+                                  "'~ts' is not a valid destination for '~ts'~n",
                                   [DestHdr, Command],
                                   State);
                         {error, {invalid_destination, Msg}} ->
                             error("Invalid destination",
-                                  "~s",
+                                  "~ts",
                                   [Msg],
                                   State);
                         {error, Reason} ->
@@ -548,20 +548,20 @@ with_destination(Command, Frame, State, Fun) ->
                     end;
                 {error, {invalid_destination, Type, Content}} ->
                     error("Invalid destination",
-                          "'~s' is not a valid ~p destination~n",
+                          "'~ts' is not a valid ~tp destination~n",
                           [Content, Type],
                           State);
                 {error, {unknown_destination, Content}} ->
                     error("Unknown destination",
-                          "'~s' is not a valid destination.~n"
-                          "Valid destination types are: ~s.~n",
+                          "'~ts' is not a valid destination.~n"
+                          "Valid destination types are: ~ts.~n",
                           [Content,
                            string:join(rabbit_routing_util:all_dest_prefixes(),
                                        ", ")], State)
             end;
         not_found ->
             error("Missing destination",
-                  "~p must include a 'destination' header~n",
+                  "~tp must include a 'destination' header~n",
                   [Command],
                   State)
     end.
@@ -570,7 +570,7 @@ without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, Hdr) of
         {ok, _} ->
             error("Invalid header",
-                  "'~s' is not allowed on '~s'.~n",
+                  "'~ts' is not allowed on '~ts'.~n",
                   [Hdr, Command],
                   State);
         not_found ->
@@ -611,23 +611,23 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                 connection = Connection,
                                 version    = Version});
         {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user '~s': authentication failed", [Username]),
+            rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'~n", [], State);
         {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed for user '~s': "
+            rabbit_log:warning("STOMP login failed for user '~ts': "
                                "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed for user '~s': "
+            rabbit_log:warning("STOMP login failed for user '~ts': "
                                "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed for user '~s': "
+            rabbit_log:warning("STOMP login failed for user '~ts': "
                                "this user's access is restricted to localhost", [Username]),
             error("Bad CONNECT", "non-loopback access denied", State)
     end.
@@ -646,7 +646,7 @@ start_connection(Params, Username, Addr) ->
 server_header() ->
     {ok, Product} = application:get_key(rabbit, description),
     {ok, Version} = application:get_key(rabbit, vsn),
-    rabbit_misc:format("~s/~s", [Product, Version]).
+    rabbit_misc:format("~ts/~ts", [Product, Version]).
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #proc_state{subscriptions = Subs,
@@ -670,7 +670,7 @@ do_subscribe(Destination, DestHdr, Frame,
             case maps:find(ConsumerTag, Subs) of
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
-                    Detail = "A subscription identified by '~s' already exists.",
+                    Detail = "A subscription identified by '~ts' already exists.",
                     _ = error(Message, Detail, [ConsumerTag], State),
                     _ = send_error(Message, Detail, [ConsumerTag], State),
                     {stop, normal, close_connection(State)};
@@ -819,7 +819,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               State);
         error ->
             send_error("Subscription not found",
-                       "There is no current subscription with tag '~s'.",
+                       "There is no current subscription with tag '~ts'.",
                        [ConsumerTag],
                        State)
     end,
@@ -860,7 +860,7 @@ close_connection(State = #proc_state{connection = Connection}) ->
     catch amqp_connection:close(Connection),
     State#proc_state{channel = none, connection = none, subscriptions = none};
 close_connection(undefined) ->
-    rabbit_log:debug("~s:close_connection: undefined state", [?MODULE]),
+    rabbit_log:debug("~ts:close_connection: undefined state", [?MODULE]),
     #proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
@@ -1006,7 +1006,7 @@ transactional_action(Frame, Name, Fun, State) ->
             Fun(Transaction, State);
         no ->
             error("Missing transaction",
-                  "~p must include a 'transaction' header~n",
+                  "~tp must include a 'transaction' header~n",
                   [Name],
                   State)
     end.
@@ -1015,7 +1015,7 @@ with_transaction(Transaction, State, Fun) ->
     case get({transaction, Transaction}) of
         undefined ->
             error("Bad transaction",
-                  "Invalid transaction identifier: ~p~n",
+                  "Invalid transaction identifier: ~tp~n",
                   [Transaction],
                   State);
         Actions ->
@@ -1132,12 +1132,12 @@ ok(Command, Headers, BodyFragments, State) ->
                       body_iolist = BodyFragments}, State}.
 
 amqp_death(access_refused = ErrorName, Explanation, State) ->
-    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
-    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
@@ -1157,9 +1157,9 @@ priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
 
 log_error(Message, Detail, ServerPrivateDetail) ->
     rabbit_log:error("STOMP error frame sent:~n"
-                     "Message: ~p~n"
-                     "Detail: ~p~n"
-                     "Server private detail: ~p",
+                     "Message: ~tp~n"
+                     "Detail: ~tp~n"
+                     "Server private detail: ~tp",
                      [Message, Detail, ServerPrivateDetail]).
 
 %%----------------------------------------------------------------------------

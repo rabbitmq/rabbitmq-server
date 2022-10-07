@@ -60,7 +60,7 @@ get_used_fd(State0) ->
         end
     catch
         _:Error ->
-            State2 = log_fd_error("Could not infer the number of file handles used: ~p", [Error], State0),
+            State2 = log_fd_error("Could not infer the number of file handles used: ~tp", [Error], State0),
             {State2, 0}
     end.
 
@@ -83,14 +83,14 @@ get_used_fd({unix, BSD}, State0)
         UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
         {State0, UsedFd}
     catch _:Error:Stacktrace ->
-              State1 = log_fd_error("Could not parse fstat output:~n~s~n~p",
+              State1 = log_fd_error("Could not parse fstat output:~n~ts~n~tp",
                                     [Output, {Error, Stacktrace}], State0),
               {State1, 0}
     end;
 
 get_used_fd({unix, _}, State0) ->
     Cmd = rabbit_misc:format(
-            "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
+            "lsof -d \"0-9999999\" -lna -p ~ts || echo failed", [os:getpid()]),
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
         "failed\n" ->
@@ -172,7 +172,7 @@ get_used_fd({win32, _}, State0) ->
                     State1 = log_fd_error("handle.exe output did not contain "
                                           "a line beginning with '  File ', unable "
                                           "to determine used file descriptor "
-                                          "count: ~p", [Handle], State0),
+                                          "count: ~tp", [Handle], State0),
                     {State1, 0};
                 UsedFd ->
                     {State0, UsedFd}

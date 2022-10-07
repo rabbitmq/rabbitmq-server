@@ -76,7 +76,7 @@ add_primary_filters() ->
 
 filter_discarded_message(#{level := error,
                            meta := #{error_logger := #{emulator := true, tag := error}},
-                           msg := {"~s~n", Msg}}, OnMatch) ->
+                           msg := {"~ts~n", Msg}}, OnMatch) ->
     case string:find(Msg, "Discarding message") of
         nomatch ->
             ignore;

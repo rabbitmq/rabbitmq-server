@@ -1727,7 +1727,7 @@ leader_failover_dedupe(Config) ->
     %% pick a random node order for this test
     %% realle we should run all permuations
     Nodes = lists:nth(rand:uniform(length(PermNodes)), PermNodes),
-    ct:pal("~s running with nodes ~w", [?FUNCTION_NAME, Nodes]),
+    ct:pal("~ts running with nodes ~w", [?FUNCTION_NAME, Nodes]),
     [_Server1, DownNode, PubNode] = Nodes,
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
     Q = ?config(queue_name, Config),
@@ -1771,7 +1771,7 @@ leader_failover_dedupe(Config) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
               Info = find_queue_info(Config, PubNode, [leader, members]),
-              ct:pal("info ~p", [Info]),
+              ct:pal("info ~tp", [Info]),
               NewLeader = proplists:get_value(leader, Info),
               NewLeader =/= DownNode
       end),
@@ -2241,7 +2241,7 @@ check_leader_and_replicas(Config, Members, Tag) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
               Info = find_queue_info(Config, [leader, Tag]),
-              ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
+              ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
               lists:member(proplists:get_value(leader, Info), Members)
                   andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
       end, 60_000).
@@ -2251,7 +2251,7 @@ check_members(Config, ExpectedMembers) ->
       fun () ->
               Info = find_queue_info(Config, 0, [members]),
               Members = proplists:get_value(members, Info),
-              ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
+              ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
               lists:sort(ExpectedMembers) == lists:sort(Members)
       end, 20_000).
 
@@ -2326,7 +2326,7 @@ receive_batch_min_offset(Ch, N, M) ->
             exit({unexpected_offset, S});
         {#'basic.deliver'{delivery_tag = DeliveryTag},
          #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S}]}}} ->
-            ct:pal("Committed offset is ~p but as first offset got ~p", [N, S]),
+            ct:pal("Committed offset is ~tp but as first offset got ~tp", [N, S]),
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false}),
             receive_batch(Ch, S + 1, M)
@@ -2377,7 +2377,7 @@ run_proper(Fun, Args, NumTests) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok

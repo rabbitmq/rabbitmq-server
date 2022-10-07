@@ -41,7 +41,7 @@ file_info(Name) ->
                {ok, Info} ->
                    Info#file_info.size;
                {error, Error} ->
-                   rabbit_log:warning("error getting file info for ~s: ~p",
+                   rabbit_log:warning("error getting file info for ~ts: ~tp",
                                       [Name, Error]),
                    0
            end,

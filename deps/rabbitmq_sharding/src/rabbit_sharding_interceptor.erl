@@ -41,7 +41,7 @@ intercept(#'basic.consume'{queue = QName} = Method, Content, VHost) ->
         {ok, QName2} ->
             {Method#'basic.consume'{queue = QName2}, Content};
         {error, QName} ->
-            precondition_failed("Error finding sharded queue for: ~p", [QName])
+            precondition_failed("Error finding sharded queue for: ~tp", [QName])
     end;
 
 intercept(#'basic.get'{queue = QName} = Method, Content, VHost) ->
@@ -49,13 +49,13 @@ intercept(#'basic.get'{queue = QName} = Method, Content, VHost) ->
         {ok, QName2} ->
             {Method#'basic.get'{queue = QName2}, Content};
         {error, QName} ->
-            precondition_failed("Error finding sharded queue for: ~p", [QName])
+            precondition_failed("Error finding sharded queue for: ~tp", [QName])
     end;
 
 intercept(#'queue.delete'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't delete sharded queue: ~p", [QName]);
+            precondition_failed("Can't delete sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -78,7 +78,7 @@ intercept(#'queue.declare'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.bind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't bind sharded queue: ~p", [QName]);
+            precondition_failed("Can't bind sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -86,7 +86,7 @@ intercept(#'queue.bind'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.unbind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't unbind sharded queue: ~p", [QName]);
+            precondition_failed("Can't unbind sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -94,7 +94,7 @@ intercept(#'queue.unbind'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.purge'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't purge sharded queue: ~p", [QName]);
+            precondition_failed("Can't purge sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;

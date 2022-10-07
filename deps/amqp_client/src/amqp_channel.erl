@@ -510,7 +510,7 @@ handle_info({bump_credit, Msg}, State) ->
     {noreply, State};
 %% @private
 handle_info(timed_out_flushing_channel, State) ->
-    ?LOG_WARN("Channel (~p) closing: timed out flushing while "
+    ?LOG_WARN("Channel (~tp) closing: timed out flushing while "
               "connection closing", [self()]),
     {stop, timed_out_flushing_channel, State};
 %% @private
@@ -519,8 +519,8 @@ handle_info({'DOWN', _, process, ReturnHandler, shutdown},
     {noreply, State#state{return_handler = none}};
 handle_info({'DOWN', _, process, ReturnHandler, Reason},
             State = #state{return_handler = {ReturnHandler, _Ref}}) ->
-    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
-              "Reason: ~p", [self(), ReturnHandler, Reason]),
+    ?LOG_WARN("Channel (~tp): Unregistering return handler ~tp because it died. "
+              "Reason: ~tp", [self(), ReturnHandler, Reason]),
     {noreply, State#state{return_handler = none}};
 %% @private
 handle_info({'DOWN', _, process, ConfirmHandler, shutdown},
@@ -528,8 +528,8 @@ handle_info({'DOWN', _, process, ConfirmHandler, shutdown},
     {noreply, State#state{confirm_handler = none}};
 handle_info({'DOWN', _, process, ConfirmHandler, Reason},
             State = #state{confirm_handler = {ConfirmHandler, _Ref}}) ->
-    ?LOG_WARN("Channel (~p): Unregistering confirm handler ~p because it died. "
-              "Reason: ~p", [self(), ConfirmHandler, Reason]),
+    ?LOG_WARN("Channel (~tp): Unregistering confirm handler ~tp because it died. "
+              "Reason: ~tp", [self(), ConfirmHandler, Reason]),
     {noreply, State#state{confirm_handler = none}};
 %% @private
 handle_info({'DOWN', _, process, FlowHandler, shutdown},
@@ -537,8 +537,8 @@ handle_info({'DOWN', _, process, FlowHandler, shutdown},
     {noreply, State#state{flow_handler = none}};
 handle_info({'DOWN', _, process, FlowHandler, Reason},
             State = #state{flow_handler = {FlowHandler, _Ref}}) ->
-    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
-              "Reason: ~p", [self(), FlowHandler, Reason]),
+    ?LOG_WARN("Channel (~tp): Unregistering flow handler ~tp because it died. "
+              "Reason: ~tp", [self(), FlowHandler, Reason]),
     {noreply, State#state{flow_handler = none}};
 handle_info({'DOWN', _, process, QPid, _Reason}, State) ->
     rabbit_amqqueue_common:notify_sent_queue_down(QPid),
@@ -587,13 +587,13 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, Flow,
             {noreply, rpc_top_half(Method, build_content(AmqpMsg),
                                    From, Sender, Flow, State1)};
         {ok, none, BlockReply} ->
-            ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
-                      "Reason: ~p", [self(), Method, BlockReply]),
+            ?LOG_WARN("Channel (~tp): discarding method ~tp in cast.~n"
+                      "Reason: ~tp", [self(), Method, BlockReply]),
             {noreply, State};
         {ok, _, BlockReply} ->
             {reply, BlockReply, State};
         {{_, InvalidMethodMessage}, none, _} ->
-            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. " ++
+            ?LOG_WARN("Channel (~tp): ignoring cast of ~tp method. " ++
                       InvalidMethodMessage ++ "", [self(), Method]),
             {noreply, State};
         {{InvalidMethodReply, _}, _, _} ->
@@ -694,7 +694,7 @@ safely_handle_method_from_server(Method, Content,
                             {{just_channel, _}, _}                     -> true;
                             _                                          -> false
                         end,
-                 if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
+                 if Drop -> ?LOG_INFO("Channel (~tp): dropping method ~tp from "
                                       "server because channel is closing",
                                       [self(), {Method, Content}]),
                             {noreply, State};
@@ -775,7 +775,7 @@ handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler = ReturnHandler}) ->
     case ReturnHandler of
-        none        -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is "
+        none        -> ?LOG_WARN("Channel (~tp): received {~tp, ~tp} but there is "
                                  "no return handler registered",
                                  [self(), BasicReturn, AmqpMsg]);
         {Pid, _Ref} -> Pid ! {BasicReturn, AmqpMsg}
@@ -790,7 +790,7 @@ handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
     {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler = none} = State) ->
-    ?LOG_WARN("Channel (~p): received ~p but there is no "
+    ?LOG_WARN("Channel (~tp): received ~tp but there is no "
               "confirm handler registered", [self(), BasicNack]),
     {noreply, update_confirm_set(BasicNack, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
@@ -835,7 +835,7 @@ handle_connection_closing(CloseType, Reason,
 handle_channel_exit(Reason = #amqp_error{name = ErrorName, explanation = Expl},
                     State = #state{connection = Connection, number = Number}) ->
     %% Sent by rabbit_channel for hard errors in the direct case
-    ?LOG_ERR("connection ~p, channel ~p - error:~n~p",
+    ?LOG_ERR("connection ~tp, channel ~tp - error:~n~tp",
              [Connection, Number, Reason]),
     {true, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
     ReportedReason = {server_initiated_close, Code, Expl},
@@ -927,8 +927,8 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
         {0, _} ->
             handle_shutdown({server_misbehaved, AmqpError}, State);
         {_, Close} ->
-            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
-                      "error caused by the server ~p", [self(), AmqpError]),
+            ?LOG_WARN("Channel (~tp) flushing and closing due to soft "
+                      "error caused by the server ~tp", [self(), AmqpError]),
             Self = self(),
             spawn(fun () -> call(Self, Close) end),
             {noreply, State}

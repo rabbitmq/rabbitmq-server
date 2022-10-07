@@ -26,7 +26,7 @@ get(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
             ?LOG_ERROR(
-               "Key ~s is not found in peer discovery config mapping ~p!",
+               "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
@@ -42,7 +42,7 @@ get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
             ?LOG_ERROR(
-               "Key ~s is not found in peer discovery config mapping ~p!",
+               "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});

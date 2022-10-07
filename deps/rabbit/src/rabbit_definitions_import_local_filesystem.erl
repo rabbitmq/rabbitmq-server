@@ -50,7 +50,7 @@ load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
         Path      ->
-            rabbit_log:debug("Asked to import definitions from a local file or directory at '~s'", [Path]),
+            rabbit_log:debug("Asked to import definitions from a local file or directory at '~ts'", [Path]),
             case file:read_file_info(Path, [raw]) of
                 {ok, FileInfo} ->
                     %% same check is used by Cuttlefish validation, this is to be extra defensive
@@ -59,11 +59,11 @@ load(Proplist) when is_list(Proplist) ->
                         true ->
                             load_from_single_file(Path);
                         false ->
-                            Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
+                            Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
                             {error, Msg}
                     end;
                 _ ->
-                    Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
+                    Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
                     {error, {could_not_read_defs, Msg}}
             end
     end;
@@ -85,7 +85,7 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
 
 -spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
 load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
-    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~s, is directory?: ~p, previous hash value: ~s",
+    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~ts, is directory?: ~tp, previous hash value: ~ts",
                      [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
     case compiled_definitions_from_local_path(IsDir, Path) of
         %% the directory is empty or no files could be read
@@ -95,7 +95,7 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
             case rabbit_definitions_hashing:hash(Algo, Defs) of
                 PreviousHash -> PreviousHash;
                 Other        ->
-                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
+                    rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
                     load_from_local_path(IsDir, Path),
                     Other
             end
@@ -109,7 +109,7 @@ location() ->
 
 -spec load_from_local_path(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load_from_local_path(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory ~s", [Dir]),
+    rabbit_log:info("Applying definitions from directory ~ts", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
 load_from_local_path(false, File) ->
     load_from_single_file(File).
@@ -170,7 +170,7 @@ compiled_definitions_from_local_path(true = _IsDir, Dir) ->
                 end, ReadResults),
             [Body || {ok, Body} <- Successes];
         {error, E} ->
-            rabbit_log:error("Could not list files in '~s', error: ~p", [Dir, E]),
+            rabbit_log:error("Could not list files in '~ts', error: ~tp", [Dir, E]),
             {error, {could_not_read_defs, {Dir, E}}}
     end;
 compiled_definitions_from_local_path(false = _IsDir, Path) ->
@@ -185,7 +185,7 @@ read_file_contents(Path) ->
         {ok, Body} ->
             Body;
         {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
+            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
             {error, {could_not_read_defs, {Path, E}}}
     end.
 
@@ -194,7 +194,7 @@ load_from_files({ok, Filenames0}, Dir) ->
     Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
     load_from_multiple_files(Filenames2);
 load_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
+    rabbit_log:error("Could not read definitions from directory ~ts, Error: ~tp", [Dir, E]),
     {error, {could_not_read_defs, E}}.
 
 load_from_multiple_files([]) ->
@@ -206,12 +206,12 @@ load_from_multiple_files([File|Rest]) ->
     end.
 
 load_from_single_file(Path) ->
-    rabbit_log:debug("Will try to load definitions from a local file or directory at '~s'", [Path]),
+    rabbit_log:debug("Will try to load definitions from a local file or directory at '~ts'", [Path]),
     case rabbit_misc:raw_read_file(Path) of
         {ok, Body} ->
-            rabbit_log:info("Applying definitions from file at '~s'", [Path]),
+            rabbit_log:info("Applying definitions from file at '~ts'", [Path]),
             import_raw(Body);
         {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
+            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
             {error, {could_not_read_defs, {Path, E}}}
     end.

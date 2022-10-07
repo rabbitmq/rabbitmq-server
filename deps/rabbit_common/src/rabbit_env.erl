@@ -1211,7 +1211,7 @@ amqp_tcp_port(Context) ->
             catch
                 _:badarg ->
                     ?LOG_ERROR(
-                       "Invalid value for $RABBITMQ_NODE_PORT: ~p",
+                       "Invalid value for $RABBITMQ_NODE_PORT: ~tp",
                        [TcpPortStr],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({exit, ex_config})
@@ -1231,7 +1231,7 @@ erlang_dist_tcp_port(#{amqp_tcp_port := AmqpTcpPort} = Context) ->
             catch
                 _:badarg ->
                     ?LOG_ERROR(
-                       "Invalid value for $RABBITMQ_DIST_PORT: ~p",
+                       "Invalid value for $RABBITMQ_DIST_PORT: ~tp",
                        [TcpPortStr],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({exit, ex_config})
@@ -1598,7 +1598,7 @@ do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
     Marker = vars_list_marker(),
     Script = rabbit_misc:format(
                ". \"~ts\" && "
-               "echo \"~s\" && "
+               "echo \"~ts\" && "
                "set", [ConfEnvFile, Marker]),
 
     #{sys_prefix := SysPrefix,
@@ -1662,7 +1662,7 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile0) ->
                             <<"chcp 65001 >nul\r\n">>,
                             <<"call \"">>, ConfEnvFile3, <<"\" && echo ">>, Marker, <<" && set\r\n">>],
     TempPath = get_temp_path_win32(),
-    TempBatchFileName = rabbit_misc:format("rabbitmq-env-conf-runner-~s.bat", [os:getpid()]),
+    TempBatchFileName = rabbit_misc:format("rabbitmq-env-conf-runner-~ts.bat", [os:getpid()]),
     TempBatchFilePath = normalize_path(TempPath, TempBatchFileName),
     ok = file:write_file(TempBatchFilePath, TempBatchFileContent),
     try
@@ -1703,7 +1703,7 @@ vars_list_marker() ->
     % Note:
     % The following can't have any spaces in the text or it will not work on
     % win32. See rabbitmq/rabbitmq-server#5471
-    rabbit_misc:format("-----VARS-PID-~s-----", [os:getpid()]).
+    rabbit_misc:format("-----VARS-PID-~ts-----", [os:getpid()]).
 
 collect_conf_env_file_output(Context, Port, Marker, Output) ->
     receive
@@ -1718,8 +1718,8 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
             collect_conf_env_file_output(
               Context, Port, Marker, [Output, UnicodeChunk]);
         {Port, {data, Chunk}} ->
-            rabbit_log:warning("~p unexpected non-binary chunk in "
-                               "conf env file output: ~p~n", [?MODULE, Chunk])
+            rabbit_log:warning("~tp unexpected non-binary chunk in "
+                               "conf env file output: ~tp~n", [?MODULE, Chunk])
     end.
 
 post_port_cmd_output(#{os_type := {OSType, _}}, UnicodeOutput, ExitStatus) ->
@@ -1785,7 +1785,7 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
                 _ ->
                     %% Parsing failed somehow.
                     ?LOG_WARNING(
-                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
+                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~tp",
                        [Line],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     #{}
@@ -2082,7 +2082,7 @@ setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
         Error ->
             logger:error(
               "rabbit_env: Failed to setup distribution (as ~ts) to "
-              "query node ~ts: ~p",
+              "query node ~ts: ~tp",
               [Nodename, Remote, Error]),
             setup_dist_for_remote_query(Context,
                                         NamePart, HostPart, NameType,

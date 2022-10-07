@@ -43,11 +43,11 @@ do_update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
         _ ->
             ?LOG_DEBUG(
               lists:flatten(["Marking the following plugins as enabled:",
-                             ["~n  - ~s" || _ <- SortedList]]),
+                             ["~n  - ~ts" || _ <- SortedList]]),
               SortedList,
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
     end,
-    Content = io_lib:format("~p.~n", [SortedList]),
+    Content = io_lib:format("~tp.~n", [SortedList]),
     case file:write_file(File, Content) of
         ok ->
             ?LOG_DEBUG(

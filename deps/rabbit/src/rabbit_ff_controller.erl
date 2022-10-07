@@ -91,7 +91,7 @@ enable(FeatureName) when is_atom(FeatureName) ->
     enable([FeatureName]);
 enable(FeatureNames) when is_list(FeatureNames) ->
     ?LOG_DEBUG(
-       "Feature flags: REQUEST TO ENABLE: ~p",
+       "Feature flags: REQUEST TO ENABLE: ~tp",
        [FeatureNames],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     gen_statem:call(?LOCAL_NAME, {enable, FeatureNames}).
@@ -99,7 +99,7 @@ enable(FeatureNames) when is_list(FeatureNames) ->
 check_node_compatibility(RemoteNode) ->
     ThisNode = node(),
     ?LOG_DEBUG(
-       "Feature flags: CHECKING COMPATIBILITY between nodes `~s` and `~s`",
+       "Feature flags: CHECKING COMPATIBILITY between nodes `~ts` and `~ts`",
        [ThisNode, RemoteNode],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     %% We don't go through the controller process to check nodes compatibility
@@ -152,7 +152,7 @@ standing_by(
   when EventContent =/= notify_when_done ->
     ?LOG_DEBUG(
        "Feature flags: registering controller globally before "
-       "proceeding with task: ~p",
+       "proceeding with task: ~tp",
        [EventContent],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
@@ -265,19 +265,19 @@ code_change(_OldVsn, OldState, OldData, _Extra) ->
 
 register_globally() ->
     ?LOG_DEBUG(
-       "Feature flags: [global sync] @ ~s",
+       "Feature flags: [global sync] @ ~ts",
        [node()],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     ok = rabbit_node_monitor:global_sync(),
     ?LOG_DEBUG(
-       "Feature flags: [global register] @ ~s",
+       "Feature flags: [global register] @ ~ts",
        [node()],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:register_name(?GLOBAL_NAME, self()).
 
 unregister_globally() ->
     ?LOG_DEBUG(
-       "Feature flags: [global unregister] @ ~s",
+       "Feature flags: [global unregister] @ ~ts",
        [node()],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     _ = global:unregister_name(?GLOBAL_NAME),
@@ -297,7 +297,7 @@ notify_waiting_controller({ControlerPid, _} = From) ->
     ControlerNode = node(ControlerPid),
     ?LOG_DEBUG(
        "Feature flags: controller's task finished; notify waiting controller "
-       "on node ~p",
+       "on node ~tp",
        [ControlerNode],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     gen_statem:reply(From, done).
@@ -313,7 +313,7 @@ notify_waiting_controller({ControlerPid, _} = From) ->
 
 check_node_compatibility_task(NodeA, NodeB) ->
     ?LOG_NOTICE(
-       "Feature flags: checking nodes `~s` and `~s` compatibility...",
+       "Feature flags: checking nodes `~ts` and `~ts` compatibility...",
        [NodeA, NodeB],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     NodesA = list_nodes_clustered_with(NodeA),
@@ -321,14 +321,14 @@ check_node_compatibility_task(NodeA, NodeB) ->
     AreCompatible = case collect_inventory_on_nodes(NodesA) of
                         {ok, InventoryA} ->
                             ?LOG_DEBUG(
-                               "Feature flags: inventory of node `~s`:~n~p",
+                               "Feature flags: inventory of node `~ts`:~n~tp",
                                [NodeA, InventoryA],
                                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                             case collect_inventory_on_nodes(NodesB) of
                                 {ok, InventoryB} ->
                                     ?LOG_DEBUG(
                                        "Feature flags: inventory of node "
-                                       "`~s`:~n~p",
+                                       "`~ts`:~n~tp",
                                        [NodeB, InventoryB],
                                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                                     are_compatible(InventoryA, InventoryB);
@@ -341,13 +341,13 @@ check_node_compatibility_task(NodeA, NodeB) ->
     case AreCompatible of
         true ->
             ?LOG_NOTICE(
-               "Feature flags: nodes `~s` and `~s` are compatible",
+               "Feature flags: nodes `~ts` and `~ts` are compatible",
                [NodeA, NodeB],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
         false ->
             ?LOG_WARNING(
-               "Feature flags: nodes `~s` and `~s` are incompatible",
+               "Feature flags: nodes `~ts` and `~ts` are incompatible",
                [NodeA, NodeB],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, incompatible_feature_flags}
@@ -429,7 +429,7 @@ enable_task(FeatureNames) ->
         AllNodes ->
             ?LOG_DEBUG(
                "Feature flags: nodes where the feature flags will be "
-               "enabled: ~p~n"
+               "enabled: ~tp~n"
                "Feature flags: new nodes joining the cluster in between "
                "will wait and synchronize their feature flag states after.",
                [AllNodes],
@@ -446,7 +446,7 @@ enable_task(FeatureNames) ->
         _ ->
             ?LOG_ERROR(
                "Feature flags: refuse to enable feature flags while "
-               "clustered nodes are missing, stopped or unreachable: ~p",
+               "clustered nodes are missing, stopped or unreachable: ~tp",
                [AllNodes -- RunningNodes]),
             {error, missing_clustered_nodes}
     end.
@@ -470,7 +470,7 @@ sync_cluster_task() ->
     %% running before we can expand the cluster...
     Nodes = running_nodes(),
     ?LOG_DEBUG(
-       "Feature flags: synchronizing feature flags on nodes: ~p",
+       "Feature flags: synchronizing feature flags on nodes: ~tp",
        [Nodes],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
@@ -517,7 +517,7 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
     case is_known_and_supported(Inventory, FeatureName) of
         true ->
             ?LOG_DEBUG(
-               "Feature flags: `~s`: supported; continuing",
+               "Feature flags: `~ts`: supported; continuing",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             case lock_registry_and_enable(Inventory, FeatureName) of
@@ -526,7 +526,7 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
             end;
         false ->
             ?LOG_DEBUG(
-               "Feature flags: `~s`: unsupported; aborting",
+               "Feature flags: `~ts`: unsupported; aborting",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, unsupported}
@@ -567,26 +567,26 @@ enable_with_registry_locked(
     case Nodes of
         [] ->
             ?LOG_DEBUG(
-               "Feature flags: `~s`: already enabled; skipping",
+               "Feature flags: `~ts`: already enabled; skipping",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {ok, Inventory};
         _ ->
             ?LOG_NOTICE(
-               "Feature flags: attempt to enable `~s`...",
+               "Feature flags: attempt to enable `~ts`...",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
             case update_feature_state_and_enable(Inventory, FeatureName) of
                 {ok, _Inventory} = Ok ->
                     ?LOG_NOTICE(
-                       "Feature flags: `~s` enabled",
+                       "Feature flags: `~ts` enabled",
                        [FeatureName],
                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     Ok;
                 Error ->
                     ?LOG_ERROR(
-                       "Feature flags: failed to enable `~s`: ~p",
+                       "Feature flags: failed to enable `~ts`: ~tp",
                        [FeatureName, Error],
                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     Error
@@ -724,7 +724,7 @@ collect_inventory_on_nodes(Nodes) ->
 
 collect_inventory_on_nodes(Nodes, Timeout) ->
     ?LOG_DEBUG(
-       "Feature flags: collecting inventory on nodes: ~p",
+       "Feature flags: collecting inventory on nodes: ~tp",
        [Nodes],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Inventory0 = #{feature_flags => #{},
@@ -858,7 +858,7 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
             %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
             %% this situation from happening before we reach this point.
             ?LOG_DEBUG(
-               "Feature flags: ~s:~s~p unavailable on node `~s`: "
+               "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
                "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
                [?MODULE, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
@@ -866,9 +866,9 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
         {badrpc, Reason} = Error ->
             ?LOG_ERROR(
                "Feature flags: error while running:~n"
-               "Feature flags:   ~s:~s~p~n"
-               "Feature flags: on node `~s`:~n"
-               "Feature flags:   ~p",
+               "Feature flags:   ~ts:~ts~tp~n"
+               "Feature flags: on node `~ts`:~n"
+               "Feature flags:   ~tp",
                [?MODULE, Function, Args, Node, Reason],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, Error};
@@ -987,7 +987,7 @@ mark_as_enabled_on_nodes(
   #{states_per_node := StatesPerNode} = Inventory,
   FeatureName, IsEnabled) ->
     ?LOG_DEBUG(
-       "Feature flags: `~s`: mark as enabled=~p on nodes ~p",
+       "Feature flags: `~ts`: mark as enabled=~tp on nodes ~tp",
        [FeatureName, IsEnabled, Nodes],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Rets = rpc_calls(
@@ -1036,7 +1036,7 @@ enable_dependencies(
             {ok, Inventory};
         _ ->
             ?LOG_DEBUG(
-               "Feature flags: `~s`: enable dependencies: ~p",
+               "Feature flags: `~ts`: enable dependencies: ~tp",
                [FeatureName, DependsOn],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             enable_dependencies1(Inventory, DependsOn)
@@ -1082,7 +1082,7 @@ run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
             do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout);
         #{Command := Invalid} ->
             ?LOG_ERROR(
-               "Feature flags: `~s`: invalid callback for `~s`: ~p",
+               "Feature flags: `~ts`: invalid callback for `~ts`: ~tp",
                [FeatureName, Command, Invalid],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             #{node() =>
@@ -1122,15 +1122,15 @@ do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout) ->
     #{feature_name := FeatureName,
       command := Command} = Args,
     ?LOG_DEBUG(
-       "Feature flags: `~s`: run callback ~s:~s (~s callback)~n"
-       "Feature flags:   with args = ~p~n"
-       "Feature flags:   on nodes ~p",
+       "Feature flags: `~ts`: run callback ~ts:~ts (~ts callback)~n"
+       "Feature flags:   with args = ~tp~n"
+       "Feature flags:   on nodes ~tp",
        [FeatureName, CallbackMod, CallbackFun, Command, Args, Nodes],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Rets = rpc_calls(Nodes, CallbackMod, CallbackFun, [Args], Timeout),
     ?LOG_DEBUG(
-       "Feature flags: `~s`: callback ~s:~s (~s callback) returned:~n"
-       "Feature flags:   ~p",
+       "Feature flags: `~ts`: callback ~ts:~ts (~ts callback) returned:~n"
+       "Feature flags:   ~tp",
        [FeatureName, CallbackMod, CallbackFun, Command, Rets],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Rets.

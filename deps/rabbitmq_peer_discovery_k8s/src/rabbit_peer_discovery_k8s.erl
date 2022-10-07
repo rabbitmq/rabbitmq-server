@@ -44,7 +44,7 @@ list_nodes() ->
       Nodes = lists:map(fun node_name/1, Addresses),
       {ok, {Nodes, disc}};
     {error, Reason} ->
-      Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
+      Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~ts", [Reason]),
       rabbit_log:error(Details),
       send_event("Warning", "Failed", Details),
       {error, Reason}
@@ -57,7 +57,7 @@ supports_registration() ->
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 post_registration() ->
-    Details = io_lib:format("Node ~s is registered", [node()]),
+    Details = io_lib:format("Node ~ts is registered", [node()]),
     send_event("Normal", "Created", Details).
 
 -spec register() -> ok.
@@ -77,7 +77,7 @@ lock(Node) ->
     {ok, {Nodes, disc}} ->
       case lists:member(Node, Nodes) of
         true ->
-          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
+          rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
           LockId = rabbit_nodes:lock_id(Node),
           Retries = rabbit_nodes:lock_retries(),
           case global:set_lock(LockId, Nodes, Retries) of
@@ -90,7 +90,7 @@ lock(Node) ->
           %% Don't try to acquire the global lock when local node is not discoverable by peers.
           %% This branch is just an additional safety check. We should never run into this branch
           %% because the local Pod is in state 'Running' and we listed both ready and not-ready addresses.
-          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
+          {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
       end;
     {error, _} = Error ->
       Error

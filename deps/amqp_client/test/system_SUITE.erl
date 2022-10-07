@@ -447,9 +447,9 @@ basic_qos(Config) ->
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
     ct:pal(?LOW_IMPORTANCE,
-      "QOS=0 -> ~p (noqos)~n"
-      "QOS=1 -> ~p (qos)~n"
-      "qos / noqos < ~p * ~p = ~p < ~p = ~p~n",
+      "QOS=0 -> ~tp (noqos)~n"
+      "QOS=1 -> ~tp (qos)~n"
+      "qos / noqos < ~tp * ~tp = ~tp < ~tp = ~tp~n",
       [NoQos, Qos, ExpectedRatio, FudgeFactor, Qos / NoQos, ExpectedRatio * FudgeFactor, Qos / NoQos < ExpectedRatio * FudgeFactor]),
     true = Qos / NoQos < ExpectedRatio * FudgeFactor.
 
@@ -796,7 +796,7 @@ sync_method_serialization(Config) ->
         "sync_method_serialization", Config,
         fun (_, _) -> ok end,
         fun (Channel, _, _, _, Count) ->
-                Q = fmt("sync_method_serialization-~p", [Count]),
+                Q = fmt("sync_method_serialization-~tp", [Count]),
                 #'queue.declare_ok'{queue = Q1} =
                     amqp_channel:call(Channel,
                                       #'queue.declare'{queue     = Q,
@@ -1576,9 +1576,9 @@ set_resource_alarm(Resource, Config)
   when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+    Cmd = [{"RABBITMQ_NODENAME=~ts", [Nodename]},
            "set-resource-alarm",
-           {"SOURCE=~s", [Resource]}],
+           {"SOURCE=~ts", [Resource]}],
     {ok, _} = case os:getenv("RABBITMQ_RUN") of
         false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         Run -> rabbit_ct_helpers:exec([Run | Cmd])
@@ -1588,9 +1588,9 @@ clear_resource_alarm(Resource, Config)
   when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+    Cmd = [{"RABBITMQ_NODENAME=~ts", [Nodename]},
            "clear-resource-alarm",
-           {"SOURCE=~s", [Resource]}],
+           {"SOURCE=~ts", [Resource]}],
     {ok, _} = case os:getenv("RABBITMQ_RUN") of
         false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         Run -> rabbit_ct_helpers:exec([Run | Cmd])

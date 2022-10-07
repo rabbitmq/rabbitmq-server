@@ -38,7 +38,7 @@ groups() ->
     Signals = [sighup,
                sigterm,
                sigtstp],
-    Tests = [list_to_existing_atom(rabbit_misc:format("send_~s", [Signal]))
+    Tests = [list_to_existing_atom(rabbit_misc:format("send_~ts", [Signal]))
              || Signal <- Signals],
     [
      {signal_sent_to_pid_in_pidfile, [], Tests},

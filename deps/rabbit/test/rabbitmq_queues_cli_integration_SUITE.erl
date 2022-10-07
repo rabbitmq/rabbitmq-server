@@ -153,13 +153,13 @@ publish_confirm(Ch, QName) ->
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}),
     amqp_channel:register_confirm_handler(Ch, self()),
-    ct:pal("waiting for confirms from ~s", [QName]),
+    ct:pal("waiting for confirms from ~ts", [QName]),
     receive
         #'basic.ack'{} ->
-            ct:pal("CONFIRMED! ~s", [QName]),
+            ct:pal("CONFIRMED! ~ts", [QName]),
             ok;
         #'basic.nack'{} ->
-            ct:pal("NOT CONFIRMED! ~s", [QName]),
+            ct:pal("NOT CONFIRMED! ~ts", [QName]),
             fail
     after 10000 ->
             exit(confirm_timeout)

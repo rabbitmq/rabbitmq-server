@@ -128,7 +128,7 @@ terminate(_Reason, State) ->
     cancel_timer(State).
 
 handle_call(Request, From, State) ->
-    rabbit_log:info("~s received unhandled call from ~p: ~p", [?MODULE, From, Request]),
+    rabbit_log:info("~ts received unhandled call from ~tp: ~tp", [?MODULE, From, Request]),
     {noreply, State}.
 
 handle_cast({queue_event, QRef, {_From, {machine, lookup_topology}}},
@@ -160,7 +160,7 @@ handle_cast(settle_timeout, State0) ->
     State = State0#state{timer = undefined},
     redeliver_and_ack(State);
 handle_cast(Request, State) ->
-    rabbit_log:info("~s received unhandled cast ~p", [?MODULE, Request]),
+    rabbit_log:info("~ts received unhandled cast ~tp", [?MODULE, Request]),
     {noreply, State}.
 
 redeliver_and_ack(State0) ->
@@ -174,7 +174,7 @@ handle_info({'DOWN', Ref, process, _, _},
                    queue_ref = QRef}) ->
     %% Source quorum queue is down. Therefore, terminate ourself.
     %% The new leader will re-create another dlx_worker.
-    rabbit_log:debug("~s terminating itself because leader of ~s is down...",
+    rabbit_log:debug("~ts terminating itself because leader of ~ts is down...",
                      [?MODULE, rabbit_misc:rs(QRef)]),
     supervisor:terminate_child(rabbit_fifo_dlx_sup, self());
 handle_info({'DOWN', _MRef, process, QPid, Reason},
@@ -188,7 +188,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
             remove_queue(QRef, State0#state{queue_type_state = QTypeState})
     end;
 handle_info(Info, State) ->
-    rabbit_log:info("~s received unhandled info ~p", [?MODULE, Info]),
+    rabbit_log:info("~ts received unhandled info ~tp", [?MODULE, Info]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -210,7 +210,7 @@ remove_queue(QRef, #state{pendings = Pendings0,
                           queue_type_state = QTypeState}}.
 
 wait_for_queue_deleted(QRef, 0) ->
-    rabbit_log:debug("Received deletion event for ~s but queue still exists in ETS table.",
+    rabbit_log:debug("Received deletion event for ~ts but queue still exists in ETS table.",
                      [rabbit_misc:rs(QRef)]);
 wait_for_queue_deleted(QRef, N) ->
     case rabbit_amqqueue:exists(QRef) of
@@ -277,7 +277,7 @@ rejected(SeqNo, Qs, Pendings)
                              Pendings);
         false ->
             rabbit_log:debug("Ignoring rejection for unknown sequence number ~b "
-                             "from target dead letter queues ~p",
+                             "from target dead letter queues ~tp",
                              [SeqNo, Qs]),
             Pendings
     end.
@@ -357,7 +357,7 @@ deliver_to_queues(#delivery{msg_seq_no = SeqNo} = Delivery, Qs, #state{queue_typ
                                %% we won't rely on rabbit_fifo_client to re-deliver on behalf of us
                                %% (and therefore preventing messages to get stuck in our 'unsettled' state).
                                QNames = queue_names(Qs),
-                               rabbit_log:debug("Failed to deliver message with seq_no ~b to queues ~p: ~p",
+                               rabbit_log:debug("Failed to deliver message with seq_no ~b to queues ~tp: ~tp",
                                                 [SeqNo, QNames, Reason]),
                                {State0#state{pendings = rejected(SeqNo, QNames, Pendings)}, []}
                        end,
@@ -390,7 +390,7 @@ handle_settled0(QRef, MsgSeq, #state{pendings = Pendings,
             State#state{pendings = maps:update(MsgSeq, Pend, Pendings)};
         error ->
             rabbit_log:debug("Ignoring publisher confirm for unknown sequence number ~b "
-                             "from target dead letter ~s",
+                             "from target dead letter ~ts",
                              [MsgSeq, rabbit_misc:rs(QRef)]),
             State
     end.
@@ -599,8 +599,8 @@ log_missing_dlx_once(#state{exchange_ref = SameDlx,
 log_missing_dlx_once(#state{exchange_ref = DlxResource,
                             queue_ref = QueueResource,
                             logged = Logged} = State) ->
-    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~s because "
-                       "its configured dead-letter-exchange ~s does not exist. "
+    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~ts because "
+                       "its configured dead-letter-exchange ~ts does not exist. "
                        "Either create the configured dead-letter-exchange or re-configure "
                        "the dead-letter-exchange policy for the source quorum queue to prevent "
                        "dead-lettered messages from piling up in the source quorum queue. "
@@ -616,9 +616,9 @@ log_no_route_once(#state{queue_ref = QueueResource,
                          exchange_ref = DlxResource,
                          routing_key = RoutingKey,
                          logged = Logged} = State) ->
-    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~s "
-                       "with configured dead-letter-exchange ~s and configured "
-                       "dead-letter-routing-key '~s'. This can happen either if the dead-letter "
+    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~ts "
+                       "with configured dead-letter-exchange ~ts and configured "
+                       "dead-letter-routing-key '~ts'. This can happen either if the dead-letter "
                        "routing topology is misconfigured (for example no queue bound to "
                        "dead-letter-exchange or wrong dead-letter-routing-key configured) or if "
                        "non-mirrored classic queues are bound whose host node is down. "
@@ -637,8 +637,8 @@ log_cycle_once(Queues, _, #state{logged = Logged} = State)
 log_cycle_once(Queues, RoutingKeys, #state{exchange_ref = DlxResource,
                                            queue_ref = QueueResource,
                                            logged = Logged} = State) ->
-    rabbit_log:warning("Dead-letter queues cycle detected for source quorum ~s "
-                       "with dead-letter exchange ~s and routing keys ~p: ~p "
+    rabbit_log:warning("Dead-letter queues cycle detected for source quorum ~ts "
+                       "with dead-letter exchange ~ts and routing keys ~tp: ~tp "
                        "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource),
                         RoutingKeys, Queues]),

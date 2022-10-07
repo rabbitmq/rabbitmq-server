@@ -212,7 +212,7 @@ drop_mirror(QName, MirrorNode) ->
                 [PrimaryPid] when MirrorPids =:= [] ->
                     {error, cannot_drop_only_mirror};
                 [Pid] ->
-                    log_info(Name, "Dropping queue mirror on node ~p",
+                    log_info(Name, "Dropping queue mirror on node ~tp",
                              [MirrorNode]),
                     exit(Pid, {shutdown, dropped}),
                     {ok, dropped}
@@ -239,21 +239,21 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                         {ok, _} ->
                             try
                                 MirrorPid = rabbit_amqqueue_sup_sup:start_queue_process(MirrorNode, Q, slave),
-                                log_info(QName, "Adding mirror on node ~p: ~p", [MirrorNode, MirrorPid]),
+                                log_info(QName, "Adding mirror on node ~tp: ~tp", [MirrorNode, MirrorPid]),
                                 rabbit_mirror_queue_slave:go(MirrorPid, SyncMode)
                             of
                                 _ -> ok
                             catch
                                 error:QError ->
                                     log_warning(QName,
-                                        "Unable to start queue mirror on node '~p'. "
-                                        "Target queue supervisor is not running: ~p",
+                                        "Unable to start queue mirror on node '~tp'. "
+                                        "Target queue supervisor is not running: ~tp",
                                         [MirrorNode, QError])
                             end;
                         {error, Error} ->
                             log_warning(QName,
-                                        "Unable to start queue mirror on node '~p'. "
-                                        "Target virtual host is not running: ~p",
+                                        "Unable to start queue mirror on node '~tp'. "
+                                        "Target virtual host is not running: ~tp",
                                         [MirrorNode, Error]),
                             ok
                     end
@@ -265,7 +265,7 @@ add_mirror(QName, MirrorNode, SyncMode) ->
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    log_info(QueueName, "~s replica of queue ~s detected replica ~s to be down",
+    log_info(QueueName, "~ts replica of queue ~ts detected replica ~ts to be down",
                     [case IsMaster of
                          true  -> "Primary";
                          false -> "Secondary"
@@ -276,13 +276,13 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
 -spec log_info(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
 
 log_info   (QName, Fmt, Args) ->
-    rabbit_log_mirroring:info("Mirrored ~s: " ++ Fmt,
+    rabbit_log_mirroring:info("Mirrored ~ts: " ++ Fmt,
                               [rabbit_misc:rs(QName) | Args]).
 
 -spec log_warning(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
 
 log_warning(QName, Fmt, Args) ->
-    rabbit_log_mirroring:warning("Mirrored ~s: " ++ Fmt,
+    rabbit_log_mirroring:warning("Mirrored ~ts: " ++ Fmt,
                                  [rabbit_misc:rs(QName) | Args]).
 
 -spec store_updated_slaves(amqqueue:amqqueue()) ->
@@ -342,8 +342,8 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                         Acc
                 after WaitTimeout ->
                         rabbit_mirror_queue_misc:log_warning(
-                          QName, "Missing 'DOWN' message from ~p in"
-                          " node ~p", [Pid, node(Pid)]),
+                          QName, "Missing 'DOWN' message from ~tp in"
+                          " node ~tp", [Pid, node(Pid)]),
                         [Pid | Acc]
                 end;
             false ->
@@ -430,7 +430,7 @@ validate_mode(Mode) ->
         {ok, _Module} ->
             ok;
         not_mirrored ->
-            {error, "~p is not a valid ha-mode value", [Mode]}
+            {error, "~tp is not a valid ha-mode value", [Mode]}
     end.
 
 -spec is_mirrored(amqqueue:amqqueue()) -> boolean().
@@ -518,7 +518,7 @@ default_max_sync_throughput() ->
         {error, parse_error} ->
           rabbit_log:warning(
             "The configured value for the mirroring_sync_max_throughput is "
-            "not a valid value: ~p. Disabled sync throughput control. ",
+            "not a valid value: ~tp. Disabled sync throughput control. ",
             [Value]),
           ?DEFAULT_MAX_SYNC_THROUGHPUT
       end;
@@ -759,7 +759,7 @@ validate_sync_mode(SyncMode) ->
         <<"manual">>    -> ok;
         none            -> ok;
         Mode            -> {error, "ha-sync-mode must be \"manual\" "
-                            "or \"automatic\", got ~p", [Mode]}
+                            "or \"automatic\", got ~tp", [Mode]}
     end.
 
 validate_sync_batch_size(none) ->
@@ -768,7 +768,7 @@ validate_sync_batch_size(N) when is_integer(N) andalso N > 0 ->
     ok;
 validate_sync_batch_size(N) ->
     {error, "ha-sync-batch-size takes an integer greater than 0, "
-     "~p given", [N]}.
+     "~tp given", [N]}.
 
 validate_pos(PromoteOnShutdown) ->
     case PromoteOnShutdown of
@@ -776,7 +776,7 @@ validate_pos(PromoteOnShutdown) ->
         <<"when-synced">> -> ok;
         none              -> ok;
         Mode              -> {error, "ha-promote-on-shutdown must be "
-                              "\"always\" or \"when-synced\", got ~p", [Mode]}
+                              "\"always\" or \"when-synced\", got ~tp", [Mode]}
     end.
 
 validate_pof(PromoteOnShutdown) ->
@@ -785,5 +785,5 @@ validate_pof(PromoteOnShutdown) ->
         <<"when-synced">> -> ok;
         none              -> ok;
         Mode              -> {error, "ha-promote-on-failure must be "
-                              "\"always\" or \"when-synced\", got ~p", [Mode]}
+                              "\"always\" or \"when-synced\", got ~tp", [Mode]}
     end.

@@ -25,7 +25,7 @@ create(Channel, Queue, TestPid, CancelOnFailover, ExpectingMsgs) ->
     ConsumerPid.
 
 start(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume) ->
-    error_logger:info_msg("consumer ~p on ~p awaiting ~w messages "
+    error_logger:info_msg("consumer ~tp on ~tp awaiting ~w messages "
                           "(lowest seen = ~w, cancel-on-failover = ~w)~n",
                           [self(), Channel, MsgsToConsume, LowestSeen,
                            CancelOnFailover]),
@@ -65,8 +65,8 @@ run(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume) ->
                                    {error, {unexpected_message, MsgNum}})
             end;
         #'basic.cancel'{} when CancelOnFailover ->
-            error_logger:info_msg("consumer ~p on ~p received basic.cancel: "
-                                  "resubscribing to ~p on ~p~n",
+            error_logger:info_msg("consumer ~tp on ~tp received basic.cancel: "
+                                  "resubscribing to ~tp on ~tp~n",
                                   [self(), Channel, Queue, Channel]),
             resubscribe(TestPid, Channel, Queue, CancelOnFailover,
                         LowestSeen, MsgsToConsume);
@@ -84,7 +84,7 @@ resubscribe(TestPid, Channel, Queue, CancelOnFailover, LowestSeen,
       Channel, consume_method(Queue, CancelOnFailover), self()),
     ok = receive #'basic.consume_ok'{} -> ok
          end,
-    error_logger:info_msg("re-subscripting consumer ~p on ~p complete "
+    error_logger:info_msg("re-subscripting consumer ~tp on ~tp complete "
                           "(received basic.consume_ok)",
                           [self(), Channel]),
     start(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume).

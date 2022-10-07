@@ -53,12 +53,12 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                                 session            = rabbit_amqp1_0_session:init(Channel)
                                }};
                 {error, Reason} ->
-                    rabbit_log:warning("Closing session for connection ~p:~n~p",
+                    rabbit_log:warning("Closing session for connection ~tp:~n~tp",
                                        [ReaderPid, Reason]),
                     {stop, Reason}
             end;
         {error, Reason} ->
-            rabbit_log:warning("Closing session for connection ~p:~n~p",
+            rabbit_log:warning("Closing session for connection ~tp:~n~tp",
                                [ReaderPid, Reason]),
             {stop, Reason}
     end.
@@ -95,7 +95,7 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
     case get({out, Handle}) of
         undefined ->
             %% TODO handle missing link -- why does the queue think it's there?
-            rabbit_log:warning("Delivery to non-existent consumer ~p",
+            rabbit_log:warning("Delivery to non-existent consumer ~tp",
                                [ConsumerTag]),
             {noreply, State};
         Link ->
@@ -159,7 +159,7 @@ handle_info({'DOWN', _MRef, process, Ch, Reason},
                                              io_lib:format("~w", [Reason])))}}
     end,
     End = #'v1_0.end'{ error = Error },
-    rabbit_log:warning("Closing session for connection ~p:~n~p",
+    rabbit_log:warning("Closing session for connection ~tp:~n~tp",
                        [ReaderPid, Reason]),
     ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
     {stop, normal, State};
@@ -187,7 +187,7 @@ handle_cast({frame, Frame, FlowPid},
     catch exit:Reason = #'v1_0.error'{} ->
             %% TODO shut down nicely like rabbit_channel
             End = #'v1_0.end'{ error = Reason },
-            rabbit_log:warning("Closing session for connection ~p:~n~p",
+            rabbit_log:warning("Closing session for connection ~tp:~n~tp",
                                [ReaderPid, Reason]),
             ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
             {stop, normal, State};
@@ -248,7 +248,7 @@ handle_control({Txfr = #'v1_0.transfer'{handle = Handle},
     case get({in, Handle}) of
         undefined ->
             protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
-                           "Unknown link handle ~p", [Handle]);
+                           "Unknown link handle ~tp", [Handle]);
         Link ->
             {Flows, Session1} = rabbit_amqp1_0_session:incr_incoming_id(Session),
             case rabbit_amqp1_0_incoming_link:transfer(
@@ -286,8 +286,8 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                _ ->
                                    protocol_error(
                                      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                                     "Unrecognised state: ~p~n"
-                                     "Disposition was: ~p", [Outcome, Disp])
+                                     "Unrecognised state: ~tp~n"
+                                     "Disposition was: ~tp", [Outcome, Disp])
                            end)
         end,
     case rabbit_amqp1_0_session:settle(Disp, session(State), AckFun) of
@@ -329,9 +329,9 @@ handle_control(Flow = #'v1_0.flow'{},
                 undefined ->
                     case get({out, Handle}) of
                         undefined ->
-                            rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
+                            rabbit_log:warning("Flow for unknown link handle ~tp", [Flow]),
                             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                                           "Unattached handle: ~p", [Handle]);
+                                           "Unattached handle: ~tp", [Handle]);
                         Out ->
                             {ok, Reply} = rabbit_amqp1_0_outgoing_link:flow(
                                             Out, Flow, BCh),
@@ -347,7 +347,7 @@ handle_control(Flow = #'v1_0.flow'{},
 
 handle_control(Frame, _State) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                   "Unexpected frame ~p",
+                   "Unexpected frame ~tp",
                    [amqp10_framing:pprint(Frame)]).
 
 run_buffer(State = #state{ writer_pid = WriterPid,

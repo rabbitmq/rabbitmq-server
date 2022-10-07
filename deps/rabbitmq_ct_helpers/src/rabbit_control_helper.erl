@@ -26,7 +26,7 @@ command_with_output(Command, Node, Args, Opts) ->
     Formatted = format_command(Command, Node, Args, Opts),
     CommandResult = 'Elixir.RabbitMQCtl':exec_command(
         Formatted, fun(Output,_,_) -> Output end),
-    ct:pal("Executed command ~p against node ~p~nResult: ~p~n", [Formatted, Node, CommandResult]),
+    ct:pal("Executed command ~tp against node ~tp~nResult: ~tp~n", [Formatted, Node, CommandResult]),
     CommandResult.
 
 format_command(Command, Node, Args, Opts) ->
@@ -41,6 +41,6 @@ format_args(Args) ->
 
 format_options(Opts) ->
     EffectiveOpts = [{"--script-name", "rabbitmqctl"} | Opts],
-    iolist_to_binary([io_lib:format("~s=~tp ", [Key, Value])
+    iolist_to_binary([io_lib:format("~ts=~tp ", [Key, Value])
                       || {Key, Value} <- EffectiveOpts ]).
 

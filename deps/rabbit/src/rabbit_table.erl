@@ -43,7 +43,7 @@ create() ->
 
 create(TableName, TableDefinition) ->
     TableDefinition1 = proplists:delete(match, TableDefinition),
-    rabbit_log:debug("Will create a schema database table '~s'", [TableName]),
+    rabbit_log:debug("Will create a schema database table '~ts'", [TableName]),
     case mnesia:create_table(TableName, TableDefinition1) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -76,7 +76,7 @@ ensure_secondary_index(Table, Field) ->
 -spec ensure_table_copy(mnesia:table(), node(), ram_copies | disc_copies) ->
     ok | {error, any()}.
 ensure_table_copy(TableName, Node, StorageType) ->
-    rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
+    rabbit_log:debug("Will add a local schema database copy for table '~ts'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, StorageType) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -110,7 +110,7 @@ wait(TableNames, Retry) ->
 wait(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left",
+    rabbit_log:info("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
                     [Timeout, Retries - 1]),
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
@@ -129,7 +129,7 @@ wait(TableNames, Timeout, Retries) ->
         {1, {error, _} = Error} ->
             throw(Error);
         {_, {error, Error}} ->
-            rabbit_log:warning("Error while waiting for Mnesia tables: ~p", [Error]),
+            rabbit_log:warning("Error while waiting for Mnesia tables: ~tp", [Error]),
             wait(TableNames, Timeout, Retries - 1)
     end.
 

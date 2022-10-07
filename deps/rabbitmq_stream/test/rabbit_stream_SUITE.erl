@@ -370,12 +370,12 @@ java(Config) ->
                                 {"NODE1_STREAM_PORT=~b", [StreamPortNode1]},
                                 {"NODE1_STREAM_PORT_TLS=~b",
                                  [StreamPortTlsNode1]},
-                                {"NODE1_NAME=~p", [Node1Name]},
-                                {"NODE2_NAME=~p", [Node2Name]},
+                                {"NODE1_NAME=~tp", [Node1Name]},
+                                {"NODE2_NAME=~tp", [Node2Name]},
                                 {"NODE2_STREAM_PORT=~b", [StreamPortNode2]},
                                 {"NODE2_STREAM_PORT_TLS=~b",
                                  [StreamPortTlsNode2]},
-                                {"RABBITMQCTL=~p", [RabbitMqCtl]}]),
+                                {"RABBITMQCTL=~tp", [RabbitMqCtl]}]),
     {ok, _} = MakeResult.
 
 get_rabbitmqctl(Config) ->
@@ -467,7 +467,7 @@ test_authenticate(Transport, S, C0) ->
         {response, _, {sasl_handshake, ?RESPONSE_CODE_OK, Mechanisms}} ->
             ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
         _ ->
-            ct:fail("invalid cmd ~p", [Cmd])
+            ct:fail("invalid cmd ~tp", [Cmd])
     end,
 
     Username = <<"guest">>,

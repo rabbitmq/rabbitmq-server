@@ -105,6 +105,6 @@ shutdown_ok(Node) ->
     {stream, Stream} = rabbit_ct_broker_helpers:control_action(shutdown, Node, []),
     %% Execute command steps. Each step will output a binary string
     Lines = 'Elixir.Enum':to_list(Stream),
-    ct:pal("Command output ~p ~n", [Lines]),
+    ct:pal("Command output ~tp ~n", [Lines]),
     [true = is_binary(Line) || Line <- Lines],
     ok.

@@ -111,7 +111,7 @@ seed_internal_cluster_id() ->
     case rabbit_runtime_parameters:lookup_global(?INTERNAL_CLUSTER_ID_PARAM_NAME) of
         not_found ->
             Id = rabbit_guid:binary(rabbit_guid:gen(), "rabbitmq-cluster-id"),
-            rabbit_log:info("Initialising internal cluster ID to '~s'", [Id]),
+            rabbit_log:info("Initialising internal cluster ID to '~ts'", [Id]),
             rabbit_runtime_parameters:set_global(?INTERNAL_CLUSTER_ID_PARAM_NAME, Id, ?INTERNAL_USER),
             Id;
         Param ->
@@ -123,7 +123,7 @@ seed_user_provided_cluster_name() ->
     case application:get_env(rabbit, cluster_name) of
         undefined -> ok;
         {ok, Name} ->
-            rabbit_log:info("Setting cluster name to '~s' as configured", [Name]),
+            rabbit_log:info("Setting cluster name to '~ts' as configured", [Name]),
             set_cluster_name(rabbit_data_coercion:to_binary(Name))
     end.
 

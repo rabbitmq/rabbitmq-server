@@ -100,7 +100,7 @@ uri_base_from(Config, Node) ->
 uri_base_from(Config, Node, Base) ->
     Port = mgmt_port(Config, Node),
     Prefix = get_uri_prefix(Config),
-    Uri = rabbit_mgmt_format:print("http://localhost:~w~s/~s", [Port, Prefix, Base]),
+    Uri = rabbit_mgmt_format:print("http://localhost:~w~ts/~ts", [Port, Prefix, Base]),
     binary_to_list(Uri).
 
 get_uri_prefix(Config) ->

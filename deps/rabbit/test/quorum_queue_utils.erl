@@ -33,7 +33,7 @@ wait_for_messages(Servers, QName, Number, Fun, 0) ->
     ?assertEqual([Number || _ <- lists:seq(1, length(Servers))], Msgs);
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
-    ct:pal("Got messages ~p ~p", [QName, Msgs]),
+    ct:pal("Got messages ~tp ~tp", [QName, Msgs]),
     %% hack to allow the check to succeed in mixed versions clusters if at
     %% least one node matches the criteria rather than all nodes for
     F = case rabbit_ct_helpers:is_mixed_versions() of
@@ -84,7 +84,7 @@ wait_for_min_messages(Config, Queue, Msgs, 0) ->
     [[_, Got]] = filter_queues([[Queue, Msgs]],
                                rabbit_ct_broker_helpers:rabbitmqctl_list(
                                  Config, 0, ["list_queues", "name", "messages"])),
-    ct:pal("Got ~p messages on queue ~p", [Got, Queue]),
+    ct:pal("Got ~tp messages on queue ~tp", [Got, Queue]),
     ?assert(binary_to_integer(Got) >= Msgs);
 wait_for_min_messages(Config, Queue, Msgs, N) ->
     case filter_queues([[Queue, Msgs]],
@@ -110,7 +110,7 @@ wait_for_max_messages(Config, Queue, Msgs, 0) ->
     [[_, Got]] = filter_queues([[Queue, Msgs]],
                                rabbit_ct_broker_helpers:rabbitmqctl_list(
                                  Config, 0, ["list_queues", "name", "messages"])),
-    ct:pal("Got ~p messages on queue ~p", [Got, Queue]),
+    ct:pal("Got ~tp messages on queue ~tp", [Got, Queue]),
     ?assert(binary_to_integer(Got) =< Msgs);
 wait_for_max_messages(Config, Queue, Msgs, N) ->
     case filter_queues([[Queue, Msgs]],

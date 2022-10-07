@@ -67,7 +67,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     Nodenames = [
-      list_to_atom(rabbit_misc:format("~s-~b", [Testcase, I]))
+      list_to_atom(rabbit_misc:format("~ts-~b", [Testcase, I]))
       || I <- lists:seq(1, ClusterSize)
     ],
     Config1 = rabbit_ct_helpers:set_config(Config, [

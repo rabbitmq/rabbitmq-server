@@ -47,11 +47,11 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
         {ok, ok, L} ->
-            rabbit_log:warning("Failed to process command ~p on quorum queue leader ~p because actual leader is ~p.",
+            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
                                [Cmd, Leader, L]),
             {error, ra_command_failed};
         Err ->
-            rabbit_log:warning("Failed to process command ~p on quorum queue leader ~p: ~p~n"
+            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",
                                [Cmd, Leader, Err, Tries]),
             process_command(Cmd, State, Tries - 1)
@@ -62,7 +62,7 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
 handle_ra_event(Leader, {machine, {dlx_delivery, _} = Del}, #state{leader = Leader} = State) ->
     handle_delivery(Del, State);
 handle_ra_event(From, Evt, State) ->
-    rabbit_log:debug("Ignoring ra event ~p from ~p", [Evt, From]),
+    rabbit_log:debug("Ignoring ra event ~tp from ~tp", [Evt, From]),
     {ok, State, []}.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},

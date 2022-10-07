@@ -61,7 +61,7 @@ params_table(SafeURI, XorQ) ->
 
 params_to_string(#upstream_params{safe_uri = SafeURI,
                                   x_or_q   = XorQ}) ->
-    print("~s on ~s", [rabbit_misc:rs(r(XorQ)), SafeURI]).
+    print("~ts on ~ts", [rabbit_misc:rs(r(XorQ)), SafeURI]).
 
 remove_credentials(URI) ->
     list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).

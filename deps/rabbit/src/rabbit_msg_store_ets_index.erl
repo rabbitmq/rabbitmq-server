@@ -70,7 +70,7 @@ terminate(#state { table = MsgLocations, dir = Dir }) ->
         ok           -> ok;
         {error, Err} ->
             rabbit_log:error("Unable to save message store index"
-                             " for directory ~p.~nError: ~p",
+                             " for directory ~tp.~nError: ~tp",
                              [Dir, Err])
     end,
     ets:delete(MsgLocations).

@@ -109,7 +109,7 @@ open_amqp10_connection(Config) ->
                 container_id => atom_to_binary(?FUNCTION_NAME, utf8),
                 sasl => {plain, <<"guest">>, <<"guest">>}},
 
-    % ct:pal("opening connectoin with ~p", [OpnConf]),
+    % ct:pal("opening connectoin with ~tp", [OpnConf]),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     SenderLinkName = <<"test-sender">>,
@@ -149,7 +149,7 @@ open_amqp10_connection(Config) ->
 flush(Prefix) ->
     receive
         Msg ->
-            ct:pal("~s flushed: ~w~n", [Prefix, Msg]),
+            ct:pal("~ts flushed: ~w~n", [Prefix, Msg]),
             flush(Prefix)
     after 1 ->
               ok

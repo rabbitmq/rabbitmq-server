@@ -615,7 +615,7 @@ handle_ra_event(Leader, {machine, leader_change},
                 #state{leader = OldLeader} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
-    rabbit_log:debug("~s: Detected QQ leader change from ~w to ~w",
+    rabbit_log:debug("~ts: Detected QQ leader change from ~w to ~w",
                      [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, State, []};
@@ -624,7 +624,7 @@ handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
     {ok, State, []};
 handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = OldLeader} = State0) ->
-    rabbit_log:debug("~s: Detected QQ leader change (rejection) from ~w to ~w",
+    rabbit_log:debug("~ts: Detected QQ leader change (rejection) from ~w to ~w",
                      [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
@@ -835,10 +835,10 @@ get_missing_deliveries(State, From, To, ConsumerTag) ->
         {ok, Missing} ->
             Missing;
         {error, Error} ->
-            {protocol_error, internal_error, "Cannot query missing deliveries from ~p: ~p",
+            {protocol_error, internal_error, "Cannot query missing deliveries from ~tp: ~tp",
              [ServerId, Error]};
         {timeout, _} ->
-            {protocol_error, internal_error, "Cannot query missing deliveries from ~p: timeout",
+            {protocol_error, internal_error, "Cannot query missing deliveries from ~tp: timeout",
              [ServerId]}
     end.
 
