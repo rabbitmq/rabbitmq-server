@@ -323,7 +323,7 @@ import_on_a_booting_node_using_classic_local_source(Config) ->
     %% verify that vhost2 eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
-        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+        {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
 
 import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
@@ -332,7 +332,7 @@ import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
     %% verify that vhost2 eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
-        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+        {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
 
 import_on_a_booting_node_using_public_https_source(Config) ->
@@ -340,7 +340,7 @@ import_on_a_booting_node_using_public_https_source(Config) ->
     %% verify that virtual host eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
-        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+        {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
 
 import_on_a_booting_node_using_skip_if_unchanged(Config) ->
@@ -349,7 +349,7 @@ import_on_a_booting_node_using_skip_if_unchanged(Config) ->
     %% verify that vhost2 eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
-        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+        {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
 
 %%
@@ -396,7 +396,7 @@ import_raw(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]) of
         ok -> ok;
         {error, E} ->
-            ct:pal("Import of JSON definitions ~p failed: ~p~n", [Body, E]),
+            ct:pal("Import of JSON definitions ~tp failed: ~tp~n", [Body, E]),
             ct:fail({failure, Body, E})
     end.
 
@@ -404,7 +404,7 @@ import_parsed(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_parsed, [Body]) of
         ok -> ok;
         {error, E} ->
-            ct:pal("Import of parsed definitions ~p failed: ~p~n", [Body, E]),
+            ct:pal("Import of parsed definitions ~tp failed: ~tp~n", [Body, E]),
             ct:fail({failure, Body, E})
     end.
 
@@ -415,7 +415,7 @@ run_export() ->
     rabbit_definitions:all_definitions().
 
 run_directory_import_case(Path, Expected) ->
-    ct:pal("Will load definitions from files under ~p~n", [Path]),
+    ct:pal("Will load definitions from files under ~tp~n", [Path]),
     Result = rabbit_definitions:maybe_load_definitions_from(true, Path),
     case Expected of
         ok ->
@@ -426,20 +426,20 @@ run_directory_import_case(Path, Expected) ->
 
 run_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
-   ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
+   ct:pal("Successfully loaded a definition to import from ~tp~n", [Path]),
    case rabbit_definitions:import_raw(Body) of
      ok -> ok;
      {error, E} ->
-       ct:pal("Import case ~p failed: ~p~n", [Path, E]),
+       ct:pal("Import case ~tp failed: ~tp~n", [Path, E]),
        ct:fail({failure, Path, E})
    end.
 
 run_invalid_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
-   ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
+   ct:pal("Successfully loaded a definition to import from ~tp~n", [Path]),
    case rabbit_definitions:import_raw(Body) of
      ok ->
-       ct:pal("Expected import case ~p to fail~n", [Path]),
+       ct:pal("Expected import case ~tp to fail~n", [Path]),
        ct:fail({failure, Path});
      {error, _E} -> ok
    end.

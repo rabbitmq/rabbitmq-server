@@ -83,7 +83,7 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
         fun(_Token) ->
             Scopes      = get_scopes(DecodedTokenFun()),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
-            rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
+            rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
@@ -112,7 +112,7 @@ update_state(AuthUser, NewToken) ->
       {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
         {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
       {refused, Err} ->
-        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~p", [Err])};
+        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
       {ok, DecodedToken} ->
           Tags = tags_from(DecodedToken),
 
@@ -131,7 +131,7 @@ authenticate(_, AuthProps0) ->
         {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
           {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
         {refused, Err} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+          {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
         {ok, DecodedToken} ->
             Func = fun(Token0) ->
                         Username = username_from(
@@ -145,7 +145,7 @@ authenticate(_, AuthProps0) ->
                    end,
             case with_decoded_token(DecodedToken, Func) of
                 {error, Err} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 Else ->
                     Else
             end
@@ -162,7 +162,7 @@ with_decoded_token(DecodedToken, Fun) ->
 validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Now = os:system_time(seconds),
     case Exp =< Now of
-        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~p (validated at ~p)", [Exp, Now])};
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [Exp, Now])};
         false -> ok
     end;
 validate_token_expiry(#{}) -> ok.
@@ -629,12 +629,17 @@ username_from(PreferredUsernameClaims, DecodedToken) ->
       [lists:flatten(io_lib:format("~p",[ResolvedUsernameClaims])), Username]),
     Username.
 
+<<<<<<< HEAD
 append_or_return_default(ListOrBinary, Default) ->
   case ListOrBinary of
     VarList when is_list(VarList) -> VarList ++ Default;
     VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
     _ -> Default
   end.
+=======
+    rabbit_log:debug("Computing username from client's JWT token, client ID: '~ts', sub: '~ts'",
+                     [ClientId, Sub]),
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 
 find_claim_in_token(Claim, Token) ->
   case maps:get(Claim, Token, undefined) of

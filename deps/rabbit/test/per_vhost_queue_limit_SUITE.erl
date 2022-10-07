@@ -670,7 +670,7 @@ delete_durable_queues(Ch, N) ->
                   lists:seq(1, N)).
 
 durable_queue_name(N) when is_integer(N) ->
-    iolist_to_binary(io_lib:format("queue-limits-durable-~p", [N])).
+    iolist_to_binary(io_lib:format("queue-limits-durable-~tp", [N])).
 
 expect_shutdown_due_to_precondition_failed(Thunk) ->
     try

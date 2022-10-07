@@ -59,7 +59,7 @@ node_health_check(rabbit_node_monitor) ->
         [] ->
             ok;
         L when is_list(L), length(L) > 0 ->
-            ErrorMsg = io_lib:format("cluster partition in effect: ~p", [L]),
+            ErrorMsg = io_lib:format("cluster partition in effect: ~tp", [L]),
             {error_string, ErrorMsg}
     end;
 
@@ -72,7 +72,7 @@ node_health_check(alarms) ->
         [] ->
             ok;
         Alarms ->
-            ErrorMsg = io_lib:format("resource alarm(s) in effect:~p", [Alarms]),
+            ErrorMsg = io_lib:format("resource alarm(s) in effect:~tp", [Alarms]),
             {error_string, ErrorMsg}
     end.
 

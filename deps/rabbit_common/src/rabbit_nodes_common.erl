@@ -51,7 +51,7 @@ names(Hostname) ->
 names(Hostname, 0) ->
   epmd_names(Hostname);
 names(Hostname, RetriesLeft) ->
-  rabbit_log:debug("Getting epmd names for hostname '~s', ~b retries left",
+  rabbit_log:debug("Getting epmd names for hostname '~ts', ~b retries left",
     [Hostname, RetriesLeft]),
   case catch epmd_names(Hostname) of
     {ok, R } -> {ok, R};
@@ -123,7 +123,7 @@ port_shutdown_loop(Port) ->
         {Port, closed}             -> ok;
         {Port, {data, _}}          -> port_shutdown_loop(Port);
         {'EXIT', Port, Reason}     ->
-            rabbit_log:error("Failed to start a one-off Erlang VM to keep epmd alive: ~p", [Reason])
+            rabbit_log:error("Failed to start a one-off Erlang VM to keep epmd alive: ~tp", [Reason])
     after 15000 ->
         %% ensure the port is closed
         Port ! {self(), close},
@@ -139,7 +139,7 @@ cookie_hash() ->
 diagnostics(Nodes) ->
     verbose_erlang_distribution(true),
     NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
-                  "attempted to contact: ~p~n", [Nodes]}] ++
+                  "attempted to contact: ~tp~n", [Nodes]}] ++
         [diagnostics_node(Node) || Node <- Nodes] ++
         current_node_details(),
     verbose_erlang_distribution(false),
@@ -155,24 +155,24 @@ verbose_erlang_distribution(false) ->
 current_node_details() ->
     [{"~nCurrent node details:~n * node name: ~w", [node()]},
      case init:get_argument(home) of
-         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [filename:absname(Home)]};
-         Other          -> {" * effective user has no home directory: ~p", [Other]}
+         {ok, [[Home]]} -> {" * effective user's home directory: ~ts", [filename:absname(Home)]};
+         Other          -> {" * effective user has no home directory: ~tp", [Other]}
      end,
-     {" * Erlang cookie hash: ~s", [cookie_hash()]}].
+     {" * Erlang cookie hash: ~ts", [cookie_hash()]}].
 
 diagnostics_node(Node) ->
     {Name, Host} = parts(Node),
-    [{"~s:", [Node]} |
+    [{"~ts:", [Node]} |
      case names(Host) of
          {error, Reason} ->
-             [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
+             [{"  * unable to connect to epmd (port ~ts) on ~ts: ~ts~n",
                [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];
          noport ->
-             [{"  * unable to connect to epmd (port ~s) on ~s: "
+             [{"  * unable to connect to epmd (port ~ts) on ~ts: "
                "couldn't resolve hostname~n",
                [epmd_port(), Host]}];
          {ok, NamePorts} ->
-             [{"  * connected to epmd (port ~s) on ~s",
+             [{"  * connected to epmd (port ~ts) on ~ts",
                [epmd_port(), Host]}] ++
                  case net_adm:ping(Node) of
                      pong -> dist_working_diagnostics(Node);
@@ -182,10 +182,10 @@ diagnostics_node(Node) ->
 
 dist_working_diagnostics(Node) ->
     case is_process_running(Node, rabbit) of
-        true  -> [{"  * node ~s up, 'rabbit' application running", [Node]}];
-        false -> [{"  * node ~s up, 'rabbit' application not running~n"
-                   "  * running applications on ~s: ~p~n"
-                   "  * suggestion: use rabbitmqctl start_app on ~s",
+        true  -> [{"  * node ~ts up, 'rabbit' application running", [Node]}];
+        false -> [{"  * node ~ts up, 'rabbit' application not running~n"
+                   "  * running applications on ~ts: ~tp~n"
+                   "  * suggestion: use rabbitmqctl start_app on ~ts",
                    [Node, Node, remote_apps(Node), Node]}]
     end.
 
@@ -207,21 +207,21 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
                                                    _    -> never_matches
                                                end],
             OthersDiag = case Others of
-                             [] -> [{"                  no other nodes on ~s",
+                             [] -> [{"                  no other nodes on ~ts",
                                      [Host]}];
-                             _  -> [{"                  other nodes on ~s: ~p",
+                             _  -> [{"                  other nodes on ~ts: ~tp",
                                      [Host, Others]}]
                          end,
-            [{"  * epmd reports: node '~s' not running at all", [Name]},
+            [{"  * epmd reports: node '~ts' not running at all", [Name]},
              OthersDiag, {"  * suggestion: start the node", []}];
         [{Name, Port}] ->
-            [{"  * epmd reports node '~s' uses port ~b for inter-node and CLI tool traffic ", [Name, Port]} |
+            [{"  * epmd reports node '~ts' uses port ~b for inter-node and CLI tool traffic ", [Name, Port]} |
              case diagnose_connect(Host, Port) of
                  ok ->
                      connection_succeeded_diagnostics();
                  {error, Reason} ->
-                     [{"  * can't establish TCP connection to the target node, reason: ~s~n"
-                       "  * suggestion: check if host '~s' resolves, is reachable and ports ~b, 4369 are not blocked by firewall",
+                     [{"  * can't establish TCP connection to the target node, reason: ~ts~n"
+                       "  * suggestion: check if host '~ts' resolves, is reachable and ports ~b, 4369 are not blocked by firewall",
                        [rabbit_misc:format_inet_error(Reason), Host, Port]}]
              end]
     end.

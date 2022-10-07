@@ -79,7 +79,7 @@ apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
     Delta = maps:keys(Ids) -- maps:keys(Ids1),
     Effects = lists:map(fun(Id) ->
                   [{mod_call, rabbit_log, debug,
-                    ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
+                    ["MQTT connection with client id '~ts' failed", [Id]]}] end, Delta),
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(_Meta, {nodeup, Node}, State) ->
@@ -101,7 +101,7 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
                             {demonitor, process, Pid},
                             {mod_call, ?MODULE, notify_connection, [Pid, decommission_node]},
                             {mod_call, rabbit_log, debug,
-                              ["MQTT will remove client ID '~s' from known "
+                              ["MQTT will remove client ID '~ts' from known "
                                "as its node has been decommissioned", [ClientId]]}
                           ]  ++ Acc
                           end, [], Delta),
@@ -110,7 +110,7 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(_Meta, Unknown, State) ->
-    logger:error("MQTT Raft state machine received an unknown command ~p", [Unknown]),
+    logger:error("MQTT Raft state machine received an unknown command ~tp", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
 state_enter(leader, State) ->

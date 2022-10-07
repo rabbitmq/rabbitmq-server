@@ -833,14 +833,14 @@ assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, 
                 [] ->
                     case FastFail of
                         fail ->
-                            ct:fail("Expected ~p / ~p, got ~p / ~p~nat ~p~n",
+                            ct:fail("Expected ~tp / ~tp, got ~tp / ~tp~nat ~tp~n",
                                     [ExpMNode, ExpSNodes, ActMNode, ActSNodes,
                                     get_stacktrace()]);
                         nofail ->
                             failed
                     end;
                 State  ->
-                    ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
+                    ct:pal("Waiting to leave state ~tp~n Waiting for ~tp~n",
                            [State, {ExpMNode, ExpSNodes}]),
                     timer:sleep(200),
                     assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes},
@@ -984,10 +984,10 @@ wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries) ->
                     Policies = rpc:call(Node, rabbit_policy, list, [], 5000),
                     ct:pal(
                       "Last policy not applied:~n"
-                      "  Queue node:          ~s (~p)~n"
-                      "  Queue info:          ~p~n"
-                      "  Configured policies: ~p~n"
-                      "  Tested policies:     ~p",
+                      "  Queue node:          ~ts (~tp)~n"
+                      "  Queue info:          ~tp~n"
+                      "  Configured policies: ~tp~n"
+                      "  Tested policies:     ~tp",
                       [Node, Pid, FinalInfo, Policies, TestedPolicies]),
                     false;
                 false ->

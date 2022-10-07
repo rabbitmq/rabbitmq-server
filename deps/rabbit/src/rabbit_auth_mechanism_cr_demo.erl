@@ -25,7 +25,7 @@
 %% Provides equivalent security to PLAIN but demos use of Connection.Secure(Ok)
 %% START-OK: Username
 %% SECURE: "Please tell me your password"
-%% SECURE-OK: "My password is ~s", [Password]
+%% SECURE-OK: "My password is ~ts", [Password]
 
 description() ->
     [{description, <<"RabbitMQ Demo challenge-response authentication "
@@ -45,4 +45,4 @@ handle_response(<<"My password is ", Password/binary>>,
                 #state{username = Username}) ->
     rabbit_access_control:check_user_pass_login(Username, Password);
 handle_response(Response, _State) ->
-    {protocol_error, "Invalid response '~s'", [Response]}.
+    {protocol_error, "Invalid response '~ts'", [Response]}.

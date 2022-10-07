@@ -121,7 +121,7 @@ run_code_on_one_vm(Config) ->
 
 do_run_code_on_one_vm(CTMaster) ->
     CTPeer = node(),
-    ct:pal("Testcase running on ~s", [CTPeer]),
+    ct:pal("Testcase running on ~ts", [CTPeer]),
     ?assertNotEqual(CTMaster, CTPeer),
     ?assertEqual(pong, net_adm:ping(CTMaster)).
 
@@ -131,7 +131,7 @@ run_code_on_three_vms(Config) ->
 
 do_run_code_on_three_vms(CTMaster) ->
     CTPeer = node(),
-    ct:pal("Testcase running on ~s", [CTPeer]),
+    ct:pal("Testcase running on ~ts", [CTPeer]),
     ?assertNotEqual(CTMaster, CTPeer),
     ?assertEqual(pong, net_adm:ping(CTMaster)).
 

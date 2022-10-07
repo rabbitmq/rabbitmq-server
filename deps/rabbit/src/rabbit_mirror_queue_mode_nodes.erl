@@ -63,7 +63,7 @@ validate_policy(Nodes) when is_list(Nodes) ->
     case [I || I <- Nodes, not is_binary(I)] of
         []      -> ok;
         Invalid -> {error, "ha-mode=\"nodes\" takes a list of strings, "
-                    "~p was not a string", [Invalid]}
+                    "~tp was not a string", [Invalid]}
     end;
 validate_policy(Params) ->
-    {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]}.
+    {error, "ha-mode=\"nodes\" takes a list, ~tp given", [Params]}.

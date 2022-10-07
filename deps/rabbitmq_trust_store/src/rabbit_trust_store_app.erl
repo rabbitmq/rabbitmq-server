@@ -49,7 +49,7 @@ edit(Options) ->
             ok;
         Val       ->
             rabbit_log:warning("RabbitMQ trust store plugin is used "
-                               "and the verify_fun TLS option is set: ~p. "
+                               "and the verify_fun TLS option is set: ~tp. "
                                "It will be overwritten by the plugin.", [Val]),
             ok
     end,

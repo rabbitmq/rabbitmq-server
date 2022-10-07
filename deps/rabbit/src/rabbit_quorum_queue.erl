@@ -192,7 +192,7 @@ start_cluster(Q) ->
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => [Leader | Followers]}),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum ~s with leader on node '~s'",
+    rabbit_log:debug("Will start up to ~w replicas for quorum ~ts with leader on node '~ts'",
                      [QuorumSize, rabbit_misc:rs(QName), Leader]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
@@ -238,7 +238,7 @@ start_cluster(Q) ->
 declare_queue_error(Error, QName, Leader, ActingUser) ->
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
     {protocol_error, internal_error,
-     "Cannot declare quorum ~s on node '~s' with leader on node '~s': ~255p",
+     "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
      [rabbit_misc:rs(QName), node(), Leader, Error]}.
 
 ra_machine(Q) ->
@@ -485,7 +485,7 @@ handle_tick(QName,
                           [] ->
                               ok;
                           Stale ->
-                              rabbit_log:info("~s: stale nodes detected. Purging ~w",
+                              rabbit_log:info("~ts: stale nodes detected. Purging ~w",
                                               [rabbit_misc:rs(QName), Stale]),
                               %% pipeline purge command
                               {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -509,7 +509,7 @@ repair_leader_record(QName, Self) ->
             %% it's ok - we don't need to do anything
             ok;
         _ ->
-            rabbit_log:debug("~s: repairing leader record",
+            rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
             become_leader(QName, Name),
@@ -645,11 +645,11 @@ restart_server({_, _} = Ref) ->
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
-     "cannot delete ~s. queue.delete operations with if-unused flag set are not supported by quorum queues",
+     "cannot delete ~ts. queue.delete operations with if-unused flag set are not supported by quorum queues",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
-     "cannot delete ~s. queue.delete operations with if-empty flag set are not supported by quorum queues",
+     "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
@@ -685,7 +685,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 false ->
                     %% attempt forced deletion of all servers
                     rabbit_log:warning(
-                      "Could not delete quorum '~s', not enough nodes "
+                      "Could not delete quorum '~ts', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
@@ -1196,14 +1196,14 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
 shrink_all(Node) ->
     [begin
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: removing member (replica) on node ~w",
+         rabbit_log:info("~ts: removing member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          Size = length(get_nodes(Q)),
          case delete_member(Q, Node) of
              ok ->
                  {QName, {ok, Size-1}};
              {error, Err} ->
-                 rabbit_log:warning("~s: failed to remove member (replica) on node ~w, error: ~w",
+                 rabbit_log:warning("~ts: failed to remove member (replica) on node ~w, error: ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
@@ -1219,14 +1219,14 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: adding a new member (replica) on node ~w",
+         rabbit_log:info("~ts: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          case add_member(Q, Node, ?ADD_MEMBER_TIMEOUT) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
                  rabbit_log:warning(
-                   "~s: failed to add member (replica) on node ~w, error: ~w",
+                   "~ts: failed to add member (replica) on node ~w, error: ~w",
                    [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
@@ -1322,12 +1322,12 @@ dead_letter_handler(Q, Overflow) ->
 dlh(undefined, undefined, undefined, _, _) ->
     undefined;
 dlh(undefined, RoutingKey, undefined, _, QName) ->
-    rabbit_log:warning("Disabling dead-lettering for ~s despite configured dead-letter-routing-key '~s' "
+    rabbit_log:warning("Disabling dead-lettering for ~ts despite configured dead-letter-routing-key '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), RoutingKey]),
     undefined;
 dlh(undefined, _, Strategy, _, QName) ->
-    rabbit_log:warning("Disabling dead-lettering for ~s despite configured dead-letter-strategy '~s' "
+    rabbit_log:warning("Disabling dead-lettering for ~ts despite configured dead-letter-strategy '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
@@ -1338,13 +1338,13 @@ dlh(Exchange, RoutingKey, <<"at-least-once">>, reject_publish, QName) ->
         true ->
             at_least_once;
         false ->
-            rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~s "
+            rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
                                "because feature flag stream_queue is disabled.",
                                [rabbit_misc:rs(QName)]),
             dlh_at_most_once(Exchange, RoutingKey, QName)
     end;
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
-    rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~s "
+    rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
                        "effective overflow strategy drop-head. To enable dead-letter-strategy "
                        "at-least-once, set overflow strategy to reject-publish.",
@@ -1653,7 +1653,7 @@ overflow(undefined, Def, _QName) -> Def;
 overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
 overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
 overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
-    rabbit_log:warning("Invalid overflow strategy ~p for quorum queue: ~s",
+    rabbit_log:warning("Invalid overflow strategy ~tp for quorum queue: ~ts",
                        [V, rabbit_misc:rs(QName)]),
     Def.
 

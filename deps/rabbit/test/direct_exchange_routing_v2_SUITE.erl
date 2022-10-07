@@ -104,14 +104,14 @@ init_per_group(start_feature_flag_disabled = Group, Config0) ->
             Config;
         false ->
             end_per_group(Group, Config),
-            {skip, io_lib:format("'~s' feature flag is unsupported", [?FEATURE_FLAG])}
+            {skip, io_lib:format("'~ts' feature flag is unsupported", [?FEATURE_FLAG])}
     end.
 
 start_broker(Group, Config0) ->
     Size = rabbit_ct_helpers:get_config(Config0, rmq_nodes_count),
     Clustered = rabbit_ct_helpers:get_config(Config0, rmq_nodes_clustered, true),
     Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodename_suffix,
-                                                    io_lib:format("cluster_size_~b-clustered_~p-~s",
+                                                    io_lib:format("cluster_size_~b-clustered_~tp-~ts",
                                                                   [Size, Clustered, Group])}),
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:setup_steps() ++

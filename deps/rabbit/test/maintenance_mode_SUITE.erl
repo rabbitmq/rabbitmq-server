@@ -172,7 +172,7 @@ maintenance_mode_status(Config) ->
 
 listener_suspension_status(Config) ->
     Nodes = [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ct:pal("Picked node ~s for maintenance tests...", [A]),
+    ct:pal("Picked node ~ts for maintenance tests...", [A]),
 
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
@@ -204,7 +204,7 @@ listener_suspension_status(Config) ->
 
 client_connection_closure(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ct:pal("Picked node ~s for maintenance tests...", [A]),
+    ct:pal("Picked node ~ts for maintenance tests...", [A]),
 
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
@@ -222,7 +222,7 @@ client_connection_closure(Config) ->
 quorum_queue_leadership_transfer(Config) ->
     [A | _] = Nodenames = rabbit_ct_broker_helpers:get_node_configs(
                             Config, nodename),
-    ct:pal("Picked node ~s for maintenance tests...", [A]),
+    ct:pal("Picked node ~ts for maintenance tests...", [A]),
 
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),

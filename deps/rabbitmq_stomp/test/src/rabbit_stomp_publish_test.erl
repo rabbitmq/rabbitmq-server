@@ -44,7 +44,7 @@ report() ->
                  put(last_sent, get(sent)),
                  put(last_recd, get(recd)),
                  put(last_ts, erlang:monotonic_time()),
-                 io:format("Send ~p msg/s | Recv ~p msg/s~n",
+                 io:format("Send ~tp msg/s | Recv ~tp msg/s~n",
                            [trunc(S * ?MICROS_PER_SECOND / Diff),
                             trunc(R * ?MICROS_PER_SECOND / Diff)]);
         false -> ok

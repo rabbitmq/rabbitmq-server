@@ -128,15 +128,15 @@ do_http_req(Path0, Query) ->
     URI = uri_parser:parse(Path0, [{port, 80}]),
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
-    HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
+    HostHdr = rabbit_misc:format("~ts:~b", [Host, Port]),
     {ok, Method} = application:get_env(rabbitmq_auth_backend_http, http_method),
     Request = case rabbit_data_coercion:to_atom(Method) of
         get  ->
             Path = Path0 ++ "?" ++ Query,
-            rabbit_log:debug("auth_backend_http: GET ~s", [Path]),
+            rabbit_log:debug("auth_backend_http: GET ~ts", [Path]),
             {Path, [{"Host", HostHdr}]};
         post ->
-            rabbit_log:debug("auth_backend_http: POST ~s", [Path0]),
+            rabbit_log:debug("auth_backend_http: POST ~ts", [Path0]),
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
     RequestTimeout =
@@ -149,7 +149,7 @@ do_http_req(Path0, Query) ->
             {ok, Val2} -> Val2;
             _ -> RequestTimeout
         end,
-    rabbit_log:debug("auth_backend_http: request timeout: ~p, connection timeout: ~p", [RequestTimeout, ConnectionTimeout]),
+    rabbit_log:debug("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
     HttpOpts = case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts} when is_list(Opts) ->
             [
@@ -165,7 +165,7 @@ do_http_req(Path0, Query) ->
 
     case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
-            rabbit_log:debug("auth_backend_http: response code is ~p, body: ~p", [Code, Body]),
+            rabbit_log:debug("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
                 true  -> parse_resp(Body);
                 false -> {error, {Code, Body}}

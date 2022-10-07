@@ -81,7 +81,7 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
               rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
               {init, new}, infinity);
         {error, Error} ->
-            {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
+            {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
              [rabbit_misc:rs(QName), Node1, Error]}
     end.
 
@@ -96,14 +96,14 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
             #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q1),
             case IfEmpty of
                 true ->
-                    rabbit_log:error("Queue ~s in vhost ~ts has its master node down and "
+                    rabbit_log:error("Queue ~ts in vhost ~ts has its master node down and "
                                      "no mirrors available or eligible for promotion. "
                                      "The queue may be non-empty. "
                                      "Refusing to force-delete.",
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
-                    rabbit_log:warning("Queue ~s in vhost ~ts has its master node is down and "
+                    rabbit_log:warning("Queue ~ts in vhost ~ts has its master node is down and "
                                        "no mirrors available or eligible for promotion. "
                                        "Forcing queue deletion.",
                                        [Name, Vhost]),
@@ -139,7 +139,7 @@ recover(VHost, Queues) ->
             FailedQs = find_missing_queues(Queues,RecoveredQs),
             {RecoveredQs, FailedQs};
         {error, Reason} ->
-            rabbit_log:error("Failed to start queue supervisor for vhost '~ts': ~s", [VHost, Reason]),
+            rabbit_log:error("Failed to start queue supervisor for vhost '~ts': ~ts", [VHost, Reason]),
             throw({error, Reason})
     end.
 
@@ -471,7 +471,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
         gen_server2:mcall(
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~p failed to initialise: ~p",
+    [rabbit_log:error("Queue ~tp failed to initialise: ~tp",
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 

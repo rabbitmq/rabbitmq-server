@@ -47,7 +47,7 @@ handle_force_fine_statistics() ->
             ok;
         X ->
             rabbit_log:warning(
-              "force_fine_statistics set to ~p; ignored.~n"
+              "force_fine_statistics set to ~tp; ignored.~n"
               "Replaced by {rates_mode, none} in the rabbitmq_management "
               "application.", [X])
     end.
@@ -58,7 +58,7 @@ ensure_statistics_enabled() ->
     ForceStats = rates_mode() =/= none,
     handle_force_fine_statistics(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_log:info("Management plugin: using rates mode '~p'", [rates_mode()]),
+    rabbit_log:info("Management plugin: using rates mode '~tp'", [rates_mode()]),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
             ok;

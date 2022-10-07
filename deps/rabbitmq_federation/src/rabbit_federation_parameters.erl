@@ -54,7 +54,7 @@ validate(_VHost, <<"federation-upstream">>, Name, Term0, _User) ->
             shared_validation()], Term);
 
 validate(_VHost, _Component, Name, _Term, _User) ->
-    {error, "name not recognised: ~p", [Name]}.
+    {error, "name not recognised: ~tp", [Name]}.
 
 notify(_VHost, <<"federation-upstream-set">>, Name, _Term, _Username) ->
     adjust({upstream_set, Name});
@@ -98,7 +98,7 @@ validate_uri(Name, Term) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, _}    -> ok;
-                  {error, E} -> {error, "\"~s\" not a valid URI: ~p", [Term, E]}
+                  {error, E} -> {error, "\"~ts\" not a valid URI: ~tp", [Term, E]}
               end;
         E  -> E
     end;
@@ -119,23 +119,23 @@ validate_policy([{<<"federation-upstream-set">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"federation-upstream-set">>, Value}]) ->
-    {error, "~p is not a valid federation upstream set name", [Value]};
+    {error, "~tp is not a valid federation upstream set name", [Value]};
 
 validate_policy([{<<"federation-upstream-pattern">>, Value}])
   when is_binary(Value) ->
     case re:compile(Value) of
         {ok, _}         -> ok;
-        {error, Reason} -> {error, "could not compile pattern ~s to a regular expression. "
-                                   "Error: ~p", [Value, Reason]}
+        {error, Reason} -> {error, "could not compile pattern ~ts to a regular expression. "
+                                   "Error: ~tp", [Value, Reason]}
     end;
 validate_policy([{<<"federation-upstream-pattern">>, Value}]) ->
-    {error, "~p is not a valid federation upstream pattern name", [Value]};
+    {error, "~tp is not a valid federation upstream pattern name", [Value]};
 
 validate_policy([{<<"federation-upstream">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"federation-upstream">>, Value}]) ->
-    {error, "~p is not a valid federation upstream name", [Value]};
+    {error, "~tp is not a valid federation upstream name", [Value]};
 
 validate_policy(L) when length(L) >= 2 ->
     {error, "cannot specify federation-upstream, federation-upstream-set "

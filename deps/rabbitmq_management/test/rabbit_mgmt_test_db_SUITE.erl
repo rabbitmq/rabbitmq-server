@@ -81,7 +81,7 @@ trace_fun(Config, MFs) ->
     Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     dbg:tracer(process, {fun(A,_) ->
                                  ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
+                                        "TRACE: ~tp", [A])
                          end, ok}),
     dbg:n(Nodename1),
     dbg:p(all,c),

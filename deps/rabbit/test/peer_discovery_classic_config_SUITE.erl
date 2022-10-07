@@ -55,7 +55,7 @@ init_per_testcase(successful_discovery = Testcase, Config) ->
 
     N = 3,
     NodeNames = [
-      list_to_atom(rabbit_misc:format("~s-~b", [Testcase, I]))
+      list_to_atom(rabbit_misc:format("~ts-~b", [Testcase, I]))
       || I <- lists:seq(1, N)
     ],
     Config2 = rabbit_ct_helpers:set_config(Config1, [
@@ -80,7 +80,7 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
 
     N = 2,
     NodeNames = [
-      list_to_atom(rabbit_misc:format("~s-~b", [Testcase, I]))
+      list_to_atom(rabbit_misc:format("~ts-~b", [Testcase, I]))
       || I <- lists:seq(1, N)
     ],
     Config2 = rabbit_ct_helpers:set_config(Config1, [

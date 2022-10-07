@@ -280,7 +280,7 @@ get_test(Config) ->
     %% Check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
-    URI = lists:flatten(io_lib:format("http://localhost:~p/metricsooops", [Port])),
+    URI = lists:flatten(io_lib:format("http://localhost:~tp/metricsooops", [Port])),
     {ok, {{_, CodeAct, _}, _, _}} = httpc:request(get, {URI, []}, ?HTTPC_OPTS, []),
     ?assertMatch(404, CodeAct).
 
@@ -555,7 +555,7 @@ http_get(Config, ReqHeaders, CodeExp) ->
 
 http_get(Config, Path, ReqHeaders, CodeExp) ->
     Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
-    URI = lists:flatten(io_lib:format("http://localhost:~p~s", [Port, Path])),
+    URI = lists:flatten(io_lib:format("http://localhost:~tp~ts", [Port, Path])),
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
         httpc:request(get, {URI, ReqHeaders}, ?HTTPC_OPTS, []),
     ?assertMatch(CodeExp, CodeAct),

@@ -202,8 +202,8 @@ handle_connection_closing(ChannelCloseType, Reason,
 internal_pass_frame(Number, Frame, State) ->
     case internal_lookup_npa(Number, State) of
         undefined ->
-            ?LOG_INFO("Dropping frame ~p for invalid or closed "
-                      "channel number ~p", [Frame, Number]),
+            ?LOG_INFO("Dropping frame ~tp for invalid or closed "
+                      "channel number ~tp", [Frame, Number]),
             State;
         {ChPid, AState} ->
             NewAState = process_channel_frame(Frame, Number, ChPid, AState),

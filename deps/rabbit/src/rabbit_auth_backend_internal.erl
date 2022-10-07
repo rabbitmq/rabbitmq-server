@@ -236,7 +236,7 @@ add_user_sans_validation(Limits, Tags) ->
     end.
 
 add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
-    rabbit_log:debug("Asked to create a new user '~ts', password length in bytes: ~p", [Username, bit_size(Password)]),
+    rabbit_log:debug("Asked to create a new user '~ts', password length in bytes: ~tp", [Username, bit_size(Password)]),
     %% hash_password will pick the hashing function configured for us
     %% but we also need to store a hint as part of the record, so we
     %% retrieve it here one more time
@@ -361,7 +361,7 @@ change_password(Username, Password, ActingUser) ->
 
 change_password_sans_validation(Username, Password, ActingUser) ->
     try
-        rabbit_log:debug("Asked to change password of user '~ts', new password length in bytes: ~p", [Username, bit_size(Password)]),
+        rabbit_log:debug("Asked to change password of user '~ts', new password length in bytes: ~tp", [Username, bit_size(Password)]),
         HashingAlgorithm = rabbit_password:hashing_mod(),
         R = change_password_hash(Username,
                                  hash_password(rabbit_password:hashing_mod(),
@@ -490,7 +490,7 @@ notify_user_tags_set(Username, ConvertedTags, ActingUser) ->
 
 set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set permissions for "
-                     "'~ts' in virtual host '~ts' to '~s', '~s', '~s'",
+                     "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                      [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
     _ = lists:map(
       fun (RegexpBin) ->
@@ -520,7 +520,7 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                                  write)
                 end)),
         rabbit_log:info("Successfully set permissions for "
-                        "'~ts' in virtual host '~ts' to '~s', '~s', '~s'",
+                        "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                         [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
         rabbit_event:notify(permission_created, [{user,      Username},
                                                  {vhost,     VirtualHost},
@@ -597,7 +597,7 @@ set_permissions_globally(Username, ConfigurePerm, WritePerm, ReadPerm, ActingUse
 
 set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set topic permissions on exchange '~ts' for "
-                     "user '~ts' in virtual host '~ts' to '~s', '~s'",
+                     "user '~ts' in virtual host '~ts' to '~ts', '~ts'",
                      [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
     WritePermRegex = rabbit_data_coercion:to_binary(WritePerm),
     ReadPermRegex = rabbit_data_coercion:to_binary(ReadPerm),
@@ -633,7 +633,7 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                 write)
             end)),
         rabbit_log:info("Successfully set topic permissions on exchange '~ts' for "
-                         "'~ts' in virtual host '~ts' to '~s', '~s'",
+                         "'~ts' in virtual host '~ts' to '~ts', '~ts'",
                          [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
         rabbit_event:notify(topic_permission_created, [
             {user,      Username},

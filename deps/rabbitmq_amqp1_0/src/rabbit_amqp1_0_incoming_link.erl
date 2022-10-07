@@ -74,7 +74,7 @@ attach(#'v1_0.attach'{name = Name,
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                               "Attach rejected: ~p", [Reason])
+                               "Attach rejected: ~tp", [Reason])
     end.
 
 set_delivery_id({uint, D},
@@ -132,7 +132,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                         send_settle_mode = SSM,
                         recv_settle_mode = RSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
-    ?DEBUG("Inbound content:~n  ~p",
+    ?DEBUG("Inbound content:~n  ~tp",
            [[amqp10_framing:pprint(Section) ||
                 Section <- amqp10_framing:decode_bin(MsgBin)]]),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),
@@ -158,7 +158,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                 credit_used      = CreditUsed1,
                 msg_acc          = []},
     Reply = case SendFlow of
-                true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
+                true  -> ?DEBUG("sending flow for incoming ~tp", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,

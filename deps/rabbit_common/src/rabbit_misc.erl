@@ -344,22 +344,22 @@ assert_field_equivalence(Orig, New, Name, Key) ->
     equivalence_fail(Orig, New, Name, Key).
 
 equivalence_fail(Orig, New, Name, Key) ->
-    protocol_error(precondition_failed, "inequivalent arg '~s' "
-                   "for ~s: received ~s but current is ~s",
+    protocol_error(precondition_failed, "inequivalent arg '~ts' "
+                   "for ~ts: received ~ts but current is ~ts",
                    [Key, rs(Name), val(New), val(Orig)]).
 
 val(undefined) ->
     "none";
 val({Type, Value}) ->
     ValFmt = case is_binary(Value) of
-                 true  -> "~s";
-                 false -> "~p"
+                 true  -> "~ts";
+                 false -> "~tp"
              end,
-    format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]);
+    format("the value '" ++ ValFmt ++ "' of type '~ts'", [Value, Type]);
 val(Value) ->
     format(case is_binary(Value) of
-               true  -> "'~s'";
-               false -> "'~p'"
+               true  -> "'~ts'";
+               false -> "'~tp'"
            end, [Value]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
@@ -423,7 +423,7 @@ amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
 amqp_value(table, V)                   -> amqp_table(V);
 amqp_value(decimal, {Before, After})   ->
     erlang:list_to_float(
-      lists:flatten(io_lib:format("~p.~p", [Before, After])));
+      lists:flatten(io_lib:format("~tp.~tp", [Before, After])));
 amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
 amqp_value(_Type, V)                   -> V.
 
@@ -450,9 +450,9 @@ r_arg(VHostPath, Kind, Table, Key) ->
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = topic, name = Name}) ->
-    format("'~s' in vhost '~ts'", [Name, VHostPath]);
+    format("'~ts' in vhost '~ts'", [Name, VHostPath]);
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
-    format("~s '~s' in vhost '~ts'", [Kind, Name, VHostPath]).
+    format("~ts '~ts' in vhost '~ts'", [Kind, Name, VHostPath]).
 
 enable_cover() -> enable_cover(["."]).
 
@@ -500,7 +500,7 @@ report_cover1(Root) ->
     ok.
 
 report_coverage_percentage(File, Cov, NotCov, Mod) ->
-    io:fwrite(File, "~6.2f ~p~n",
+    io:fwrite(File, "~6.2f ~tp~n",
               [if
                    Cov+NotCov > 0 -> 100.0*Cov/(Cov+NotCov);
                    true -> 100.0
@@ -612,9 +612,9 @@ ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
     list_to_atom(
-      format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
+      format("~w_~ts:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
-format_inet_error(E) -> format("~w (~s)", [E, format_inet_error0(E)]).
+format_inet_error(E) -> format("~w (~ts)", [E, format_inet_error0(E)]).
 
 format_inet_error0(address) -> "cannot connect to host/port";
 format_inet_error0(timeout) -> "timed out";
@@ -706,10 +706,10 @@ dirty_dump_log(FileName) ->
 dirty_dump_log1(_LH, eof) ->
     io:format("Done.~n");
 dirty_dump_log1(LH, {K, Terms}) ->
-    io:format("Chunk: ~p~n", [Terms]),
+    io:format("Chunk: ~tp~n", [Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K));
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
-    io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
+    io:format("Bad Chunk, ~tp: ~tp~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
 format(Fmt, Args) -> lists:flatten(io_lib:format(Fmt, Args)).
@@ -774,7 +774,7 @@ sort_field_table(Arguments) ->
 %% permits easy identification of the pid's node.
 pid_to_string(Pid) when is_pid(Pid) ->
     {Node, Cre, Id, Ser} = decompose_pid(Pid),
-    format("<~s.~B.~B.~B>", [Node, Cre, Id, Ser]).
+    format("<~ts.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 -spec hexify(binary() | atom() | list()) -> binary().
 hexify(Bin) when is_binary(Bin) ->
@@ -930,7 +930,7 @@ module_attributes(Module) ->
         Module:module_info(attributes)
     catch
         _:undef ->
-            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+            io:format("WARNING: module ~tp not found, so not scanned for boot steps.~n",
                       [Module]),
             []
     end.
@@ -1189,8 +1189,18 @@ is_os_process_alive(Pid) ->
                              PidS = rabbit_data_coercion:to_list(Pid),
                              case os:find_executable("tasklist.exe") of
                                  false ->
+<<<<<<< HEAD
                                      Cmd = format("(Get-Process -Id ~ts).ProcessName", [PidS]),
                                      {ok, [Res]} = pwsh_cmd(Cmd),
+=======
+                                     Cmd =
+                                     format(
+                                       "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
+                                       "\"(Get-Process -Id ~ts).ProcessName\"",
+                                       [PidS]),
+                                     Res =
+                                     os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                      case Res of
                                          "erl"  -> true;
                                          "werl" -> true;

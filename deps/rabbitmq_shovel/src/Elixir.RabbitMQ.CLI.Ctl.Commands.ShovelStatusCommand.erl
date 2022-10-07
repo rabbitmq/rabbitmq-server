@@ -116,7 +116,7 @@ fmt_status('starting' = St, Map) ->
          termination_reason => <<>>};
 fmt_status({'terminated' = St, Reason}, Map) ->
     Map#{state => St,
-         termination_reason => list_to_binary(io_lib:format("~p", [Reason])),
+         termination_reason => list_to_binary(io_lib:format("~tp", [Reason])),
          source => <<>>,
          destination => <<>>}.
 

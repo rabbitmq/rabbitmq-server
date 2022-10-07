@@ -95,5 +95,5 @@ format_title(BootState) ->
               "RabbitMQ ~ts~ts", [Vsn, BootStateSuffix]);
         Node ->
             rabbit_misc:format(
-              "~s — RabbitMQ ~ts~ts", [Node, Vsn, BootStateSuffix])
+              "~ts — RabbitMQ ~ts~ts", [Node, Vsn, BootStateSuffix])
     end.

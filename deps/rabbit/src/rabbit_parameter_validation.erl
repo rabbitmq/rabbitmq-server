@@ -14,49 +14,49 @@ number(_Name, Term) when is_number(Term) ->
     ok;
 
 number(Name, Term) ->
-    {error, "~s should be a number, actually was ~p", [Name, Term]}.
+    {error, "~ts should be a number, actually was ~tp", [Name, Term]}.
 
 integer(_Name, Term) when is_integer(Term) ->
     ok;
 
 integer(Name, Term) ->
-    {error, "~s should be a number, actually was ~p", [Name, Term]}.
+    {error, "~ts should be a number, actually was ~tp", [Name, Term]}.
 
 binary(_Name, Term) when is_binary(Term) ->
     ok;
 
 binary(Name, Term) ->
-    {error, "~s should be binary, actually was ~p", [Name, Term]}.
+    {error, "~ts should be binary, actually was ~tp", [Name, Term]}.
 
 amqp091_queue_name(Name, S) when is_binary(S) ->
     case size(S) of
         Len when Len =< 255 -> ok;
-        _                   -> {error, "~s should be less than 255 bytes, actually was ~p", [Name, size(S)]}
+        _                   -> {error, "~ts should be less than 255 bytes, actually was ~tp", [Name, size(S)]}
     end;
 
 amqp091_queue_name(Name, Term) ->
-    {error, "~s should be binary, actually was ~p", [Name, Term]}.
+    {error, "~ts should be binary, actually was ~tp", [Name, Term]}.
 
 
 boolean(_Name, Term) when is_boolean(Term) ->
     ok;
 boolean(Name, Term) ->
-    {error, "~s should be boolean, actually was ~p", [Name, Term]}.
+    {error, "~ts should be boolean, actually was ~tp", [Name, Term]}.
 
 list(_Name, Term) when is_list(Term) ->
     ok;
 
 list(Name, Term) ->
-    {error, "~s should be list, actually was ~p", [Name, Term]}.
+    {error, "~ts should be list, actually was ~tp", [Name, Term]}.
 
 regex(Name, Term) when is_binary(Term) ->
     case re:compile(Term) of
         {ok, _}         -> ok;
-        {error, Reason} -> {error, "~s should be regular expression "
-                                   "but is invalid: ~p", [Name, Reason]}
+        {error, Reason} -> {error, "~ts should be regular expression "
+                                   "but is invalid: ~tp", [Name, Reason]}
     end;
 regex(Name, Term) ->
-    {error, "~s should be a binary but was ~p", [Name, Term]}.
+    {error, "~ts should be a binary but was ~tp", [Name, Term]}.
 
 proplist(Name, Constraints, Term) when is_list(Term) ->
     {Results, Remainder}
@@ -80,7 +80,7 @@ proplist(Name, Constraints, Term) when is_list(Term) ->
                             {[Fun(Key, Value) | Results0],
                              Term1};
                         {false, mandatory} ->
-                            {[{error, "Key \"~s\" not found in ~s",
+                            {[{error, "Key \"~ts\" not found in ~ts",
                                [Key, Name]} | Results0], Term0};
                         {false, optional} ->
                             {Results0, Term0}
@@ -88,7 +88,7 @@ proplist(Name, Constraints, Term) when is_list(Term) ->
             end, {[], Term}, Constraints),
     case Remainder of
         [] -> Results;
-        _  -> [{error, "Unrecognised terms ~p in ~s", [Remainder, Name]}
+        _  -> [{error, "Unrecognised terms ~tp in ~ts", [Remainder, Name]}
                | Results]
     end;
 
@@ -97,16 +97,16 @@ proplist(Name, Constraints, Term0) when is_map(Term0) ->
     proplist(Name, Constraints, Term);
 
 proplist(Name, _Constraints, Term) ->
-    {error, "~s not a list ~p", [Name, Term]}.
+    {error, "~ts not a list ~tp", [Name, Term]}.
 
 enum(OptionsA) ->
     Options = [list_to_binary(atom_to_list(O)) || O <- OptionsA],
     fun (Name, Term) when is_binary(Term) ->
             case lists:member(Term, Options) of
                 true  -> ok;
-                false -> {error, "~s should be one of ~p, actually was ~p",
+                false -> {error, "~ts should be one of ~tp, actually was ~tp",
                           [Name, Options, Term]}
             end;
         (Name, Term) ->
-            {error, "~s should be binary, actually was ~p", [Name, Term]}
+            {error, "~ts should be binary, actually was ~tp", [Name, Term]}
     end.

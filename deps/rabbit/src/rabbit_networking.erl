@@ -104,7 +104,7 @@ boot_listeners(Fun, NumAcceptors, ConcurrentConnsSupsCount, Type) ->
         ok                                                                  ->
             ok;
         {error, {could_not_start_listener, Address, Port, Details}} = Error ->
-            rabbit_log:error("Failed to start ~s listener [~s]:~p, error: ~p",
+            rabbit_log:error("Failed to start ~ts listener [~ts]:~tp, error: ~tp",
                              [Type, Address, Port, Details]),
             throw(Error)
     end.
@@ -159,9 +159,9 @@ poodle_check(Context) ->
 
 log_poodle_fail(Context) ->
     rabbit_log:error(
-      "The installed version of Erlang (~s) contains the bug OTP-10905,~n"
+      "The installed version of Erlang (~ts) contains the bug OTP-10905,~n"
       "which makes it impossible to disable SSLv3. This makes the system~n"
-      "vulnerable to the POODLE attack. SSL listeners for ~s have therefore~n"
+      "vulnerable to the POODLE attack. SSL listeners for ~ts have therefore~n"
       "been disabled.~n~n"
       "You are advised to upgrade to a recent Erlang version; R16B01 is the~n"
       "first version in which this bug is fixed, but later is usually~n"
@@ -189,7 +189,7 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    rabbit_log:error("invalid port ~p - not 0..65535", [Port]),
+    rabbit_log:error("invalid port ~tp - not 0..65535", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
@@ -274,7 +274,7 @@ stop_ranch_listener_of_protocol(Protocol) ->
     case rabbit_networking:ranch_ref_of_protocol(Protocol) of
         undefined -> ok;
         Ref       ->
-            rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
+            rabbit_log:debug("Stopping Ranch listener for protocol ~ts", [Protocol]),
             ranch:stop_listener(Ref)
     end.
 
@@ -424,7 +424,7 @@ epmd_port_please(Name, Host) ->
 epmd_port_please(Name, Host, 0) ->
     maybe_get_epmd_port(Name, Host);
 epmd_port_please(Name, Host, RetriesLeft) ->
-    rabbit_log:debug("Getting epmd port node '~s', ~b retries left",
+    rabbit_log:debug("Getting epmd port node '~ts', ~b retries left",
     [Name, RetriesLeft]),
   case catch maybe_get_epmd_port(Name, Host) of
     ok -> ok;
@@ -500,11 +500,11 @@ on_node_down_mnesia(Node) ->
     case lists:member(Node, nodes()) of
         false ->
             rabbit_log:info(
-              "Node ~s is down, deleting its listeners", [Node]),
+              "Node ~ts is down, deleting its listeners", [Node]),
             ok = mnesia:dirty_delete(rabbit_listener, Node);
         true  ->
             rabbit_log:info(
-              "Keeping ~s listeners: the node is already back", [Node])
+              "Keeping ~ts listeners: the node is already back", [Node])
     end.
 
 -spec register_connection(pid()) -> ok.
@@ -586,10 +586,10 @@ close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of
         true  ->
             Res = rabbit_reader:shutdown(Pid, Explanation),
-            rabbit_log:info("Closing connection ~p because ~p", [Pid, Explanation]),
+            rabbit_log:info("Closing connection ~tp because ~tp", [Pid, Explanation]),
             Res;
         false ->
-            rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
+            rabbit_log:warning("Asked to close connection ~tp (reason: ~tp) "
                                "but no running cluster node reported it as an active connection. Was it already closed? ",
                                [Pid, Explanation]),
             ok
@@ -626,8 +626,8 @@ force_non_amqp_connection_event_refresh(Ref) ->
 -spec failed_to_recv_proxy_header(_, _) -> no_return().
 failed_to_recv_proxy_header(Ref, Error) ->
     Msg = case Error of
-        closed -> "error when receiving proxy header: TCP socket was ~p prematurely";
-        _Other -> "error when receiving proxy header: ~p"
+        closed -> "error when receiving proxy header: TCP socket was ~tp prematurely";
+        _Other -> "error when receiving proxy header: ~tp"
     end,
     rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
@@ -707,7 +707,7 @@ gethostaddr(Host, Family) ->
 
 -spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
-    rabbit_log:error("invalid host ~p - ~p", [Host, Reason]),
+    rabbit_log:error("invalid host ~tp - ~tp", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;

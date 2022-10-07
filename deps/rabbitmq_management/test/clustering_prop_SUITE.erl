@@ -264,7 +264,7 @@ trace_fun(Config, MFs) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     dbg:tracer(process, {fun(A,_) ->
                                  ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
+                                        "TRACE: ~tp", [A])
                          end, ok}),
     dbg:n(Nodename1),
     dbg:n(Nodename2),
@@ -274,7 +274,7 @@ trace_fun(Config, MFs) ->
 
 dump_table(Config, Table) ->
     Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
+    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~tp:~n~tp~n", [Table, Data]),
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
+    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
 

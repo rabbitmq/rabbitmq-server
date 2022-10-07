@@ -23,29 +23,29 @@ log_error(Error) ->
 
 format_error({error, {duplicate_node_name, NodeName, NodeHost}}) ->
     rabbit_misc:format(
-      "ERROR: node with name ~p is already running on host ~p",
+      "ERROR: node with name ~tp is already running on host ~tp",
       [NodeName, NodeHost]);
 format_error({error, {epmd_error, NodeHost, EpmdReason}}) ->
     rabbit_misc:format(
-      "ERROR: epmd error for host ~s: ~s",
+      "ERROR: epmd error for host ~ts: ~ts",
       [NodeHost, rabbit_misc:format_inet_error(EpmdReason)]);
 format_error({error, {invalid_dist_port_range, DistTcpPort}}) ->
     rabbit_misc:format(
       "Invalid Erlang distribution TCP port: ~b", [DistTcpPort]);
 format_error({error, {dist_port_already_used, Port, not_erlang, Host}}) ->
     rabbit_misc:format(
-      "ERROR: could not bind to distribution port ~b on host ~s. It could "
+      "ERROR: could not bind to distribution port ~b on host ~ts. It could "
       "be in use by another process or cannot be bound to (e.g. due to a "
       "security policy)", [Port, Host]);
 format_error({error, {dist_port_already_used, Port, Name, Host}}) ->
     rabbit_misc:format(
       "ERROR: could not bind to distribution port ~b, it is in use by "
-      "another node: ~s@~s", [Port, Name, Host]);
+      "another node: ~ts@~ts", [Port, Name, Host]);
 format_error({error, {erlang_dist_running_with_unexpected_nodename,
                       Unexpected, Node}}) ->
     rabbit_misc:format(
-      "Erlang distribution running with another node name (~s) "
-      "than the configured one (~s)",
+      "Erlang distribution running with another node name (~ts) "
+      "than the configured one (~ts)",
       [Unexpected, Node]);
 format_error({bad_config_entry_decoder, missing_passphrase}) ->
     rabbit_misc:format(
@@ -53,7 +53,7 @@ format_error({bad_config_entry_decoder, missing_passphrase}) ->
       "`config_entry_decoder`", []);
 format_error({config_decryption_error, {key, Key}, _Msg}) ->
     rabbit_misc:format(
-      "Error while decrypting key '~p'. Please check encrypted value, "
+      "Error while decrypting key '~tp'. Please check encrypted value, "
       "passphrase, and encryption configuration~n",
       [Key]);
 format_error({error, {timeout_waiting_for_tables, AllNodes, _}}) ->
@@ -72,26 +72,26 @@ format_error({error, {timeout_waiting_for_tables, AllNodes, _}}) ->
                  " are timing out.~n" ++ Suffix, []),
                []};
         Ns -> {rabbit_misc:format(
-                 "Timeout contacting cluster nodes: ~p.~n" ++ Suffix,
+                 "Timeout contacting cluster nodes: ~tp.~n" ++ Suffix,
                  [Ns]),
                Ns}
     end,
     Message ++ "\n" ++ rabbit_nodes_common:diagnostics(Nodes);
 format_error({error, {cannot_log_to_file, unknown, Reason}}) ->
     rabbit_misc:format(
-      "failed to initialised logger: ~p~n",
+      "failed to initialised logger: ~tp~n",
       [Reason]);
 format_error({error, {cannot_log_to_file, LogFile,
                       {cannot_create_parent_dirs, _, Reason}}}) ->
     rabbit_misc:format(
-      "failed to create parent directory for log file at '~s', reason: ~s~n",
+      "failed to create parent directory for log file at '~ts', reason: ~ts~n",
       [LogFile, file:format_error(Reason)]);
 format_error({error, {cannot_log_to_file, LogFile, Reason}}) ->
     rabbit_misc:format(
-      "failed to open log file at '~s', reason: ~s",
+      "failed to open log file at '~ts', reason: ~ts",
       [LogFile, file:format_error(Reason)]);
 format_error(Error) ->
-    rabbit_misc:format("Error during startup: ~p", [Error]).
+    rabbit_misc:format("Error during startup: ~tp", [Error]).
 
 log_exception(Class, Exception, Stacktrace) ->
     Message = format_exception(Class, Exception, Stacktrace),
@@ -103,7 +103,7 @@ format_exception(Class, Exception, Stacktrace) ->
                               undefined when is_list(ArgListOrArity) ->
                                   io_lib:format(
                                     "    ~ts:~ts/~b~n"
-                                    "        args: ~p",
+                                    "        args: ~tp",
                                     [Mod, Fun, length(ArgListOrArity),
                                      ArgListOrArity]);
                               undefined when is_integer(ArgListOrArity) ->
@@ -113,7 +113,7 @@ format_exception(Class, Exception, Stacktrace) ->
                               Line when is_list(ArgListOrArity) ->
                                   io_lib:format(
                                     "    ~ts:~ts/~b, line ~b~n"
-                                    "        args: ~p",
+                                    "        args: ~tp",
                                     [Mod, Fun, length(ArgListOrArity), Line,
                                      ArgListOrArity]);
                               Line when is_integer(ArgListOrArity) ->
@@ -125,7 +125,7 @@ format_exception(Class, Exception, Stacktrace) ->
                       || {Mod, Fun, ArgListOrArity, Props} <- Stacktrace],
     ExceptionStr = io_lib:format("~ts:~0p", [Class, Exception]),
     rabbit_misc:format(
-      "Exception during startup:~n~n~s~n~n~s",
+      "Exception during startup:~n~n~ts~n~n~ts",
       [ExceptionStr, string:join(StacktraceStrs, "\n")]).
 
 log_message(Message) ->
@@ -136,11 +136,11 @@ log_message(Message) ->
               [$\n],
               all),
     ?LOG_ERROR(
-       "~s", [string:join(Lines, "\n")],
+       "~ts", [string:join(Lines, "\n")],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     lists:foreach(
       fun(Line) ->
-              io:format(standard_error, "~s~n", [Line])
+              io:format(standard_error, "~ts~n", [Line])
       end, Lines),
     timer:sleep(1000),
     ok.

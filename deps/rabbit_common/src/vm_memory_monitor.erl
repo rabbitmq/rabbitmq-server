@@ -91,7 +91,7 @@ get_total_memory() ->
                 {error, parse_error} ->
                     rabbit_log:warning(
                       "The override value for the total memmory available is "
-                      "not a valid value: ~p, getting total from the system.",
+                      "not a valid value: ~tp, getting total from the system.",
                       [Value]),
                     get_total_memory_from_os()
             end;
@@ -164,7 +164,7 @@ get_memory_calculation_strategy() ->
         rss -> rss;
         UnsupportedValue ->
             rabbit_log:warning(
-              "Unsupported value '~p' for vm_memory_calculation_strategy. "
+              "Unsupported value '~tp' for vm_memory_calculation_strategy. "
               "Supported values: (allocated|erlang|legacy|rss). "
               "Defaulting to 'rss'",
               [UnsupportedValue]
@@ -252,7 +252,7 @@ get_cached_process_memory_and_limit() ->
     try
         gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity)
     catch exit:{noproc, Error} ->
-        rabbit_log:warning("Memory monitor process not yet started: ~p", [Error]),
+        rabbit_log:warning("Memory monitor process not yet started: ~tp", [Error]),
         ProcessMemory = get_process_memory_uncached(),
         {ProcessMemory, infinity}
     end.
@@ -272,7 +272,7 @@ init_state_by_os(State = #state{os_type = undefined}) ->
     init_state_by_os(State#state{os_type = OsType, os_pid = OsPid});
 init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
     PageSize = get_linux_pagesize(),
-    ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
+    ProcFile = io_lib:format("/proc/~ts/statm", [OsPid]),
     State0#state{page_size = PageSize, proc_file = ProcFile};
 init_state_by_os(State) ->
     State.
@@ -307,7 +307,7 @@ get_total_memory_from_os() ->
         get_total_memory(os:type())
     catch _:Error:Stacktrace ->
             rabbit_log:warning(
-              "Failed to get total system memory: ~n~p~n~p",
+              "Failed to get total system memory: ~n~tp~n~tp",
               [Error, Stacktrace]),
             unknown
     end.
@@ -331,8 +331,8 @@ set_mem_limits(State, MemLimit) ->
                     #state { total_memory = undefined,
                              memory_limit = undefined } ->
                         rabbit_log:warning(
-                          "Unknown total memory size for your OS ~p. "
-                          "Assuming memory size is ~p MiB (~p bytes).",
+                          "Unknown total memory size for your OS ~tp. "
+                          "Assuming memory size is ~tp MiB (~tp bytes).",
                           [os:type(),
                            trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MiB),
                            ?MEMORY_SIZE_FOR_UNKNOWN_OS]);
@@ -346,7 +346,7 @@ set_mem_limits(State, MemLimit) ->
         case get_vm_limit() of
             Limit when Limit < TotalMemory ->
                 rabbit_log:warning(
-                  "Only ~p MiB (~p bytes) of ~p MiB (~p bytes) memory usable due to "
+                  "Only ~tp MiB (~tp bytes) of ~tp MiB (~tp bytes) memory usable due to "
                   "limited address space.~n"
                   "Crashes due to memory exhaustion are possible - see~n"
                   "https://www.rabbitmq.com/memory.html#address-space",
@@ -358,8 +358,8 @@ set_mem_limits(State, MemLimit) ->
         end,
     MemLim = interpret_limit(parse_mem_limit(MemLimit), UsableMemory),
     rabbit_log:info(
-        "Memory high watermark set to ~p MiB (~p bytes)"
-        " of ~p MiB (~p bytes) total",
+        "Memory high watermark set to ~tp MiB (~tp bytes)"
+        " of ~tp MiB (~tp bytes) total",
         [trunc(MemLim/?ONE_MiB), MemLim,
          trunc(TotalMemory/?ONE_MiB), TotalMemory]
     ),
@@ -381,7 +381,7 @@ parse_mem_limit({absolute, Limit}) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Limit) of
         {ok, ParsedLimit} -> {absolute, ParsedLimit};
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
+            rabbit_log:error("Unable to parse vm_memory_high_watermark value ~tp", [Limit]),
             ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
     end;
 parse_mem_limit({relative, MemLimit}) ->
@@ -392,13 +392,13 @@ parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit =< ?MAX_VM_MEMORY_HI
     MemLimit;
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit > ?MAX_VM_MEMORY_HIGH_WATERMARK ->
     rabbit_log:warning(
-      "Memory high watermark of ~p is above the allowed maximum, falling back to ~p",
+      "Memory high watermark of ~tp is above the allowed maximum, falling back to ~tp",
       [MemLimit, ?MAX_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?MAX_VM_MEMORY_HIGH_WATERMARK;
 parse_mem_limit(MemLimit) ->
     rabbit_log:warning(
-      "Memory high watermark of ~p is invalid, defaulting to ~p",
+      "Memory high watermark of ~tp is invalid, defaulting to ~tp",
       [MemLimit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
@@ -420,7 +420,7 @@ internal_update(State0 = #state{memory_limit = MemLimit,
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
-      "vm_memory_high_watermark ~p. Memory used:~p allowed:~p",
+      "vm_memory_high_watermark ~tp. Memory used:~tp allowed:~tp",
       [AlarmState, MemUsed, MemLimit]).
 
 %% According to https://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
@@ -459,7 +459,7 @@ cmd(Command, ThrowIfMissing) ->
 
 default_linux_pagesize(CmdOutput) ->
     rabbit_log:warning(
-      "Failed to get memory page size, using 4096. Reason: ~s",
+      "Failed to get memory page size, using 4096. Reason: ~ts",
       [CmdOutput]),
     4096.
 
@@ -583,7 +583,7 @@ sysctl(Def) ->
         list_to_integer(R)
     catch
         error:badarg ->
-            rabbit_log:debug("Failed to get total system memory: ~p", [R]),
+            rabbit_log:debug("Failed to get total system memory: ~tp", [R]),
             unknown
     end.
 

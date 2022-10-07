@@ -344,7 +344,7 @@ check_values_from_reachable_remote_node(Config) ->
            rabbit,
            [{vsn, "fake-rabbit"}]},
     AppFile = filename:join(RabbitEbinDir, "rabbit.app"),
-    AppContent = io_lib:format("~p.~n", [App]),
+    AppContent = io_lib:format("~tp.~n", [App]),
     ok = file:write_file(AppFile, AppContent),
 
     %% Start a fake RabbitMQ node.
@@ -359,13 +359,13 @@ check_values_from_reachable_remote_node(Config) ->
             "-pa", filename:dirname(code:which(rabbit)),
             "-pa", RabbitEbinDir,
             "-mnesia", "dir",
-            rabbit_misc:format("~p", [MnesiaDir]),
+            rabbit_misc:format("~tp", [MnesiaDir]),
             "-rabbit", "feature_flags_file",
-            rabbit_misc:format("~p", [FeatureFlagsFile]),
+            rabbit_misc:format("~tp", [FeatureFlagsFile]),
             "-rabbit", "plugins_dir",
-            rabbit_misc:format("~p", [PluginsDir]),
+            rabbit_misc:format("~tp", [PluginsDir]),
             "-rabbit", "enabled_plugins_file",
-            rabbit_misc:format("~p", [EnabledPluginsFile]),
+            rabbit_misc:format("~tp", [EnabledPluginsFile]),
             "-eval",
             "ok = application:load(mnesia),"
             "ok = application:load(rabbit)."],
@@ -377,7 +377,7 @@ check_values_from_reachable_remote_node(Config) ->
                     exit_status,
                     stderr_to_stdout],
     ct:pal(
-      "Starting fake RabbitMQ node with the following settings:~n~p",
+      "Starting fake RabbitMQ node with the following settings:~n~tp",
       [PortSettings]),
     Pid = spawn_link(
             fun() ->
@@ -494,7 +494,7 @@ consume_stdout(Port, Nodename) ->
         {Port, {exit_status, X}} ->
             ?assertEqual(0, X);
         {Port, {data, Out}} ->
-            ct:pal("stdout: ~p", [Out]),
+            ct:pal("stdout: ~tp", [Out]),
             consume_stdout(Port, Nodename)
     end.
 
@@ -658,11 +658,11 @@ check_context_to_app_env_vars(_) ->
 check_context_to_code_path(Config) ->
     PrivDir = ?config(priv_dir, Config),
     PluginsDir1 = filename:join(
-                     PrivDir, rabbit_misc:format("~s-1", [?FUNCTION_NAME])),
+                     PrivDir, rabbit_misc:format("~ts-1", [?FUNCTION_NAME])),
     MyPlugin1Dir = filename:join(PluginsDir1, "my_plugin1"),
     MyPlugin1EbinDir = filename:join(MyPlugin1Dir, "ebin"),
     PluginsDir2 = filename:join(
-                     PrivDir, rabbit_misc:format("~s-2", [?FUNCTION_NAME])),
+                     PrivDir, rabbit_misc:format("~ts-2", [?FUNCTION_NAME])),
     MyPlugin2Dir = filename:join(PluginsDir2, "my_plugin2"),
     MyPlugin2EbinDir = filename:join(MyPlugin2Dir, "ebin"),
 
@@ -809,8 +809,8 @@ check_RABBITMQ_ENABLED_PLUGINS(_) ->
     check_prefixed_variable("RABBITMQ_ENABLED_PLUGINS",
                             enabled_plugins,
                             '_',
-                            rabbit_misc:format("~s,~s", Value1), Value1,
-                            rabbit_misc:format("~s,~s", Value2), Value2).
+                            rabbit_misc:format("~ts,~ts", Value1), Value1,
+                            rabbit_misc:format("~ts,~ts", Value2), Value2).
 
 check_RABBITMQ_ENABLED_PLUGINS_FILE(_) ->
     Value1 = random_string(),

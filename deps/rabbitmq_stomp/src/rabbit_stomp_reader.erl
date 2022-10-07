@@ -61,7 +61,7 @@ init([SupHelperPid, Ref, Configuration]) ->
             ProcState = rabbit_stomp_processor:initial_state(Configuration,
                                                              ProcInitArgs),
 
-            rabbit_log_connection:info("accepting STOMP connection ~p (~s)",
+            rabbit_log_connection:info("accepting STOMP connection ~tp (~ts)",
                 [self(), ConnStr]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
@@ -299,7 +299,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 log_reason({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: connection closed",
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: connection closed",
         [ConnStr]);
 
 
@@ -320,46 +320,46 @@ log_reason({network_error,
              {tls_alert, Alert}}, ConnStr}, _State) ->
     log_tls_alert(Alert, ConnStr);
 log_reason({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: ~p",
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: ~tp",
         [ConnStr, Reason]);
 
 log_reason({network_error, Reason, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected network error on ~s: ~p",
+    rabbit_log_connection:error("STOMP detected network error on ~ts: ~tp",
         [ConnStr, Reason]);
 
 log_reason({network_error, Reason}, _State) ->
-    rabbit_log_connection:error("STOMP detected network error: ~p", [Reason]);
+    rabbit_log_connection:error("STOMP detected network error: ~tp", [Reason]);
 
 log_reason({shutdown, client_heartbeat_timeout},
            #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
     rabbit_log_connection:warning("STOMP detected missed client heartbeat(s) "
-                                  "on connection ~s, closing it", [AdapterName]);
+                                  "on connection ~ts, closing it", [AdapterName]);
 
 log_reason({shutdown, {server_initiated_close, Reason}},
            #reader_state{conn_name = ConnName}) ->
-    rabbit_log_connection:info("closing STOMP connection ~p (~s), reason: ~s",
+    rabbit_log_connection:info("closing STOMP connection ~tp (~ts), reason: ~ts",
                                [self(), ConnName, Reason]);
 
 log_reason(normal, #reader_state{conn_name  = ConnName}) ->
-    rabbit_log_connection:info("closing STOMP connection ~p (~s)", [self(), ConnName]);
+    rabbit_log_connection:info("closing STOMP connection ~tp (~ts)", [self(), ConnName]);
 
 log_reason(shutdown, undefined) ->
     rabbit_log_connection:error("closing STOMP connection that never completed connection handshake (negotiation)");
 
 log_reason(Reason, #reader_state{processor_state = ProcState}) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
-    rabbit_log_connection:warning("STOMP connection ~s terminated"
-                                  " with reason ~p, closing it", [AdapterName, Reason]).
+    rabbit_log_connection:warning("STOMP connection ~ts terminated"
+                                  " with reason ~tp, closing it", [AdapterName, Reason]).
 
 log_tls_alert(handshake_failure, ConnStr) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: handshake failure",
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: handshake failure",
         [ConnStr]);
 log_tls_alert(unknown_ca, ConnStr) ->
-    rabbit_log_connection:error("STOMP detected TLS certificate verification error on ~s: alert 'unknown CA'",
+    rabbit_log_connection:error("STOMP detected TLS certificate verification error on ~ts: alert 'unknown CA'",
         [ConnStr]);
 log_tls_alert(Alert, ConnStr) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: alert ~s",
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~ts: alert ~ts",
         [ConnStr, Alert]).
 
 

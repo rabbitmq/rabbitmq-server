@@ -159,7 +159,7 @@ create_stream(Q0) ->
                 Error ->
 
                     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-                    {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
+                    {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
                      [rabbit_misc:rs(QName), node(), Error]}
             end;
         {existing, Q} ->
@@ -177,7 +177,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
         {ok, Reply} ->
             Reply;
         Error ->
-            {protocol_error, internal_error, "Cannot delete queue '~s' on node '~s': ~255p ",
+            {protocol_error, internal_error, "Cannot delete queue '~ts' on node '~ts': ~255p ",
              [rabbit_misc:rs(amqqueue:get_name(Q)), node(), Error]}
     end.
 
@@ -207,12 +207,12 @@ stat(Q) ->
 
 consume(Q, #{prefetch_count := 0}, _)
   when ?amqqueue_is_stream(Q) ->
-    {protocol_error, precondition_failed, "consumer prefetch count is not set for '~s'",
+    {protocol_error, precondition_failed, "consumer prefetch count is not set for '~ts'",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{no_ack := true}, _)
   when ?amqqueue_is_stream(Q) ->
     {protocol_error, not_implemented,
-     "automatic acknowledgement not supported by stream queues ~s",
+     "automatic acknowledgement not supported by stream queues ~ts",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
@@ -406,7 +406,7 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
 
 -spec dequeue(_, _, _, client()) -> no_return().
 dequeue(_, _, _, #stream_client{name = Name}) ->
-    {protocol_error, not_implemented, "basic.get not supported by stream queues ~s",
+    {protocol_error, not_implemented, "basic.get not supported by stream queues ~ts",
      [rabbit_misc:rs(Name)]}.
 
 handle_event({osiris_written, From, _WriterId, Corrs},
@@ -451,15 +451,15 @@ handle_event({stream_local_member_change, Pid}, #stream_client{local_pid = P} = 
     {ok, State, []};
 handle_event({stream_local_member_change, Pid}, State = #stream_client{name = QName,
                                                                        readers = Readers0}) ->
-    rabbit_log:debug("Local member change event for ~p", [QName]),
+    rabbit_log:debug("Local member change event for ~tp", [QName]),
     Readers1 = maps:fold(fun(T, #stream{log = Log0} = S0, Acc) ->
                                  Offset = osiris_log:next_offset(Log0),
                                  osiris_log:close(Log0),
                                  CounterSpec = {{?MODULE, QName, self()}, []},
-                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~p at offset ~p", [T, Offset]),
+                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~tp at offset ~tp", [T, Offset]),
                                  {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec),
                                  NextOffset = osiris_log:next_offset(Log1) - 1,
-                                 rabbit_log:debug("Registering offset listener at offset ~p", [NextOffset]),
+                                 rabbit_log:debug("Registering offset listener at offset ~tp", [NextOffset]),
                                  osiris:register_offset_listener(Pid, NextOffset),
                                  S1 = S0#stream{listening_offset = NextOffset,
                                                 log = Log1},
@@ -498,7 +498,7 @@ settle(complete, CTag, MsgIds, #stream_client{readers = Readers0,
     {State#stream_client{readers = Readers}, [{deliver, CTag, true, Msgs}]};
 settle(_, _, _, #stream_client{name = Name}) ->
     {protocol_error, not_implemented,
-     "basic.nack and basic.reject not supported by stream queues ~s",
+     "basic.nack and basic.reject not supported by stream queues ~ts",
      [rabbit_misc:rs(Name)]}.
 
 info(Q, all_keys) ->
@@ -750,7 +750,7 @@ init(Q) when ?is_amqqueue(Q) ->
         {ok, stream_not_found, _} ->
             {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
-            rabbit_log:warning("Failed to start stream client ~p: coordinator unavailable",
+            rabbit_log:warning("Failed to start stream client ~tp: coordinator unavailable",
                                [rabbit_misc:rs(QName)]),
             E
     end.
@@ -901,7 +901,7 @@ check_queue_exists_in_local_node(Q) ->
             ok;
         _ ->
             {protocol_error, precondition_failed,
-             "queue '~s' does not have a replica on the local node",
+             "queue '~ts' does not have a replica on the local node",
              [rabbit_misc:rs(amqqueue:get_name(Q))]}
     end.
 

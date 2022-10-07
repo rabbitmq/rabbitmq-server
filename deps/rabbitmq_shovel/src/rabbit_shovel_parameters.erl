@@ -41,7 +41,7 @@ validate(_VHost, <<"shovel">>, Name, Def0, User) ->
     ++ rabbit_parameter_validation:proplist(Name, Validations, Def);
 
 validate(_VHost, _Component, Name, _Term, _User) ->
-    {error, "name not recognised: ~p", [Name]}.
+    {error, "name not recognised: ~tp", [Name]}.
 
 pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
                            {undefined, undefined} -> zero;
@@ -180,7 +180,7 @@ validate_uri(Name, Term, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, P}    -> validate_params_user(P, User);
-                  {error, E} -> {error, "\"~s\" not a valid URI: ~p", [Term, E]}
+                  {error, E} -> {error, "\"~ts\" not a valid URI: ~tp", [Term, E]}
               end;
         E  -> E
     end;
@@ -202,13 +202,13 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
     VHostAccess = case catch rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
                       ok -> ok;
                       NotOK ->
-                          rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]),
+                          rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]),
                           NotOK
                   end,
     case rabbit_vhost:exists(VHost) andalso VHostAccess of
         ok -> ok;
         _ ->
-            {error, "user \"~s\" may not connect to vhost \"~s\"", [Username, VHost]}
+            {error, "user \"~ts\" may not connect to vhost \"~ts\"", [Username, VHost]}
     end;
 validate_params_user(#amqp_params_network{}, _User) ->
     ok.
@@ -217,8 +217,8 @@ validate_delete_after(_Name, <<"never">>)          -> ok;
 validate_delete_after(_Name, <<"queue-length">>)   -> ok;
 validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
-    {error, "~s should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
-     "~p", [Name, Term]}.
+    {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
+     "~tp", [Name, Term]}.
 
 validate_queue_args(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),

@@ -103,7 +103,7 @@ init_with_lock(0, _, RunPeerDiscovery) ->
     end;
 init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
     LockResult = rabbit_peer_discovery:lock(),
-    rabbit_log:debug("rabbit_peer_discovery:lock returned ~p", [LockResult]),
+    rabbit_log:debug("rabbit_peer_discovery:lock returned ~tp", [LockResult]),
     case LockResult of
         not_supported ->
             RunPeerDiscovery(),
@@ -137,7 +137,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {error, Reason} ->
                 RetriesLeft1 = RetriesLeft - 1,
-                rabbit_log:error("Peer discovery returned an error: ~p. Will retry after a delay of ~b ms, ~b retries left...",
+                rabbit_log:error("Peer discovery returned an error: ~tp. Will retry after a delay of ~b ms, ~b retries left...",
                                 [Reason, DelayInterval, RetriesLeft1]),
                 timer:sleep(DelayInterval),
                 run_peer_discovery_with_retries(RetriesLeft1, DelayInterval);
@@ -153,7 +153,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
                 e(invalid_cluster_nodes_conf)
         end,
     DiscoveredNodes = lists:usort(DiscoveredNodes0),
-    rabbit_log:info("All discovered existing cluster peers: ~s",
+    rabbit_log:info("All discovered existing cluster peers: ~ts",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
     Peers = nodes_excl_me(DiscoveredNodes),
     case Peers of
@@ -163,7 +163,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
                             "Enabling debug logging might help troubleshoot."),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
-            rabbit_log:info("Peer nodes we can cluster with: ~s",
+            rabbit_log:info("Peer nodes we can cluster with: ~ts",
                 [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
             join_discovered_peers(Peers, NodeType)
     end.
@@ -177,14 +177,14 @@ join_discovered_peers(TryNodes, NodeType) ->
 
 join_discovered_peers_with_retries(TryNodes, _NodeType, 0, _DelayInterval) ->
     rabbit_log:info(
-              "Could not successfully contact any node of: ~s (as in Erlang distribution). "
+              "Could not successfully contact any node of: ~ts (as in Erlang distribution). "
                "Starting as a blank standalone node...",
                 [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
 join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval) ->
     case find_reachable_peer_to_cluster_with(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~s' selected for auto-clustering", [Node]),
+            rabbit_log:info("Node '~ts' selected for auto-clustering", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
             rabbit_node_monitor:notify_joined_cluster();
@@ -234,7 +234,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                     reset_gracefully(),
 
                     %% Join the cluster
-                    rabbit_log:info("Clustering with ~p as ~p node",
+                    rabbit_log:info("Clustering with ~tp as ~tp node",
                                     [ClusterNodes, NodeType]),
                     ok = init_db_with_mnesia(ClusterNodes, NodeType,
                                              true, true, _Retry = true),
@@ -248,7 +248,7 @@ join_cluster(DiscoveryNode, NodeType) ->
             %% do we think so ourselves?
             case are_we_clustered_with(DiscoveryNode) of
                 true ->
-                    rabbit_log:info("Asked to join a cluster but already a member of it: ~p", [ClusterNodes]),
+                    rabbit_log:info("Asked to join a cluster but already a member of it: ~tp", [ClusterNodes]),
                     {ok, already_member};
                 false ->
                     Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
@@ -332,7 +332,7 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             _ = mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
-            rabbit_log:info("Updating cluster nodes from ~p",
+            rabbit_log:info("Updating cluster nodes from ~tp",
                             [DiscoveryNode]),
             init_db_with_mnesia(AllNodes, node_type(), true, true, _Retry = false);
         false ->
@@ -363,7 +363,7 @@ forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
         {true,   true} -> e(online_node_offline_flag);
         {false, false} -> e(offline_node_no_offline_flag);
         {false,  true} -> rabbit_log:info(
-                            "Removing node ~p from cluster", [Node]),
+                            "Removing node ~tp from cluster", [Node]),
                           case remove_node_if_mnesia_running(Node) of
                               ok when EmitNodeDeletedEvent ->
                                   rabbit_event:notify(node_deleted, [{node, Node}]),
@@ -546,7 +546,7 @@ dir() -> mnesia:system_info(directory).
 %% file.
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     NodeIsVirgin = is_virgin_node(),
-    rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~p", [NodeIsVirgin]),
+    rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -909,7 +909,7 @@ leave_cluster(Node) ->
     end.
 
 wait_for(Condition) ->
-    rabbit_log:info("Waiting for ~p...", [Condition]),
+    rabbit_log:info("Waiting for ~tp...", [Condition]),
     timer:sleep(1000).
 
 start_mnesia(CheckConsistency) ->
@@ -974,8 +974,8 @@ check_mnesia_consistency(Node, ProtocolVersion) ->
                 LocalVersion = mnesia:system_info(protocol_version),
                 {error, {inconsistent_cluster,
                          rabbit_misc:format("Mnesia protocol negotiation failed."
-                                            " Local version: ~p."
-                                            " Remote version ~p",
+                                            " Local version: ~tp."
+                                            " Remote version ~tp",
                                             [LocalVersion, ProtocolVersion])}}
         end
     end).
@@ -1039,10 +1039,10 @@ is_virgin_node() ->
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
-            rabbit_log:debug("Files and directories found in node's data directory: ~s, of them to be ignored: ~s",
+            rabbit_log:debug("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
             List = List0 -- IgnoredFiles,
-            rabbit_log:debug("Files and directories found in node's data directory sans ignored ones: ~s", [string:join(lists:usort(List), ", ")]),
+            rabbit_log:debug("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
             List =:= []
     end.
 
@@ -1051,20 +1051,20 @@ find_reachable_peer_to_cluster_with([]) ->
 find_reachable_peer_to_cluster_with([Node | Nodes]) ->
     Fail = fun (Fmt, Args) ->
                    rabbit_log:warning(
-                     "Could not auto-cluster with node ~s: " ++ Fmt, [Node | Args]),
+                     "Could not auto-cluster with node ~ts: " ++ Fmt, [Node | Args]),
                    find_reachable_peer_to_cluster_with(Nodes)
            end,
     case remote_node_info(Node) of
         {badrpc, _} = Reason ->
-            Fail("~p", [Reason]);
+            Fail("~tp", [Reason]);
         %% old delegate hash check
         {_OTP, RMQ, Hash, _} when is_binary(Hash) ->
-            Fail("version ~s", [RMQ]);
+            Fail("version ~ts", [RMQ]);
         {_OTP, _RMQ, _Protocol, {error, _} = E} ->
-            Fail("~p", [E]);
+            Fail("~tp", [E]);
         {OTP, RMQ, Protocol, _} ->
             case check_consistency(Node, OTP, RMQ, Protocol) of
-                {error, _} -> Fail("versions ~p",
+                {error, _} -> Fail("versions ~tp",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}
             end
@@ -1089,11 +1089,11 @@ e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
 error_description({invalid_cluster_node_names, BadNames}) ->
     "In the 'cluster_nodes' configuration key, the following node names "
-        "are invalid: " ++ lists:flatten(io_lib:format("~p", [BadNames]));
+        "are invalid: " ++ lists:flatten(io_lib:format("~tp", [BadNames]));
 error_description({invalid_cluster_node_type, BadType}) ->
     "In the 'cluster_nodes' configuration key, the node type is invalid "
         "(expected 'disc' or 'ram'): " ++
-        lists:flatten(io_lib:format("~p", [BadType]));
+        lists:flatten(io_lib:format("~tp", [BadType]));
 error_description(invalid_cluster_nodes_conf) ->
     "The 'cluster_nodes' configuration key is invalid, it must be of the "
         "form {[Nodes], Type}, where Nodes is a list of node names and "
@@ -1128,6 +1128,6 @@ error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
 
 format_inconsistent_cluster_message(Thinker, Dissident) ->
-    rabbit_misc:format("Node ~p thinks it's clustered "
-                       "with node ~p, but ~p disagrees",
+    rabbit_misc:format("Node ~tp thinks it's clustered "
+                       "with node ~tp, but ~tp disagrees",
                        [Thinker, Dissident, Dissident]).

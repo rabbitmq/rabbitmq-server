@@ -217,8 +217,8 @@ check_version_consistency(This, Remote, Name, Comp) ->
 
 version_error(Name, This, Remote) ->
     {error, {inconsistent_cluster,
-             rabbit_misc:format("~s version mismatch: local node is ~s, "
-                                "remote node ~s", [Name, This, Remote])}}.
+             rabbit_misc:format("~ts version mismatch: local node is ~ts, "
+                                "remote node ~ts", [Name, This, Remote])}}.
 
 -spec check_otp_consistency
         (string()) -> rabbit_types:ok_or_error(any()).

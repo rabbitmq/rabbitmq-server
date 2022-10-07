@@ -88,12 +88,12 @@ attach(#'v1_0.attach'{name = Name,
                        role = ?SEND_ROLE}], OutgoingLink};
                 Fail ->
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                   "Consume failed: ~p", [Fail])
+                                   "Consume failed: ~tp", [Fail])
             end;
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                               "Attach rejected: ~p", [Reason])
+                               "Attach rejected: ~tp", [Reason])
     end.
 
 credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
@@ -208,7 +208,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                             batchable = false},
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
-    ?DEBUG("Outbound content:~n  ~p",
+    ?DEBUG("Outbound content:~n  ~tp",
            [[amqp10_framing:pprint(Section) ||
                 Section <- amqp10_framing:decode_bin(
                              iolist_to_binary(Msg1_0))]]),
@@ -224,7 +224,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
 
 encode_frames(_T, _Msg, MaxContentLen, _Transfers) when MaxContentLen =< 0 ->
     protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
-                   "Frame size is too small by ~p bytes", [-MaxContentLen]);
+                   "Frame size is too small by ~tp bytes", [-MaxContentLen]);
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
         true  ->

@@ -255,7 +255,7 @@ parse_mem_limit_relative_exactly_max(_Config) ->
     case MemLimit of
         ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
         _ ->    ct:fail(
-                    "Expected memory limit to be ~p, but it was ~p",
+                    "Expected memory limit to be ~tp, but it was ~tp",
                     [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
                 )
     end.
@@ -265,7 +265,7 @@ parse_mem_relative_above_max(_Config) ->
     case MemLimit of
         ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
         _ ->    ct:fail(
-                    "Expected memory limit to be ~p, but it was ~p",
+                    "Expected memory limit to be ~tp, but it was ~tp",
                     [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
                 )
     end.
@@ -275,7 +275,7 @@ parse_mem_relative_integer(_Config) ->
     case MemLimit of
         ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
         _ ->    ct:fail(
-                    "Expected memory limit to be ~p, but it was ~p",
+                    "Expected memory limit to be ~tp, but it was ~tp",
                     [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
                 )
     end.
@@ -285,7 +285,7 @@ parse_mem_relative_invalid(_Config) ->
     case MemLimit of
         ?DEFAULT_VM_MEMORY_HIGH_WATERMARK -> ok;
         _ ->    ct:fail(
-                    "Expected memory limit to be ~p, but it was ~p",
+                    "Expected memory limit to be ~tp, but it was ~tp",
                     [?DEFAULT_VM_MEMORY_HIGH_WATERMARK, MemLimit]
                 )
     end.
@@ -295,8 +295,8 @@ platform_and_version(_Config) ->
     Result = rabbit_misc:platform_and_version(),
     RegExp = "^Erlang/OTP\s" ++ MajorVersion,
     case re:run(Result, RegExp) of
-        nomatch -> ct:fail("~p does not match ~p", [Result, RegExp]);
-        {error, ErrType} -> ct:fail("~p", [ErrType]);
+        nomatch -> ct:fail("~tp does not match ~tp", [Result, RegExp]);
+        {error, ErrType} -> ct:fail("~tp", [ErrType]);
         _ -> ok
     end.
 

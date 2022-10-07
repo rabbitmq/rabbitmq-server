@@ -396,7 +396,7 @@ assert_percentage(Breakdown0, ExtraMargin) ->
             ok
     end.
 
-println(What) -> io:format("~p~n", [What]).
+println(What) -> io:format("~tp~n", [What]).
 
 auth_test(Config) ->
     http_put(Config, "/users/user", [{password, <<"user">>},
@@ -1825,7 +1825,7 @@ definitions_password_test(Config) ->
                    tags              => [<<"management">>]},
     http_post(Config, "/definitions", Config35, {group, '2xx'}),
     Definitions35 = http_get(Config, "/definitions", ?OK),
-    ct:pal("Definitions35: ~p", [Definitions35]),
+    ct:pal("Definitions35: ~tp", [Definitions35]),
     Users35 = maps:get(users, Definitions35),
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
 
@@ -3015,9 +3015,9 @@ extensions_test(Config) ->
 cors_test(Config) ->
     %% With CORS disabled. No header should be received.
     R = req(Config, get, "/overview", [auth_header("guest", "guest")]),
-    io:format("CORS test R: ~p~n", [R]),
+    io:format("CORS test R: ~tp~n", [R]),
     {ok, {_, HdNoCORS, _}} = R,
-    io:format("CORS test HdNoCORS: ~p~n", [HdNoCORS]),
+    io:format("CORS test HdNoCORS: ~tp~n", [HdNoCORS]),
     false = lists:keymember("access-control-allow-origin", 1, HdNoCORS),
     %% The Vary header should include "Origin" regardless of CORS configuration.
     {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
@@ -3064,7 +3064,7 @@ check_cors_all_endpoints(Config) ->
     Endpoints = get_all_http_endpoints(),
 
     [begin
-        ct:pal("Options for ~p~n", [EP]),
+        ct:pal("Options for ~tp~n", [EP]),
         {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
     end
      || EP <- Endpoints].

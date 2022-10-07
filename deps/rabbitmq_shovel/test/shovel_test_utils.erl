@@ -15,7 +15,7 @@
 make_uri(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    list_to_binary(lists:flatten(io_lib:format("amqp://~s:~b",
+    list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~b",
                                                [Hostname, Port]))).
 set_param(Config, Name, Value) ->
     set_param_nowait(Config, Name, Value),

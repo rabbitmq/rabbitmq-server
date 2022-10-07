@@ -17,7 +17,7 @@ init(Req = #{method := <<"GET">>}, Users) ->
 authenticate(Username, Password, Users) ->
    case maps:get(Username, Users, undefined) of
        {MatchingPassword, Tags} when Password =:= MatchingPassword ->
-           StringTags = lists:map(fun(T) -> io_lib:format("~s", [T]) end, Tags),
+           StringTags = lists:map(fun(T) -> io_lib:format("~ts", [T]) end, Tags),
            <<"allow ", (list_to_binary(string:join(StringTags, " ")))/binary>>;
         {_OtherPassword, _} ->
             <<"deny">>;

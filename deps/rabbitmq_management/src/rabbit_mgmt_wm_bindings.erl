@@ -84,14 +84,14 @@ accept_content(ReqData0, {_Mode, Context}) ->
             {source, Source},
             {routing_key, Key},
             {arguments, Args}],
-           "Binding error: ~s", ReqData, Context) of
+           "Binding error: ~ts", ReqData, Context) of
         {stop, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
             From = binary_to_list(cowboy_req:path(ReqData)),
             Prefix = rabbit_mgmt_util:get_path_prefix(),
             BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
-            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~s/e/~s/~s/~s/~s",
+            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
                                                      [VHost, Source, DestType,
                                                       Dest, BindingProps]),
             To = Prefix ++ binary_to_list(UrlWithBindings),

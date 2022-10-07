@@ -66,7 +66,7 @@ init_per_testcase(Testcase, Config) ->
             ClusterSize = ?config(rmq_nodes_count, Config),
             TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
             Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
             Config1 = rabbit_ct_helpers:set_config(Config, [
                                                             {rmq_nodename_suffix, Testcase},
                                                             {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},

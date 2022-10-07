@@ -253,7 +253,7 @@ settle(Disp = #'v1_0.disposition'{first   = First0,
                                           Map;
                                       {value, Entry} ->
                                           #outgoing_delivery{delivery_tag = DeliveryTag } = Entry,
-                                          ?DEBUG("Settling ~p with ~p", [Delivery, _Outcome]),
+                                          ?DEBUG("Settling ~tp with ~tp", [Delivery, _Outcome]),
                                           UpstreamAckFun(DeliveryTag),
                                           gb_trees:delete(Delivery, Map)
                                   end
@@ -322,8 +322,8 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
             case serial_compare(FlowNextIn, LocalNextOut) of
                 greater ->
                     protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-                                   "Remote incoming id (~p) leads "
-                                   "local outgoing id (~p)",
+                                   "Remote incoming id (~tp) leads "
+                                   "local outgoing id (~tp)",
                                    [FlowNextIn, LocalNextOut]);
                 equal ->
                     Session#session{
@@ -342,8 +342,8 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
                     Session#session{next_incoming_id = FlowNextOut};
                 {ok, true} ->
                     protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-                                   "Remote outgoing id (~p) not equal to "
-                                   "local incoming id (~p)",
+                                   "Remote outgoing id (~tp) not equal to "
+                                   "local incoming id (~tp)",
                                    [FlowNextOut, LocalNextIn])
             end
     end.

@@ -112,7 +112,7 @@ end_per_testcase(Testcase, Config) ->
 health_checks_test(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
     http_get(Config, "/health/checks/certificate-expiration/1/days", ?OK),
-    http_get(Config, io_lib:format("/health/checks/port-listener/~p", [Port]), ?OK),
+    http_get(Config, io_lib:format("/health/checks/port-listener/~tp", [Port]), ?OK),
     http_get(Config, "/health/checks/protocol-listener/http", ?OK),
     http_get(Config, "/health/checks/virtual-hosts", ?OK),
     http_get(Config, "/health/checks/node-is-mirror-sync-critical", ?OK),
@@ -140,7 +140,7 @@ alarms_test(Config) ->
     rabbit_ct_helpers:await_condition(
         fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
     ),
-    ct:pal("Alarms: ~p", [rabbit_ct_broker_helpers:get_alarms(Config, Server)]),
+    ct:pal("Alarms: ~tp", [rabbit_ct_broker_helpers:get_alarms(Config, Server)]),
 
     passed.
 
@@ -333,7 +333,7 @@ port_listener_test(Config) ->
     MQTT = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
 
     Path = fun(Port) ->
-                   lists:flatten(io_lib:format("/health/checks/port-listener/~p", [Port]))
+                   lists:flatten(io_lib:format("/health/checks/port-listener/~tp", [Port]))
            end,
 
     Check0 = http_get(Config, Path(AMQP), ?OK),

@@ -66,7 +66,7 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:direct_request(
             'queue.declare',
             fun rabbit_mgmt_format:format_accept_content/1,
-            [{queue, Name}], "Declare queue error: ~s", ReqData, Context);
+            [{queue, Name}], "Declare queue error: ~ts", ReqData, Context);
         {error, F, A} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
@@ -82,7 +82,7 @@ delete_resource(ReqData, Context) ->
       fun rabbit_mgmt_format:format_accept_content/1,
       [{queue, Name},
        {if_unused, IfUnused},
-       {if_empty, IfEmpty}], "Delete queue error: ~s", ReqData, Context).
+       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

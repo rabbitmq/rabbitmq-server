@@ -27,7 +27,7 @@ setup(#{feature_flags_file := FFFile}) ->
                     ok;
                 {error, Reason} ->
                     ?LOG_ERROR(
-                      "Failed to initialize feature flags registry: ~p",
+                      "Failed to initialize feature flags registry: ~tp",
                       [Reason],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({error, failed_to_initialize_feature_flags_registry})

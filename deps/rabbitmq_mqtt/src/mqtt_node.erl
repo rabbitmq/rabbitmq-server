@@ -51,14 +51,14 @@ start(Delay, AttemptsLeft) ->
                       %% This scenario does not guarantee single cluster formation but without knowing the list of members
                       %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
                       %% to achieve without having consensus around expected cluster members.
-                      rabbit_log:info("MQTT: will wait for ~p more ms for cluster members to join before triggering a Raft leader election", [Delay]),
+                      rabbit_log:info("MQTT: will wait for ~tp more ms for cluster members to join before triggering a Raft leader election", [Delay]),
                       timer:sleep(Delay),
                       start(Delay, AttemptsLeft - 1);
                   Peers ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
-                      rabbit_log:info("MQTT: discovered ~p cluster peers that support client ID tracking", [length(Peers)]),
+                      rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
                       start_server(),
                       join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)

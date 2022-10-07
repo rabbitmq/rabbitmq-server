@@ -289,7 +289,7 @@ opened(info, {'DOWN', MRef, _, _, _Info},
     ok = notify_closed(Config, shutdown),
     {stop, normal, State};
 opened(_EvtType, Frame, State) ->
-    logger:warning("Unexpected connection frame ~p when in state ~p ",
+    logger:warning("Unexpected connection frame ~tp when in state ~tp ",
                              [Frame, State]),
     {keep_state, State}.
 
@@ -372,7 +372,7 @@ send_open(#state{socket = Socket, config = Config}) ->
            end,
     Encoded = amqp10_framing:encode_bin(Open),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
-    ?DBG("CONN <- ~p", [Open]),
+    ?DBG("CONN <- ~tp", [Open]),
     socket_send(Socket, Frame).
 
 
@@ -380,7 +380,7 @@ send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},
     Encoded = amqp10_framing:encode_bin(Close),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
-    ?DBG("CONN <- ~p", [Close]),
+    ?DBG("CONN <- ~tp", [Close]),
     Ret = socket_send(Socket, Frame),
     case Ret of
         ok -> _ =
@@ -402,7 +402,7 @@ send_sasl_init(State, {plain, User, Pass}) ->
 send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = amqp10_framing:encode_bin(Record),
     Frame = amqp10_binary_generator:build_frame(0, FrameType, Encoded),
-    ?DBG("CONN <- ~p", [Record]),
+    ?DBG("CONN <- ~tp", [Record]),
     socket_send(Socket, Frame).
 
 send_heartbeat(#state{socket = Socket}) ->

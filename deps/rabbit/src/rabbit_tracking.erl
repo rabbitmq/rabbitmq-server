@@ -50,12 +50,12 @@ sum_rpc_multicall_result([{ok, Int}|ResL], [_N|Nodes], ContextMsg, Acc) when is_
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc + Int);
 sum_rpc_multicall_result([{ok, BadValue}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
     rabbit_log:error(
-      "Failed to fetch number of ~s on node ~p:~n not an integer ~p",
+      "Failed to fetch number of ~ts on node ~tp:~n not an integer ~tp",
       [ContextMsg, BadNode, BadValue]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
 sum_rpc_multicall_result([{Class, Reason}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
     rabbit_log:error(
-      "Failed to fetch number of ~s on node ~p:~n~p:~p",
+      "Failed to fetch number of ~ts on node ~tp:~n~tp:~tp",
       [ContextMsg, BadNode, Class, Reason]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
 sum_rpc_multicall_result([], [], _, Acc) ->
@@ -79,7 +79,7 @@ count_tracked_items_mnesia(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                             Acc + N
                         catch _:Err  ->
                                 rabbit_log:error(
-                                  "Failed to fetch number of ~p ~p on node ~p:~n~p",
+                                  "Failed to fetch number of ~tp ~tp on node ~tp:~n~tp",
                                   [ContextMsg, Key, Node, Err]),
                                 Acc
                         end
@@ -126,7 +126,7 @@ delete_tracking_table(TableName, Node, ContextMsg) ->
         {atomic, ok}              -> ok;
         {aborted, {no_exists, _}} -> ok;
         {aborted, Error} ->
-            rabbit_log:error("Failed to delete a ~p table for node ~p: ~p",
+            rabbit_log:error("Failed to delete a ~tp table for node ~tp: ~tp",
                 [ContextMsg, Node, Error]),
             ok
     end.

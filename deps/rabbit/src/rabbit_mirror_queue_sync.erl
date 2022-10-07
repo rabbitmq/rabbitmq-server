@@ -166,7 +166,7 @@ maybe_pause_sync(TotalBytes, Interval, SyncThroughput) ->
 pause_queue_sync(0) ->
     rabbit_log_mirroring:debug("Sync throughput is ok.");
 pause_queue_sync(Delta) ->
-    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~p ms", [Delta]),
+    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~tp ms", [Delta]),
     timer:sleep(Delta).
 
 %% Sync throughput computation:
@@ -177,7 +177,7 @@ pause_queue_sync(Delta) ->
 %% The amount of time to pause queue sync is the different between time needed to broadcast TotalBytes at max throughput
 %% and the elapsed time (Interval).
 get_time_diff(TotalBytes, Interval, SyncThroughput) ->
-    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
+    rabbit_log_mirroring:debug("Total ~tp bytes has been sent over last ~tp ms. Effective sync througput: ~tp", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
     max(round(TotalBytes/SyncThroughput * 1000 - Interval), 0).
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
@@ -210,7 +210,7 @@ maybe_emit_stats(Last, I, EmitStats, Log) ->
                  erlang:monotonic_time() - Last, native, micro_seconds),
     case Interval > ?SYNC_PROGRESS_INTERVAL of
         true  -> EmitStats({syncing, I}),
-                 Log("~p messages", [I]),
+                 Log("~tp messages", [I]),
                  erlang:monotonic_time();
         false -> Last
     end.
@@ -235,7 +235,7 @@ syncer(Ref, Log, MPid, SPids) ->
     case await_slaves(Ref, SPids) of
         []     -> Log("all mirrors already synced", []);
         SPids1 -> MPid ! {ready, self()},
-                  Log("mirrors ~p to sync", [[node(SPid) || SPid <- SPids1]]),
+                  Log("mirrors ~tp to sync", [[node(SPid) || SPid <- SPids1]]),
                   syncer_check_resources(Ref, MPid, SPids1)
     end.
 

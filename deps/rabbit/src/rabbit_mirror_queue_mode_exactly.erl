@@ -42,4 +42,4 @@ shuffle(L) ->
 validate_policy(N) when is_integer(N) andalso N > 0 ->
     ok;
 validate_policy(Params) ->
-    {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]}.
+    {error, "ha-mode=\"exactly\" takes an integer, ~tp given", [Params]}.

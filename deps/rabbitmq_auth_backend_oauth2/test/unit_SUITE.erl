@@ -1046,7 +1046,7 @@ test_incorrect_kid(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk1),
 
-    ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~p", [{error,key_not_found}]},
+    ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [{error,key_not_found}]},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token})).
 
 test_command_json(_) ->

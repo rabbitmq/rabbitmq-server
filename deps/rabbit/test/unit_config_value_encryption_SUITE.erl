@@ -123,7 +123,7 @@ do_decrypt_start_app(Config, Passphrase) ->
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch _:Err:Stacktrace ->
-              ct:pal("start_apps failed with ~p~n~p", [Err, Stacktrace]),
+              ct:pal("start_apps failed with ~tp~n~tp", [Err, Stacktrace]),
               ok
     end,
     %% Check if the values have been decrypted.
@@ -218,21 +218,21 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
 
     {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase]
+        [lists:flatten(io_lib:format("~tp", [Encrypted])), PassPhrase]
     ),
     Secret = lists:flatten(Result),
     % decrypt with {encrypted, ...} form as input
     {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase]
+        [lists:flatten(io_lib:format("~tp", [{encrypted, Encrypted}])), PassPhrase]
     ),
 
     % wrong passphrase
     {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase ++ " "]
+        [lists:flatten(io_lib:format("~tp", [Encrypted])), PassPhrase ++ " "]
     ),
     {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
+        [lists:flatten(io_lib:format("~tp", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     ).

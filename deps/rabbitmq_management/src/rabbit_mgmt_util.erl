@@ -148,7 +148,7 @@ get_bool_env(Application, Par, Default) ->
         true -> true;
         false -> false;
         Other ->
-            rabbit_log:warning("Invalid configuration for application ~p: ~p set to ~p",
+            rabbit_log:warning("Invalid configuration for application ~tp: ~tp set to ~tp",
                                [Application, Par, Other]),
             Default
     end.
@@ -260,6 +260,7 @@ is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
     is_authorized(ReqData, Context, Username, Password, Msg, Fun, ReplyWhenFailed).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
+<<<<<<< HEAD
     is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, true).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFailed) ->
@@ -270,6 +271,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
                        true -> not_authorised(Msg, ReqData, Context);
                        false -> {false, ReqData, "Not_Authorized"}
                      end
+=======
+    ErrFun = fun (Msg) ->
+                     rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
+                                        [Username, Msg]),
+                     not_authorised(Msg, ReqData, Context)
+>>>>>>> 7fe159edef (Yolo-replace format strings)
              end,
     AuthProps = [{password, Password}] ++ case vhost(ReqData) of
         VHost when is_binary(VHost) -> [{vhost, VHost}];
@@ -305,7 +312,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
             end;
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-            rabbit_log:warning("HTTP access denied: ~s",
+            rabbit_log:warning("HTTP access denied: ~ts",
                                [rabbit_misc:format(Msg, Args)]),
             case ReplyWhenFailed of
               true -> not_authenticated(<<"Not_Authorized">>, ReqData, Context);
@@ -364,9 +371,9 @@ reply0(Facts, ReqData, Context) ->
         end
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
-                      io_lib:format("JSON encode error: ~p", [E])),
+                      io_lib:format("JSON encode error: ~tp", [E])),
             Reason = iolist_to_binary(
-                       io_lib:format("While encoding: ~n~p", [Facts])),
+                       io_lib:format("While encoding: ~n~tp", [Facts])),
             internal_server_error(Error, Reason, ReqData1, Context)
     end.
 
@@ -630,7 +637,7 @@ pagination_params(ReqData) ->
             #pagination{page = PageNum, page_size = PageSize,
                 name =  Name, use_regex = UseRegex};
         _ -> throw({error, invalid_pagination_parameters,
-                    io_lib:format("Invalid pagination parameters: page number ~p, page size ~p",
+                    io_lib:format("Invalid pagination parameters: page number ~tp, page size ~tp",
                                   [PageNum, PageSize])})
     end.
 
@@ -655,7 +662,7 @@ range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
     catch
         error:function_clause ->
             Reason = io_lib:format(
-               "Page out of range, page: ~p page size: ~p, len: ~p",
+               "Page out of range, page: ~tp page size: ~tp, len: ~tp",
                [PageNum, PageSize, length(List)]),
             throw({error, page_out_of_range, Reason})
     end.
@@ -776,7 +783,7 @@ method_not_allowed(Reason, ReqData, Context) ->
     halt_response(405, method_not_allowed, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
-    rabbit_log:error("~s~n~s", [Error, Reason]),
+    rabbit_log:error("~ts~n~ts", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
 
 invalid_pagination(Type,Reason, ReqData, Context) ->
@@ -806,7 +813,7 @@ format_reason(Binary) when is_binary(Binary) ->
 format_reason(Other) ->
     case is_string(Other) of
         true ->  rabbit_mgmt_format:print("~ts", [Other]);
-        false -> rabbit_mgmt_format:print("~p", [Other])
+        false -> rabbit_mgmt_format:print("~tp", [Other])
     end.
 
 is_string(List) when is_list(List) ->
@@ -915,7 +922,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                                         [Method, none, #{}, none,
                                          VHost, User]) of
                   {badrpc, nodedown} ->
-                      Msg = io_lib:format("Node ~p could not be contacted", [Node]),
+                      Msg = io_lib:format("Node ~tp could not be contacted", [Node]),
                       rabbit_log:warning(ErrorMsg, [Msg]),
                       bad_request(list_to_binary(Msg), ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
@@ -934,7 +941,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                       rabbit_log:warning(ErrorMsg, [Reason]),
                       bad_request(
                         list_to_binary(
-                          io_lib:format("Request to node ~s failed with ~p",
+                          io_lib:format("Request to node ~ts failed with ~tp",
                                         [Node, Reason])),
                         ReqData1, Context);
                   _      -> {true, ReqData1, Context}
@@ -1036,12 +1043,12 @@ with_channel(VHost, ReqData,
         {error, {nodedown, N}} ->
             bad_request(
               list_to_binary(
-                io_lib:format("Node ~s could not be contacted", [N])),
+                io_lib:format("Node ~ts could not be contacted", [N])),
               ReqData, Context)
     end.
 
 bad_request_exception(Code, Reason, ReqData, Context) ->
-    bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
+    bad_request(list_to_binary(io_lib:format("~tp ~ts", [Code, Reason])),
                 ReqData, Context).
 
 all_or_one_vhost(ReqData, Fun) ->
@@ -1167,7 +1174,7 @@ list_login_vhosts(User, AuthzData) ->
 
 % rabbitmq/rabbitmq-auth-backend-http#100
 log_access_control_result(NotOK) ->
-    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]).
+    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
 
 %% base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.
@@ -1220,7 +1227,7 @@ range(Prefix, Round, ReqData) ->
                    last  = Last,
                    incr  = Incr};
         true -> throw({error, invalid_range_parameters,
-                    io_lib:format("Invalid range parameters: age ~p, incr ~p",
+                    io_lib:format("Invalid range parameters: age ~tp, incr ~tp",
                                   [Age0, Incr0])})
     end.
 

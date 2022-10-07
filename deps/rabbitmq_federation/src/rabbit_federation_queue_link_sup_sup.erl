@@ -42,7 +42,7 @@ start_child(Q) ->
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
           QueueName = amqqueue:get_name(Q),
-          rabbit_log_federation:warning("Federation link for queue ~p was already started",
+          rabbit_log_federation:warning("Federation link for queue ~tp was already started",
                                         [rabbit_misc:rs(QueueName)]),
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
@@ -66,7 +66,7 @@ stop_child(Q) ->
       {error, Err} ->
         QueueName = amqqueue:get_name(Q),
         rabbit_log_federation:warning(
-          "Attempt to stop a federation link for queue ~p failed: ~p",
+          "Attempt to stop a federation link for queue ~tp failed: ~tp",
           [rabbit_misc:rs(QueueName), Err]),
         ok
     end,

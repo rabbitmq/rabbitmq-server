@@ -60,7 +60,7 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:direct_request(
       'exchange.declare',
       fun rabbit_mgmt_format:format_accept_content/1,
-      [{exchange, Name}], "Declare exchange error: ~s", ReqData, Context).
+      [{exchange, Name}], "Declare exchange error: ~ts", ReqData, Context).
 
 delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused, as the HTTP API uses '-'
@@ -71,7 +71,7 @@ delete_resource(ReqData, Context) ->
       'exchange.delete',
       fun rabbit_mgmt_format:format_accept_content/1,
       [{exchange, Name},
-       {if_unused, IfUnused}], "Delete exchange error: ~s", ReqData, Context).
+       {if_unused, IfUnused}], "Delete exchange error: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

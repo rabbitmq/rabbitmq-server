@@ -268,7 +268,7 @@ create_super_stream(NodeName,
     of
         ok ->
             {ok,
-             rabbit_misc:format("Super stream ~s has been created",
+             rabbit_misc:format("Super stream ~ts has been created",
                                 [SuperStream])};
         Error ->
             Error

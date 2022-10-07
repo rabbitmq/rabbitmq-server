@@ -36,7 +36,7 @@ handle_response(Response, _State) ->
         {ok, User, Pass} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
         error ->
-            {protocol_error, "response ~p invalid", [Response]}
+            {protocol_error, "response ~tp invalid", [Response]}
     end.
 
 extract_user_pass(Response) ->

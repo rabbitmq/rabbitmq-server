@@ -33,7 +33,7 @@ remove_credentials(URI) ->
                         end
            end,
     rabbit_misc:format(
-      "~s://~s~s~s", [proplists:get_value(scheme, Props), PGet(host, Props),
+      "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
                       PortPart,                           PGet(path, Props)]).
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |

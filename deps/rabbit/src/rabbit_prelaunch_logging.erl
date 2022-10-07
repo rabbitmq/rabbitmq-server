@@ -261,7 +261,7 @@ setup(Context) ->
 set_log_level(Level) ->
     %% Primary log level.
     ?LOG_DEBUG(
-       "Logging: changing primary log level to ~s", [Level],
+       "Logging: changing primary log level to ~ts", [Level],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     _ = logger:set_primary_config(level, Level),
 
@@ -269,7 +269,7 @@ set_log_level(Level) ->
     lists:foreach(
       fun({Module, _}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' module log level to ~s",
+                 "Logging: changing '~ts' module log level to ~ts",
                  [Module, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               _ = logger:set_module_level(Module, Level)
@@ -283,7 +283,7 @@ set_log_level(Level) ->
       fun
           (#{id := Id, filters := Filters, config := Config}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' handler log level to ~s",
+                 "Logging: changing '~ts' handler log level to ~ts",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               Filters1 = lists:map(
@@ -324,7 +324,7 @@ set_log_level(Level) ->
               ok;
           (#{id := Id, config := Config}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' handler log level to ~s",
+                 "Logging: changing '~ts' handler log level to ~ts",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               %% If the log level is set to `debug', we turn off burst limit to
@@ -391,14 +391,14 @@ log_locations([#{module := syslog_logger_h} | Rest],
     Host = application:get_env(syslog, dest_host, ""),
     Locations1 = add_once(
                    Locations,
-                   rabbit_misc:format("syslog:~s", [Host])),
+                   rabbit_misc:format("syslog:~ts", [Host])),
     log_locations(Rest, Locations1);
 log_locations([#{module := rabbit_logger_exchange_h,
                  config := #{exchange := Exchange}} | Rest],
               Locations) ->
     Locations1 = add_once(
                    Locations,
-                   rabbit_misc:format("exchange:~p", [Exchange])),
+                   rabbit_misc:format("exchange:~tp", [Exchange])),
     log_locations(Rest, Locations1);
 log_locations([_ | Rest], Locations) ->
     log_locations(Rest, Locations);
@@ -1614,28 +1614,28 @@ adjust_running_dependencies(Handlers) ->
 
 adjust_running_dependencies1([{App, true} | Rest]) ->
     ?LOG_DEBUG(
-       "Logging: ensure log handler dependency '~s' is started", [App],
+       "Logging: ensure log handler dependency '~ts' is started", [App],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case application:ensure_all_started(App) of
         {ok, _} ->
             adjust_running_dependencies1(Rest);
         {error, Reason} ->
             ?LOG_ERROR(
-               "Failed to start log handlers dependency '~s': ~p",
+               "Failed to start log handlers dependency '~ts': ~tp",
                [App, Reason],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             error
     end;
 adjust_running_dependencies1([{App, false} | Rest]) ->
     ?LOG_DEBUG(
-       "Logging: ensure log handler dependency '~s' is stopped", [App],
+       "Logging: ensure log handler dependency '~ts' is stopped", [App],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case application:stop(App) of
         ok ->
             ok;
         {error, Reason} ->
             ?LOG_NOTICE(
-               "Logging: failed to stop log handlers dependency '~s': ~p",
+               "Logging: failed to stop log handlers dependency '~ts': ~tp",
                [App, Reason],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
     end,
@@ -1681,7 +1681,7 @@ remove_old_handlers() ->
                       if
                           Num < RunNum ->
                               ?LOG_DEBUG(
-                                "Logging: removing old logger handler ~s",
+                                "Logging: removing old logger handler ~ts",
                                 [Id],
                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                               ok = logger:remove_handler(Id);

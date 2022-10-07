@@ -12,7 +12,7 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
        "~n== Erlang distribution ==", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ?LOG_DEBUG(
-       "Rqeuested node name: ~s (type: ~s)",
+       "Rqeuested node name: ~ts (type: ~ts)",
        [Node, NameType],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case node() of
@@ -72,7 +72,7 @@ do_setup(#{nodename := Node,
 %% Check whether a node with the same name is already running
 duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
     ?LOG_DEBUG(
-      "Checking if node name ~s is already used", [NodeName],
+      "Checking if node name ~ts is already used", [NodeName],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     PrelaunchName = rabbit_nodes_common:make(
                       {NodeName ++ "_prelaunch_" ++ os:getpid(),
@@ -136,13 +136,13 @@ dist_port_use_check_fail(Port, Host) ->
 
 set_credentials_obfuscation_secret() ->
     ?LOG_DEBUG(
-        "Refreshing credentials obfuscation configuration from env: ~p",
+        "Refreshing credentials obfuscation configuration from env: ~tp",
         [application:get_all_env(credentials_obfuscation)],
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
     ?LOG_DEBUG(
-        "Setting credentials obfuscation secret to '~s'", [CookieBin],
+        "Setting credentials obfuscation secret to '~ts'", [CookieBin],
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:set_secret(CookieBin),
     Fallback = application:get_env(rabbit, 

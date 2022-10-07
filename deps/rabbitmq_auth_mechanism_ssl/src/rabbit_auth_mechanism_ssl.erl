@@ -51,7 +51,7 @@ init(Sock) ->
                            not_found -> {refused, none, "no name found", []};
                            Name      ->
                                Val = rabbit_data_coercion:to_binary(Name),
-                               rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Val]),
+                               rabbit_log:debug("auth mechanism TLS extracted username '~ts' from peer certificate", [Val]),
                                Val
                        end;
                    {error, no_peercert} ->

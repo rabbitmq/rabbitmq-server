@@ -268,7 +268,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, Itera
     Expected = [IterationCount div 6, IterationCount div 6, (IterationCount div 6) * 2, (IterationCount div 6) * 2],
     Obs = lists:zip(Counts, Expected),
     Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
-    ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35, observations (counts, expected): ~p",
+    ct:pal("Chi-square test for 3 degrees of freedom is ~tp, p = 0.01 is 11.35, observations (counts, expected): ~tp",
            [Chi, Obs]),
 
     clean_up_test_topology(Config, CHX, Queues),
@@ -443,14 +443,14 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
                                                 routing_key = <<"3">>})
      || Q <- Queues],
 
-    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
+    ct:pal("all hash ring rows: ~tp", [hash_ring_rows(Config)]),
 
     ?assertEqual(18, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
     ok = amqp_connection:close(Conn),
     timer:sleep(500),
 
-    ct:pal("all hash ring rows after connection closure: ~p", [hash_ring_rows(Config)]),
+    ct:pal("all hash ring rows after connection closure: ~tp", [hash_ring_rows(Config)]),
 
     ?awaitMatch(0, count_buckets_of_exchange(Config, X), ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     clean_up_test_topology(Config, X, []),
@@ -499,7 +499,7 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
                                                 routing_key = integer_to_binary(Key)})
      || Q <- Queues],
 
-    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
+    ct:pal("all hash ring rows: ~tp", [hash_ring_rows(Config)]),
 
     %% NumQueues x 'Key' buckets per binding
     ?assertEqual(NumQueues * Key, count_buckets_of_exchange(Config, X)),
@@ -507,7 +507,7 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
     ok = amqp_connection:close(Conn),
     timer:sleep(1000),
 
-    ct:pal("all hash ring rows after connection closure (~p): ~p", [XAsList, hash_ring_rows(Config)]),
+    ct:pal("all hash ring rows after connection closure (~tp): ~tp", [XAsList, hash_ring_rows(Config)]),
 
     ?awaitMatch(0, count_buckets_of_exchange(Config, X), ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     clean_up_test_topology(Config, X, []),

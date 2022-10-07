@@ -137,7 +137,7 @@ switch_strategies(_Config) ->
     %% Switching from undefined to at_least_once should start dlx consumer.
     {S1, Effects0} = rabbit_fifo_dlx:update_config(Handler0, Handler1, QRes, S0),
     ?assertEqual([{mod_call, rabbit_log, debug,
-                   ["Switching dead_letter_handler from ~p to ~p for ~s",
+                   ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
                     [undefined, at_least_once, "queue 'blah' in vhost '/'"]]},
                   {aux, {dlx, setup}}],
                  Effects0),
@@ -152,10 +152,10 @@ switch_strategies(_Config) ->
     %% Switching from at_least_once to undefined should terminate dlx consumer.
     {S5, Effects} = rabbit_fifo_dlx:update_config(Handler1, Handler0, QRes, S4),
     ?assertEqual([{mod_call, rabbit_log, debug,
-                   ["Switching dead_letter_handler from ~p to ~p for ~s",
+                   ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
                     [at_least_once, undefined, "queue 'blah' in vhost '/'"]]},
                   {mod_call, rabbit_log, info,
-                   ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~s",
+                   ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
                     [1, 1, "queue 'blah' in vhost '/'"]]}],
                  Effects),
     ?assertMatch([_, {active, 0}, _, _],

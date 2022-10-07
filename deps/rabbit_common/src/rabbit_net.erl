@@ -225,7 +225,7 @@ connection_string(Sock, Direction) ->
     case socket_ends(Sock, Direction) of
         {ok, {FromAddress, FromPort, ToAddress, ToPort}} ->
             {ok, rabbit_misc:format(
-                   "~s:~p -> ~s:~p",
+                   "~ts:~tp -> ~ts:~tp",
                    [maybe_ntoab(FromAddress), FromPort,
                     maybe_ntoab(ToAddress),   ToPort])};
         Error ->

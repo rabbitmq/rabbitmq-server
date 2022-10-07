@@ -53,7 +53,7 @@ ensure_term_to_binary_defaults_to_version_1(Config) ->
         false ->
             ct:pal(
               ?LOW_IMPORTANCE,
-              "This test require ERTS ~p or above, running on ~p~n"
+              "This test require ERTS ~tp or above, running on ~tp~n"
               "Skipping test...",
               [MinimumTestedERTS, CurrentERTS])
     end.

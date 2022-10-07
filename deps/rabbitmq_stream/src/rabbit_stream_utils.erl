@@ -161,7 +161,7 @@ auth_mechanisms(Sock) ->
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
-            rabbit_log:warning("Unknown authentication mechanism '~p'",
+            rabbit_log:warning("Unknown authentication mechanism '~tp'",
                                [TypeBin]),
             {error, not_found};
         T ->
@@ -172,7 +172,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
                 {true, {ok, Module}} ->
                     {ok, Module};
                 _ ->
-                    rabbit_log:warning("Invalid authentication mechanism '~p'",
+                    rabbit_log:warning("Invalid authentication mechanism '~tp'",
                                        [T]),
                     {error, invalid}
             end

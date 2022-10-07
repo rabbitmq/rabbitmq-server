@@ -51,15 +51,15 @@ init_etcd(Config) ->
         {ok, Stdout} ->
             case re:run(Stdout, "^ETCD_PID=([0-9]+)$", [{capture, all_but_first, list}, multiline]) of
                 {match, [EtcdPid]} ->
-                    ct:pal(?LOW_IMPORTANCE, "etcd PID: ~s~netcd is listening on: ~b", [EtcdPid, TcpPort]),
+                    ct:pal(?LOW_IMPORTANCE, "etcd PID: ~ts~netcd is listening on: ~b", [EtcdPid, TcpPort]),
                     rabbit_ct_helpers:set_config(Config, [{etcd_pid, EtcdPid},
-                                                          {etcd_endpoints, [rabbit_misc:format("localhost:~p", [TcpPort])]},
+                                                          {etcd_endpoints, [rabbit_misc:format("localhost:~tp", [TcpPort])]},
                                                           {etcd_port, TcpPort}]);
                 nomatch ->
-                    ct:pal(?HI_IMPORTANCE, "init-etcd.sh output did not match what's expected: ~p", [Stdout])
+                    ct:pal(?HI_IMPORTANCE, "init-etcd.sh output did not match what's expected: ~tp", [Stdout])
             end;
         {error, Code, Reason} ->
-            ct:pal(?HI_IMPORTANCE, "init-etcd.sh exited with code ~p: ~p", [Code, Reason]),
+            ct:pal(?HI_IMPORTANCE, "init-etcd.sh exited with code ~tp: ~tp", [Code, Reason]),
             _ = rabbit_ct_helpers:exec(["pkill", "-INT", "etcd"]),
             {skip, "Failed to initialize etcd"}
     end.

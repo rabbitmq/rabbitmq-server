@@ -360,7 +360,7 @@ auth_attempt_metrics(Config) ->
 flush(Prefix) ->
     receive
         Msg ->
-            ct:pal("~s flushed: ~w~n", [Prefix, Msg]),
+            ct:pal("~ts flushed: ~w~n", [Prefix, Msg]),
             flush(Prefix)
     after 1 ->
               ok

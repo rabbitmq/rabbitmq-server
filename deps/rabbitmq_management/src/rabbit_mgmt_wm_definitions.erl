@@ -152,7 +152,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     _ = disable_idle_timeout(ReqData),
     case decode(Body) of
       {error, E} ->
-        rabbit_log:error("Encountered an error when parsing definitions: ~p", [E]),
+        rabbit_log:error("Encountered an error when parsing definitions: ~tp", [E]),
         rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("failed_to_parse_json"),
                                     ReqData, Context);
       {ok, Map} ->
@@ -160,7 +160,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
             none ->
                 case apply_defs(Map, Username) of
                   {error, E} ->
-                        rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
+                        rabbit_log:error("Encountered an error when importing definitions: ~tp", [E]),
                         rabbit_mgmt_util:bad_request(E, ReqData, Context);
                   ok -> {true, ReqData, Context}
                 end;
@@ -170,7 +170,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
             VHost when is_binary(VHost) ->
                 case apply_defs(Map, Username, VHost) of
                     {error, E} ->
-                        rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
+                        rabbit_log:error("Encountered an error when importing definitions: ~tp", [E]),
                         rabbit_mgmt_util:bad_request(E, ReqData, Context);
                     ok -> {true, ReqData, Context}
                 end

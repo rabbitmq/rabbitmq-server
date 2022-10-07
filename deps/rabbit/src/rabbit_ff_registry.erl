@@ -197,7 +197,7 @@ always_return_false() ->
 on_load() ->
      _ = (catch rabbit_log_feature_flags:debug(
                   "Feature flags: Loading initial (uninitialized) registry "
-                  "module (~p)",
+                  "module (~tp)",
                   [self()])),
     ok.
 -endif.

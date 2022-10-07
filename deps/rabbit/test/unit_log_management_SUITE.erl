@@ -128,11 +128,11 @@ log_file_initialised_during_startup1(_Config) ->
 
     %% start application with logging to non-existing directory
     NonExistent = rabbit_misc:format(
-                    "/tmp/non-existent/~s.log", [?FUNCTION_NAME]),
+                    "/tmp/non-existent/~ts.log", [?FUNCTION_NAME]),
     delete_file(NonExistent),
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
-    io:format("Setting log file to \"~s\"~n", [NonExistent]),
+    io:format("Setting log file to \"~ts\"~n", [NonExistent]),
     os:putenv("RABBITMQ_LOGS", NonExistent),
     ok = rabbit:start(),
 
@@ -170,7 +170,7 @@ log_file_fails_to_initialise_during_startup(Config) ->
 log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     [LogFile|_] = rabbit:log_locations(),
     delete_file(LogFile),
-    Fn = rabbit_misc:format("~s.log", [?FUNCTION_NAME]),
+    Fn = rabbit_misc:format("~ts.log", [?FUNCTION_NAME]),
 
     %% start application with logging to directory with no
     %% write permissions
@@ -179,7 +179,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(filename:dirname(NoPermission1)),
 
     ok = rabbit:stop(),
-    io:format("Setting log file to \"~s\"~n", [NoPermission1]),
+    io:format("Setting log file to \"~ts\"~n", [NoPermission1]),
     os:putenv("RABBITMQ_LOGS", NoPermission1),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
@@ -193,7 +193,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(NoPermission2),
     delete_file(filename:dirname(NoPermission2)),
 
-    io:format("Setting log file to \"~s\"~n", [NoPermission2]),
+    io:format("Setting log file to \"~ts\"~n", [NoPermission2]),
     os:putenv("RABBITMQ_LOGS", NoPermission2),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},

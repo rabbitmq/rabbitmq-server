@@ -43,6 +43,7 @@ collect_mf(_Registry, Callback) ->
                         #{},
                         Alarms),
 
+<<<<<<< HEAD
         Callback(create_mf(?METRIC_NAME(<<"file_descriptor_limit">>),
                            <<"is 1 if file descriptor limit alarm is in effect">>,
                            untyped,
@@ -58,6 +59,32 @@ collect_mf(_Registry, Callback) ->
                            untyped,
                            [untyped_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
         ok
+=======
+                Callback(create_mf(?METRIC_NAME(<<"file_descriptor_limit">>),
+                                   <<"is 1 if file descriptor limit alarm is in effect">>,
+                                   untyped,
+                                   [untyped_metric(maps:get(file_descriptor_limit,
+                                                            ActiveAlarms,
+                                                            0))])),
+                Callback(create_mf(?METRIC_NAME(<<"free_disk_space_watermark">>),
+                                   <<"is 1 if free disk space watermark alarm is in effect">>,
+                                   untyped,
+                                   [untyped_metric(maps:get(disk_limit, ActiveAlarms, 0))])),
+                Callback(create_mf(?METRIC_NAME(<<"memory_used_watermark">>),
+                                   <<"is 1 if VM memory watermark alarm is in effect">>,
+                                   untyped,
+                                   [untyped_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
+                ok;
+            Error ->
+                rabbit_log:error("alarm_metrics_collector failed to emit metrics: "
+                                 "rabbitm_alarm:get_local_alarms returned ~tp",
+                                 [Error]),
+                %% We are not going to render any alarm metrics here.
+                %% Breaks continuity but at least doesn't crash the
+                %% whole scraping endpoint
+                ok
+        end
+>>>>>>> 7fe159edef (Yolo-replace format strings)
     catch
         exit:{timeout, _} ->
             rabbit_log:error("alarm_metrics_collector failed to emit metrics: "

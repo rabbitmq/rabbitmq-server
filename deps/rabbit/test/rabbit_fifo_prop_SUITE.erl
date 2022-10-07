@@ -1180,8 +1180,8 @@ single_active_ordering_03(_Config) ->
     Entries = lists:zip(Indexes, Commands),
     try run_log(test_init(Conf), Entries) of
         {State, Effects} ->
-            ct:pal("Effects: ~p~n", [Effects]),
-            ct:pal("State: ~p~n", [State]),
+            ct:pal("Effects: ~tp~n", [Effects]),
+            ct:pal("State: ~tp~n", [State]),
             %% assert C1 has no messages
             ?assertNotMatch(#{C1 := _}, State#rabbit_fifo.consumers),
             true;
@@ -1189,8 +1189,8 @@ single_active_ordering_03(_Config) ->
             true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1526,8 +1526,8 @@ in_memory_limit_prop(Conf0, Commands) ->
             true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1546,8 +1546,8 @@ max_length_prop(Conf0, Commands) ->
             true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1599,8 +1599,8 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
             true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1661,12 +1661,12 @@ simple_prefetch_invariant(WithCheckoutCancel) ->
 
 valid_simple_prefetch(Prefetch, Credit, _, _, CId)
   when Credit > Prefetch ->
-    ct:pal("simple_prefetch invariant failed: consumer ~p has credit (~b) > prefetch (~b)",
+    ct:pal("simple_prefetch invariant failed: consumer ~tp has credit (~b) > prefetch (~b)",
            [CId, Credit, Prefetch]),
     false;
 valid_simple_prefetch(_, Credit, _, _, CId)
   when Credit < 0 ->
-    ct:pal("simple_prefetch invariant failed: consumer ~p has negative credit (~b)",
+    ct:pal("simple_prefetch invariant failed: consumer ~tp has negative credit (~b)",
            [CId, Credit]),
     false;
 valid_simple_prefetch(Prefetch, _, CheckedOut, false, CId)
@@ -1675,7 +1675,7 @@ valid_simple_prefetch(Prefetch, _, CheckedOut, false, CId)
     %% if a consumer is cancelled while it has unacked messages, and a new consumer with same
     %% consumer ID but lower Prefetch subscribes, we know that the number of messages checked out
     %% to the new consumer can be (temporarily) higher than the new consumer's Prefetch value.
-    ct:pal("simple_prefetch invariant failed: consumer ~p has checked_out (~b) > prefetch (~b)",
+    ct:pal("simple_prefetch invariant failed: consumer ~tp has checked_out (~b) > prefetch (~b)",
            [CId, CheckedOut, Prefetch]),
     false;
 valid_simple_prefetch(_, _, _, _, _) ->
@@ -1712,7 +1712,7 @@ upgrade_prop(Conf0, Commands) ->
          case V1Overview == V2Overview of
              true -> ok;
              false ->
-                 ct:pal("upgrade_prop failed expected~n~p~nGot:~n~p",
+                 ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
                         [V1Overview, V2Overview]),
                  ?assertEqual(V1Overview, V2Overview)
          end,
@@ -1738,7 +1738,7 @@ upgrade_prop(Conf0, Commands) ->
          case V1Overview == V2Overview of
              true -> ok;
              false ->
-                 ct:pal("upgrade_prop failed expected~n~p~nGot:~n~p",
+                 ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
                         [V1Overview, V2Overview]),
                  ?assertEqual(V1Overview, V2Overview)
          end
@@ -1770,7 +1770,7 @@ validate_msg_order(Cid, [{_, {H, Num}} | Rem], PrevMax) ->
 
 
 dump_generated(Conf, Commands) ->
-    ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+    ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
     true.
 
 snapshots_prop(Conf, Commands) ->
@@ -1778,8 +1778,8 @@ snapshots_prop(Conf, Commands) ->
         _ -> true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1788,8 +1788,8 @@ upgrade_snapshots_prop(Conf, Commands) ->
         _ -> true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -1798,8 +1798,8 @@ upgrade_snapshots_prop_v2_to_v3(Conf, Commands) ->
         _ -> true
     catch
         Err ->
-            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
-            ct:pal("Err: ~p~n", [Err]),
+            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
+            ct:pal("Err: ~tp~n", [Err]),
             false
     end.
 
@@ -2240,7 +2240,7 @@ run_snapshot_test(Conf, Commands) ->
 run_snapshot_test(Conf, Commands, Invariant) ->
     %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
-    ct:pal("running snapshot test with ~b commands using config ~p",
+    ct:pal("running snapshot test with ~b commands using config ~tp",
            [length(Commands), Conf]),
     [begin
          % ct:pal("~w running commands to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
@@ -2271,11 +2271,11 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
              State -> ok;
              _ ->
                  ct:pal("Snapshot tests failed run log:~n"
-                        "~p~n from snapshot index ~b "
-                        "with snapshot state~n~p~n Entries~n~p~n"
-                        "Config: ~p~n",
+                        "~tp~n from snapshot index ~b "
+                        "with snapshot state~n~tp~n Entries~n~tp~n"
+                        "Config: ~tp~n",
                         [Filtered, SnapIdx, SnapState, Entries, Conf]),
-                 ct:pal("Expected~n~p~nGot:~n~p~n", [?record_info(rabbit_fifo, State),
+                 ct:pal("Expected~n~tp~nGot:~n~tp~n", [?record_info(rabbit_fifo, State),
                                                      ?record_info(rabbit_fifo, S)]),
                  ?assertEqual(State, S)
          end
@@ -2283,7 +2283,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
     ok.
 
 run_upgrade_snapshot_test(Conf, Commands) ->
-    ct:pal("running test with ~b commands using config ~p",
+    ct:pal("running test with ~b commands using config ~tp",
            [length(Commands), Conf]),
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
@@ -2320,8 +2320,8 @@ run_upgrade_snapshot_test(Conf, Commands) ->
          case V1Overview == V2Overview of
              true -> ok;
              false ->
-                 ct:pal("property failed, expected:~n~p~ngot:~n~p~nstate v1:~n~p~nstate v2:~n~p~n"
-                        "snapshot index: ~p",
+                 ct:pal("property failed, expected:~n~tp~ngot:~n~tp~nstate v1:~n~tp~nstate v2:~n~tp~n"
+                        "snapshot index: ~tp",
                         [V1Overview, V2Overview, StateV1, ?record_info(rabbit_fifo, StateV2), SnapIdx]),
                  ?assertEqual(V1Overview, V2Overview)
          end
@@ -2329,7 +2329,7 @@ run_upgrade_snapshot_test(Conf, Commands) ->
     ok.
 
 run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
-    ct:pal("running test with ~b commands using config ~p",
+    ct:pal("running test with ~b commands using config ~tp",
            [length(Commands), Conf]),
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
@@ -2367,8 +2367,8 @@ run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
          case V2Overview == V3Overview of
              true -> ok;
              false ->
-                 ct:pal("property failed, expected:~n~p~ngot:~n~p~nstate v2:~n~p~nstate v3:~n~p~n"
-                        "snapshot index: ~p",
+                 ct:pal("property failed, expected:~n~tp~ngot:~n~tp~nstate v2:~n~tp~nstate v3:~n~tp~n"
+                        "snapshot index: ~tp",
                         [V2Overview, V3Overview, StateV2, ?record_info(rabbit_fifo, StateV3), SnapIdx]),
                  ?assertEqual(V2Overview, V3Overview)
          end

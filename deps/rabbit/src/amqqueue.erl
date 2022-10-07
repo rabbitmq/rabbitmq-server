@@ -614,7 +614,7 @@ qnode({_, Node}) ->
 
 macros() ->
     io:format(
-      "-define(is_~s(Q), is_record(Q, amqqueue, ~b)).~n~n",
+      "-define(is_~ts(Q), is_record(Q, amqqueue, ~b)).~n~n",
       [?record_version, record_info(size, amqqueue)]),
     %% The field number starts at 2 because the first element is the
     %% record name.
@@ -622,7 +622,7 @@ macros() ->
 
 macros([Field | Rest], I) ->
     io:format(
-      "-define(~s_field_~s(Q), element(~b, Q)).~n",
+      "-define(~s_field_~ts(Q), element(~b, Q)).~n",
       [?record_version, Field, I]),
     macros(Rest, I + 1);
 macros([], _) ->

@@ -75,7 +75,7 @@ delete_super_stream(NodeName, Timeout, VHost, SuperStream) ->
     of
         ok ->
             {ok,
-             rabbit_misc:format("Super stream ~s has been deleted",
+             rabbit_misc:format("Super stream ~ts has been deleted",
                                 [SuperStream])};
         Error ->
             Error

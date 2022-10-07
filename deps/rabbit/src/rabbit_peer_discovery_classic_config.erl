@@ -33,7 +33,7 @@ lock(Node) ->
   {ok, {Nodes, _NodeType}} = list_nodes(),
   case lists:member(Node, Nodes) of
     false when Nodes =/= [] ->
-      rabbit_log:warning("Local node ~s is not part of configured nodes ~p. "
+      rabbit_log:warning("Local node ~ts is not part of configured nodes ~tp. "
                       "This might lead to incorrect cluster formation.", [Node, Nodes]);
     _ -> ok
   end,

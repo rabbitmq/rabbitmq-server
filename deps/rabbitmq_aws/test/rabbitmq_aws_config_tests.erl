@@ -285,6 +285,17 @@ read_file_test_() ->
   [
     {"file does not exist", fun() ->
       ?assertEqual({error, enoent}, rabbitmq_aws_config:read_file(filename:join([filename:absname("."), "bad_path"])))
+<<<<<<< HEAD:deps/rabbitmq_aws/test/rabbitmq_aws_config_tests.erl
+=======
+     end},
+    {"file handle is closed", fun() ->
+      {MegaSecs, Secs, MicroSecs} = erlang:timestamp(),
+      Name = lists:flatten(io_lib:format("~tp-~tp-~tp.tmp", [MegaSecs, Secs, MicroSecs])),
+      {ok, Handle} = file:open(Name, [write]),
+      file:close(Handle),
+      ?assertEqual({error,terminated}, rabbitmq_aws_config:read_file(Handle, [])),
+      file:delete(Name)
+>>>>>>> 7fe159edef (Yolo-replace format strings):deps/rabbitmq_aws/test/src/rabbitmq_aws_config_tests.erl
      end}
   ].
 

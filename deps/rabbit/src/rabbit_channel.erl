@@ -394,7 +394,7 @@ info(Pid) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -409,7 +409,7 @@ info(Pid, Items) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -446,7 +446,7 @@ refresh_config_local() ->
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
           rabbit_log:error("Failed to refresh channel config "
-                           "for channel ~p. Reason ~p",
+                           "for channel ~tp. Reason ~tp",
                            [C, Reason])
         end
       end,
@@ -460,7 +460,7 @@ refresh_interceptors() ->
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
           rabbit_log:error("Failed to refresh channel interceptors "
-                           "for channel ~p. Reason ~p",
+                           "for channel ~tp. Reason ~tp",
                            [C, Reason])
         end
       end,
@@ -841,7 +841,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({{Ref, Node}, LateAnswer},
             State = #ch{cfg = #conf{channel = Channel}})
   when is_reference(Ref) ->
-    rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
+    rabbit_log_channel:warning("Channel ~tp ignoring late answer ~tp from ~tp",
         [Channel, LateAnswer, Node]),
     noreply(State);
 
@@ -949,7 +949,7 @@ send(Command, #ch{cfg = #conf{writer_pid = WriterPid}}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
 format_soft_error(#amqp_error{name = N, explanation = E, method = M}) ->
-    io_lib:format("operation ~s caused a channel exception ~s: ~ts", [M, N, E]).
+    io_lib:format("operation ~ts caused a channel exception ~ts: ~ts", [M, N, E]).
 
 handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
                                                  channel = Channel,
@@ -965,8 +965,8 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
             rabbit_log_channel:error(
-                "Channel error on connection ~p (~ts, vhost: '~ts',"
-                " user: '~ts'), channel ~p:~n~ts",
+                "Channel error on connection ~tp (~ts, vhost: '~ts',"
+                " user: '~ts'), channel ~tp:~n~ts",
                 [ConnPid, ConnName, VHost, User#user.username,
                  Channel, format_soft_error(Reason)]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
@@ -1042,20 +1042,20 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
     case lists:member(impersonator, Tags) of
         true  -> ok;
         false -> precondition_failed(
-                   "user_id property set to '~s' but authenticated user was "
-                   "'~s'", [Claimed, Actual])
+                   "user_id property set to '~ts' but authenticated user was "
+                   "'~ts'", [Claimed, Actual])
     end.
 
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
         {ok, _}    -> ok;
-        {error, E} -> precondition_failed("invalid expiration '~s': ~p",
+        {error, E} -> precondition_failed("invalid expiration '~ts': ~tp",
                                           [Props#'P_basic'.expiration, E])
     end.
 
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
-                               "cannot publish to internal ~s",
+                               "cannot publish to internal ~ts",
                                [rabbit_misc:rs(Name)]);
 check_internal_exchange(_) ->
     ok.
@@ -1119,8 +1119,8 @@ check_msg_size(Content, MaxMessageSize, GCThreshold) ->
 check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
   case rabbit_vhost_limit:is_over_queue_limit(VHost) of
     false         -> ok;
-    {true, Limit} -> precondition_failed("cannot declare queue '~s': "
-                               "queue limit in vhost '~ts' (~p) is reached",
+    {true, Limit} -> precondition_failed("cannot declare queue '~ts': "
+                               "queue limit in vhost '~ts' (~tp) is reached",
                                [QueueName, VHost, Limit])
 
   end.
@@ -1173,7 +1173,7 @@ check_not_default_exchange(_) ->
 check_exchange_deletion(XName = #resource{name = <<"amq.", _/binary>>,
                                           kind = exchange}) ->
     rabbit_misc:protocol_error(
-      access_refused, "deletion of system ~s not allowed",
+      access_refused, "deletion of system ~ts not allowed",
       [rabbit_misc:rs(XName)]);
 check_exchange_deletion(_) ->
     ok.
@@ -1190,7 +1190,7 @@ check_exchange_deletion(_) ->
 check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
     rabbit_misc:protocol_error(
       access_refused,
-      "~s name '~s' contains reserved prefix 'amq.*'",[Kind, NameBin]);
+      "~ts name '~ts' contains reserved prefix 'amq.*'",[Kind, NameBin]);
 check_name(_Kind, NameBin) ->
     NameBin.
 
@@ -1342,7 +1342,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                               State1#ch{tx = {Msgs1, Acks}}
                       end};
         {error, Reason} ->
-            precondition_failed("invalid message: ~p", [Reason])
+            precondition_failed("invalid message: ~tp", [Reason])
     end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
@@ -1394,13 +1394,13 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
         {error, {unsupported, single_active_consumer}} ->
             rabbit_misc:protocol_error(
               resource_locked,
-              "cannot obtain access to locked ~s. basic.get operations "
+              "cannot obtain access to locked ~ts. basic.get operations "
               "are not supported by quorum queues with single active consumer",
               [rabbit_misc:rs(QueueName)]);
         {error, Reason} ->
             %% TODO add queue type to error message
             rabbit_misc:protocol_error(internal_error,
-                                       "Cannot get a message from queue '~s': ~p",
+                                       "Cannot get a message from queue '~ts': ~tp",
                                        [rabbit_misc:rs(QueueName), Reason]);
         {protocol_error, Type, Reason, ReasonArgs} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
@@ -1441,7 +1441,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
         {ok, _} ->
             %% Attempted reuse of consumer tag.
             rabbit_misc:protocol_error(
-              not_allowed, "attempt to reuse consumer tag '~s'", [CTag0])
+              not_allowed, "attempt to reuse consumer tag '~ts'", [CTag0])
     end;
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
@@ -1483,25 +1483,25 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                     {noreply, State1};
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
-                      access_refused, "~s in exclusive use",
+                      access_refused, "~ts in exclusive use",
                       [rabbit_misc:rs(QueueName)]);
                 {error, global_qos_not_supported_for_queue_type} ->
                     rabbit_misc:protocol_error(
-                      not_implemented, "~s does not support global qos",
+                      not_implemented, "~ts does not support global qos",
                       [rabbit_misc:rs(QueueName)]);
                 {error, timeout} ->
                     rabbit_misc:protocol_error(
-                      internal_error, "~s timeout occurred during consume operation",
+                      internal_error, "~ts timeout occurred during consume operation",
                       [rabbit_misc:rs(QueueName)]);
                 {error, no_local_stream_replica_available} ->
                     rabbit_misc:protocol_error(
-                      resource_error, "~s does not have a running local replica",
+                      resource_error, "~ts does not have a running local replica",
                       [rabbit_misc:rs(QueueName)])
             end;
         {ok, _} ->
             %% Attempted reuse of consumer tag.
             rabbit_misc:protocol_error(
-              not_allowed, "attempt to reuse consumer tag '~s'", [ConsumerTag])
+              not_allowed, "attempt to reuse consumer tag '~ts'", [ConsumerTag])
     end;
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
@@ -1778,7 +1778,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
             {ok, QStates, Actions} = rabbit_queue_type:credit(Q, CTag, Credit, Drain, QStates0),
             {noreply, handle_queue_actions(Actions, State#ch{queue_states = QStates})};
         error -> precondition_failed(
-                   "unknown consumer tag '~s'", [CTag])
+                   "unknown consumer tag '~ts'", [CTag])
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
@@ -1934,6 +1934,14 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             rabbit_amqqueue:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
             rabbit_amqqueue:absent(Q, Reason);
+<<<<<<< HEAD
+=======
+        {error, binding_not_found} ->
+            rabbit_misc:protocol_error(
+              not_found, "no binding ~ts between ~ts and ~ts",
+              [RoutingKey, rabbit_misc:rs(ExchangeName),
+               rabbit_misc:rs(DestinationName)]);
+>>>>>>> 7fe159edef (Yolo-replace format strings)
         {error, {binding_invalid, Fmt, Args}} ->
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
@@ -2204,12 +2212,12 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
         {error, {stream_not_found, Resource}} ->
             rabbit_misc:protocol_error(
               resource_error,
-              "Stream not found for ~s",
+              "Stream not found for ~ts",
               [rabbit_misc:rs(Resource)]);
         {error, {coordinator_unavailable, Resource}} ->
             rabbit_misc:protocol_error(
               resource_error,
-              "Stream coordinator unavailable for ~s",
+              "Stream coordinator unavailable for ~ts",
               [rabbit_misc:rs(Resource)])
     end;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{exchange_name = XName},
@@ -2243,7 +2251,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
         {error, {coordinator_unavailable, Resource}} ->
             rabbit_misc:protocol_error(
               resource_error,
-              "Stream coordinator unavailable for ~s",
+              "Stream coordinator unavailable for ~ts",
               [rabbit_misc:rs(Resource)])
     end.
 
@@ -2432,7 +2440,7 @@ pending_raft_commands(QStates) ->
     rabbit_queue_type:fold_state(Fun, 0, QStates).
 
 name(#ch{cfg = #conf{conn_name = ConnName, channel = Channel}}) ->
-    list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
+    list_to_binary(rabbit_misc:format("~ts (~tp)", [ConnName, Channel])).
 
 emit_stats(State) -> emit_stats(State, []).
 
@@ -2547,7 +2555,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                 false ->
                                     rabbit_misc:protocol_error(
                                       precondition_failed,
-                                      "Cannot declare a server-named queue for type ~p",
+                                      "Cannot declare a server-named queue for type ~tp",
                                       [rabbit_amqqueue:get_queue_type(Args)])
                             end;
                         Other -> check_name('queue', Other)
@@ -2572,7 +2580,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                    ok;
                {error, {invalid_type, Type}} ->
                     precondition_failed(
-                      "invalid type '~s' for arg '~s' in ~s",
+                      "invalid type '~ts' for arg '~ts' in ~ts",
                       [Type, DlxKey, rabbit_misc:rs(QueueName)]);
                DLX ->
                    check_read_permitted(QueueName, User, AuthzContext),
@@ -2654,9 +2662,9 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                    rabbit_amqqueue:absent(Q, Reason)
            end) of
         {error, in_use} ->
-            precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
+            precondition_failed("~ts in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
-            precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
+            precondition_failed("~ts not empty", [rabbit_misc:rs(QueueName)]);
         {error, {exit, _, _}} ->
             %% rabbit_amqqueue:delete()/delegate:invoke might return {error, {exit, _, _}}
             {ok, 0};
@@ -2678,7 +2686,7 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
         {error, not_found} ->
             ok;
         {error, in_use} ->
-            precondition_failed("~s in use", [rabbit_misc:rs(ExchangeName)]);
+            precondition_failed("~ts in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
             ok
     end;
@@ -2695,7 +2703,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin},
                   {error, not_supported} ->
                       rabbit_misc:protocol_error(
                         not_implemented,
-                        "queue.purge not supported by stream queues ~s",
+                        "queue.purge not supported by stream queues ~ts",
                         [rabbit_misc:rs(amqqueue:get_name(Q))])
               end
       end);
@@ -2721,7 +2729,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                     undefined -> ok;
                     {error, {invalid_type, Type}} ->
                         precondition_failed(
-                          "invalid type '~s' for arg '~s' in ~s",
+                          "invalid type '~ts' for arg '~ts' in ~ts",
                           [Type, AeKey, rabbit_misc:rs(ExchangeName)]);
                     AName     -> check_read_permitted(ExchangeName, User, AuthzContext),
                                  check_write_permitted(AName, User, AuthzContext),
@@ -2839,14 +2847,14 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
                      delivered_at = Time}
           when is_integer(Timeout)
                andalso Time < Now - Timeout ->
-            rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
-                                       "waiting for delivery acknowledgement. Timeout used: ~p ms. "
+            rabbit_log_channel:warning("Consumer ~ts on channel ~w has timed out "
+                                       "waiting for delivery acknowledgement. Timeout used: ~tp ms. "
                                        "This timeout value can be configured, see consumers doc guide to learn more",
                                        [rabbit_data_coercion:to_binary(ConsumerTag),
                                         Channel, Timeout]),
             Ex = rabbit_misc:amqp_error(precondition_failed,
                                         "delivery acknowledgement on channel ~w timed out. "
-                                        "Timeout value used: ~p ms. "
+                                        "Timeout value used: ~tp ms. "
                                         "This timeout value can be configured, see consumers doc guide to learn more",
                                         [Channel, Timeout], none),
             handle_exception(Ex, State0);

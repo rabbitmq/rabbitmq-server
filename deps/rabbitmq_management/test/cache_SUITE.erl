@@ -59,7 +59,7 @@ end_per_testcase(_Testcase, Config) ->
 %% tests
 
 name(Config) ->
-    ct:pal(?LOW_IMPORTANCE, "Priv: ~p", [?config(priv_dir, Config)]),
+    ct:pal(?LOW_IMPORTANCE, "Priv: ~tp", [?config(priv_dir, Config)]),
     rabbit_mgmt_db_cache_banana = rabbit_mgmt_db_cache:process_name(banana).
 
 fetch_new_key(_Config) ->

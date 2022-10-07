@@ -282,7 +282,7 @@ handle_dest(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
                        end, Seq, Multiple, State);
 
 handle_dest(#'basic.cancel'{}, #{name := Name}) ->
-    rabbit_log:warning("Shovel ~p received a 'basic.cancel' from the server", [Name]),
+    rabbit_log:warning("Shovel ~tp received a 'basic.cancel' from the server", [Name]),
     {stop, {shutdown, restart}};
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
@@ -405,12 +405,12 @@ pop_pending(State = #{dest := Dest}) ->
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~ts' has no more URIs to try for connection",
+          "Shovel '~ts' in vhost '~ts' has no more URIs to try for connection",
           [Name, VHost]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' has no more URIs to try for connection",
+          "Shovel '~ts' has no more URIs to try for connection",
           [ShovelName]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan(URIs, ShovelName) ->
@@ -439,11 +439,11 @@ do_make_conn_and_chan(URIs, ShovelName) ->
 
 log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~ts' failed to connect (URI: ~s): ~s",
+          "Shovel '~ts' in vhost '~ts' failed to connect (URI: ~ts): ~ts",
       [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' failed to connect (URI: ~s): ~s",
+          "Shovel '~ts' failed to connect (URI: ~ts): ~ts",
           [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
 
 human_readable_connection_error({auth_failure, Msg}) ->
@@ -467,7 +467,7 @@ human_readable_connection_error(eacces) ->
     "This may be due to insufficient RabbitMQ process permissions or "
     "a reserved IP address used as destination";
 human_readable_connection_error(Other) ->
-    rabbit_misc:format("~p", [Other]).
+    rabbit_misc:format("~tp", [Other]).
 
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
     Prefix = <<"Shovel ">>,

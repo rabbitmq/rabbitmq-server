@@ -29,18 +29,18 @@
 -spec acquire_state_change_lock() -> boolean().
 acquire_state_change_lock() ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: acquiring lock ~p",
+      "Feature flags: acquiring lock ~tp",
       [?FF_STATE_CHANGE_LOCK]),
     Ret = global:set_lock(?FF_STATE_CHANGE_LOCK),
     rabbit_log_feature_flags:debug(
-      "Feature flags: acquired lock ~p",
+      "Feature flags: acquired lock ~tp",
       [?FF_STATE_CHANGE_LOCK]),
     Ret.
 
 -spec release_state_change_lock() -> true.
 release_state_change_lock() ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: releasing lock ~p",
+      "Feature flags: releasing lock ~tp",
       [?FF_STATE_CHANGE_LOCK]),
     global:del_lock(?FF_STATE_CHANGE_LOCK).
 
@@ -261,7 +261,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                       %% flag.
                                       ?assertNotEqual(state_changing, State),
                                       rabbit_log_feature_flags:error(
-                                        "Feature flags: `~s`: required "
+                                        "Feature flags: `~ts`: required "
                                         "feature flag not enabled! It must "
                                         "be enabled before upgrading "
                                         "RabbitMQ.",
@@ -290,7 +290,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     case Proceed of
         true ->
             rabbit_log_feature_flags:debug(
-              "Feature flags: (re)initialize registry (~p)",
+              "Feature flags: (re)initialize registry (~tp)",
               [self()]),
             T0 = erlang:timestamp(),
             Ret = do_initialize_registry(RegistryVsn,
@@ -300,7 +300,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                          WrittenToDisk),
             T1 = erlang:timestamp(),
             rabbit_log_feature_flags:debug(
-              "Feature flags: time to regen registry: ~p us",
+              "Feature flags: time to regen registry: ~tp us",
               [timer:now_diff(T1, T0)]),
             Ret;
         false ->
@@ -372,8 +372,13 @@ do_initialize_registry(RegistryVsn,
     rabbit_log_feature_flags:debug(
       "Feature flags: list of feature flags found:~n" ++
       lists:flatten(
+<<<<<<< HEAD
         [io_lib:format(
            "Feature flags:   [~s] ~s~n",
+=======
+        [rabbit_misc:format(
+           "Feature flags:   [~ts] ~ts~n",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
            [case maps:get(FeatureName, FeatureStates, false) of
                 true           -> "x";
                 state_changing -> "~~";
@@ -381,9 +386,15 @@ do_initialize_registry(RegistryVsn,
             end,
             FeatureName])
          || FeatureName <- lists:sort(maps:keys(AllFeatureFlags))] ++
+<<<<<<< HEAD
         [io_lib:format(
            "Feature flags: scanned applications: ~p~n"
            "Feature flags: feature flag states written to disk: ~s",
+=======
+        [rabbit_misc:format(
+           "Feature flags: scanned applications: ~tp~n"
+           "Feature flags: feature flag states written to disk: ~ts",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
            [ScannedApps,
             case WrittenToDisk of
                 true  -> "yes";
@@ -606,8 +617,8 @@ regen_registry_mod(RegistryVsn,
         {error, Errors, Warnings} ->
             rabbit_log_feature_flags:error(
               "Feature flags: registry compilation failure:~n"
-              "Errors: ~p~n"
-              "Warnings: ~p",
+              "Errors: ~tp~n"
+              "Warnings: ~tp",
               [Errors, Warnings]),
             {error, {compilation_failure, Errors, Warnings}};
         error ->
@@ -622,7 +633,7 @@ maybe_log_registry_source_code(Forms) ->
         #{log_feature_flags_registry := true} ->
             rabbit_log_feature_flags:debug(
               "== FEATURE FLAGS REGISTRY ==~n"
-              "~s~n"
+              "~ts~n"
               "== END ==~n",
               [erl_prettypr:format(erl_syntax:form_list(Forms))]),
             ok;
@@ -640,14 +651,14 @@ registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
 
 load_registry_mod(RegistryVsn, Mod, Bin) ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: registry module ready, loading it (~p)...",
+      "Feature flags: registry module ready, loading it (~tp)...",
       [self()]),
     FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     rabbit_log_feature_flags:debug(
-      "Feature flags: acquired lock before reloading registry module (~p)",
+      "Feature flags: acquired lock before reloading registry module (~tp)",
      [self()]),
     %% We want to make sure that the old registry (not the one being
     %% currently in use) is purged by the code server. It means no
@@ -668,25 +679,25 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               OtherVsn    -> {error, {restart, RegistryVsn, OtherVsn}}
           end,
     rabbit_log_feature_flags:debug(
-      "Feature flags: releasing lock after reloading registry module (~p)",
+      "Feature flags: releasing lock after reloading registry module (~tp)",
      [self()]),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
             rabbit_log_feature_flags:debug(
-              "Feature flags: registry module loaded (vsn: ~p -> ~p)",
+              "Feature flags: registry module loaded (vsn: ~tp -> ~tp)",
               [RegistryVsn, registry_vsn()]),
             ok;
         {error, {restart, Expected, Current}} ->
             rabbit_log_feature_flags:error(
               "Feature flags: another registry module was loaded in the "
-              "meantime (expected old vsn: ~p, current vsn: ~p); "
+              "meantime (expected old vsn: ~tp, current vsn: ~tp); "
               "restarting the regen",
               [Expected, Current]),
             restart;
         {error, Reason} ->
             rabbit_log_feature_flags:error(
-              "Feature flags: failed to load registry module: ~p",
+              "Feature flags: failed to load registry module: ~tp",
               [Reason]),
             throw({feature_flag_registry_reload_failure, Reason})
     end.

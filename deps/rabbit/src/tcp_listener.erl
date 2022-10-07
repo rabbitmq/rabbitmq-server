@@ -65,7 +65,7 @@ start_link(IPAddress, Port,
 
 init({IPAddress, Port, {M, F, A}, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
-    logger:info("started ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    logger:info("started ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]),
     State0 = #state{
         on_shutdown = OnShutdown,
@@ -85,11 +85,11 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{on_shutdown = OnShutdown, label = Label, ip = IPAddress, port = Port}) ->
-    logger:info("stopped ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    logger:info("stopped ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     try
         OnShutdown(IPAddress, Port)
     catch _:Error ->
-        logger:error("Failed to stop ~s on ~s:~p: ~p",
+        logger:error("Failed to stop ~ts on ~ts:~tp: ~tp",
                      [Label, rabbit_misc:ntoab(IPAddress), Port, Error])
     end.
 

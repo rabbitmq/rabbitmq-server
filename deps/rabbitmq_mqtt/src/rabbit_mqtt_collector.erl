@@ -60,7 +60,11 @@ list(QF) ->
             case ra:leader_query(NodeIds, QF) of
                 {ok, {_, Result}, _} -> Result;
                 {timeout, _}      ->
+<<<<<<< HEAD
                     rabbit_log:debug("~ts:list/1 leader query timed out",
+=======
+                    rabbit_log:debug("~ts:list/0 leader query timed out",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                      [?MODULE]),
                     []
             end;
@@ -70,7 +74,11 @@ list(QF) ->
                 {error, _} ->
                     [];
                 {timeout, _}      ->
+<<<<<<< HEAD
                     rabbit_log:debug("~ts:list/1 leader query timed out",
+=======
+                    rabbit_log:debug("~ts:list/0 leader query timed out",
+>>>>>>> 7fe159edef (Yolo-replace format strings)
                                      [?MODULE]),
                     []
             end

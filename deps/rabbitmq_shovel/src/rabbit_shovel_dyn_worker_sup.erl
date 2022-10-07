@@ -37,8 +37,8 @@ init([Name, Config0]) ->
     Config  = rabbit_data_coercion:to_proplist(Config0),
     Delay   = pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY),
     case Name of
-      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' will use reconnection delay of ~p", [ShovelName, VHost, Delay]);
-      ShovelName          -> rabbit_log:debug("Shovel '~s' will use reconnection delay of ~s", [ShovelName, Delay])
+      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~ts' in virtual host '~ts' will use reconnection delay of ~tp", [ShovelName, VHost, Delay]);
+      ShovelName          -> rabbit_log:debug("Shovel '~ts' will use reconnection delay of ~ts", [ShovelName, Delay])
     end,
     Restart = case Delay of
         N when is_integer(N) andalso N > 0 ->

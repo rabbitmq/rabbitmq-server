@@ -70,8 +70,8 @@ close_user_connection(#tracked_connection{name = Name, pid = Pid, username = Use
 close_user_connection(#tracked_connection{pid = undefined}, _Username, _ReqData) ->
     ok;
 close_user_connection(UnexpectedConn, Username, _ReqData) ->
-    rabbit_log:debug("~p Username: ~p", [?MODULE, Username]),
-    rabbit_log:debug("~p unexpected connection: ~p", [?MODULE, UnexpectedConn]),
+    rabbit_log:debug("~tp Username: ~tp", [?MODULE, Username]),
+    rabbit_log:debug("~tp unexpected connection: ~tp", [?MODULE, UnexpectedConn]),
     ok.
 
 force_close_connection(ReqData, Conn, Pid) ->

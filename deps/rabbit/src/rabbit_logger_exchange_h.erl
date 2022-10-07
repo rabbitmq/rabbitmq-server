@@ -106,7 +106,7 @@ try_format_body(LogEvent, Formatter, FormatterConfig) ->
                 {Formatter, FormatterConfig} ->
                     "DEFAULT FORMATTER CRASHED\n";
                 {DefaultFormatter, DefaultFormatterConfig} ->
-                    Msg = {"FORMATTER CRASH: ~tp -- ~p:~p:~p",
+                    Msg = {"FORMATTER CRASH: ~tp -- ~tp:~tp:~tp",
                            [maps:get(msg, LogEvent), C, R, S]},
                     LogEvent1 = LogEvent#{msg => Msg},
                     try_format_body(
@@ -131,11 +131,11 @@ setup_proc(
     case declare_exchange(Config) of
         ok ->
             ?LOG_INFO(
-               "Logging to exchange '~s' in vhost '~ts' ready", [Name, VHost],
+               "Logging to exchange '~ts' in vhost '~ts' ready", [Name, VHost],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         error ->
             ?LOG_DEBUG(
-               "Logging to exchange '~s' in vhost '~ts' not ready, "
+               "Logging to exchange '~ts' in vhost '~ts' not ready, "
                "trying again in ~b second(s)",
                [Name, VHost, ?DECL_EXCHANGE_INTERVAL_SECS],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -155,14 +155,14 @@ declare_exchange(
                         Exchange, topic, true, false, true, [],
                         ?INTERNAL_USER),
         ?LOG_DEBUG(
-           "Declared exchange '~s' in vhost '~ts'",
+           "Declared exchange '~ts' in vhost '~ts'",
            [Name, VHost],
            #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
         ok
     catch
         Class:Reason ->
             ?LOG_DEBUG(
-               "Could not declare exchange '~s' in vhost '~ts', "
+               "Could not declare exchange '~ts' in vhost '~ts', "
                "reason: ~0p:~0p",
                [Name, VHost, Class, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -176,6 +176,6 @@ unconfigure_exchange(
     Pid ! stop,
     _ = rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
     ?LOG_INFO(
-       "Logging to exchange '~s' in vhost '~ts' disabled",
+       "Logging to exchange '~ts' in vhost '~ts' disabled",
        [Name, VHost],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}).

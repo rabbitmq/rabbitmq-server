@@ -50,21 +50,21 @@ check_user_login(Username, AuthProps) ->
                     %% it gives us
                     case try_authenticate(Mod, Username, AuthProps) of
                         {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
+                            rabbit_log:debug("User '~ts' authenticated successfully by backend ~ts", [Username2, Mod]),
                             user(ModNUser, {ok, [{Mod, Impl}], []});
                         Else ->
-                            rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
+                            rabbit_log:debug("User '~ts' failed authenticatation by backend ~ts", [Username, Mod]),
                             Else
                     end;
                 (_, {ok, User}) ->
                     %% We've successfully authenticated. Skip to the end...
                     {ok, User}
             end,
-            {refused, Username, "No modules checked '~s'", [Username]}, Modules)
+            {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
         catch 
             Type:Error:Stacktrace -> 
-                rabbit_log:debug("User '~s' authentication failed with ~s:~p:~n~p", [Username, Type, Error, Stacktrace]),
-                {refused, Username, "User '~s' authentication failed with internal error. "
+                rabbit_log:debug("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
+                {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
 
         end.
@@ -76,7 +76,7 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             end,
     case try_authenticate(ModN, Username, AuthProps) of
         {ok, ModNUser = #auth_user{username = Username2}} ->
-            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
+            rabbit_log:debug("User '~ts' authenticated successfully by backend ~ts", [Username2, ModN]),
             user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
         Else ->
             Else
@@ -86,7 +86,7 @@ try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
         {ok, AuthUser}  -> {ok, AuthUser};
         {error, E}      -> {refused, Username,
-                            "~s failed authenticating ~s: ~p",
+                            "~ts failed authenticating ~ts: ~tp",
                             [Module, Username, E]};
         {refused, F, A} -> {refused, Username, F, A}
     end.
@@ -98,7 +98,7 @@ try_authorize(Modules, Username, AuthProps) ->
                   {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags ++ Tags};
                   {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls], ModsTags};
                   {error, E}      -> {refused, Username,
-                                        "~s failed authorizing ~s: ~p",
+                                        "~ts failed authorizing ~ts: ~tp",
                                         [Module, Username, E]};
                   {refused, F, A} -> {refused, Username, F, A}
               end;
@@ -157,7 +157,7 @@ check_vhost_access(User = #user{username       = Username,
                             Mod:check_vhost_access(
                               auth_user(User, Impl), VHostPath, FullAuthzContext)
                 end,
-                Mod, "access to vhost '~ts' refused for user '~s'",
+                Mod, "access to vhost '~ts' refused for user '~ts'",
                 [VHostPath, Username], not_allowed);
          (_, Else) ->
               Else
@@ -188,7 +188,7 @@ check_resource_access(User = #user{username       = Username,
               check_access(
                 fun() -> Module:check_resource_access(
                            auth_user(User, Impl), Resource, Permission, Context) end,
-                Module, "access to ~s refused for user '~s'",
+                Module, "access to ~ts refused for user '~ts'",
                 [rabbit_misc:rs(Resource), Username]);
          (_, Else) -> Else
       end, ok, Modules).
@@ -201,7 +201,7 @@ check_topic_access(User = #user{username = Username,
             check_access(
                 fun() -> Module:check_topic_access(
                     auth_user(User, Impl), Resource, Permission, Context) end,
-                Module, "access to topic '~s' in exchange ~s refused for user '~s'",
+                Module, "access to topic '~ts' in exchange ~ts refused for user '~ts'",
                 [maps:get(routing_key, Context), rabbit_misc:rs(Resource), Username]);
             (_, Else) -> Else
         end, ok, Modules).
@@ -216,7 +216,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         false ->
             rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
         {error, E}  ->
-            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p",
+            FullErrStr = ErrStr ++ ", backend ~ts returned an error: ~tp",
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)

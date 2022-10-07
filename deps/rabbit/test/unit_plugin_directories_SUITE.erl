@@ -37,11 +37,11 @@ listing_plugins_from_multiple_directories(Config) ->
     ok = file:make_dir(FirstDir),
     ok = file:make_dir(SecondDir),
     lists:foreach(fun({Dir, AppName, Vsn}) ->
-                          EzName = filename:join([Dir, io_lib:format("~s-~s.ez", [AppName, Vsn])]),
-                          AppFileName = lists:flatten(io_lib:format("~s-~s/ebin/~s.app", [AppName, Vsn, AppName])),
+                          EzName = filename:join([Dir, io_lib:format("~ts-~ts.ez", [AppName, Vsn])]),
+                          AppFileName = lists:flatten(io_lib:format("~ts-~ts/ebin/~ts.app", [AppName, Vsn, AppName])),
                           AppFileContents = list_to_binary(
                                               io_lib:format(
-                                                "~p.",
+                                                "~tp.",
                                                 [{application, AppName,
                                                   [{vsn, Vsn},
                                                    {applications, [kernel, stdlib, rabbit]}]}])),
@@ -70,7 +70,7 @@ listing_plugins_from_multiple_directories(Config) ->
         Expected ->
             ok;
         _ ->
-            ct:pal("Got ~p~nExpected: ~p", [Got, Expected]),
+            ct:pal("Got ~tp~nExpected: ~tp", [Got, Expected]),
             exit({wrong_plugins_list, Got})
     end,
     ok.

@@ -80,14 +80,14 @@ init() ->
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
-    rabbit_log:debug("Will use AWS access key of '~s'", [get_config_key(aws_access_key, M)]),
+    rabbit_log:debug("Will use AWS access key of '~ts'", [get_config_key(aws_access_key, M)]),
     ok = maybe_set_region(get_config_key(aws_ec2_region, M)),
     ok = maybe_set_credentials(get_config_key(aws_access_key, M),
                                get_config_key(aws_secret_key, M)),
     case get_config_key(aws_autoscaling, M) of
         true ->
             case rabbitmq_aws_config:instance_id() of
-                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
+                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~tp", [InstanceId]),
                                     get_autoscaling_group_node_list(InstanceId, get_tags());
                 _                -> {error, "Failed to determine EC2 instance ID from metadata service"}
             end;
@@ -124,7 +124,7 @@ lock(Node) ->
     {ok, {Nodes, disc}} ->
       case lists:member(Node, Nodes) of
         true ->
-          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
+          rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
           LockId = rabbit_nodes:lock_id(Node),
           Retries = rabbit_nodes:lock_retries(),
           case global:set_lock(LockId, Nodes, Retries) of
@@ -136,7 +136,7 @@ lock(Node) ->
         false ->
           %% Don't try to acquire the global lock when our own node is not discoverable by peers.
           %% We shouldn't run into this branch because our node is running and should have been discovered.
-          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
+          {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
       end;
     {error, _} = Error ->
       Error
@@ -166,7 +166,7 @@ get_config_key(Key, Map) ->
 maybe_set_credentials("undefined", _) -> ok;
 maybe_set_credentials(_, "undefined") -> ok;
 maybe_set_credentials(AccessKey, SecretKey) ->
-    rabbit_log:debug("Setting AWS credentials, access key: '~s'", [AccessKey]),
+    rabbit_log:debug("Setting AWS credentials, access key: '~ts'", [AccessKey]),
     rabbitmq_aws:set_credentials(AccessKey, SecretKey).
 
 
@@ -180,24 +180,31 @@ maybe_set_region("undefined") ->
         {ok, Region} -> maybe_set_region(Region)
     end;
 maybe_set_region(Value) ->
-    rabbit_log:debug("Setting AWS region to ~p", [Value]),
+    rabbit_log:debug("Setting AWS region to ~tp", [Value]),
     rabbitmq_aws:set_region(Value).
 
+<<<<<<< HEAD
+=======
+get_autoscaling_group_node_list(error, _) ->
+    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
+                       "instance id from ~ts", [rabbitmq_aws_config:instance_id_url()]),
+    {ok, {[], disc}};
+>>>>>>> 7fe159edef (Yolo-replace format strings)
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
             case find_autoscaling_group(Instances, Instance) of
                 {ok, Group} ->
-                    rabbit_log:debug("Performing autoscaling group discovery, group: ~p", [Group]),
+                    rabbit_log:debug("Performing autoscaling group discovery, group: ~tp", [Group]),
                     Values = get_autoscaling_instances(Instances, Group, []),
-                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~p", [Values]),
+                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~tp", [Values]),
                     case get_hostname_by_instance_ids(Values, Tag) of
                         error ->
                             Msg = "Cannot discover any nodes: DescribeInstances API call failed",
                             rabbit_log:error(Msg),
                             {error, Msg};
                         Names ->
-                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
+                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~tp", [Names]),
                             {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
                     end;
                 error ->
@@ -242,7 +249,7 @@ fetch_all_autoscaling_instances(QArgs, Accum) ->
             NextToken = get_next_token(Payload),
             get_all_autoscaling_instances(lists:append(Instances, Accum), NextToken);
         {error, Reason} = Error ->
-            rabbit_log:error("Error fetching autoscaling group instance list: ~p", [Reason]),
+            rabbit_log:error("Error fetching autoscaling group instance list: ~tp", [Reason]),
             Error
     end.
 
@@ -330,7 +337,7 @@ get_hostname_names(Path) ->
             ReservationSet = proplists:get_value("reservationSet", Response),
             get_hostname_name_from_reservation_set(ReservationSet, []);
         {error, Reason} ->
-            rabbit_log:error("Error fetching node list via EC2 API, request path: ~s, error: ~p", [Path, Reason]),
+            rabbit_log:error("Error fetching node list via EC2 API, request path: ~ts, error: ~tp", [Path, Reason]),
             error
     end.
 
@@ -341,7 +348,7 @@ get_hostname_by_tags(Tags) ->
     case get_hostname_names(Path) of
         error ->
             rabbit_log:warning("Cannot discover any nodes because AWS "
-                               "instance description with tags ~p failed", [Tags]),
+                               "instance description with tags ~tp failed", [Tags]),
             [];
         Names ->
             Names

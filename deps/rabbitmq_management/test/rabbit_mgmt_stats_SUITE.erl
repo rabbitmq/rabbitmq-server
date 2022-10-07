@@ -135,7 +135,7 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
            Results = rabbit_mgmt_stats:format_range(Range, LastTS, Table, 5000,
                                                     InstantRateFun,
                                                     SamplesFun),
-           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~nRange: ~p~n", [Results, Slide, Range]),
+           ?WHENFAIL(io:format("Got: ~tp~nSlide: ~tp~nRange: ~tp~n", [Results, Slide, Range]),
                      Check(Results, Total, Samples, Table))
        end).
 

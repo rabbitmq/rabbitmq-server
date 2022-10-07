@@ -176,7 +176,7 @@ info(FeatureFlags, Options) ->
                                         false -> {"unsupported", Red}
                                     end,
                                     #paragraph{content =
-                                               [rabbit_misc:format("  ~s: ",
+                                               [rabbit_misc:format("  ~ts: ",
                                                                    [Node]),
                                                 #paragraph{content = Label,
                                                            props = LabelColor}]}
@@ -242,4 +242,4 @@ state_legend(Options) ->
 %% @returns the formatted error reason.
 
 format_error(Reason) ->
-    rabbit_misc:format("~p", [Reason]).
+    rabbit_misc:format("~tp", [Reason]).

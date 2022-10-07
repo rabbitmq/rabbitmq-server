@@ -102,7 +102,7 @@ set_and_verify_vm_memory_high_watermark_relative(MemLimitRatio) ->
         MemTotal -> ok;
         _        -> MemTotalToMemLimitRatio = (MemLimit * 100) / (MemTotal * 100),
                     ct:fail(
-                        "Expected memory high watermark to be ~p (~p), but it was ~p (~.1f)",
+                        "Expected memory high watermark to be ~tp (~tp), but it was ~tp (~.1f)",
                         [MemTotal, MemLimitRatio, MemLimit, MemTotalToMemLimitRatio]
                     )
     end.
@@ -117,6 +117,6 @@ set_and_verify_vm_memory_high_watermark_absolute(MemLimit0) ->
         MemTotal    -> ok;
         Interpreted -> ok;
         _           ->
-            ct:fail("Expected memory high watermark to be ~p but it was ~p", [Interpreted, MemLimit])
+            ct:fail("Expected memory high watermark to be ~tp but it was ~tp", [Interpreted, MemLimit])
     end,
     vm_memory_monitor:set_vm_memory_high_watermark(0.4).

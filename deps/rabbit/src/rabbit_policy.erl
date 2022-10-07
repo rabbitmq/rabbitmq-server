@@ -310,7 +310,7 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser)
         Num -> parse_set0(Type, VHost, Name, Pattern, Definition, Num, ApplyTo,
                           ActingUser)
     catch
-        error:badarg -> {error, "~p priority must be a number", [Priority]}
+        error:badarg -> {error, "~tp priority must be a number", [Priority]}
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
@@ -322,7 +322,7 @@ parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
                       {<<"priority">>,   Priority},
                       {<<"apply-to">>,   ApplyTo}],
                      ActingUser),
-            rabbit_log:info("Successfully set policy '~s' matching ~s names in virtual host '~s' using pattern '~s'",
+            rabbit_log:info("Successfully set policy '~ts' matching ~ts names in virtual host '~ts' using pattern '~ts'",
                             [Name, ApplyTo, VHost, Pattern]),
             R;
         {error, Reason} ->
@@ -577,12 +577,12 @@ validation(_Name, Terms, Validator) when is_list(Terms) ->
         true  -> {TermKeys, _} = lists:unzip(Terms),
                  case dups(TermKeys) of
                      []   -> validation0(Validators, Terms);
-                     Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+                     Dup  -> {error, "~tp duplicate keys not allowed", [Dup]}
                  end;
-        false -> {error, "definition must be a dictionary: ~p", [Terms]}
+        false -> {error, "definition must be a dictionary: ~tp", [Terms]}
     end;
 validation(Name, Term, Validator) ->
-    {error, "parse error while reading policy ~s: ~p. Validator: ~p.",
+    {error, "parse error while reading policy ~ts: ~tp. Validator: ~tp.",
      [Name, Term, Validator]}.
 
 validation0(Validators, Terms) ->
@@ -600,7 +600,7 @@ validation0(Validators, Terms) ->
          {ok, []} ->
              ok;
          {ok, Unvalidated} ->
-             {error, "~p are not recognised policy settings", [Unvalidated]};
+             {error, "~tp are not recognised policy settings", [Unvalidated]};
          {Error, _} ->
              Error
     end.
@@ -615,5 +615,5 @@ apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
 apply_to_validation(_Name, Term) ->
-    {error, "apply-to '~s' unrecognised; should be 'queues', 'exchanges' "
+    {error, "apply-to '~ts' unrecognised; should be 'queues', 'exchanges' "
      "or 'all'", [Term]}.

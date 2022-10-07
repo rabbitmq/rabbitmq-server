@@ -38,7 +38,7 @@ list_certs(_, #http_state{url = Url,
         {ok, {{_,304, _}, _, _}}  -> no_change;
         {ok, {{_,Code,_}, _, Body}} -> {error, {http_error, Code, Body}};
         {error, Reason} ->
-            rabbit_log:error("Trust store HTTP[S] provider request failed: ~p", [Reason]),
+            rabbit_log:error("Trust store HTTP[S] provider request failed: ~tp", [Reason]),
             {error, Reason}
     end.
 
@@ -95,7 +95,7 @@ decode_cert_list(Body) ->
             rabbit_log:error("Trust store failed to decode an HTTP[S] response: JSON parser failed"),
             [];
           _:Error ->
-            rabbit_log:error("Trust store failed to decode an HTTP[S] response: ~p", [Error]),
+            rabbit_log:error("Trust store failed to decode an HTTP[S] response: ~tp", [Error]),
             []
     end.
 

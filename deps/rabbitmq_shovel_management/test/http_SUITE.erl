@@ -306,7 +306,7 @@ assert_code(CodeExp, CodeAct, _Type, _Path, _Body) ->
     ?assertEqual(CodeExp, CodeAct).
 
 req_uri(Config, Path) ->
-    rabbit_misc:format("~s/api~s", [
+    rabbit_misc:format("~ts/api~ts", [
         rabbit_ct_broker_helpers:node_uri(Config, 0, management),
         Path
       ]).

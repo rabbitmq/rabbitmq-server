@@ -280,13 +280,13 @@ handle_call({init, Overall}, _From,
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
     ok = pg:join(Group, Overall),
-    rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~p joined group ~p", [Overall, Group]),
+    rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~tp joined group ~tp", [Overall, Group]),
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
-    rabbit_log:debug("Mirrored supervisor: known group ~p members: ~p on nodes ~p", [Group, Rest, Nodes]),
+    rabbit_log:debug("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
     case Rest of
         [] ->
-            rabbit_log:debug("Mirrored supervisor: no known peer members in group ~p, will delete all child records for it", [Group]),
+            rabbit_log:debug("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
             TxFun(fun() -> delete_all(Group) end);
         _  -> ok
     end,
@@ -311,19 +311,19 @@ handle_call({start_child, ChildSpec}, _From,
                            tx_fun   = TxFun}) ->
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
-    rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~p", [Group]),
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~tp", [Group]),
     Result = case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
                  already_in_mnesia ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                      " overall ~p returned 'record already present'", [Group, Overall]),
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned 'record already present'", [Group, Overall]),
                      {error, already_present};
                  {already_in_mnesia, Pid} ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                      " overall ~p returned 'already running: ~p'", [Group, Overall, Pid]),
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned 'already running: ~tp'", [Group, Overall, Pid]),
                      {error, {already_started, Pid}};
                  Else ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                      " overall ~p returned ~p", [Group, Overall, Else]),
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned ~tp", [Group, Overall, Else]),
                      Else
              end,
     mirrored_supervisor_locks:unlock(LockId),
@@ -403,19 +403,19 @@ tell_all_peers_to_die(Group, Reason) ->
     [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
 
 maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
-    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~p", [Group]),
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~tp", [Group]),
     try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
         start      ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'do start'", [Group, Overall]),
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'do start'", [Group, Overall]),
             start(Delegate, ChildSpec);
         undefined  ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'undefined'", [Group, Overall]),
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'undefined'", [Group, Overall]),
             already_in_mnesia;
         Pid        ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'already running (~p)'", [Group, Overall, Pid]),
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'already running (~tp)'", [Group, Overall, Pid]),
             {already_in_mnesia, Pid}
     catch
         %% If we are torn down while in the transaction...
@@ -423,10 +423,10 @@ maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
-    rabbit_log:debug("Mirrored supervisor: check_start for group ~p, id: ~p, overall: ~p",
+    rabbit_log:debug("Mirrored supervisor: check_start for group ~tp, id: ~tp, overall: ~tp",
                      [Group, id(ChildSpec), Overall]),
     ReadResult = mnesia:wread({?TABLE, {Group, id(ChildSpec)}}),
-    rabbit_log:debug("Mirrored supervisor: check_start table ~s read for key ~p returned ~p",
+    rabbit_log:debug("Mirrored supervisor: check_start table ~ts read for key ~tp returned ~tp",
                      [?TABLE, {Group, id(ChildSpec)}, ReadResult]),
     case ReadResult of
         []  -> _ = write(Group, Overall, ChildSpec),
@@ -435,11 +435,11 @@ check_start(Group, Overall, Delegate, ChildSpec) ->
                                        mirroring_pid = Pid} = S,
                case Overall of
                    Pid ->
-                       rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~p", [Pid]),
+                       rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~tp", [Pid]),
                        child(Delegate, Id);
                    _   ->
-                       rabbit_log:debug("Mirrored supervisor: overall ~p did not match mirrored pid ~p", [Overall, Pid]),
-                       rabbit_log:debug("Mirrored supervisor: supervisor(~p) returned ~p", [Pid, supervisor(Pid)]),
+                       rabbit_log:debug("Mirrored supervisor: overall ~tp did not match mirrored pid ~tp", [Overall, Pid]),
+                       rabbit_log:debug("Mirrored supervisor: supervisor(~tp) returned ~tp", [Pid, supervisor(Pid)]),
                        case supervisor(Pid) of
                           dead      ->
                               _ = write(Group, Overall, ChildSpec),
@@ -553,6 +553,6 @@ restore_child_order(ChildSpecs, ChildOrder) ->
                end, ChildSpecs).
 
 maybe_log_lock_acquisition_failure(undefined = _LockId, Group) ->
-    rabbit_log:warning("Mirrored supervisor: could not acquire lock for group ~s", [Group]);
+    rabbit_log:warning("Mirrored supervisor: could not acquire lock for group ~ts", [Group]);
 maybe_log_lock_acquisition_failure(_, _) ->
     ok.
