@@ -79,7 +79,6 @@
          "RABBITMQ_PRODUCT_VERSION",
          "RABBITMQ_QUORUM_DIR",
          "RABBITMQ_STREAM_DIR",
-         "RABBITMQ_UPGRADE_LOG",
          "RABBITMQ_USE_LONGNAME",
          "SYS_PREFIX"
         ]).
@@ -142,7 +141,6 @@ get_context_after_reloading_env(Context) ->
              fun advanced_config_file/1,
              fun log_base_dir/1,
              fun main_log_file/1,
-             fun upgrade_log_file/1,
              fun mnesia_base_dir/1,
              fun mnesia_dir/1,
              fun quorum_queue_dir/1,
@@ -624,10 +622,6 @@ get_default_advanced_config_file(#{config_base_dir := ConfigBaseDir}) ->
 %%   Main log file
 %%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log
 %%
-%% RABBITMQ_UPDATE_LOG
-%%   Upgrade-procesure-specific log file
-%%   Default: ${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log
-%%
 %% RABBITMQ_LOG
 %%   Log level; overrides the configuration file value
 %%   Default: (undefined)
@@ -731,18 +725,6 @@ main_log_file(#{nodename := Nodename,
         Value ->
             File = normalize_path(Value),
             update_context(Context, main_log_file, File, environment)
-    end.
-
-upgrade_log_file(#{nodename := Nodename,
-                   log_base_dir := LogBaseDir} = Context) ->
-    case get_prefixed_env_var("RABBITMQ_UPGRADE_LOG") of
-        false ->
-            UpgradeLogFileName = atom_to_list(Nodename) ++ "_upgrade.log",
-            File = normalize_path(LogBaseDir, UpgradeLogFileName),
-            update_context(Context, upgrade_log_file, File, default);
-        Value ->
-            File = normalize_path(Value),
-            update_context(Context, upgrade_log_file, File, environment)
     end.
 
 dbg_config() ->

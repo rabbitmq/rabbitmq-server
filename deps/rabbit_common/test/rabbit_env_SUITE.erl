@@ -53,7 +53,6 @@
          check_RABBITMQ_PRODUCT_VERSION/1,
          check_RABBITMQ_QUORUM_DIR/1,
          check_RABBITMQ_STREAM_DIR/1,
-         check_RABBITMQ_UPGRADE_LOG/1,
          check_RABBITMQ_USE_LOGNAME/1,
          check_value_is_yes/1,
          check_log_process_env/1,
@@ -97,7 +96,6 @@ all() ->
      check_RABBITMQ_PRODUCT_NAME,
      check_RABBITMQ_PRODUCT_VERSION,
      check_RABBITMQ_QUORUM_DIR,
-     check_RABBITMQ_UPGRADE_LOG,
      check_RABBITMQ_USE_LOGNAME,
      check_value_is_yes,
      check_log_process_env,
@@ -205,8 +203,7 @@ check_default_values(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      stream_queue_dir => default,
-      upgrade_log_file => default
+      stream_queue_dir => default
      },
 
     ?assertEqual(
@@ -256,8 +253,6 @@ check_default_values(_) ->
            "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         upgrade_log_file =>
-           "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{sys_prefix => default}},
        UnixContext),
@@ -309,8 +304,6 @@ check_default_values(_) ->
          stream_queue_dir =>
            "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
-         upgrade_log_file =>
-           "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{rabbitmq_base => default}},
        Win32Context).
@@ -430,8 +423,7 @@ check_values_from_reachable_remote_node(Config) ->
           product_version => default,
           quorum_queue_dir => default,
           rabbitmq_home => default,
-          stream_queue_dir => default,
-          upgrade_log_file => default
+          stream_queue_dir => default
          },
 
         ?assertEqual(
@@ -478,8 +470,6 @@ check_values_from_reachable_remote_node(Config) ->
              stream_queue_dir => MnesiaDir ++ "/stream",
              split_nodename => rabbit_nodes_common:parts(Node),
              sys_prefix => "",
-             upgrade_log_file =>
-               "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
              var_origins => Origins#{sys_prefix => default}},
            UnixContext)
@@ -555,8 +545,7 @@ check_values_from_offline_remote_node(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      stream_queue_dir => default,
-      upgrade_log_file => default
+      stream_queue_dir => default
      },
 
     ?assertEqual(
@@ -603,8 +592,6 @@ check_values_from_offline_remote_node(_) ->
          stream_queue_dir => undefined,
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         upgrade_log_file =>
-           "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{sys_prefix => default}},
        UnixContext).
@@ -903,15 +890,6 @@ check_RABBITMQ_LOGS(_) ->
     Value2 = random_string(),
     check_prefixed_variable("RABBITMQ_LOGS",
                             main_log_file,
-                            '_',
-                            Value1, Value1,
-                            Value2, Value2).
-
-check_RABBITMQ_UPGRADE_LOG(_) ->
-    Value1 = random_string(),
-    Value2 = random_string(),
-    check_prefixed_variable("RABBITMQ_UPGRADE_LOG",
-                            upgrade_log_file,
                             '_',
                             Value1, Value1,
                             Value2, Value2).

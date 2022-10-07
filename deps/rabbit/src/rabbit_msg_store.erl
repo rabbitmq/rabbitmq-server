@@ -9,7 +9,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/5, start_global_store_link/4, successfully_recovered_state/1,
+-export([start_link/5, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
          write/3, write_flow/3, read/2, contains/2, remove/2]).
@@ -18,8 +18,6 @@
          delete_file/2]). %% internal
 
 -export([scan_file_for_valid_messages/1]). %% salvage tool
-
--export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_call/4, prioritise_cast/3,
@@ -445,11 +443,6 @@
 start_link(VHost, Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
     gen_server2:start_link(?MODULE,
                            [VHost, Type, Dir, ClientRefs, StartupFunState],
-                           [{timeout, infinity}]).
-
-start_global_store_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
-    gen_server2:start_link({local, Type}, ?MODULE,
-                           [global, Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 -spec successfully_recovered_state(server()) -> boolean().
@@ -2211,60 +2204,3 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {got, FinalOffsetZ},
                         {destination, Destination}]}
     end.
-
--spec force_recovery(file:filename(), server()) -> 'ok'.
-
-force_recovery(BaseDir, Store) ->
-    Dir = filename:join(BaseDir, atom_to_list(Store)),
-    case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
-        ok              -> ok;
-        {error, enoent} -> ok
-    end,
-    recover_crashed_compactions(BaseDir),
-    ok.
-
-foreach_file(D, Fun, Files) ->
-    [ok = Fun(filename:join(D, File)) || File <- Files].
-
-foreach_file(D1, D2, Fun, Files) ->
-    [ok = Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
-
--spec transform_dir(file:filename(), server(),
-        fun ((any()) -> (rabbit_types:ok_or_error2(msg(), any())))) -> 'ok'.
-
-transform_dir(BaseDir, Store, TransformFun) ->
-    Dir = filename:join(BaseDir, atom_to_list(Store)),
-    TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
-    TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
-    CopyFile = fun (Src, Dst) -> {ok, _Bytes} = file:copy(Src, Dst), ok end,
-    case filelib:is_dir(TmpDir) of
-        true  -> throw({error, transform_failed_previously});
-        false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
-                 foreach_file(Dir, TmpDir, TransformFile,     FileList),
-                 foreach_file(Dir,         fun file:delete/1, FileList),
-                 foreach_file(TmpDir, Dir, CopyFile,          FileList),
-                 foreach_file(TmpDir,      fun file:delete/1, FileList),
-                 ok = file:del_dir(TmpDir)
-    end.
-
-transform_msg_file(FileOld, FileNew, TransformFun) ->
-    ok = rabbit_file:ensure_parent_dirs_exist(FileNew),
-    {ok, RefOld} = file_handle_cache:open_with_absolute_path(
-                     FileOld, [raw, binary, read], []),
-    {ok, RefNew} = file_handle_cache:open_with_absolute_path(
-                     FileNew, [raw, binary, write],
-                     [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]),
-    {ok, _Acc, _IgnoreSize} =
-        rabbit_msg_file:scan(
-          RefOld, filelib:file_size(FileOld),
-          fun({MsgId, _Size, _Offset, BinMsg}, ok) ->
-                  {ok, MsgNew} = case binary_to_term(BinMsg) of
-                                     <<>> -> {ok, <<>>};  %% dying client marker
-                                     Msg  -> TransformFun(Msg)
-                                 end,
-                  {ok, _} = rabbit_msg_file:append(RefNew, MsgId, MsgNew),
-                  ok
-          end, ok),
-    ok = file_handle_cache:close(RefOld),
-    ok = file_handle_cache:close(RefNew),
-    ok.

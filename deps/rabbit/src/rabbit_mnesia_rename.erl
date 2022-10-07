@@ -9,7 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([rename/2]).
--export([maybe_finish/1]).
+-export([maybe_finish/0, maybe_finish/1]).
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
 
@@ -127,6 +127,12 @@ restore_backup(Backup) ->
     stop_mnesia(),
     rabbit_mnesia:force_load_next_boot().
 
+-spec maybe_finish() -> ok.
+
+maybe_finish() ->
+    AllNodes = rabbit_nodes:all(),
+    maybe_finish(AllNodes).
+
 -spec maybe_finish([node()]) -> 'ok'.
 
 maybe_finish(AllNodes) ->
@@ -138,7 +144,7 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
-            case rabbit_upgrade:nodes_running(AllNodes) of
+            case rabbit_nodes:filter_nodes_running_rabbitmq(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
             end;
@@ -168,10 +174,29 @@ finish_primary(FromNode, ToNode) ->
 finish_secondary(FromNode, ToNode, AllNodes) ->
     rabbit_log:info("Restarting as secondary after rename from ~s to ~s",
                     [FromNode, ToNode]),
-    rabbit_upgrade:secondary_upgrade(AllNodes),
+    %% Renaming a node was partially handled by `rabbit_upgrade', the old
+    %% upgrade mechanism used before we introduced feature flags. The
+    %% following lines until `init_db_unchecked()' included were part of
+    %% `rabbit_upgrade:secondary_upgrade(AllNodes)'.
+    NodeType = node_type_legacy(),
+    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                          cannot_delete_schema),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    ok = rabbit_mnesia:init_db_unchecked(AllNodes, NodeType),
     rename_in_running_mnesia(FromNode, ToNode),
     delete_rename_files(),
     ok.
+
+node_type_legacy() ->
+    %% This is pretty ugly but we can't start Mnesia and ask it (will
+    %% hang), we can't look at the config file (may not include us
+    %% even if we're a disc node).  We also can't use
+    %% rabbit_mnesia:node_type/0 because that will give false
+    %% positives on Rabbit up to 2.5.1.
+    case filelib:is_regular(filename:join(rabbit_mnesia:dir(), "rabbit_durable_exchange.DCD")) of
+        true  -> disc;
+        false -> ram
+    end.
 
 dir()                -> rabbit_mnesia:dir() ++ "-rename".
 before_backup_name() -> dir() ++ "/backup-before".

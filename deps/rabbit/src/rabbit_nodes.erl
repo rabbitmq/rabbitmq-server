@@ -10,7 +10,9 @@
 -export([names/1, diagnostics/1, make/1, make/2, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
-         all_running/0, name_type/0, running_count/0, total_count/0,
+         all_running/0, all_running_mnesia/0,
+         all_running_rabbitmq/0, filter_nodes_running_rabbitmq/1,
+         name_type/0, running_count/0, total_count/0,
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
@@ -144,7 +146,19 @@ ensure_epmd() ->
 all() -> rabbit_mnesia:cluster_nodes(all).
 
 -spec all_running() -> [node()].
-all_running() -> rabbit_mnesia:cluster_nodes(running).
+all_running() -> all_running_mnesia().
+
+-spec all_running_mnesia() -> [node()].
+all_running_mnesia() -> rabbit_mnesia:cluster_nodes(running).
+
+-spec all_running_rabbitmq() -> [node()].
+all_running_rabbitmq() ->
+    AllNodes = all(),
+    filter_nodes_running_rabbitmq(AllNodes).
+
+-spec filter_nodes_running_rabbitmq([node()]) -> [node()].
+filter_nodes_running_rabbitmq(Nodes) ->
+    [N || N <- Nodes, rabbit:is_running(N)].
 
 -spec running_count() -> integer().
 running_count() -> length(all_running()).
