@@ -68,6 +68,14 @@
        migration_fun => {?MODULE, user_limits_migration}
      }}).
 
+-rabbit_feature_flag(
+    {classic_queue_type_delivery_support,
+        #{desc          => "Bug fix for classic queue deliveries using mixed versions",
+        doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
+        stability     => stable,
+        depends_on    => [stream_queue]
+        }}).
+
 classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
     ok.
 
@@ -136,14 +144,6 @@ remove_explicit_default_bindings(FeatureName, Queues) ->
     [rabbit_binding:remove_default_exchange_binding_rows_of(Q)
      || Q <- Queues],
     ok.
-
--rabbit_feature_flag(
-   {classic_queue_type_delivery_support,
-    #{desc          => "Bug fix for classic queue deliveries using mixed versions",
-      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
-      stability     => stable,
-      depends_on    => [stream_queue]
-     }}).
 
 %% -------------------------------------------------------------------
 %% Virtual host metadata.
