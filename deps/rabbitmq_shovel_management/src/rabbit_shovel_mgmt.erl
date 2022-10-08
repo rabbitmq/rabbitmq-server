@@ -95,13 +95,8 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                             %% We must distinguish between a delete and restart
                             case is_restart(ReqData) of
                                 true ->
-<<<<<<< HEAD
-                                    rabbit_log:info("Asked to restart shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
-                                    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
-=======
                                     rabbit_log:info("Asked to restart shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
->>>>>>> c3c1a3f48f (Fix error handling of shovel_management delete/restart shovel)
                                         ok -> true;
                                         {error, not_found} ->
                                             rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
@@ -113,13 +108,8 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                                     end;
 
                                 _ ->
-<<<<<<< HEAD
-                                    rabbit_log:info("Asked to delete shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
-                                    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
-=======
                                     rabbit_log:info("Asked to delete shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     try erpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
->>>>>>> c3c1a3f48f (Fix error handling of shovel_management delete/restart shovel)
                                         ok -> true;
                                         {error, not_found} ->
                                             rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
