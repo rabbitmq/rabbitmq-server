@@ -61,6 +61,7 @@
      }}).
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
     ok.
@@ -74,6 +75,19 @@ classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) -
      }}).
 
 >>>>>>> 0dd396843f (Introduce new feature flag to avoid crashing channel.)
+=======
+-rabbit_feature_flag(
+    {classic_queue_type_delivery_support,
+        #{desc          => "Bug fix for classic queue deliveries using mixed versions",
+        doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
+        stability     => stable,
+        depends_on    => [stream_queue]
+        }}).
+
+classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
+    ok.
+
+>>>>>>> 9bda277d5a (Compile)
 %% -------------------------------------------------------------------
 %% Quorum queues.
 %% -------------------------------------------------------------------
