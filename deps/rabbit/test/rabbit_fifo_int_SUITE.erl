@@ -2,6 +2,7 @@
 
 %% rabbit_fifo and rabbit_fifo_client integration suite
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -include_lib("common_test/include/ct.hrl").
@@ -98,24 +99,27 @@ basics(Config) ->
 
     {ok, FState2} = rabbit_fifo_client:enqueue(one, FState1),
 
-    FState4 = receive
-                  {ra_event, From, Evt} ->
-                      case rabbit_fifo_client:handle_ra_event(From, Evt, FState2) of
-                          {ok, FState3,
-                           [{deliver, C, true,
-                             [{_Qname, _QRef, MsgId, _SomBool, _Msg}]}]} ->
-                              {S, _A} = rabbit_fifo_client:settle(C, [MsgId], FState3),
-                              S
-                      end
-              after 5000 ->
-                        exit(await_msg_timeout)
-              end,
+    DeliverFun = fun DeliverFun(S0, F) ->
+                         receive
+                             {ra_event, From, Evt} ->
+                                 case rabbit_fifo_client:handle_ra_event(From, Evt, S0) of
+                                     {ok, S1,
+                                      [{deliver, C, true,
+                                        [{_Qname, _QRef, MsgId, _SomBool, _Msg}]}]} ->
+                                         {S, _A} = rabbit_fifo_client:F(C, [MsgId], S1),
+                                         %% settle applied event
+                                         process_ra_event(S, ?RA_EVENT_TIMEOUT);
+                                     {ok, S, _} ->
+                                         DeliverFun(S, F)
+                                 end
+                         after 5000 ->
+                                   flush(),
+                                   exit(await_delivery_timeout)
+                         end
+                 end,
 
-    % process applied event
-    FState5 = process_ra_event(FState4, ?RA_EVENT_TIMEOUT),
+    FState5 = DeliverFun(FState2, settle),
 
-    % process settle applied notification
-    FState5b = process_ra_event(FState5, ?RA_EVENT_TIMEOUT),
     _ = rabbit_quorum_queue:stop_server(ServerId),
     _ = rabbit_quorum_queue:restart_server(ServerId),
 
@@ -126,20 +130,8 @@ basics(Config) ->
               exit(leader_change_timeout)
     end,
 
-    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
-    FState8 = receive
-                   {ra_event, Frm, E} ->
-                       case rabbit_fifo_client:handle_ra_event(Frm, E, FState6) of
-                           {ok, FState7, [{deliver, Ctag, true,
-                                           [{_, _, Mid, _, two}]}]} ->
-                               {S2, _A2} = rabbit_fifo_client:return(Ctag, [Mid], FState7),
-                               S2
-                       end
-               after 2000 ->
-                         exit(await_msg_timeout)
-               end,
-    % process applied event
-    _FState9 = process_ra_event(FState8, ?RA_EVENT_TIMEOUT),
+    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5),
+    _FState8 = DeliverFun(FState6, return),
 
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
