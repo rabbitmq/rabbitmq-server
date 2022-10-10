@@ -86,7 +86,7 @@ block(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, P},
-                                {clientid, <<"simpleClient">>},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
                                 {proto_ver, v4}]),
     {ok, _Properties} = emqtt:connect(C),
 
@@ -125,7 +125,7 @@ block_connack_timeout(Config) ->
     %% We can still connect via TCP, but CONNECT frame will not be processed on the server.
     {ok, Client} = emqtt:start_link([{host, "localhost"},
                                      {port, P},
-                                     {clientid, <<"simpleClient">>},
+                                     {clientid, atom_to_binary(?FUNCTION_NAME)},
                                      {proto_ver, v4},
                                      {connect_timeout, 1}]),
     unlink(Client),
@@ -156,7 +156,12 @@ block_connack_timeout(Config) ->
               ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
-    [] = rpc(Config, rabbit_mqtt_collector, list, []),
+    [] = case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
+             true ->
+                 rpc(Config, rabbit_mqtt_collector, list, []);
+             false ->
+                 rpc(Config, rabbit_mqtt_clientid, list_all, [])
+         end,
     ok.
 
 handle_invalid_frames(Config) ->
@@ -189,7 +194,7 @@ keepalive(Config) ->
     {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
                                 {host, "localhost"},
                                 {port, P},
-                                {clientid, <<"simpleClient">>},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
                                 {proto_ver, v4}
                                ]),
     {ok, _Properties} = emqtt:connect(C),
@@ -221,13 +226,18 @@ stats(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, P},
-                                {clientid, <<"simpleClient">>},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
                                 {proto_ver, v4}]),
     {ok, _Properties} = emqtt:connect(C),
     %% Wait for stats being emitted (every 100ms)
     timer:sleep(300),
     %% Retrieve the connection Pid
-    [{_, Reader}] = rpc(Config, rabbit_mqtt_collector, list, []),
+    [{_, Reader}] = case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
+                        true ->
+                            rpc(Config, rabbit_mqtt_collector, list, []);
+                        false ->
+                            rpc(Config, rabbit_mqtt_clientid, list_local, [])
+                    end,
     [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),

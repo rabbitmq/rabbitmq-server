@@ -21,9 +21,11 @@
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
 
+-spec queue_names(binary()) ->
+    {binary(), binary()}.
 queue_names(ClientId) ->
-    Base = "mqtt-subscription-" ++ ClientId ++ "qos",
-    {list_to_binary(Base ++ "0"), list_to_binary(Base ++ "1")}.
+    Base = <<"mqtt-subscription-", ClientId/binary, "qos">>,
+    {<<Base/binary, "0">>, <<Base/binary, "1">>}.
 
 cached(CacheName, Fun, Arg) ->
     Cache =
@@ -100,8 +102,9 @@ get_topic_translation_funs() ->
     end,
     {ok, {mqtt2amqp_fun, M2AFun}, {amqp2mqtt_fun, A2MFun}}.
 
+-spec gen_client_id() -> binary().
 gen_client_id() ->
-    lists:nthtail(1, rabbit_guid:string(rabbit_guid:gen_secure(), [])).
+    rabbit_misc:base64url(rabbit_guid:gen_secure()).
 
 env(Key) ->
     case application:get_env(rabbitmq_mqtt, Key) of

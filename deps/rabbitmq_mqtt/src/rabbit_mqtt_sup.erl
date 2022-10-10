@@ -33,27 +33,38 @@ init([{Listeners, SslListeners0}]) ->
                      end}
           end,
     {ok,
-        {#{strategy => one_for_all, intensity => 10, period => 10}, [
-            #{
-                id => rabbit_mqtt_retainer_sup,
-                start =>
-                    {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
-                restart => transient,
-                shutdown => ?SUPERVISOR_WAIT,
-                type => supervisor,
-                modules => [rabbit_mqtt_retainer_sup]
-            }
-            | listener_specs(
-                fun tcp_listener_spec/1,
-                [SocketOpts, NumTcpAcceptors, ConcurrentConnsSups],
-                Listeners
-            ) ++
-                listener_specs(
-                    fun ssl_listener_spec/1,
-                    [SocketOpts, SslOpts, NumSslAcceptors, ConcurrentConnsSups],
-                    SslListeners
-                )
-        ]}}.
+     {#{strategy => one_for_all,
+        intensity => 10,
+        period => 10},
+      [
+       #{id => rabbit_mqtt_clientid,
+         start => {rabbit_mqtt_clientid, start_link,
+                   [{local, rabbit_mqtt_clientid}]},
+         restart => transient,
+         shutdown => ?WORKER_WAIT,
+         type => worker,
+         modules => [rabbit_mqtt_clientid]
+        },
+       #{
+         id => rabbit_mqtt_retainer_sup,
+         start => {rabbit_mqtt_retainer_sup, start_link,
+                   [{local, rabbit_mqtt_retainer_sup}]},
+         restart => transient,
+         shutdown => ?SUPERVISOR_WAIT,
+         type => supervisor,
+         modules => [rabbit_mqtt_retainer_sup]
+        }
+       | listener_specs(
+           fun tcp_listener_spec/1,
+           [SocketOpts, NumTcpAcceptors, ConcurrentConnsSups],
+           Listeners
+          ) ++
+       listener_specs(
+         fun ssl_listener_spec/1,
+         [SocketOpts, SslOpts, NumSslAcceptors, ConcurrentConnsSups],
+         SslListeners
+        )
+      ]}}.
 
 stop_listeners() ->
     rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),

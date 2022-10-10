@@ -142,20 +142,19 @@ connection_id_tracking(Config) ->
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
-    assert_connection_count(Config, 10, 2, 1),
+    assert_connection_count(Config, 4, 2, 1),
 
     %% connect to the same node (A or 0)
     {ok, MRef2, _C2} = connect_to_node(Config, 0, ID),
-
     %% C1 is disconnected
     await_disconnection(MRef1),
+    assert_connection_count(Config, 4, 2, 1),
 
     %% connect to a different node (C or 2)
     {ok, _, C3} = connect_to_node(Config, 2, ID),
-    assert_connection_count(Config, 10, 2, 1),
-
     %% C2 is disconnected
     await_disconnection(MRef2),
+    assert_connection_count(Config, 4, 2, 1),
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
@@ -164,42 +163,45 @@ connection_id_tracking_on_nodedown(Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-    assert_connection_count(Config, 10, 2, 1),
+    assert_connection_count(Config, 4, 2, 1),
     ok = stop_node(Config, Server),
     await_disconnection(MRef),
-    assert_connection_count(Config, 10, 2, 0),
+    assert_connection_count(Config, 4, 2, 0),
     ok.
 
 connection_id_tracking_with_decommissioned_node(Config) ->
-    Server = get_node_config(Config, 0, nodename),
-    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
-    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    case rpc(Config, 0, rabbit_mqtt_ff, track_client_id_in_ra, []) of
+        false ->
+            {skip, "This test requires client ID tracking in Ra"};
+        true ->
+            Server = get_node_config(Config, 0, nodename),
+            {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
+            {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
+            ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
+            expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
-    assert_connection_count(Config, 10, 2, 1),
-    {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-    await_disconnection(MRef),
-    assert_connection_count(Config, 10, 2, 0),
-    ok.
+            assert_connection_count(Config, 4, 2, 1),
+            {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
+            await_disconnection(MRef),
+            assert_connection_count(Config, 4, 2, 0),
+            ok
+    end.
 
 %%
 %% Helpers
 %%
 
-assert_connection_count(_Config, 0,  _, _) ->
-    ct:fail("failed to complete rabbit_mqtt_collector:list/0");
+assert_connection_count(_Config, 0,  _, NumElements) ->
+    ct:fail("failed to match connection count ~b", [NumElements]);
 assert_connection_count(Config, Retries, NodeId, NumElements) ->
-    List = rpc(Config, NodeId, rabbit_mqtt_collector, list, []),
-    case length(List) == NumElements of
-        true ->
+    case util:all_connection_pids(Config) of
+        Pids
+          when length(Pids) =:= NumElements ->
             ok;
-        false ->
-            timer:sleep(200),
+        _ ->
+            timer:sleep(500),
             assert_connection_count(Config, Retries-1, NodeId, NumElements)
     end.
-
-
 
 connect_to_node(Config, Node, ClientID) ->
   Port = get_node_config(Config, Node, tcp_port_mqtt),

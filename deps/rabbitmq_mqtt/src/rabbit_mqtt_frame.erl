@@ -58,7 +58,7 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
               _Reserved    : 1,
               KeepAlive    : 16/big,
               Rest3/binary>>   = Rest2,
-            {ClientId,  Rest4} = parse_utf(Rest3),
+            {ClientId,  Rest4} = parse_utf_as_binary(Rest3),
             {WillTopic, Rest5} = parse_utf(Rest4, WillFlag),
             {WillMsg,   Rest6} = parse_msg(Rest5, WillFlag),
             {UserName,  Rest7} = parse_utf(Rest6, UsernameFlag),
@@ -135,6 +135,9 @@ parse_utf(Bin, _) ->
 
 parse_utf(<<Len:16/big, Str:Len/binary, Rest/binary>>) ->
     {binary_to_list(Str), Rest}.
+
+parse_utf_as_binary(<<Len:16/big, Str:Len/binary, Rest/binary>>) ->
+    {Str, Rest}.
 
 parse_msg(Bin, 0) ->
     {undefined, Bin};

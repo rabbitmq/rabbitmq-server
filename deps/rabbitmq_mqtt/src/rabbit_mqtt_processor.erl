@@ -276,10 +276,10 @@ process_connect(#mqtt_frame{
     SendFun(ResponseFrame, PState),
     return_connack(ReturnCode, PState).
 
-client_id([]) ->
+client_id(<<>>) ->
     rabbit_mqtt_util:gen_client_id();
 client_id(ClientId)
-  when is_list(ClientId) ->
+  when is_binary(ClientId) ->
     ClientId.
 
 check_protocol_version(#mqtt_frame_connect{proto_ver = ProtoVersion}) ->
@@ -339,36 +339,46 @@ register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
                 PState = #proc_state{client_id = ClientId,
                                      socket = Socket,
                                      auth_state = #auth_state{vhost = VHost}}) ->
-    case rabbit_mqtt_collector:register(ClientId, self()) of
-        {ok, Corr} ->
+    NewProcState =
+    fun(RegisterState) ->
+            rabbit_mqtt_clientid:register(VHost, ClientId),
             RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
             Prefetch = rabbit_mqtt_util:env(prefetch),
             {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Socket, inbound),
             ExchangeBin = rabbit_mqtt_util:env(exchange),
             ExchangeName = rabbit_misc:r(VHost, exchange, ExchangeBin),
             ProtoHumanReadable = {'MQTT', human_readable_mqtt_version(ProtoVersion)},
-            {ok, PState#proc_state{
-                   exchange = ExchangeName,
-                   will_msg   = make_will_msg(Frame),
-                   retainer_pid = RetainerPid,
-                   register_state = {pending, Corr},
-                   proto_ver = ProtoVersion,
-                   info = #info{prefetch = Prefetch,
-                                peer_host = PeerHost,
-                                peer_port = PeerPort,
-                                host = Host,
-                                port = Port,
-                                proto_human = ProtoHumanReadable
-                               }}};
-        {error, _} = Err ->
-            %% e.g. this node was removed from the MQTT cluster members
-            rabbit_log_connection:error("MQTT cannot accept a connection: "
-                                        "client ID tracker is unavailable: ~p", [Err]),
-            {error, ?CONNACK_SERVER_UNAVAILABLE};
-        {timeout, _} ->
-            rabbit_log_connection:error("MQTT cannot accept a connection: "
-                                        "client ID registration timed out"),
-            {error, ?CONNACK_SERVER_UNAVAILABLE}
+            PState#proc_state{
+              exchange = ExchangeName,
+              will_msg   = make_will_msg(Frame),
+              retainer_pid = RetainerPid,
+              register_state = RegisterState,
+              proto_ver = ProtoVersion,
+              info = #info{prefetch = Prefetch,
+                           peer_host = PeerHost,
+                           peer_port = PeerPort,
+                           host = Host,
+                           port = Port,
+                           proto_human = ProtoHumanReadable
+                          }}
+    end,
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            case rabbit_mqtt_collector:register(ClientId, self()) of
+                {ok, Corr} ->
+                    {ok, NewProcState({pending, Corr})};
+                {error, _} = Err ->
+                    %% e.g. this node was removed from the MQTT cluster members
+                    rabbit_log_connection:error("MQTT cannot accept a connection: "
+                                                "client ID tracker is unavailable: ~p", [Err]),
+                    {error, ?CONNACK_SERVER_UNAVAILABLE};
+                {timeout, _} ->
+                    rabbit_log_connection:error("MQTT cannot accept a connection: "
+                                                "client ID registration timed out"),
+                    {error, ?CONNACK_SERVER_UNAVAILABLE}
+            end;
+        false ->
+            {ok, NewProcState(undefined)}
     end.
 
 notify_connection_created(already_connected, _PState) ->
@@ -551,7 +561,7 @@ process_login(_UserBin, _PassBin, _ClientId,
     rabbit_log_connection:warning("MQTT detected duplicate connect/login attempt for user ~tp, vhost ~tp",
                                   [UsernameStr, VHostStr]),
     already_connected;
-process_login(UserBin, PassBin, ClientId0,
+process_login(UserBin, PassBin, ClientId,
               #proc_state{socket = Sock,
                           ssl_login_name = SslLoginName,
                           peer_addr = Addr,
@@ -562,7 +572,6 @@ process_login(UserBin, PassBin, ClientId0,
       "MQTT vhost picked using ~s",
       [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     RemoteIpAddressBin = list_to_binary(inet:ntoa(Addr)),
-    ClientId = rabbit_data_coercion:to_binary(ClientId0),
     Input = #{vhost => VHost,
               username_bin => UsernameBin,
               pass_bin => PassBin,
@@ -1155,9 +1164,16 @@ serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
 
 terminate(#proc_state{client_id = undefined}) ->
     ok;
-terminate(#proc_state{client_id = ClientId}) ->
+terminate(#proc_state{client_id = ClientId,
+                      auth_state = #auth_state{vhost = VHost}}) ->
     %% ignore any errors as we are shutting down
-    rabbit_mqtt_collector:unregister(ClientId, self()).
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            rabbit_mqtt_collector:unregister(ClientId, self());
+        false ->
+            ok
+    end,
+    rabbit_mqtt_clientid:unregister(VHost, ClientId).
 
 handle_pre_hibernate() ->
     erase(permission_cache),
@@ -1171,14 +1187,24 @@ handle_ra_event({applied, [{Corr, ok}]},
 handle_ra_event({not_leader, Leader, Corr},
                 PState = #proc_state{register_state = {pending, Corr},
                                      client_id = ClientId}) ->
-    %% retry command against actual leader
-    {ok, NewCorr} = rabbit_mqtt_collector:register(Leader, ClientId, self()),
-    PState#proc_state{register_state = {pending, NewCorr}};
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            %% retry command against actual leader
+            {ok, NewCorr} = rabbit_mqtt_collector:register(Leader, ClientId, self()),
+            PState#proc_state{register_state = {pending, NewCorr}};
+        false ->
+            PState
+    end;
 handle_ra_event(register_timeout,
                 PState = #proc_state{register_state = {pending, _Corr},
                                      client_id = ClientId}) ->
-    {ok, NewCorr} = rabbit_mqtt_collector:register(ClientId, self()),
-    PState#proc_state{register_state = {pending, NewCorr}};
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            {ok, NewCorr} = rabbit_mqtt_collector:register(ClientId, self()),
+            PState#proc_state{register_state = {pending, NewCorr}};
+        false ->
+            PState
+    end;
 handle_ra_event(register_timeout, PState) ->
     PState;
 handle_ra_event(Evt, PState) ->

@@ -38,7 +38,7 @@
          %% (Not to be confused with packet IDs sent from client to server which can be the
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
-         client_id,
+         client_id :: binary(),
          clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),

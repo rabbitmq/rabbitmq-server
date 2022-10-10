@@ -1,3 +1,9 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+
 -module(direct_exchange_routing_v2_SUITE).
 
 %% Test suite for the feature flag direct_exchange_routing_v2

@@ -210,54 +210,53 @@ handle_info({'DOWN', _MRef, process, _Pid, _Reason} = Evt,
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate(Reason, State = #state{keepalive = KState0}) ->
+terminate(Reason, State = #state{keepalive = KState0,
+                                 proc_state = PState}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
-    do_terminate(Reason, State).
+    rabbit_mqtt_processor:terminate(PState),
+    log_terminate(Reason, State).
 
 handle_pre_hibernate(State) ->
     rabbit_mqtt_processor:handle_pre_hibernate(),
     {hibernate, State}.
 
-do_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: connection closed",
-       [ConnStr]);
+log_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
+    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: connection closed",
+                                [ConnStr]);
 
-do_terminate({network_error,
-              {ssl_upgrade_error,
-               {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
+log_terminate({network_error,
+               {ssl_upgrade_error,
+                {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
     log_tls_alert(handshake_failure, ConnStr);
-do_terminate({network_error,
-              {ssl_upgrade_error,
-               {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
+log_terminate({network_error,
+               {ssl_upgrade_error,
+                {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
     log_tls_alert(unknown_ca, ConnStr);
-do_terminate({network_error,
-              {ssl_upgrade_error,
-               {tls_alert, {Err, _}}}, ConnStr}, _State) ->
+log_terminate({network_error,
+               {ssl_upgrade_error,
+                {tls_alert, {Err, _}}}, ConnStr}, _State) ->
     log_tls_alert(Err, ConnStr);
-do_terminate({network_error,
-              {ssl_upgrade_error,
-               {tls_alert, Alert}}, ConnStr}, _State) ->
+log_terminate({network_error,
+               {ssl_upgrade_error,
+                {tls_alert, Alert}}, ConnStr}, _State) ->
     log_tls_alert(Alert, ConnStr);
-do_terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: ~tp",
-        [ConnStr, Reason]);
+log_terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
+    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: ~p",
+                                [ConnStr, Reason]);
 
-do_terminate({network_error, Reason, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected network error on ~ts: ~tp",
-        [ConnStr, Reason]);
+log_terminate({network_error, Reason, ConnStr}, _State) ->
+    rabbit_log_connection:error("MQTT detected network error on ~s: ~p",
+                                [ConnStr, Reason]);
 
-do_terminate({network_error, Reason}, _State) ->
-    rabbit_log_connection:error("MQTT detected network error: ~tp", [Reason]);
+log_terminate({network_error, Reason}, _State) ->
+    rabbit_log_connection:error("MQTT detected network error: ~p", [Reason]);
 
-do_terminate(normal, #state{proc_state = ProcState,
-                            conn_name  = ConnName}) ->
-    rabbit_mqtt_processor:terminate(ProcState),
+log_terminate(normal, #state{conn_name  = ConnName}) ->
     rabbit_log_connection:info("closing MQTT connection ~p (~s)", [self(), ConnName]),
     ok;
 
-do_terminate(_Reason, #state{proc_state = ProcState}) ->
-    rabbit_mqtt_processor:terminate(ProcState),
+log_terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
