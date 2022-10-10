@@ -1047,11 +1047,16 @@ info(backing_queue_status, #vqstate {
           target_ram_count = TargetRamCount,
           next_seq_id      = NextSeqId,
           next_deliver_seq_id = NextDeliverSeqId,
+          ram_pending_ack  = RPA,
+          disk_pending_ack = DPA,
+          unconfirmed      = UC,
+          index_mod        = IndexMod,
+          index_state      = IndexState,
+          store_state      = StoreState,
           rates            = #rates { in      = AvgIngressRate,
                                       out     = AvgEgressRate,
                                       ack_in  = AvgAckIngressRate,
                                       ack_out = AvgAckEgressRate }}) ->
-
     [ {mode                , Mode},
       {version             , Version},
       {q1                  , ?QUEUE:len(Q1)},
@@ -1063,10 +1068,14 @@ info(backing_queue_status, #vqstate {
       {target_ram_count    , TargetRamCount},
       {next_seq_id         , NextSeqId},
       {next_deliver_seq_id , NextDeliverSeqId},
+      {num_pending_acks    , gb_trees:size(RPA) + gb_trees:size(DPA)},
+      {num_unconfirmed     , gb_sets:size(UC)},
       {avg_ingress_rate    , AvgIngressRate},
       {avg_egress_rate     , AvgEgressRate},
       {avg_ack_ingress_rate, AvgAckIngressRate},
-      {avg_ack_egress_rate , AvgAckEgressRate} ];
+      {avg_ack_egress_rate , AvgAckEgressRate} ]
+    ++ IndexMod:info(IndexState)
+    ++ rabbit_classic_queue_store_v2:info(StoreState);
 info(_, _) ->
     ''.
 
