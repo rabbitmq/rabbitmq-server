@@ -79,16 +79,19 @@ elixir_config.internal_elixir_from_github_release(
     sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f",
     version = "1.10.4",
 )
+
 elixir_config.internal_elixir_from_github_release(
     name = "1_12",
     sha256 = "c5affa97defafa1fd89c81656464d61da8f76ccfec2ea80c8a528decd5cb04ad",
     version = "1.12.3",
 )
+
 elixir_config.internal_elixir_from_github_release(
     name = "1_13",
     sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
     version = "1.13.4",
 )
+
 elixir_config.internal_elixir_from_github_release(
     name = "1_14",
     sha256 = "ac129e266a1e04cdc389551843ec3dbdf36086bb2174d3d7e7936e820735003b",
@@ -228,14 +231,14 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "jose",
-    repository = "potatosalad/erlang-jose",
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+    repository = "potatosalad/erlang-jose",
 )
 
 erlang_package.hex_package(
     name = "jsx",
-    version = "3.1.0",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+    version = "3.1.0",
 )
 
 erlang_package.git_package(
@@ -250,9 +253,8 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-    repository = "rabbitmq/osiris",
-    tag = "v1.3.1",
-    patch_cmds = ["""VERSION=$(git rev-parse HEAD)
+    patch_cmds = [
+        """VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
 sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
 echo "Injecting ${VERSION} into BUILD.bazel..."
@@ -261,6 +263,8 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
 """,
     ],
+    repository = "rabbitmq/osiris",
+    tag = "v1.3.1",
 )
 
 erlang_package.hex_package(
@@ -294,10 +298,6 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-    repository = "rabbitmq/ra",
-    tag = "v2.2.0",
-    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
-"""],
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
@@ -321,7 +321,11 @@ erlang_app(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-"""
+""",
+    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
+"""],
+    repository = "rabbitmq/ra",
+    tag = "v2.2.0",
 )
 
 erlang_package.hex_package(
