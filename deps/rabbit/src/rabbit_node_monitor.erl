@@ -341,11 +341,8 @@ unblock_global_peer(PeerNode) ->
     {global_name_server, PeerNode} ! {nodeup, ThisNode},
 =======
 
-    {status, _, _, [_, _, _, _, PeerState]} = PeerStatus =
-        erpc:call(PeerNode, sys, get_status, [global_name_server]),
-    {status, _, _, [_, _, _, _, ThisState]} = ThisStatus =
-        sys:get_status(global_name_server),
-
+    PeerState = erpc:call(PeerNode, sys, get_state, [global_name_server]),
+    ThisState = sys:get_state(global_name_server),
     PeerToThisCid = connection_id(PeerState, ThisNode),
     ThisToPeerCid = connection_id(ThisState, PeerNode),
 
@@ -355,7 +352,8 @@ unblock_global_peer(PeerNode) ->
       [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
     logger:debug(
       "peer global state: ~p~nour global state: ~p",
-      [PeerStatus, ThisStatus]),
+      [erpc:call(PeerNode, sys, get_status, [global_name_server]),
+       sys:get_status(global_name_server)]),
 
     {ThisDownMsg, ThisUpMsg} = messages(ThisToPeerCid, PeerNode),
     {PeerDownMsg, PeerUpMsg} = messages(PeerToThisCid, ThisNode),
@@ -366,12 +364,10 @@ unblock_global_peer(PeerNode) ->
 >>>>>>> bfcdeec2cd (Make "global hang workaround" support OTP >= 25.1)
     ok.
 
-connection_id(Misc, Node) ->
-    [State] = [S || {data, [{"State", S}]} <- Misc],
-    state = element(1, State),
+connection_id(State, Node) ->
     case element(3, State) of
-        Known when is_map(Known) ->
-            maps:get({connection_id, Node}, Known, undefined);
+        #{{connection_id, Node} := ConnectionId} ->
+            ConnectionId;
         _ ->
             undefined
     end.
