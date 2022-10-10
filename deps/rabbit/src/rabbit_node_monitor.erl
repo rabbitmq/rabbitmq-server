@@ -326,20 +326,6 @@ find_blocked_global_peers1([], _) ->
 
 unblock_global_peer(PeerNode) ->
     ThisNode = node(),
-<<<<<<< HEAD
-    PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
-    logger:info(
-      "Global hang workaround: global state on ~s seems broken~n"
-      " * Peer global state:  ~p~n"
-      " * Local global state: ~p~n"
-      "Faking nodedown/nodeup between ~s and ~s",
-      [PeerNode, PeerState, sys:get_status(global_name_server),
-       PeerNode, ThisNode]),
-    {global_name_server, ThisNode} ! {nodedown, PeerNode},
-    {global_name_server, PeerNode} ! {nodedown, ThisNode},
-    {global_name_server, ThisNode} ! {nodeup, PeerNode},
-    {global_name_server, PeerNode} ! {nodeup, ThisNode},
-=======
 
     PeerState = erpc:call(PeerNode, sys, get_state, [global_name_server]),
     ThisState = sys:get_state(global_name_server),
@@ -361,7 +347,6 @@ unblock_global_peer(PeerNode) ->
     {global_name_server, PeerNode} ! PeerDownMsg,
     {global_name_server, ThisNode} ! ThisUpMsg,
     {global_name_server, PeerNode} ! PeerUpMsg,
->>>>>>> bfcdeec2cd (Make "global hang workaround" support OTP >= 25.1)
     ok.
 
 connection_id(State, Node) ->
