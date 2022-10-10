@@ -12,15 +12,6 @@ platform(
 )
 
 platform(
-    name = "erlang_linux_23_platform",
-    constraint_values = [
-        "@erlang_config//:erlang_23",
-        "@elixir_config//:elixir_1_10",
-    ],
-    parents = ["@rbe//config:platform"],
-)
-
-platform(
     name = "erlang_linux_24_platform",
     constraint_values = [
         "@erlang_config//:erlang_24",
