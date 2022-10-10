@@ -305,11 +305,14 @@ find_blocked_global_peers() ->
     Snapshot1 = snapshot_global_dict(),
     timer:sleep(10000),
     Snapshot2 = snapshot_global_dict(),
+    logger:debug("global's sync tags 10s ago: ~p~n"
+                 "global's sync tags now: ~p",
+                 [Snapshot1, Snapshot2]),
     find_blocked_global_peers1(Snapshot2, Snapshot1).
 
 snapshot_global_dict() ->
-    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
-    [E || {{sync_tag_his, _}, _} = E <- Dict].
+    {status, _Pid, _Mod, [PDict | _]} = sys:get_status(global_name_server),
+    [E || {{sync_tag_his, _}, _} = E <- PDict].
 
 find_blocked_global_peers1([{{sync_tag_his, Peer}, _} = Item | Rest],
   OlderSnapshot) ->
@@ -323,19 +326,48 @@ find_blocked_global_peers1([], _) ->
 
 unblock_global_peer(PeerNode) ->
     ThisNode = node(),
-    PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
+
+    PeerState = erpc:call(PeerNode, sys, get_state, [global_name_server]),
+    ThisState = sys:get_state(global_name_server),
+    PeerToThisCid = connection_id(PeerState, ThisNode),
+    ThisToPeerCid = connection_id(ThisState, PeerNode),
+
     logger:info(
-      "Global hang workaround: global state on ~s seems broken~n"
-      " * Peer global state:  ~p~n"
-      " * Local global state: ~p~n"
-      "Faking nodedown/nodeup between ~s and ~s",
-      [PeerNode, PeerState, sys:get_status(global_name_server),
-       PeerNode, ThisNode]),
-    {global_name_server, ThisNode} ! {nodedown, PeerNode},
-    {global_name_server, PeerNode} ! {nodedown, ThisNode},
-    {global_name_server, ThisNode} ! {nodeup, PeerNode},
-    {global_name_server, PeerNode} ! {nodeup, ThisNode},
+      "global hang workaround: faking nodedown / nodeup between peer node ~s "
+      "(connection ID to us: ~p) and our node ~s (connection ID to peer: ~p)",
+      [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
+    logger:debug(
+      "peer global state: ~p~nour global state: ~p",
+      [erpc:call(PeerNode, sys, get_status, [global_name_server]),
+       sys:get_status(global_name_server)]),
+
+    {ThisDownMsg, ThisUpMsg} = messages(ThisToPeerCid, PeerNode),
+    {PeerDownMsg, PeerUpMsg} = messages(PeerToThisCid, ThisNode),
+    {global_name_server, ThisNode} ! ThisDownMsg,
+    {global_name_server, PeerNode} ! PeerDownMsg,
+    {global_name_server, ThisNode} ! ThisUpMsg,
+    {global_name_server, PeerNode} ! PeerUpMsg,
     ok.
+
+connection_id(State, Node) ->
+    case element(3, State) of
+        #{{connection_id, Node} := ConnectionId} ->
+            ConnectionId;
+        _ ->
+            undefined
+    end.
+
+%% The nodedown and nodeup message format handled by global differs due to
+%% https://github.com/erlang/otp/commit/9274e89857d294f85702e0d5d42fb196e8e12d6a
+messages(undefined, Node) ->
+    %% OTP < 25.1
+    {{nodedown, Node},
+     {nodeup, Node}};
+messages(ConnectionId, Node) ->
+    %% OTP >= 25.1
+    Cid = #{connection_id => ConnectionId},
+    {{nodedown, Node, Cid},
+     {nodeup, Node, Cid}}.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
