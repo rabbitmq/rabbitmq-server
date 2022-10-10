@@ -25,13 +25,13 @@ attributes(State) ->
     Content2 = "Q, MQ and GQ are Erlang messages (total, mailbox and GS2 queue).",
     Content3 = "mem/disk are AMQP messages in memory or on disk.",
     Content4 = "pa/cf are messages pending acks or confirms.",
-    Content5 = "qib/qibu/qsb are index/store buffer sizes, with qib = AMQP messages + qibu (acks).",
+    Content5 = "qib/qibu are index buffer sizes, with qib = AMQP messages + qibu (acks).",
     {[
-        [#{content => Content1, width => 133}],
-        [#{content => Content2, width => 133}],
-        [#{content => Content3, width => 133}],
-        [#{content => Content4, width => 133}],
-        [#{content => Content5, width => 133}]
+        [#{content => Content1, width => 126}],
+        [#{content => Content2, width => 126}],
+        [#{content => Content3, width => 126}],
+        [#{content => Content4, width => 126}],
+        [#{content => Content5, width => 126}]
     ], State}.
 
 sheet_header() ->
@@ -47,8 +47,7 @@ sheet_header() ->
         #{title => "", width => 8, shortcut => "pa"},
         #{title => "", width => 8, shortcut => "cf"},
         #{title => "", width => 6, shortcut => "qib"},
-        #{title => "", width => 6, shortcut => "qibu"},
-        #{title => "", width => 6, shortcut => "qsb"}
+        #{title => "", width => 6, shortcut => "qibu"}
     ].
 
 sheet_body(State) ->
@@ -75,8 +74,7 @@ sheet_body(State) ->
                             proplists:get_value(num_pending_acks, BQInfo),
                             proplists:get_value(num_unconfirmed, BQInfo),
                             proplists:get_value(qi_buffer_size, BQInfo, 0),
-                            proplists:get_value(qi_buffer_num_up, BQInfo, 0),
-                            proplists:get_value(qs_buffer_size, BQInfo)
+                            proplists:get_value(qi_buffer_num_up, BQInfo, 0)
                         ]
                 end
         end
