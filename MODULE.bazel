@@ -314,7 +314,7 @@ erlang_app(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-"""
+""",
 )
 
 erlang_package.hex_package(
