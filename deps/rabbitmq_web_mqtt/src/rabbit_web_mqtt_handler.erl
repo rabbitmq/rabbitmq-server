@@ -170,6 +170,10 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                                         [State#state.conn_name, Reason]),
             stop(State#state{proc_state = PState})
     end;
+websocket_info({'$gen_cast', Delivery = {deliver, _, _, _}},
+               State = #state{proc_state = PState0}) ->
+    {ok, PState} = rabbit_mqtt_processor:handle_deprecated_delivery(Delivery, PState0),
+    {[], State#state{proc_state = PState}, hibernate};
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                             conn_name = ConnName }) ->
     rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",

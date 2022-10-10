@@ -127,6 +127,9 @@ handle_cast(QueueEvent = {queue_event, _, _},
             State = #state{proc_state = PState}) ->
     callback_reply(State, rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState));
 
+handle_cast(Delivery = {deliver, _, _, _}, State = #state{proc_state = PState}) ->
+    callback_reply(State, rabbit_mqtt_processor:handle_deprecated_delivery(Delivery, PState));
+
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 

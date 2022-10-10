@@ -13,9 +13,6 @@
          close_local_client_connections/1]).
 
 start(normal, []) ->
-    %%TODO make feature flag stream_queue 'required' for 3.12
-    %% because we rely on rabbit_queue_type interface.
-    ok = rabbit_feature_flags:enable(stream_queue),
     rabbit_global_counters:init([{protocol, mqtt}]),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
