@@ -171,8 +171,9 @@ maybe_close_fd(Fd) ->
 
 -spec info(state()) -> [{atom(), non_neg_integer()}].
 
-info(#qs{ write_buffer = WriteBuffer }) ->
-    [{qs_buffer_size, map_size(WriteBuffer)}].
+%% The write_buffer information is not available before 3.12.
+info(_) ->
+    [].
 
 -spec write(rabbit_variable_queue:seq_id(), rabbit_types:basic_message(),
             rabbit_types:message_properties(), State)
