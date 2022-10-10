@@ -99,25 +99,7 @@ basics(Config) ->
 
     {ok, FState2} = rabbit_fifo_client:enqueue(one, FState1),
     % process ra events
-    FState3 = process_ra_event(FState2, ?RA_EVENT_TIMEOUT),
 
-<<<<<<< HEAD
-    FState5 = receive
-                  {ra_event, From, Evt} ->
-                      case rabbit_fifo_client:handle_ra_event(From, Evt, FState3) of
-                          {ok, FState4,
-                           [{deliver, C, true,
-                             [{_Qname, _QRef, MsgId, _SomBool, _Msg}]}]} ->
-                              {S, _A} = rabbit_fifo_client:settle(C, [MsgId], FState4),
-                              S
-                      end
-              after 5000 ->
-                        exit(await_msg_timeout)
-              end,
-
-    % process settle applied notification
-    FState5b = process_ra_event(FState5, ?RA_EVENT_TIMEOUT),
-=======
     DeliverFun = fun DeliverFun(S0, F) ->
                          receive
                              {ra_event, From, Evt} ->
@@ -139,7 +121,6 @@ basics(Config) ->
 
     FState5 = DeliverFun(FState2, settle),
 
->>>>>>> c50e6db4dd (Make rabbit_fifo_basics_SUITE:basics less dependent on ra_event order)
     _ = rabbit_quorum_queue:stop_server(ServerId),
     _ = rabbit_quorum_queue:restart_server(ServerId),
 
@@ -150,26 +131,9 @@ basics(Config) ->
               exit(leader_change_timeout)
     end,
 
-<<<<<<< HEAD
-    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
-    % process applied event
-    FState6b = process_ra_event(FState6, ?RA_EVENT_TIMEOUT),
-=======
     {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5),
     _FState8 = DeliverFun(FState6, return),
->>>>>>> c50e6db4dd (Make rabbit_fifo_basics_SUITE:basics less dependent on ra_event order)
 
-    receive
-        {ra_event, Frm, E} ->
-            case rabbit_fifo_client:handle_ra_event(Frm, E, FState6b) of
-                {ok, FState7, [{deliver, Ctag, true,
-                                [{_, _, Mid, _, two}]}]} ->
-                    {_, _} = rabbit_fifo_client:return(Ctag, [Mid], FState7),
-                    ok
-            end
-    after 2000 ->
-              exit(await_msg_timeout)
-    end,
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
