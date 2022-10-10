@@ -74,8 +74,76 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "opentelemetry_exporter",
-        version = "1.0.4",
-        sha256 = "61da65290fbb6cac3459b84b8cd630795bf608df93a2b2cc49251cae78200e5e",
+        version = "1.2.0",
+        sha256 = "358d13805ef9f0521160ccca4ab533d3c8b1ca7561f72a90d3dd7ef30877c159",
+    )
+
+    hex_pm_erlang_app(
+        name = "opentelemetry_api",
+        version = "1.0.3",
+        sha256 = "4293e06bd369bc004e6fad5edbb56456d891f14bd3f9f1772b18f1923e0678ea",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+erlang_app(
+    app_name = "opentelemetry_api",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+)
+""",
+    )
+
+    hex_pm_erlang_app(
+        name = "opentelemetry_cowboy",
+        version = "0.2.0",
+        sha256 = "e42b216920ad80c7b7bf2c45a58880864bb28ccd8941e4e9910beed76349e15d",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+erlang_app(
+    app_name = "opentelemetry_cowboy",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@opentelemetry_api//:erlang_app",
+        "@opentelemetry_telemetry//:erlang_app",
+        "@telemetry//:erlang_app",
+        "@cowboy_telemetry//:erlang_app",
+    ],
+)
+""",
+    )
+
+
+    hex_pm_erlang_app(
+        name = "cowboy_telemetry",
+        version = "0.4.0",
+        deps = [],
+        sha256 = "7d98bac1ee4565d31b62d59f8823dfd8356a169e7fcbb83831b8a5397404c9de"
+    )
+
+    hex_pm_erlang_app(
+        name = "opentelemetry_telemetry",
+        version = "1.0.0",
+        deps = [
+            "@telemetry//:erlang_app",
+            "@telemetry_registry//:erlang_app",
+            "@opentelemetry_api//:erlang_app",
+        ],
+        sha256 = "3401d13a1d4b7aa941a77e6b3ec074f0ae77f83b5b2206766ce630123a9291a9"
+    )
+
+    hex_pm_erlang_app(
+        name = "telemetry",
+        version = "1.1.0",
+        deps = [],
+        sha256 = "b727b2a1f75614774cff2d7565b64d0dfa5bd52ba517f16543e6fc7efcc0df48"
+    )    
+    
+    hex_pm_erlang_app(
+        name = "telemetry_registry",
+        version = "0.3.0",
+        sha256 = "492e2adbc609f3e79ece7f29fec363a97a2c484ac78a83098535d6564781e917"
     )
 
     http_archive(
