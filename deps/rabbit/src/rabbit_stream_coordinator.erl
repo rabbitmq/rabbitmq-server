@@ -18,7 +18,8 @@
          handle_aux/6,
          tick/2,
          version/0,
-         which_module/1]).
+         which_module/1,
+         overview/1]).
 
 -export([recover/0,
          add_replica/2,
@@ -739,6 +740,36 @@ handle_aux(leader, _, {down, Pid, Reason},
     end;
 handle_aux(_, _, _, AuxState, LogState, _) ->
     {no_reply, AuxState, LogState}.
+
+overview(#?MODULE{streams = Streams,
+                  monitors = Monitors,
+                  single_active_consumer = Sac}) ->
+    StreamsOverview = maps:map(
+                        fun (_, #stream{epoch = Epoch,
+                                        members = Members,
+                                        listeners = StreamListeners,
+                                        target = Target}) ->
+                                MembO = maps:map(
+                                          fun (_, #member{state = MS,
+                                                          role = R,
+                                                          current = C,
+                                                          target = T}) ->
+                                                  #{state => MS,
+                                                    role => R,
+                                                    current => C,
+                                                    target => T}
+                                          end, Members),
+                                #{epoch => Epoch,
+                                  members => MembO,
+                                  num_listeners => map_size(StreamListeners),
+                                  target => Target}
+                        end, Streams),
+    #{
+      num_streams => map_size(Streams),
+      num_monitors => map_size(Monitors),
+      single_active_consumer => rabbit_stream_sac_coordinator:overview(Sac),
+      streams => StreamsOverview
+     }.
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
