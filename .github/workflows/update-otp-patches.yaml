@@ -11,17 +11,33 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
+        erlang_version:
+        - "24.3"
+        - "25.0"
+        - "25.1"
         include:
         - erlang_version: "24.3"
           name: '24'
+          branch: v3.10.x
+          labels: |
+            backport-v3.9.x
         - erlang_version: "25.0"
           name: '25_0'
+          branch: main
+          labels: |
+            backport-v3.11.x
         - erlang_version: "25.1"
           name: '25_1'
+          branch: main
+          labels: |
+            backport-v3.11.x
+            backport-v3.10.x
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
+      with:
+        ref: ${{ matrix.branch }}
     - name: SKIP IF THE PR ALREADY EXISTS
       id: check-for-branch
       run: |
@@ -124,9 +140,6 @@ jobs:
            GitHub action in the ${{ github.workflow }} workflow.
         commit-message: |
           Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
-        labels: |
-          backport-v3.11.x
-          backport-v3.10.x
-          backport-v3.9.x
+        labels: ${{ matrix.labels }}
         branch: bump-otp-${{ matrix.erlang_version }}
         delete-branch: true
