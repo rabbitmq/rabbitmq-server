@@ -35,9 +35,6 @@ build:rbe --host_platform=//bazel/platforms:erlang_internal_platform
 build:rbe --host_cpu=k8
 build:rbe --cpu=k8
 
-build:rbe-23 --config=rbe
-build:rbe-23 --platforms=//bazel/platforms:erlang_linux_23_platform
-
 build:rbe-24 --config=rbe
 build:rbe-24 --platforms=//bazel/platforms:erlang_linux_24_platform
 
