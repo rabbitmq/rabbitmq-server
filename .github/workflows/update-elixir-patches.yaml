@@ -11,10 +11,6 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-        - elixir_version: "1.10"
-          name: '1_10'
-        - elixir_version: "1.12"
-          name: '1_12'
         - elixir_version: "1.13"
           name: '1_13'
         - elixir_version: "1.14"
