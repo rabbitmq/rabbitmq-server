@@ -176,6 +176,7 @@ load(
 elixir_config(
     internal_elixir_configs = [
         internal_elixir_from_github_release(
+<<<<<<< HEAD
             name = "1_10",
             sha256 = "8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f",
             version = "1.10.4",
@@ -186,6 +187,8 @@ elixir_config(
             version = "1.12.3",
         ),
         internal_elixir_from_github_release(
+=======
+>>>>>>> 3f8b3ee582 (Drop Elixir 1.12 toolchain)
             name = "1_13",
             sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
             version = "1.13.4",

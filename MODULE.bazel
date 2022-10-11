@@ -108,8 +108,11 @@ register_toolchains(
     "@erlang_config//25_1:toolchain",
     "@erlang_config//git_master:toolchain",
     "@elixir_config//external:toolchain",
+<<<<<<< HEAD
     "@elixir_config//1_10:toolchain",
     "@elixir_config//1_12:toolchain",
+=======
+>>>>>>> 3f8b3ee582 (Drop Elixir 1.12 toolchain)
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
 )
