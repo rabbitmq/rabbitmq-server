@@ -169,11 +169,6 @@ load(
 elixir_config(
     internal_elixir_configs = [
         internal_elixir_from_github_release(
-            name = "1_12",
-            sha256 = "c5affa97defafa1fd89c81656464d61da8f76ccfec2ea80c8a528decd5cb04ad",
-            version = "1.12.3",
-        ),
-        internal_elixir_from_github_release(
             name = "1_13",
             sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
             version = "1.13.4",

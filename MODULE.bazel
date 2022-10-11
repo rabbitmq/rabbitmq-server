@@ -98,7 +98,6 @@ register_toolchains(
     "@erlang_config//25_1:toolchain",
     "@erlang_config//git_master:toolchain",
     "@elixir_config//external:toolchain",
-    "@elixir_config//1_12:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
 )
