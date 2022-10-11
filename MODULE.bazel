@@ -69,12 +69,6 @@ elixir_config = use_extension(
 )
 
 elixir_config.internal_elixir_from_github_release(
-    name = "1_12",
-    sha256 = "c5affa97defafa1fd89c81656464d61da8f76ccfec2ea80c8a528decd5cb04ad",
-    version = "1.12.3",
-)
-
-elixir_config.internal_elixir_from_github_release(
     name = "1_13",
     sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
     version = "1.13.4",
@@ -98,7 +92,6 @@ register_toolchains(
     "@erlang_config//25_1:toolchain",
     "@erlang_config//git_master:toolchain",
     "@elixir_config//external:toolchain",
-    "@elixir_config//1_12:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
 )
