@@ -6,6 +6,7 @@
 %%
 
 -define(CLIENT_ID_MAXLEN, 23).
+-define(PG_SCOPE, pg_scope_rabbitmq_mqtt_clientid).
 
 -include("rabbit_mqtt_types.hrl").
 

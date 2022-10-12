@@ -156,12 +156,7 @@ block_connack_timeout(Config) ->
               ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
-    [] = case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
-             true ->
-                 rpc(Config, rabbit_mqtt_collector, list, []);
-             false ->
-                 rpc(Config, rabbit_mqtt_clientid, list_all, [])
-         end,
+    ?assertEqual([], util:all_connection_pids(Config)),
     ok.
 
 handle_invalid_frames(Config) ->
@@ -232,12 +227,7 @@ stats(Config) ->
     %% Wait for stats being emitted (every 100ms)
     timer:sleep(300),
     %% Retrieve the connection Pid
-    [{_, Reader}] = case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
-                        true ->
-                            rpc(Config, rabbit_mqtt_collector, list, []);
-                        false ->
-                            rpc(Config, rabbit_mqtt_clientid, list_local, [])
-                    end,
+    [Reader] = util:all_connection_pids(Config),
     [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),

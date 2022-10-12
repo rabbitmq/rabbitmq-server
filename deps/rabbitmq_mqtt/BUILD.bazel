@@ -91,6 +91,16 @@ rabbitmq_test_helper(
     ],
 )
 
+rabbitmq_test_helper(
+    name = "util",
+    srcs = [
+        "test/util.erl",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "auth_SUITE",
     additional_beam = [
@@ -108,6 +118,9 @@ rabbitmq_integration_suite(
     flaky = True,
     runtime_deps = [
         "@emqtt//:erlang_app",
+    ],
+    additional_beam = [
+        ":util",
     ],
 )
 
@@ -150,6 +163,9 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "@emqtt//:erlang_app",
     ],
+    additional_beam = [
+        ":util",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -163,6 +179,9 @@ rabbitmq_integration_suite(
     name = "ff_SUITE",
     runtime_deps = [
         "@emqtt//:erlang_app",
+    ],
+    additional_beam = [
+        ":util",
     ],
 )
 

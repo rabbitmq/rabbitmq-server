@@ -9,6 +9,7 @@
 -behaviour(supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_mqtt.hrl").
 
 -export([start_link/2, init/1, stop_listeners/0]).
 
@@ -32,18 +33,21 @@ init([{Listeners, SslListeners0}]) ->
                          danger -> []
                      end}
           end,
+    %% Use separate process group scope per RabbitMQ node. This achieves a local-only
+    %% process group which requires less memory with millions of connections.
+    PgScope = list_to_atom(io_lib:format("~s_~s", [?PG_SCOPE, node()])),
+    persistent_term:put(?PG_SCOPE, PgScope),
     {ok,
      {#{strategy => one_for_all,
         intensity => 10,
         period => 10},
       [
-       #{id => rabbit_mqtt_clientid,
-         start => {rabbit_mqtt_clientid, start_link,
-                   [{local, rabbit_mqtt_clientid}]},
+       #{id => PgScope,
+         start => {pg, start_link, [PgScope]},
          restart => transient,
          shutdown => ?WORKER_WAIT,
          type => worker,
-         modules => [rabbit_mqtt_clientid]
+         modules => [pg]
         },
        #{
          id => rabbit_mqtt_retainer_sup,

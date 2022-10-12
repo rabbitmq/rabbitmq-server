@@ -68,8 +68,7 @@ run(Args, #{node := NodeName,
         false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
     end,
 
-    %% a node uses the Raft-based collector to list connections, which knows about all connections in the cluster
-    %% so no need to reach out to all the nodes
+    %% List only connections on the target node.
     Nodes = [NodeName],
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(

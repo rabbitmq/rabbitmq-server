@@ -68,23 +68,18 @@ enable_feature_flag(Config) ->
     C = connect_to_node(Config, 1, <<"my-client">>),
     timer:sleep(500),
     %% old client ID tracking works
-    ?assertMatch([{<<"my-client">>, _ConnectionPid}],
-                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mqtt_collector, list, [])),
+    ?assertEqual(1, length(util:all_connection_pids(Config))),
     %% Ra processes are alive
     ?assert(lists:all(fun erlang:is_pid/1,
                       rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node]))),
-    %% new client ID tracking works
-    ?assertEqual(1,
-                 length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mqtt_clientid, list_all, []))),
 
     ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG)),
 
     %% Ra processes should be gone
     ?assert(lists:all(fun(Pid) -> Pid =:= undefined end,
                       rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node]))),
-    %% new client ID tracking still works
-    ?assertEqual(1,
-                 length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mqtt_clientid, list_all, []))),
+    %% new client ID tracking works
+    ?assertEqual(1, length(util:all_connection_pids(Config))),
     ?assert(erlang:is_process_alive(C)),
     ok = emqtt:disconnect(C).
 

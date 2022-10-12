@@ -10,6 +10,7 @@
 -include("rabbit_mqtt.hrl").
 
 -behaviour(application).
+
 -export([start/2, stop/1]).
 -export([emit_connection_info_all/4,
          close_local_client_connections/1]).

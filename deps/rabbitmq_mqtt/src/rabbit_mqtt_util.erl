@@ -16,7 +16,9 @@
          path_for/2,
          path_for/3,
          vhost_name_to_table_name/1,
-         get_topic_translation_funs/0
+         get_topic_translation_funs/0,
+         register_clientid/2,
+         remove_duplicate_clientid_connections/2
         ]).
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
@@ -140,3 +142,20 @@ path_for(Dir, VHost, Suffix) ->
 vhost_name_to_table_name(VHost) ->
   <<Num:128>> = erlang:md5(VHost),
   list_to_atom("rabbit_mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num])).
+
+-spec register_clientid(rabbit_types:vhost(), binary()) -> ok.
+register_clientid(Vhost, ClientId)
+  when is_binary(Vhost), is_binary(ClientId) ->
+    PgGroup = {Vhost, ClientId},
+    ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
+    ok = erpc:multicast([node() | nodes()],
+                        ?MODULE,
+                        remove_duplicate_clientid_connections,
+                        [PgGroup, self()]).
+
+-spec remove_duplicate_clientid_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
+remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->
+    Pids = pg:get_local_members(persistent_term:get(?PG_SCOPE), PgGroup),
+    lists:foreach(fun(Pid) ->
+                          gen_server:cast(Pid, duplicate_id)
+                  end, Pids -- [PidToKeep]).

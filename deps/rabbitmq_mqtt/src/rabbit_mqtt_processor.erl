@@ -341,7 +341,7 @@ register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
                                      auth_state = #auth_state{vhost = VHost}}) ->
     NewProcState =
     fun(RegisterState) ->
-            rabbit_mqtt_clientid:register(VHost, ClientId),
+            rabbit_mqtt_util:register_clientid(VHost, ClientId),
             RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
             Prefetch = rabbit_mqtt_util:env(prefetch),
             {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Socket, inbound),
@@ -1164,16 +1164,14 @@ serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
 
 terminate(#proc_state{client_id = undefined}) ->
     ok;
-terminate(#proc_state{client_id = ClientId,
-                      auth_state = #auth_state{vhost = VHost}}) ->
+terminate(#proc_state{client_id = ClientId}) ->
     %% ignore any errors as we are shutting down
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
             rabbit_mqtt_collector:unregister(ClientId, self());
         false ->
             ok
-    end,
-    rabbit_mqtt_clientid:unregister(VHost, ClientId).
+    end.
 
 handle_pre_hibernate() ->
     erase(permission_cache),
