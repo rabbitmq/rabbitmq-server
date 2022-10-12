@@ -35,7 +35,7 @@ validate_strategy(Strategy) ->
     case module(Strategy) of
         R = {ok, _M} -> R;
         _            ->
-            {error, "~p invalid queue-master-locator value", [Strategy]}
+            {error, "~tp invalid queue-master-locator value", [Strategy]}
     end.
 
 policy(Policy, Q) ->

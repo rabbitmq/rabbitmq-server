@@ -15,7 +15,7 @@ run_boot_steps() ->
 
 run_boot_steps(Apps) ->
     [begin
-      rabbit_log:info("Running boot step ~s defined by app ~s", [Step, App]),
+      rabbit_log:info("Running boot step ~ts defined by app ~ts", [Step, App]),
       ok = run_step(Attrs, mfa)
     end || {App, Step, Attrs} <- find_steps(Apps)],
     ok.
@@ -36,11 +36,11 @@ find_steps(Apps) ->
 
 run_step(Attributes, AttributeName) ->
     [begin
-        rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
+        rabbit_log:debug("Applying MFA: M = ~ts, F = ~ts, A = ~tp",
                         [M, F, A]),
         case apply(M,F,A) of
             ok              ->
-                rabbit_log:debug("Finished MFA: M = ~s, F = ~s, A = ~p",
+                rabbit_log:debug("Finished MFA: M = ~ts, F = ~ts, A = ~tp",
                                  [M, F, A]);
             {error, Reason} -> exit({error, Reason})
         end

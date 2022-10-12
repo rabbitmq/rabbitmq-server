@@ -35,7 +35,7 @@ get() ->
 
 -spec set(boot_state()) -> ok.
 set(BootState) ->
-    ?LOG_DEBUG("Change boot state to `~s`", [BootState],
+    ?LOG_DEBUG("Change boot state to `~ts`", [BootState],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ?assert(is_valid(BootState)),
     case BootState of

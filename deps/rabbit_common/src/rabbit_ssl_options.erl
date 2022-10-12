@@ -43,7 +43,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
         Module:module_info()
     catch
         _:Exception ->
-            rabbit_log:error("TLS verify_fun: module ~s missing: ~p",
+            rabbit_log:error("TLS verify_fun: module ~ts missing: ~tp",
                              [Module, Exception]),
             throw({error, {invalid_verify_fun, missing_module}})
     end,
@@ -66,7 +66,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
                     Module:Function(Args)
             end;
         _ ->
-            rabbit_log:error("TLS verify_fun: no ~s:~s/3 exported",
+            rabbit_log:error("TLS verify_fun: no ~ts:~ts/3 exported",
               [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.

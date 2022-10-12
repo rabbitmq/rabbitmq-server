@@ -1096,7 +1096,7 @@ ping_log(Id, Level, Metadata, Config) ->
                   32,
                   "abcdefghijklmnopqrstuvwxyz"
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-    ct:log("Logging \"~ts\" at level ~ts (~p)", [RandomMsg, Level, Metadata]),
+    ct:log("Logging \"~ts\" at level ~ts (~tp)", [RandomMsg, Level, Metadata]),
     case need_rpc(Config) of
         false -> logger:log(Level, RandomMsg, Metadata);
         true  -> rabbit_ct_broker_helpers:rpc(
@@ -1175,7 +1175,7 @@ check_log1(#{module := rabbit_logger_exchange_h},
                       timer:sleep(500),
                       false;
                   Other ->
-                      io:format(standard_error, "OTHER -> ~p~n", [Other]),
+                      io:format(standard_error, "OTHER -> ~tp~n", [Other]),
                       timer:sleep(500),
                       false
               end
@@ -1288,7 +1288,7 @@ clear_syslogd_messages(Config) ->
 syslogd_init(Parent) ->
     {ok, TcpPort, LSock} = open_tcp_listening_sock(22000),
     ct:pal(
-      "Fake syslogd ready (~p), listening on TCP port ~p",
+      "Fake syslogd ready (~tp), listening on TCP port ~tp",
       [self(), TcpPort]),
     Parent ! {syslogd_ready, TcpPort},
     syslogd_start_loop(LSock).
@@ -1316,7 +1316,7 @@ syslogd_loop(LSock, Sock, Messages, Buffer) ->
                 syslogd_loop(LSock, Sock, Messages ++ NewMessages, Buffer2);
             {get_messages, From} ->
                 ct:pal(
-                  "Fake syslogd: sending messages to ~p:~n~p",
+                  "Fake syslogd: sending messages to ~tp:~n~tp",
                   [From, Messages]),
                 From ! {syslogd_messages, Messages},
                 syslogd_loop(LSock, Sock, Messages, Buffer);
@@ -1331,12 +1331,12 @@ syslogd_loop(LSock, Sock, Messages, Buffer) ->
                 _ = gen_tcp:close(Sock),
                 _ = gen_tcp:close(LSock);
             Other ->
-                ct:pal("Fake syslogd: unhandled message: ~p", [Other]),
+                ct:pal("Fake syslogd: unhandled message: ~tp", [Other]),
                 syslogd_loop(LSock, Sock, Messages, Buffer)
         end
     catch
         C:R:S ->
-            ct:pal("~p ~p ~p", [C, R, S]),
+            ct:pal("~tp ~tp ~tp", [C, R, S]),
             throw(R)
     end.
 

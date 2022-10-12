@@ -120,7 +120,7 @@ fmt_ip(HostName) ->
 -spec fmtnow() -> string().
 fmtnow() ->
     {{Year, Month, Date}, {Hour, Min, Sec}} = calendar:local_time(),
-    io_lib:format("[~2..0w/~s/~4..0w:~2..0w:~2..0w:~2..0w ~s]",
+    io_lib:format("[~2..0w/~ts/~4..0w:~2..0w:~2..0w:~2..0w ~ts]",
                   [Date,month(Month),Year, Hour, Min, Sec, zone()]).
 
 %% @doc Notify registered log event handler of an access event.
@@ -131,7 +131,7 @@ log_access({_, _, _}=LogData) ->
 %% @doc Close a log file.
 -spec log_close(atom(), string(), file:io_device()) -> ok | {error, term()}.
 log_close(Mod, Name, FD) ->
-    logger:info("~p: closing log file: ~p", [Mod, Name]),
+    logger:info("~tp: closing log file: ~tp", [Mod, Name]),
     file:close(FD).
 
 %% @doc Open a new log file for writing
@@ -144,7 +144,7 @@ log_open(FileName) ->
 -spec log_open(string(), non_neg_integer()) -> file:io_device().
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
-    logger:info("opening log file: ~p", [LogName]),
+    logger:info("opening log file: ~tp", [LogName]),
     filelib:ensure_dir(LogName),
     {ok, FD} = file:open(LogName, [read, write, raw]),
     {ok, Location} = file:position(FD, eof),

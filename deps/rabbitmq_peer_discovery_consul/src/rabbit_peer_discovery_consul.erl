@@ -55,7 +55,7 @@ list_nodes() ->
     Fun0 = fun() -> {ok, {[], disc}} end,
     Fun1 = fun() ->
                    ?LOG_WARNING(
-                      "Peer discovery backend is set to ~s but final "
+                      "Peer discovery backend is set to ~ts but final "
                       "config does not contain "
                       "rabbit.cluster_formation.peer_discovery_consul. "
                       "Cannot discover any nodes because Consul cluster "
@@ -99,7 +99,7 @@ register() ->
   case registration_body() of
     {ok, Body} ->
       ?LOG_DEBUG(
-         "Consul registration body: ~s", [Body],
+         "Consul registration body: ~ts", [Body],
          #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
       Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
       Headers = maybe_add_acl([]),
@@ -124,7 +124,7 @@ unregister() ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   ID = service_id(),
   ?LOG_DEBUG(
-     "Unregistering with Consul using service ID '~s'", [ID],
+     "Unregistering with Consul using service ID '~ts'", [ID],
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
   Headers = maybe_add_acl([]),
@@ -139,13 +139,13 @@ unregister() ->
                                        []) of
     {ok, Response} ->
           ?LOG_INFO(
-             "Consul's response to the unregistration attempt: ~p",
+             "Consul's response to the unregistration attempt: ~tp",
              [Response],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           ok;
     Error   ->
           ?LOG_INFO(
-             "Failed to unregister service with ID '~s` with Consul: ~p",
+             "Failed to unregister service with ID '~ts` with Consul: ~tp",
              [ID, Error],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           Error
@@ -165,7 +165,7 @@ post_registration() ->
 lock(Node) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
-       "Effective Consul peer discovery configuration: ~p", [M],
+       "Effective Consul peer discovery configuration: ~tp", [M],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
         {ok, SessionId} ->
@@ -174,7 +174,7 @@ lock(Node) ->
             EndTime = Now + get_config_key(lock_wait_time, M),
             lock(TRef, SessionId, Now, EndTime);
         {error, Reason} ->
-            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~s",
+            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~ts",
                                                 [Reason]))}
     end.
 
@@ -189,7 +189,7 @@ unlock({SessionId, TRef}) ->
         {ok, true} ->
             ok;
         {ok, false} ->
-            {error, lists:flatten(io_lib:format("Error while releasing the lock, session ~s may have been invalidated", [SessionId]))};
+            {error, lists:flatten(io_lib:format("Error while releasing the lock, session ~ts may have been invalidated", [SessionId]))};
         {error, _} = Err ->
             Err
     end.
@@ -311,7 +311,7 @@ registration_body({ok, Body}) ->
   {ok, rabbit_data_coercion:to_binary(Body)};
 registration_body({error, Reason}) ->
   ?LOG_ERROR(
-     "Error serializing the request body: ~p",
+     "Error serializing the request body: ~tp",
      [Reason],
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, Reason}.
@@ -556,7 +556,7 @@ send_health_check_pass() ->
           ok;
     {error, Reason} ->
           ?LOG_ERROR(
-             "Error running Consul health check: ~p",
+             "Error running Consul health check: ~tp",
              [Reason],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
       ok
@@ -565,7 +565,7 @@ send_health_check_pass() ->
 maybe_re_register({error, Reason}) ->
     ?LOG_ERROR(
        "Internal error in Consul while updating health check. "
-       "Cannot obtain list of nodes registered in Consul either: ~p",
+       "Cannot obtain list of nodes registered in Consul either: ~tp",
        [Reason],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
 maybe_re_register({ok, {Members, _NodeType}}) ->
@@ -708,15 +708,15 @@ lock(TRef, SessionId, _, EndTime) ->
                             lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
                         {error, Reason} ->
                             timer:cancel(TRef),
-                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~s",[Reason]))}
+                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
                     end;
                 {error, Reason} ->
                     timer:cancel(TRef),
-                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~s", [Reason]))}
+                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~ts", [Reason]))}
             end;
         {error, Reason} ->
             timer:cancel(TRef),
-            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~s", [Reason]))}
+            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~ts", [Reason]))}
     end.
 
 %%--------------------------------------------------------------------

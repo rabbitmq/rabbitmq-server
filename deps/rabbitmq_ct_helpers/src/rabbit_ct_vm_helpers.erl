@@ -128,7 +128,7 @@ determine_erlang_version(Config) ->
               end,
     Regex = "([0-9]+\.[0-9]+|R[0-9]+(?:[AB])[0-9]+).*",
     ErlangVersion = re:replace(Version, Regex, "\\1"),
-    ct:pal(?LOW_IMPORTANCE, "Erlang version: ~s", [ErlangVersion]),
+    ct:pal(?LOW_IMPORTANCE, "Erlang version: ~ts", [ErlangVersion]),
     rabbit_ct_helpers:set_config(
       Config, {erlang_version, ErlangVersion}).
 
@@ -152,7 +152,7 @@ determine_erlang_git_ref(Config) ->
                   V ->
                       V
               end,
-    ct:pal(?LOW_IMPORTANCE, "Erlang Git reference: ~s", [GitRef]),
+    ct:pal(?LOW_IMPORTANCE, "Erlang Git reference: ~ts", [GitRef]),
     rabbit_ct_helpers:set_config(
       Config, {erlang_git_ref, GitRef}).
 
@@ -174,13 +174,13 @@ determine_elixir_version(Config) ->
                   V ->
                       V
               end,
-    ct:pal(?LOW_IMPORTANCE, "Elixir version: ~s", [Version]),
+    ct:pal(?LOW_IMPORTANCE, "Elixir version: ~ts", [Version]),
     rabbit_ct_helpers:set_config(Config, {elixir_version, Version}).
 
 compute_code_path(Config) ->
     EntireCodePath = code:get_path(),
     CodePath = filter_out_erlang_code_path(EntireCodePath),
-    ct:pal(?LOW_IMPORTANCE, "Code path: ~p", [CodePath]),
+    ct:pal(?LOW_IMPORTANCE, "Code path: ~tp", [CodePath]),
     rabbit_ct_helpers:set_config(Config, {erlang_code_path, CodePath}).
 
 filter_out_erlang_code_path(CodePath) ->
@@ -285,15 +285,15 @@ set_terraform_config_dirs(Config) ->
 set_terraform_state(Config) ->
     PrivDir = ?config(priv_dir, Config),
     Suffix = ?config(terraform_files_suffix, Config),
-    SpawnDataDir = rabbit_misc:format(".terraform-~s", [Suffix]),
-    SpawnStateFilename = rabbit_misc:format("terraform-~s.tfstate",
+    SpawnDataDir = rabbit_misc:format(".terraform-~ts", [Suffix]),
+    SpawnStateFilename = rabbit_misc:format("terraform-~ts.tfstate",
                                             [Suffix]),
-    PollDataDir = rabbit_misc:format(".terraform-query-~s", [Suffix]),
-    PollStateFilename = rabbit_misc:format("terraform-query-~s.tfstate",
+    PollDataDir = rabbit_misc:format(".terraform-query-~ts", [Suffix]),
+    PollStateFilename = rabbit_misc:format("terraform-query-~ts.tfstate",
                                            [Suffix]),
     SpawnTfState = filename:join(PrivDir, SpawnStateFilename),
     PollTfState = filename:join(PrivDir, PollStateFilename),
-    ct:pal(?LOW_IMPORTANCE, "Terraform state: ~s", [SpawnTfState]),
+    ct:pal(?LOW_IMPORTANCE, "Terraform state: ~ts", [SpawnTfState]),
     rabbit_ct_helpers:set_config(
       Config, [{terraform_state, SpawnTfState},
                {terraform_data_dir, SpawnDataDir},
@@ -386,7 +386,7 @@ list_dirs_to_upload(Config) ->
             AllDirs = lists:sort(
                         [SrcDir, ErlangMkPath, RabbitmqComponentsPath] ++ DepsDirs
                        ),
-            ct:pal(?LOW_IMPORTANCE, "Directories to upload: ~p", [AllDirs]),
+            ct:pal(?LOW_IMPORTANCE, "Directories to upload: ~tp", [AllDirs]),
             rabbit_ct_helpers:set_config(Config, {dirs_to_upload, AllDirs});
         _ ->
             global:del_lock(LockId, LockNodes),
@@ -402,7 +402,7 @@ list_dirs_to_download(Config) ->
                               | filter_out_subdirs(PrivDirParent, Dirs0)]
             end,
     Dirs = lists:sort(Dirs1),
-    ct:pal(?LOW_IMPORTANCE, "Directories to download: ~p", [Dirs]),
+    ct:pal(?LOW_IMPORTANCE, "Directories to download: ~tp", [Dirs]),
     rabbit_ct_helpers:set_config(Config, {dirs_to_download, Dirs}).
 
 filter_out_subdirs(RootDir, Dirs) ->
@@ -422,7 +422,7 @@ maybe_prepare_dirs_to_upload_archive(Config) ->
     Archive = filename:join(
                 PrivDir,
                 rabbit_misc:format(
-                  ?UPLOAD_DIRS_ARCHIVE_PREFIX "~s.tar.xz", [Checksum])),
+                  ?UPLOAD_DIRS_ARCHIVE_PREFIX "~ts.tar.xz", [Checksum])),
     Config1 = rabbit_ct_helpers:set_config(
                 Config, {upload_dirs_archive, Archive}),
     LockId = {{dirs_to_upload, Archive}, self()},
@@ -444,7 +444,7 @@ maybe_prepare_dirs_to_upload_archive(Config) ->
 
 prepare_dirs_to_upload_archive(Config, Archive, Dirs) ->
     DirsList = string:join(
-                 [rabbit_misc:format("~p", [Dir])
+                 [rabbit_misc:format("~tp", [Dir])
                   || Dir <- Dirs,
                      filelib:is_dir(Dir) orelse filelib:is_regular(Dir)],
                  " "),
@@ -453,12 +453,12 @@ prepare_dirs_to_upload_archive(Config, Archive, Dirs) ->
             " --exclude '.terraform*'"
             " --exclude '" ?UPLOAD_DIRS_ARCHIVE_PREFIX "*'"
             " --exclude '" ?ERLANG_REMOTE_NODENAME "@*'"
-            " ~s"
-            " | xz --threads=0 > ~p",
+            " ~ts"
+            " | xz --threads=0 > ~tp",
             [DirsList, Archive]),
     ct:pal(
       ?LOW_IMPORTANCE,
-      "Creating upload dirs archive `~s`:~n  ~s",
+      "Creating upload dirs archive `~ts`:~n  ~ts",
       [filename:basename(Archive), Cmd]),
     case os:cmd(Cmd) of
         "" ->
@@ -466,7 +466,7 @@ prepare_dirs_to_upload_archive(Config, Archive, Dirs) ->
         Output ->
             ct:pal(
               ?LOW_IMPORTANCE,
-              "Failed to create upload dirs archive:~n~s",
+              "Failed to create upload dirs archive:~n~ts",
               [Output]),
             {skip, "Failed to create upload dirs archive"}
     end.
@@ -484,7 +484,7 @@ spawn_terraform_vms(Config) ->
            Terraform,
            "apply",
            "-auto-approve=true",
-           {"-state=~s", [TfState]}
+           {"-state=~ts", [TfState]}
           ] ++ TfVarFlags ++ [
            TfConfigDir
           ],
@@ -516,7 +516,7 @@ destroy_terraform_vms(Config) ->
            Terraform,
            "destroy",
            "-auto-approve=true",
-           {"-state=~s", [TfState]}
+           {"-state=~ts", [TfState]}
           ] ++ TfVarFlags ++ [
            TfConfigDir
           ],
@@ -542,7 +542,7 @@ terraform_var_flags(Config) ->
                              undefined ->
                                  "RabbitMQ testing: ";
                              _ ->
-                                 rabbit_misc:format("~s: ", [ErlangApp])
+                                 rabbit_misc:format("~ts: ", [ErlangApp])
                          end,
     TestedApp = ?config(tested_erlang_app, Config),
     _ = application:load(TestedApp),
@@ -553,20 +553,20 @@ terraform_var_flags(Config) ->
     ct:pal(?LOW_IMPORTANCE, "Number of VMs requested: ~b", [InstanceCount]),
     Archive = ?config(upload_dirs_archive, Config),
     [
-     {"-var=erlang_version=~s", [ErlangVersion]},
-     {"-var=erlang_git_ref=~s", [GitRef]},
-     {"-var=elixir_version=~s", [ElixirVersion]},
-     {"-var=erlang_cookie=~s", [erlang:get_cookie()]},
-     {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
-     {"-var=ssh_key=~s", [SshKey]},
+     {"-var=erlang_version=~ts", [ErlangVersion]},
+     {"-var=erlang_git_ref=~ts", [GitRef]},
+     {"-var=elixir_version=~ts", [ElixirVersion]},
+     {"-var=erlang_cookie=~ts", [erlang:get_cookie()]},
+     {"-var=erlang_nodename=~ts", [?ERLANG_REMOTE_NODENAME]},
+     {"-var=ssh_key=~ts", [SshKey]},
      {"-var=instance_count=~b", [InstanceCount]},
-     {"-var=instance_name=~s", [InstanceName]},
-     {"-var=upload_dirs_archive=~s", [Archive]},
-     {"-var=vpc_cidr_block=~s", [CidrBlock]},
-     {"-var=files_suffix=~s", [Suffix]},
-     {"-var=aws_ec2_region=~s", [EC2Region]},
-     {"-var=instance_name_prefix=~s", [InstanceNamePrefix]},
-     {"-var=instance_name_suffix=~s", [InstanceNameSuffix]}
+     {"-var=instance_name=~ts", [InstanceName]},
+     {"-var=upload_dirs_archive=~ts", [Archive]},
+     {"-var=vpc_cidr_block=~ts", [CidrBlock]},
+     {"-var=files_suffix=~ts", [Suffix]},
+     {"-var=aws_ec2_region=~ts", [EC2Region]},
+     {"-var=instance_name_prefix=~ts", [InstanceNamePrefix]},
+     {"-var=instance_name_suffix=~ts", [InstanceNameSuffix]}
     ].
 
 instance_count(Config) ->
@@ -584,7 +584,7 @@ query_terraform_uuid(Config) ->
            Terraform,
            "output",
            "-no-color",
-           {"-state=~s", [TfState]},
+           {"-state=~ts", [TfState]},
            "uuid"
           ],
     case rabbit_ct_helpers:exec(Cmd) of
@@ -659,9 +659,9 @@ do_poll_vms(Config, TRef) ->
            Terraform,
            "apply",
            "-auto-approve=true",
-           {"-state=~s", [TfState]},
-           {"-var=uuid=~s", [Uuid]},
-           {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
+           {"-state=~ts", [TfState]},
+           {"-var=uuid=~ts", [Uuid]},
+           {"-var=erlang_nodename=~ts", [?ERLANG_REMOTE_NODENAME]},
            TfConfigDir
           ],
     case rabbit_ct_helpers:exec(Cmd, [{env, Env}]) of
@@ -676,7 +676,7 @@ ensure_instance_count(Config, TRef) ->
            Terraform,
            "output",
            "-no-color",
-           {"-state=~s", [TfState]},
+           {"-state=~ts", [TfState]},
            "instance_count"
           ],
     case rabbit_ct_helpers:exec(Cmd) of
@@ -714,13 +714,13 @@ do_query_terraform_map(Config, TfState, Var) ->
            Terraform,
            "output",
            "-no-color",
-           {"-state=~s", [TfState]},
+           {"-state=~ts", [TfState]},
            Var
           ],
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, Output} ->
             Map = parse_terraform_map(Output),
-            ct:pal(?LOW_IMPORTANCE, "Terraform map: ~p", [Map]),
+            ct:pal(?LOW_IMPORTANCE, "Terraform map: ~tp", [Map]),
             {ok, Map};
         _ ->
             {skip, "Terraform failed to query VMs"}
@@ -754,7 +754,7 @@ initialize_ct_peers(Config, NodenamesMap, IPAddrsMap) ->
                           {make_cmd, "make"}
                          ]}
                 end, NodenamesMap),
-    ct:pal(?LOW_IMPORTANCE, "Remote Erlang nodes: ~p", [CTPeers]),
+    ct:pal(?LOW_IMPORTANCE, "Remote Erlang nodes: ~tp", [CTPeers]),
     rabbit_ct_helpers:set_config(Config, {ct_peers, CTPeers}).
 
 set_inet_hosts(Config) ->
@@ -764,7 +764,7 @@ set_inet_hosts(Config) ->
          Hostname = ?config(hostname, CTPeerConfig),
          IPAddr = ?config(ipaddr, CTPeerConfig),
          inet_db:add_host(IPAddr, [Hostname]),
-         rabbit_misc:format("{host, ~p, [~p]}.~n",
+         rabbit_misc:format("{host, ~tp, [~tp]}.~n",
                             [IPAddr, Hostname])
      end || {_, CTPeerConfig} <- CTPeers],
     Config.
@@ -774,7 +774,7 @@ write_inetrc(Config) ->
     Suffix = ?config(terraform_files_suffix, Config),
     Filename = filename:join(
                  PrivDir,
-                 rabbit_misc:format("inetrc-~s", [Suffix])),
+                 rabbit_misc:format("inetrc-~ts", [Suffix])),
     LockId = {erlang_inetrc, self()},
     LockNodes = [node()],
     % We write an `inetrc` file per setup so there is no risk of
@@ -792,10 +792,10 @@ write_inetrc(Config) ->
                   ({lookup, _})  -> true;
                   (_)            -> false
               end, Inetrc),
-    Lines = [io_lib:format("~p.~n", [Line]) || Line <- Lines0],
+    Lines = [io_lib:format("~tp.~n", [Line]) || Line <- Lines0],
     ct:pal(
       ?LOW_IMPORTANCE,
-      "Erlang inetrc:~n~s",
+      "Erlang inetrc:~n~ts",
       [string:strip(["  " ++ Line || Line <- Lines], right, $\n)]),
     case file:write_file(Filename, Lines) of
         ok ->
@@ -804,7 +804,7 @@ write_inetrc(Config) ->
             Config;
         {error, Reason} ->
             global:del_lock(LockId, LockNodes),
-            ct:pal(?LOW_IMPORTANCE, "Failed to write inetrc: ~p~n", [Reason]),
+            ct:pal(?LOW_IMPORTANCE, "Failed to write inetrc: ~tp~n", [Reason]),
             {skip, "Failed to write inetrc"}
     end.
 
@@ -817,13 +817,13 @@ wait_for_ct_peers(Config) ->
 wait_for_ct_peers(Config, [CTPeer | Rest] = CTPeers, TRef) ->
     case net_adm:ping(CTPeer) of
         pong ->
-            ct:pal(?LOW_IMPORTANCE, "Remote Erlang node ~p ready", [CTPeer]),
+            ct:pal(?LOW_IMPORTANCE, "Remote Erlang node ~tp ready", [CTPeer]),
             wait_for_ct_peers(Config, Rest, TRef);
         pang ->
             receive
                 ct_peers_timeout ->
                     ct:pal(?LOW_IMPORTANCE,
-                           "Remote Erlang node ~p didn't respond to pings",
+                           "Remote Erlang node ~tp didn't respond to pings",
                            [CTPeer]),
                     {skip, "Failed to ping remote Erlang nodes (timeout)"}
             after 5000 ->
@@ -851,7 +851,7 @@ configure_ct_peers_environment(Config) ->
                  Value <- [os:getenv(Var)],
                  Value =/= false],
     ct:pal(?LOW_IMPORTANCE,
-           "Env. variables to set on remote VMs: ~p~n", [Values]),
+           "Env. variables to set on remote VMs: ~tp~n", [Values]),
     lists:foreach(
       fun({Var, Value}) ->
               rpc_all(Config, os, putenv, [Var, Value])
@@ -882,7 +882,7 @@ download_urls(Config, [Url | Rest]) ->
     PrivDir = ?config(priv_dir, Config),
     Headers = [{"connection", "close"}],
     Options = [{body_format, binary}],
-    ct:pal(?LOW_IMPORTANCE, "Fetching download dirs archive at `~s`", [Url]),
+    ct:pal(?LOW_IMPORTANCE, "Fetching download dirs archive at `~ts`", [Url]),
     Ret = httpc:request(get, {Url, Headers}, [], Options),
     case Ret of
         {ok, {{_, 200, _}, _, Body}} ->
@@ -893,15 +893,15 @@ download_urls(Config, [Url | Rest]) ->
                 {error, Reason} ->
                     ct:pal(
                       ?LOW_IMPORTANCE,
-                      "Failed to write download dirs archive `~s` "
-                      "to `~s`: ~p",
+                      "Failed to write download dirs archive `~ts` "
+                      "to `~ts`: ~tp",
                       [Url, Archive, Reason]),
                     {skip, "Failed to write download dirs archive"}
             end;
         _ ->
             ct:pal(
               ?LOW_IMPORTANCE,
-              "Failed to download dirs archive `~s`: ~p",
+              "Failed to download dirs archive `~ts`: ~tp",
               [Url, Ret]),
             {skip, "Failed to download dirs archive"}
     end;
@@ -933,10 +933,10 @@ prepare_dirs_to_download_archives(Config, _, [], _) ->
 prepare_dirs_to_download_archive(Config, CTPeer, Dir, I) ->
     PrivDir = ?config(priv_dir, Config),
     Archive = rabbit_misc:format(
-                "~s-~b-~s.tar.gz", [CTPeer, I, filename:basename(Dir)]),
+                "~ts-~b-~ts.tar.gz", [CTPeer, I, filename:basename(Dir)]),
     FilesList = [File || File <- filelib:wildcard("**", Dir),
                          not filelib:is_dir(filename:join(Dir, File))],
-    ct:pal(?LOW_IMPORTANCE, "Creating download dirs archive `~s`", [Archive]),
+    ct:pal(?LOW_IMPORTANCE, "Creating download dirs archive `~ts`", [Archive]),
     Ret = erl_tar:create(
             filename:join(PrivDir, Archive),
             [{File, filename:join(Dir, File)} || File <- FilesList],
@@ -947,7 +947,7 @@ prepare_dirs_to_download_archive(Config, CTPeer, Dir, I) ->
         {error, Reason} ->
             ct:pal(
               ?LOW_IMPORTANCE,
-              "Failed to create download dirs archive `~s` for dir `~s`: ~p",
+              "Failed to create download dirs archive `~ts` for dir `~ts`: ~tp",
               [Archive, Dir, Reason]),
             {skip, "Failed to create download dirs archive"}
     end.
@@ -975,14 +975,14 @@ start_http_server(Config) ->
             HttpInfo = httpd:info(Pid),
             ct:pal(
               ?LOW_IMPORTANCE,
-              "Ready to serve download dirs archive at `~s`",
+              "Ready to serve download dirs archive at `~ts`",
               [archive_name_to_url(HttpInfo, "")]),
             archive_names_to_urls(Config, HttpInfo);
         {error, Reason} ->
             ct:pal(
               ?LOW_IMPORTANCE,
               "Failed to start HTTP server to serve download dirs "
-              "archives: ~p",
+              "archives: ~tp",
               [Reason]),
             {skiip, "Failed to start dirs archive HTTP server"}
     end.
@@ -997,7 +997,7 @@ archive_names_to_urls(Config, HttpInfo) ->
 archive_name_to_url(HttpInfo, Archive) ->
     Hostname = proplists:get_value(server_name, HttpInfo),
     Port = proplists:get_value(port, HttpInfo),
-    rabbit_misc:format("http://~s:~b/~s", [Hostname, Port, Archive]).
+    rabbit_misc:format("http://~ts:~b/~ts", [Hostname, Port, Archive]).
 
 stop_ct_peers(Config) ->
     CTPeers = get_ct_peers(Config),

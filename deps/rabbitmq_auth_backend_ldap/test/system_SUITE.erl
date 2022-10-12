@@ -172,7 +172,7 @@ init_slapd(Config) ->
                                     [{capture, all_but_first, list},
                                      multiline]),
             ct:pal(?LOW_IMPORTANCE,
-                   "slapd(8) PID: ~s~nslapd(8) listening on: ~b",
+                   "slapd(8) PID: ~ts~nslapd(8) listening on: ~b",
                    [SlapdPid, TcpPort]),
             rabbit_ct_helpers:set_config(Config,
                                          [{slapd_pid, SlapdPid},

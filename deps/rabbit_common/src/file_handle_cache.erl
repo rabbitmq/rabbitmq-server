@@ -1082,7 +1082,7 @@ init([AlarmSet, AlarmClear]) ->
                     end
             end,
     ObtainLimit = obtain_limit(Limit),
-    logger:info("Limiting to approx ~p file handles (~p sockets)",
+    logger:info("Limiting to approx ~tp file handles (~tp sockets)",
                  [Limit, ObtainLimit]),
     Clients = ets:new(?CLIENT_ETS_TABLE, [set, private, {keypos, #cstate.pid}]),
     Elders = ets:new(?ELDERS_ETS_TABLE, [set, private]),

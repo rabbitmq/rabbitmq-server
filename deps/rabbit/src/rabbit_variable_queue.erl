@@ -399,13 +399,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
 do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
-            rabbit_log:info("Started message store of type ~s for vhost '~ts'", [abbreviated_type(Type), VHost]);
+            rabbit_log:info("Started message store of type ~ts for vhost '~ts'", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~ts': the vhost no longer exists!",
+            rabbit_log:error("Failed to start message store of type ~ts for vhost '~ts': the vhost no longer exists!",
                              [Type, VHost]),
             exit(Err);
         {error, Error} ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~ts': ~p",
+            rabbit_log:error("Failed to start message store of type ~ts for vhost '~ts': ~tp",
                              [Type, VHost, Error]),
             exit({error, Error})
     end.

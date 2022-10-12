@@ -192,13 +192,13 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p",
+    ?DEBUG("Channel ~tp <-~n~tp",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?DEBUG("Channel ~p <-~n~p",
+    ?DEBUG("Channel ~tp <-~n~tp",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel,
@@ -211,7 +211,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 
 assemble_frames(Channel, Performative, Content, _FrameMax,
                 amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content",
+    ?DEBUG("Channel ~tp <-~n~tp~n  followed by ~tp bytes of content",
            [Channel, amqp10_framing:pprint(Performative),
             iolist_size(Content)]),
     PerfBin = amqp10_framing:encode_bin(Performative),

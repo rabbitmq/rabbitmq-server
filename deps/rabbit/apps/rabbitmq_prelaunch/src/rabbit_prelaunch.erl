@@ -149,7 +149,7 @@ get_stop_reason() ->
 set_stop_reason(Reason) ->
     case get_stop_reason() of
         undefined ->
-            ?LOG_DEBUG("Set stop reason to: ~p", [Reason]),
+            ?LOG_DEBUG("Set stop reason to: ~tp", [Reason]),
             persistent_term:put(?PT_KEY_STOP_REASON, Reason);
         _ ->
             ok
@@ -173,8 +173,8 @@ setup_shutdown_func() ->
             ok;
         {ok, {ExistingMod, ExistingFunc}} ->
             ?LOG_DEBUG(
-              "Setting up kernel shutdown function: ~s:~s/1 "
-              "(chained with ~s:~s/1)",
+              "Setting up kernel shutdown function: ~ts:~ts/1 "
+              "(chained with ~ts:~ts/1)",
               [ThisMod, ThisFunc, ExistingMod, ExistingFunc]),
             ok = persistent_term:put(
                    ?PT_KEY_SHUTDOWN_FUNC,
@@ -182,7 +182,7 @@ setup_shutdown_func() ->
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc);
         _ ->
             ?LOG_DEBUG(
-              "Setting up kernel shutdown function: ~s:~s/1",
+              "Setting up kernel shutdown function: ~ts:~ts/1",
               [ThisMod, ThisFunc]),
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc)
     end.
@@ -194,7 +194,7 @@ record_kernel_shutdown_func(Mod, Func) ->
 
 shutdown_func(Reason) ->
     ?LOG_DEBUG(
-      "Running ~s:shutdown_func() as part of `kernel` shutdown", [?MODULE]),
+      "Running ~ts:shutdown_func() as part of `kernel` shutdown", [?MODULE]),
     Context = get_context(),
     remove_pid_file(Context),
     ChainedShutdownFunc = persistent_term:get(

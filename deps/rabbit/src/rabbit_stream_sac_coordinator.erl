@@ -128,7 +128,7 @@ process_command(Cmd) ->
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
-            rabbit_log:warning("SAC coordinator command ~p returned error ~p",
+            rabbit_log:warning("SAC coordinator command ~tp returned error ~tp",
                                [Cmd, Err]),
             Err
     end.
@@ -258,7 +258,7 @@ apply(#command_activate_consumer{vhost = VirtualHost,
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
-                rabbit_log:warning("trying to activate consumer in group ~p, but "
+                rabbit_log:warning("trying to activate consumer in group ~tp, but "
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};

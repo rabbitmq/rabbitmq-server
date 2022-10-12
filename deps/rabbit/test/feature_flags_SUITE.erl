@@ -201,15 +201,15 @@ init_per_testcase(Testcase, Config) ->
                     false -> []
                 end,
     Suffix = case UsingFFv2 of
-                 false -> rabbit_misc:format("~s-v1", [Testcase]);
-                 true  -> rabbit_misc:format("~s-v2", [Testcase])
+                 false -> rabbit_misc:format("~ts-v1", [Testcase]);
+                 true  -> rabbit_misc:format("~ts-v2", [Testcase])
              end,
     case ?config(tc_group_properties, Config) of
         [{name, registry} | _] ->
             logger:set_primary_config(level, debug),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config),
                                              rabbit_misc:format(
-                                               "feature_flags-~s",
+                                               "feature_flags-~ts",
                                                [Testcase])),
             application:set_env(rabbit, feature_flags_file, FeatureFlagsFile),
             rabbit_ct_helpers:set_config(
@@ -488,7 +488,7 @@ registry_concurrent_reloads(_Config) ->
                     [MakeName(I) || I <- ProcIs]),
     Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
     rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Started registry spammer (~p)",
+      ?MODULE_STRING ": Started registry spammer (~tp)",
       [self()]),
 
     %% We acquire the lock from the main process to synchronize the test
@@ -1173,7 +1173,7 @@ build_my_plugin(Config) ->
         [] ->
             DepsDir = ?config(erlang_mk_depsdir, Config),
             Args = ["test-dist",
-                    {"DEPS_DIR=~s", [DepsDir]},
+                    {"DEPS_DIR=~ts", [DepsDir]},
                     %% We clear ALL_DEPS_DIRS to make sure they are
                     %% not recompiled when the plugin is built. `rabbit`
                     %% was previously compiled with -DTEST and if it is
@@ -1207,7 +1207,7 @@ update_cli_path(Config, PluginSrcDir) ->
     case filelib:is_regular(Rabbitmqctl) of
         true ->
             ct:pal(?LOW_IMPORTANCE,
-                   "Switching to CLI in e.g. ~s", [Rabbitmqctl]),
+                   "Switching to CLI in e.g. ~ts", [Rabbitmqctl]),
             rabbit_ct_helpers:set_config(
               Config,
               [{rabbitmqctl_cmd, Rabbitmqctl},

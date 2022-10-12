@@ -27,12 +27,12 @@ boot() ->
             case application:ensure_all_started(looking_glass) of
                 {ok, _} -> ok;
                 {error, Error} ->
-                    rabbit_log:error("Failed to start Looking Glass, reason: ~p", [Error])
+                    rabbit_log:error("Failed to start Looking Glass, reason: ~tp", [Error])
             end;
         Value ->
             Input = parse_value(Value),
             rabbit_log:info(
-                "Enabling Looking Glass profiler, input value: ~p",
+                "Enabling Looking Glass profiler, input value: ~tp",
                 [Input]
             ),
             {ok, _} = application:ensure_all_started(looking_glass),

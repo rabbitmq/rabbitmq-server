@@ -23,7 +23,7 @@ init_schemas(App, Config) ->
 
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
-    ct:pal("Loaded config schema snippets: ~p", [Snippets]),
+    ct:pal("Loaded config schema snippets: ~tp", [Snippets]),
     lists:map(
         fun({N, S, C, P})    -> ok = test_snippet(Config, {snippet_id(N), S, []}, C, P);
            ({N, S, A, C, P}) -> ok = test_snippet(Config, {snippet_id(N), S, A},  C, P)
@@ -55,8 +55,8 @@ test_snippet(Config, Snippet, Expected, _Plugins) ->
     case Exp of
         Gen -> ok;
         _         ->
-            ct:pal("Expected: ~p~ngenerated: ~p", [Expected, Generated]),
-            ct:pal("Expected (sorted): ~p~ngenerated (sorted): ~p", [Exp, Gen]),
+            ct:pal("Expected: ~tp~ngenerated: ~tp", [Expected, Generated]),
+            ct:pal("Expected (sorted): ~tp~ngenerated (sorted): ~tp", [Exp, Gen]),
             error({config_mismatch, Snippet, Exp, Gen})
     end.
 

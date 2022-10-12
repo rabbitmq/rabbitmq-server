@@ -146,7 +146,7 @@ ct:pal("Start test 3", []),
     queue_is_not_empty(Channel2, Queue2),
     % Vhost2Dir = vhost_dir(Vhost2, Config),
     % [StoreFile] = filelib:wildcard(binary_to_list(filename:join([Vhost2Dir, "msg_store_persistent_*", "0.rdq"]))),
-    % ct:pal("Store file ~p~n", [file:read_file(StoreFile)]).
+    % ct:pal("Store file ~tp~n", [file:read_file(StoreFile)]).
 % ok.
     rabbit_ct_broker_helpers:stop_broker(Config, 0),
     delete_vhost_data(Vhost1, Config),
@@ -227,7 +227,7 @@ consume_messages(Storage, Channel, Queue) ->
     end,
     lists:foreach(
         fun(I) ->
-            ct:pal("Consume message ~p~n ~p~n", [I, MessagePayload]),
+            ct:pal("Consume message ~tp~n ~tp~n", [I, MessagePayload]),
             {#'basic.get_ok'{}, Content} =
                 amqp_channel:call(Channel,
                                   #'basic.get'{queue = Queue,

@@ -49,11 +49,11 @@ validate_binding(_X, #binding{args = Args}) ->
         {longstr, <<"any-with-x">>} -> ok;
         {longstr, Other}     -> {error,
                                  {binding_invalid,
-                                  "Invalid x-match field value ~p; "
+                                  "Invalid x-match field value ~tp; "
                                   "expected all, any, all-with-x, or any-with-x", [Other]}};
         {Type,    Other}     -> {error,
                                  {binding_invalid,
-                                  "Invalid x-match field type ~p (value ~p); "
+                                  "Invalid x-match field type ~tp (value ~tp); "
                                   "expected longstr", [Type, Other]}};
         undefined            -> ok %% [0]
     end.

@@ -23,8 +23,8 @@ respond(Files, Req, State) ->
     {ok, Req2, State}.
 
 respond_error(Reason, Req, State) ->
-    Error = io_lib:format("Error listing certificates ~p", [Reason]),
-    logger:log(error, "~s", [Error]),
+    Error = io_lib:format("Error listing certificates ~tp", [Reason]),
+    logger:log(error, "~ts", [Error]),
     Req2 = cowboy_req:reply(500, [], iolist_to_binary(Error), Req),
     {ok, Req2, State}.
 
@@ -35,7 +35,7 @@ json_encode(Files) ->
     thoas:encode(Map).
 
 cert_id(FileName, FileDate, FileHash) ->
-    iolist_to_binary(io_lib:format("~s:~p:~p", [FileName, FileDate, FileHash])).
+    iolist_to_binary(io_lib:format("~ts:~tp:~tp", [FileName, FileDate, FileHash])).
 
 cert_path(FileName) ->
     iolist_to_binary(["/certs/", FileName]).

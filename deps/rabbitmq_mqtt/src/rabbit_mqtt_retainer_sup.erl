@@ -48,7 +48,7 @@ delete_child(VHost) ->
 
 init([]) ->
   Mod = rabbit_mqtt_retainer:store_module(),
-  rabbit_log:info("MQTT retained message store: ~p",
+  rabbit_log:info("MQTT retained message store: ~tp",
     [Mod]),
   {ok, {
       #{strategy => one_for_one, intensity => 5, period => 5},

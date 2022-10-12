@@ -156,7 +156,7 @@ cert_validity(Cert) ->
                               pubkey_cert:time_str_2_gregorian_sec(NotAfter)
                       end;
                  ({Type, _, _}) ->
-                      {error, io_lib:format("The certificate file provided contains a ~p entry",
+                      {error, io_lib:format("The certificate file provided contains a ~tp entry",
                                             [Type])}
               end, DsaEntries)
     end.                      

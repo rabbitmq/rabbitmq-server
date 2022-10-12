@@ -70,7 +70,7 @@ delete_resource(ReqData, Context) ->
                  {source, S},
                  {routing_key, Key},
                  {arguments, Args}],
-                "Unbinding error: ~s", ReqData, Context)
+                "Unbinding error: ~ts", ReqData, Context)
       end).
 
 is_authorized(ReqData, Context) ->

@@ -88,7 +88,7 @@ validity(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        validity = {'Validity', Start, End} }}) ->
-                      rabbit_misc:format("~s - ~s", [format_asn1_value(Start),
+                      rabbit_misc:format("~ts - ~ts", [format_asn1_value(Start),
                                                      format_asn1_value(End)])
               end, Cert).
 
@@ -149,12 +149,12 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             {{0,9,2342,19200300,100,1,1}     , "UID"}], %% Not in public_key.hrl
     case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
-            rabbit_misc:format(Fmt ++ "=~s", [FV]);
+            rabbit_misc:format(Fmt ++ "=~ts", [FV]);
         none when is_tuple(T) ->
             TypeL = [rabbit_misc:format("~w", [X]) || X <- tuple_to_list(T)],
-            rabbit_misc:format("~s=~s", [string:join(TypeL, "."), FV]);
+            rabbit_misc:format("~ts=~ts", [string:join(TypeL, "."), FV]);
         none ->
-            rabbit_misc:format("~p=~s", [T, FV])
+            rabbit_misc:format("~tp=~ts", [T, FV])
     end.
 
 %% Escape a string as per RFC4514.
@@ -204,10 +204,10 @@ format_asn1_value(V) when is_binary(V) ->
         {ST, S} = public_key:der_decode('DirectoryString', V),
         format_directory_string(ST, S)
     catch _:_ ->
-            rabbit_misc:format("~p", [V])
+            rabbit_misc:format("~tp", [V])
     end;
 format_asn1_value(V) ->
-    rabbit_misc:format("~p", [V]).
+    rabbit_misc:format("~tp", [V]).
 
 %% DirectoryString { INTEGER : maxSize } ::= CHOICE {
 %%     teletexString     TeletexString (SIZE (1..maxSize)),

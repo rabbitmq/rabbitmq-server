@@ -1136,21 +1136,21 @@ system_code_change(GS2State = #gs2_state { mod   = Mod,
 print_event(Dev, {in, Msg}, Name) ->
     case Msg of
         {'$gen_call', {From, _Tag}, Call} ->
-            io:format(Dev, "*DBG* ~p got call ~p from ~w~n",
+            io:format(Dev, "*DBG* ~tp got call ~tp from ~w~n",
                       [Name, Call, From]);
         {'$gen_cast', Cast} ->
-            io:format(Dev, "*DBG* ~p got cast ~p~n",
+            io:format(Dev, "*DBG* ~tp got cast ~tp~n",
                       [Name, Cast]);
         _ ->
-            io:format(Dev, "*DBG* ~p got ~p~n", [Name, Msg])
+            io:format(Dev, "*DBG* ~tp got ~tp~n", [Name, Msg])
     end;
 print_event(Dev, {out, Msg, To, State}, Name) ->
-    io:format(Dev, "*DBG* ~p sent ~p to ~w, new state ~w~n",
+    io:format(Dev, "*DBG* ~tp sent ~tp to ~w, new state ~w~n",
               [Name, Msg, To, State]);
 print_event(Dev, {noreply, State}, Name) ->
-    io:format(Dev, "*DBG* ~p new state ~w~n", [Name, State]);
+    io:format(Dev, "*DBG* ~tp new state ~w~n", [Name, State]);
 print_event(Dev, Event, Name) ->
-    io:format(Dev, "*DBG* ~p dbg  ~p~n", [Name, Event]).
+    io:format(Dev, "*DBG* ~tp dbg  ~tp~n", [Name, Event]).
 
 
 %%% ---------------------------------------------------
@@ -1192,14 +1192,14 @@ error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
 error_info(Reason, RootCause, Name, Msg, State, Debug) ->
     Reason1 = error_reason(Reason),
     Fmt =
-        "** Generic server ~p terminating~n"
-        "** Last message in was ~p~n"
-        "** When Server state == ~p~n"
-        "** Reason for termination == ~n** ~p~n",
+        "** Generic server ~tp terminating~n"
+        "** Last message in was ~tp~n"
+        "** When Server state == ~tp~n"
+        "** Reason for termination == ~n** ~tp~n",
     case RootCause of
         undefined -> format(Fmt, [Name, Msg, State, Reason1]);
         _         -> format(Fmt ++ "** In 'terminate' callback "
-                            "with reason ==~n** ~p~n",
+                            "with reason ==~n** ~tp~n",
                             [Name, Msg, State, Reason1,
                              error_reason(RootCause)])
     end,
@@ -1249,7 +1249,7 @@ dbg_options(Name, Opts) ->
 dbg_opts(Name, Opts) ->
     case catch sys:debug_options(Opts) of
         {'EXIT',_} ->
-            format("~p: ignoring erroneous debug options - ~p~n",
+            format("~tp: ignoring erroneous debug options - ~tp~n",
                    [Name, Opts]),
             [];
         Dbg ->

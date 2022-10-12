@@ -844,13 +844,13 @@ publish_confirm(Ch, QName) ->
 publish_confirm(Ch, QName, Timeout) ->
     publish(Ch, QName),
     amqp_channel:register_confirm_handler(Ch, self()),
-    ct:pal("waiting for confirms from ~s", [QName]),
+    ct:pal("waiting for confirms from ~ts", [QName]),
     receive
         #'basic.ack'{} ->
-            ct:pal("CONFIRMED! ~s", [QName]),
+            ct:pal("CONFIRMED! ~ts", [QName]),
             ok;
         #'basic.nack'{} ->
-            ct:pal("NOT CONFIRMED! ~s", [QName]),
+            ct:pal("NOT CONFIRMED! ~ts", [QName]),
             fail
     after Timeout ->
               exit(confirm_timeout)
@@ -997,7 +997,7 @@ subscribe_should_fail_when_global_qos_true(Config) ->
         _ -> exit(subscribe_should_not_pass)
     catch
         _:_ = Err ->
-        ct:pal("subscribe_should_fail_when_global_qos_true caught an error: ~p", [Err])
+        ct:pal("subscribe_should_fail_when_global_qos_true caught an error: ~tp", [Err])
     end,
     ok.
 
@@ -1182,7 +1182,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     RaName = ra_name(QQ),
     publish(Ch2, QQ),
     Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
-    ct:pal ("Res ~p", [Res]),
+    ct:pal ("Res ~tp", [Res]),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName, 1),
     [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
@@ -1656,7 +1656,7 @@ flush(T) ->
 add_member_not_running(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    ct:pal("add_member_not_running config ~p", [Config]),
+    ct:pal("add_member_not_running config ~tp", [Config]),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},

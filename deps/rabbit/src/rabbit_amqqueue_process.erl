@@ -929,7 +929,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
                 true  ->
                     log_auto_delete(
                         io_lib:format(
-                            "because all of its consumers (~p) were on a channel that was closed",
+                            "because all of its consumers (~tp) were on a channel that was closed",
                             [length(ChCTags)]),
                         State),
                     {stop, State2};
@@ -1449,7 +1449,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
                 true  ->
                     log_auto_delete(
                         io_lib:format(
-                            "because its last consumer with tag '~s' was cancelled",
+                            "because its last consumer with tag '~ts' was cancelled",
                             [ConsumerTag]),
                         State),
                     stop(ok, State1)
@@ -1671,7 +1671,7 @@ handle_cast({force_event_refresh, Ref},
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
-    rabbit_log:debug("Queue ~s forced to re-emit events, consumers: ~p", [rabbit_misc:rs(QName), AllConsumers]),
+    rabbit_log:debug("Queue ~ts forced to re-emit events, consumers: ~tp", [rabbit_misc:rs(QName), AllConsumers]),
     [emit_consumer_created(
        Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
        Args, Ref, ActingUser) ||
@@ -1818,14 +1818,14 @@ log_delete_exclusive({ConPid, _ConRef}, State) ->
 log_delete_exclusive(ConPid, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting exclusive queue '~s' in vhost '~ts' " ++
-                           "because its declaring connection ~p was closed",
+    rabbit_log_queue:debug("Deleting exclusive queue '~ts' in vhost '~ts' " ++
+                           "because its declaring connection ~tp was closed",
                            [QName, VHost, ConPid]).
 
 log_auto_delete(Reason, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting auto-delete queue '~s' in vhost '~ts' " ++
+    rabbit_log_queue:debug("Deleting auto-delete queue '~ts' in vhost '~ts' " ++
                            Reason,
                            [QName, VHost]).
 

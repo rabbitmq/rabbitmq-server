@@ -137,7 +137,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                       Err
               end);
         _ ->
-            rabbit_log:warning("ignoring exchange.declare for exchange ~p,
+            rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
             X
     end.
@@ -167,12 +167,12 @@ check_type(TypeBin) ->
     case rabbit_registry:binary_to_type(rabbit_data_coercion:to_binary(TypeBin)) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              command_invalid, "unknown exchange type '~s'", [TypeBin]);
+              command_invalid, "unknown exchange type '~ts'", [TypeBin]);
         T ->
             case rabbit_registry:lookup_module(exchange, T) of
                 {error, not_found} -> rabbit_misc:protocol_error(
                                         command_invalid,
-                                        "invalid exchange type '~s'", [T]);
+                                        "invalid exchange type '~ts'", [T]);
                 {ok, _Module}      -> T
             end
     end.
@@ -565,7 +565,7 @@ peek_serial(XName, LockType) ->
     end.
 
 invalid_module(T) ->
-    rabbit_log:warning("Could not find exchange type ~s.", [T]),
+    rabbit_log:warning("Could not find exchange type ~ts.", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 

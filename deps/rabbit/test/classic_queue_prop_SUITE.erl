@@ -141,8 +141,8 @@ instrs_to_manual([Instrs]) ->
             Res = "Res" ++ integer_to_list(Var),
             PrevSt = "St" ++ integer_to_list(Var - 1),
             St = "St" ++ integer_to_list(Var),
-            io:format("    ~s = cmd_setup_queue(~s),~n"
-                      "    ~s = ~s#cq{amq=~s},~n~n",
+            io:format("    ~ts = cmd_setup_queue(~ts),~n"
+                      "    ~ts = ~ts#cq{amq=~ts},~n~n",
                       [Res, PrevSt, St, PrevSt, Res]);
         ({set, {var,Var}, {call, ?MODULE, Cmd, [#cq{}|Args]}}) ->
             Res = "Res" ++ integer_to_list(Var),
@@ -152,9 +152,9 @@ instrs_to_manual([Instrs]) ->
                                     {var,V} -> "Res" ++ integer_to_list(V);
                                     _ -> io_lib:format("~0p", [A])
                                 end] || A <- Args],
-            io:format("    ~s = ~s(~s~s),~n"
-                      "    true = postcondition(~s, {call, undefined, ~s, [~s~s]}, ~s),~n"
-                      "    ~s = next_state(~s, ~s, {call, undefined, ~s, [~s~s]}),~n~n",
+            io:format("    ~ts = ~ts(~ts~ts),~n"
+                      "    true = postcondition(~ts, {call, undefined, ~ts, [~ts~ts]}, ~ts),~n"
+                      "    ~ts = next_state(~ts, ~ts, {call, undefined, ~ts, [~ts~ts]}),~n~n",
                       [Res, Cmd, PrevSt, ExtraArgs,
                        PrevSt, Cmd, PrevSt, ExtraArgs, Res,
                        St, PrevSt, Res, Cmd, PrevSt, ExtraArgs]);
@@ -169,9 +169,9 @@ instrs_to_manual([Instrs]) ->
                 "" -> "";
                 ", " ++ ExtraArgs0 -> ExtraArgs0
             end,
-            io:format("    ~s = ~s(~s),~n"
-                      "    true = postcondition(~s, {call, undefined, ~s, [~s]}, ~s),~n"
-                      "    ~s = next_state(~s, ~s, {call, undefined, ~s, [~s]}),~n~n",
+            io:format("    ~ts = ~ts(~ts),~n"
+                      "    true = postcondition(~ts, {call, undefined, ~ts, [~ts]}, ~ts),~n"
+                      "    ~ts = next_state(~ts, ~ts, {call, undefined, ~ts, [~ts]}),~n~n",
                       [Res, Cmd, ExtraArgs,
                        PrevSt, Cmd, ExtraArgs, Res,
                        St, PrevSt, Res, Cmd, ExtraArgs])
@@ -216,7 +216,7 @@ on_output_fun() ->
     fun (".", _) -> ok; % don't print the '.'s on new lines
         ("!", _) -> ok;
         ("~n", _) -> ok; % don't print empty lines; CT adds many to logs already
-        ("~w~n", A) -> logger:error("~p~n", [A]); % make sure this gets sent to the terminal, it's important
+        ("~w~n", A) -> logger:error("~tp~n", [A]); % make sure this gets sent to the terminal, it's important
         (F, A) -> io:format(F, A)
     end.
 
@@ -239,7 +239,7 @@ prop_common(InitialState) ->
         ?TRAPEXIT(begin
             {History, State, Result} = run_commands(?MODULE, Commands),
             cmd_teardown_queue(State),
-            ?WHENFAIL(logger:error("History: ~p~nState: ~p~nResult: ~p",
+            ?WHENFAIL(logger:error("History: ~tp~nState: ~tp~nResult: ~tp",
                                    [History, State, Result]),
                       aggregate(command_names(Commands), Result =:= ok))
         end)

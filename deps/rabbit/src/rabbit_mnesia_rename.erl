@@ -150,7 +150,7 @@ finish(FromNode, ToNode, AllNodes) ->
             end;
         FromNode ->
             rabbit_log:info(
-              "Abandoning rename from ~s to ~s since we are still ~s",
+              "Abandoning rename from ~ts to ~ts since we are still ~ts",
               [FromNode, ToNode, FromNode]),
             [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
             ok = rabbit_file:recursive_delete([rabbit_mnesia:dir()]),
@@ -161,18 +161,18 @@ finish(FromNode, ToNode, AllNodes) ->
             %% Boot will almost certainly fail but we might as
             %% well just log this
             rabbit_log:info(
-              "Rename attempted from ~s to ~s but we are ~s - ignoring.",
+              "Rename attempted from ~ts to ~ts but we are ~ts - ignoring.",
               [FromNode, ToNode, node()])
     end.
 
 finish_primary(FromNode, ToNode) ->
-    rabbit_log:info("Restarting as primary after rename from ~s to ~s",
+    rabbit_log:info("Restarting as primary after rename from ~ts to ~ts",
                     [FromNode, ToNode]),
     delete_rename_files(),
     ok.
 
 finish_secondary(FromNode, ToNode, AllNodes) ->
-    rabbit_log:info("Restarting as secondary after rename from ~s to ~s",
+    rabbit_log:info("Restarting as secondary after rename from ~ts to ~ts",
                     [FromNode, ToNode]),
     %% Renaming a node was partially handled by `rabbit_upgrade', the old
     %% upgrade mechanism used before we introduced feature flags. The
@@ -288,11 +288,11 @@ become(BecomeNode) ->
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> ok = net_kernel:stop(),
-                io:format("  * Impersonating node: ~s...", [BecomeNode]),
+                io:format("  * Impersonating node: ~ts...", [BecomeNode]),
                 {ok, _} = start_distribution(BecomeNode),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
-                io:format("  * Mnesia directory  : ~s~n", [Dir])
+                io:format("  * Mnesia directory  : ~ts~n", [Dir])
     end.
 
 start_distribution(Name) ->

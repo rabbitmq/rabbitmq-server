@@ -70,12 +70,12 @@ handle_event(Signal, State) ->
         %
         %#{Signal := stop} ->
         %    logger:info(
-        %      "~s received - shutting down",
+        %      "~ts received - shutting down",
         %      [string:uppercase(atom_to_list(Signal))]),
         %    ok = init:stop();
         _ ->
             logger:info(
-              "~s received - unhandled signal",
+              "~ts received - unhandled signal",
               [string:uppercase(atom_to_list(Signal))])
     end,
     {ok, State}.

@@ -446,7 +446,7 @@ recover(VHost, Qs) ->
                end, ByType1, Qs),
    maps:fold(fun (Mod, Queues, {R0, F0}) ->
                      {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
-                     rabbit_log:info("Recovering ~b queues of type ~s took ~bms",
+                     rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
                                     [length(Queues), Mod, Taken div 1000]),
                      {R0 ++ R, F0 ++ F}
              end, {[], []}, ByType).

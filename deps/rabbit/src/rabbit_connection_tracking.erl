@@ -95,12 +95,12 @@ handle_cast({connection_created, Details}) ->
                 register_tracked(TConn)
             catch
                 error:{no_exists, _} ->
-                    Msg = "Could not register connection ~p for tracking, "
+                    Msg = "Could not register connection ~tp for tracking, "
                           "its table is not ready yet or the connection terminated prematurely",
                     rabbit_log_connection:warning(Msg, [ConnId]),
                     ok;
                 error:Err ->
-                    Msg = "Could not register connection ~p for tracking: ~p",
+                    Msg = "Could not register connection ~tp for tracking: ~tp",
                     rabbit_log_connection:warning(Msg, [ConnId, Err]),
                     ok
             end;
@@ -295,7 +295,7 @@ ensure_tracked_connections_table_for_this_node() ->
 ensure_tracked_connections_table_for_this_node_ets() ->
     ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
                                         {keypos, #tracked_connection.id}]),
-    rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
+    rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE]).
 
 ensure_tracked_connections_table_for_this_node_mnesia() ->
@@ -304,14 +304,14 @@ ensure_tracked_connections_table_for_this_node_mnesia() ->
     case mnesia:create_table(TableName, [{record_name, tracked_connection},
                                          {attributes, record_info(fields, tracked_connection)}]) of
         {atomic, ok}                   ->
-            rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, {already_exists, _}} ->
-            rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
+            rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
                             [TableName]);
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
+            rabbit_log:error("Failed to create a tracked connection table for node ~tp: ~tp", [Node, Error]),
             ok
     end.
 
@@ -326,7 +326,7 @@ ensure_per_vhost_tracked_connections_table_for_this_node() ->
     end.
 
 ensure_per_vhost_tracked_connections_table_for_this_node_ets() ->
-    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
+    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
     ets:new(?TRACKED_CONNECTION_TABLE_PER_VHOST, [named_table, public, {write_concurrency, true}]).
 
@@ -336,15 +336,15 @@ ensure_per_vhost_tracked_connections_table_for_this_node_mnesia() ->
     case mnesia:create_table(TableName, [{record_name, tracked_connection_per_vhost},
                                          {attributes, record_info(fields, tracked_connection_per_vhost)}]) of
         {atomic, ok}                   ->
-            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
+            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, {already_exists, _}} ->
-            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
+            rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
+            rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~tp: ~tp", [Node, Error]),
             ok
     end.
 
@@ -360,7 +360,7 @@ ensure_per_user_tracked_connections_table_for_this_node() ->
 
 ensure_per_user_tracked_connections_table_for_this_node_ets() ->
     ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
-    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
+    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
 ensure_per_user_tracked_connections_table_for_this_node_mnesia() ->
@@ -369,15 +369,15 @@ ensure_per_user_tracked_connections_table_for_this_node_mnesia() ->
     case mnesia:create_table(TableName, [{record_name, tracked_connection_per_user},
                                          {attributes, record_info(fields, tracked_connection_per_user)}]) of
         {atomic, ok}                   ->
-            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
+            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, {already_exists, _}} ->
-            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
+            rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
                             [TableName]),
             ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-user tracked connection table for node ~p: ~p", [Node, Error]),
+            rabbit_log:error("Failed to create a per-user tracked connection table for node ~tp: ~tp", [Node, Error]),
             ok
     end.
 
@@ -716,7 +716,7 @@ close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
             ok;
           _:Err ->
             %% ignore, don't terminate
-            rabbit_log:warning("Could not close connection ~p: ~p", [Pid, Err]),
+            rabbit_log:warning("Could not close connection ~tp: ~tp", [Pid, Err]),
             ok
     end;
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->

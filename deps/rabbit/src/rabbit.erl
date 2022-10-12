@@ -397,7 +397,7 @@ start_it(StartType) ->
 
                 T1 = erlang:timestamp(),
                 ?LOG_DEBUG(
-                  "Time to start RabbitMQ: ~p us",
+                  "Time to start RabbitMQ: ~tp us",
                   [timer:now_diff(T1, T0)]),
                 stop_boot_marker(Marker),
                 ok
@@ -447,11 +447,11 @@ stop() ->
             case rabbit_boot_state:get() of
                 ready ->
                     Product = product_name(),
-                    ?LOG_INFO("~s is asked to stop...", [Product],
+                    ?LOG_INFO("~ts is asked to stop...", [Product],
                               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     do_stop(),
                     ?LOG_INFO(
-                      "Successfully stopped ~s and its dependencies",
+                      "Successfully stopped ~ts and its dependencies",
                       [Product],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     ok;
@@ -478,7 +478,7 @@ stop_and_halt() ->
         stop()
     catch Type:Reason ->
         ?LOG_ERROR(
-          "Error trying to stop ~s: ~p:~p",
+          "Error trying to stop ~ts: ~tp:~tp",
           [product_name(), Type, Reason],
           #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
         error({Type, Reason})
@@ -490,7 +490,7 @@ stop_and_halt() ->
             ?LOG_INFO(
                 lists:flatten(
                   ["Halting Erlang VM with the following applications:~n",
-                   ["    ~p~n" || _ <- AppsLeft]]),
+                   ["    ~tp~n" || _ <- AppsLeft]]),
                 AppsLeft,
                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             %% Also duplicate this information to stderr, so console where
@@ -539,8 +539,8 @@ stop_apps([]) ->
 stop_apps(Apps) ->
     ?LOG_INFO(
         lists:flatten(
-          ["Stopping ~s applications and their dependencies in the following order:~n",
-           ["    ~p~n" || _ <- Apps]]),
+          ["Stopping ~ts applications and their dependencies in the following order:~n",
+           ["    ~tp~n" || _ <- Apps]]),
         [product_name() | lists:reverse(Apps)],
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = app_utils:stop_applications(
@@ -846,7 +846,7 @@ start(normal, []) ->
               product_base_name := BaseName,
               product_base_version := BaseVersion} ->
                 ?LOG_INFO(
-                   "~n Starting ~s ~s on Erlang ~s [~s]~n Based on ~s ~s~n ~s~n ~s",
+                   "~n Starting ~ts ~ts on Erlang ~ts [~ts]~n Based on ~ts ~ts~n ~ts~n ~ts",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
                     BaseName, BaseVersion,
@@ -854,7 +854,7 @@ start(normal, []) ->
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
             _ ->
                 ?LOG_INFO(
-                   "~n Starting ~s ~s on Erlang ~s [~s]~n ~s~n ~s",
+                   "~n Starting ~ts ~ts on Erlang ~ts [~ts]~n ~ts~n ~ts",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
                     ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
@@ -884,7 +884,7 @@ start(normal, []) ->
         %% Note that plugins were not taken care of at this point
         %% either.
         ?LOG_DEBUG(
-          "Register `rabbit` process (~p) for rabbit_node_monitor",
+          "Register `rabbit` process (~tp) for rabbit_node_monitor",
           [self()]),
         true = register(rabbit, self()),
 
@@ -902,7 +902,7 @@ start(normal, []) ->
         %% before plugin which depend on them.
         Plugins = rabbit_plugins:setup(),
         ?LOG_DEBUG(
-          "Loading the following plugins: ~p", [Plugins]),
+          "Loading the following plugins: ~tp", [Plugins]),
         %% We can load all plugins and refresh their feature flags at
         %% once, because it does not involve running code from the
         %% plugins.
@@ -955,7 +955,7 @@ do_run_postlaunch_phase(Plugins) ->
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
         %% before a plugin which depends on it gets a chance to start.
-        ?LOG_DEBUG("Starting the following plugins: ~p", [Plugins]),
+        ?LOG_DEBUG("Starting the following plugins: ~tp", [Plugins]),
         lists:foreach(
           fun(Plugin) ->
                   case application:ensure_all_started(Plugin) of
@@ -982,7 +982,7 @@ do_run_postlaunch_phase(Plugins) ->
         StrictlyPlugins = rabbit_plugins:strictly_plugins(ActivePlugins),
         ok = log_broker_started(StrictlyPlugins),
 
-        ?LOG_DEBUG("Marking ~s as running", [product_name()]),
+        ?LOG_DEBUG("Marking ~ts as running", [product_name()]),
         rabbit_boot_state:set(ready)
     catch
         throw:{error, _} = Error ->
@@ -1126,38 +1126,38 @@ force_event_refresh(Ref) ->
 %% misc
 
 log_broker_started(Plugins) ->
-    PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
+    PluginList = iolist_to_binary([rabbit_misc:format(" * ~ts~n", [P])
                                    || P <- Plugins]),
     Message = string:strip(rabbit_misc:format(
-        "Server startup complete; ~b plugins started.~n~s",
+        "Server startup complete; ~b plugins started.~n~ts",
         [length(Plugins), PluginList]), right, $\n),
     ?LOG_INFO(Message,
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    io:format(" completed with ~p plugins.~n", [length(Plugins)]).
+    io:format(" completed with ~tp plugins.~n", [length(Plugins)]).
 
 -define(RABBIT_TEXT_LOGO,
-        "~n  ##  ##      ~s ~s"
+        "~n  ##  ##      ~ts ~ts"
         "~n  ##  ##"
-        "~n  ##########  ~s"
+        "~n  ##########  ~ts"
         "~n  ######  ##"
-        "~n  ##########  ~s").
+        "~n  ##########  ~ts").
 -define(FG8_START,  "\033[38;5;202m").
 -define(BG8_START,  "\033[48;5;202m").
 -define(FG32_START, "\033[38;2;255;102;0m").
 -define(BG32_START, "\033[48;2;255;102;0m").
 -define(C_END,      "\033[0m").
 -define(RABBIT_8BITCOLOR_LOGO,
-        "~n  " ?BG8_START "  " ?C_END "  " ?BG8_START "  " ?C_END "      \033[1m" ?FG8_START "~s" ?C_END " ~s"
+        "~n  " ?BG8_START "  " ?C_END "  " ?BG8_START "  " ?C_END "      \033[1m" ?FG8_START "~ts" ?C_END " ~ts"
         "~n  " ?BG8_START "  " ?C_END "  " ?BG8_START "  " ?C_END
-        "~n  " ?BG8_START "          " ?C_END "  ~s"
+        "~n  " ?BG8_START "          " ?C_END "  ~ts"
         "~n  " ?BG8_START "      " ?C_END "  " ?BG8_START "  " ?C_END
-        "~n  " ?BG8_START "          " ?C_END "  ~s").
+        "~n  " ?BG8_START "          " ?C_END "  ~ts").
 -define(RABBIT_32BITCOLOR_LOGO,
-        "~n  " ?BG32_START "  " ?C_END "  " ?BG32_START "  " ?C_END "      \033[1m" ?FG32_START "~s" ?C_END " ~s"
+        "~n  " ?BG32_START "  " ?C_END "  " ?BG32_START "  " ?C_END "      \033[1m" ?FG32_START "~ts" ?C_END " ~ts"
         "~n  " ?BG32_START "  " ?C_END "  " ?BG32_START "  " ?C_END
-        "~n  " ?BG32_START "          " ?C_END "  ~s"
+        "~n  " ?BG32_START "          " ?C_END "  ~ts"
         "~n  " ?BG32_START "      " ?C_END "  " ?BG32_START "  " ?C_END
-        "~n  " ?BG32_START "          " ?C_END "  ~s").
+        "~n  " ?BG32_START "          " ?C_END "  ~ts").
 
 print_banner() ->
     Product = product_name(),
@@ -1372,11 +1372,11 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
             end;
         {IC, MCA} ->
             throw({error,
-             {"both msg_store_credit_disc_bound values should be integers, but ~p given",
+             {"both msg_store_credit_disc_bound values should be integers, but ~tp given",
               [{IC, MCA}]}});
         CreditDiscBound ->
             throw({error,
-             {"invalid msg_store_credit_disc_bound value given: ~p",
+             {"invalid msg_store_credit_disc_bound value given: ~tp",
               [CreditDiscBound]}})
     end,
 
@@ -1571,9 +1571,9 @@ ensure_working_fhc() ->
             {ok, true}  -> "ON";
             {ok, false} -> "OFF"
         end,
-        ?LOG_INFO("FHC read buffering: ~s", [ReadBuf],
+        ?LOG_INFO("FHC read buffering: ~ts", [ReadBuf],
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        ?LOG_INFO("FHC write buffering: ~s", [WriteBuf],
+        ?LOG_INFO("FHC write buffering: ~ts", [WriteBuf],
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
         Filename = filename:join(code:lib_dir(kernel, ebin), "kernel.app"),
         {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),

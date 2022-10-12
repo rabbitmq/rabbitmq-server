@@ -162,7 +162,7 @@ create_bad_schema(Rabbit, Hare, Config) ->
     {ok, HareMnesiaDir} = rpc:call(Hare, application, get_env, [mnesia, dir]),
     %% Make sure we don't use the current dir:
     PrivDir = ?config(priv_dir, Config),
-    ct:pal("Priv dir ~p~n", [PrivDir]),
+    ct:pal("Priv dir ~tp~n", [PrivDir]),
     ok = filelib:ensure_dir(filename:join(PrivDir, "file")),
 
     ok = rpc:call(Rabbit, file, set_cwd, [PrivDir]),

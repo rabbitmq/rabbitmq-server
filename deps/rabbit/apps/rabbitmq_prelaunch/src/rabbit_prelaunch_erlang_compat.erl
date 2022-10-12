@@ -17,8 +17,8 @@ check(_Context) ->
     ERTSVer = erlang:system_info(version),
     OTPRel = rabbit_misc:otp_release(),
     ?LOG_DEBUG(
-      "Requiring: Erlang/OTP ~s (ERTS ~s)~n"
-      "Running:   Erlang/OTP ~s (ERTS ~s)",
+      "Requiring: Erlang/OTP ~ts (ERTS ~ts)~n"
+      "Running:   Erlang/OTP ~ts (ERTS ~ts)",
       [?OTP_MINIMUM, ?ERTS_MINIMUM, OTPRel, ERTSVer],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
@@ -39,8 +39,8 @@ check(_Context) ->
             ok;
         _ ->
             Msg =
-            "This RabbitMQ version cannot run on Erlang ~s (erts ~s): "
-            "minimum required version is ~s (erts ~s)",
+            "This RabbitMQ version cannot run on Erlang ~ts (erts ~ts): "
+            "minimum required version is ~ts (erts ~ts)",
             Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
             ?LOG_ERROR(Msg, Args, #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
@@ -48,7 +48,7 @@ check(_Context) ->
             io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),
 
             Msg2 = rabbit_misc:format(
-                     "Erlang ~s or later is required, started on ~s",
+                     "Erlang ~ts or later is required, started on ~ts",
                      [?OTP_MINIMUM, OTPRel]),
             throw({error, {erlang_version_too_old, Msg2}})
     end.

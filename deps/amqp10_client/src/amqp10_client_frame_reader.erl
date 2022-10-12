@@ -171,7 +171,7 @@ handle_event(info, {Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
 
 handle_event(info, {TcpError, _, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
-    logger:warning("AMQP 1.0 connection socket errored, connection state: '~s', reason: '~p'",
+    logger:warning("AMQP 1.0 connection socket errored, connection state: '~ts', reason: '~tp'",
                     [StateName, Reason]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
@@ -179,7 +179,7 @@ handle_event(info, {TcpError, _, Reason}, StateName, State)
     {stop, {error, Reason}, State1};
 handle_event(info, {TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
-    logger:warning("AMQP 1.0 connection socket was closed, connection state: '~s'",
+    logger:warning("AMQP 1.0 connection socket was closed, connection state: '~ts'",
                     [StateName]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
@@ -292,7 +292,7 @@ defer_heartbeat_timer(State) -> State.
 route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
                                                State0),
-    ?DBG("FRAME -> ~p ~p~n ~p", [Channel, DestinationPid, Performative]),
+    ?DBG("FRAME -> ~tp ~tp~n ~tp", [Channel, DestinationPid, Performative]),
     case Payload of
         <<>> -> ok = gen_statem:cast(DestinationPid, Performative);
         _ -> ok = gen_statem:cast(DestinationPid, Frame)

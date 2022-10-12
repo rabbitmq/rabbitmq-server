@@ -103,7 +103,7 @@ websocket_init(State) ->
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->
-    rabbit_log_connection:info("Web STOMP: will terminate connection process ~p, reason: ~s",
+    rabbit_log_connection:info("Web STOMP: will terminate connection process ~tp, reason: ~ts",
                                [Pid, Reason]),
     sys:terminate(Pid, Reason),
     ok.
@@ -235,7 +235,7 @@ websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
 
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("Web STOMP: unexpected message ~p",
+    rabbit_log_connection:info("Web STOMP: unexpected message ~tp",
                     [Msg]),
     {ok, State}.
 
@@ -266,8 +266,8 @@ handle_data(Data, State0) ->
         {ok, State1 = #state{state = blocked}} ->
             {[{active, false}], State1};
         {error, Error0} ->
-            Error1 = rabbit_misc:format("~p", [Error0]),
-            rabbit_log_connection:error("STOMP detected framing error '~s'", [Error1]),
+            Error1 = rabbit_misc:format("~tp", [Error0]),
+            rabbit_log_connection:error("STOMP detected framing error '~ts'", [Error1]),
             stop(State0, 1007, Error1);
         Other ->
             Other

@@ -80,7 +80,7 @@ route(#exchange {name      = Name,
 
                     case maps:get(SelectedBucket, BM, undefined) of
                         undefined ->
-                            rabbit_log:warning("Bucket ~p not found", [SelectedBucket]),
+                            rabbit_log:warning("Bucket ~tp not found", [SelectedBucket]),
                             [];
                         Queue     -> [Queue]
                     end
@@ -96,7 +96,7 @@ validate(#exchange{arguments = Args}) ->
                 true  -> ok;
                 false ->
                     rabbit_misc:protocol_error(precondition_failed,
-                                               "Unsupported property: ~s",
+                                               "Unsupported property: ~ts",
                                                [Value])
             end;
         {_, undefined} ->
@@ -115,7 +115,7 @@ validate_binding(_X, #binding { key = K }) ->
             false -> ok
         end
     catch error:badarg ->
-            {error, {binding_invalid, "The binding key must be an integer: ~p", [K]}}
+            {error, {binding_invalid, "The binding key must be an integer: ~tp", [K]}}
     end.
 
 maybe_initialise_hash_ring_state(transaction, #exchange{name = Name}) ->
@@ -146,7 +146,7 @@ recover() ->
             [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)];
         {aborted, Reason} ->
             rabbit_log:error(
-                "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~p",
+                "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~tp",
                 [Reason])
     end.
 
@@ -165,14 +165,14 @@ list_exchanges() ->
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     mnesia:transaction(
         fun () ->
-            rabbit_log:debug("Consistent hashing exchange: will recover exchange ~s", [rabbit_misc:rs(XName)]),
+            rabbit_log:debug("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
             create(transaction, X),
-            rabbit_log:debug("Consistent hashing exchange: recovered exchange ~s", [rabbit_misc:rs(XName)]),
+            rabbit_log:debug("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
             Bindings = rabbit_binding:list_for_source(XName),
-            rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~s",
+            rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",
                              [length(Bindings), rabbit_misc:rs(XName)]),
             [add_binding(transaction, X, B) || B <- lists:usort(Bindings)],
-            rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~s",
+            rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~ts",
                              [rabbit_misc:rs(XName)])
     end).
 
@@ -200,13 +200,13 @@ add_binding(transaction, X,
             case map_has_value(BM0, D) of
                 true ->
                     rabbit_log:debug("Consistent hashing exchange: NOT adding binding from "
-                                     "exchange ~s to destination ~s with routing key '~s' "
+                                     "exchange ~ts to destination ~ts with routing key '~ts' "
                                      "because this binding (possibly with a different "
                                      "routing key) already exists",
                                      [rabbit_misc:rs(S), rabbit_misc:rs(D), K]);
                 false ->
                     rabbit_log:debug("Consistent hashing exchange: adding binding from "
-                                     "exchange ~s to destination ~s with routing key '~s'",
+                                     "exchange ~ts to destination ~ts with routing key '~ts'",
                                      [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
                     NextN    = NexN0 + Weight,
                     %% hi/lo bucket counters are 0-based but weight is 1-based
@@ -239,7 +239,7 @@ remove_bindings(none, X, Bindings) ->
 -spec remove_binding(#binding{}) -> ok.
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     rabbit_log:debug("Consistent hashing exchange: removing binding "
-                     "from exchange ~s to destination ~s with routing key '~s'",
+                     "from exchange ~ts to destination ~ts with routing key '~ts'",
                      [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
@@ -271,7 +271,7 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
                     ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write)
             end;
         [] ->
-            rabbit_log:warning("Can't remove binding: hash ring state for exchange ~s wasn't found",
+            rabbit_log:warning("Can't remove binding: hash ring state for exchange ~ts wasn't found",
                                [rabbit_misc:rs(S)]),
             ok
     end.

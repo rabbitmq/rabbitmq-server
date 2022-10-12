@@ -372,7 +372,7 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
             ok = notify_link(Link, credit_exhausted),
             {next_state, mapped, State};
         {transfer_limit_exceeded, State} ->
-            logger:warning("transfer_limit_exceeded for link ~p", [Link]),
+            logger:warning("transfer_limit_exceeded for link ~tp", [Link]),
             Link1 = detach_with_error_cond(Link, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
             {next_state, mapped, update_link(Link1, State)}
@@ -403,7 +403,7 @@ mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, Fir
 
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
-    logger:warning("Unhandled session frame ~p in state ~p",
+    logger:warning("Unhandled session frame ~tp in state ~tp",
                              [Frame, State]),
     {next_state, mapped, State};
 mapped({call, From},

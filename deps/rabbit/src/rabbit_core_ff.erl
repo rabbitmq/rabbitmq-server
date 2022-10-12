@@ -129,14 +129,14 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
                 ok = rabbit_binding:populate_index_route_table();
             {error, Err} = Error ->
                 rabbit_log_feature_flags:error(
-                  "Feature flags: `~s`: failed to add copy of table ~s to "
-                  "node ~p: ~p",
+                  "Feature flags: `~ts`: failed to add copy of table ~ts to "
+                  "node ~tp: ~tp",
                   [FeatureName, TableName, node(), Err]),
                 Error
         end
     catch throw:{error, Reason} ->
               rabbit_log_feature_flags:error(
-                "Feature flags: `~s`: enable callback failure: ~p",
+                "Feature flags: `~ts`: enable callback failure: ~tp",
                 [FeatureName, Reason]),
               {error, Reason}
     end.
@@ -162,7 +162,7 @@ listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
             ok;
         throw:{error, Reason} ->
             rabbit_log_feature_flags:error(
-              "Feature flags: `~s`: failed to migrate Mnesia table: ~p",
+              "Feature flags: `~ts`: failed to migrate Mnesia table: ~tp",
               [FeatureName, Reason]),
             {error, Reason}
     end.
@@ -176,14 +176,14 @@ listener_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
                 ok;
             {aborted, Err} ->
                 rabbit_log_feature_flags:error(
-                  "Feature flags: `~s`: failed to delete Mnesia table: ~p",
+                  "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
                   [FeatureName, Err]),
                 ok
         end
     catch
         throw:{error, Reason} ->
             rabbit_log_feature_flags:error(
-              "Feature flags: `~s`: failed to delete Mnesia table: ~p",
+              "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
               [FeatureName, Reason]),
             ok
     end.
@@ -196,7 +196,7 @@ tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
         throw:{error, {no_exists, _}} ->
             ok;
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
                                            [FeatureName, Reason]),
             {error, Reason}
     end.
@@ -209,7 +209,7 @@ tracking_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
             Tab <- rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(node())]
     catch
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
                                            [FeatureName, Reason]),
             %% adheres to the callback interface
             ok
@@ -222,7 +222,7 @@ delete_table(FeatureName, Tab) ->
         {aborted, {no_exists, _}} ->
             ok;
         {aborted, Err} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed to delete mnesia table ~p: ~p",
+            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed to delete mnesia table ~tp: ~tp",
                                            [FeatureName, Tab, Err]),
             %% adheres to the callback interface
             ok

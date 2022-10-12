@@ -750,8 +750,8 @@ wait_log(Config, Deadline, Clauses) ->
         T when T > Deadline ->
             lists:foreach(fun
                               ({REs, _}) ->
-                                  Matches = [ io_lib:format("~p - ~s~n", [RE, re:run(Content, RE, [{capture, none}])]) || RE <- REs ],
-                                  ct:pal("Wait log clause status: ~s", [Matches])
+                                  Matches = [ io_lib:format("~tp - ~ts~n", [RE, re:run(Content, RE, [{capture, none}])]) || RE <- REs ],
+                                  ct:pal("Wait log clause status: ~ts", [Matches])
                           end, Clauses),
             exit(no_log_lines_detected);
         _ -> ok

@@ -718,7 +718,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("Message store ~tp: using ~p to provide index", [Name, IndexModule]),
+    rabbit_log:info("Message store ~tp: using ~tp to provide index", [Name, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -799,7 +799,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                       true -> "clean";
                       false -> "unclean"
                   end,
-    rabbit_log:debug("Rebuilding message location index after ~s shutdown...",
+    rabbit_log:debug("Rebuilding message location index after ~ts shutdown...",
                      [Cleanliness]),
     {Offset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
@@ -1010,7 +1010,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
         {error, FSErr} ->
             rabbit_log:error("Unable to store file summary"
                              " for vhost message store for directory ~tp~n"
-                             "Error: ~p",
+                             "Error: ~tp",
                              [Dir, FSErr])
     end,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
@@ -1023,7 +1023,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
             ok;
         {error, RTErr} ->
             rabbit_log:error("Unable to save message store recovery terms"
-                             " for directory ~tp~nError: ~p",
+                             " for directory ~tp~nError: ~tp",
                              [Dir, RTErr])
     end,
     State3 #msstate { index_state         = undefined,
@@ -1603,7 +1603,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
             end,
     case read_recovery_terms(Dir) of
         {false, Error} ->
-            Fresh("failed to read recovery terms: ~p", [Error]);
+            Fresh("failed to read recovery terms: ~tp", [Error]);
         {true, Terms} ->
             RecClientRefs  = proplists:get_value(client_refs, Terms, []),
             RecIndexModule = proplists:get_value(index_module, Terms),
@@ -1613,7 +1613,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
                              {ok, IndexState1} ->
                                  {true, IndexState1, ClientRefs};
                              {error, Error} ->
-                                 Fresh("failed to recover index: ~p", [Error])
+                                 Fresh("failed to recover index: ~tp", [Error])
                          end;
                 false -> Fresh("recovery terms differ from present", [])
             end
@@ -2029,7 +2029,7 @@ combine_files(Source, Destination,
             {ok, do_combine_files(SourceSummary, DestinationSummary,
                                   Source, Destination, State)};
         _ ->
-            rabbit_log:debug("Asked to combine files ~p and ~p but they have active readers. Deferring.",
+            rabbit_log:debug("Asked to combine files ~tp and ~tp but they have active readers. Deferring.",
                              [Source, Destination]),
             DeferredFiles = [FileSummary#file_summary.file
                              || FileSummary <- [SourceSummary, DestinationSummary],
@@ -2111,7 +2111,7 @@ do_combine_files(SourceSummary, DestinationSummary,
               {#file_summary.file_size,        TotalValidData}]),
 
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
-    rabbit_log:debug("Combined segment files number ~p (source) and ~p (destination), reclaimed ~p bytes",
+    rabbit_log:debug("Combined segment files number ~tp (source) and ~tp (destination), reclaimed ~tp bytes",
                      [Source, Destination, Reclaimed]),
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
     safe_file_delete_fun(Source, Dir, FileHandlesEts).
@@ -2131,7 +2131,7 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
             gen_server2:cast(Server, {delete_file, File, FileSize}),
             {ok, safe_file_delete_fun(File, Dir, FileHandlesEts)};
         [#file_summary{readers = Readers}] when Readers > 0 ->
-            rabbit_log:debug("Asked to delete file ~p but it has active readers. Deferring.",
+            rabbit_log:debug("Asked to delete file ~tp but it has active readers. Deferring.",
                              [File]),
             {defer, [File]}
     end.

@@ -121,7 +121,7 @@ init_per_group1(backing_queue_tests, Config) ->
               ?MODULE, setup_backing_queue_test_group, [Config]);
         _ ->
             {skip, rabbit_misc:format(
-               "Backing queue module not supported by this test group: ~p~n",
+               "Backing queue module not supported by this test group: ~tp~n",
                [Module])}
     end;
 init_per_group1(backing_queue_v1, Config) ->
@@ -1848,7 +1848,7 @@ check_variable_queue_status(VQ0, Props) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok

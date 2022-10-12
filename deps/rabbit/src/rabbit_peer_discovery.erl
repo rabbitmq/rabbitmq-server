@@ -80,7 +80,7 @@ lock_acquisition_failure_mode() ->
 -spec log_configured_backend() -> ok.
 
 log_configured_backend() ->
-  rabbit_log:info("Configured peer discovery backend: ~s", [backend()]).
+  rabbit_log:info("Configured peer discovery backend: ~ts", [backend()]).
 
 maybe_init() ->
     Backend = backend(),
@@ -93,7 +93,7 @@ maybe_init() ->
                     rabbit_log:debug("Peer discovery backend initialisation succeeded"),
                     ok;
                 {error, Error} ->
-                    rabbit_log:warning("Peer discovery backend initialisation failed: ~p.", [Error]),
+                    rabbit_log:warning("Peer discovery backend initialisation failed: ~tp.", [Error]),
                     ok
             end;
         false ->
@@ -126,7 +126,7 @@ maybe_register() ->
       register(),
       Backend:post_registration();
     false ->
-      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
+      rabbit_log:info("Peer discovery backend ~ts does not support registration, skipping registration.", [Backend]),
       ok
   end.
 
@@ -139,7 +139,7 @@ maybe_unregister() ->
     true  ->
       unregister();
     false ->
-      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
+      rabbit_log:info("Peer discovery backend ~ts does not support registration, skipping unregistration.", [Backend]),
       ok
   end.
 
@@ -159,11 +159,11 @@ discovery_retries() ->
 
 register() ->
   Backend = backend(),
-  rabbit_log:info("Will register with peer discovery backend ~s", [Backend]),
+  rabbit_log:info("Will register with peer discovery backend ~ts", [Backend]),
   case Backend:register() of
     ok             -> ok;
     {error, Error} ->
-      rabbit_log:error("Failed to register with peer discovery backend ~s: ~p",
+      rabbit_log:error("Failed to register with peer discovery backend ~ts: ~tp",
         [Backend, Error]),
       ok
   end.
@@ -173,11 +173,11 @@ register() ->
 
 unregister() ->
   Backend = backend(),
-  rabbit_log:info("Will unregister with peer discovery backend ~s", [Backend]),
+  rabbit_log:info("Will unregister with peer discovery backend ~ts", [Backend]),
   case Backend:unregister() of
     ok             -> ok;
     {error, Error} ->
-      rabbit_log:error("Failed to unregister with peer discovery backend ~s: ~p",
+      rabbit_log:error("Failed to unregister with peer discovery backend ~ts: ~tp",
         [Backend, Error]),
       ok
   end.
@@ -186,10 +186,10 @@ unregister() ->
 
 lock() ->
     Backend = backend(),
-    rabbit_log:info("Will try to lock with peer discovery backend ~s", [Backend]),
+    rabbit_log:info("Will try to lock with peer discovery backend ~ts", [Backend]),
     case Backend:lock(node()) of
         {error, Reason} = Error ->
-            rabbit_log:error("Failed to lock with peer discovery backend ~s: ~p",
+            rabbit_log:error("Failed to lock with peer discovery backend ~ts: ~tp",
                              [Backend, Reason]),
             Error;
         Any ->
@@ -200,11 +200,11 @@ lock() ->
 
 unlock(Data) ->
     Backend = backend(),
-    rabbit_log:info("Will try to unlock with peer discovery backend ~s", [Backend]),
+    rabbit_log:info("Will try to unlock with peer discovery backend ~ts", [Backend]),
     case Backend:unlock(Data) of
         {error, Reason} = Error ->
-            rabbit_log:error("Failed to unlock with peer discovery backend ~s: ~p, "
-                             "lock data: ~p",
+            rabbit_log:error("Failed to unlock with peer discovery backend ~ts: ~tp, "
+                             "lock data: ~tp",
                              [Backend, Reason, Data]),
             Error;
         Any ->

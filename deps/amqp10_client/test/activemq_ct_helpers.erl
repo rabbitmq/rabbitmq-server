@@ -66,10 +66,10 @@ start_activemq_nodes(Config) ->
     Cmd = [ActivemqCmd,
            "start",
            {"-Dtestsuite.tcp_port_amqp=~b", [TCPPort]},
-           {"xbean:file:~s", [ConfigFile]}],
+           {"xbean:file:~ts", [ConfigFile]}],
     case rabbit_ct_helpers:exec(Cmd, []) of
         {ok, _} -> wait_for_activemq_nodes(Config1);
-        Error   -> ct:pal("Error: ~p", [Error]),
+        Error   -> ct:pal("Error: ~tp", [Error]),
                    {skip, "Failed to start ActiveMQ"}
     end.
 
@@ -114,6 +114,6 @@ stop_activemq_nodes(Config) ->
     Cmd = [ActivemqCmd, "stop"],
     case rabbit_ct_helpers:exec(Cmd, []) of
         {ok, _} -> Config;
-        Error   -> ct:pal("Error: ~p", [Error]),
+        Error   -> ct:pal("Error: ~tp", [Error]),
                    {skip, "Failed to stop ActiveMQ"}
     end.

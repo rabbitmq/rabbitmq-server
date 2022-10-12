@@ -53,7 +53,7 @@ check_no_overlap1(Sets) ->
                     case sets:size(Is) of
                         0 -> ok;
                         _ ->
-                            internal_error("Interceptor: more than one module handles ~p", [Is])
+                            internal_error("Interceptor: more than one module handles ~tp", [Is])
                       end,
                     sets:union(Set, Union)
                 end,
@@ -79,14 +79,14 @@ validate_response(Mod, M1, C1, R = {M2, C2}) ->
     case {validate_method(M1, M2), validate_content(C1, C2)} of
         {true, true} -> R;
         {false, _} ->
-            internal_error("Interceptor: ~p expected to return "
-                                "method: ~p but returned: ~p",
+            internal_error("Interceptor: ~tp expected to return "
+                                "method: ~tp but returned: ~tp",
                            [Mod, rabbit_misc:method_record_type(M1),
                             rabbit_misc:method_record_type(M2)]);
         {_, false} ->
-            internal_error("Interceptor: ~p expected to return "
+            internal_error("Interceptor: ~tp expected to return "
                                 "content iff content is provided but "
-                                "content in = ~p; content out = ~p",
+                                "content in = ~tp; content out = ~tp",
                            [Mod, C1, C2])
     end;
 validate_response(_Mod, _M1, _C1, AMQPError = #amqp_error{}) ->

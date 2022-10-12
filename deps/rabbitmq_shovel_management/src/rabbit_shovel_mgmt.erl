@@ -48,7 +48,7 @@ resource_exists(ReqData, Context) ->
                             %% Deleting or restarting a shovel
                             case get_shovel_node(VHost, Name, ReqData, Context) of
                                 undefined ->
-                                    rabbit_log:error("Shovel with the name '~s' was not found on virtual host '~s'",
+                                    rabbit_log:error("Shovel with the name '~ts' was not found on virtual host '~ts'",
                                         [Name, VHost]),
                                     false;
                                 _ ->
@@ -72,13 +72,13 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                     false;
                 Name ->
                     case get_shovel_node(VHost, Name, ReqData, Context) of
-                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
                             false;
                         Node ->
                             %% We must distinguish between a delete and restart
                             case is_restart(ReqData) of
                                 true ->
-                                    rabbit_log:info("Asked to restart shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
+                                    rabbit_log:info("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {error, not_found} ->
@@ -91,7 +91,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                                     end;
 
                                 _ ->
-                                    rabbit_log:info("Asked to delete shovel '~s' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
+                                    rabbit_log:info("Asked to delete shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     try erpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {error, not_found} ->

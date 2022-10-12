@@ -71,8 +71,8 @@ prop_last_two() ->
            {_LastTS, Slide} = new_slide(Interval, Incremental, Elements),
            Expected = last_two(Elements),
            ValuesOnly = [V || {_Timestamp, V} <- exometer_slide:last_two(Slide)],
-           ?WHENFAIL(io:format("Last two values obtained: ~p~nExpected: ~p~n"
-                               "Slide: ~p~n", [ValuesOnly, Expected, Slide]),
+           ?WHENFAIL(io:format("Last two values obtained: ~tp~nExpected: ~tp~n"
+                               "Slide: ~tp~n", [ValuesOnly, Expected, Slide]),
                      Expected == ValuesOnly)
        end).
 
@@ -88,8 +88,8 @@ prop_last_two_incremental() ->
            {_LastTS, Slide} = new_slide(Interval, Incremental, Elements),
            [{_Timestamp, Values} | _] = exometer_slide:last_two(Slide),
            Expected = add_elements(Elements),
-           ?WHENFAIL(io:format("Expected a total of: ~p~nGot: ~p~n"
-                               "Slide: ~p~n", [Expected, Values, Slide]),
+           ?WHENFAIL(io:format("Expected a total of: ~tp~nGot: ~tp~n"
+                               "Slide: ~tp~n", [Expected, Values, Slide]),
                      Values == Expected)
        end).
 
@@ -111,7 +111,7 @@ prop_sum(Inc) ->
            Sum = exometer_slide:sum([Slide || _ <- lists:seq(1, Number)]),
            Values = [V || {_TS, V} <- exometer_slide:to_list(LastTS + 1, Sum)],
            Expected = expected_sum(Slide, LastTS + 1, Number, Interval, Inc),
-           ?WHENFAIL(io:format("Expected: ~p~nGot: ~p~nSlide:~p~n",
+           ?WHENFAIL(io:format("Expected: ~tp~nGot: ~tp~nSlide:~tp~n",
                                [Expected, Values, Slide]),
                      Values == Expected)
        end).

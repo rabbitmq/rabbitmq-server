@@ -238,7 +238,7 @@ publish(Ch, Queue, Msg) ->
 
 publish_and_confirm(Ch, Queue, Msg) ->
     publish(Ch, Queue, Msg),
-    ct:pal("waiting for ~s message confirmation from ~s", [Msg, Queue]),
+    ct:pal("waiting for ~ts message confirmation from ~ts", [Msg, Queue]),
     ok = receive
              #'basic.ack'{}  -> ok;
              #'basic.nack'{} -> fail
@@ -286,7 +286,7 @@ basic_nack(Ch, DTag) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok

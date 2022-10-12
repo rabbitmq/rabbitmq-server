@@ -42,7 +42,7 @@ accept_content(ReqData, Context) ->
         {error, {already_started, _}} ->
             {true, ReqData, Context};
         {error, Err} ->
-            Message = io_lib:format("Request to node ~s failed with ~p",
+            Message = io_lib:format("Request to node ~ts failed with ~tp",
                                     [Node, Err]),
             rabbit_mgmt_util:bad_request(list_to_binary(Message), ReqData, Context)
     end.

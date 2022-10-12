@@ -295,8 +295,8 @@ run_java_test(Config, Class) ->
     Ret = rabbit_ct_helpers:exec([
         TestProjectDir ++ "/mvnw",
         "test",
-        {"-Dtest=~s", [Class]},
-        {"-Drmq_broker_uri=~s", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
+        {"-Dtest=~ts", [Class]},
+        {"-Drmq_broker_uri=~ts", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
       ],
       [{cd, TestProjectDir}]),
     {ok, _} = Ret.

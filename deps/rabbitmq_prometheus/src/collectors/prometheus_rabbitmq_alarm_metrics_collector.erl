@@ -62,7 +62,7 @@ collect_mf(_Registry, Callback) ->
                 ok;
             Error ->
                 rabbit_log:error("alarm_metrics_collector failed to emit metrics: "
-                                 "rabbitm_alarm:get_local_alarms returned ~p",
+                                 "rabbitm_alarm:get_local_alarms returned ~tp",
                                  [Error]),
                 %% We are not going to render any alarm metrics here.
                 %% Breaks continuity but at least doesn't crash the

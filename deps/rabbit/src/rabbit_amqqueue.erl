@@ -118,7 +118,7 @@ warn_file_limit() ->
     case file_handle_cache:get_limit() < L of
         true ->
             rabbit_log:warning(
-              "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!",
+              "Recovering ~tp queues, available file handles: ~tp. Please increase max open file handles limit to at least ~tp!",
               [L, file_handle_cache:get_limit(), L]);
         false ->
             ok
@@ -236,7 +236,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
             rabbit_queue_type:declare(Q, Node);
         false ->
             {protocol_error, internal_error,
-             "Cannot declare a queue '~s' of type '~s' on node '~s': "
+             "Cannot declare a queue '~ts' of type '~ts' on node '~ts': "
              "the corresponding feature flag is disabled",
               [rabbit_misc:rs(QueueName), Type, Node]}
     end.
@@ -430,7 +430,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
     maybe_rebalance(get_rebalance_lock(self()), Type, VhostSpec, QueueSpec).
 
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
-    rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~ts' and queues matching '~s'",
+    rabbit_log:info("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
                     [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
     NumRunning = length(Running),
@@ -509,23 +509,23 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
-                    rabbit_log:info("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                    rabbit_log:info("Migrating queue ~tp from node ~tp with ~tp queues to node ~tp with ~tp queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
-                            rabbit_log:info("Queue ~p migrated to ~p", [Name, NewNode]),
+                            rabbit_log:info("Queue ~tp migrated to ~tp", [Name, NewNode]),
                             {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
-                            rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
+                            rabbit_log:warning("Error migrating queue ~tp: ~tp", [Name, Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
                     end
             end;
         [{_, _, true} | _] = All when length(All) > MaxQueuesDesired ->
-            rabbit_log:warning("Node ~p contains ~p queues, but all have already migrated. "
+            rabbit_log:warning("Node ~tp contains ~tp queues, but all have already migrated. "
                                "Do nothing", [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
         All ->
-            rabbit_log:debug("Node ~p only contains ~p queues, do nothing",
+            rabbit_log:debug("Node ~tp only contains ~tp queues, do nothing",
                                [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
     end.
@@ -624,7 +624,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
                     % The old check would have crashed here,
                     % instead, log it and run the exit fun. absent & alive is weird,
                     % but better than crashing with badmatch,true
-                    rabbit_log:debug("Unexpected alive queue process ~p", [QPid]),
+                    rabbit_log:debug("Unexpected alive queue process ~tp", [QPid]),
                     E({absent, Q, alive});
                 false ->
                     ok % Expected result
@@ -653,7 +653,7 @@ die_fun(Name) ->
 
 -spec not_found(name()) -> rabbit_types:channel_exit().
 
-not_found(R) -> rabbit_misc:protocol_error(not_found, "no ~s", [rabbit_misc:rs(R)]).
+not_found(R) -> rabbit_misc:protocol_error(not_found, "no ~ts", [rabbit_misc:rs(R)]).
 
 -spec absent(amqqueue:amqqueue(), absent_reason()) ->
     rabbit_types:channel_exit().
@@ -674,28 +674,28 @@ priv_absent(QueueName, QPid, true, nodedown) ->
     %% here with non-durable queues.
     rabbit_misc:protocol_error(
       not_found,
-      "home node '~s' of durable ~s is down or inaccessible",
+      "home node '~ts' of durable ~ts is down or inaccessible",
       [amqqueue:qnode(QPid), rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, stopped) ->
     rabbit_misc:protocol_error(
       not_found,
-      "~s process is stopped by supervisor", [rabbit_misc:rs(QueueName)]);
+      "~ts process is stopped by supervisor", [rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, crashed) ->
     rabbit_misc:protocol_error(
       not_found,
-      "~s has crashed and failed to restart", [rabbit_misc:rs(QueueName)]);
+      "~ts has crashed and failed to restart", [rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
     rabbit_misc:protocol_error(
       not_found,
-      "failed to perform operation on ~s due to timeout", [rabbit_misc:rs(QueueName)]);
+      "failed to perform operation on ~ts due to timeout", [rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, QPid, _IsDurable, alive) ->
     rabbit_misc:protocol_error(
       not_found,
-      "failed to perform operation on ~s: its master replica ~w may be stopping or being demoted",
+      "failed to perform operation on ~ts: its master replica ~w may be stopping or being demoted",
       [rabbit_misc:rs(QueueName), QPid]).
 
 -spec assert_equivalence
@@ -757,7 +757,7 @@ check_exclusive_access(Q, _ReaderPid, _MatchType) ->
     QueueName = amqqueue:get_name(Q),
     rabbit_misc:protocol_error(
       resource_locked,
-      "cannot obtain exclusive access to locked ~s. It could be originally "
+      "cannot obtain exclusive access to locked ~ts. It could be originally "
       "declared on another connection or the exclusive property value does not "
       "match that of the original declaration.",
       [rabbit_misc:rs(QueueName)]).
@@ -799,7 +799,7 @@ check_arguments_type_and_value(QueueName, Args, Validators) ->
                           ok             -> ok;
                           {error, Error} -> rabbit_misc:protocol_error(
                                               precondition_failed,
-                                              "invalid arg '~s' for ~s: ~255p",
+                                              "invalid arg '~ts' for ~ts: ~255p",
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
@@ -815,7 +815,7 @@ check_arguments_key(QueueName, QueueType, Args, InvalidArgs) ->
                               true ->
                                   rabbit_misc:protocol_error(
                                     precondition_failed,
-                                    "invalid arg '~s' for ~s of queue type ~s",
+                                    "invalid arg '~ts' for ~ts of queue type ~ts",
                                     [ArgKey, rabbit_misc:rs(QueueName), QueueType])
                           end
                   end, Args).
@@ -849,7 +849,7 @@ consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, rabbit_misc:format("expected integer, got ~p", [Type])}
+        false -> {error, rabbit_misc:format("expected integer, got ~tp", [Type])}
     end;
 check_int_arg(Val, _) when is_integer(Val) ->
     ok;
@@ -1053,14 +1053,14 @@ check_stream_offset_arg(Val, _Args) ->
 check_queue_mode({longstr, Val}, _Args) ->
     case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~ts'", [Val])}
     end;
 check_queue_mode({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_mode(Val, _Args) when is_binary(Val) ->
     case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~ts'", [Val])}
     end;
 check_queue_mode(_Val, _Args) ->
     {error, invalid_queue_mode}.
@@ -1084,14 +1084,14 @@ check_queue_version(Val, Args) ->
 check_queue_type({longstr, Val}, _Args) ->
     case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
         true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
+        false -> {error, rabbit_misc:format("unsupported queue type '~ts'", [Val])}
     end;
 check_queue_type({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_type(Val, _Args) when is_binary(Val) ->
     case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
         true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
+        false -> {error, rabbit_misc:format("unsupported queue type '~ts'", [Val])}
     end;
 check_queue_type(_Val, _Args) ->
     {error, invalid_queue_type}.
@@ -1370,7 +1370,7 @@ count(VHost) ->
     %% that requires a proper consensus algorithm.
     length(list_for_count(VHost))
   catch _:Err ->
-    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p",
+    rabbit_log:error("Failed to fetch number of queues in vhost ~tp:~n~tp",
                      [VHost, Err]),
     0
   end.
@@ -2015,7 +2015,7 @@ on_node_down(Node) ->
     {Time, {QueueNames, QueueDeletions}} = timer:tc(fun() -> delete_queues_on_node_down(Node) end),
     case length(QueueNames) of
         0 -> ok;
-        _ -> rabbit_log:info("~p transient queues from an old incarnation of node ~p deleted in ~fs", [length(QueueNames), Node, Time/1000000])
+        _ -> rabbit_log:info("~tp transient queues from an old incarnation of node ~tp deleted in ~fs", [length(QueueNames), Node, Time/1000000])
     end,
     notify_queue_binding_deletions(QueueDeletions),
     rabbit_core_metrics:queues_deleted(QueueNames),

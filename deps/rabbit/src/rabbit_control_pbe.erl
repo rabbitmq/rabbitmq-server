@@ -13,10 +13,10 @@
 -export([evaluate_input_as_term/1]).
 
 list_ciphers() ->
-    {ok, io_lib:format("~p", [rabbit_pbe:supported_ciphers()])}.
+    {ok, io_lib:format("~tp", [rabbit_pbe:supported_ciphers()])}.
 
 list_hashes() ->
-    {ok, io_lib:format("~p", [rabbit_pbe:supported_hashes()])}.
+    {ok, io_lib:format("~tp", [rabbit_pbe:supported_hashes()])}.
 
 validate(_Cipher, _Hash, Iterations, _Args) when Iterations =< 0 ->
     {error, io_lib:format("The requested number of iterations is incorrect", [])};
@@ -45,10 +45,10 @@ encode(Cipher, Hash, Iterations, Args) ->
                     TermValue = evaluate_input_as_term(Value),
                     Result = {encrypted, _} = rabbit_pbe:encrypt_term(Cipher, Hash, Iterations,
                                                                       list_to_binary(PassPhrase), TermValue),
-                    {ok, io_lib:format("~p", [Result])}
+                    {ok, io_lib:format("~tp", [Result])}
                 end
             catch
-                _:Msg -> {error, io_lib:format("Error during cipher operation: ~p", [Msg])}
+                _:Msg -> {error, io_lib:format("Error during cipher operation: ~tp", [Msg])}
             end
     end.
 
@@ -68,10 +68,10 @@ decode(Cipher, Hash, Iterations, Args) ->
                     Result = rabbit_pbe:decrypt_term(Cipher, Hash, Iterations,
                                                      list_to_binary(PassPhrase),
                                                      TermToDecrypt),
-                    {ok, io_lib:format("~p", [Result])}
+                    {ok, io_lib:format("~tp", [Result])}
                 end
             catch
-                _:Msg -> {error, io_lib:format("Error during cipher operation: ~p", [Msg])}
+                _:Msg -> {error, io_lib:format("Error during cipher operation: ~tp", [Msg])}
             end
     end.
 

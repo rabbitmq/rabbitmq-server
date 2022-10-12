@@ -11,7 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 await_response(ProducerPid) ->
-    error_logger:info_msg("waiting for producer pid ~p~n", [ProducerPid]),
+    error_logger:info_msg("waiting for producer pid ~tp~n", [ProducerPid]),
     case receive {ProducerPid, Response} -> Response end of
         ok                -> ok;
         {error, _} = Else -> exit(Else);
@@ -42,7 +42,7 @@ start(Channel, Queue, TestPid, Confirm, MsgsToSend, AckNackMsgs) ->
             false -> none
         end,
     TestPid ! {self(), started},
-    error_logger:info_msg("publishing ~w msgs on ~p~n", [MsgsToSend, Channel]),
+    error_logger:info_msg("publishing ~w msgs on ~tp~n", [MsgsToSend, Channel]),
     producer(Channel, Queue, TestPid, ConfirmState, MsgsToSend, AckNackMsgs).
 
 %%
@@ -52,7 +52,7 @@ start(Channel, Queue, TestPid, Confirm, MsgsToSend, AckNackMsgs) ->
 producer(_Channel, _Queue, TestPid, none, 0, _AckNackMsgs) ->
     TestPid ! {self(), ok};
 producer(Channel, _Queue, TestPid, ConfirmState, 0, {AckMsg, NackMsg}) ->
-    error_logger:info_msg("awaiting confirms on channel ~p~n", [Channel]),
+    error_logger:info_msg("awaiting confirms on channel ~tp~n", [Channel]),
     Msg = case drain_confirms(none, ConfirmState) of
               %% No acks or nacks
               acks        -> AckMsg;

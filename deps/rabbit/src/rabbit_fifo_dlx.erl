@@ -136,7 +136,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
                            msg_bytes_checkout = BytesCheckout - BytesMoved},
     {State, []};
 apply(_, Cmd, DLH, State) ->
-    rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", [Cmd, DLH]),
+    rabbit_log:debug("Ignoring command ~tp for dead_letter_handler ~tp", [Cmd, DLH]),
     {State, []}.
 
 -spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
@@ -246,7 +246,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
 ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
     case is_local_and_alive(Pid) of
         true ->
-            rabbit_log:debug("rabbit_fifo_dlx_worker ~p already started for ~s",
+            rabbit_log:debug("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
         false ->
             start_worker(QRef)
@@ -258,7 +258,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
     {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
-    rabbit_log:debug("started rabbit_fifo_dlx_worker ~p for ~s",
+    rabbit_log:debug("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
@@ -269,7 +269,7 @@ ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
             %% Note that we can't return a mod_call effect here
             %% because mod_call is executed on the leader only.
             ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~p", [Pid]);
+            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
         false ->
             ok
     end.
@@ -305,7 +305,7 @@ update_config(SameDLH, SameDLH, _, State) ->
     {State, []};
 update_config(OldDLH, NewDLH, QRes, State0) ->
     LogOnLeader = {mod_call, rabbit_log, debug,
-                   ["Switching dead_letter_handler from ~p to ~p for ~s",
+                   ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
                     [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
     {State1, Effects0} = switch_from(OldDLH, QRes, State0),
     {State, Effects} = switch_to(NewDLH, State1, Effects0),
@@ -319,7 +319,7 @@ switch_from(at_least_once, QRes, State) ->
     {Num, Bytes} = stat(State),
     %% Log only on leader.
     {init(), [{mod_call, rabbit_log, info,
-               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~s",
+               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
                 [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
 switch_from(_, _, State) ->
     {State, []}.

@@ -186,7 +186,7 @@ test_frame_serialization(Expected, TrailingLF) ->
     {ok, Val} = rabbit_stomp_frame:header(Frame, "head\r:\ner"),
     ?assertEqual(":\n\r\\", Val),
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame, TrailingLF)),
-    ?assertEqual(Expected, rabbit_misc:format("~s", [Serialized])).
+    ?assertEqual(Expected, rabbit_misc:format("~ts", [Serialized])).
 
 headers_escaping_roundtrip(_) ->
     test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n", true).

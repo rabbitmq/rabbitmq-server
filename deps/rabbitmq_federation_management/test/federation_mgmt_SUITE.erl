@@ -53,7 +53,7 @@ end_per_suite(Config) ->
 setup_federation(Config) ->
     set_policy(Config),
     Port = amqp_port(Config, 0),
-    Uri = lists:flatten(io_lib:format("amqp://myuser:myuser@localhost:~p", [Port])),
+    Uri = lists:flatten(io_lib:format("amqp://myuser:myuser@localhost:~tp", [Port])),
     rabbit_ct_broker_helpers:set_parameter(
       Config, 0, <<"federation-upstream">>, <<"broken-bunny">>,
       [{<<"uri">>, list_to_binary(Uri)},

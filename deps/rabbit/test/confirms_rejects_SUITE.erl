@@ -358,7 +358,7 @@ validate_acks_mailbox({LatestMultipleN, LatestMultipleAck}) ->
     after
         10000 -> none
     end,
-    % ct:pal("Received ~p~n", [Received]),
+    % ct:pal("Received ~tp~n", [Received]),
     case Received of
         {LatestN, IsMultiple, AckOrNack} ->
             case LatestN < LatestMultipleN of
@@ -405,7 +405,7 @@ kill_the_queue(QueueName) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok
