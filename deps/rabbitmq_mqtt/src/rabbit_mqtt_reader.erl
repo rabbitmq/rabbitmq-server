@@ -7,12 +7,12 @@
 
 -module(rabbit_mqtt_reader).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 -behaviour(ranch_protocol).
 
 -export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         code_change/3, terminate/2, handle_pre_hibernate/1]).
+         code_change/3, terminate/2]).
 
 %%TODO check where to best 'hibernate' when returning from callback
 %%TODO use rabbit_global_counters for MQTT protocol
@@ -26,6 +26,7 @@
 
 -define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
 -define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
+-define(HIBERNATE_AFTER, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -39,7 +40,7 @@ conserve_resources(Pid, _, {_, Conserve, _}) ->
 
 info(Pid, InfoItems) ->
     case InfoItems -- ?INFO_ITEMS of
-        [] -> gen_server2:call(Pid, {info, InfoItems});
+        [] -> gen_server:call(Pid, {info, InfoItems});
         UnknownItems -> throw({bad_argument, UnknownItems})
     end.
 
@@ -67,7 +68,7 @@ init(Ref) ->
             %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L536
             %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L189
             %% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L72
-            gen_server2:enter_loop(?MODULE, [],
+            gen_server:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(
                #state{socket                 = RealSocket,
@@ -78,8 +79,8 @@ init(Ref) ->
                       received_connect_frame = false,
                       conserve               = false,
                       parse_state            = rabbit_mqtt_frame:initial_state(),
-                      proc_state             = ProcessorState }), #state.stats_timer),
-             {backoff, 1000, 1000, 10000});
+                      proc_state             = ProcessorState }), #state.stats_timer)
+             );
         {network_error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             terminate({shutdown, Reason}, undefined);
@@ -133,13 +134,17 @@ handle_cast(Delivery = {deliver, _, _, _}, State = #state{proc_state = PState}) 
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
+handle_info(timeout, State) ->
+    rabbit_mqtt_processor:handle_pre_hibernate(),
+    {noreply, State, hibernate};
+
 handle_info({'EXIT', _Conn, Reason}, State) ->
     {stop, {connection_died, Reason}, State};
 
 handle_info({Tag, Sock, Data},
             State = #state{ socket = Sock, connection_state = blocked })
-            when Tag =:= tcp; Tag =:= ssl ->
-    {noreply, State#state{ deferred_recv = Data }, hibernate};
+  when Tag =:= tcp; Tag =:= ssl ->
+    {noreply, State#state{ deferred_recv = Data }, ?HIBERNATE_AFTER};
 
 handle_info({Tag, Sock, Data},
             State = #state{ socket = Sock, connection_state = running })
@@ -156,7 +161,7 @@ handle_info({Tag, Sock, Reason}, State = #state{socket = Sock})
     network_error(Reason, State);
 
 handle_info({inet_reply, Sock, ok}, State = #state{socket = Sock}) ->
-    {noreply, State, hibernate};
+    {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info({inet_reply, Sock, {error, Reason}}, State = #state{socket = Sock}) ->
     network_error(Reason, State);
@@ -173,7 +178,7 @@ handle_info({keepalive, Req}, State = #state{keepalive = KState0,
                                              conn_name = ConnName}) ->
     case rabbit_mqtt_keepalive:handle(Req, KState0) of
         {ok, KState} ->
-            {noreply, State#state{keepalive = KState}, hibernate};
+            {noreply, State#state{keepalive = KState}, ?HIBERNATE_AFTER};
         {error, timeout} ->
             rabbit_log_connection:error("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
             send_will_and_terminate({shutdown, keepalive_timeout}, State);
@@ -193,19 +198,19 @@ handle_info(login_timeout, State = #state{conn_name = ConnStr}) ->
     {stop, {shutdown, login_timeout}, State};
 
 handle_info(emit_stats, State) ->
-    {noreply, emit_stats(State), hibernate};
+    {noreply, emit_stats(State), ?HIBERNATE_AFTER};
 
 handle_info({ra_event, _From, Evt},
             #state{proc_state = PState0} = State) ->
     %% handle applied event to ensure registration command actually got applied
     %% handle not_leader notification in case we send the command to a non-leader
     PState = rabbit_mqtt_processor:handle_ra_event(Evt, PState0),
-    {noreply, pstate(State, PState), hibernate};
+    {noreply, pstate(State, PState), ?HIBERNATE_AFTER};
 
 handle_info({'DOWN', _MRef, process, _Pid, _Reason} = Evt,
             #state{proc_state = PState0} = State) ->
     PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
-    {noreply, pstate(State, PState), hibernate};
+    {noreply, pstate(State, PState), ?HIBERNATE_AFTER};
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
@@ -216,10 +221,6 @@ terminate(Reason, State = #state{keepalive = KState0,
     maybe_emit_stats(State#state{keepalive = KState}),
     rabbit_mqtt_processor:terminate(PState),
     log_terminate(Reason, State).
-
-handle_pre_hibernate(State) ->
-    rabbit_mqtt_processor:handle_pre_hibernate(),
-    {hibernate, State}.
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: connection closed",
@@ -279,9 +280,9 @@ process_received_bytes(<<>>, State = #state{received_connect_frame = false,
                                             conn_name = ConnStr}) ->
     rabbit_log_connection:info("Accepted MQTT connection ~p (~s, client id: ~s)",
                                [self(), ConnStr, rabbit_mqtt_processor:info(client_id, PState)]),
-    {noreply, ensure_stats_timer(State#state{received_connect_frame = true}), hibernate};
+    {noreply, ensure_stats_timer(State#state{received_connect_frame = true}), ?HIBERNATE_AFTER};
 process_received_bytes(<<>>, State) ->
-    {noreply, ensure_stats_timer(State), hibernate};
+    {noreply, ensure_stats_timer(State), ?HIBERNATE_AFTER};
 process_received_bytes(Bytes,
                        State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
@@ -290,7 +291,7 @@ process_received_bytes(Bytes,
         {more, ParseState1} ->
             {noreply,
              ensure_stats_timer( State #state{ parse_state = ParseState1 }),
-             hibernate};
+             ?HIBERNATE_AFTER};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
                 {ok, ProcState1} ->
@@ -341,7 +342,7 @@ process_received_bytes(Bytes,
     end.
 
 callback_reply(State, {ok, ProcState}) ->
-    {noreply, pstate(State, ProcState), hibernate};
+    {noreply, pstate(State, ProcState), ?HIBERNATE_AFTER};
 callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
@@ -413,7 +414,7 @@ control_throttle(State = #state{connection_state = Flow,
     end.
 
 maybe_process_deferred_recv(State = #state{ deferred_recv = undefined }) ->
-    {noreply, State, hibernate};
+    {noreply, State, ?HIBERNATE_AFTER};
 maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock }) ->
     handle_info({tcp, Sock, Data},
                 State#state{ deferred_recv = undefined }).
