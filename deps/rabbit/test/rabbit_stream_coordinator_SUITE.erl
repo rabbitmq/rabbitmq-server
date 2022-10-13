@@ -6,7 +6,6 @@
 -export([
          ]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/src/rabbit_stream_coordinator.hrl").
@@ -38,7 +37,8 @@ all_tests() ->
      delete_replica,
      delete_two_replicas,
      delete_replica_2,
-     leader_start_failed
+     leader_start_failed,
+     overview
     ].
 
 groups() ->
@@ -660,7 +660,6 @@ leader_start_failed(_) ->
     {_S9, Actions8} = evaluate_stream(Meta8, S8, []),
     ?assertMatch([{aux, {stop, StreamId, #{node := N3, epoch := E2}, _}}
                  ], lists:sort(Actions8)),
-
 
     ok.
 
@@ -1310,6 +1309,36 @@ delete_replica_leader(_) ->
                                                    state = {ready, E2}}
                                     }},
                  S4),
+    ok.
+
+overview(_Config) ->
+    S0 = rabbit_stream_coordinator:init(undefined),
+    O0 = rabbit_stream_coordinator:overview(S0),
+    ?assertMatch(#{num_monitors := 0,
+                   num_streams := 0,
+                   single_active_consumer := #{groups := _,
+                                               num_groups := 0},
+                   streams := #{}}, O0),
+
+    StreamId = <<"bananas">>,
+    TypeState = #{name => StreamId,
+                  retention => [],
+                  nodes => [node()]},
+    Q = new_q(<<"bananas">>, TypeState),
+    Cmd = {new_stream, StreamId, #{leader_node => node(),
+                                   retention => [],
+                                   queue => Q}},
+    {S1, _, _} = apply_cmd(#{index => 1,
+                             machine_version => 3,
+                             system_time => 203984982374}, Cmd, S0),
+
+    ?assertMatch(#{num_monitors := 0,
+                   num_streams := 1,
+                   single_active_consumer := #{groups := _,
+                                               num_groups := 0},
+                   streams := #{StreamId := _}},
+                 rabbit_stream_coordinator:overview(S1)),
+
     ok.
 
 meta(N) when is_integer(N) ->
