@@ -5,23 +5,37 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(cluster_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-import(rabbit_ct_broker_helpers,
+        [setup_steps/0,
+         teardown_steps/0,
+         get_node_config/3,
+         rabbitmqctl/3,
+         rpc/5,
+         stop_node/2,
+         drain_node/2,
+         revive_node/2]).
+
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, cluster_size_3},
+     {group, cluster_size_5}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                connection_id_tracking,
-                                connection_id_tracking_on_nodedown,
-                                connection_id_tracking_with_decommissioned_node
-                               ]}
+     {cluster_size_3, [], [
+                           maintenance
+                          ]},
+     {cluster_size_5, [], [
+                           connection_id_tracking,
+                           connection_id_tracking_on_nodedown,
+                           connection_id_tracking_with_decommissioned_node
+                          ]}
     ].
 
 suite() ->
@@ -45,8 +59,20 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(cluster_size_3, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "maintenance mode wrongly closes cluster-wide MQTT connections "
+             " in RMQ < 3.11.2 and < 3.10.10"};
+        false ->
+            set_cluster_size(3, Config)
+    end;
+init_per_group(cluster_size_5, Config) ->
+    set_cluster_size(5, Config).
+
+set_cluster_size(NodesCount, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config, [{rmq_nodes_count, NodesCount}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -58,23 +84,42 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
                                tcp_port_mqtt_tls_extra]},
-        {rmq_nodes_clustered, true},
-        {rmq_nodes_count, 5}
+        {rmq_nodes_clustered, true}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
+      setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
+      teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
 %% Test cases
 %% -------------------------------------------------------------------
+
+maintenance(Config) ->
+    {ok, MRef0, C0} = connect_to_node(Config, 0, <<"client-0">>),
+    {ok, MRef1a, C1a} = connect_to_node(Config, 1, <<"client-1a">>),
+    {ok, MRef1b, C1b} = connect_to_node(Config, 1, <<"client-1b">>),
+    timer:sleep(500),
+
+    ok = drain_node(Config, 2),
+    ok = revive_node(Config, 2),
+    timer:sleep(500),
+    [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
+
+    ok = drain_node(Config, 1),
+    [await_disconnection(Ref) || Ref <- [MRef1a, MRef1b]],
+    ok = revive_node(Config, 1),
+    ?assert(erlang:is_process_alive(C0)),
+
+    ok = drain_node(Config, 0),
+    await_disconnection(MRef0),
+    ok = revive_node(Config, 0).
 
 %% Note about running this testsuite in a mixed-versions cluster:
 %% All even-numbered nodes will use the same code base when using a
@@ -114,26 +159,26 @@ connection_id_tracking(Config) ->
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = get_node_config(Config, 0, nodename),
     {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 10, 2, 1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = stop_node(Config, Server),
     await_disconnection(MRef),
     assert_connection_count(Config, 10, 2, 0),
     ok.
 
 connection_id_tracking_with_decommissioned_node(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = get_node_config(Config, 0, nodename),
     {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     assert_connection_count(Config, 10, 2, 1),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
+    {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
     await_disconnection(MRef),
     assert_connection_count(Config, 10, 2, 0),
     ok.
@@ -145,7 +190,7 @@ connection_id_tracking_with_decommissioned_node(Config) ->
 assert_connection_count(_Config, 0,  _, _) ->
     ct:fail("failed to complete rabbit_mqtt_collector:list/0");
 assert_connection_count(Config, Retries, NodeId, NumElements) ->
-    List = rabbit_ct_broker_helpers:rpc(Config, NodeId, rabbit_mqtt_collector, list, []),
+    List = rpc(Config, NodeId, rabbit_mqtt_collector, list, []),
     case length(List) == NumElements of
         true ->
             ok;
@@ -157,7 +202,7 @@ assert_connection_count(Config, Retries, NodeId, NumElements) ->
 
 
 connect_to_node(Config, Node, ClientID) ->
-  Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
+  Port = get_node_config(Config, Node, tcp_port_mqtt),
   {ok, C} = connect(Port, ClientID),
   MRef = erlang:monitor(process, C),
   {ok, MRef, C}.
@@ -177,7 +222,7 @@ await_disconnection(Ref) ->
     receive
         {'DOWN', Ref, _, _, _} -> ok
     after
-        30000 -> exit(missing_down_message)
+        20_000 -> exit(missing_down_message)
     end.
 
 expect_publishes(_Topic, []) -> ok;
