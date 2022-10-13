@@ -39,7 +39,8 @@
          handle_connection_down/2,
          consumer_groups/3,
          group_consumers/5,
-         is_ff_enabled/0]).
+         is_ff_enabled/0,
+         overview/1]).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -193,6 +194,19 @@ maybe_sac_execute(Fun) ->
         false ->
             {error, feature_flag_disabled}
     end.
+
+-spec overview(state()) -> map().
+overview(undefined) ->
+    undefined;
+overview(#?MODULE{groups = Groups}) ->
+    GroupsOverview = maps:map(fun (_, #group{consumers = Consumers,
+                                             partition_index = Idx}) ->
+                                      #{num_consumers => length(Consumers),
+                                        partition_index => Idx}
+                              end, Groups),
+    #{num_groups => map_size(Groups),
+      groups => GroupsOverview}.
+
 
 -spec init_state() -> state().
 init_state() ->
