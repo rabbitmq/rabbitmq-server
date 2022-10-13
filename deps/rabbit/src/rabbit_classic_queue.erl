@@ -320,13 +320,13 @@ deliver(Qs0, #delivery{flow = Flow,
     Delivery = Delivery0#delivery{message = Msg},
 
     {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),
-    QPids = MPids ++ SPids,
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process
         %% dictionary.
-        flow   -> [credit_flow:send(QPid) || QPid <- QPids],
-                  [credit_flow:send(QPid) || QPid <- SPids];
+        flow ->
+            [credit_flow:send(QPid) || QPid <- MPids],
+            [credit_flow:send(QPid) || QPid <- SPids];
         noflow -> ok
     end,
     MMsg = {deliver, Delivery, false},
