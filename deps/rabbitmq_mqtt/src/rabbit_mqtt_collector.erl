@@ -60,11 +60,7 @@ list(QF) ->
             case ra:leader_query(NodeIds, QF) of
                 {ok, {_, Result}, _} -> Result;
                 {timeout, _}      ->
-<<<<<<< HEAD
-                    rabbit_log:debug("~s:list/0 leader query timed out",
-=======
                     rabbit_log:debug("~ts:list/1 leader query timed out",
->>>>>>> 694501b923 (Close local MQTT connections when draining node)
                                      [?MODULE]),
                     []
             end;
@@ -74,11 +70,7 @@ list(QF) ->
                 {error, _} ->
                     [];
                 {timeout, _}      ->
-<<<<<<< HEAD
-                    rabbit_log:debug("~s:list/0 leader query timed out",
-=======
                     rabbit_log:debug("~ts:list/1 leader query timed out",
->>>>>>> 694501b923 (Close local MQTT connections when draining node)
                                      [?MODULE]),
                     []
             end
