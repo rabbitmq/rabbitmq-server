@@ -9,7 +9,8 @@
 
 -include("mqtt_machine.hrl").
 
--export([register/2, register/3, unregister/2, list/0, leave/1]).
+-export([register/2, register/3, unregister/2,
+         list/0, list_pids/0, leave/1]).
 
 %%----------------------------------------------------------------------------
 -spec register(term(), pid()) -> {ok, reference()} | {error, term()}.
@@ -44,26 +45,32 @@ unregister(ClientId, Pid) ->
             send_ra_command(Leader, {unregister, ClientId, Pid}, no_correlation)
     end.
 
+-spec list_pids() -> [pid()].
+list_pids() ->
+    list(fun(#machine_state{pids = Pids}) -> maps:keys(Pids) end).
+
 list() ->
+    list(fun(#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end).
+
+list(QF) ->
     {ClusterName, _} = mqtt_node:server_id(),
-     QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
     case ra_leaderboard:lookup_leader(ClusterName) of
         undefined ->
             NodeIds = mqtt_node:all_node_ids(),
             case ra:leader_query(NodeIds, QF) of
-                {ok, {_, Ids}, _} -> Ids;
+                {ok, {_, Result}, _} -> Result;
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    rabbit_log:debug("~ts:list/1 leader query timed out",
                                      [?MODULE]),
                     []
             end;
         Leader ->
             case ra:leader_query(Leader, QF) of
-                {ok, {_, Ids}, _} -> Ids;
+                {ok, {_, Result}, _} -> Result;
                 {error, _} ->
                     [];
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    rabbit_log:debug("~ts:list/1 leader query timed out",
                                      [?MODULE]),
                     []
             end
