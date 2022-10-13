@@ -95,11 +95,11 @@ drain() ->
     suspend_all_client_listeners(),
     rabbit_log:warning("Suspended all listeners and will no longer accept client connections"),
     {ok, NConnections} = close_all_client_connections(),
+    rabbit_log:warning("Closed ~b local client connections", [NConnections]),
     %% allow plugins to react e.g. by closing their protocol connections
     rabbit_event:notify(maintenance_connections_closed, #{
         reason => <<"node is being put into maintenance">>
     }),
-    rabbit_log:warning("Closed ~b local client connections", [NConnections]),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
