@@ -140,6 +140,18 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
     end.
 
+-spec default_limits(vhost:name()) -> proplists:proplist().
+default_limits(Name) ->
+    AllLimits = application:get_env(rabbit, default_limits, []),
+    VHostLimits = proplists:get_value(vhost, AllLimits, []),
+    Match = lists:search(fun({RE, _}) ->
+                                 re:run(Name, RE, [{capture, none}]) =:= match
+                         end, VHostLimits),
+    case Match of
+        {value, {_, Limits}} -> Limits;
+        _                    -> []
+    end.
+
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
@@ -192,11 +204,12 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
+    DefaultLimits = default_limits(Name),
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
                       [] ->
-                        Row = vhost:new(Name, [], Metadata),
+                        Row = vhost:new(Name, DefaultLimits, Metadata),
                         rabbit_log:debug("Inserting a virtual host record ~tp", [Row]),
                         ok = mnesia:write(rabbit_vhost, Row, write),
                         Row;
@@ -208,6 +221,11 @@ do_add(Name, Metadata, ActingUser) ->
           fun (VHost1, true) ->
                   VHost1;
               (VHost1, false) ->
+                  rabbit_log:info("Applying default limits to vhost '~tp': ~tp", [Name, DefaultLimits]),
+                  ok = case DefaultLimits of
+                      [] -> ok;
+                      _  -> rabbit_vhost_limit:set(Name, DefaultLimits, ActingUser)
+                  end,
                   [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
                     rabbit_log:debug("Will declare an exchange ~tp", [Resource]),

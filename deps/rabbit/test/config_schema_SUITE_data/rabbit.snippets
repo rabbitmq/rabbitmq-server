@@ -100,6 +100,27 @@ ssl_options.fail_if_no_peer_cert = true",
  {socket_writer_gc_threshold_off,
   "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
 
+ {default_limits_vhost,
+ "
+  default_limits.vhost.a.pattern = .*
+  default_limits.vhost.a.max_queues = 10
+  default_limits.vhost.a.max_connections = 100
+ ",
+  [{rabbit, [{default_limits, [{vhost, [
+      {<<".*">>, [{<<"max-connections">>, 100}, {<<"max-queues">>, 10}]}
+                                       ]}]}]}],
+  []},
+
+ {default_limits_vhost_no_undefined,
+ "
+  default_limits.vhost.a.pattern = .*
+  default_limits.vhost.a.max_queues = 10
+ ",
+  [{rabbit, [{default_limits, [{vhost, [
+      {<<".*">>, [{<<"max-queues">>, 10}]}
+                                       ]}]}]}],
+  []},
+
  {default_user_settings,
   "default_user = guest
 default_pass = guest
