@@ -23,6 +23,7 @@ all() ->
 
 groups() ->
     ClusterSize1Tests = [
+        vhost_is_created_with_default_limits,
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
         vhost_creation_idempotency,
@@ -315,6 +316,21 @@ vhost_creation_idempotency(Config) ->
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost))
+    after
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
+vhost_is_created_with_default_limits(Config) ->
+    VHost = <<"limits-test">>,
+    Pattern = "^limits-.*$",
+    Limits = [{<<"max-connections">>, 10}, {<<"max-queues">>, 1}],
+    Env = [{vhost, [{Pattern, Limits}]}],
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                      application, set_env, [rabbit, default_limits, Env])),
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                          rabbit_vhost_limit, list, [VHost]))
     after
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
