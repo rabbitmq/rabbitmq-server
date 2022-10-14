@@ -27,6 +27,11 @@ groups() ->
                                ]}
     ].
 
+suite() ->
+    [
+      {timetrap, {minutes, 3}}
+    ].
+
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [

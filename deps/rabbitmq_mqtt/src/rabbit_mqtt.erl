@@ -13,7 +13,10 @@
 
 -export([start/2, stop/1]).
 -export([emit_connection_info_all/4,
-         close_local_client_connections/1]).
+         emit_connection_info_local/3,
+         close_local_client_connections/1,
+         %% exported for tests
+         local_connection_pids/0]).
 
 start(normal, []) ->
     rabbit_global_counters:init([{protocol, mqtt}]),
@@ -36,29 +39,47 @@ start(normal, []) ->
 stop(_) ->
     rabbit_mqtt_sup:stop_listeners().
 
-emit_connection_info_all(_Nodes, Items, Ref, AggregatorPid) ->
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            %% Ra tracks connections cluster-wide.
+            AllPids = rabbit_mqtt_collector:list_pids(),
+            emit_connection_info(Items, Ref, AggregatorPid, AllPids),
+            %% Our node already emitted infos for all connections. Therefore, for the
+            %% remaining nodes, we send back 'finished' so that the CLI does not time out.
+            [AggregatorPid ! {Ref, finished} || _ <- lists:seq(1, length(Nodes) - 1)];
+        false ->
+            Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,
+                               [Items, Ref, AggregatorPid])
+                    || Node <- Nodes],
+            rabbit_control_misc:await_emitters_termination(Pids)
+    end.
+
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
+    LocalPids = local_connection_pids(),
+    emit_connection_info(Items, Ref, AggregatorPid, LocalPids).
+
+emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
-      AggregatorPid,
-      Ref,
+      AggregatorPid, Ref,
       fun(Pid) ->
               rabbit_mqtt_reader:info(Pid, Items)
-      end,
-      rabbit_mqtt_collector:list_pids()
-     ).
+      end, Pids).
 
 -spec close_local_client_connections(string() | binary()) -> {'ok', non_neg_integer()}.
 close_local_client_connections(Reason) ->
-    LocalPids = local_connection_pids(),
-    [rabbit_mqtt_reader:close_connection(Pid, Reason) || Pid <- LocalPids],
-    {ok, length(LocalPids)}.
+    Pids = local_connection_pids(),
+    lists:foreach(fun(Pid) ->
+                          rabbit_mqtt_reader:close_connection(Pid, Reason)
+                  end, Pids),
+    {ok, length(Pids)}.
 
 -spec local_connection_pids() -> [pid()].
 local_connection_pids() ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
             AllPids = rabbit_mqtt_collector:list_pids(),
-            LocalPids = lists:filter(fun(Pid) -> node(Pid) =:= node() end, AllPids),
-            LocalPids;
+            lists:filter(fun(Pid) -> node(Pid) =:= node() end, AllPids);
         false ->
             PgScope = persistent_term:get(?PG_SCOPE),
             lists:flatmap(fun(Group) ->

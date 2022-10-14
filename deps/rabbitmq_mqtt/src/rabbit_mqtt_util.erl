@@ -155,7 +155,13 @@ register_clientid(Vhost, ClientId)
 
 -spec remove_duplicate_clientid_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
 remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->
-    Pids = pg:get_local_members(persistent_term:get(?PG_SCOPE), PgGroup),
-    lists:foreach(fun(Pid) ->
-                          gen_server:cast(Pid, duplicate_id)
-                  end, Pids -- [PidToKeep]).
+    try persistent_term:get(?PG_SCOPE) of
+        PgScope ->
+            Pids = pg:get_local_members(PgScope, PgGroup),
+            lists:foreach(fun(Pid) ->
+                                  gen_server:cast(Pid, duplicate_id)
+                          end, Pids -- [PidToKeep])
+    catch _:badarg ->
+              %% MQTT supervision tree on this node not fully started
+              ok
+    end.

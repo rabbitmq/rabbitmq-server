@@ -30,7 +30,7 @@ scopes() -> [ctl, diagnostics].
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
-description() -> <<"Lists MQTT connections on the target node">>.
+description() -> <<"Lists all MQTT connections">>.
 
 help_section() ->
     {plugin, mqtt}.
@@ -68,8 +68,7 @@ run(Args, #{node := NodeName,
         false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
     end,
 
-    %% List only connections on the target node.
-    Nodes = [NodeName],
+    Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(
         NodeName,
