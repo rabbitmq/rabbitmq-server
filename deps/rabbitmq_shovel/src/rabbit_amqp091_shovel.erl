@@ -30,6 +30,7 @@
          close_dest/1,
          ack/3,
          nack/3,
+         status/1,
          forward/4
         ]).
 
@@ -153,10 +154,48 @@ dest_endpoint(#{dest := Dest}) ->
     Keys = [dest_exchange, dest_exchange_key, dest_queue],
     maps:to_list(maps:filter(fun(K, _) -> proplists:is_defined(K, Keys) end, Dest)).
 
+<<<<<<< HEAD
 forward(IncomingTag, Props, Payload,
         State0 = #{dest := #{props_fun := PropsFun,
                              current := {_, _, DstUri},
                              fields_fun := FieldsFun}}) ->
+=======
+forward_pending(State) ->
+    case pop_pending(State) of
+        empty ->
+            State;
+        {{Tag, Props, Payload}, S} ->
+            S2 = do_forward(Tag, Props, Payload, S),
+            S3 = control_throttle(S2),
+            case is_blocked(S3) of
+                true ->
+                    %% We are blocked by client-side flow-control and/or
+                    %% `connection.blocked` message from the destination
+                    %% broker. Stop forwarding pending messages.
+                    S3;
+                false ->
+                    forward_pending(S3)
+            end
+    end.
+
+forward(IncomingTag, Props, Payload, State) ->
+    case is_blocked(State) of
+        true ->
+            %% We are blocked by client-side flow-control and/or
+            %% `connection.blocked` message from the destination
+            %% broker. Simply cache the forward.
+            PendingEntry = {IncomingTag, Props, Payload},
+            add_pending(PendingEntry, State);
+        false ->
+            State1 = do_forward(IncomingTag, Props, Payload, State),
+            control_throttle(State1)
+    end.
+
+do_forward(IncomingTag, Props, Payload,
+           State0 = #{dest := #{props_fun := PropsFun,
+                                current := {_, _, DstUri},
+                                fields_fun := FieldsFun}}) ->
+>>>>>>> e6b50cb6cb (Report flow/blocked shovel status in Mgmt UI)
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
     Exchange = maps:get(exchange, Props, undefined),
@@ -313,6 +352,46 @@ publish(IncomingTag, Method, Msg,
               rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
 
+<<<<<<< HEAD
+=======
+control_throttle(State) ->
+    update_blocked_by(flow, credit_flow:blocked(), State).
+
+update_blocked_by(Tag, IsBlocked, State = #{dest := Dest}) ->
+    BlockReasons = maps:get(blocked_by, Dest, []),
+    NewBlockReasons =
+        case IsBlocked of
+            true -> ordsets:add_element(Tag, BlockReasons);
+            false -> ordsets:del_element(Tag, BlockReasons)
+        end,
+    State#{dest => Dest#{blocked_by => NewBlockReasons}}.
+
+is_blocked(#{dest := #{blocked_by := BlockReasons}}) when BlockReasons =/= [] ->
+    true;
+is_blocked(_) ->
+    false.
+
+status(#{dest := #{blocked_by := [flow]}}) ->
+    flow;
+status(#{dest := #{blocked_by := BlockReasons}}) when BlockReasons =/= [] ->
+    blocked;
+status(_) ->
+    running.
+
+add_pending(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, queue:new()),
+    State#{dest => Dest#{pending => queue:in(Elem, Pending)}}.
+
+pop_pending(State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, queue:new()),
+    case queue:out(Pending) of
+        {empty, _} ->
+            empty;
+        {{value, Elem}, Pending2} ->
+            {Elem, State#{dest => Dest#{pending => Pending2}}}
+    end.
+
+>>>>>>> e6b50cb6cb (Report flow/blocked shovel status in Mgmt UI)
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
           "Shovel '~s' in vhost '~s' has no more URIs to try for connection",

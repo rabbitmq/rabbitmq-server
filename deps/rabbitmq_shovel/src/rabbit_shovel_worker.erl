@@ -19,7 +19,8 @@
 
 -record(state, {name :: binary() | {rabbit_types:vhost(), binary()},
                 type :: static | dynamic,
-                config :: rabbit_shovel_behaviour:state()}).
+                config :: rabbit_shovel_behaviour:state(),
+                last_reported_status = running :: rabbit_shovel_status:blocked_status()}).
 
 start_link(Type, Name, Config) ->
     ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
@@ -115,7 +116,9 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
                     rabbit_log_shovel:debug("Shovel ~s decided to stop due a message from destination: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
                 Config1 ->
-                    {noreply, State#state{config = Config1}}
+                    State1 = State#state{config = Config1},
+                    State2 = maybe_report_blocked_status(State1),
+                    {noreply, State2}
             end;
         {stop, {inbound_conn_died, heartbeat_timeout}} ->
             rabbit_log_shovel:error("Shovel ~s detected missed heartbeats on source connection", [human_readable_name(Name)]),
@@ -130,7 +133,9 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
             rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
         Config1 ->
-            {noreply, State#state{config = Config1}}
+            State1 = State#state{config = Config1},
+            State2 = maybe_report_blocked_status(State1),
+            {noreply, State2}
     end.
 
 terminate({shutdown, autodelete}, State = #state{name = Name,
@@ -207,6 +212,18 @@ human_readable_name(Name) ->
     {VHost, ShovelName} -> rabbit_misc:format("'~s' in virtual host '~s'", [ShovelName, VHost]);
     ShovelName          -> rabbit_misc:format("'~s'", [ShovelName])
   end.
+
+maybe_report_blocked_status(#state{config = Config,
+                                   last_reported_status = LastStatus} = State) ->
+    case rabbit_shovel_behaviour:status(Config) of
+        ignore ->
+            State;
+        LastStatus ->
+            State;
+        NewStatus ->
+            rabbit_shovel_status:report_blocked_status(State#state.name, NewStatus),
+            State#state{last_reported_status = NewStatus}
+    end.
 
 report_running(#state{config = Config} = State) ->
     InUri = rabbit_shovel_behaviour:source_uri(Config),

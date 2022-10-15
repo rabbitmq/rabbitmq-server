@@ -439,6 +439,218 @@ get_connection_name(_Config) ->
     <<"Shovel">> = rabbit_shovel_worker:get_connection_name({one, two, three}),
     <<"Shovel">> = rabbit_shovel_worker:get_connection_name(<<"anything else">>).
 
+<<<<<<< HEAD
+=======
+credit_flow(Config) ->
+    OrigCredit = set_default_credit(Config, {20, 10}),
+
+    with_ch(Config,
+      fun (Ch) ->
+              try
+                  shovel_test_utils:set_param_nowait(
+                    Config,
+                    <<"test">>, [{<<"src-queue">>,    <<"src">>},
+                                 {<<"dest-queue">>,   <<"dest">>},
+                                 {<<"src-prefetch-count">>, 50},
+                                 {<<"ack-mode">>,     <<"on-publish">>},
+                                 {<<"src-delete-after">>, <<"never">>}]),
+                  shovel_test_utils:await_shovel(Config, <<"test">>),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>),
+
+                  ShovelPid = find_shovel_pid(Config),
+                  #{dest :=
+                        #{current :=
+                              {_DestConn, DestChan, _DestUri}}} =
+                      get_shovel_state(ShovelPid),
+                  WriterPid = find_writer_pid_for_channel(Config, DestChan),
+
+                  %% When the broker-side channel is blocked by flow
+                  %% control, it stops reading from the tcp
+                  %% socket. After all the OS, BEAM and process buffers
+                  %% are full, gen_tcp:send/2 will block the writer
+                  %% process. Simulate this by suspending the writer process.
+                  true = suspend_process(Config, WriterPid),
+
+                  %% Publish 1000 messages to the src queue
+                  amqp_channel:call(Ch, #'confirm.select'{}),
+                  publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 1000),
+                  amqp_channel:wait_for_confirms(Ch),
+
+                  %% Wait until the shovel is blocked
+                  shovel_test_utils:await(
+                    fun() ->
+                            case shovel_test_utils:get_shovel_status(Config, <<"test">>) of
+                                flow -> true;
+                                Status -> Status
+                            end
+                    end,
+                    5000),
+
+                  %% There should be only one process with a message buildup
+                  [{WriterPid, MQLen, _}, {_, 0, _} | _] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 10]),
+
+                  %% The writer process should have only a limited
+                  %% message queue. The shovel stops sending messages
+                  %% when the channel and shovel process used up all
+                  %% their initial credit (that is 20 + 20).
+                  2 * 20 = MQLen = proc_info(WriterPid, message_queue_len),
+
+                  %% Most messages should still be in the queue either ready or unacked
+                  ExpDestCnt = 0,
+                  #{messages := ExpDestCnt} = message_count(Config, <<"dest">>),
+                  ExpSrcCnt = 1000 - MQLen,
+                  #{messages := ExpSrcCnt,
+                    messages_unacknowledged := 50} = message_count(Config, <<"src">>),
+
+                  %% After the writer process is resumed all messages
+                  %% should be shoveled to the dest queue, and process
+                  %% message queues should be empty
+                  resume_process(Config),
+
+                  shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"src">>),
+                            Cnt =:= 0
+                    end,
+                    5000),
+                  #{messages := 1000} = message_count(Config, <<"dest">>),
+                  [{_, 0, _}] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 1]),
+
+                  %% Status only transitions from flow to running
+                  %% after a 1 second state-change-interval
+                  timer:sleep(1000),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
+              after
+                  resume_process(Config),
+                  set_default_credit(Config, OrigCredit)
+              end
+      end).
+
+dest_resource_alarm_on_confirm(Config) ->
+    dest_resource_alarm(<<"on-confirm">>, Config).
+
+dest_resource_alarm_on_publish(Config) ->
+    dest_resource_alarm(<<"on-publish">>, Config).
+
+dest_resource_alarm_no_ack(Config) ->
+    dest_resource_alarm(<<"no-ack">>, Config).
+
+dest_resource_alarm(AckMode, Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'confirm.select'{}),
+              amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+              publish(Ch, <<>>, <<"src">>, <<"hello">>),
+              amqp_channel:call(Ch, #'queue.declare'{queue = <<"temp">>}),
+              publish_count(Ch, <<>>, <<"temp">>, <<"hello">>, 1000),
+              true = amqp_channel:wait_for_confirms(Ch),
+
+              #{messages := 1} = message_count(Config, <<"src">>),
+              %%#{messages := 0} = message_count(Config, <<"dest">>),
+
+              %% A resource alarm will block publishing connections
+              OrigLimit = set_vm_memory_high_watermark(Config, 0.00000001),
+              %% Let connection block.
+              timer:sleep(100),
+
+              try
+                  shovel_test_utils:set_param(
+                    Config,
+                    <<"test">>, [{<<"src-queue">>,    <<"src">>},
+                                 {<<"dest-queue">>,   <<"dest">>},
+                                 {<<"src-prefetch-count">>, 50},
+                                 {<<"ack-mode">>,     AckMode},
+                                 {<<"src-delete-after">>, <<"never">>}]),
+
+                  %% The shovel is blocked
+                  blocked = shovel_test_utils:get_shovel_status(Config, <<"test">>),
+
+                  %% The shoveled message triggered a
+                  %% connection.blocked notification, but hasn't
+                  %% reached the dest queue because of the resource
+                  %% alarm
+                  InitialMsgCnt =
+                      case AckMode of
+                          <<"on-confirm">> -> 1;
+                          _ -> 0
+                      end,
+
+                  #{messages := InitialMsgCnt,
+                    messages_unacknowledged := InitialMsgCnt} = message_count(Config, <<"src">>),
+                  #{messages := 0} = message_count(Config, <<"dest">>),
+
+                  %% Now publish messages to "src" queue
+                  %% (network connections are blocked from publishing
+                  %% so we use a temporary shovel with direct
+                  %% connections to populate "src" queue with messages
+                  %% from the "temp" queue)
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0,
+                         rabbit_runtime_parameters, set,
+                         [
+                          <<"/">>, <<"shovel">>, <<"temp">>,
+                          [{<<"src-uri">>, <<"amqp://">>},
+                           {<<"dest-uri">>, [<<"amqp://">>]},
+                           {<<"src-queue">>, <<"temp">>},
+                           {<<"dest-queue">>, <<"src">>},
+                           {<<"src-delete-after">>, <<"queue-length">>}], none]),
+                  shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"temp">>),
+                            Cnt =:= 0
+                    end,
+                    5000),
+
+                  %% No messages reached the dest queue
+                  #{messages := 0} = message_count(Config, <<"dest">>),
+
+                  %% When the shovel sets a prefetch_count
+                  %% (on-confirm/on-publish mode), all messages are in
+                  %% the source queue, prefrech count are
+                  %% unacknowledged and buffered in the shovel
+                  MsgCnts =
+                      case AckMode of
+                          <<"on-confirm">> ->
+                              #{messages => 1001,
+                                messages_unacknowledged => 50};
+                          <<"on-publish">> ->
+                              #{messages => 1000,
+                                messages_unacknowledged => 50};
+                          <<"no-ack">> ->
+                              %% no prefetch limit, all messages are
+                              %% buffered in the shovel
+                              #{messages => 0,
+                                messages_unacknowledged => 0}
+                      end,
+
+                  MsgCnts = message_count(Config, <<"src">>),
+
+                  %% There should be no process with a message buildup
+                  [{_, 0, _}] =
+                      rabbit_ct_broker_helpers:rpc(
+                        Config, 0, recon, proc_count, [message_queue_len, 1]),
+
+                  %% Clear the resource alarm, all messages should
+                  %% arrive to the dest queue
+                  set_vm_memory_high_watermark(Config, OrigLimit),
+
+                  catch shovel_test_utils:await(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"dest">>),
+                            Cnt =:= 1001
+                    end,
+                    5000),
+                  #{messages := 0} = message_count(Config, <<"src">>),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
+              after
+                  set_vm_memory_high_watermark(Config, OrigLimit)
+              end
+      end).
+>>>>>>> e6b50cb6cb (Report flow/blocked shovel status in Mgmt UI)
 
 %%----------------------------------------------------------------------------
 
