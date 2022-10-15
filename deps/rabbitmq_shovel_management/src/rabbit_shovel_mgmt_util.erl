@@ -9,6 +9,10 @@
 
 -export([status/2]).
 
+-ifdef(TEST).
+-export([status/1]).
+-endif.
+
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -53,7 +57,8 @@ format_info(starting) ->
     [{state, starting}];
 
 format_info({running, Props}) ->
-    [{state, running}] ++ Props;
+    BlockedStatus = proplists:get_value(blocked_status, Props, running),
+    [{state, BlockedStatus}] ++ Props;
 
 format_info({terminated, Reason}) ->
     [{state,  terminated},

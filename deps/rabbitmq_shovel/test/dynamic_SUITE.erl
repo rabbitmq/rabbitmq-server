@@ -459,6 +459,7 @@ credit_flow(Config) ->
                                  {<<"ack-mode">>,     <<"on-publish">>},
                                  {<<"src-delete-after">>, <<"never">>}]),
                   shovel_test_utils:await_shovel(Config, <<"test">>),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>),
 
                   ShovelPid = find_shovel_pid(Config),
                   #{dest :=
@@ -482,9 +483,9 @@ credit_flow(Config) ->
                   %% Wait until the shovel is blocked
                   shovel_test_utils:await(
                     fun() ->
-                            case get_shovel_state(ShovelPid) of
-                                #{dest := #{blocked_by := [flow]}} -> true;
-                                Conf -> Conf
+                            case shovel_test_utils:get_shovel_status(Config, <<"test">>) of
+                                flow -> true;
+                                Status -> Status
                             end
                     end,
                     5000),
@@ -521,8 +522,12 @@ credit_flow(Config) ->
                   #{messages := 1000} = message_count(Config, <<"dest">>),
                   [{_, 0, _}] =
                       rabbit_ct_broker_helpers:rpc(
-                        Config, 0, recon, proc_count, [message_queue_len, 1])
+                        Config, 0, recon, proc_count, [message_queue_len, 1]),
 
+                  %% Status only transitions from flow to running
+                  %% after a 1 second state-change-interval
+                  timer:sleep(1000),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
               after
                   resume_process(Config),
                   set_default_credit(Config, OrigCredit)
@@ -566,9 +571,7 @@ dest_resource_alarm(AckMode, Config) ->
                                  {<<"src-delete-after">>, <<"never">>}]),
 
                   %% The shovel is blocked
-                  ShovelPid = find_shovel_pid(Config),
-                  Conf = get_shovel_state(ShovelPid),
-                  #{dest := #{blocked_by := [connection_blocked]}} = Conf,
+                  blocked = shovel_test_utils:get_shovel_status(Config, <<"test">>),
 
                   %% The shoveled message triggered a
                   %% connection.blocked notification, but hasn't
@@ -645,7 +648,8 @@ dest_resource_alarm(AckMode, Config) ->
                             Cnt =:= 1001
                     end,
                     5000),
-                  #{messages := 0} = message_count(Config, <<"src">>)
+                  #{messages := 0} = message_count(Config, <<"src">>),
+                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
               after
                   set_vm_memory_high_watermark(Config, OrigLimit)
               end
