@@ -154,6 +154,24 @@ dest_endpoint(#{dest := Dest}) ->
     Keys = [dest_exchange, dest_exchange_key, dest_queue],
     maps:to_list(maps:filter(fun(K, _) -> proplists:is_defined(K, Keys) end, Dest)).
 
+forward_pending(State) ->
+    case pop_pending(State) of
+        empty ->
+            State;
+        {{Tag, Props, Payload}, S} ->
+            S2 = do_forward(Tag, Props, Payload, S),
+            S3 = control_throttle(S2),
+            case is_blocked(S3) of
+                true ->
+                    %% We are blocked by client-side flow-control and/or
+                    %% `connection.blocked` message from the destination
+                    %% broker. Stop forwarding pending messages.
+                    S3;
+                false ->
+                    forward_pending(S3)
+            end
+    end.
+
 forward(IncomingTag, Props, Payload, State) ->
     State1 = control_throttle(State),
     case is_blocked(State1) of
@@ -276,19 +294,15 @@ handle_dest(#'connection.blocked'{}, State) ->
     update_blocked_by(connection_blocked, true, State);
 
 handle_dest(#'connection.unblocked'{}, State) ->
-    {Pending, State1} = reset_pending(update_blocked_by(connection_blocked, false, State)),
+    State1 = update_blocked_by(connection_blocked, false, State),
     %% we are unblocked so can begin to forward
-    lists:foldl(fun ({Tag, Props, Payload}, S) ->
-                        forward(Tag, Props, Payload, S)
-                end, State1, lists:reverse(Pending));
+    forward_pending(State1);
 
 handle_dest({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    {Pending, State1} = reset_pending(control_throttle(State)),
+    State1 = control_throttle(State),
     %% we have credit so can begin to forward
-    lists:foldl(fun ({Tag, Props, Payload}, S) ->
-                        forward(Tag, Props, Payload, S)
-                end, State1, lists:reverse(Pending));
+    forward_pending(State1);
 
 handle_dest(_Msg, _State) ->
     not_handled.
@@ -369,12 +383,17 @@ is_blocked(_) ->
     false.
 
 add_pending(Elem, State = #{dest := Dest}) ->
-    Pending = maps:get(pending, Dest, []),
-    State#{dest => Dest#{pending => [Elem|Pending]}}.
+    Pending = maps:get(pending, Dest, queue:new()),
+    State#{dest => Dest#{pending => queue:in(Elem, Pending)}}.
 
-reset_pending(State = #{dest := Dest}) ->
-    Pending = maps:get(pending, Dest, []),
-    {Pending, State#{dest => Dest#{pending => []}}}.
+pop_pending(State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, queue:new()),
+    case queue:out(Pending) of
+        {empty, _} ->
+            empty;
+        {{value, Elem}, Pending2} ->
+            {Elem, State#{dest => Dest#{pending => Pending2}}}
+    end.
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
