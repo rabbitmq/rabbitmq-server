@@ -351,23 +351,44 @@ dist_info({Node, Info}, TcpInetPorts) ->
 
 dist_info(Node, TcpInetPorts, DistPid, PeerAddrArg) ->
     case [P || P <- TcpInetPorts, inet:peername(P) =:= {ok, PeerAddrArg}] of
+        %% Note: sometimes the port closes before we get here and thus can't get stats
+        %% See rabbitmq/rabbitmq-server#5490
         [] ->
-            % Note: sometimes the port closes before we get here and thus can't get stats
-            % See rabbitmq/rabbitmq-server#5490
             {Node, DistPid, []};
         [DistPort] ->
-            S = case {socket_ends(DistPort, inbound), getstat(DistPort, [recv_oct, send_oct])} of
-                    {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
-                        PeerAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(PeerAddr)),
-                        SockAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(SockAddr)),
-                        [{peer_addr, PeerAddrBin},
-                         {peer_port, PeerPort},
-                         {sock_addr, SockAddrBin},
-                         {sock_port, SockPort},
-                         {recv_bytes, rabbit_misc:pget(recv_oct, Stats)},
-                         {send_bytes, rabbit_misc:pget(send_oct, Stats)}];
-                    _ ->
-                        []
-                end,
-            {Node, DistPid, S}
+            S = dist_port_stats(DistPort),
+            {Node, DistPid, S};
+        %% And sometimes there multiple ports, most likely right after a peer node
+        %% restart.
+        DistPorts when is_list(DistPorts) ->
+            ConnectedPorts = lists:filter(fun(Port) ->
+                                            case erlang:port_info(Port, connected) of
+                                                {connected, AssocPid} ->
+                                                    erlang:is_process_alive(AssocPid);
+                                                undefined ->
+                                                    false
+                                            end
+                                          end, DistPorts),
+            case ConnectedPorts of
+                [] ->
+                    {Node, DistPid, []};
+                CPs when is_list(CPs) ->
+                    S = dist_port_stats(hd(CPs)),
+                    {Node, DistPid, S}
+            end
+    end.
+
+dist_port_stats(DistPort) ->
+    case {socket_ends(DistPort, inbound), getstat(DistPort, [recv_oct, send_oct])} of
+        {{ok, {PeerAddr, PeerPort, SockAddr, SockPort}}, {ok, Stats}} ->
+            PeerAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(PeerAddr)),
+            SockAddrBin = rabbit_data_coercion:to_binary(maybe_ntoab(SockAddr)),
+            [{peer_addr, PeerAddrBin},
+                {peer_port, PeerPort},
+                {sock_addr, SockAddrBin},
+                {sock_port, SockPort},
+                {recv_bytes, rabbit_misc:pget(recv_oct, Stats)},
+                {send_bytes, rabbit_misc:pget(send_oct, Stats)}];
+        _ ->
+            []
     end.
