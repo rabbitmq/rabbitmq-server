@@ -201,14 +201,15 @@ jobs:
           bazelisk query //packaging/docker-image:otp_source --output=build
           bazelisk cquery //packaging/docker-image:otp_source --output=build
 
-      #! - name: Setup tmate session
-      #!   uses: mxschmitt/action-tmate@v3
-
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
+
+      - name: Setup tmate session
+        if: ${{ matrix.otp_major }} == 24
+        uses: mxschmitt/action-tmate@v3
 
       - name: Actions Debug
         run: |

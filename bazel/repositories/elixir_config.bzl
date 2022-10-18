@@ -186,8 +186,6 @@ def _default_elixir_dict(repository_ctx):
         }
 
 def _build_file_content(elixir_installations):
-    default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
-
     build_file_content = """\
 package(
     default_visibility = ["//visibility:public"],
@@ -198,33 +196,27 @@ constraint_setting(
     default_constraint_value = ":elixir_external",
 )
 
-constraint_setting(
-    name = "elixir_version",
-    default_constraint_value = ":elixir_{default_identifier}",
-)
-
 constraint_value(
     name = "elixir_external",
     constraint_setting = ":elixir_internal_external",
 )
 
-""".format(
-        default_identifier = default_installation.identifier,
-    )
-
-    external_installations = {
-        name: props
-        for (name, props) in elixir_installations.items()
-        if props.type == INSTALLATION_TYPE_EXTERNAL
-    }
-    if len(elixir_installations) > len(external_installations):
-        build_file_content += """\
 constraint_value(
     name = "elixir_internal",
     constraint_setting = ":elixir_internal_external",
 )
 
 """
+
+    default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
+
+    build_file_content += """\
+constraint_setting(
+    name = "elixir_version",
+    default_constraint_value = ":elixir_{}",
+)
+
+""".format(default_installation.identifier)
 
     unique_identifiers = {
         props.identifier: name
