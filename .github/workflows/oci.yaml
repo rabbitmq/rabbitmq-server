@@ -198,10 +198,6 @@ jobs:
           echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
 
-          # clean so that when we next run bazelisk, the host erlang version
-          # is re-detected
-          bazelisk clean --expunge
-
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
         with:
@@ -210,7 +206,9 @@ jobs:
 
       - name: Validate otp version embedded in OCI
         run: |
-          bazel cquery //packaging/docker-image:otp_source --output=build
+          bazel cquery //packaging/docker-image:otp_source \
+            --config=buildbuddy \
+            --output=build
 
       - name: Build
         run: |
