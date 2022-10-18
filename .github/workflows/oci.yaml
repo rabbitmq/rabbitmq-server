@@ -212,6 +212,7 @@ jobs:
 
       - name: Actions Debug
         run: |
+          cat bazel-rabbitmq-server/external/*.erlang_config/BUILD.bazel
           bazelisk query //packaging/docker-image:otp_source --output=build
           bazelisk cquery //packaging/docker-image:otp_source --output=build
 

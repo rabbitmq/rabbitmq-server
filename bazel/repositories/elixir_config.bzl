@@ -116,6 +116,7 @@ elixir_config = repository_rule(
     environ = [
         "ELIXIR_HOME",
     ],
+    local = True,
 )
 
 def _elixir_home_from_elixir_path(repository_ctx, elixir_path):
