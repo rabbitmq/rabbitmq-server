@@ -73,8 +73,12 @@ jobs:
         run: |
           bazelisk build :otp_version :elixir_version \
             --config=rbe-${{ matrix.otp_version_id }}
-          echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
-          echo "::set-output name=elixir::$(cat bazel-bin/elixir_version.txt)"
+          echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
+          echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
+
+          # clean so that when we next run bazelisk, the host erlang version
+          # is re-detected
+          bazelisk clean --expunge
 
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
@@ -82,25 +86,23 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
+      - name: Validate otp version embedded in OCI
+        run: |
+          bazel cquery //packaging/docker-image:otp_source --output=build
+
       - name: Build
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk build //packaging/docker-image:rabbitmq \
             --config=buildbuddy
 
       - name: Test
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           OCI_TESTS=$(bazel query 'tests(//packaging/docker-image/...)')
           bazelisk test ${OCI_TESTS} \
             --config=buildbuddy
 
       - name: Load
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk run //packaging/docker-image:rabbitmq \
             --config=buildbuddy
 
@@ -108,9 +110,9 @@ jobs:
         id: authorized
         run: |
           if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "::set-output name=PUSH::true"
+            echo "PUSH=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=PUSH::false"
+            echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to DockerHub
