@@ -743,27 +743,6 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(State);
 
-handle_cast({reject_publish, _MsgSeqNo, QPid} = Evt, State) ->
-    %% For backwards compatibility
-    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
-    case QRef of
-        undefined ->
-            %% ignore if no queue could be found for the given pid
-            noreply(State);
-        _ ->
-            handle_cast({queue_event, QRef, Evt}, State)
-    end;
-
-handle_cast({confirm, _MsgSeqNo, QPid} = Evt, State) ->
-    %% For backwards compatibility
-    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
-    case QRef of
-        undefined ->
-            %% ignore if no queue could be found for the given pid
-            noreply(State);
-        _ ->
-            handle_cast({queue_event, QRef, Evt}, State)
-    end;
 handle_cast({queue_event, QRef, Evt},
             #ch{queue_states = QueueStates0} = State0) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
@@ -786,11 +765,6 @@ handle_cast({queue_event, QRef, Evt},
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
 
-handle_info({ra_event, {Name, _} = From, Evt}, State) ->
-    %% For backwards compatibility
-    QRef = find_queue_name_from_quorum_name(Name, State#ch.queue_states),
-    handle_cast({queue_event, QRef, {From, Evt}}, State);
-
 handle_info({bump_credit, Msg}, State) ->
     %% A rabbit_amqqueue_process is granting credit to our channel. If
     %% our channel was being blocked by this process, and no other
@@ -811,11 +785,11 @@ handle_info(emit_stats, State) ->
     %% stats timer.
     {noreply, send_confirms_and_nacks(State1), hibernate};
 
-handle_info({'DOWN', _MRef, process, QPid, Reason},
+handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #ch{queue_states = QStates0,
                 queue_monitors = _QMons} = State0) ->
     credit_flow:peer_down(QPid),
-    case rabbit_queue_type:handle_down(QPid, Reason, QStates0) of
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QState1, Actions} ->
             State1 = State0#ch{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
@@ -1813,7 +1787,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                       Username, QueueStates0),
                     Q}
            end) of
-        {{ok, QueueStates, Actions}, Q} when ?is_amqqueue(Q) ->
+        {{ok, QueueStates}, Q} when ?is_amqqueue(Q) ->
             rabbit_global_counters:consumer_created(amqp091),
             CM1 = maps:put(
                     ActualConsumerTag,
@@ -1822,10 +1796,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
 
             State1 = State#ch{consumer_mapping = CM1,
                               queue_states = QueueStates},
-            State2 = handle_queue_actions(Actions, State1),
             {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State2);
-                     false -> State2
+                     true  -> consumer_monitor(ActualConsumerTag, State1);
+                     false -> State1
                  end};
         {{error, exclusive_consume_unavailable} = E, _Q} ->
             E;
@@ -2890,20 +2863,6 @@ handle_queue_actions(Actions, #ch{} = State0) ->
               handle_consuming_queue_down_or_eol(QRef, S0)
 
       end, State0, Actions).
-
-find_queue_name_from_quorum_name(Name, QStates) ->
-    Fun = fun(K, _V, undefined) ->
-                  {ok, Q} = rabbit_amqqueue:lookup(K),
-                  case amqqueue:get_pid(Q) of
-                      {Name, _} ->
-                          amqqueue:get_name(Q);
-                      _ ->
-                          undefined
-                  end;
-             (_, _, Acc) ->
-                  Acc
-          end,
-    rabbit_queue_type:fold_state(Fun, undefined, QStates).
 
 maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->
     State0;

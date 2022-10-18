@@ -1763,7 +1763,7 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates) ->
                     non_neg_integer(), rabbit_types:ctag(), boolean(),
                     rabbit_framing:amqp_table(), any(), rabbit_types:username(),
                     rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()} |
+    {ok, rabbit_queue_type:state()} |
     {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 basic_consume(Q, NoAck, ChPid, LimiterPid,

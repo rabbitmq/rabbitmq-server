@@ -27,7 +27,7 @@
          handle_ra_event/3,
          untracked_enqueue/2,
          purge/1,
-         cluster_name/1,
+         queue_name/1,
          update_machine_state/2,
          pending_size/1,
          stat/1,
@@ -47,13 +47,13 @@
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
 -type actions() :: [action()].
 
--type cluster_name() :: rabbit_types:r(queue).
+-type queue_name() :: rabbit_types:r(queue).
 
 -record(consumer, {last_msg_id :: seq() | -1,
                    ack = false :: boolean(),
                    delivery_count = 0 :: non_neg_integer()}).
 
--record(cfg, {cluster_name :: cluster_name(),
+-record(cfg, {queue_name :: queue_name(),
               servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
               block_handler = fun() -> ok end :: fun(() -> term()),
@@ -87,33 +87,33 @@
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param ClusterName the id of the cluster to interact with
+%% @param QueueName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(cluster_name(), [ra:server_id()]) -> state().
-init(ClusterName, Servers) ->
-    init(ClusterName, Servers, ?SOFT_LIMIT).
+-spec init(queue_name(), [ra:server_id()]) -> state().
+init(QueueName, Servers) ->
+    init(QueueName, Servers, ?SOFT_LIMIT).
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param ClusterName the id of the cluster to interact with
+%% @param QueueName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(cluster_name(), [ra:server_id()], non_neg_integer()) -> state().
-init(ClusterName = #resource{}, Servers, SoftLimit) ->
+-spec init(queue_name(), [ra:server_id()], non_neg_integer()) -> state().
+init(QueueName = #resource{}, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
-    #state{cfg = #cfg{cluster_name = ClusterName,
+    #state{cfg = #cfg{queue_name = QueueName,
                       servers = Servers,
                       soft_limit = SoftLimit,
                       timeout = Timeout * 1000}}.
 
--spec init(cluster_name(), [ra:server_id()], non_neg_integer(), fun(() -> ok),
+-spec init(queue_name(), [ra:server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
-init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
+init(QueueName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
     %% net ticktime is in seconds
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
-    #state{cfg = #cfg{cluster_name = ClusterName,
+    #state{cfg = #cfg{queue_name = QueueName,
                       servers = Servers,
                       block_handler = BlockFun,
                       unblock_handler = UnblockFun,
@@ -237,7 +237,7 @@ enqueue(Msg, State) ->
      | {empty, state()} | {error | timeout, term()}.
 dequeue(ConsumerTag, Settlement,
         #state{cfg = #cfg{timeout = Timeout,
-                          cluster_name = QName}} = State0) ->
+                          queue_name = QName}} = State0) ->
     Node = pick_server(State0),
     ConsumerId = consumer_id(ConsumerTag),
     case ra:process_command(Node,
@@ -502,9 +502,9 @@ stat(Leader, Timeout) ->
     end.
 
 %% @doc returns the cluster name
--spec cluster_name(state()) -> cluster_name().
-cluster_name(#state{cfg = #cfg{cluster_name = ClusterName}}) ->
-    ClusterName.
+-spec queue_name(state()) -> queue_name().
+queue_name(#state{cfg = #cfg{queue_name = QueueName}}) ->
+    QueueName.
 
 update_machine_state(Server, Conf) ->
     case ra:process_command(Server, rabbit_fifo:make_update_config(Conf), ?COMMAND_TIMEOUT) of
@@ -561,7 +561,7 @@ update_machine_state(Server, Conf) ->
     {internal, Correlators :: [term()], actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
-                #state{cfg = #cfg{cluster_name = QRef,
+                #state{cfg = #cfg{queue_name = QRef,
                                   soft_limit = SftLmt,
                                   unblock_handler = UnblockFun}} = State0) ->
 
@@ -738,7 +738,7 @@ maybe_auto_ack(false, {deliver, Tag, _Ack, Msgs} = Deliver, State0) ->
     {ok, State, [Deliver] ++ Actions}.
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
-                #state{cfg = #cfg{cluster_name = QName},
+                #state{cfg = #cfg{queue_name = QName},
                        consumer_deliveries = CDels0} = State0)
   when is_map_key(Tag, CDels0) ->
     QRef = qref(Leader),
@@ -905,7 +905,7 @@ add_command(Cid, discard, MsgIds, Acc) ->
 
 set_timer(#state{leader = Leader0,
                  cfg = #cfg{servers = [Server | _],
-                            cluster_name = QName}} = State) ->
+                            queue_name = QName}} = State) ->
     Leader = case Leader0 of
                  undefined -> Server;
                  _ ->

@@ -177,10 +177,10 @@ handle_info({'DOWN', Ref, process, _, _},
     rabbit_log:debug("~ts terminating itself because leader of ~ts is down...",
                      [?MODULE, rabbit_misc:rs(QRef)]),
     supervisor:terminate_child(rabbit_fifo_dlx_sup, self());
-handle_info({'DOWN', _MRef, process, QPid, Reason},
+handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #state{queue_type_state = QTypeState0} = State0) ->
     %% received from target classic queue
-    case rabbit_queue_type:handle_down(QPid, Reason, QTypeState0) of
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QTypeState0) of
         {ok, QTypeState, Actions} ->
             State = State0#state{queue_type_state = QTypeState},
             {noreply, handle_queue_actions(Actions, State)};

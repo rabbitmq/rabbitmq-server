@@ -11,8 +11,7 @@
 -export([info/2, initial_state/2, initial_state/4,
          process_frame/2, serialise/2, send_will/1,
          terminate/1, handle_pre_hibernate/0,
-         handle_ra_event/2, handle_down/2, handle_queue_event/2,
-         handle_deprecated_delivery/2]).
+         handle_ra_event/2, handle_down/2, handle_queue_event/2]).
 
 %%TODO Use single queue per MQTT subscriber connection?
 %% * when publishing we store in x-mqtt-publish-qos header the publishing QoS
@@ -958,7 +957,7 @@ consume(Q, QoS, #proc_state{
                      ok_msg => undefined,
                      acting_user => Username},
             case rabbit_queue_type:consume(Q, Spec, QStates0) of
-                {ok, QStates, _Actions = []} ->
+                {ok, QStates} ->
                     % rabbit_global_counters:consumer_created(mqtt),
                     PState = PState0#proc_state{queue_states = QStates},
                     {ok, PState};
@@ -1088,6 +1087,8 @@ publish_to_queues(
 deliver_to_queues(Delivery,
                   RoutedToQNames,
                   PState0 = #proc_state{queue_states = QStates0}) ->
+    %% TODO only lookup fields that are needed using ets:select / match?
+    %% TODO Use ETS continuations to be more space efficient
     Qs0 = rabbit_amqqueue:lookup(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
@@ -1210,10 +1211,9 @@ handle_ra_event(Evt, PState) ->
     rabbit_log:debug("unhandled ra_event: ~w ", [Evt]),
     PState.
 
-handle_down({'DOWN', _MRef, process, QPid, Reason},
+handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             PState0 = #proc_state{queue_states = QStates0}) ->
-    %% spike handles only QoS0
-    case rabbit_queue_type:handle_down(QPid, Reason, QStates0) of
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates1, Actions} ->
             PState = PState0#proc_state{queue_states = QStates1},
             handle_queue_actions(Actions, PState);
@@ -1221,11 +1221,6 @@ handle_down({'DOWN', _MRef, process, QPid, Reason},
             QStates = rabbit_queue_type:remove(QRef, QStates1),
             PState0#proc_state{queue_states = QStates}
     end.
-
-%% Handle deprecated delivery from classic queue. This function is to be
-%% removed when feature flag classic_queue_type_delivery_support becomes required.
-handle_deprecated_delivery({deliver, ?CONSUMER_TAG, AckRequired, Msg}, PState) ->
-    {ok, deliver_one_to_client(Msg, AckRequired, PState)}.
 
 handle_queue_event({queue_event, QName, Evt},
                    PState0 = #proc_state{queue_states = QStates0,

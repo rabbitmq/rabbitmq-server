@@ -58,7 +58,7 @@
     %% data pending delivery (between socket
     %% flushes)
     pending,
-    %% defines how ofter gc will be executed
+    %% defines how often gc will be executed
     writer_gc_threshold
 }).
 

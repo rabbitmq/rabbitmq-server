@@ -816,7 +816,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                     emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                           AckRequired, QName, Prefetch,
                                           Args, none, ActingUser),
-                    {ok, QState, []};
+                    {ok, QState};
                 {error, Error} ->
                     Error;
                 {timeout, _} ->
@@ -831,7 +831,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   AckRequired, QName, Prefetch,
                                   Args, none, ActingUser),
-            {ok, QState, []}
+            {ok, QState}
     end.
 
 cancel(_Q, ConsumerTag, OkMsg, _ActingUser, State) ->
@@ -893,7 +893,7 @@ deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
               case deliver(Confirm, Delivery, S0) of
                   {reject_publish, S} ->
                       Seq = Delivery#delivery.msg_seq_no,
-                      QName = rabbit_fifo_client:cluster_name(S),
+                      QName = rabbit_fifo_client:queue_name(S),
                       {[{Q, S} | Qs], [{rejected, QName, [Seq]} | Actions]};
                   {_, S} ->
                       {[{Q, S} | Qs], Actions}
@@ -1325,18 +1325,8 @@ dlh(undefined, _, Strategy, _, QName) ->
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
-dlh(Exchange, RoutingKey, <<"at-least-once">>, reject_publish, QName) ->
-    %% Feature flag stream_queue includes the rabbit_queue_type refactor
-    %% which is required by rabbit_fifo_dlx_worker.
-    case rabbit_queue_type:is_supported() of
-        true ->
-            at_least_once;
-        false ->
-            rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
-                               "because feature flag stream_queue is disabled.",
-                               [rabbit_misc:rs(QName)]),
-            dlh_at_most_once(Exchange, RoutingKey, QName)
-    end;
+dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
+    at_least_once;
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
     rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
@@ -1593,7 +1583,7 @@ maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 queue_name(RaFifoState) ->
-    rabbit_fifo_client:cluster_name(RaFifoState).
+    rabbit_fifo_client:queue_name(RaFifoState).
 
 get_default_quorum_initial_group_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of

@@ -15,7 +15,6 @@
          discover/1,
          feature_flag_name/1,
          default/0,
-         is_supported/0,
          is_enabled/1,
          is_compatible/4,
          declare/2,
@@ -34,7 +33,7 @@
          new/2,
          consume/3,
          cancel/5,
-         handle_down/3,
+         handle_down/4,
          handle_event/3,
          module/2,
          deliver/3,
@@ -42,7 +41,6 @@
          credit/5,
          dequeue/5,
          fold_state/3,
-         find_name_from_pid/2,
          is_policy_applicable/2,
          is_server_named_allowed/1,
          arguments/1,
@@ -51,7 +49,6 @@
          ]).
 
 -type queue_name() :: rabbit_types:r(queue).
--type queue_ref() :: queue_name() | atom().
 -type queue_state() :: term().
 -type msg_tag() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
@@ -66,13 +63,8 @@
 %% TODO resolve all registered queue types from registry
 -define(QUEUE_TYPES, [rabbit_classic_queue, rabbit_quorum_queue, rabbit_stream_queue]).
 
--define(QREF(QueueReference),
-    (is_tuple(QueueReference) andalso element(1, QueueReference) == resource)
-    orelse is_atom(QueueReference)).
-%% anything that the host process needs to do on behalf of the queue type
-%% session, like knowing when to notify on monitor down
+%% anything that the host process needs to do on behalf of the queue type session
 -type action() ::
-    {monitor, Pid :: pid(), queue_ref()} |
     %% indicate to the queue type module that a message has been delivered
     %% fully to the queue
     {settled, Success :: boolean(), [msg_tag()]} |
@@ -85,7 +77,6 @@
     term().
 
 -record(ctx, {module :: module(),
-              name :: queue_name(),
               %% "publisher confirm queue accounting"
               %% queue type implementation should emit a:
               %% {settle, Success :: boolean(), msg_tag()}
@@ -97,8 +88,7 @@
               state :: queue_state()}).
 
 
--record(?STATE, {ctxs = #{} :: #{queue_ref() => #ctx{}},
-                 monitor_registry = #{} :: #{pid() => queue_ref()}
+-record(?STATE, {ctxs = #{} :: #{queue_name() => #ctx{}}
                 }).
 
 -opaque state() :: #?STATE{}.
@@ -245,12 +235,6 @@ feature_flag_name(_) ->
 default() ->
     rabbit_classic_queue.
 
-%% is the queue type API supported in the cluster
-is_supported() ->
-    %% the stream_queue feature enables
-    %% the queue_type internal message API
-    rabbit_feature_flags:is_enabled(stream_queue).
-
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
 is_enabled(Type) ->
@@ -297,7 +281,7 @@ stat(Q) ->
     Mod = amqqueue:get_type(Q),
     Mod:stat(Q).
 
--spec remove(queue_ref(), state()) -> state().
+-spec remove(queue_name(), state()) -> state().
 remove(QRef, #?STATE{ctxs = Ctxs0} = State) ->
     case maps:take(QRef, Ctxs0) of
         error ->
@@ -318,11 +302,6 @@ info(Q, Items) ->
 
 fold_state(Fun, Acc, #?STATE{ctxs = Ctxs}) ->
     maps:fold(Fun, Acc, Ctxs).
-
-%% slight hack to help provide backwards compatibility in the channel
-%% better than scanning the entire queue state
-find_name_from_pid(Pid, #?STATE{monitor_registry = Mons}) ->
-    maps:get(Pid, Mons, undefined).
 
 state_info(#ctx{state = S,
                 module = Mod}) ->
@@ -399,13 +378,13 @@ new(Q, State) when ?is_amqqueue(Q) ->
     set_ctx(Q, Ctx, State).
 
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
-    {ok, state(), actions()} | {error, term()}.
+    {ok, state()} | {error, term()}.
 consume(Q, Spec, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
     case Mod:consume(Q, Spec, CtxState0) of
-        {ok, CtxState, Actions} ->
-            return_ok(set_ctx(Q, Ctx#ctx{state = CtxState}, State), Actions);
+        {ok, CtxState} ->
+            {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
         Err ->
             Err
     end.
@@ -453,26 +432,20 @@ recover(VHost, Qs) ->
                      {R0 ++ R, F0 ++ F}
              end, {[], []}, ByType).
 
--spec handle_down(pid(), term(), state()) ->
-    {ok, state(), actions()} | {eol, state(), queue_ref()} | {error, term()}.
-handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
-    %% lookup queue ref in monitor registry
-    case maps:take(Pid, Reg0) of
-        {QRef, Reg} ->
-            case handle_event(QRef, {down, Pid, Info}, State0) of
-                {ok, State, Actions} ->
-                    {ok, State#?STATE{monitor_registry = Reg}, Actions};
-                eol ->
-                    {eol, State0#?STATE{monitor_registry = Reg}, QRef};
-                Err ->
-                    Err
-            end;
-        error ->
-            {ok, State0, []}
+-spec handle_down(pid(), queue_name(), term(), state()) ->
+    {ok, state(), actions()} | {eol, state(), queue_name()} | {error, term()}.
+handle_down(Pid, QName, Info, State0) ->
+    case handle_event(QName, {down, Pid, QName, Info}, State0) of
+        {ok, State, Actions} ->
+            {ok, State, Actions};
+        eol ->
+            {eol, State0, QName};
+        Err ->
+            Err
     end.
 
 %% messages sent from queues
--spec handle_event(queue_ref(), term(), state()) ->
+-spec handle_event(queue_name(), term(), state()) ->
     {ok, state(), actions()} | eol | {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event(QRef, Evt, Ctxs) ->
@@ -483,7 +456,7 @@ handle_event(QRef, Evt, Ctxs) ->
              state = State0} = Ctx  ->
             case Mod:handle_event(Evt, State0) of
                 {ok, State, Actions} ->
-                    return_ok(set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions);
+                    {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
                 Err ->
                     Err
             end;
@@ -491,7 +464,7 @@ handle_event(QRef, Evt, Ctxs) ->
             {ok, Ctxs, []}
     end.
 
--spec module(queue_ref(), state()) ->
+-spec module(queue_name(), state()) ->
     {ok, module()} | {error, not_found}.
 module(QRef, State) ->
     %% events can arrive after a queue state has been cleared up
@@ -515,7 +488,7 @@ deliver(Qs, Delivery, State) ->
     end.
 
 deliver0(Qs, Delivery, stateless) ->
-    _ = lists:map(fun(Q) ->
+    lists:foreach(fun(Q) ->
                           Mod = amqqueue:get_type(Q),
                           _ = Mod:deliver([{Q, stateless}], Delivery)
                   end, Qs),
@@ -542,15 +515,13 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
                       Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
-    return_ok(State, Actions).
+    {ok, State, Actions}.
 
-
--spec settle(queue_ref(), settle_op(), rabbit_types:ctag(),
+-spec settle(queue_name(), settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->
           {ok, state(), actions()} |
           {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
-settle(QRef, Op, CTag, MsgIds, Ctxs)
-  when ?QREF(QRef) ->
+settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
     case get_ctx(QRef, Ctxs, undefined) of
         undefined ->
             %% if we receive a settlement and there is no queue state it means
@@ -566,7 +537,7 @@ settle(QRef, Op, CTag, MsgIds, Ctxs)
             end
     end.
 
--spec credit(amqqueue:amqqueue() | queue_ref(),
+-spec credit(amqqueue:amqqueue() | queue_name(),
              rabbit_types:ctag(), non_neg_integer(),
              boolean(), state()) -> {ok, state(), actions()}.
 credit(Q, CTag, Credit, Drain, Ctxs) ->
@@ -609,24 +580,20 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
         _ when InitState == undefined ->
             %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
-            Name = amqqueue:get_name(Q),
             case Mod:init(Q) of
                 {error, Reason} ->
                     exit({Reason, Ref});
                 {ok, QState} ->
                     #ctx{module = Mod,
-                         name = Name,
                          state = QState}
             end;
         _  ->
             %% not found - initialize with supplied initial state
             Mod = amqqueue:get_type(Q),
-            Name = amqqueue:get_name(Q),
             #ctx{module = Mod,
-                 name = Name,
                  state = InitState}
     end;
-get_ctx_with(QRef, Contexts, undefined) when ?QREF(QRef) ->
+get_ctx_with(#resource{kind = queue} = QRef, Contexts, undefined) ->
     case get_ctx(QRef, Contexts, undefined) of
         undefined ->
             exit({queue_context_not_found, QRef});
@@ -639,10 +606,6 @@ get_ctx(QRef, #?STATE{ctxs = Contexts}, Default) ->
     %% if we use a QRef it should always be initialised
     maps:get(Ref, Contexts, Default).
 
-set_ctx(Q, Ctx, #?STATE{ctxs = Contexts} = State)
-  when ?is_amqqueue(Q) ->
-    Ref = qref(Q),
-    State#?STATE{ctxs = maps:put(Ref, Ctx, Contexts)};
 set_ctx(QRef, Ctx, #?STATE{ctxs = Contexts} = State) ->
     Ref = qref(QRef),
     State#?STATE{ctxs = maps:put(Ref, Ctx, Contexts)}.
@@ -651,27 +614,3 @@ qref(#resource{kind = queue} = QName) ->
     QName;
 qref(Q) when ?is_amqqueue(Q) ->
     amqqueue:get_name(Q).
-
-return_ok(State0, []) ->
-    {ok, State0, []};
-return_ok(State0, Actions0) ->
-    {State, Actions} =
-        lists:foldl(
-          fun({monitor, Pid, QRef},
-              {#?STATE{monitor_registry = M0} = S0, A0}) ->
-                  case M0 of
-                      #{Pid := QRef} ->
-                          %% already monitored by the qref
-                          {S0, A0};
-                      #{Pid := _} ->
-                          %% TODO: allow multiple Qrefs to monitor the same pid
-                          exit(return_ok_duplicate_monitored_pid);
-                      _ ->
-                          _ = erlang:monitor(process, Pid),
-                          M = M0#{Pid => QRef},
-                          {S0#?STATE{monitor_registry = M}, A0}
-                  end;
-             (Act, {S, A0}) ->
-                  {S, [Act | A0]}
-          end, {State0, []}, Actions0),
-    {ok, State, lists:reverse(Actions)}.

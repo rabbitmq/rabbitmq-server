@@ -321,9 +321,8 @@ begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
                            listening_offset = NextOffset,
                            log = Seg0,
                            max = Max},
-            Actions = [],
             {ok, State#stream_client{local_pid = LocalPid,
-                                     readers = Readers0#{Tag => Str0}}, Actions}
+                                     readers = Readers0#{Tag => Str0}}}
     end.
 
 cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,

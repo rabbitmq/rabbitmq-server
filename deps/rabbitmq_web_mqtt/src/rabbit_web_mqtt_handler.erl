@@ -36,9 +36,6 @@
           keepalive :: rabbit_mqtt_keepalive:state()
          }).
 
-%%TODO move from deprecated callback results to new callback results
-%% see cowboy_websocket.erl
-
 %%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
 %% when need to force load the 'connection_created' event for the management plugin, see
 %% https://github.com/rabbitmq/rabbitmq-management-agent/issues/58
@@ -170,10 +167,6 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                                         [State#state.conn_name, Reason]),
             stop(State#state{proc_state = PState})
     end;
-websocket_info({'$gen_cast', Delivery = {deliver, _, _, _}},
-               State = #state{proc_state = PState0}) ->
-    {ok, PState} = rabbit_mqtt_processor:handle_deprecated_delivery(Delivery, PState0),
-    {[], State#state{proc_state = PState}, hibernate};
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                             conn_name = ConnName }) ->
     rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
