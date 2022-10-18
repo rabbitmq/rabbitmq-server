@@ -198,32 +198,11 @@ jobs:
           echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
 
-          bazelisk query //packaging/docker-image:otp_source --output=build
-          bazelisk cquery //packaging/docker-image:otp_source --output=build
-
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
-
-      - name: Setup tmate session
-        if: ${{ matrix.otp_major }} == 24
-        uses: mxschmitt/action-tmate@v3
-
-      - name: Actions Debug
-        run: |
-          cat bazel-rabbitmq-server/external/*.erlang_config/BUILD.bazel
-          bazelisk query //packaging/docker-image:otp_source --output=build
-          bazelisk cquery //packaging/docker-image:otp_source --output=build
-
-      - name: Select otp src for OCI
-        run: |
-          sudo npm install --global --silent @bazel/buildozer
-
-          buildozer 'set tars ["@otp_src_${{ matrix.otp_major }}//file"]' //packaging/docker-image:otp_source
-
-          git diff
 
       - name: Build
         run: |
