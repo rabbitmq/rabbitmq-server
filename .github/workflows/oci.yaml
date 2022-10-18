@@ -206,11 +206,6 @@ jobs:
 
       - name: Build
         run: |
-          which elixir
-          which iex
-
-          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
-
           bazelisk build //packaging/docker-image:rabbitmq \
             --config=buildbuddy
 

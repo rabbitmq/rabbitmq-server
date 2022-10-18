@@ -105,6 +105,7 @@ elixir_config = repository_rule(
     },
     environ = [
         ELIXIR_HOME_ENV_VAR,
+        "PATH",
     ],
     local = True,
 )
@@ -130,28 +131,20 @@ def _default_elixir_dict(repository_ctx):
     if _is_windows(repository_ctx):
         if ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
             elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
-            repository_ctx.report_progress("Using elixir from ELIXIR_HOME ({})".format(elixir_home))
             elixir_path = elixir_home + "\\bin\\elixir"
         else:
             elixir_path = repository_ctx.which("elixir")
-            if elixir_path != None:
-                repository_ctx.report_progress("Using elixir from PATH ({})".format(elixir_path))
-            else:
+            if elixir_path == None:
                 elixir_path = repository_ctx.path("C:/Program Files (x86)/Elixir/bin/elixir")
-                repository_ctx.report_progress("Using elixir from default location ({})".format(elixir_path))
             elixir_home = _elixir_home_from_elixir_path(repository_ctx, elixir_path)
         elixir_home = msys2_path(elixir_home)
     elif ELIXIR_HOME_ENV_VAR in repository_ctx.os.environ:
         elixir_home = repository_ctx.os.environ[ELIXIR_HOME_ENV_VAR]
-        repository_ctx.report_progress("Using elixir from ELIXIR_HOME ({})".format(elixir_home))
         elixir_path = path_join(elixir_home, "bin", "elixir")
     else:
         elixir_path = repository_ctx.which("elixir")
-        if elixir_path != None:
-            repository_ctx.report_progress("Using elixir from PATH ({})".format(elixir_path))
-        else:
+        if elixir_path == None:
             elixir_path = repository_ctx.path("/usr/local/bin/elixir")
-            repository_ctx.report_progress("Using elixir from default location ({})".format(elixir_path))
         elixir_home = _elixir_home_from_elixir_path(repository_ctx, elixir_path)
 
     version = repository_ctx.execute(
