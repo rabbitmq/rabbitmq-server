@@ -198,9 +198,8 @@ jobs:
           echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
 
-          # clean so that when we next run bazelisk, the host erlang version
-          # is re-detected
-          bazelisk clean --expunge
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
@@ -208,11 +207,13 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
-      - name: Validate otp version embedded in OCI
+      - name: Select otp src for OCI
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
-          bazel cquery //packaging/docker-image:otp_source --output=build
+          sudo npm install --global --silent @bazel/buildozer
+
+          buildozer 'set tars ["@otp_src_${{ matrix.otp_major }}//file"]' //packaging/docker-image:otp_souce
+
+          git diff
 
       - name: Build
         run: |
