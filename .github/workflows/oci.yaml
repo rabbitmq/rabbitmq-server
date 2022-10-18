@@ -210,6 +210,8 @@ jobs:
 
       - name: Validate otp version embedded in OCI
         run: |
+          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazel cquery //packaging/docker-image:otp_source --output=build
 
       - name: Build
