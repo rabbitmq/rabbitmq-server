@@ -41,22 +41,13 @@ def _impl(repository_ctx):
         )
 
     for (name, props) in elixir_installations.items():
-        target_compatible_with = [
-            "//:elixir_{}".format(props.identifier),
-        ]
-
-        target_compatible_with = "".join([
-            "\n        \"%s\"," % c
-            for c in target_compatible_with
-        ])
-
         if props.type == INSTALLATION_TYPE_EXTERNAL:
             repository_ctx.template(
                 "{}/BUILD.bazel".format(name),
                 Label("//bazel/repositories:BUILD_external.tpl"),
                 {
                     "%{ELIXIR_HOME}": props.elixir_home,
-                    "%{TARGET_COMPATIBLE_WITH}": target_compatible_with,
+                    "%{ELIXIR_VERSION_ID}": props.identifier,
                     "%{RABBITMQ_SERVER_WORKSPACE}": rabbitmq_server_workspace,
                 },
                 False,
@@ -66,11 +57,10 @@ def _impl(repository_ctx):
                 "{}/BUILD.bazel".format(name),
                 Label("//bazel/repositories:BUILD_internal.tpl"),
                 {
-                    "%{ELIXIR_VERSION}": props.version,
                     "%{URL}": props.url,
                     "%{STRIP_PREFIX}": props.strip_prefix or "",
                     "%{SHA_256}": props.sha256 or "",
-                    "%{TARGET_COMPATIBLE_WITH}": target_compatible_with,
+                    "%{ELIXIR_VERSION_ID}": props.identifier,
                     "%{RABBITMQ_SERVER_WORKSPACE}": rabbitmq_server_workspace,
                 },
                 False,
