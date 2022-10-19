@@ -97,6 +97,22 @@ jobs:
             +    "+nowarn_export_all",
                  "-DINSTR_MOD=gm",
              ]
+        - erlang_major: "25"
+          tag: v3.11.2
+          patch: |
+            diff --git a/rabbitmq.bzl b/rabbitmq.bzl
+            index d9e815c72b..f5c10a2ce5 100644
+            --- a/rabbitmq.bzl
+            +++ b/rabbitmq.bzl
+            @@ -28,6 +28,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
+             MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
+ 
+             RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
+            +    "-DTEST=1",
+            +    "+nowarn_export_all",
+                 "-DINSTR_MOD=gm",
+             ]
+
     timeout-minutes: 20
     steps:
     - name: Checkout Repository (Secondary Umbrella tag)

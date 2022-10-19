@@ -274,12 +274,12 @@ def rabbitmq_integration_suite(
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
-            "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/.secondary_umbrella.rabbitmq-server-generic-unix-3.10/rabbitmq-run",
+            "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/.secondary_umbrella.rabbitmq-server-generic-unix-3.11/rabbitmq-run",
             "LANG": "C.UTF-8",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
-            "@rabbitmq-server-generic-unix-3.10//:rabbitmq-run",
+            "@rabbitmq-server-generic-unix-3.11//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
             "//bazel/elixir:erlang_app",
