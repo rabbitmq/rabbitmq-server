@@ -1,4 +1,4 @@
-name: Generate Mixed Version Testing Artifacts
+name: Generate Mixed Version Testing Artifacts (v3.8.x only)
 on:
   workflow_dispatch:
 jobs:
@@ -11,10 +11,6 @@ jobs:
         include:
         - erlang_major: "24"
           tag: v3.8.27
-        - erlang_major: "24"
-          tag: v3.9.13
-        - erlang_major: "24"
-          tag: v3.10.6
     timeout-minutes: 20
     steps:
     - name: Checkout Repository (Latest to get updated patches)
