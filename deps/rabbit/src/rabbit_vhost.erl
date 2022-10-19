@@ -143,7 +143,7 @@ parse_tags(Val) when is_list(Val) ->
 -spec default_limits(vhost:name()) -> proplists:proplist().
 default_limits(Name) ->
     AllLimits = application:get_env(rabbit, default_limits, []),
-    VHostLimits = proplists:get_value(vhost, AllLimits, []),
+    VHostLimits = proplists:get_value(vhosts, AllLimits, []),
     Match = lists:search(fun({RE, _}) ->
                                  re:run(Name, RE, [{capture, none}]) =:= match
                          end, VHostLimits),

@@ -632,7 +632,7 @@ end}.
 %% {default_user,        <<"guest">>},
 %% {default_pass,        <<"guest">>},
 %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-%% {default_limits,      [{vhost, []}]
+%% {default_limits,      [{vhosts, []}]
 
 {mapping, "default_vhost", "rabbit.default_vhost", [
     {datatype, string}
@@ -682,30 +682,30 @@ fun(Conf) ->
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
 end}.
 
-{mapping, "default_limits.vhost.$id.pattern", "rabbit.default_limits.vhost", [
+{mapping, "default_limits.vhosts.$id.pattern", "rabbit.default_limits.vhosts", [
     {include_default, 1},
     {comment, ".*"},
     {validators, ["valid_regex"]},
     {datatype, string}
 ]}.
 
-{mapping, "default_limits.vhost.$id.max_connections", "rabbit.default_limits.vhost", [
+{mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
     {include_default, 1},
     {comment, 1000},
     {validators, [ "non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
 
-{mapping, "default_limits.vhost.$id.max_queues", "rabbit.default_limits.vhost", [
+{mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
     {include_default, 1},
     {comment, 100},
     {validators, [ "non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
 
-{translation, "rabbit.default_limits.vhost",
+{translation, "rabbit.default_limits.vhosts",
 fun(Conf) ->
-    Prefix = ["default_limits", "vhost"],
+    Prefix = ["default_limits", "vhosts"],
     GetAll = fun(Spec) ->
                      FullSpec = Prefix ++ Spec,
                      lists:filtermap(
@@ -727,7 +727,7 @@ fun(Conf) ->
                   ),
     [ cuttlefish:invalid(
         io_lib:format(
-           "default_limits.vhost.~ts.pattern required",
+           "default_limits.vhosts.~ts.pattern required",
            [ID]))
      || ID <- SettingIDs, Get([ID, "pattern"]) =:= undefined ],
 
