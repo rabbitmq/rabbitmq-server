@@ -1,4 +1,4 @@
-name: Generate Mixed Version Testing Artifacts
+name: Generate Mixed Version Testing Artifacts (v3.8.x only)
 on:
   workflow_dispatch:
   push:
@@ -47,72 +47,6 @@ jobs:
                  "+{parse_transform,lager_transform}",
                  "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
              ]
-        - erlang_major: "24"
-          tag: v3.9.13
-          patch: |
-            diff --git a/rabbitmq.bzl b/rabbitmq.bzl
-            index 852a156d33..e85da53960 100644
-            --- a/rabbitmq.bzl
-            +++ b/rabbitmq.bzl
-            @@ -9,7 +9,10 @@ load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
-             load("//:rabbitmq_home.bzl", "rabbitmq_home")
-             load("//:rabbitmq_run.bzl", "rabbitmq_run")
-
-            -RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS
-            +RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
-            +    "-DTEST=1",
-            +    "+nowarn_export_all",
-            +]
-
-             RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-                 "+nowarn_export_all",
-        - erlang_major: "25"
-          tag: v3.10.7
-          patch: |
-            diff --git a/MODULE.bazel b/MODULE.bazel
-            index bbc541b766..9290f13053 100644
-            --- a/MODULE.bazel
-            +++ b/MODULE.bazel
-            @@ -13,6 +13,11 @@ bazel_dep(
-                 version = "1.2.0",
-             )
-
-            +bazel_dep(
-            +    name = "platforms",
-            +    version = "0.0.5",
-            +)
-            +
-             bazel_dep(
-                 name = "rules_cc",
-                 version = "0.0.1",
-            diff --git a/rabbitmq.bzl b/rabbitmq.bzl
-            index 7c13e30385..330b54494a 100644
-            --- a/rabbitmq.bzl
-            +++ b/rabbitmq.bzl
-            @@ -28,6 +28,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
-             MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
-
-             RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
-            +    "-DTEST=1",
-            +    "+nowarn_export_all",
-                 "-DINSTR_MOD=gm",
-             ]
-        - erlang_major: "25"
-          tag: v3.11.2
-          patch: |
-            diff --git a/rabbitmq.bzl b/rabbitmq.bzl
-            index d9e815c72b..f5c10a2ce5 100644
-            --- a/rabbitmq.bzl
-            +++ b/rabbitmq.bzl
-            @@ -28,6 +28,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
-             MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
- 
-             RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
-            +    "-DTEST=1",
-            +    "+nowarn_export_all",
-                 "-DINSTR_MOD=gm",
-             ]
-
     timeout-minutes: 20
     steps:
     - name: Checkout Repository (Secondary Umbrella tag)
