@@ -154,9 +154,9 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_major: 24
+            otp_version_id: 24
           - image_tag_suffix: otp-max-bazel
-            otp_major: 25
+            otp_version_id: 25_1
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -194,13 +194,10 @@ jobs:
         id: load-info
         run: |
           bazelisk build :otp_version :elixir_version \
-            --config=rbe-${{ matrix.otp_major }}
+            --config=rbe \
+            --platforms=//bazel/platforms:erlang_linux_${{ matrix.otp_version_id }}_platform
           echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
-
-          # clean so that when we next run bazelisk, the host erlang version
-          # is re-detected
-          bazelisk clean --expunge
 
       - name: Configure OTP & Elixir
         uses: erlef/setup-beam@v1.13
@@ -208,9 +205,12 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
-      - name: Validate otp version embedded in OCI
+      - name: Configure otp for the OCI image
         run: |
-          bazel cquery //packaging/docker-image:otp_source --output=build
+          sudo npm install --global --silent @bazel/buildozer
+
+          buildozer 'set tars ["@otp_src_${{ matrix.otp_version_id }}//file"]' \
+            //packaging/docker-image:otp_source
 
       - name: Build
         run: |

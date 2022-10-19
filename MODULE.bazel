@@ -25,7 +25,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.7.2",
+    version = "3.8.3",
 )
 
 erlang_config = use_extension(
@@ -85,11 +85,14 @@ use_repo(
 )
 
 register_toolchains(
-    "@erlang_config//external:toolchain",
     "@erlang_config//24:toolchain",
+    "@erlang_config//24:toolchain2",
     "@erlang_config//25_0:toolchain",
+    "@erlang_config//25_0:toolchain2",
     "@erlang_config//25_1:toolchain",
+    "@erlang_config//25_1:toolchain2",
     "@erlang_config//git_master:toolchain",
+    "@erlang_config//git_master:toolchain2",
     "@elixir_config//external:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
