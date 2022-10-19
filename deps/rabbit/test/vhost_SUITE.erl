@@ -324,7 +324,7 @@ vhost_is_created_with_default_limits(Config) ->
     VHost = <<"limits-test">>,
     Pattern = "^limits-.*$",
     Limits = [{<<"max-connections">>, 10}, {<<"max-queues">>, 1}],
-    Env = [{vhost, [{Pattern, Limits}]}],
+    Env = [{vhosts, [{Pattern, Limits}]}],
     try
         ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
                                                       application, set_env, [rabbit, default_limits, Env])),
