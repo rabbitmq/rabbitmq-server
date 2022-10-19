@@ -44,6 +44,19 @@ bazel_dep(
     version = "0.5.8",
 )
 
+bazel_dep(
+    name = "ra",
+    version = "2.3.0",
+)
+
+git_override(
+    module_name = "ra",
+    remote = "https://github.com/rabbitmq/ra.git",
+    commit = "d18de709e5b1fa9418b3119211fd6becd4de7b85",
+    # Note: we will need bazel 6 where patch_cmds are supported, to inject the ra
+    #       version just like we do with the module extension
+)
+
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
@@ -283,15 +296,15 @@ erlang_package.hex_package(
     version = "0.2.1",
 )
 
-erlang_package.git_package(
-    branch = "main",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
-"""],
-    repository = "rabbitmq/ra",
-)
+# erlang_package.git_package(
+#     branch = "main",
+#     patch_cmds = ["""
+# VERSION=$(git rev-parse HEAD)
+# echo "Injecting ${VERSION} into ra.app.src..."
+# sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
+# """],
+#     repository = "rabbitmq/ra",
+# )
 
 erlang_package.hex_package(
     name = "ranch",
@@ -372,7 +385,7 @@ use_repo(
     "osiris",
     "prometheus",
     "proper",
-    "ra",
+    # "ra",
     "ranch",
     "recon",
     "redbug",
