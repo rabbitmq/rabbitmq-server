@@ -971,9 +971,8 @@ cleanup_data_dir() ->
              end
              || Q <- rabbit_amqqueue:list_by_type(?MODULE),
                 lists:member(node(), get_nodes(Q))],
-    NoQQClusters = rabbit_ra_registry:list_not_quorum_clusters(),
     Registered = ra_directory:list_registered(?RA_SYSTEM),
-    Running = Names ++ NoQQClusters,
+    Running = Names,
     _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
                                        not lists:member(Name, Running)],
     ok.
@@ -1436,7 +1435,7 @@ i(memory, Q) when ?is_amqqueue(Q) ->
 i(state, Q) when ?is_amqqueue(Q) ->
     {Name, Node} = amqqueue:get_pid(Q),
     %% Check against the leader or last known leader
-    case rpc:call(Node, ?MODULE, cluster_state, [Name], ?RPC_TIMEOUT) of
+    case erpc:call(Node, ?MODULE, cluster_state, [Name], ?RPC_TIMEOUT) of
         {badrpc, _} -> down;
         State -> State
     end;
@@ -1457,7 +1456,7 @@ i(online, Q) -> online(Q);
 i(leader, Q) -> leader(Q);
 i(open_files, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
-    Nodes = get_nodes(Q),
+    Nodes = get_connected_nodes(Q),
     {Data, _} = rpc:multicall(Nodes, ?MODULE, open_files, [Name]),
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
@@ -1559,7 +1558,7 @@ peek(_Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_classic(Q) ->
     {error, classic_queue_not_supported}.
 
 online(Q) when ?is_amqqueue(Q) ->
-    Nodes = get_nodes(Q),
+    Nodes = get_connected_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
     [Node || Node <- Nodes, is_process_alive(Name, Node)].
 
@@ -1568,7 +1567,11 @@ format(Q) when ?is_amqqueue(Q) ->
     [{members, Nodes}, {online, online(Q)}, {leader, leader(Q)}].
 
 is_process_alive(Name, Node) ->
-    erlang:is_pid(rpc:call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
+    %% don't attempt rpc if node is not already connected
+    %% as this function is used for metrics and stats and the additional
+    %% latency isn't warranted
+    lists:member(Node, [node() | nodes()]) andalso
+    erlang:is_pid(erpc:call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
 
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
@@ -1625,6 +1628,10 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes.
+
+get_connected_nodes(Q) when ?is_amqqueue(Q) ->
+    ErlangNodes = [node() | nodes()],
+    [N || N <- get_nodes(Q), lists:member(N, ErlangNodes)].
 
 update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
     Ts = amqqueue:get_type_state(Q),

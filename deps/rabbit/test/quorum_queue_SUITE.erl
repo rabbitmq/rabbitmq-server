@@ -1705,7 +1705,7 @@ add_member(Config) ->
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
     rabbit_control_helper:command(start_app, Server1),
-    ?assertEqual(ok, rpc:call(Server0, rabbit_quorum_queue, add_member,
+    ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, add_member,
                               [<<"/">>, QQ, Server1, 5000])),
     Info = rpc:call(Server0, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
