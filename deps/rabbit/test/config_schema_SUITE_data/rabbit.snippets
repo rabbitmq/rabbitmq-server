@@ -106,7 +106,7 @@ ssl_options.fail_if_no_peer_cert = true",
   default_limits.vhosts.a.max_queues = 10
   default_limits.vhosts.a.max_connections = 100
  ",
-  [{rabbit, [{default_limits, [{vhost, [
+  [{rabbit, [{default_limits, [{vhosts, [
       {<<".*">>, [{<<"max-connections">>, 100}, {<<"max-queues">>, 10}]}
                                        ]}]}]}],
   []},
@@ -116,7 +116,7 @@ ssl_options.fail_if_no_peer_cert = true",
   default_limits.vhosts.a.pattern = .*
   default_limits.vhosts.a.max_queues = 10
  ",
-  [{rabbit, [{default_limits, [{vhost, [
+  [{rabbit, [{default_limits, [{vhosts, [
       {<<".*">>, [{<<"max-queues">>, 10}]}
                                        ]}]}]}],
   []},
