@@ -570,7 +570,21 @@ grow_coordinator_cluster(Config) ->
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
     rabbit_control_helper:command(start_app, Server1),
+    %% at this point there _probably_ won't be a stream coordinator member on
+    %% Server1
 
+    %% check we can add a new stream replica for the previously declare stream
+    ?assertEqual(ok,
+                 rpc:call(Server1, rabbit_stream_queue, add_replica,
+                          [<<"/">>, Q, Server1])),
+    %% also check we can declare a new stream when calling Server1
+    Q2 = unicode:characters_to_binary([Q, <<"_2">>]),
+    ChServer1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(ChServer1, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    %% wait until the stream coordinator detects there is a new rabbit node
+    %% and adds a new member on the new node
     rabbit_ct_helpers:await_condition(
       fun() ->
               case rpc:call(Server0, ra, members, [{rabbit_stream_coordinator, Server0}]) of
@@ -588,6 +602,7 @@ shrink_coordinator_cluster(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
+
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
