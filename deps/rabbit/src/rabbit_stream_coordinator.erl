@@ -307,23 +307,25 @@ ensure_coordinator_started() ->
         undefined ->
             global:set_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes = case ra:restart_server(?RA_SYSTEM, Local) of
-                {error, Reason} when Reason == not_started orelse
-                                     Reason == name_not_registered ->
-                    OtherNodes = all_coord_members() -- [Local],
-                    %% We can't use find_members/0 here as a process that timeouts means the cluster is up
-                    case lists:filter(fun(N) -> global:whereis_name(N) =/= undefined end, OtherNodes) of
-                        [] ->
-                            start_coordinator_cluster();
-                        _ ->
-                            OtherNodes
-                    end;
-                ok ->
-                    AllNodes;
-                {error, {already_started, _}} ->
+                        {error, Reason} when Reason == not_started orelse
+                                             Reason == name_not_registered ->
+                            OtherNodes = all_coord_members() -- [Local],
+                            case lists:filter(
+                                   fun({_, N}) ->
+                                           erpc:call(N, erlang, whereis, [?MODULE]) =/= undefined
+                                   end, OtherNodes) of
+                                [] ->
+                                    start_coordinator_cluster();
+                                _ ->
+                                    OtherNodes
+                            end;
+                        ok ->
                             AllNodes;
-                _ ->
-                    AllNodes
-            end,
+                        {error, {already_started, _}} ->
+                            AllNodes;
+                        _ ->
+                            AllNodes
+                    end,
             global:del_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes;
         _ ->
