@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-    - main
+    - produce-3-11-2-mixed-version
     paths:
     - .github/workflows/secondary-umbrella.yaml
 jobs:
