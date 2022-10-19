@@ -74,7 +74,8 @@ jobs:
         id: load-info
         run: |
           bazelisk build :otp_version :elixir_version \
-            --config=rbe-${{ matrix.otp_version_id }}
+            --config=rbe \
+            --platforms=//bazel/platforms:erlang_linux_${{ matrix.otp_version_id }}_platform
           echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
 
@@ -84,11 +85,12 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
-      - name: Validate otp version embedded in OCI
+      - name: Configure otp for the OCI image
         run: |
-          bazel cquery //packaging/docker-image:otp_source \
-            --config=buildbuddy \
-            --output=build
+          sudo npm install --global --silent @bazel/buildozer
+
+          buildozer 'set tars ["@otp_src_${{ matrix.otp_version_id }}//file"]' \
+            //packaging/docker-image:otp_source
 
       - name: Build
         run: |
