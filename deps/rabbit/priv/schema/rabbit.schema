@@ -632,6 +632,7 @@ end}.
 %% {default_user,        <<"guest">>},
 %% {default_pass,        <<"guest">>},
 %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+%% {default_limits,      [{vhosts, []}]
 
 {mapping, "default_vhost", "rabbit.default_vhost", [
     {datatype, string}
@@ -679,6 +680,70 @@ fun(Conf) ->
     Read      = proplists:get_value(["default_permissions", "read"], Settings),
     Write     = proplists:get_value(["default_permissions", "write"], Settings),
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
+end}.
+
+{mapping, "default_limits.vhosts.$id.pattern", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {comment, ".*"},
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {comment, 1000},
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {comment, 100},
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{translation, "rabbit.default_limits.vhosts",
+fun(Conf) ->
+    Prefix = ["default_limits", "vhosts"],
+    GetAll = fun(Spec) ->
+                     FullSpec = Prefix ++ Spec,
+                     lists:filtermap(
+                       fun({K, V}) ->
+                               case cuttlefish_variable:is_fuzzy_match(K, FullSpec) of
+                                   true -> [_, _, ID, _] = K,
+                                           {true, {ID, V}};
+                                   _    -> false
+                               end
+                       end,
+                       Conf)
+             end,
+    Get = fun(Spec) -> cuttlefish:conf_get(Prefix ++ Spec, Conf, undefined) end,
+
+    %% Warn about incomplete config
+    SettingIDs = lists:uniq(
+                   [ ID || {ID, _} <- GetAll(["$id", "max_connections"]) ] ++
+                   [ ID || {ID, _} <- GetAll(["$id", "max_queues"]) ]
+                  ),
+    [ cuttlefish:invalid(
+        io_lib:format(
+           "default_limits.vhosts.~ts.pattern required",
+           [ID]))
+     || ID <- SettingIDs, Get([ID, "pattern"]) =:= undefined ],
+
+    %% Transform
+    Settings = [ {P, [{<<"max-connections">>, Get([ID, "max_connections"])},
+                      {<<"max-queues">>,      Get([ID, "max_queues"])}]} ||
+                 {ID, P} <- GetAll(["$id", "pattern"]) ],
+    Settings1 = lists:map(fun({P, L}) -> {
+                                    list_to_binary(P),
+                                    lists:filter(fun({_, V}) -> V =/= undefined end, L)
+                                   }
+                          end, Settings),
+    case Settings1 of
+        [] -> cuttlefish:unset();
+        _ -> Settings1
+    end
 end}.
 
 %% Tags for default user
@@ -2320,3 +2385,9 @@ end}.
 fun(Int) when is_integer(Int) ->
     Int >= 1
 end}.
+
+{validator, "valid_regex", "string must be a valid regular expression",
+ fun("")     -> false;
+    (String) -> {Res, _ } = re:compile(String),
+                Res =:= ok
+ end}.
