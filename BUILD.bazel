@@ -1,5 +1,6 @@
 load(
     "@bazel_skylib//rules:common_settings.bzl",
+    "bool_flag",
     "string_flag",
 )
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
@@ -23,6 +24,19 @@ config_setting(
     name = "debug_build",
     values = {
         "compilation_mode": "dbg",
+    },
+)
+
+bool_flag(
+    name = "enable_test_build",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "test_build",
+    flag_values = {
+        "//:enable_test_build": "true",
     },
 )
 
