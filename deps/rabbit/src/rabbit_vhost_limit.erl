@@ -152,6 +152,8 @@ parse_set(VHost, Defn, ActingUser) ->
                 rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
+-spec set(rabbit_types:name(), {binary(), binary()}, rabbit_types:user() | rabbit_types:username()) ->
+    rabbit_runtime_parameters:ok_or_error_string().
 set(VHost, Defn, ActingUser) ->
     rabbit_runtime_parameters:set_any(VHost, <<"vhost-limits">>,
                                       <<"limits">>, Defn, ActingUser).
