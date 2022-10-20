@@ -135,6 +135,9 @@ def rabbitmq_app(
         erlc_opts = select({
             "//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
             "//conditions:default": RABBITMQ_ERLC_OPTS,
+        }) + select({
+            "//:test_build": ["-DTEST=1", "+nowarn_export_all"],
+            "//conditions:default": [],
         }),
         build_deps = build_deps,
         deps = deps,
