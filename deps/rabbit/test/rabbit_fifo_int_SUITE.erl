@@ -102,6 +102,7 @@ basics(Config) ->
     DeliverFun = fun DeliverFun(S0, F) ->
                          receive
                              {ra_event, From, Evt} ->
+                                 ct:pal("ra_event ~p", [Evt]),
                                  case rabbit_fifo_client:handle_ra_event(From, Evt, S0) of
                                      {ok, S1,
                                       [{deliver, C, true,
@@ -124,13 +125,17 @@ basics(Config) ->
     _ = rabbit_quorum_queue:restart_server(ServerId),
 
     %% wait for leader change to notice server is up again
+    FState5b =
     receive
-        {ra_event, _, {machine, leader_change}} -> ok
+        {ra_event, From, Evt} ->
+            ct:pal("ra_event ~p", [Evt]),
+            {ok, F6, _} = rabbit_fifo_client:handle_ra_event(From, Evt, FState5),
+            F6
     after 5000 ->
               exit(leader_change_timeout)
     end,
 
-    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5),
+    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
     _FState8 = DeliverFun(FState6, return),
 
     rabbit_quorum_queue:stop_server(ServerId),
@@ -570,10 +575,12 @@ conf(ClusterName, UId, ServerId, _, Peers) ->
 process_ra_event(State, Wait) ->
     receive
         {ra_event, From, Evt} ->
+            ct:pal("Ra_event ~p", [Evt]),
             {ok, S, _Actions} =
-                rabbit_fifo_client:handle_ra_event(From, Evt, State),
+            rabbit_fifo_client:handle_ra_event(From, Evt, State),
             S
     after Wait ->
+              flush(),
               exit(ra_event_timeout)
     end.
 
