@@ -100,7 +100,7 @@ ssl_options.fail_if_no_peer_cert = true",
  {socket_writer_gc_threshold_off,
   "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
 
- {default_limits_vhost,
+ {default_vhost_limits_with_two_limits,
  "
   default_limits.vhosts.a.pattern = .*
   default_limits.vhosts.a.max_queues = 10
@@ -111,7 +111,7 @@ ssl_options.fail_if_no_peer_cert = true",
                                        ]}]}]}],
   []},
 
- {default_limits_vhost_no_undefined,
+ {default_vhost_limits_with_one_limit,
  "
   default_limits.vhosts.a.pattern = .*
   default_limits.vhosts.a.max_queues = 10
