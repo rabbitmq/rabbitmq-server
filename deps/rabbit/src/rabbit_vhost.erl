@@ -208,13 +208,8 @@ do_add(Name, Metadata, ActingUser) ->
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
                       [] ->
-<<<<<<< HEAD
-                        Row = vhost:new(Name, [], Metadata),
-                        rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
-=======
                         Row = vhost:new(Name, DefaultLimits, Metadata),
                         rabbit_log:debug("Inserting a virtual host record ~tp", [Row]),
->>>>>>> 27ebc04dc9 (Add ability to set default vhost limits by pattern)
                         ok = mnesia:write(rabbit_vhost, Row, write),
                         Row;
                       %% the vhost already exists
