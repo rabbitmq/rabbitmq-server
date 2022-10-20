@@ -999,14 +999,15 @@ process_instruction({drop, Length, Dropped, AckRequired},
              true  -> State1;
              false -> update_delta(ToDrop - Dropped, State1)
          end};
-process_instruction({ack, MsgIds},
+process_instruction({ack, AckTags},%MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
                                      msg_id_ack          = MA }) ->
-    {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
-    {MsgIds1, BQS1} = BQ:ack(AckTags, BQS),
-    [] = MsgIds1 -- MsgIds, %% ASSERTION
-    {ok, update_delta(length(MsgIds1) - length(MsgIds),
+%    {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
+    MA1 = MA,
+    {_MsgIds1, BQS1} = BQ:ack(AckTags, BQS),
+%    [] = MsgIds1 -- MsgIds, %% ASSERTION
+    {ok, update_delta(0,%length(MsgIds1) - length(MsgIds),
                       State #state { msg_id_ack          = MA1,
                                      backing_queue_state = BQS1 })};
 process_instruction({requeue, MsgIds},

@@ -369,7 +369,7 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
     case MsgIds of
         [] -> ok;
-        _  -> ok = gm:broadcast(GM, {ack, MsgIds})
+        _  -> ok = gm:broadcast(GM, {ack, AckTags})%MsgIds})
     end,
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
