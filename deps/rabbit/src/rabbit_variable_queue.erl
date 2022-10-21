@@ -745,8 +745,8 @@ fetch(AckRequired, State) ->
         {{value, MsgStatus}, State1} ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
-            {Msg, State2} = read_msg(MsgStatus, State1),
-            {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
+            {Msg = #basic_message{id = MsgId}, State2} = read_msg(MsgStatus, State1),
+            {AckTag, State3} = remove(AckRequired, MsgStatus#msg_status{msg_id = MsgId}, State2),
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
@@ -755,8 +755,17 @@ drop(AckRequired, State) ->
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            {AckTag, State2} = remove(AckRequired, MsgStatus, State1),
-            {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
+            %% This is necessary for CMQs so that slaves can drop the message.
+            %% @todo Remove this once CMQs are gone.
+            {MsgStatus1, State3} = case {AckRequired, MsgStatus} of
+                {true, #msg_status{msg_id = undefined}} ->
+                    {#basic_message{id = MsgId}, State2} = read_msg(MsgStatus, State1),
+                    {MsgStatus#msg_status{msg_id = MsgId}, State2};
+                _ ->
+                    {MsgStatus, State1}
+            end,
+            {AckTag, State4} = remove(AckRequired, MsgStatus1, State3),
+            {{MsgStatus1#msg_status.msg_id, AckTag}, a(State4)}
     end.
 
 %% Duplicated from rabbit_backing_queue
@@ -1881,9 +1890,9 @@ in_r(MsgStatus = #msg_status { msg = undefined },
      State = #vqstate { mode = default, q3 = Q3, q4 = Q4 }) ->
     case ?QUEUE:is_empty(Q4) of
         true  -> State #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3) };
-        false -> {Msg, State1 = #vqstate { q4 = Q4a }} =
+        false -> {Msg = #basic_message{id = MsgId}, State1 = #vqstate { q4 = Q4a }} =
                      read_msg(MsgStatus, State),
-                 MsgStatus1 = MsgStatus#msg_status{msg = Msg},
+                 MsgStatus1 = MsgStatus#msg_status{msg_id = MsgId, msg = Msg},
                  stats(ready0, {MsgStatus, MsgStatus1}, 0,
                        State1 #vqstate { q4 = ?QUEUE:in_r(MsgStatus1, Q4a) })
     end;
@@ -2134,9 +2143,10 @@ process_queue_entries1(
   #msg_status { seq_id = SeqId } = MsgStatus,
   Fun,
   {NextDeliverSeqId, FetchAcc, State}) ->
-    {Msg, State1} = read_msg(MsgStatus, State),
+    {Msg = #basic_message{id = MsgId}, State1} = read_msg(MsgStatus, State),
     State2 = record_pending_ack(
                MsgStatus #msg_status {
+                 msg_id = MsgId,
                  is_delivered = true }, State1),
     {next_deliver_seq_id(SeqId, NextDeliverSeqId),
      Fun(Msg, SeqId, FetchAcc),
@@ -2776,8 +2786,8 @@ msgs_and_indices_written_to_disk(Callback, MsgIdSet) ->
 %%----------------------------------------------------------------------------
 
 publish_alpha(#msg_status { msg = undefined } = MsgStatus, State) ->
-    {Msg, State1} = read_msg(MsgStatus, State),
-    MsgStatus1 = MsgStatus#msg_status { msg = Msg },
+    {Msg=#basic_message{id=MsgId}, State1} = read_msg(MsgStatus, State),
+    MsgStatus1 = MsgStatus#msg_status { msg_id = MsgId, msg = Msg },
     {MsgStatus1, stats({1, -1}, {MsgStatus, MsgStatus1}, 0, State1)};
 publish_alpha(MsgStatus, State) ->
     {MsgStatus, stats({1, -1}, {MsgStatus, MsgStatus}, 0, State)}.
