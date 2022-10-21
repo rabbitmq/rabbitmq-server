@@ -54,7 +54,8 @@ groups() ->
            queue_size_on_declare,
            leader_locator_balanced,
            leader_locator_balanced_maintenance,
-           select_nodes_with_least_replicas
+           select_nodes_with_least_replicas,
+           recover_after_leader_and_coordinator_kill
           ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
@@ -217,7 +218,8 @@ init_per_testcase(TestCase, Config)
 init_per_testcase(TestCase, Config)
   when TestCase == replica_recovery
        orelse TestCase == leader_failover
-       orelse TestCase == leader_failover_dedupe ->
+       orelse TestCase == leader_failover_dedupe
+       orelse TestCase == recover_after_leader_and_coordinator_kill ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             %% not supported because of machine version difference
@@ -587,7 +589,8 @@ grow_coordinator_cluster(Config) ->
     %% and adds a new member on the new node
     rabbit_ct_helpers:await_condition(
       fun() ->
-              case rpc:call(Server0, ra, members, [{rabbit_stream_coordinator, Server0}]) of
+              case rpc:call(Server0, ra, members,
+                            [{rabbit_stream_coordinator, Server0}]) of
                   {_, Members, _} ->
                       Nodes = lists:sort([N || {_, N} <- Members]),
                       lists:sort([Server0, Server1]) == Nodes;
@@ -1129,6 +1132,45 @@ receive_basic_cancel_on_queue_deletion(Config) ->
             exit(timeout)
     end.
 
+recover_after_leader_and_coordinator_kill(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    % Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    publish_confirm(Ch1, Q, [<<"msg 1">>]),
+
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    [begin
+         Sleep = rand:uniform(10),
+         ct:pal("Attempt ~b Sleep ~b", [Num, Sleep]),
+         {ok, {_LeaderNode, LeaderPid}} = leader_info(Config),
+         {_, CoordNode} = get_stream_coordinator_leader(Config),
+         kill_stream_leader_then_coordinator_leader(Config, CoordNode,
+                                                    LeaderPid, Sleep),
+         publish_confirm(Ch1, Q, [<<"msg">>]),
+         recover_coordinator(Config, CoordNode),
+         timer:sleep(Sleep),
+         rabbit_ct_helpers:await_condition(
+           fun () ->
+                   rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                                validate_writer_pid, [QName])
+           end)
+     end || Num <- lists:seq(1, 10)],
+
+    {_, Node} = get_stream_coordinator_leader(Config),
+
+    CState = rabbit_ct_broker_helpers:rpc(Config, Node, sys,
+                                          get_state,
+                                          [rabbit_stream_coordinator]),
+
+
+    ct:pal("sys state ~p", [CState]),
+
+    ok.
+
 keep_consuming_on_leader_restart(Config) ->
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1172,6 +1214,13 @@ leader_info(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_leader_info,
                                  [QName]).
 
+validate_writer_pid(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    MnesiaPid = amqqueue:get_pid(Q),
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamId} = QState,
+    {ok, MnesiaPid} == rabbit_stream_coordinator:writer_pid(StreamId).
+
 get_leader_info(QName) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     QState = amqqueue:get_type_state(Q),
@@ -1194,6 +1243,31 @@ kill_process(Config, Node, Pid) ->
 
 do_kill_process(Pid) ->
     exit(Pid, kill).
+
+do_stop_start_coordinator() ->
+    rabbit_stream_coordinator:stop(),
+    timer:sleep(10),
+    rabbit_stream_coordinator:recover().
+
+recover_coordinator(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_stream_coordinator,
+                                 recover, []).
+
+get_stream_coordinator_leader(Config) ->
+    Node = hd(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    rabbit_ct_broker_helpers:rpc(Config, Node, ra_leaderboard,
+                                 lookup_leader, [rabbit_stream_coordinator]).
+
+kill_stream_leader_then_coordinator_leader(Config, CoordLeaderNode,
+                                           StreamLeaderPid, Sleep) ->
+    rabbit_ct_broker_helpers:rpc(Config, CoordLeaderNode, ?MODULE,
+                                 do_stop_kill, [StreamLeaderPid, Sleep]).
+
+do_stop_kill(Pid, Sleep) ->
+    exit(Pid, kill),
+    timer:sleep(Sleep),
+    rabbit_stream_coordinator:stop().
+
 
 filter_consumers(Config, Server, CTag) ->
     CInfo = rabbit_ct_broker_helpers:rpc(Config, Server, ets, tab2list, [consumer_created]),

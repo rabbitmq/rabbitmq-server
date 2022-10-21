@@ -22,6 +22,7 @@
          overview/1]).
 
 -export([recover/0,
+         stop/0,
          add_replica/2,
          delete_replica/2,
          register_listener/1,
@@ -33,8 +34,10 @@
 -export([policy_changed/1]).
 
 -export([local_pid/1,
+         writer_pid/1,
          members/1]).
 -export([query_local_pid/3,
+         query_writer_pid/2,
          query_members/2]).
 
 
@@ -113,6 +116,16 @@ recover() ->
             ok
     end.
 
+%% stop the stream coordinator on the local node
+stop() ->
+    case erlang:whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            ra:stop_server(?RA_SYSTEM, {?MODULE, node()})
+    end.
+
+
 %% new api
 
 new_stream(Q, LeaderNode)
@@ -189,11 +202,18 @@ state() ->
             Any
     end.
 
+writer_pid(StreamId) when is_list(StreamId) ->
+    MFA = {?MODULE, query_writer_pid, [StreamId]},
+    query_pid(StreamId, MFA).
+
 local_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_local_pid, [StreamId, node()]},
+    query_pid(StreamId, MFA).
+
+query_pid(StreamId, MFA) when is_list(StreamId) ->
     case ra:local_query({?MODULE, node()}, MFA) of
         {ok, {_, {ok, Pid}}, _} ->
-            case is_process_alive(Pid) of
+            case erpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                 true ->
                     {ok, Pid};
                 false ->
@@ -262,6 +282,20 @@ query_local_pid(StreamId, Node, #?MODULE{streams = Streams}) ->
             {ok, Pid};
         _ ->
             {error, not_found}
+    end.
+
+query_writer_pid(StreamId, #?MODULE{streams = Streams}) ->
+    case Streams of
+        #{StreamId := #stream{members = Members}} ->
+            maps:fold(
+              fun (_Node, #member{role = {writer, _},
+                                  state = {running, _, Pid}}, _Acc) ->
+                      {ok, Pid};
+                  (_, _, Acc) ->
+                      Acc
+              end, {error, writer_not_found}, Members);
+        _ ->
+            {error, stream_not_found}
     end.
 
 -spec register_listener(amqqueue:amqqueue()) ->
@@ -711,11 +745,14 @@ handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
     ActionFun = phase_delete_member(StreamId, Args, Conf),
     run_action(delete_member, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, fail_active_actions,
-           #aux{actions = Monitors} = Aux, LogState,
+           #aux{actions = Actions} = Aux, LogState,
            #?MODULE{streams = Streams}) ->
+    %% this bit of code just creates an exclude map of currently running
+    %% tasks to avoid failing them, this could only really happen during
+    %% a leader flipflap
     Exclude = maps:from_list([{S, ok}
-                              || {P, {S, _, _}} <- maps:to_list(Monitors),
-                             not is_process_alive(P)]),
+                              || {P, {S, _, _}} <- maps:to_list(Actions),
+                             is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
     fail_active_actions(Streams, Exclude),
     {no_reply, Aux, LogState, []};
@@ -1707,11 +1744,27 @@ eval_replica(_Meta, #member{node = Node} = Replica, _LeaderState, _Stream,
 
 fail_active_actions(Streams, Exclude) ->
     maps:map(
-      fun (_,  #stream{id = Id, members = Members})
+      fun (_,  #stream{id = Id,
+                       members = Members,
+                       mnesia = Mnesia})
             when not is_map_key(Id, Exclude)  ->
               _ = maps:map(fun(_, M) ->
                                    fail_action(Id, M)
-                           end, Members)
+                           end, Members),
+              case Mnesia of
+                  {updating, E} ->
+                      rabbit_log:debug("~ts: failing active action for ~ts node
+                                       ~w Action ~w",
+                                       [?MODULE, Id, node(), updating_mnesia]),
+                      send_self_command({action_failed, Id,
+                                         #{action => updating_mnesia,
+                                           index => 0,
+                                           node => node(),
+                                           epoch => E}});
+                  _ ->
+                      ok
+              end,
+              ok
       end, Streams),
 
     ok.
