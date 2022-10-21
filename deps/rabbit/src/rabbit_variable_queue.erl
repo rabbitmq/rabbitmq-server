@@ -1298,27 +1298,26 @@ msg_status(Version, IsPersistent, IsDelivered, SeqId,
                 msg_props     = MsgProps}.
 
 beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, rabbit_queue_index, MsgProps, IsPersistent}) ->
+                 SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = Msg,
-                   persist_to   = queue_index,
-                   msg_location = memory};
-
-beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, {rabbit_classic_queue_store_v2, _, _}, MsgProps, IsPersistent}) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
-    MS0#msg_status{msg_id       = MsgId,
-                   msg          = Msg,
-                   persist_to   = queue_store,
-                   msg_location = memory};
+                   persist_to   = case MsgLocation of
+                                      rabbit_queue_index -> queue_index;
+                                      {rabbit_classic_queue_store_v2, _, _} -> queue_store;
+                                      rabbit_msg_store -> msg_store
+                                  end,
+                   msg_location = case MsgLocation of
+                                      rabbit_queue_index -> memory;
+                                      _ -> MsgLocation
+                                  end};
 
 beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = undefined,
                    persist_to   = case is_tuple(MsgLocation) of
-                                      true  -> queue_store;
+                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
                                       false -> msg_store
                                   end,
                    msg_location = MsgLocation}.
@@ -2591,12 +2590,12 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         index_mod            = IndexMod,
                         index_state          = IndexState,
                         store_state          = StoreState,
+                        msg_store_clients    = {MCStateP, MCStateT},
                         ram_msg_count        = RamMsgCount,
                         ram_bytes            = RamBytes,
                         disk_read_count      = DiskReadCount,
                         delta_transient_bytes = DeltaTransientBytes,
-                        transient_threshold  = TransientThreshold,
-                        version              = Version },
+                        transient_threshold  = TransientThreshold },
                       MemoryLimit) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
@@ -2619,15 +2618,61 @@ maybe_deltas_to_betas(DelsAndAcksFun,
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {List, StoreState2} = case Version of
-        1 -> {List0, StoreState};
-        %% When using v2 we try to read all messages from disk at once
-        %% instead of 1 by 1 at fetch time.
-        2 ->
-            Reads = [{SeqId, MsgLocation}
-                || {_, SeqId, MsgLocation, _, _} <- List0, is_tuple(MsgLocation)],
-            {Msgs, StoreState1} = rabbit_classic_queue_store_v2:read_many(Reads, StoreState),
-            {merge_read_msgs(List0, Reads, Msgs), StoreState1}
+    %% We try to read messages from disk all at once instead of
+    %% 1 by 1 at fetch time. When v1 is used and messages are
+    %% embedded, then the message content is already read from
+    %% disk at this point. For v2 embedded we must do a separate
+    %% call to obtain the contents and then merge the contents
+    %% back into the #msg_status records.
+    %%
+    %% For shared message store messages we do the same but only
+    %% for messages < 20000 bytes and when there are at least 10
+    %% messages to fetch (otherwise we do the fetch 1 by 1 right
+    %% before sending the messages). The values have been
+    %% obtained through experiments because after a certain size
+    %% the performance drops and it become no longer interesting
+    %% to keep the extra data in memory. Since we have
+    %% two different shared stores for persistent/transient
+    %% they are treated separately when deciding whether to
+    %% read_many from either of them.
+    %%
+    %% Because v2 and shared stores function differently we
+    %% must keep different information for performing the reads.
+    {V2Reads0, ShPersistReads, ShTransientReads} = lists:foldl(fun
+        ({_, SeqId, MsgLocation, _, _}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when is_tuple(MsgLocation) ->
+            {[{SeqId, MsgLocation}|V2ReadsAcc], ShPReadsAcc, ShTReadsAcc};
+        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< 20000 ->
+            {V2ReadsAcc, [MsgId|ShPReadsAcc], ShTReadsAcc};
+        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< 20000 ->
+            {V2ReadsAcc, ShPReadsAcc, [MsgId|ShTReadsAcc]};
+        (_, Acc) ->
+            Acc
+    end, {[], [], []}, List0),
+    %% In order to properly read and merge V2 messages we want them
+    %% in the older->younger order.
+    V2Reads = lists:reverse(V2Reads0),
+    %% We do read_many for v2 store unconditionally.
+    {V2Msgs, StoreState2} = rabbit_classic_queue_store_v2:read_many(V2Reads, StoreState),
+    List1 = merge_read_msgs(List0, V2Reads, V2Msgs),
+    %% We read from the shared message store only if there are multiple messages
+    %% (10+ as we wouldn't get much benefits from smaller number of messages)
+    %% otherwise we wait and read later.
+    %%
+    %% Because read_many does not use FHC we do not get an updated MCState
+    %% like with normal reads.
+    List2 = case length(ShPersistReads) < 10 of
+        true ->
+            List1;
+        false ->
+            ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
+            merge_sh_read_msgs(List1, ShPersistMsgs)
+    end,
+    List = case length(ShTransientReads) < 10 of
+        true ->
+            List2;
+        false ->
+            ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
+            merge_sh_read_msgs(List2, ShTransientMsgs)
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
@@ -2670,8 +2715,20 @@ merge_read_msgs([M = {_, SeqId, _, _, _}|MTail], [{SeqId, _}|RTail], [Msg|MsgTai
     [setelement(1, M, Msg)|merge_read_msgs(MTail, RTail, MsgTail)];
 merge_read_msgs([M|MTail], RTail, MsgTail) ->
     [M|merge_read_msgs(MTail, RTail, MsgTail)];
+%% @todo We probably don't need to unwrap until the end.
 merge_read_msgs([], [], []) ->
     [].
+
+%% We may not get as many messages as we tried reading.
+merge_sh_read_msgs([M = {MsgId, _, _, _, _}|MTail], Reads) ->
+    case Reads of
+        #{MsgId := Msg} ->
+            [setelement(1, M, Msg)|merge_sh_read_msgs(MTail, Reads)];
+        _ ->
+            [M|merge_sh_read_msgs(MTail, Reads)]
+    end;
+merge_sh_read_msgs(MTail, _Reads) ->
+    MTail.
 
 %% Flushes queue index batch caches and updates queue index state.
 ui(#vqstate{index_mod        = IndexMod,
