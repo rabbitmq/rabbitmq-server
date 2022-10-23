@@ -486,14 +486,10 @@ get_queue(QoS, PState) ->
     QName = queue_name(QoS, PState),
     rabbit_amqqueue:lookup(QName).
 
-queue_name(QoS, #proc_state{auth_state = #auth_state{vhost = VHost},
-                            client_id  = ClientId}) ->
-    QNameBin = queue_name_bin(QoS, ClientId),
+queue_name(QoS, #proc_state{client_id = ClientId,
+                            auth_state = #auth_state{vhost = VHost}}) ->
+    QNameBin = rabbit_mqtt_util:queue_name(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
-
-queue_name_bin(QoS, ClientId) ->
-    Names = rabbit_mqtt_util:queue_names(ClientId),
-    element(QoS + 1, Names).
 
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
     Topic1 = Amqp2MqttFun(Topic0),
@@ -864,7 +860,6 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
-
 ensure_queue(QoS, #proc_state{
                      client_id = ClientId,
                      clean_sess = CleanSess,
@@ -877,20 +872,26 @@ ensure_queue(QoS, #proc_state{
         {ok, Q} ->
             {ok, Q};
         {error, not_found} ->
-            QNameBin = queue_name_bin(QoS, ClientId),
+            QNameBin = rabbit_mqtt_util:queue_name(ClientId, QoS),
             QName = rabbit_misc:r(VHost, queue, QNameBin),
             %% configure access to queue required for queue.declare
             case check_resource_access(User, QName, configure, AuthzCtx) of
                 ok ->
-                    rabbit_core_metrics:queue_declared(QName),
                     case rabbit_vhost_limit:is_over_queue_limit(VHost) of
                         false ->
-                            case rabbit_amqqueue:declare(QName,
-                                                         _Durable = true,
-                                                         _AutoDelete = false,
-                                                         queue_args(QoS, CleanSess),
-                                                         queue_owner(QoS, CleanSess),
-                                                         Username) of
+                            rabbit_core_metrics:queue_declared(QName),
+                            QArgs = queue_args(QoS, CleanSess),
+                            Q0 = amqqueue:new(QName,
+                                              self(),
+                                              _Durable = true,
+                                              _AutoDelete = false,
+                                              queue_owner(QoS, CleanSess),
+                                              QArgs,
+                                              VHost,
+                                              #{user => Username},
+                                              queue_type(QoS, CleanSess, QArgs)
+                                             ),
+                            case rabbit_queue_type:declare(Q0, node()) of
                                 {new, Q} when ?is_amqqueue(Q) ->
                                     rabbit_core_metrics:queue_created(QName),
                                     {ok, Q};
@@ -935,6 +936,11 @@ queue_args(_, _) ->
             Args
     end.
 
+queue_type(?QOS_0, true, _) ->
+    rabbit_mqtt_qos0_queue;
+queue_type(_, _, QArgs) ->
+    rabbit_amqqueue:get_queue_type(QArgs).
+
 consume(Q, QoS, #proc_state{
                    queue_states = QStates0,
                    auth_state = #auth_state{
@@ -946,25 +952,32 @@ consume(Q, QoS, #proc_state{
     %% read access to queue required for basic.consume
     case check_resource_access(User, QName, read, AuthzCtx) of
         ok ->
-            Spec = #{no_ack => QoS =:= ?QOS_0,
-                     channel_pid => self(),
-                     limiter_pid => none,
-                     limiter_active => false,
-                     prefetch_count => Prefetch,
-                     consumer_tag => ?CONSUMER_TAG,
-                     exclusive_consume => false,
-                     args => [],
-                     ok_msg => undefined,
-                     acting_user => Username},
-            case rabbit_queue_type:consume(Q, Spec, QStates0) of
-                {ok, QStates} ->
-                    % rabbit_global_counters:consumer_created(mqtt),
-                    PState = PState0#proc_state{queue_states = QStates},
-                    {ok, PState};
-                {error, Reason} = Err ->
-                    rabbit_log:error("Failed to consume from ~s: ~p",
-                                     [rabbit_misc:rs(QName), Reason]),
-                    Err
+            case amqqueue:get_type(Q) of
+                rabbit_mqtt_qos0_queue ->
+                    %% Messages get delivered directly to our process without
+                    %% explicitly calling rabbit_queue_type:consume/3.
+                    {ok, PState0};
+                _ ->
+                    Spec = #{no_ack => QoS =:= ?QOS_0,
+                             channel_pid => self(),
+                             limiter_pid => none,
+                             limiter_active => false,
+                             prefetch_count => Prefetch,
+                             consumer_tag => ?CONSUMER_TAG,
+                             exclusive_consume => false,
+                             args => [],
+                             ok_msg => undefined,
+                             acting_user => Username},
+                    case rabbit_queue_type:consume(Q, Spec, QStates0) of
+                        {ok, QStates} ->
+                            % rabbit_global_counters:consumer_created(mqtt),
+                            PState = PState0#proc_state{queue_states = QStates},
+                            {ok, PState};
+                        {error, Reason} = Err ->
+                            rabbit_log:error("Failed to consume from ~s: ~p",
+                                             [rabbit_misc:rs(QName), Reason]),
+                            Err
+                    end
             end;
         {error, access_refused} = Err ->
             Err
@@ -1092,19 +1105,16 @@ deliver_to_queues(Delivery,
     Qs0 = rabbit_amqqueue:lookup(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
-        {ok, QStates, _Actions = []} ->
+        {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(mqtt, length(Qs)),
-            PState = process_routing_confirm(Delivery, Qs, PState0),
+            PState = process_routing_confirm(Delivery, Qs,
+                                             PState0#proc_state{queue_states = QStates}),
             %% Actions must be processed after registering confirms as actions may
-            %% contain rejections of publishes
-            %% TODO handle Actions: For example if the messages is rejected, MQTT 5 allows to send a NACK
-            %% back to the client (via PUBACK Reason Code).
-            % State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
-            {ok, PState#proc_state{queue_states = QStates}};
+            %% contain rejections of publishes.
+            {ok, handle_queue_actions(Actions, PState)};
         {error, Reason} ->
-            rabbit_log:error("Failed to deliver message to queues "
-                             "packet_id=~p, queues=~p, Reason=~p",
-                             [Delivery#delivery.msg_seq_no, queue_names(Qs), Reason]),
+            rabbit_log:error("Failed to deliver message with packet_id=~p to queues: ~p",
+                             [Delivery#delivery.msg_seq_no, Reason]),
             {error, Reason, PState0}
     end.
 
@@ -1133,7 +1143,7 @@ process_routing_confirm(#delivery{confirm = true,
 process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = MsgId},
                         Qs, PState = #proc_state{unacked_client_pubs = U0}) ->
-    QNames = queue_names(Qs),
+    QNames = lists:map(fun amqqueue:get_name/1, Qs),
     {ok, U} = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
     PState#proc_state{unacked_client_pubs = U}.
 
@@ -1165,14 +1175,33 @@ serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
 
 terminate(#proc_state{client_id = undefined}) ->
     ok;
-terminate(#proc_state{client_id = ClientId}) ->
+terminate(PState = #proc_state{client_id = ClientId}) ->
     %% ignore any errors as we are shutting down
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
             rabbit_mqtt_collector:unregister(ClientId, self());
         false ->
             ok
-    end.
+    end,
+    delete_mqtt_qos0_queue(PState).
+
+delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
+                                            auth_state = #auth_state{username = Username}}) ->
+    case get_queue(?QOS_0, PState) of
+        {ok, Q} ->
+            %% double check we delete the right queue
+            case {amqqueue:get_type(Q), amqqueue:get_pid(Q)} of
+                {rabbit_mqtt_qos0_queue, Pid}
+                  when Pid =:= self() ->
+                    rabbit_queue_type:delete(Q, false, false, Username);
+                _ ->
+                    ok
+            end;
+        {error, not_found} ->
+            ok
+    end;
+delete_mqtt_qos0_queue(_) ->
+    ok.
 
 handle_pre_hibernate() ->
     erase(permission_cache),
@@ -1222,6 +1251,9 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             PState0#proc_state{queue_states = QStates}
     end.
 
+handle_queue_event({queue_event, rabbit_mqtt_qos0_queue, Msg}, PState0) ->
+    PState = deliver_one_to_client(Msg, false, PState0),
+    {ok, PState};
 handle_queue_event({queue_event, QName, Evt},
                    PState0 = #proc_state{queue_states = QStates0,
                                          unacked_client_pubs = U0}) ->
@@ -1267,7 +1299,7 @@ deliver_to_client(Msgs, Ack, PState) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, PState, Msgs).
 
-deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
+deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
                              #basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}},
                       AckRequired, PState0) ->
     PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
@@ -1285,13 +1317,13 @@ deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
     PState1 = maybe_publish_to_client(Msg, QoS, PState0),
-    PState = maybe_ack(AckRequired, QoS, QName, QMsgId, PState1),
+    PState = maybe_ack(AckRequired, QoS, QNameOrType, QMsgId, PState1),
     %%TODO GC
     % case GCThreshold of
     %     undefined -> ok;
     %     _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
     % end,
-    ok = maybe_notify_sent(QName, QPid, PState),
+    ok = maybe_notify_sent(QNameOrType, QPid, PState),
     PState.
 
 -spec effective_qos(qos(), qos()) -> qos().
@@ -1302,7 +1334,7 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     erlang:min(PublisherQoS, SubscriberQoS).
 
 maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, PState) ->
-    %% Do no redeliver to MQTT subscriber who gets message at most once.
+    %% Do not redeliver to MQTT subscriber who gets message at most once.
     PState;
 maybe_publish_to_client(
   {_QName, _QPid, QMsgId, Redelivered,
@@ -1362,6 +1394,8 @@ maybe_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
 maybe_ack(_, _, _, _, PState) ->
     PState.
 
+maybe_notify_sent(rabbit_mqtt_qos0_queue, _, _) ->
+    ok;
 maybe_notify_sent(QName, QPid, #proc_state{queue_states = QStates}) ->
     case rabbit_queue_type:module(QName, QStates) of
         {ok, rabbit_classic_queue} ->
@@ -1478,6 +1512,3 @@ ssl_login_name(Sock) ->
         {error, no_peercert} -> none;
         nossl                -> none
     end.
-
-queue_names(Queues) ->
-    lists:map(fun amqqueue:get_name/1, Queues).

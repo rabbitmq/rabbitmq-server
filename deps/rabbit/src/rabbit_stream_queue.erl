@@ -34,7 +34,8 @@
          state_info/1,
          stat/1,
          capabilities/0,
-         notify_decorators/1]).
+         notify_decorators/1,
+         is_stateful/0]).
 
 -export([list_with_minimum_quorum/0]).
 
@@ -1095,3 +1096,5 @@ list_with_minimum_quorum() ->
                          RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
                          map_size(RunningMembers) =< map_size(Members) div 2 + 1
                  end, rabbit_amqqueue:list_local_stream_queues()).
+
+is_stateful() -> true.

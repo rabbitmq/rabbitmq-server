@@ -8,8 +8,9 @@
 -module(rabbit_mqtt_util).
 
 -include("rabbit_mqtt.hrl").
+-include("rabbit_mqtt_frame.hrl").
 
--export([queue_names/1,
+-export([queue_name/2,
          gen_client_id/0,
          env/1,
          table_lookup/2,
@@ -23,11 +24,18 @@
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
 
--spec queue_names(binary()) ->
-    {binary(), binary()}.
-queue_names(ClientId) ->
-    Base = <<"mqtt-subscription-", ClientId/binary, "qos">>,
-    {<<Base/binary, "0">>, <<Base/binary, "1">>}.
+-spec queue_name(binary(), qos()) ->
+    binary().
+queue_name(ClientId, QoS) ->
+    Prefix = <<"mqtt-subscription-", ClientId/binary, "qos">>,
+    queue_name0(Prefix, QoS).
+
+queue_name0(Prefix, ?QOS_0) ->
+    %%TODO consider shortening the QoS0 queue name to save memory
+    %%(can't change QoS1 name to not break rolling updates)
+    <<Prefix/binary, "0">>;
+queue_name0(Prefix, ?QOS_1) ->
+    <<Prefix/binary, "1">>.
 
 cached(CacheName, Fun, Arg) ->
     Cache =

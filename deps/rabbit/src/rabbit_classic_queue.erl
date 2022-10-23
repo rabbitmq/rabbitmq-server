@@ -47,7 +47,8 @@
          info/2,
          state_info/1,
          capabilities/0,
-         notify_decorators/1
+         notify_decorators/1,
+         is_stateful/0
          ]).
 
 -export([delete_crashed/1,
@@ -497,6 +498,8 @@ capabilities() ->
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
+
+is_stateful() -> true.
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).

@@ -27,6 +27,8 @@ groups() ->
                                 login_timeout,
                                 keepalive,
                                 stats,
+                                clean_session_disconnect_client,
+                                clean_session_kill_node,
                                 quorum_clean_session_false,
                                 quorum_clean_session_true,
                                 classic_clean_session_true,
@@ -266,6 +268,56 @@ validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType)
     QNameBin = <<Prefix/binary, ClientName/binary, Suffix/binary>>,
     ?assertEqual(ExpectedQueueType, get_durable_queue_type(Server, QNameBin)),
     ok = emqtt:disconnect(C).
+
+clean_session_disconnect_client(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = emqtt:start_link([{clean_start, true},
+                                {host, "localhost"},
+                                {port, P},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
+                                {proto_ver, v4}]),
+    {ok, _Properties} = emqtt:connect(C),
+
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ?assertEqual(1, length(L0)),
+
+    {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
+    L1 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
+    ?assertEqual(1, length(L1)),
+
+    ok = emqtt:disconnect(C),
+    %% After terminating a clean session, we expect any session state to be cleaned up on the server.
+    timer:sleep(200), %% Give some time to clean up exclusive classic queue.
+    L = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(0, length(L)).
+
+clean_session_kill_node(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = emqtt:start_link([{clean_start, true},
+                                {host, "localhost"},
+                                {port, P},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
+                                {proto_ver, v4}]),
+    {ok, _Properties} = emqtt:connect(C),
+
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ?assertEqual(1, length(L0)),
+
+    {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
+    L1 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
+    ?assertEqual(1, length(L1)),
+
+    ?assertEqual(2, rpc(Config, ets, info, [rabbit_durable_queue, size])),
+
+    process_flag(trap_exit, true),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+
+    %% After terminating a clean session by a node crash, we expect any session
+    %% state to be cleaned up on the server once the server comes back up.
+    ?assertEqual(0, rpc(Config, ets, info, [rabbit_durable_queue, size])).
 
 quorum_clean_session_false(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),

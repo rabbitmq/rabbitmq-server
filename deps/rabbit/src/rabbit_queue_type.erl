@@ -138,20 +138,33 @@
     rabbit_types:error(in_use | not_empty) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
--callback recover(rabbit_types:vhost(), [amqqueue:amqqueue()]) ->
-    {Recovered :: [amqqueue:amqqueue()],
-     Failed :: [amqqueue:amqqueue()]}.
-
 %% checks if the queue should be recovered
 -callback is_recoverable(amqqueue:amqqueue()) ->
     boolean().
+
+-callback recover(rabbit_types:vhost(), [amqqueue:amqqueue()]) ->
+    {Recovered :: [amqqueue:amqqueue()],
+     Failed :: [amqqueue:amqqueue()]}.
 
 -callback purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()} | {error, term()}.
 
 -callback policy_changed(amqqueue:amqqueue()) -> ok.
 
-%% stateful
+-callback is_stateful() -> boolean().
+
+%% stateful callbacks are optional
+-optional_callbacks([init/1,
+                     close/1,
+                     update/2,
+                     consume/3,
+                     cancel/5,
+                     handle_event/2,
+                     settle/4,
+                     credit/4,
+                     dequeue/4,
+                     state_info/1]).
+
 %% intitialise and return a queue type specific session context
 -callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
 
@@ -416,21 +429,20 @@ is_recoverable(Q) ->
     {Recovered :: [amqqueue:amqqueue()],
      Failed :: [amqqueue:amqqueue()]}.
 recover(VHost, Qs) ->
-    ByType0 = lists:map(fun(T) -> {T, []} end, ?QUEUE_TYPES),
-    ByType1 = maps:from_list(ByType0),
+    ByType0 = maps:from_keys(?QUEUE_TYPES, []),
     ByType = lists:foldl(
                fun (Q, Acc) ->
                        T = amqqueue:get_type(Q),
                        maps:update_with(T, fun (X) ->
                                                    [Q | X]
-                                           end, Acc)
-               end, ByType1, Qs),
-   maps:fold(fun (Mod, Queues, {R0, F0}) ->
-                     {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
-                     rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
-                                    [length(Queues), Mod, Taken div 1000]),
-                     {R0 ++ R, F0 ++ F}
-             end, {[], []}, ByType).
+                                           end, [Q], Acc)
+               end, ByType0, Qs),
+    maps:fold(fun (Mod, Queues, {R0, F0}) ->
+                      {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
+                      rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
+                                      [length(Queues), Mod, Taken div 1000]),
+                      {R0 ++ R, F0 ++ F}
+              end, {[], []}, ByType).
 
 -spec handle_down(pid(), queue_name(), term(), state()) ->
     {ok, state(), actions()} | {eol, state(), queue_name()} | {error, term()}.
@@ -496,15 +508,23 @@ deliver0(Qs, Delivery, stateless) ->
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
-    ByType = lists:foldl(
-               fun (Q, Acc) ->
-                       T = amqqueue:get_type(Q),
-                       Ctx = get_ctx(Q, State0),
-                       maps:update_with(
-                         T, fun (A) ->
-                                    [{Q, Ctx#ctx.state} | A]
-                            end, [{Q, Ctx#ctx.state}], Acc)
-               end, #{}, Qs),
+    {ByType, Actions0} =
+        lists:foldl(
+          fun (Q, {M, L}) ->
+                  T = amqqueue:get_type(Q),
+                  case T:is_stateful() of
+                      true ->
+                          Ctx = get_ctx(Q, State0),
+                          {maps:update_with(
+                             T, fun (A) ->
+                                        [{Q, Ctx#ctx.state} | A]
+                                end, [{Q, Ctx#ctx.state}], M),
+                           L};
+                      false ->
+                          {[], DeliverActions} = T:deliver([{Q, stateless}], Delivery),
+                          {M, DeliverActions ++ L}
+                  end
+          end, {#{}, []}, Qs),
     %%% dispatch each group to queue type interface?
     {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->
                                       {X, A} = Mod:deliver(QSs, Delivery),
@@ -515,7 +535,7 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
                       Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
-    {ok, State, Actions}.
+    {ok, State, Actions0 ++ Actions}.
 
 -spec settle(queue_name(), settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->

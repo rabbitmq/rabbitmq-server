@@ -64,7 +64,8 @@
 
 -export([is_enabled/0,
          is_compatible/3,
-         declare/2]).
+         declare/2,
+         is_stateful/0]).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
                                  qname_to_internal_name/1]).
@@ -1702,8 +1703,8 @@ ets_lookup_element(Tbl, Key, Pos, Default) ->
             Default
     end.
 
-erpc_call(Node, M, F, A, Timeout)
-  when is_integer(Timeout) andalso Node == node()  ->
+erpc_call(Node, M, F, A, _Timeout)
+  when Node =:= node()  ->
     %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
     %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
     try erpc:call(Node, M, F, A, infinity) of
@@ -1727,4 +1728,4 @@ erpc_call(Node, M, F, A, Timeout) ->
             {error, noconnection}
     end.
 
-
+is_stateful() -> true.
