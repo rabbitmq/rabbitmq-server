@@ -122,7 +122,7 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
                backing_queue_state = BQS,
                seen_status         = #{},
                confirmed           = [],
-               known_senders       = sets:new(),
+               known_senders       = sets:new([{version, 2}]),
                wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000)};
     {error, Reason} ->
         %% The GM can shutdown before the coordinator has started up

@@ -104,7 +104,7 @@ group_by_queue_and_reason(Tables) ->
                            ensure_xdeath_event_count(Augmented, N),
                            Key, SeenKeys, Acc),
                   {sets:add_element(Key, SeenKeys), Acc1}
-          end, {sets:new(), []}, Tables),
+          end, {sets:new([{version, 2}]), []}, Tables),
     Grouped.
 
 update_x_death_header(Info, undefined) ->

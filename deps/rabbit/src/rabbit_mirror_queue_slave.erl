@@ -878,7 +878,7 @@ maybe_enqueue_message(
 
 get_sender_queue(ChPid, SQ) ->
     case maps:find(ChPid, SQ) of
-        error     -> {queue:new(), sets:new(), running};
+        error     -> {queue:new(), sets:new([{version, 2}]), running};
         {ok, Val} -> Val
     end.
 
