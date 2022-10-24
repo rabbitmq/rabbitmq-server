@@ -61,6 +61,11 @@
 erl_crash.dump
 rebar3.crashdump
 .envrc
+<<<<<<< HEAD
+=======
+.exrc
+.ignore
+>>>>>>> eb14b0af3d (Ignore `.exrc` file)
 *.plt
 *.lock
 
