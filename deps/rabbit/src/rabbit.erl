@@ -910,6 +910,8 @@ start(normal, []) ->
         ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
                Plugins),
 
+        persist_static_configuration(),
+
         ?LOG_DEBUG(""),
         ?LOG_DEBUG("== Boot steps =="),
 
@@ -1592,3 +1594,25 @@ ensure_working_fhc() ->
     after Timeout ->
             throw({ensure_working_fhc, {timeout, TestPid}})
     end.
+
+%% Any configuration that
+%% 1. is not allowed to change while RabbitMQ is running, and
+%% 2. is read often
+%% should be placed into persistent_term for efficiency.
+persist_static_configuration() ->
+    persist_static_configuration(
+      [{rabbit, classic_queue_index_v2_segment_entry_count},
+       {rabbit, classic_queue_store_v2_max_cache_size},
+       {rabbit, classic_queue_store_v2_check_crc32}
+      ]).
+
+persist_static_configuration(AppParams) ->
+    lists:foreach(
+      fun(Key = {App, Param}) ->
+              case application:get_env(App, Param) of
+                  {ok, Value} ->
+                      ok = persistent_term:put(Key, Value);
+                  undefined ->
+                      ok
+              end
+      end, AppParams).
