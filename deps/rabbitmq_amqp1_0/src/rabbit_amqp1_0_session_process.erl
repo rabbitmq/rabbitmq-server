@@ -277,6 +277,14 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                #'v1_0.accepted'{} ->
                                    #'basic.ack'{delivery_tag = DeliveryTag,
                                                 multiple     = false};
+                               %% we don't care if the client modified the
+                               %% so just treat it as accepted.
+                               %% Some clients send modified instead of accepted
+                               %% when e.g. a client
+                               %% side message TTL expires.
+                               #'v1_0.modified'{} ->
+                                   #'basic.ack'{delivery_tag = DeliveryTag,
+                                                multiple     = false};
                                #'v1_0.rejected'{} ->
                                    #'basic.reject'{delivery_tag = DeliveryTag,
                                                    requeue      = false};
