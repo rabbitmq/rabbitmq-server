@@ -1753,7 +1753,7 @@ fail_active_actions(Streams, Exclude) ->
                            end, Members),
               case Mnesia of
                   {updating, E} ->
-                      rabbit_log:debug("~ts: schema database action failed, will have to retry. "
+                      rabbit_log:debug("~ts: failing stale action to trigger retry. "
                                        "Stream ID: ~ts, node: ~w, action: ~w",
                                        [?MODULE, Id, node(), updating_mnesia]),
                       send_self_command({action_failed, Id,
@@ -1774,9 +1774,9 @@ fail_action(_StreamId, #member{current = undefined}) ->
 fail_action(StreamId, #member{role = {_, E},
                               current = {Action, Idx},
                               node = Node}) ->
-    rabbit_log:debug("~ts: schema database action failed, will have to retry. "
+    rabbit_log:debug("~ts: failing stale action to trigger retry. "
                      "Stream ID: ~ts, node: ~w, action: ~w",
-                     [?MODULE, StreamId, node(), updating_mnesia]),
+                     [?MODULE, StreamId, node(), Action]),
     %% if we have an action send failure message
     send_self_command({action_failed, StreamId,
                        #{action => Action,
