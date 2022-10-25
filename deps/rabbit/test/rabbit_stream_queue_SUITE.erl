@@ -1135,7 +1135,6 @@ receive_basic_cancel_on_queue_deletion(Config) ->
 recover_after_leader_and_coordinator_kill(Config) ->
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    % Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
@@ -1145,7 +1144,6 @@ recover_after_leader_and_coordinator_kill(Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, Q),
     [begin
          Sleep = rand:uniform(10),
-         ct:pal("Attempt ~b Sleep ~b", [Num, Sleep]),
          {ok, {_LeaderNode, LeaderPid}} = leader_info(Config),
          {_, CoordNode} = get_stream_coordinator_leader(Config),
          kill_stream_leader_then_coordinator_leader(Config, CoordNode,
@@ -1158,7 +1156,7 @@ recover_after_leader_and_coordinator_kill(Config) ->
                    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
                                                 validate_writer_pid, [QName])
            end)
-     end || Num <- lists:seq(1, 10)],
+     end || _Num <- lists:seq(1, 10)],
 
     {_, Node} = get_stream_coordinator_leader(Config),
 
