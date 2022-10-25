@@ -32,6 +32,7 @@
          detach_link/1,
          send_msg/2,
          accept_msg/2,
+         settle_msg/3,
          flow_link_credit/3,
          flow_link_credit/4,
          echo/1,
@@ -335,11 +336,18 @@ send_msg(#link_ref{role = sender, session = Session,
 
 %% @doc Accept a message on a the link referred to be the 'LinkRef'.
 -spec accept_msg(link_ref(), amqp10_msg:amqp10_msg()) -> ok.
-accept_msg(#link_ref{role = receiver, session = Session}, Msg) ->
+accept_msg(LinkRef, Msg) ->
+    settle_msg(LinkRef, Msg, accepted).
+
+%% @doc Settle a message on a the link referred to be the 'LinkRef' using
+%% the chosen delivery state.
+-spec settle_msg(link_ref(), amqp10_msg:amqp10_msg(),
+                 amqp10_client_types:delivery_state()) -> ok.
+settle_msg(#link_ref{role = receiver,
+                     session = Session}, Msg, Settlement) ->
     DeliveryId = amqp10_msg:delivery_id(Msg),
     amqp10_client_session:disposition(Session, receiver, DeliveryId,
-                                      DeliveryId, true, accepted).
-
+                                      DeliveryId, true, Settlement).
 %% @doc Get a single message from a link.
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref()) -> {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
