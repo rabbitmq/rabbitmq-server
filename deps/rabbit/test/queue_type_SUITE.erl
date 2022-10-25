@@ -193,6 +193,15 @@ smoke(Config) ->
                    messages_get_empty_total => 2,
                    messages_redelivered_total => 1
                   }, ProtocolQueueTypeCounters),
+
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+
+    ?assertMatch(
+       #{consumers := 0,
+         publishers := 0},
+       maps:get([{protocol, amqp091}], get_global_counters(Config))),
+
     ok.
 
 ack_after_queue_delete(Config) ->

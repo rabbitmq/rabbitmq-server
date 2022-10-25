@@ -877,6 +877,7 @@ handle_post_hibernate(State0) ->
 
 terminate(_Reason,
           State = #ch{cfg = #conf{user = #user{username = Username}},
+                      consumer_mapping = CM,
                       queue_states = QueueCtxs}) ->
     _ = rabbit_queue_type:close(QueueCtxs),
     {_Res, _State1} = notify_queues(State),
@@ -885,6 +886,10 @@ terminate(_Reason,
                             fun() -> emit_stats(State) end),
     [delete_stats(Tag) || {Tag, _} <- get()],
     maybe_decrease_global_publishers(State),
+    _ = maps:map(
+          fun (_, _) ->
+                  rabbit_global_counters:consumer_deleted(amqp091)
+          end, CM),
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()},
                                          {user_who_performed_action, Username}]).
@@ -2903,7 +2908,7 @@ maybe_increase_global_publishers(State0) ->
     rabbit_global_counters:publisher_created(amqp091),
     State0#ch{publishing_mode = true}.
 
-maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
-    ok;
 maybe_decrease_global_publishers(#ch{publishing_mode = false}) ->
+    ok;
+maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
     rabbit_global_counters:publisher_deleted(amqp091).
