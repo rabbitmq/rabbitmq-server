@@ -33,5 +33,5 @@ selenium/screens/*/*
 selenium/logs
 selenium/suites/logs/*
 selenium/suites/screens/*
-h2/*.trace.db
-h2/*.lock.db
+selenium/test/oauth/*/h2/*.trace.db
+selenium/test/oauth/*/h2/*.lock.db
