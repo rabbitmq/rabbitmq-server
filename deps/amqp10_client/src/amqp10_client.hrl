@@ -20,5 +20,6 @@
 -define(DBG(F, A), ok).
 -endif.
 
--record(link_ref, {role :: sender | receiver, session :: pid(),
+-record(link_ref, {role :: sender | receiver,
+                   session :: pid(),
                    link_handle :: non_neg_integer()}).

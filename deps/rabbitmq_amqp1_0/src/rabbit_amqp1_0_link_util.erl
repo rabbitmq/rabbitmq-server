@@ -14,14 +14,11 @@
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
--define(SUPPORTED_OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
-                             ?V_1_0_SYMBOL_REJECTED,
-                             ?V_1_0_SYMBOL_RELEASED]).
-
 -define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED,
                    ?V_1_0_SYMBOL_MODIFIED]).
+-define(SUPPORTED_OUTCOMES, ?OUTCOMES).
 
 outcomes(Source) ->
     {DefaultOutcome, Outcomes} =
