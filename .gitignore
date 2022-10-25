@@ -64,6 +64,8 @@
 erl_crash.dump
 rebar3.crashdump
 .envrc
+.exrc
+.ignore
 *.plt
 *.lock
 
