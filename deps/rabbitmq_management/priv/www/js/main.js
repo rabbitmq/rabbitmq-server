@@ -111,11 +111,7 @@ function check_login() {
         }
     }
     else {
-        if (oauth.enabled) {
-          user.name = oauth.user_name;
-          // remove once we are able to configure which oauth2 claim can be used as identity
-          // for now we take the claim
-        }
+      
 
         hide_popup_warn();
         replace_content('outer', format('layout', {}));
