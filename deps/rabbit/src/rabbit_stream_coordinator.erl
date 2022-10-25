@@ -751,15 +751,9 @@ handle_aux(leader, _, fail_active_actions,
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
     Exclude = maps:from_list([{S, ok}
-<<<<<<< HEAD
-                              || {P, {S, _, _}} <- maps:to_list(Monitors),
-                             not is_process_alive(P)]),
-    rabbit_log:debug("~s: failing actions: ~w", [?MODULE, Exclude]),
-=======
                               || {P, {S, _, _}} <- maps:to_list(Actions),
                              is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
->>>>>>> e2a5ba5b78 (SC: fail active mnesia update actions on leader change)
     fail_active_actions(Streams, Exclude),
     {no_reply, Aux, LogState, []};
 handle_aux(leader, _, {down, Pid, normal},
@@ -1759,7 +1753,7 @@ fail_active_actions(Streams, Exclude) ->
                            end, Members),
               case Mnesia of
                   {updating, E} ->
-                      rabbit_log:debug("~ts: schema database action failed, will have to retry. "
+                      rabbit_log:debug("~ts: failing stale action to trigger retry. "
                                        "Stream ID: ~ts, node: ~w, action: ~w",
                                        [?MODULE, Id, node(), updating_mnesia]),
                       send_self_command({action_failed, Id,
@@ -1780,14 +1774,9 @@ fail_action(_StreamId, #member{current = undefined}) ->
 fail_action(StreamId, #member{role = {_, E},
                               current = {Action, Idx},
                               node = Node}) ->
-<<<<<<< HEAD
-    rabbit_log:debug("~s: failing active action for ~s node ~w Action ~w",
-                     [?MODULE, StreamId, Node, Action]),
-=======
-    rabbit_log:debug("~ts: schema database action failed, will have to retry. "
+    rabbit_log:debug("~ts: failing stale action to trigger retry. "
                      "Stream ID: ~ts, node: ~w, action: ~w",
-                     [?MODULE, StreamId, node(), updating_mnesia]),
->>>>>>> 81daaf7a9a (Wording)
+                     [?MODULE, StreamId, node(), Action]),
     %% if we have an action send failure message
     send_self_command({action_failed, StreamId,
                        #{action => Action,
