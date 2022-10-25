@@ -54,7 +54,7 @@ function oauth_initialize(authSettings) {
       "logged_in": false,
       "enabled" : authSettings.oauth_enabled,
       "authority" : authSettings.oauth_provider_url
-    }
+    };
 
     if (!oauth.enabled) return oauth;
 
@@ -64,7 +64,6 @@ function oauth_initialize(authSettings) {
         //userStore: new WebStorageStateStore({ store: window.localStorage }),
         authority: authSettings.oauth_provider_url,
         client_id: authSettings.oauth_client_id,
-        client_secret: authSettings.oauth_client_secret,
         response_type: authSettings.oauth_response_type,
         scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
@@ -77,7 +76,12 @@ function oauth_initialize(authSettings) {
           audience: authSettings.oauth_resource_id, // required by oauth0
         },
     };
-    if (authSettings.oauth_metadata_url != "") oidcSettings.metadataUrl = authSettings.oauth_metadata_url
+    if (authSettings.oauth_client_secret != "") {
+      oidcSettings.client_secret = authSettings.oauth_client_secret;
+    }
+    if (authSettings.oauth_metadata_url != "") {
+      oidcSettings.metadataUrl = authSettings.oauth_metadata_url;
+    }
 
     if (authSettings.enable_uaa == true) {
       // This is required for old versions of UAA because the newer ones do expose
@@ -90,22 +94,22 @@ function oauth_initialize(authSettings) {
     oidc.Log.setLogger(console);
 
     mgr = new oidc.UserManager(oidcSettings);
-    oauth.readiness_url = mgr.settings.metadataUrl
+    oauth.readiness_url = mgr.settings.metadataUrl;
 
     _management_logger = new oidc.Logger("Management");
 
     mgr.events.addAccessTokenExpiring(function() {
-        _management_logger.info("token expiring...");
+      _management_logger.info("token expiring...");
     });
     mgr.events.addAccessTokenExpired(function() {
-        _management_logger.info("token expired!!");
+      _management_logger.info("token expired!!");
     });
     mgr.events.addSilentRenewError(function(err) {
-        _management_logger.error("token expiring failed due to ", err);
+      _management_logger.error("token expiring failed due to ", err);
     });
     mgr.events.addUserLoaded(function(user) {
-        oauth.access_token = user.access_token;
-     });
+      oauth.access_token = user.access_token;
+    });
 
     return oauth;
 }
@@ -145,7 +149,6 @@ function oauth_redirectToHome(oauth) {
   location.href = rabbit_path_prefix + "/"
 }
 function oauth_redirectToLogin(error) {
-  _management_logger.debug("oauth_redirectToLogin called");
   if (!error) location.href = rabbit_path_prefix + "/"
   else {
     location.href = rabbit_path_prefix + "/?error=" + error

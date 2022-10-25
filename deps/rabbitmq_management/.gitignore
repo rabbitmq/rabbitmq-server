@@ -33,3 +33,5 @@ selenium/screens/*/*
 selenium/logs
 selenium/suites/logs/*
 selenium/suites/screens/*
+h2/*.trace.db
+h2/*.lock.db

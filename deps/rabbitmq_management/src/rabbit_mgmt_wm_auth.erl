@@ -40,20 +40,20 @@ to_json(ReqData, Context) ->
                            rabbit_log:warning("Disabling OAuth 2 authorization, missing resource_server_id in oauth2 plugin", []),
                             [{oauth_enabled, false}];
                        false ->
-                           case is_invalid([OAuthClientId, OAuthClientSecret, OAuthProviderUrl]) of
+                           case is_invalid([OAuthClientId, OAuthProviderUrl]) of
                                true ->
                                    rabbit_log:warning("Disabling OAuth 2 authorization, missing relevant configuration in management plugin", []),
                                    [{oauth_enabled, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
                                false ->
-                                   [{oauth_enabled, true},
+                                   append_oauth_optional_secret([
+                                    {oauth_enabled, true},
                                     {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
                                     {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
-                                    {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
                                     {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
                                     {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},
                                     {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
                                     {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
-                                    ]
+                                    ], OAuthClientSecret)
                            end
                    end;
                false ->
@@ -66,3 +66,8 @@ is_authorized(ReqData, Context) ->
 
 is_invalid(List) ->
     lists:any(fun(V) -> V == "" end, List).
+
+append_oauth_optional_secret(List, OAuthClientSecret) when OAuthClientSecret == "" ->
+    List;
+append_oauth_optional_secret(List, OAuthClientSecret) ->
+    lists:append(List, [{oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)}]).

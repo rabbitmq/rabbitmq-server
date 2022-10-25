@@ -2,15 +2,15 @@
 $(document).ready(function() {
    var url_string = window.location.href;
    var url = new URL(url_string);
-   var error = url.searchParams.get("error");
+   var error = url.searchParams.get('error');
    if (error) {
      renderWarningMessageInLoginStatus(error);
    }else {
       if (oauth.enabled) {
         if (!oauth.logged_in ) {
-          get(oauth.readiness_url, "application/json", function(req) {
+          get(oauth.readiness_url, 'application/json', function(req) {
               if (req.status !== 200) {
-                  renderWarningMessageInLoginStatus(oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate" );
+                  renderWarningMessageInLoginStatus(oauth.authority + ' does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate' );
               } else {
                   replace_content('outer', format('login_oauth', {}));
               }
@@ -27,7 +27,7 @@ $(document).ready(function() {
 
 function renderWarningMessageInLoginStatus(message) {
   replace_content('outer', format('login_oauth', {}));
-  replace_content('login-status', '<p class="warning">' + message  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+  replace_content('login-status', '<p class="warning">' + message  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button>');
 }
 
 function dispatcher_add(fun) {
@@ -70,7 +70,6 @@ function getAccessToken() {
 }
 
 function start_app_login() {
-    //console.log("start_app_login begin");
     app = new Sammy.Application(function () {
         this.get('#/', function() {});
         this.put('#/login', function() {
@@ -94,7 +93,6 @@ function start_app_login() {
             check_login();
         }
     }
-    //console.log("start_app_login end");
 }
 
 
@@ -105,7 +103,7 @@ function check_login() {
         clear_pref('auth');
         clear_cookie_value('auth');
         if (oauth.enabled) {
-            renderWarningMessageInLoginStatus("Not authorized");
+            renderWarningMessageInLoginStatus('Not authorized');
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
@@ -135,10 +133,10 @@ function check_login() {
 function print_logging_session_info(user_login_session_timeout) {
   let var_has_auth_cookie_value = has_auth_cookie_value()
   let login_session_timeout = get_login_session_timeout()
-  console.log("user_login_session_timeout: " + user_login_session_timeout)
-  console.log("has_auth_cookie_value: " + var_has_auth_cookie_value)
-  console.log("login_session_timeout: " + login_session_timeout)
-  console.log("isNaN(user_login_session_timeout): " + isNaN(user_login_session_timeout))
+  console.log('user_login_session_timeout: ' + user_login_session_timeout)
+  console.log('has_auth_cookie_value: ' + var_has_auth_cookie_value)
+  console.log('login_session_timeout: ' + login_session_timeout)
+  console.log('isNaN(user_login_session_timeout): ' + isNaN(user_login_session_timeout))
 }
 
 function get_login_session_timeout() {
@@ -193,7 +191,7 @@ function start_app() {
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, "#/");
+        this.location = url.replace(/#token_type.+/gi, '#/');
     }
 
     app = new Sammy.Application(dispatcher);
@@ -245,7 +243,7 @@ function setup_extensions() {
     extension_count = 0;
     for (var i in extensions) {
         var extension = extensions[i];
-        if ($.isPlainObject(extension) && extension.hasOwnProperty("javascript")) {
+        if ($.isPlainObject(extension) && extension.hasOwnProperty('javascript')) {
             dynamic_load(extension.javascript);
             extension_count++;
         }
@@ -256,7 +254,7 @@ function dynamic_load(filename) {
     var element = document.createElement('script');
     element.setAttribute('type', 'text/javascript');
     element.setAttribute('src', 'js/' + filename);
-    document.getElementsByTagName("head")[0].appendChild(element);
+    document.getElementsByTagName('head')[0].appendChild(element);
 }
 
 function update_interval() {

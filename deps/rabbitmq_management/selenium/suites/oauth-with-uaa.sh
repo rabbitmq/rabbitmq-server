@@ -15,8 +15,8 @@ UAA_CONFIG_PATH=/uaa
 source $SCRIPT/suite_template
 
 _setup () {
+  start_uaa
   start_rabbitmq
-  start_uaa  
 }
 _save_logs() {
   save_container_logs rabbitmq

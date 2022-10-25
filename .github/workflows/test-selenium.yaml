@@ -91,7 +91,7 @@ jobs:
 
     - name: Run Suites
       run: |
-        ${SELENIUM_DIR}/run-suites.sh
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
 
     - name: Upload Test Artifacts
       if: always()

@@ -26,7 +26,7 @@ describe("Management UI without UAA running", function() {
   it("should have a login button to SSO", async function() {
     await homePage.isLoaded();
     let value = await homePage.getLoginButton()
-    assert.equal(value, "Single Sign On");
+    assert.equal(value, "Click here to log in");
   });
 
   after(async function() {

@@ -133,7 +133,7 @@ oauth:
       authorities: uaa.resource,rabbitmq
       redirect-uri: http://rabbitmq:15672
       autoapprove: true
-
+      allowpublic: true
     mgt_api_client_2:
       id: mgt_api_client_2
       secret: mgt_api_client_2
