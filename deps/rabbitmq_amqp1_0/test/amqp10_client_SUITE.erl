@@ -9,7 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -23,13 +23,8 @@ all() ->
 groups() ->
     [
      {tests, [], [
-<<<<<<< HEAD
-                  roundtrip_quorum_queue_with_drain
-=======
                   reliable_send_receive_with_outcomes,
-                  roundtrip_quorum_queue_with_drain,
-                  message_headers_conversion
->>>>>>> 6a42c8a34a (AMQP 1.0: Support the modified outcome)
+                  roundtrip_quorum_queue_with_drain
                  ]},
      {metrics, [], [
                     auth_attempt_metrics
@@ -174,11 +169,6 @@ roundtrip_quorum_queue_with_drain(Config) ->
                 port => Port,
                 container_id => atom_to_binary(?FUNCTION_NAME, utf8),
                 sasl => {plain, <<"guest">>, <<"guest">>}},
-<<<<<<< HEAD
-    % ct:pal("opening connectoin with ~p", [OpnConf]),
-=======
-
->>>>>>> 6a42c8a34a (AMQP 1.0: Support the modified outcome)
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     SenderLinkName = <<"test-sender">>,
@@ -231,78 +221,6 @@ roundtrip_quorum_queue_with_drain(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
-<<<<<<< HEAD
-=======
-message_headers_conversion(Config) ->
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
-    Address = <<"/amq/queue/", QName/binary>>,
-    %% declare a quorum queue
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
-                                            durable = true,
-                                            arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
-
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,[rabbitmq_amqp1_0, convert_amqp091_headers_to_app_props, true]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,[rabbitmq_amqp1_0, convert_app_props_to_amqp091_headers, true]),
-
-    OpnConf = #{address => Host,
-                port => Port,
-                container_id => atom_to_binary(?FUNCTION_NAME, utf8),
-                sasl => {plain, <<"guest">>, <<"guest">>}},
-
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session(Connection),
-
-    amqp10_to_amqp091_header_conversion(Session, Ch, QName, Address),
-
-    amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address),
-    delete_queue(Config, QName),
-    ok = amqp10_client:close_connection(Connection),
-    ok.
-
-amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) -> 
-    {ok, Sender} = create_amqp10_sender(Session, Address),
-
-    OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, true),
-    OutMsg2 = amqp10_msg:set_application_properties(#{
-        "x-string" => "string-value",
-        "x-int" => 3,
-        "x-bool" => true
-    }, OutMsg),
-    ok = amqp10_client:send_msg(Sender, OutMsg2),
-    wait_for_accepts(1),
-
-    {ok, Headers} = amqp091_get_msg_headers(Ch, QName),
-
-    ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)),
-    ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-int">>)),
-    ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)).    
-
-
-amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) -> 
-    Amqp091Headers = [{<<"x-forwarding">>, array, 
-                        [{table, [{<<"uri">>, longstr,
-                                   <<"amqp://localhost/%2F/upstream">>}]}]},
-                      {<<"x-string">>, longstr, "my-string"},
-                      {<<"x-int">>, long, 92},
-                      {<<"x-bool">>, bool, true}],
-
-    amqp_channel:cast(Ch, 
-        #'basic.publish'{exchange = <<"">>, routing_key = QName},
-        #amqp_msg{props = #'P_basic'{
-            headers = Amqp091Headers}, 
-            payload = <<"foobar">> }
-        ),
-
-    {ok, [Msg]} = drain_queue(Session, Address, 1),
-    Amqp10Props = amqp10_msg:application_properties(Msg),
-    ?assertEqual(true, maps:get(<<"x-bool">>, Amqp10Props, undefined)),
-    ?assertEqual(92, maps:get(<<"x-int">>, Amqp10Props, undefined)),    
-    ?assertEqual(<<"my-string">>, maps:get(<<"x-string">>, Amqp10Props, undefined)).
-
->>>>>>> 6a42c8a34a (AMQP 1.0: Support the modified outcome)
 auth_attempt_metrics(Config) ->
     Host = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -353,8 +271,6 @@ open_and_close_connection(OpnConf) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, _} = amqp10_client:begin_session(Connection),
     ok = amqp10_client:close_connection(Connection).
-<<<<<<< HEAD
-=======
 
 % before we can send messages we have to wait for credit from the server
 wait_for_credit(Sender) ->
@@ -427,4 +343,3 @@ receive_message(Receiver, N, Acc) ->
     after 5000  ->
             exit(receive_timed_out)
     end.
->>>>>>> 6a42c8a34a (AMQP 1.0: Support the modified outcome)
