@@ -9,8 +9,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -22,6 +23,7 @@ all() ->
 groups() ->
     [
      {tests, [], [
+                  reliable_send_receive_with_outcomes,
                   roundtrip_quorum_queue_with_drain
                  ]},
      {metrics, [], [
@@ -83,6 +85,75 @@ end_per_testcase(Testcase, Config) ->
 %%% TESTS
 %%%
 
+reliable_send_receive_with_outcomes(Config) ->
+    Outcomes = [accepted,
+                modified,
+                rejected,
+                released],
+    [begin
+         ct:pal("~s testing ~s", [?FUNCTION_NAME, Outcome]),
+         reliable_send_receive(Config, Outcome)
+     end || Outcome <- Outcomes],
+    ok.
+
+reliable_send_receive(Config, Outcome) ->
+    Container = atom_to_binary(?FUNCTION_NAME, utf8),
+    OutcomeBin = atom_to_binary(Outcome, utf8),
+    QName = <<Container/binary, OutcomeBin/binary>>,
+    %% declare a quorum queue
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>,
+                                                         longstr, <<"quorum">>}]}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    %% reliable send and consume
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Address = <<"/amq/queue/", QName/binary>>,
+
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => Container,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address),
+    ok = wait_for_credit(Sender),
+    DTag1 = <<"dtag-1">>,
+    %% create an unsettled message,
+    %% link will be in "mixed" mode by default
+    Msg1 = amqp10_msg:new(DTag1, <<"body-1">>, false),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = wait_for_settlement(DTag1),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:close_connection(Connection),
+    flush("post sender close"),
+
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
+    {ok, Session2} = amqp10_client:begin_session(Connection2),
+    ReceiverLinkName = <<"test-receiver">>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session2,
+                                                        ReceiverLinkName,
+                                                        Address,
+                                                        unsettled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+
+    ct:pal("got ~p", [amqp10_msg:body(Msg)]),
+
+    ok = amqp10_client:settle_msg(Receiver, Msg, Outcome),
+
+    flush("post accept"),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:close_connection(Connection2),
+
+    ok.
+
 roundtrip_quorum_queue_with_drain(Config) ->
     Host = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -98,7 +169,6 @@ roundtrip_quorum_queue_with_drain(Config) ->
                 port => Port,
                 container_id => atom_to_binary(?FUNCTION_NAME, utf8),
                 sasl => {plain, <<"guest">>, <<"guest">>}},
-    % ct:pal("opening connectoin with ~p", [OpnConf]),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     SenderLinkName = <<"test-sender">>,
@@ -201,3 +271,75 @@ open_and_close_connection(OpnConf) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, _} = amqp10_client:begin_session(Connection),
     ok = amqp10_client:close_connection(Connection).
+
+% before we can send messages we have to wait for credit from the server
+wait_for_credit(Sender) ->
+    receive
+        {amqp10_event, {link, Sender, credited}} ->
+            flush(?FUNCTION_NAME),
+            ok
+    after 5000 ->
+              flush("wait_for_credit timed out"),
+              ct:fail(credited_timeout)
+    end.
+
+wait_for_settlement(Tag) ->
+    receive
+        {amqp10_disposition, {accepted, Tag}} ->
+            flush(?FUNCTION_NAME),
+            ok
+    after 5000 ->
+              flush("wait_for_settlement timed out"),
+              ct:fail(credited_timeout)
+    end.
+
+wait_for_accepts(0) -> ok;
+wait_for_accepts(N) ->
+    receive
+        {amqp10_disposition,{accepted,_}} ->
+            wait_for_accepts(N -1)
+    after 250 ->
+              ok
+    end.
+
+delete_queue(Config, QName) -> 
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    _ = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    rabbit_ct_client_helpers:close_channel(Ch).
+
+
+amqp091_get_msg_headers(Channel, QName) -> 
+    {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{ headers= Headers}}}
+        = amqp_channel:call(Channel, #'basic.get'{queue = QName, no_ack = true}),
+    {ok, Headers}.
+
+create_amqp10_sender(Session, Address) -> 
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address),
+    wait_for_credit(Sender),
+    {ok, Sender}.
+
+    drain_queue(Session, Address, N) -> 
+        flush("Before drain_queue"),
+        {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                        <<"test-receiver">>,
+                        Address, 
+                        settled,
+                        configuration),
+    
+        ok = amqp10_client:flow_link_credit(Receiver, 1000, never, true),
+        Msgs = receive_message(Receiver, N, []),
+        flush("after drain"),
+        ok = amqp10_client:detach_link(Receiver),
+        {ok, Msgs}.
+    
+receive_message(_Receiver, 0, Acc) -> lists:reverse(Acc);
+receive_message(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, Msg} -> 
+            receive_message(Receiver, N-1, [Msg | Acc])
+    after 5000  ->
+            exit(receive_timed_out)
+    end.
