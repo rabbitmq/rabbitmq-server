@@ -59,12 +59,13 @@ sheet_body(State) ->
                 ["dead", Vhost, unicode:characters_to_binary([Name, " (dead)"]),
                     0,0,0,0,0,0,0,0,0,0];
             Pid ->
-                case process_info(Pid, message_queue_len) of
+                ProcInfo = erpc:call(node(Pid), erlang, process_info, [Pid, message_queue_len]),
+                case ProcInfo of
                     undefined ->
                         [Pid, Vhost, unicode:characters_to_binary([Name, " (dead)"]),
                             0,0,0,0,0,0,0,0,0,0];
                     {_, MsgQ} ->
-                        GS2Q = rabbit_core_metrics:get_gen_server2_stats(Pid),
+                        GS2Q = erpc:call(node(Pid), rabbit_core_metrics, get_gen_server2_stats, [Pid]),
                         Info = rabbit_amqqueue:info(Q),
                         BQInfo = proplists:get_value(backing_queue_status, Info),
                         [
