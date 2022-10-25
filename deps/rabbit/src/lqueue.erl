@@ -388,13 +388,13 @@ fold(Fun, Acc0, Q) ->
 %% Move half of elements from R to F, if there are at least three
 r2f(0, []) ->
     {0, [], []};
-r2f(1, [_] = R) ->
-    {1, [], R};
-r2f(2, [X, Y]) ->
-    {2, [X], [Y]};
+r2f(1, [_] = FF) ->
+    {1, [], FF};
+r2f(2, [Y, X]) ->
+    {2, [Y], [X]};
 r2f(Len, List) ->
-    {FF, RR} = lists:split(Len div 2 + 1, List),
-    {Len, FF, lists:reverse(RR, [])}.
+    {RR, FF} = lists:split(Len div 2, List),
+    {Len, RR, lists:reverse(FF, [])}.
 
 %% Move half of elements from F to R, if there are enough
 f2r(0, []) ->
@@ -404,5 +404,5 @@ f2r(1, [_] = F) ->
 f2r(2, [X, Y]) ->
     {2, [Y], [X]};
 f2r(Len, List) ->
-    {FF, RR} = lists:split(Len div 2 + 1, List),
+    {FF, RR} = lists:split(Len div 2, List),
     {Len, lists:reverse(RR, []), FF}.
