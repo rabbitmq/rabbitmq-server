@@ -27,11 +27,11 @@ attributes(State) ->
     Content4 = "pa/cf are messages pending acks or confirms.",
     Content5 = "qib/qibu/qsb are index/store buffer sizes, with qib = AMQP messages + qibu (acks).",
     {[
-        [#{content => Content1, width => 133}],
-        [#{content => Content2, width => 133}],
-        [#{content => Content3, width => 133}],
-        [#{content => Content4, width => 133}],
-        [#{content => Content5, width => 133}]
+        [#{content => Content1, width => 136}],
+        [#{content => Content2, width => 136}],
+        [#{content => Content3, width => 136}],
+        [#{content => Content4, width => 136}],
+        [#{content => Content5, width => 136}]
     ], State}.
 
 sheet_header() ->
@@ -39,9 +39,9 @@ sheet_header() ->
         #{title => "Pid", width => 12, shortcut => "P"},
         #{title => "Vhost", width => 10, shortcut => "V"},
         #{title => "Name", width => 26, shortcut => "N"},
-        #{title => "", width => 5, shortcut => "Q"},
-        #{title => "", width => 5, shortcut => "MQ"},
-        #{title => "", width => 5, shortcut => "GQ"},
+        #{title => "", width => 6, shortcut => "Q"},
+        #{title => "", width => 6, shortcut => "MQ"},
+        #{title => "", width => 6, shortcut => "GQ"},
         #{title => "", width => 10, shortcut => "mem"},
         #{title => "", width => 10, shortcut => "disk"},
         #{title => "", width => 8, shortcut => "pa"},
@@ -70,7 +70,7 @@ sheet_body(State) ->
                         BQInfo = proplists:get_value(backing_queue_status, Info),
                         [
                             Pid, Vhost, Name,
-                            MsgQ + GS2Q, MsgQ, GS2Q,
+                            format_int(MsgQ + GS2Q), format_int(MsgQ), format_int(GS2Q),
                             proplists:get_value(q3, BQInfo),
                             element(3, proplists:get_value(delta, BQInfo)),
                             proplists:get_value(num_pending_acks, BQInfo),
@@ -94,3 +94,13 @@ list_classic_queues() ->
                                       read)
           end),
     Qs.
+
+format_int(N) when N >= 1_000_000_000 ->
+    integer_to_list(N div 1_000_000_000) ++ "B";
+format_int(N) when N >= 1_000_000 ->
+    integer_to_list(N div 1_000_000) ++ "M";
+%% We print up to 9999 messages and shorten 10K+.
+format_int(N) when N >= 10_000 ->
+    integer_to_list(N div 1_000) ++ "K";
+format_int(N) ->
+    N.
