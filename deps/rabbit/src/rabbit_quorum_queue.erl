@@ -203,8 +203,8 @@ start_cluster(Q) ->
                                                    ?SNAPSHOT_INTERVAL),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
-            Timeout = erpc_timeout(Leader, ?START_CLUSTER_RPC_TIMEOUT),
-            try erpc:call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs], Timeout) of
+            try erpc_call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs],
+                          ?START_CLUSTER_RPC_TIMEOUT) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -285,17 +285,23 @@ single_active_consumer_on(Q) ->
         _            -> false
     end.
 
-update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args) ->
-    local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
-        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args]).
+update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
+                        Prefetch, Active, ActivityStatus, Args) ->
+    catch local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
+                                  [QName, ChPid, ConsumerTag, Exclusive,
+                                   AckRequired, Prefetch, Active,
+                                   ActivityStatus, Args]).
 
-update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args) ->
-    catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive, AckRequired,
-                                               QName, Prefetch, Active, ActivityStatus, Args).
+update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
+                Active, ActivityStatus, Args) ->
+    catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive,
+                                               AckRequired,
+                                               QName, Prefetch, Active,
+                                               ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer,
-                            [QName, ChPid, ConsumerTag]).
+    catch local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer,
+                                  [QName, ChPid, ConsumerTag]).
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
     catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
@@ -309,7 +315,7 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
         false ->
             %% this could potentially block for a while if the node is
             %% in disconnected state or tcp buffers are full
-            rpc:cast(Node, Module, Function, Args)
+            erpc:cast(Node, Module, Function, Args)
     end.
 
 become_leader(QName, Name) ->
@@ -329,8 +335,8 @@ become_leader(QName, Name) ->
                   case rabbit_amqqueue:lookup(QName) of
                       {ok, Q0} when ?is_amqqueue(Q0) ->
                           Nodes = get_nodes(Q0),
-                          [rpc:call(Node, ?MODULE, rpc_delete_metrics,
-                                    [QName], ?RPC_TIMEOUT)
+                          [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
+                                         [QName], ?RPC_TIMEOUT)
                            || Node <- Nodes, Node =/= node()];
                       _ ->
                           ok
@@ -676,8 +682,8 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             end,
             notify_decorators(QName, shutdown),
             ok = delete_queue_data(QName, ActingUser),
-            rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
-                     ?RPC_TIMEOUT),
+            _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
+                          ?RPC_TIMEOUT),
             {ok, ReadyMsgs};
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
@@ -1435,9 +1441,11 @@ i(memory, Q) when ?is_amqqueue(Q) ->
 i(state, Q) when ?is_amqqueue(Q) ->
     {Name, Node} = amqqueue:get_pid(Q),
     %% Check against the leader or last known leader
-    case erpc:call(Node, ?MODULE, cluster_state, [Name], ?RPC_TIMEOUT) of
-        {badrpc, _} -> down;
-        State -> State
+    case erpc_call(Node, ?MODULE, cluster_state, [Name], ?RPC_TIMEOUT) of
+        {error, _} ->
+            down;
+        State ->
+            State
     end;
 i(local_state, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
@@ -1570,8 +1578,7 @@ is_process_alive(Name, Node) ->
     %% don't attempt rpc if node is not already connected
     %% as this function is used for metrics and stats and the additional
     %% latency isn't warranted
-    lists:member(Node, [node() | nodes()]) andalso
-    erlang:is_pid(erpc:call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
+    erlang:is_pid(erpc_call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
 
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
@@ -1698,14 +1705,6 @@ prepare_content(Content) ->
     %% rabbit_fifo can directly parse it without having to decode again.
     Content.
 
-erpc_timeout(Node, _)
-  when Node =:= node() ->
-    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
-    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
-    infinity;
-erpc_timeout(_, Timeout) ->
-    Timeout.
-
 ets_lookup_element(Tbl, Key, Pos, Default) ->
     try ets:lookup_element(Tbl, Key, Pos) of
         V -> V
@@ -1713,3 +1712,30 @@ ets_lookup_element(Tbl, Key, Pos, Default) ->
         _:badarg ->
             Default
     end.
+
+erpc_call(Node, M, F, A, Timeout)
+  when is_integer(Timeout) andalso Node == node()  ->
+    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
+    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
+    try erpc:call(Node, M, F, A, Timeout) of
+        Result ->
+            Result
+    catch
+        error:Err ->
+            {error, Err}
+    end;
+erpc_call(Node, M, F, A, Timeout) ->
+    case lists:member(Node, nodes()) of
+        true ->
+            try erpc:call(Node, M, F, A, Timeout) of
+                Result ->
+                    Result
+            catch
+                error:Err ->
+                    {error, Err}
+            end;
+        false ->
+            {error, noconnection}
+    end.
+
+
