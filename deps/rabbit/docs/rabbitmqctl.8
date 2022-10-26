@@ -5,7 +5,7 @@
 .\"
 .\" Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd June 19, 2021
+.Dd October 26, 2022
 .Dt RABBITMQCTL 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -1093,7 +1093,7 @@ Readable name for the connection.
 Server port.
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was disabled.
+DNS failed or was turned off.
 .It Cm peer_port
 Peer port.
 .It Cm peer_host
@@ -2225,7 +2225,7 @@ SASL authentication mechanism used, such as
 .Qq PLAIN .
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was disabled.
+DNS failed or was turned off.
 .It Cm frame_max
 Maximum frame size (bytes).
 .It Cm timeout
@@ -2302,7 +2302,7 @@ can take any value from the list that follows:
 .Bl -tag -width Ds
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was disabled.
+DNS failed or was turned off.
 .It Cm port
 Server port.
 .It Cm peer_host
