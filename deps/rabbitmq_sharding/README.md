@@ -158,6 +158,11 @@ policy to shard it:
 $CTL set_policy images-shard "^shard.images$" '{"shards-per-node": 2, "routing-key": "1234"}'
 ```
 
+Note, on Windows, above command will be like this:
+```
+rabbitmqctl set_policy images-shard "^shard.images$" '{\"shards-per-node\": 2, \"routing-key\": \"1234\"}'
+```
+
 This will create `2` sharded queues per node in the cluster, and will
 bind those queues using the `"1234"` routing key.
 
