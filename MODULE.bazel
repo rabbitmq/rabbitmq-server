@@ -386,7 +386,6 @@ use_repo(
 rbe = use_extension(
     "//bazel/bzlmod:extensions.bzl",
     "rbe",
-    dev_dependency = True,
 )
 
 rbe.git_repository(
