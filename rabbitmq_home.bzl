@@ -20,7 +20,7 @@ def _copy_script(ctx, script):
 
 def link_escript(ctx, escript):
     e = ctx.attr._rabbitmqctl_escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", escript))
+    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", escript.basename))
     ctx.actions.symlink(
         output = s,
         target_file = e,
@@ -80,16 +80,7 @@ def _impl(ctx):
         source_scripts = ctx.files._scripts_windows
     scripts = [_copy_script(ctx, script) for script in source_scripts]
 
-    rabbitmq_ctl_copies = [
-        "rabbitmq-diagnostics",
-        "rabbitmq-plugins",
-        "rabbitmq-queues",
-        "rabbitmq-streams",
-        "rabbitmq-tanzu",
-        "rabbitmq-upgrade",
-        "rabbitmqctl",
-    ]
-    escripts = [link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
+    escripts = [link_escript(ctx, escript) for escript in ctx.files._scripts]
 
     plugins = flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
