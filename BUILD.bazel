@@ -151,9 +151,15 @@ pkg_tar(
     visibility = ["//visibility:public"],
 )
 
-package_generic_unix(plugins = PLUGINS)
+package_generic_unix(
+    plugins = PLUGINS,
+    rabbitmq_workspace = "@",
+)
 
-source_archive(plugins = PLUGINS)
+source_archive(
+    plugins = PLUGINS,
+    rabbitmq_workspace = "@",
+)
 
 genrule(
     name = "test-logs",
