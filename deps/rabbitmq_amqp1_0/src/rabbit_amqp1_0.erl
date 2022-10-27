@@ -50,7 +50,7 @@ list() ->
     ].
 
 boot() -> 
-    set_grant_credit_on(application:get_env(rabbitmq_amqp1_0, grant_credit, on_confirm)),
+    set_grant_credit_on(application:get_env(rabbitmq_amqp1_0, grant_credit, on_publish)),
     ok.
 
 -spec set_grant_credit_on(on_publish | on_confirm) -> ok.
