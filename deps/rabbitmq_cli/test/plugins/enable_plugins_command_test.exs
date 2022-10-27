@@ -318,4 +318,16 @@ defmodule EnablePluginsCommandTest do
             "Could not update enabled plugins file at /tmp/a/path: the file does not exist (ENOENT)"} ==
              @command.output({:error, err2}, context[:opts])
   end
+
+  test "enable command will also load its dependent plugins", context do
+    # Clears enabled plugins file and stop all plugins
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+
+    # Enable rabbitmq_stream_management
+    @command.run(["rabbitmq_stream_management"], context[:opts])
+
+    # Check command add_super_stream is available due to dependency plugin rabbitmq_stream
+    assert RabbitMQ.CLI.Core.CommandModules.load_commands(:all, %{})["add_super_stream"] ==
+             RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand
+  end
 end
