@@ -133,10 +133,10 @@ def rabbitmq_app(
         extra_srcs = extra_srcs,
         extra_priv = extra_priv,
         erlc_opts = select({
-            "//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
+            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
             "//conditions:default": RABBITMQ_ERLC_OPTS,
         }) + select({
-            "//:test_build": ["-DTEST=1", "+nowarn_export_all"],
+            Label("//:test_build"): ["-DTEST=1", "+nowarn_export_all"],
             "//conditions:default": [],
         }),
         build_deps = build_deps,
@@ -157,7 +157,7 @@ def rabbitmq_app(
         extra_srcs = extra_srcs,
         extra_priv = extra_priv,
         erlc_opts = select({
-            "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS),
+            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS),
             "//conditions:default": RABBITMQ_TEST_ERLC_OPTS,
         }),
         build_deps = with_test_versions(build_deps),
@@ -227,7 +227,7 @@ def rabbitmq_integration_suite(
         suite_name = name,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
         erlc_opts = select({
-            "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS + erlc_opts),
+            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS + erlc_opts),
             "//conditions:default": RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
         }),
         additional_hdrs = additional_hdrs,
