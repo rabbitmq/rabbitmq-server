@@ -59,6 +59,15 @@ declare(Q0, _Node) ->
     %% queue (via the topic exchange) works as usual.
     case rabbit_amqqueue:internal_declare(Q0, false) of
         {created, Q} ->
+            Opts = amqqueue:get_options(Q),
+            ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
+            rabbit_event:notify(queue_created,
+                         [{name, amqqueue:get_name(Q0)},
+                          {durable, true},
+                          {auto_delete, false},
+                          {type, amqqueue:get_type(Q0)},
+                          {arguments, amqqueue:get_arguments(Q0)},
+                          {user_who_performed_action, ActingUser}]),
             {new, Q};
         Other ->
             Other
