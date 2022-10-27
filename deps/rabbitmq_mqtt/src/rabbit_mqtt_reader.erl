@@ -212,11 +212,12 @@ handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate(Reason, State = #state{keepalive = KState0,
+terminate(Reason, State = #state{conn_name = ConnName,
+                                 keepalive = KState0,
                                  proc_state = PState}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
-    rabbit_mqtt_processor:terminate(PState),
+    rabbit_mqtt_processor:terminate(PState, ConnName),
     log_terminate(Reason, State).
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->

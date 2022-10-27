@@ -10,7 +10,7 @@
 
 -export([info/2, initial_state/2, initial_state/4,
          process_frame/2, serialise/2, send_will/1,
-         terminate/1, handle_pre_hibernate/0,
+         terminate/2, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2]).
 
 %%TODO Use single queue per MQTT subscriber connection?
@@ -646,7 +646,7 @@ check_user_login(#{vhost := VHost,
     case rabbit_access_control:check_user_login(
            UsernameBin, AuthProps) of
         {ok, User = #user{username = Username}} ->
-            notify_auth_result(Username, user_authentication_success, []),
+            notify_auth_result(user_authentication_success, Username, PState),
             {ok, maps:put(user, User, In), PState};
         {refused, Username, Msg, Args} ->
             rabbit_log_connection:error(
@@ -654,17 +654,21 @@ check_user_login(#{vhost := VHost,
               "access refused for user '~s' in vhost '~s' "
               ++ Msg,
               [self(), Username, VHost] ++ Args),
-            notify_auth_result(Username,
-                               user_authentication_failure,
-                               [{error, rabbit_misc:format(Msg, Args)}]),
+            notify_auth_result(user_authentication_failure, Username, PState),
             {error, ?CONNACK_BAD_CREDENTIALS}
     end.
 
-notify_auth_result(Username, AuthResult, ExtraProps) ->
-    EventProps = [{connection_type, mqtt},
-                  {name, case Username of none -> ''; _ -> Username end}] ++
-                 ExtraProps,
-    rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
+notify_auth_result(AuthResult, Username, #proc_state{conn_name = ConnName}) ->
+    rabbit_event:notify(
+      AuthResult,
+      [
+       {name, case Username of
+                  none -> '';
+                  _ -> Username
+              end},
+       {connection_name, ConnName},
+       {connection_type, network}
+      ]).
 
 check_user_connection_limit(#{user := #user{username = Username}}) ->
     case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
@@ -1173,20 +1177,27 @@ serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = S
 serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
     rabbit_mqtt_frame:serialise(Frame, ProtoVer).
 
-terminate(#proc_state{client_id = undefined}) ->
-    ok;
-terminate(PState = #proc_state{client_id = ClientId}) ->
-    %% ignore any errors as we are shutting down
+terminate(PState, ConnName) ->
+    rabbit_event:notify(connection_closed, [{name, ConnName},
+                                            {node, node()},
+                                            {pid, self()}]),
+    maybe_unregister_client(PState),
+    maybe_delete_mqtt_qos0_queue(PState).
+
+maybe_unregister_client(#proc_state{client_id = ClientId})
+  when ClientId =/= undefined ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
+            %% ignore any errors as we are shutting down
             rabbit_mqtt_collector:unregister(ClientId, self());
         false ->
             ok
-    end,
-    delete_mqtt_qos0_queue(PState).
+    end;
+maybe_unregister_client(_) ->
+    ok.
 
-delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
-                                            auth_state = #auth_state{username = Username}}) ->
+maybe_delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
+                                                  auth_state = #auth_state{username = Username}}) ->
     case get_queue(?QOS_0, PState) of
         {ok, Q} ->
             %% double check we delete the right queue
@@ -1200,7 +1211,7 @@ delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
         {error, not_found} ->
             ok
     end;
-delete_mqtt_qos0_queue(_) ->
+maybe_delete_mqtt_qos0_queue(_) ->
     ok.
 
 handle_pre_hibernate() ->

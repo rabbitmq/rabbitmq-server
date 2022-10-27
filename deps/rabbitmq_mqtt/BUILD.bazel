@@ -101,6 +101,16 @@ rabbitmq_test_helper(
     ],
 )
 
+rabbitmq_test_helper(
+    name = "event_recorder",
+    srcs = [
+        "test/event_recorder.erl",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "auth_SUITE",
     additional_beam = [
@@ -175,6 +185,14 @@ rabbitmq_integration_suite(
     ],
 )
 
+rabbitmq_suite(
+    name = "util_SUITE",
+    size = "small",
+    data = [
+        "test/rabbitmq_mqtt.app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "ff_SUITE",
     runtime_deps = [
@@ -185,11 +203,13 @@ rabbitmq_integration_suite(
     ],
 )
 
-rabbitmq_suite(
-    name = "util_SUITE",
-    size = "small",
-    data = [
-        "test/rabbitmq_mqtt.app",
+rabbitmq_integration_suite(
+    name = "integration_SUITE",
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+    additional_beam = [
+        ":event_recorder",
     ],
 )
 

@@ -210,7 +210,7 @@ terminate(_Reason, _Request,
     maybe_emit_stats(State),
     rabbit_mqtt_keepalive:cancel_timer(KState),
     ok = file_handle_cache:release(),
-    stop_rabbit_mqtt_processor(PState).
+    stop_rabbit_mqtt_processor(PState, ConnName).
 
 %% Internal.
 
@@ -272,11 +272,11 @@ stop(State, CloseCode, Error0) ->
     Error1 = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error1}], State}.
 
-stop_rabbit_mqtt_processor(undefined) ->
+stop_rabbit_mqtt_processor(undefined, _) ->
     ok;
-stop_rabbit_mqtt_processor(PState) ->
+stop_rabbit_mqtt_processor(PState, ConnName) ->
     rabbit_mqtt_processor:send_will(PState),
-    rabbit_mqtt_processor:terminate(PState).
+    rabbit_mqtt_processor:terminate(PState, ConnName).
 
 handle_credits(State0) ->
     case control_throttle(State0) of
