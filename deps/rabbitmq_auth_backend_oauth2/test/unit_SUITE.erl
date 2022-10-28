@@ -939,28 +939,28 @@ test_username_from(_) ->
          },
         <<"rabbit_user">>  % We expect username to be this one
       },
-      { <<"resolve username from configured 'user_name' claim ">>,
+      { <<"resolve username from 1st claim in the array of configured claims ">>,
         [<<"user_name">>],
         #{
           <<"user_name">> => <<"rabbit_user">>
          },
         <<"rabbit_user">>
       },
-      { <<"resolve username from 2nd configured 'email' claim ">>,
+      { <<"resolve username from 2nd claim in the array of configured claims">>,
         [<<"user_name">>, <<"email">>],
         #{
           <<"email">> => <<"rabbit_user">>
          },
         <<"rabbit_user">>
       },
-      { <<"resolve username from configured string claim rather than list">>,
-        <<"user_name">>,
+      { <<"resolve username from configured string claim ">>,
+        <<"email">>,
         #{
           <<"email">> => <<"rabbit_user">>
          },
         <<"rabbit_user">>
       },
-      { <<"unresolve username">>,  
+      { <<"unresolve username">>,
         [<<"user_name">>, <<"email">>],
         #{
           <<"email2">> => <<"rabbit_user">>
