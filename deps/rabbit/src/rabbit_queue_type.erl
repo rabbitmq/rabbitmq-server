@@ -27,6 +27,7 @@
          remove/2,
          info/2,
          state_info/1,
+         format_status/1,
          info_down/2,
          info_down/3,
          %% stateful client API
@@ -321,6 +322,9 @@ state_info(#ctx{state = S,
     Mod:state_info(S);
 state_info(_) ->
     #{}.
+
+format_status(#?STATE{ctxs = Ctxs}) ->
+    #{num_queue_clients => maps:size(Ctxs)}.
 
 down_keys() -> ?DOWN_KEYS.
 

@@ -11,7 +11,7 @@
 -export([info/2, initial_state/2, initial_state/4,
          process_frame/2, serialise/2, send_will/1,
          terminate/2, handle_pre_hibernate/0,
-         handle_ra_event/2, handle_down/2, handle_queue_event/2]).
+         handle_ra_event/2, handle_down/2, handle_queue_event/2, format_status/1]).
 
 %%TODO Use single queue per MQTT subscriber connection?
 %% * when publishing we store in x-mqtt-publish-qos header the publishing QoS
@@ -1523,3 +1523,38 @@ ssl_login_name(Sock) ->
         {error, no_peercert} -> none;
         nossl                -> none
     end.
+
+format_status(#proc_state{queue_states = QState,
+                          proto_ver = ProtoVersion,
+                          subscriptions = Sub,
+                          unacked_client_pubs = UnackClientPubs,
+                          unacked_server_pubs = UnackSerPubs,
+                          packet_id = PackID,
+                          client_id = ClientID,
+                          clean_sess = CleanSess,
+                          will_msg = WillMsg,
+                          exchange = Exchange,
+                          ssl_login_name = SSLLoginName,
+                          retainer_pid = RetainerPid,
+                          auth_state = AuthState,
+                          peer_addr = PeerAddr,
+                          register_state = RegisterState,
+                          conn_name = ConnName,
+                          info = Info}) ->
+    #{queue_states => rabbit_queue_type:format_status(QState),
+      proto_ver => ProtoVersion,
+      subscriptions => Sub,
+      unacked_client_pubs => UnackClientPubs,
+      unacked_server_pubs => UnackSerPubs,
+      packet_id => PackID,
+      client_id => ClientID,
+      clean_sess => CleanSess,
+      will_msg_defined => WillMsg =/= undefined,
+      exchange => Exchange,
+      ssl_login_name => SSLLoginName,
+      retainer_pid => RetainerPid,
+      auth_state => AuthState,
+      peer_addr => PeerAddr,
+      register_state => RegisterState,
+      conn_name => ConnName,
+      info => Info}.

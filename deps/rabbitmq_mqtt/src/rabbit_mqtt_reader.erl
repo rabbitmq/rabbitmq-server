@@ -12,7 +12,7 @@
 
 -export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         code_change/3, terminate/2]).
+         code_change/3, terminate/2, format_status/1]).
 
 %%TODO check where to best 'hibernate' when returning from callback
 %%TODO use rabbit_global_counters for MQTT protocol
@@ -488,3 +488,36 @@ ssl_info(F, #state{socket = Sock, proxy_socket = ProxySock}) ->
               mac := H} = proplists:get_value(selected_cipher_suite, Items),
             F({P, {K, C, H}})
     end.
+
+-spec format_status(map()) -> map().
+format_status(Status) ->
+  maps:map(
+    fun(state,State) ->
+            format_state(State);
+       (_,Value) ->
+            Value
+    end, Status).
+
+format_state(#state{proc_state = PState,
+                    socket = Socket,
+                    proxy_socket = ProxySock,
+                    conn_name = ConnName,
+                    await_recv = AwaitRecv,
+                    deferred_recv = DeferredRecv,
+                    received_connect_frame = ReceivedConnectFrame,
+                    connection_state = ConnectionState,
+                    conserve = Conserve,
+                    stats_timer = StatsTimer,
+                    keepalive = Keepalive,
+                    parse_state = _}) ->
+    #{proc_state => rabbit_mqtt_processor:format_status(PState),
+      socket => Socket,
+      proxy_socket => ProxySock,
+      conn_name => ConnName,
+      await_recv => AwaitRecv,
+      deferred_recv => DeferredRecv,
+      received_connect_frame => ReceivedConnectFrame,
+      connection_state => ConnectionState,
+      conserve => Conserve,
+      stats_timer => StatsTimer,
+      keepalive => Keepalive}.
