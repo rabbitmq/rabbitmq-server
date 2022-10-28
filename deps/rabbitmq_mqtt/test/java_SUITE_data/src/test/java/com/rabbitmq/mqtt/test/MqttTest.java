@@ -34,8 +34,6 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-//TODO Add quorum queue test
-
 /***
  *  MQTT v3.1 tests
  *

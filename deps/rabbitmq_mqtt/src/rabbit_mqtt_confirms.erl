@@ -30,10 +30,10 @@ size(State) ->
     maps:size(State).
 
 -spec insert(packet_id(), [queue_name()], state()) ->
-    {ok, state()} | {error, duplicate_packet_id}.
+    {ok, state()} | {error, {duplicate_packet_id, packet_id()}}.
 insert(PktId, _, State)
   when is_map_key(PktId, State) ->
-    {error, duplicate_packet_id};
+    {error, {duplicate_packet_id, PktId}};
 insert(PktId, QNames, State)
   when is_integer(PktId) andalso PktId > 0 ->
     QMap = maps:from_keys(QNames, ok),

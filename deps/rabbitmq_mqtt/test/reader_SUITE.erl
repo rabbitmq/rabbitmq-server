@@ -12,6 +12,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(util, [all_connection_pids/1,
+               publish_qos1/4]).
 
 all() ->
     [
@@ -99,15 +101,15 @@ block(Config) ->
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
 
     {ok, _, _} = emqtt:subscribe(C, <<"Topic1">>),
-    {ok, _} = publish_qos1(C, <<"Topic1">>, <<"Not blocked yet">>),
+    {ok, _} = publish_qos1(C, <<"Topic1">>, <<"Not blocked yet">>, 1000),
 
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
     % %% Let it block
     timer:sleep(100),
 
     %% Blocked, but still will publish
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Now blocked">>),
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Still blocked">>),
+    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Now blocked">>, 1000),
+    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Still blocked">>, 1000),
 
     %% Unblock
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
@@ -158,7 +160,7 @@ block_connack_timeout(Config) ->
               ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
-    ?assertEqual([], util:all_connection_pids(Config)),
+    ?assertEqual([], all_connection_pids(Config)),
     ok.
 
 handle_invalid_frames(Config) ->
@@ -229,7 +231,7 @@ stats(Config) ->
     %% Wait for stats being emitted (every 100ms)
     timer:sleep(300),
     %% Retrieve the connection Pid
-    [Reader] = util:all_connection_pids(Config),
+    [Reader] = all_connection_pids(Config),
     [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
@@ -351,22 +353,3 @@ expect_publishes(Topic, [Payload|Rest]) ->
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
-
-publish_qos1(Client, Topic, Payload) ->
-    Mref = erlang:monitor(process, Client),
-    ok = emqtt:publish_async(Client, Topic, #{}, Payload, [{qos, 1}], infinity,
-                             {fun ?MODULE:sync_publish_result/3, [self(), Mref]}),
-    receive
-        {Mref, Reply} ->
-            erlang:demonitor(Mref, [flush]),
-            Reply;
-        {'DOWN', Mref, process, Client, Reason} ->
-            ct:fail("client is down: ~tp", [Reason])
-    after
-        1000 ->
-            erlang:demonitor(Mref, [flush]),
-            puback_timeout
-    end.
-
-sync_publish_result(Caller, Mref, Result) ->
-    erlang:send(Caller, {Mref, Result}).
