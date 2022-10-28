@@ -333,7 +333,7 @@ def source_archive(
 
     pkg_tar(
         name = "source_archive",
-        extension = "tar.gz",
+        extension = "tar.xz",
         srcs = [
             Label(rabbitmq_workspace + "//:root-licenses"),
         ],
