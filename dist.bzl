@@ -67,45 +67,45 @@ def _copy_script(ctx, script):
     )
     return dest
 
-def _scripts_and_escripts_private_impl(ctx):
-    plugins = flat_deps(ctx.attr.plugins)
-
+def _sbin_dir_private_impl(ctx):
     scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
-    rabbitmq_ctl_copies = [
-        "rabbitmq-diagnostics",
-        "rabbitmq-plugins",
-        "rabbitmq-queues",
-        "rabbitmq-streams",
-        "rabbitmq-tanzu",
-        "rabbitmq-upgrade",
-        "rabbitmqctl",
+    return [
+        DefaultInfo(
+            files = depset(scripts),
+        ),
     ]
-    escripts = [link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
 
-    rabbitmqctl = None
-    for script in scripts:
-        if script.basename == "rabbitmqctl":
-            rabbitmqctl = script
-    if rabbitmqctl == None:
-        fail("could not find rabbitmqct among", scripts)
+def _escript_dir_private_impl(ctx):
+    escripts = [link_escript(ctx, escript) for escript in ctx.files._scripts]
 
     return [
-        RabbitmqHomeInfo(
-            rabbitmqctl = rabbitmqctl,
-        ),
         DefaultInfo(
-            files = depset(scripts + escripts),
+            files = depset(escripts),
         ),
     ]
 
-scripts_and_escripts_private = rule(
-    implementation = _scripts_and_escripts_private_impl,
+sbin_dir_private = rule(
+    implementation = _sbin_dir_private_impl,
     attrs = RABBITMQ_HOME_ATTRS,
 )
 
-def scripts_and_escripts(**kwargs):
-    scripts_and_escripts_private(
+escript_dir_private = rule(
+    implementation = _escript_dir_private_impl,
+    attrs = RABBITMQ_HOME_ATTRS,
+)
+
+def sbin_dir(**kwargs):
+    sbin_dir_private(
+        is_windows = select({
+            "@bazel_tools//src/conditions:host_windows": True,
+            "//conditions:default": False,
+        }),
+        **kwargs
+    )
+
+def escript_dir(**kwargs):
+    escript_dir_private(
         is_windows = select({
             "@bazel_tools//src/conditions:host_windows": True,
             "//conditions:default": False,
@@ -231,13 +231,14 @@ def versioned_plugins_dir(**kwargs):
 
 def package_generic_unix(
         plugins = None,
-        rabbitmq_workspace = "@",
+        rabbitmq_workspace = "@rabbitmq-server",
+        extra_licenses = [],
         package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
     collect_licenses(
         name = "licenses",
         srcs = [
-            rabbitmq_workspace + "//:root-licenses",
-        ],
+            Label(rabbitmq_workspace + "//:root-licenses"),
+        ] + extra_licenses,
         deps = plugins,
     )
 
@@ -245,13 +246,33 @@ def package_generic_unix(
         name = "license-files-tar",
         srcs = [
             ":licenses",
-            rabbitmq_workspace + "//deps/rabbit:INSTALL",
+            Label(rabbitmq_workspace + "//deps/rabbit:INSTALL"),
         ],
         visibility = ["//visibility:public"],
     )
 
-    scripts_and_escripts(
-        name = "scripts-and-escripts",
+    sbin_dir(
+        name = "sbin-dir",
+    )
+
+    pkg_tar(
+        name = "sbin-tar",
+        srcs = [
+            ":sbin-dir",
+        ],
+        package_dir = "sbin",
+    )
+
+    escript_dir(
+        name = "escript-dir",
+    )
+
+    pkg_tar(
+        name = "escripts-tar",
+        srcs = [
+            ":escript-dir",
+        ],
+        package_dir = "escript",
     )
 
     versioned_plugins_dir(
@@ -270,28 +291,26 @@ def package_generic_unix(
     pkg_tar(
         name = "package-generic-unix",
         extension = "tar.xz",
-        srcs = [
-            ":scripts-and-escripts",
-        ],
         package_dir = package_dir,
-        strip_prefix = "scripts-and-escripts",
         visibility = ["//visibility:public"],
         deps = [
+            ":escripts-tar",
+            ":sbin-tar",
             ":plugins-tar",
             ":license-files-tar",
-            rabbitmq_workspace + "//:release-notes-tar",
-            rabbitmq_workspace + "//:scripts-tar",
-            rabbitmq_workspace + "//deps/rabbit:manpages-dir",
+            Label(rabbitmq_workspace + "//:release-notes-tar"),
+            Label(rabbitmq_workspace + "//:scripts-tar"),
+            Label(rabbitmq_workspace + "//deps/rabbit:manpages-dir"),
         ],
     )
 
 def source_archive(
         plugins = None,
-        rabbitmq_workspace = "@"):
+        rabbitmq_workspace = "@rabbitmq-server"):
     source_tree(
         name = "source-tree",
         deps = plugins + [
-            rabbitmq_workspace + "//deps/rabbitmq_cli:rabbitmqctl",
+            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:rabbitmqctl"),
         ],
     )
 
@@ -307,7 +326,7 @@ def source_archive(
     pkg_tar(
         name = "cli-deps-archive",
         deps = [
-            rabbitmq_workspace + "//deps/rabbitmq_cli:fetched_srcs",
+            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:fetched_srcs"),
         ],
         package_dir = "deps/rabbitmq_cli",
     )
@@ -316,7 +335,7 @@ def source_archive(
         name = "source_archive",
         extension = "tar.gz",
         srcs = [
-            rabbitmq_workspace + "//:root-licenses",
+            Label(rabbitmq_workspace + "//:root-licenses"),
         ],
         deps = [
             ":deps-archive",
