@@ -1717,7 +1717,7 @@ erpc_call(Node, M, F, A, Timeout)
   when is_integer(Timeout) andalso Node == node()  ->
     %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
     %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
-    try erpc:call(Node, M, F, A, Timeout) of
+    try erpc:call(Node, M, F, A, infinity) of
         Result ->
             Result
     catch
