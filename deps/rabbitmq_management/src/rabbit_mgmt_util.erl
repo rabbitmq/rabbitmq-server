@@ -232,6 +232,8 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
                                   ErrorMsg, Fun)
             end;
         {bearer, Token} ->
+            % Username is only used in case is_authorized is not able to parse the token
+            % and extact the username from it
             Username = rabbit_data_coercion:to_binary(
                          application:get_env(rabbitmq_management, oauth_client_id, "")),
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
@@ -252,9 +254,9 @@ is_authorized_user(ReqData, Context, Username, Password) ->
     is_authorized(ReqData, Context, Username, Password, Msg, Fun).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) ->
+    ErrFun = fun (Username0, Msg) ->
                      rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
-                                        [Username, Msg]),
+                                        [Username0, Msg]),
                      not_authorised(Msg, ReqData, Context)
              end,
     AuthProps = [{password, Password}] ++ case vhost(ReqData) of
@@ -264,30 +266,30 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     {IP, _} = cowboy_req:peer(ReqData),
     RemoteAddress = list_to_binary(inet:ntoa(IP)),
     case rabbit_access_control:check_user_login(Username, AuthProps) of
-        {ok, User = #user{tags = Tags}} ->
-            case rabbit_access_control:check_user_loopback(Username, IP) of
+        {ok, User = #user{username = ResolvedUsername, tags = Tags}} ->
+            case rabbit_access_control:check_user_loopback(ResolvedUsername, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
                         true ->
                             case Fun(User) of
                                 true  ->
                                     rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
-                                                                               Username, http),
+                                                                               ResolvedUsername, http),
                                     {true, ReqData,
                                      Context#context{user     = User,
                                                      password = Password}};
                                 false ->
                                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
-                                                                            Username, http),
-                                    ErrFun(ErrorMsg)
+                                                                            ResolvedUsername, http),
+                                    ErrFun(ResolvedUsername, ErrorMsg)
                             end;
                         false ->
-                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-                            ErrFun(<<"Not management user">>)
+                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                            ErrFun(ResolvedUsername, <<"Not management user">>)
                     end;
                 not_allowed ->
-                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-                    ErrFun(<<"User can only log in via localhost">>)
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                    ErrFun(ResolvedUsername, <<"User can only log in via localhost">>)
             end;
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),

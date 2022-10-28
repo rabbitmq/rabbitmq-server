@@ -99,6 +99,7 @@ scim:
     - rabbit_admin|rabbit_admin|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:administrator
     - rabbitmq_management|rabbitmq_management|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:management
     - rabbit_monitor|rabbit_monitor|scim.read,openid,rabbitmq.tag:monitoring
+    - rabbit_no_management|rabbit_no_management|scim.read,openid,rabbitmq.read:*/*
   groups:
     'rabbitmq.read:*/*': Read all
     'rabbitmq.write:*/*': Write all
