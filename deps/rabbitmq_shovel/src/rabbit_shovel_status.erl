@@ -89,7 +89,12 @@ handle_cast({remove, Name}, State) ->
     {noreply, State}.
 
 handle_info(check, State) ->
-    rabbit_shovel_dyn_worker_sup_sup:cleanup_specs(),
+    try
+        rabbit_shovel_dyn_worker_sup_sup:cleanup_specs()
+    catch
+        C:E ->
+            rabbit_log_shovel:warning("Recurring shovel spec clean up failed with ~p:~p", [C, E])
+    end,
     {noreply, ensure_timer(State)};
 handle_info(_Info, State) ->
     {noreply, State}.
