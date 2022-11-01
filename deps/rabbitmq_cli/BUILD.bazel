@@ -35,6 +35,7 @@ rabbitmq_home(
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_federation:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",
+        "//deps/rabbitmq_stream_management:erlang_app",
         "//deps/amqp_client:erlang_app",
     ],
 )
