@@ -11,7 +11,8 @@
 -export([info/2, initial_state/2, initial_state/4,
          process_frame/2, serialise/2, send_will/1,
          terminate/2, handle_pre_hibernate/0,
-         handle_ra_event/2, handle_down/2, handle_queue_event/2, format_status/1]).
+         handle_ra_event/2, handle_down/2, handle_queue_event/2,
+         soft_limit_exceeded/1, format_status/1]).
 
 %%TODO Use single queue per MQTT subscriber connection?
 %% * when publishing we store in x-mqtt-publish-qos header the publishing QoS
@@ -1309,7 +1310,11 @@ handle_queue_actions(Actions, #proc_state{} = PState0) ->
                                 {error, not_found} -> Acc0
                             end
                     end, U0, MsgIds),
-              S#proc_state{unacked_client_pubs = U}
+              S#proc_state{unacked_client_pubs = U};
+          ({block, QName}, S = #proc_state{soft_limit_exceeded = SLE}) ->
+              S#proc_state{soft_limit_exceeded = sets:add_element(QName, SLE)};
+          ({unblock, QName}, S = #proc_state{soft_limit_exceeded = SLE}) ->
+              S#proc_state{soft_limit_exceeded = sets:del_element(QName, SLE)}
       end, PState0, Actions).
 
 deliver_to_client(Msgs, Ack, PState) ->
@@ -1547,7 +1552,8 @@ format_status(#proc_state{queue_states = QState,
                           peer_addr = PeerAddr,
                           register_state = RegisterState,
                           conn_name = ConnName,
-                          info = Info}) ->
+                          info = Info
+                         } = PState) ->
     #{queue_states => rabbit_queue_type:format_status(QState),
       proto_ver => ProtoVersion,
       subscriptions => Sub,
@@ -1564,4 +1570,8 @@ format_status(#proc_state{queue_states = QState,
       peer_addr => PeerAddr,
       register_state => RegisterState,
       conn_name => ConnName,
-      info => Info}.
+      info => Info,
+      soft_limit_exceeded => soft_limit_exceeded(PState)}.
+
+soft_limit_exceeded(#proc_state{soft_limit_exceeded = SLE}) ->
+    not sets:is_empty(SLE).

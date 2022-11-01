@@ -148,11 +148,10 @@ websocket_handle(Frame, State) ->
     {cowboy_websocket:commands(), State, hibernate}.
 websocket_info({conserve_resources, Conserve}, State) ->
     NewState = State#state{conserve_resources = Conserve},
-    handle_credits(control_throttle(NewState));
+    handle_credits(NewState);
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    handle_credits(control_throttle(State));
-    %%TODO return hibernate?
+    handle_credits(State);
 websocket_info({reply, Data}, State) ->
     {[{binary, Data}], State, hibernate};
 websocket_info({'EXIT', _, _}, State) ->
@@ -161,7 +160,7 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                State = #state{proc_state = PState0}) ->
     case rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
         {ok, PState} ->
-            {[], State#state{proc_state = PState}, hibernate};
+            handle_credits(State#state{proc_state = PState});
         {error, Reason, PState} ->
             rabbit_log_connection:error("Web MQTT connection ~p failed to handle queue event: ~p",
                                         [State#state.conn_name, Reason]),
@@ -200,7 +199,7 @@ websocket_info({ra_event, _From, Evt},
 websocket_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
                State = #state{proc_state = PState0}) ->
     PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
-    {[], State#state{proc_state = PState}, hibernate};
+    handle_credits(State#state{proc_state = PState});
 websocket_info(Msg, State) ->
     rabbit_log_connection:warning("Web MQTT: unexpected message ~p", [Msg]),
     {[], State, hibernate}.
@@ -283,6 +282,7 @@ stop_rabbit_mqtt_processor(PState, ConnName) ->
     rabbit_mqtt_processor:terminate(PState, ConnName).
 
 handle_credits(State0) ->
+    %%TODO return hibernate?
     case control_throttle(State0) of
         State = #state{state = running} ->
             {[{active, true}], State};
@@ -291,9 +291,13 @@ handle_credits(State0) ->
     end.
 
 control_throttle(State = #state{state = CS,
-                                conserve_resources = Mem,
-                                keepalive = KState}) ->
-    case {CS, Mem orelse credit_flow:blocked()} of
+                                conserve_resources = Conserve,
+                                keepalive = KState,
+                                proc_state = PState}) ->
+    Throttle = Conserve orelse
+    rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
+    credit_flow:blocked(),
+    case {CS, Throttle} of
         {running, true} ->
             State#state{state = blocked,
                         keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};

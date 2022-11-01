@@ -125,8 +125,13 @@ handle_cast({close_connection, Reason},
     {stop, {shutdown, server_initiated_close}, State};
 
 handle_cast(QueueEvent = {queue_event, _, _},
-            State = #state{proc_state = PState}) ->
-    callback_reply(State, rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState));
+            State = #state{proc_state = PState0}) ->
+    case rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
+        {ok, PState} ->
+            maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
+        {error, Reason, PState} ->
+            {stop, Reason, pstate(State, PState)}
+    end;
 
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
@@ -207,7 +212,7 @@ handle_info({ra_event, _From, Evt},
 handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
             #state{proc_state = PState0} = State) ->
     PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
-    {noreply, pstate(State, PState), ?HIBERNATE_AFTER};
+    maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
@@ -339,11 +344,6 @@ process_received_bytes(Bytes,
             {stop, {shutdown, Error}, State}
     end.
 
-callback_reply(State, {ok, ProcState}) ->
-    {noreply, pstate(State, ProcState), ?HIBERNATE_AFTER};
-callback_reply(State, {error, Reason, ProcState}) ->
-    {stop, Reason, pstate(State, ProcState)}.
-
 pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
 
@@ -399,8 +399,12 @@ run_socket(State = #state{ socket = Sock }) ->
 
 control_throttle(State = #state{connection_state = Flow,
                                 conserve = Conserve,
-                                keepalive = KState}) ->
-    case {Flow, Conserve orelse credit_flow:blocked()} of
+                                keepalive = KState,
+                                proc_state = PState}) ->
+    Throttle = Conserve orelse
+    rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
+    credit_flow:blocked(),
+    case {Flow, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,
                         keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};

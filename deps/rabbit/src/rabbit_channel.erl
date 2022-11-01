@@ -2846,22 +2846,27 @@ handle_queue_actions(Actions, #ch{} = State0) ->
               confirm(MsgSeqNos, QRef, S0);
           ({rejected, _QRef, MsgSeqNos}, S0) ->
               {U, Rej} =
-                  lists:foldr(
-                    fun(SeqNo, {U1, Acc}) ->
-                            case rabbit_confirms:reject(SeqNo, U1) of
-                                {ok, MX, U2} ->
-                                    {U2, [MX | Acc]};
-                                {error, not_found} ->
-                                    {U1, Acc}
-                            end
-                    end, {S0#ch.unconfirmed, []}, MsgSeqNos),
+              lists:foldr(
+                fun(SeqNo, {U1, Acc}) ->
+                        case rabbit_confirms:reject(SeqNo, U1) of
+                            {ok, MX, U2} ->
+                                {U2, [MX | Acc]};
+                            {error, not_found} ->
+                                {U1, Acc}
+                        end
+                end, {S0#ch.unconfirmed, []}, MsgSeqNos),
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
           ({queue_down, QRef}, S0) ->
-              handle_consuming_queue_down_or_eol(QRef, S0)
-
+              handle_consuming_queue_down_or_eol(QRef, S0);
+          ({block, QName}, S0) ->
+              credit_flow:block(QName),
+              S0;
+          ({unblock, QName}, S0) ->
+              credit_flow:unblock(QName),
+              S0
       end, State0, Actions).
 
 maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->

@@ -247,6 +247,10 @@ handle_queue_actions(Actions, State0) ->
               handle_rejected(QRef, MsgSeqs, S0);
           ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
+              S0;
+          ({block, _QName}, S0) ->
+              S0;
+          ({unblock, _QName}, S0) ->
               S0
       end, State0, Actions).
 

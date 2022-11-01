@@ -56,7 +56,9 @@
          register_state,
          conn_name,
          info,
-         delivery_flow :: flow | noflow
+         delivery_flow :: flow | noflow,
+         %% quorum queues and streams whose soft limit has been exceeded
+         soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set()
          }).
 
 -type proc_state() :: #proc_state{}.

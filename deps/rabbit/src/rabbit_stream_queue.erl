@@ -378,18 +378,18 @@ deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
               %%        [QRef], Delivery#delivery.message),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
-              S = deliver(Confirm, Delivery, S0),
-              {[{Q, S} | Qs], Actions}
+              {S, As} = deliver(Confirm, Delivery, S0),
+              {[{Q, S} | Qs], As ++ Actions}
       end, {[], []}, QSs).
 
 deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
-       #stream_client{name = Name,
-                      leader = LeaderPid,
-                      writer_id = WriterId,
-                      next_seq = Seq,
-                      correlation = Correlation0,
-                      soft_limit = SftLmt,
-                      slow = Slow0} = State) ->
+        #stream_client{name = Name,
+                       leader = LeaderPid,
+                       writer_id = WriterId,
+                       next_seq = Seq,
+                       correlation = Correlation0,
+                       soft_limit = SftLmt,
+                       slow = Slow0} = State) ->
     ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg)),
     Correlation = case MsgId of
                       undefined ->
@@ -397,16 +397,15 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                       _ when is_number(MsgId) ->
                           Correlation0#{Seq => {MsgId, Msg}}
                   end,
-    Slow = case maps:size(Correlation) >= SftLmt of
-               true when not Slow0 ->
-                   credit_flow:block(Name),
-                   true;
-               Bool ->
-                   Bool
-           end,
-    State#stream_client{next_seq = Seq + 1,
-                        correlation = Correlation,
-                        slow = Slow}.
+    {Slow, Actions} = case maps:size(Correlation) >= SftLmt of
+                          true when not Slow0 ->
+                              {true, [{block, Name}]};
+                          Bool ->
+                              {Bool, []}
+                      end,
+    {State#stream_client{next_seq = Seq + 1,
+                         correlation = Correlation,
+                         slow = Slow}, Actions}.
 
 -spec dequeue(_, _, _, client()) -> no_return().
 dequeue(_, _, _, #stream_client{name = Name}) ->

@@ -25,7 +25,7 @@
 -export([settle/4, dequeue/4, consume/3, cancel/5]).
 -export([credit/4]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/3, deliver/2]).
+-export([stateless_deliver/2, deliver/2]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
@@ -137,9 +137,7 @@ init(Q) when ?is_amqqueue(Q) ->
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(QName, Servers, SoftLimit,
-                                 fun() -> credit_flow:block(Name) end,
-                                 fun() -> credit_flow:unblock(Name), ok end)}.
+    {ok, rabbit_fifo_client:init(QName, Servers, SoftLimit)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(_State) ->
@@ -866,14 +864,14 @@ stateless_deliver(ServerId, Delivery) ->
 
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(),
               rabbit_fifo_client:state()) ->
-    {ok | slow, rabbit_fifo_client:state()} |
+    {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
     {reject_publish, rabbit_fifo_client:state()}.
 deliver(false, Delivery, QState0) ->
     case rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0) of
-        {ok, _} = Res -> Res;
-        {slow, _} = Res -> Res;
+        {ok, _State, _Actions} = Res ->
+            Res;
         {reject_publish, State} ->
-            {ok, State}
+            {ok, State, []}
     end;
 deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
@@ -896,8 +894,8 @@ deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
                       Seq = Delivery#delivery.msg_seq_no,
                       QName = rabbit_fifo_client:queue_name(S),
                       {[{Q, S} | Qs], [{rejected, QName, [Seq]} | Actions]};
-                  {_, S} ->
-                      {[{Q, S} | Qs], Actions}
+                  {ok, S, As} ->
+                      {[{Q, S} | Qs], As ++ Actions}
               end
       end, {[], []}, QSs).
 

@@ -14,7 +14,6 @@
 -export([
          init/2,
          init/3,
-         init/5,
          checkout/5,
          cancel_checkout/2,
          enqueue/2,
@@ -44,7 +43,8 @@
 -type seq() :: non_neg_integer().
 -type action() :: {send_credit_reply, Available :: non_neg_integer()} |
                   {send_drained, CTagCredit ::
-                   {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
+                   {rabbit_fifo:consumer_tag(), non_neg_integer()}} |
+                  rabbit_queue_type:action().
 -type actions() :: [action()].
 
 -type queue_name() :: rabbit_types:r(queue).
@@ -56,8 +56,6 @@
 -record(cfg, {queue_name :: queue_name(),
               servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
-              block_handler = fun() -> ok end :: fun(() -> term()),
-              unblock_handler = fun() -> ok end :: fun(() -> ok),
               timeout :: non_neg_integer(),
               version = 0 :: non_neg_integer()}).
 
@@ -108,33 +106,18 @@ init(QueueName = #resource{}, Servers, SoftLimit) ->
                       soft_limit = SoftLimit,
                       timeout = Timeout * 1000}}.
 
--spec init(queue_name(), [ra:server_id()], non_neg_integer(), fun(() -> ok),
-           fun(() -> ok)) -> state().
-init(QueueName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
-    %% net ticktime is in seconds
-    Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
-    #state{cfg = #cfg{queue_name = QueueName,
-                      servers = Servers,
-                      block_handler = BlockFun,
-                      unblock_handler = UnblockFun,
-                      soft_limit = SoftLimit,
-                      timeout = Timeout * 1000}}.
-
-
 %% @doc Enqueues a message.
 %% @param Correlation an arbitrary erlang term used to correlate this
 %% command when it has been applied.
 %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
 %% @returns
-%% `{ok | slow, State}' if the command was successfully sent. If the return
-%% tag is `slow' it means the limit is approaching and it is time to slow down
-%% the sending rate.
+%% `{ok, State, Actions}' if the command was successfully sent
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 -spec enqueue(Correlation :: term(), Msg :: term(), State :: state()) ->
-    {ok | slow | reject_publish, state()}.
+    {ok, state(), actions()} | {reject_publish, state()}.
 enqueue(Correlation, Msg,
         #state{queue_status = undefined,
                next_enqueue_seq = 1,
@@ -182,8 +165,7 @@ enqueue(Correlation, Msg,
                queue_status = go,
                next_seq = Seq,
                next_enqueue_seq = EnqueueSeq,
-               cfg = #cfg{soft_limit = SftLmt,
-                          block_handler = BlockFun}} = State0) ->
+               cfg = #cfg{soft_limit = SftLmt}} = State0) ->
     Server = pick_server(State0),
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
@@ -198,25 +180,22 @@ enqueue(Correlation, Msg,
                          slow = Tag == slow},
     case Tag of
         slow when not Slow ->
-            BlockFun(),
-            {slow, set_timer(State)};
+            {ok, set_timer(State), [{block, cluster_name(State)}]};
         _ ->
-            {ok, State}
+            {ok, State, []}
     end.
 
 %% @doc Enqueues a message.
 %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
 %% @returns
-%% `{ok | slow, State}' if the command was successfully sent. If the return
-%% tag is `slow' it means the limit is approaching and it is time to slow down
-%% the sending rate.
+%% `{ok, State, Actions}' if the command was successfully sent.
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 %%
 -spec enqueue(Msg :: term(), State :: state()) ->
-    {ok | slow | reject_publish, state()}.
+    {ok, state(), actions()} | {reject_publish, state()}.
 enqueue(Msg, State) ->
     enqueue(undefined, Msg, State).
 
@@ -274,10 +253,6 @@ add_delivery_count_header(Msg, _Count) ->
 %% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param MsgIds the message ids received with the {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
-%% @returns
-%% `{ok | slow, State}' if the command was successfully sent. If the return
-%% tag is `slow' it means the limit is approaching and it is time to slow down
-%% the sending rate.
 %%
 -spec settle(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
@@ -305,9 +280,7 @@ settle(ConsumerTag, [_|_] = MsgIds,
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
 %% @returns
-%% `{State, list()}' if the command was successfully sent. If the return
-%% tag is `slow' it means the limit is approaching and it is time to slow down
-%% the sending rate.
+%% `{State, list()}' if the command was successfully sent.
 %%
 -spec return(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
@@ -334,10 +307,6 @@ return(ConsumerTag, [_|_] = MsgIds,
 %% @param MsgIds the message ids to discard
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
-%% @returns
-%% `{ok | slow, State}' if the command was successfully sent. If the return
-%% tag is `slow' it means the limit is approaching and it is time to slow down
-%% the sending rate.
 -spec discard(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
@@ -562,8 +531,8 @@ update_machine_state(Server, Conf) ->
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
                 #state{cfg = #cfg{queue_name = QRef,
-                                  soft_limit = SftLmt,
-                                  unblock_handler = UnblockFun}} = State0) ->
+                                  soft_limit = SftLmt
+                                 }} = State0) ->
 
     {Corrs, Actions0, State1} = lists:foldl(fun seq_applied/2,
                                            {[], [], State0#state{leader = From}},
@@ -600,8 +569,7 @@ handle_ra_event(From, {applied, Seqs},
                                         send_command(Node, undefined, C,
                                                      normal, S0)
                                 end, State2, Commands),
-            UnblockFun(),
-            {ok, State, Actions};
+            {ok, State, [{unblock, cluster_name(State)} | Actions]};
         _ ->
             {ok, State1, Actions}
     end;
@@ -950,3 +918,8 @@ find_leader([Server | Servers]) ->
 
 qref({Ref, _}) -> Ref;
 qref(Ref) -> Ref.
+
+-spec cluster_name(state()) ->
+    atom().
+cluster_name(#state{cfg = #cfg{servers = [{Name, _Node} | _]}}) ->
+    Name.
