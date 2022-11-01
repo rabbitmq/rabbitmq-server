@@ -93,7 +93,8 @@
               amqp10_header/0,
               amqp10_properties/0,
               amqp10_body/0,
-              delivery_tag/0
+              delivery_tag/0,
+              annotations_key/0
              ]).
 
 -define(record_to_tuplelist(Rec, Ref),
