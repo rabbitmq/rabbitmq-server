@@ -88,17 +88,27 @@ end_per_testcase(Testcase, Config) ->
 reliable_send_receive_with_outcomes(Config) ->
     Outcomes = [accepted,
                 modified,
+                {modified, true, false, #{<<"fruit">> => <<"banana">>}},
+                {modified, false, true, #{}},
                 rejected,
                 released],
     [begin
-         ct:pal("~s testing ~s", [?FUNCTION_NAME, Outcome]),
          reliable_send_receive(Config, Outcome)
      end || Outcome <- Outcomes],
     ok.
 
 reliable_send_receive(Config, Outcome) ->
     Container = atom_to_binary(?FUNCTION_NAME, utf8),
-    OutcomeBin = atom_to_binary(Outcome, utf8),
+    OutcomeBin = case is_atom(Outcome) of
+                     true ->
+                         atom_to_binary(Outcome, utf8);
+                     false ->
+                         O1 = atom_to_binary(element(1, Outcome), utf8),
+                         O2 = atom_to_binary(element(2, Outcome), utf8),
+                         <<O1/binary, "_", O2/binary>>
+                 end,
+
+    ct:pal("~s testing ~s", [?FUNCTION_NAME, OutcomeBin]),
     QName = <<Container/binary, OutcomeBin/binary>>,
     %% declare a quorum queue
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
