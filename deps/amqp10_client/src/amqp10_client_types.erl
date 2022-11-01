@@ -30,7 +30,17 @@
 -type source() :: #'v1_0.source'{}.
 -type target() :: #'v1_0.target'{}.
 
--type delivery_state() :: accepted | rejected | modified | received | released.
+-type delivery_state() :: accepted |
+                          rejected |
+                          modified |
+                          %% the "full" modified outcome
+                          {modified,
+                           DeliveryFailed :: boolean(),
+                           UndeliverableHere :: boolean(),
+                           MessageAnnotations :: #{amqp10_msg:annotations_key() => term()}
+                           } |
+                          received |
+                          released.
 
 -type amqp_error() :: internal_error | not_found | unauthorized_access |
                       decode_error | resource_limit_exceeded |

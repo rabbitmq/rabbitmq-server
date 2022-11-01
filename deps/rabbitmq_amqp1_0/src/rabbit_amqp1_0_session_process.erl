@@ -277,14 +277,29 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                #'v1_0.accepted'{} ->
                                    #'basic.ack'{delivery_tag = DeliveryTag,
                                                 multiple     = false};
-                               %% we don't care if the client modified the
-                               %% so just treat it as accepted.
-                               %% Some clients send modified instead of accepted
-                               %% when e.g. a client
-                               %% side message TTL expires.
+                               #'v1_0.modified'{delivery_failed = true,
+                                                undeliverable_here = UndelHere} ->
+                                   %% NB: this is not quite correct.
+                                   %% `undeliverable_here' refers to the link
+                                   %% not the message in general but we cannot
+                                   %% filter messages from being assigned to
+                                   %% individual consumers
+                                   %% so will have to reject it without requeue
+                                   %% in this case.
+                                   Requeue = case UndelHere of
+                                                 true ->
+                                                     false;
+                                                 _ ->
+                                                     true
+                                             end,
+                                   #'basic.reject'{delivery_tag = DeliveryTag,
+                                                   requeue = Requeue};
                                #'v1_0.modified'{} ->
-                                   #'basic.ack'{delivery_tag = DeliveryTag,
-                                                multiple     = false};
+                                   %% if delivery_failed is not true, treat we
+                                   %% can't increment its' delivery_count so
+                                   %% will have to reject without requeue
+                                   #'basic.reject'{delivery_tag = DeliveryTag,
+                                                   requeue = false};
                                #'v1_0.rejected'{} ->
                                    #'basic.reject'{delivery_tag = DeliveryTag,
                                                    requeue      = false};
