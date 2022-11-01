@@ -6,7 +6,7 @@
 
 defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
   import RabbitCommon.Records
-  use Bitwise
+  import Bitwise
 
   @type error :: {:error, term()} | {:error, integer(), String.t() | [String.t()]}
 
