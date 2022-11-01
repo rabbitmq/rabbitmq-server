@@ -197,6 +197,10 @@ websocket_info({ra_event, _From, Evt},
                #state{proc_state = PState0} = State) ->
     PState = rabbit_mqtt_processor:handle_ra_event(Evt, PState0),
     {[], State#state{proc_state = PState}, hibernate};
+websocket_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
+               State = #state{proc_state = PState0}) ->
+    PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
+    {[], State#state{proc_state = PState}, hibernate};
 websocket_info(Msg, State) ->
     rabbit_log_connection:warning("Web MQTT: unexpected message ~p", [Msg]),
     {[], State, hibernate}.

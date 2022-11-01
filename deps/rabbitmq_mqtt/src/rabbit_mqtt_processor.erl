@@ -43,13 +43,18 @@ initial_state(Socket, ConnectionName) ->
 
 initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
     {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} = rabbit_mqtt_util:get_topic_translation_funs(),
+    Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
+             true   -> flow;
+             false  -> noflow
+           end,
     #proc_state{socket         = Socket,
                 conn_name      = ConnectionName,
                 ssl_login_name = ssl_login_name(Socket),
                 peer_addr      = PeerAddr,
                 send_fun       = SendFun,
                 mqtt2amqp_fun  = M2A,
-                amqp2mqtt_fun  = A2M}.
+                amqp2mqtt_fun  = A2M,
+                delivery_flow  = Flow}.
 
 process_frame(#mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}},
               PState = #proc_state{auth_state = undefined})
@@ -1061,7 +1066,8 @@ publish_to_queues(
             message_id = MessageId,
             payload    = Payload},
   #proc_state{exchange       = ExchangeName,
-              mqtt2amqp_fun  = Mqtt2AmqpFun} = PState) ->
+              mqtt2amqp_fun  = Mqtt2AmqpFun,
+              delivery_flow  = Flow} = PState) ->
     RoutingKey = Mqtt2AmqpFun(Topic),
     Confirm = Qos > ?QOS_0,
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
@@ -1090,7 +1096,7 @@ publish_to_queues(
                   sender = self(),
                   message = BasicMessage,
                   msg_seq_no = MessageId,
-                  flow = noflow %%TODO enable flow control
+                  flow = Flow
                  },
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
@@ -1253,6 +1259,7 @@ handle_ra_event(Evt, PState) ->
 
 handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             PState0 = #proc_state{queue_states = QStates0}) ->
+    credit_flow:peer_down(QPid),
     case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates1, Actions} ->
             PState = PState0#proc_state{queue_states = QStates1},

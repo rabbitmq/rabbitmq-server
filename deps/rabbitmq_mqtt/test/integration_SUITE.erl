@@ -13,7 +13,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3]).
+-import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
+                                   rpc_all/4]).
 -import(util, [all_connection_pids/1,
                publish_qos1/4]).
 
@@ -91,6 +92,13 @@ publish_to_all_queue_types_qos1(Config) ->
     publish_to_all_queue_types(Config, qos1).
 
 publish_to_all_queue_types(Config, QoS) ->
+    %% Give only 1/10 of the default credits.
+    %% We want to test whether sending many messages work when MQTT connection sometimes gets blocked.
+    Result = rpc_all(Config, application, set_env, [rabbit, credit_flow_default_credit, {40, 20}]),
+    Result = rpc_all(Config, application, set_env, [rabbit, quorum_commands_soft_limit, 3]),
+    Result = rpc_all(Config, application, set_env, [rabbit, stream_messages_soft_limit, 25]),
+    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
+
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     CQ = <<"classic-queue">>,
@@ -112,19 +120,22 @@ publish_to_all_queue_types(Config, QoS) ->
     declare_queue(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     bind(Ch, SQ, Topic),
 
+    NumMsgs = 2000,
+    NumMsgsBin = integer_to_binary(NumMsgs),
     {C, _} = connect(?FUNCTION_NAME, Config),
     lists:foreach(fun(_N) ->
                           case QoS of
                               qos0 ->
-                                  ok = emqtt:publish(C, Topic, <<"hello">>);
+                                  ok = emqtt:publish(C, Topic, <<"m">>);
                               qos1 ->
-                                  {ok, _} = publish_qos1(C, Topic, <<"hello">>, 1000)
+                                  {ok, _} = publish_qos1(C, Topic, <<"m">>, 1000)
                           end
-                  end, lists:seq(1, 2000)),
-    Expected = lists:sort([[CQ,  <<"2000">>],
-                           [CMQ, <<"2000">>],
-                           [QQ,  <<"2000">>],
-                           [SQ,  <<"2000">>]
+                  end, lists:seq(1, NumMsgs)),
+
+    Expected = lists:sort([[CQ,  NumMsgsBin],
+                           [CMQ, NumMsgsBin],
+                           [QQ,  NumMsgsBin],
+                           [SQ,  NumMsgsBin]
                           ]),
     ?awaitMatch(Expected,
                 lists:sort(rabbitmqctl_list(Config, 0, ["list_queues", "--no-table-headers",
@@ -134,7 +145,12 @@ publish_to_all_queue_types(Config, QoS) ->
     delete_queue(Ch, [CQ, CMQ, QQ, SQ]),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),
     ok = emqtt:disconnect(C),
-    ?awaitMatch([], all_connection_pids(Config), 10_000, 1000).
+    ?awaitMatch([], all_connection_pids(Config), 10_000, 1000),
+
+    Result = rpc_all(Config, application, unset_env, [rabbit, credit_flow_default_credit]),
+    Result = rpc_all(Config, application, unset_env, [rabbit, quorum_commands_soft_limit]),
+    Result = rpc_all(Config, application, unset_env, [rabbit, stream_messages_soft_limit]),
+    ok.
 
 %%TODO add test where target quorum queue rejects message
 

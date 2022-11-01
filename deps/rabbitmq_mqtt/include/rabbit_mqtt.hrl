@@ -55,7 +55,9 @@
          amqp2mqtt_fun,
          register_state,
          conn_name,
-         info}).
+         info,
+         delivery_flow :: flow | noflow
+         }).
 
 -type proc_state() :: #proc_state{}.
 
