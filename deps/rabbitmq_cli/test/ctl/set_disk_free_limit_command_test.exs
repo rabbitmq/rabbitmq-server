@@ -102,34 +102,53 @@ defmodule SetDiskFreeLimitCommandTest do
 
   @tag limit: 2_097_152
   test "run: a valid integer input returns an ok and sets the disk free limit", context do
+    set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+    Process.sleep(500)
     assert status()[:disk_free_limit] === context[:limit]
+
+    set_disk_free_limit(@default_limit)
   end
 
   @tag limit: 2_097_152.0
   test "run: a valid non-fractional float input returns an ok and sets the disk free limit",
        context do
+    set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+    Process.sleep(500)
     assert status()[:disk_free_limit] === round(context[:limit])
+
+    set_disk_free_limit(@default_limit)
   end
 
   @tag limit: 2_097_152.9
   test "run: a valid fractional float input returns an ok and sets the disk free limit",
        context do
+    set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+    Process.sleep(500)
     assert status()[:disk_free_limit] === context[:limit] |> Float.floor() |> round
+
+    set_disk_free_limit(@default_limit)
   end
 
   @tag limit: "2097152"
   test "run: an integer string input returns an ok and sets the disk free limit", context do
+    set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+    Process.sleep(500)
     assert status()[:disk_free_limit] === String.to_integer(context[:limit])
+
+    set_disk_free_limit(@default_limit)
   end
 
   @tag limit: "2MB"
   test "run: an valid unit string input returns an ok and changes the limit", context do
     assert @command.run([context[:limit]], context[:opts]) == :ok
+    Process.sleep(500)
     assert status()[:disk_free_limit] === 2_000_000
+
+    set_disk_free_limit(@default_limit)
   end
 
   ## ------------------------ run relative command -------------------------------------------
