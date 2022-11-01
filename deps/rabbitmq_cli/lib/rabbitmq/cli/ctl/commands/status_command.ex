@@ -157,7 +157,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         "\n#{bright("Memory")}\n",
         "Total memory used: #{IU.convert(total_memory, unit)} #{unit}",
         "Calculation strategy: #{memory_calculation_strategy}",
-        "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}\n"
+        "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{space_as_iu_or_unknown(m[:vm_memory_high_watermark_limit], unit)}\n"
       ] ++
         Enum.map(breakdown, fn {category, val} ->
           "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)"
@@ -172,7 +172,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
       "Low free disk space watermark: #{IU.convert(m[:disk_free_limit], unit)} #{unit}",
-      "Free disk space: #{IU.convert(m[:disk_free], unit)} #{unit}"
+      "Free disk space: #{space_as_iu_or_unknown(m[:disk_free], unit)}"
     ]
 
     totals_section = [
@@ -279,6 +279,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       {:net_ticktime, n} -> n
       n when is_integer(n) -> n
       _ -> :undefined
+    end
+  end
+
+  def space_as_iu_or_unknown(value, unit) do
+    case value do
+      :NaN ->
+        "(not available)"
+
+      x when is_number(x) ->
+        "#{IU.convert(x, unit)} #{unit}"
+
+      y ->
+        case Integer.parse(y) do
+          {n, _rem} -> "#{IU.convert(n, unit)} #{unit}"
+          :error -> "(not available)"
+        end
     end
   end
 end
