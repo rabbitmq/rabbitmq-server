@@ -52,13 +52,19 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 export LANG="en_US.UTF-8"
 export LC_ALL="en_US.UTF-8"
 
-ln -s ${{PWD}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{PWD}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{PWD}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{PWD}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{PWD}}/{package_dir}/.formatter.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+INITIAL_DIR="$(pwd)"
 
-INITIAL_DIR=${{PWD}}
+if [ ! -f ${{INITIAL_DIR}}/{package_dir}/test/test_helper.exs ]; then
+    echo "test_helper.exs cannot be found. 'bazel clean' might fix this."
+    exit 1
+fi
+
+ln -s ${{INITIAL_DIR}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+ln -s ${{INITIAL_DIR}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+ln -s ${{INITIAL_DIR}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+ln -s ${{INITIAL_DIR}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+ln -s ${{INITIAL_DIR}}/{package_dir}/.formatter.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+
 cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
 export IS_BAZEL=true
