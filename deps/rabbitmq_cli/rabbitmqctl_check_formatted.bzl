@@ -1,8 +1,4 @@
 load(
-    "@rules_erlang//:erlang_app_info.bzl",
-    "ErlangAppInfo",
-)
-load(
     "@rules_erlang//:util.bzl",
     "path_join",
     "windows_path",
@@ -12,10 +8,6 @@ load(
     "elixir_dirs",
     "erlang_dirs",
     "maybe_install_erlang",
-)
-load(
-    ":rabbitmqctl.bzl",
-    "deps_dir_contents",
 )
 
 def _impl(ctx):
@@ -74,8 +66,6 @@ set -x
     else:
         output = ctx.actions.declare_file(ctx.label.name + ".bat")
         script = """@echo off
-echo Erlang Version: {erlang_version}
-
 :: set LANG="en_US.UTF-8"
 :: set LC_ALL="en_US.UTF-8"
 
@@ -89,6 +79,7 @@ robocopy {package_dir}\\config %OUTPUTS_DIR%\\config /E /NFL /NDL /NJH /NJS /nc 
 robocopy {package_dir}\\lib %OUTPUTS_DIR%\\lib /E /NFL /NDL /NJH /NJS /nc /ns /np
 robocopy {package_dir}\\test %OUTPUTS_DIR%\\test /E /NFL /NDL /NJH /NJS /nc /ns /np
 copy {package_dir}\\mix.exs %OUTPUTS_DIR%\\mix.exs || goto :error
+copy {package_dir}\\.formatter.exs %OUTPUTS_DIR%\\.formatter.exs || goto :error
 
 cd %OUTPUTS_DIR% || goto :error
 
