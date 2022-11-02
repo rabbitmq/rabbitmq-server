@@ -59,11 +59,11 @@ if [ ! -f ${{INITIAL_DIR}}/{package_dir}/test/test_helper.exs ]; then
     exit 1
 fi
 
-ln -s ${{INITIAL_DIR}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{INITIAL_DIR}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{INITIAL_DIR}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{INITIAL_DIR}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-ln -s ${{INITIAL_DIR}}/{package_dir}/.formatter.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+cp -r ${{INITIAL_DIR}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+cp -r ${{INITIAL_DIR}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+cp -r ${{INITIAL_DIR}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+cp    ${{INITIAL_DIR}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+cp    ${{INITIAL_DIR}}/{package_dir}/.formatter.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
 cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
