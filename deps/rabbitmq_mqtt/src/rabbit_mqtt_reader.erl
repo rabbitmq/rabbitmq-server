@@ -62,12 +62,6 @@ init(Ref) ->
             LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnStr),
-            %%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
-            %% when need to force load the 'connection_created' event for the management plugin, see
-            %% https://github.com/rabbitmq/rabbitmq-management-agent/issues/58
-            %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L536
-            %% https://github.com/rabbitmq/rabbitmq-server/blob/90cc0e2abf944141feedaf3190d7b6d8b4741b11/deps/rabbitmq_stream/src/rabbit_stream_reader.erl#L189
-            %% https://github.com/rabbitmq/rabbitmq-server/blob/7eb4084cf879fe6b1d26dd3c837bd180cb3a8546/deps/rabbitmq_management_agent/src/rabbit_mgmt_db_handler.erl#L72
             gen_server:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(

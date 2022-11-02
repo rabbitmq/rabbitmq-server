@@ -412,6 +412,7 @@ notify_connection_created(
             ],
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
+    rabbit_networking:register_non_amqp_connection(self()),
     {ok, PState#proc_state{
            %% We won't need conn_name anymore. Use less memmory by setting to undefined.
            conn_name = undefined}}.
@@ -1188,6 +1189,7 @@ terminate(PState, ConnName) ->
     rabbit_event:notify(connection_closed, [{name, ConnName},
                                             {node, node()},
                                             {pid, self()}]),
+    rabbit_networking:unregister_non_amqp_connection(self()),
     maybe_unregister_client(PState),
     maybe_delete_mqtt_qos0_queue(PState).
 
