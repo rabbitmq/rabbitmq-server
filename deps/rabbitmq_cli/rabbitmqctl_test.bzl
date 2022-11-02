@@ -55,7 +55,7 @@ export LC_ALL="en_US.UTF-8"
 INITIAL_DIR="$(pwd)"
 
 if [ ! -f ${{INITIAL_DIR}}/{package_dir}/test/test_helper.exs ]; then
-    echo "test_helper.exs cannot be found"
+    echo "test_helper.exs cannot be found. 'bazel clean' might fix this."
     exit 1
 fi
 
