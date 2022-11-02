@@ -59,6 +59,10 @@ rabbitmqctl_check_formatted_test(
         "test/**/*.exs",
     ]),
     data = glob(["test/fixtures/**/*"]),
+    target_compatible_with = select({
+        "@platforms//os:macos": ["@platforms//os:macos"],
+        "//conditions:default": ["@platforms//os:linux"],
+    }),
 )
 
 alias(
