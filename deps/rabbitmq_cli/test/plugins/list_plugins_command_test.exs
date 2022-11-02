@@ -179,8 +179,7 @@ defmodule ListPluginsCommandTest do
       plugins: actual_plugins
     } = @command.run([".*"], Map.merge(context[:opts], %{verbose: true}))
 
-    assert_plugin_states(expected_plugins, actual_plugins)
-    assert Enum.all?(actual_plugins, fn p -> Keyword.fetch(p, :description) != :error end)
+    assert_plugin_states(actual_plugins, expected_plugins)
   end
 
   test "run: reports plugin names in minimal mode", context do
@@ -373,8 +372,6 @@ defmodule ListPluginsCommandTest do
       plugins: actual_plugins
     } = @command.run([".*"], opts)
 
-    IO.inspect(actual_plugins)
-    IO.inspect(expected_plugins)
     assert_plugin_states(actual_plugins, expected_plugins)
   end
 
