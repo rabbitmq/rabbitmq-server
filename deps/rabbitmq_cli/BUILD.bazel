@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:select_file.bzl", "select_file")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -46,8 +47,32 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
+rabbitmqctl_check_formatted_test(
+    name = "check_formatted",
+    size = "small",
+    srcs = [
+        "mix.exs",
+        "config/config.exs",
+        ".formatter.exs",
+    ] + glob([
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    data = glob(["test/fixtures/**/*"]),
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+alias(
+    name = "rabbitmqctl_check_formatted",
+    actual = ":check_formatted",
+)
+
 rabbitmqctl_test(
-    name = "rabbitmqctl_tests",
+    name = "tests",
     size = "large",
     srcs = [
         "mix.exs",
@@ -66,4 +91,9 @@ rabbitmqctl_test(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
+)
+
+alias(
+    name = "rabbitmqctl_tests",
+    actual = ":tests",
 )
