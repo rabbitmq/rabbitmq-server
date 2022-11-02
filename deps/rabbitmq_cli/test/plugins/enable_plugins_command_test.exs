@@ -11,6 +11,7 @@ defmodule EnablePluginsCommandTest do
   alias RabbitMQ.CLI.Core.ExitCodes
 
   @command RabbitMQ.CLI.Plugins.Commands.EnableCommand
+  @disable_command RabbitMQ.CLI.Plugins.Commands.DisableCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -348,6 +349,7 @@ defmodule EnablePluginsCommandTest do
     assert RabbitMQ.CLI.Core.CommandModules.load_commands(:all, %{})["add_super_stream"] ==
              RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand
 
+    @disable_command.run(["rabbitmq_stream_management"], context[:opts])
     reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 end
