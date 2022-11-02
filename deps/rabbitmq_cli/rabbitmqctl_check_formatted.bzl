@@ -22,14 +22,6 @@ def _impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx, short_path = True)
 
-    deps_dir = ctx.label.name + "_deps"
-
-    deps_dir_files = deps_dir_contents(
-        ctx,
-        ctx.attr.deps,
-        deps_dir,
-    )
-
     package_dir = path_join(
         ctx.label.workspace_root,
         ctx.label.package,
@@ -69,24 +61,15 @@ cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
 export IS_BAZEL=true
 export HOME=${{PWD}}
-export DEPS_DIR=$TEST_SRCDIR/$TEST_WORKSPACE/{package_dir}/{deps_dir}
 export MIX_ENV=test
 export ERL_COMPILER_OPTIONS=deterministic
-"${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
-"${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
-"${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
-# "${{ABS_ELIXIR_HOME}}"/bin/mix dialyzer
-if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
-    cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
-fi
-"${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
+set -x
 "${{ABS_ELIXIR_HOME}}"/bin/mix format --check-formatted
 """.format(
             maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             package_dir = package_dir,
-            deps_dir = deps_dir,
         )
     else:
         output = ctx.actions.declare_file(ctx.label.name + ".bat")
@@ -109,14 +92,8 @@ copy {package_dir}\\mix.exs %OUTPUTS_DIR%\\mix.exs || goto :error
 
 cd %OUTPUTS_DIR% || goto :error
 
-set DEPS_DIR=%TEST_SRCDIR%/%TEST_WORKSPACE%/{package_dir}/{deps_dir}
-set DEPS_DIR=%DEPS_DIR:/=\\%
 set ERL_COMPILER_OPTIONS=deterministic
-set MIX_ENV=test mix dialyzer
-echo y | "{elixir_home}\\bin\\mix" local.hex --force || goto :error
-echo y | "{elixir_home}\\bin\\mix" local.rebar --force || goto :error
-"{elixir_home}\\bin\\mix" deps.get || goto :error
-"{elixir_home}\\bin\\mix" deps.compile || goto :error
+set MIX_ENV=test
 "{elixir_home}\\bin\\mix" format --check-formatted || goto :error
 goto :EOF
 :error
@@ -125,7 +102,6 @@ exit /b 1
             erlang_home = windows_path(erlang_home),
             elixir_home = windows_path(elixir_home),
             package_dir = windows_path(ctx.label.package),
-            deps_dir = deps_dir,
         )
 
     ctx.actions.write(
@@ -135,7 +111,6 @@ exit /b 1
 
     runfiles = ctx.runfiles(
         files = ctx.files.srcs + ctx.files.data,
-        transitive_files = depset(deps_dir_files),
     ).merge_all([
         erlang_runfiles,
         elixir_runfiles,
@@ -152,7 +127,6 @@ rabbitmqctl_check_formatted_private_test = rule(
         "is_windows": attr.bool(mandatory = True),
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
-        "deps": attr.label_list(providers = [ErlangAppInfo]),
     },
     toolchains = [
         "//bazel/elixir:toolchain_type",
