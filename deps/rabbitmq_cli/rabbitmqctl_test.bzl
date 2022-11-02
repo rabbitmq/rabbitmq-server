@@ -133,6 +133,7 @@ robocopy {package_dir}\\config %OUTPUTS_DIR%\\config /E /NFL /NDL /NJH /NJS /nc 
 robocopy {package_dir}\\lib %OUTPUTS_DIR%\\lib /E /NFL /NDL /NJH /NJS /nc /ns /np
 robocopy {package_dir}\\test %OUTPUTS_DIR%\\test /E /NFL /NDL /NJH /NJS /nc /ns /np
 copy {package_dir}\\mix.exs %OUTPUTS_DIR%\\mix.exs || goto :error
+copy {package_dir}\\.formatter.exs %OUTPUTS_DIR%\\.formatter.exs || goto :error
 
 cd %OUTPUTS_DIR% || goto :error
 
