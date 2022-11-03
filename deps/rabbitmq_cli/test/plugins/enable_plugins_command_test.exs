@@ -11,6 +11,7 @@ defmodule EnablePluginsCommandTest do
   alias RabbitMQ.CLI.Core.ExitCodes
 
   @command RabbitMQ.CLI.Plugins.Commands.EnableCommand
+  @disable_command RabbitMQ.CLI.Plugins.Commands.DisableCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -51,12 +52,7 @@ defmodule EnablePluginsCommandTest do
   end
 
   setup context do
-    set_enabled_plugins(
-      [:rabbitmq_stomp, :rabbitmq_federation],
-      :online,
-      get_rabbit_hostname(),
-      context[:opts]
-    )
+    reset_enabled_plugins_to_preconfigured_defaults(context)
 
     {
       :ok,
@@ -66,6 +62,15 @@ defmodule EnablePluginsCommandTest do
           timeout: 1000
         })
     }
+  end
+
+  def reset_enabled_plugins_to_preconfigured_defaults(context) do
+    set_enabled_plugins(
+      [:rabbitmq_stomp, :rabbitmq_federation],
+      :online,
+      get_rabbit_hostname(),
+      context[:opts]
+    )
   end
 
   test "validate: specifying both --online and --offline is reported as invalid", context do
@@ -99,7 +104,7 @@ defmodule EnablePluginsCommandTest do
              {:validation_failure, :plugins_dir_does_not_exist}
   end
 
-  test "if node is inaccessible, writes enabled plugins file and reports implicitly enabled plugin list",
+  test "run: if node is inaccessible, writes enabled plugins file and reports implicitly enabled plugin list",
        context do
     # Clears enabled plugins file
     set_enabled_plugins([], :offline, :nonode, context[:opts])
@@ -119,7 +124,7 @@ defmodule EnablePluginsCommandTest do
              currently_active_plugins(context)
   end
 
-  test "in offline mode, writes enabled plugins and reports implicitly enabled plugin list",
+  test "run: in offline mode, writes enabled plugins and reports implicitly enabled plugin list",
        context do
     # Clears enabled plugins file
     set_enabled_plugins([], :offline, :nonode, context[:opts])
@@ -144,7 +149,7 @@ defmodule EnablePluginsCommandTest do
     )
   end
 
-  test "adds additional plugins to those already enabled", context do
+  test "run: adds additional plugins to those already enabled", context do
     # Clears enabled plugins file
     set_enabled_plugins([], :offline, :nonode, context[:opts])
 
@@ -181,7 +186,7 @@ defmodule EnablePluginsCommandTest do
     check_plugins_enabled([:rabbitmq_stomp, :rabbitmq_federation], context)
   end
 
-  test "updates plugin list and starts newly enabled plugins", context do
+  test "run: updates plugin list and starts newly enabled plugins", context do
     # Clears enabled plugins file and stop all plugins
     set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
@@ -222,9 +227,11 @@ defmodule EnablePluginsCommandTest do
       [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
       currently_active_plugins(context)
     )
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
-  test "can enable multiple plugins at once", context do
+  test "run: can enable multiple plugins at once", context do
     # Clears plugins file and stop all plugins
     set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
@@ -249,9 +256,11 @@ defmodule EnablePluginsCommandTest do
       [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
       currently_active_plugins(context)
     )
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
-  test "does not enable an already implicitly enabled plugin", context do
+  test "run: does not enable an already implicitly enabled plugin", context do
     # Clears enabled plugins file and stop all plugins
     set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     assert {:stream, test_stream} = @command.run(["amqp_client"], context[:opts])
@@ -266,6 +275,8 @@ defmodule EnablePluginsCommandTest do
 
     assert [:amqp_client, :rabbitmq_federation] ==
              currently_active_plugins(context)
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
   test "run: does not enable plugins with unmet version requirements", context do
@@ -281,6 +292,8 @@ defmodule EnablePluginsCommandTest do
     # Not changed
     {:error, _version_error} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
     check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
   test "run: does not enable plugins with unmet version requirements even when enabling all plugins",
@@ -295,17 +308,21 @@ defmodule EnablePluginsCommandTest do
     {:error, _version_error} = @command.run([], opts)
 
     check_plugins_enabled([], context)
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
-  test "formats enabled plugins mismatch errors", context do
+  test "output: formats enabled plugins mismatch errors", context do
     err = {:enabled_plugins_mismatch, '/tmp/a/cli/path', '/tmp/a/server/path'}
 
     assert {:error, ExitCodes.exit_dataerr(),
             "Could not update enabled plugins file at /tmp/a/cli/path: target node #{context[:opts][:node]} uses a different path (/tmp/a/server/path)"} ==
              @command.output({:error, err}, context[:opts])
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 
-  test "formats enabled plugins write errors", context do
+  test "output: formats enabled plugins write errors", context do
     err1 = {:cannot_write_enabled_plugins_file, "/tmp/a/path", :eacces}
 
     assert {:error, ExitCodes.exit_dataerr(),
@@ -317,5 +334,22 @@ defmodule EnablePluginsCommandTest do
     assert {:error, ExitCodes.exit_dataerr(),
             "Could not update enabled plugins file at /tmp/a/path: the file does not exist (ENOENT)"} ==
              @command.output({:error, err2}, context[:opts])
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
+  end
+
+  test "output: enable command will also load its dependent plugins", context do
+    # Clears enabled plugins file and stop all plugins
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+
+    # Enable rabbitmq_stream_management
+    @command.run(["rabbitmq_stream_management"], context[:opts])
+
+    # Check command add_super_stream is available due to dependency plugin rabbitmq_stream
+    assert RabbitMQ.CLI.Core.CommandModules.load_commands(:all, %{})["add_super_stream"] ==
+             RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand
+
+    @disable_command.run(["rabbitmq_stream_management"], context[:opts])
+    reset_enabled_plugins_to_preconfigured_defaults(context)
   end
 end

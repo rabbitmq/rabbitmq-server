@@ -74,8 +74,31 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
           []
       end
 
+    all_plugins = PluginsHelpers.list(opts)
+    enabled_with_dep = :rabbit_plugins.dependencies(false, enabled_plugins, all_plugins)
+
+    all_enabled_plugins =
+      Enum.flat_map(
+        all_plugins,
+        fn plugin ->
+          name = PluginsHelpers.plugin_name(plugin)
+
+          strictly_member =
+            :rabbit_plugins.is_strictly_plugin(plugin) and
+              Enum.member?(enabled_with_dep, name)
+
+          case strictly_member do
+            true ->
+              [name]
+
+            false ->
+              []
+          end
+        end
+      )
+
     partitioned =
-      Enum.group_by(enabled_plugins, fn app ->
+      Enum.group_by(all_enabled_plugins, fn app ->
         case Application.load(app) do
           :ok -> :loaded
           {:error, {:already_loaded, ^app}} -> :loaded
