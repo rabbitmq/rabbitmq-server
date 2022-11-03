@@ -8,11 +8,17 @@ defmodule RabbitMQ.CLI.Core.CodePath do
   alias RabbitMQ.CLI.Core.{Config, Paths, Platform}
 
   def add_plugins_to_load_path(opts) do
-    with {:ok, plugins_dir} <- Paths.plugins_dir(opts) do
-      String.split(to_string(plugins_dir), Platform.path_separator())
-      |> Enum.map(&add_directory_plugins_to_load_path/1)
+    case Paths.plugins_dir(opts) do
+      {:error, _} ->
+        :ok
 
-      :ok
+      val ->
+        with {:ok, plugins_dir} <- val do
+          String.split(to_string(plugins_dir), Platform.path_separator())
+          |> Enum.map(&add_directory_plugins_to_load_path/1)
+
+          :ok
+        end
     end
   end
 
