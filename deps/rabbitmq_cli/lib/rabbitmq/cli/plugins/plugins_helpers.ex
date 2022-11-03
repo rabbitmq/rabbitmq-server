@@ -41,9 +41,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def list(opts) do
-    {:ok, dir} = plugins_dir(opts)
-    add_all_to_path(dir)
-    :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
+    case plugins_dir(opts) do
+      {:ok, dir} ->
+        add_all_to_path(dir)
+        :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
+
+      {:error, _} ->
+        []
+    end
   end
 
   def list_names(opts) do
