@@ -606,6 +606,67 @@ defmodule TestHelper do
     Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
+  # Asserts that for every expected plugin, there is an actually
+  # present plugin on the node that has the same name.
+  #
+  # If there are more activated plugins than expected,
+  # this is considered acceptable.
+  def assert_plugin_presence(actual, expected) do
+    assert Enum.all?(expected, fn ep ->
+             Enum.find(actual, false, fn ap ->
+               ap[:name] == ep[:name]
+             end)
+           end)
+  end
+
+  # Asserts that for every expected plugin, there is an actually
+  # present plugin on the node that has the same name,
+  # activation state and running/stopped state.
+  #
+  # If there are more activated plugins than expected,
+  # this is considered acceptable.
+  def assert_plugin_states(actual, expected) do
+    assert Enum.all?(expected, fn ep ->
+             Enum.find(actual, false, fn ap ->
+               ap[:name] == ep[:name] and
+                 ap[:enabled] == ep[:enabled] and
+                 ap[:running] == ep[:running]
+             end)
+           end)
+  end
+
+  # Asserts that for every expected plugin, there is an actually
+  # present plugin on the node that has the same name, version,
+  # activation state.
+  #
+  # If there are more activated plugins than expected,
+  # this is considered acceptable.
+  def assert_plugin_states_and_versions(actual, expected) do
+    assert Enum.all?(expected, fn ep ->
+             Enum.find(actual, false, fn ap ->
+               ap[:name] == ep[:name] and
+                 ap[:version] == ep[:version] and
+                 ap[:enabled] == ep[:enabled]
+             end)
+           end)
+  end
+
+  # Asserts that for every expected plugin, there is an actually
+  # present plugin on the node that has the same name, dependencies,
+  # activation state.
+  #
+  # If there are more activated plugins than expected,
+  # this is considered acceptable.
+  def assert_plugin_states_and_dependencies(actual, expected) do
+    assert Enum.all?(expected, fn ep ->
+             Enum.find(actual, false, fn ap ->
+               ap[:name] == ep[:name] and
+                 Enum.sort(ap[:dependencies]) == Enum.sort(ep[:dependencies]) and
+                 ap[:enabled] == ep[:enabled]
+             end)
+           end)
+  end
+
   def enable_federation_plugin() do
     node = get_rabbit_hostname()
 
