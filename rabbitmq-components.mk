@@ -113,7 +113,6 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
-dep_thoas = hex 0.3.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git master
 dep_prometheus = hex 4.9.1
 dep_ra = git https://github.com/rabbitmq/ra.git main
