@@ -27,6 +27,7 @@ groups() ->
         , last_will_disabled
         , disconnect
         , keepalive
+        , maintenance
         ]}
     ].
 
@@ -256,6 +257,24 @@ keepalive(Config) ->
     ?assertEqual({close, {1000, <<"MQTT keepalive timeout">>}},
                  rfc6455_client:recv(WS, ceil(3 * 0.75 * KeepaliveMs))).
 
+maintenance(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    PortStr = integer_to_list(Port),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS,
+        ?CONNECT_PACKET(#mqtt_packet_connect{
+            clean_sess = true,
+            client_id = <<"node-drain-test">>,
+            username  = <<"guest">>,
+            password  = <<"guest">>})),
+
+    ?assertEqual(1, num_mqtt_connections(Config, 0)),
+    ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
+
+    ?assertEqual(0, num_mqtt_connections(Config, 0)),
+    ok = rabbit_ct_broker_helpers:revive_node(Config, 0).
+
 raw_send(WS, Packet) ->
     Frame = emqttc_serialiser:serialise(Packet),
     rfc6455_client:send_binary(WS, Frame).
@@ -270,3 +289,8 @@ raw_recv(WS, Timeout) ->
         {error, timeout} ->
             {error, timeout}
     end.
+
+%% Web mqtt connections are tracked together with mqtt connections
+num_mqtt_connections(Config, Node) ->
+    length(rabbit_ct_broker_helpers:rpc(
+        Config, Node, rabbit_mqtt,local_connection_pids,[])).
