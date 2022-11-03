@@ -291,13 +291,9 @@ defmodule EnablePluginsCommandTest do
 
     # Not changed
     {:error, _version_error} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
-<<<<<<< HEAD
     check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
-=======
-    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_9], context)
 
     reset_enabled_plugins_to_preconfigured_defaults(context)
->>>>>>> db22cdf6f4 (Reset enabled plugins after each test that enables any)
   end
 
   test "run: does not enable plugins with unmet version requirements even when enabling all plugins",
