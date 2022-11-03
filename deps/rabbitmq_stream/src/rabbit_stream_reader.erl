@@ -2563,8 +2563,10 @@ remove_subscription(SubscriptionId,
                         Connection,
                     #stream_connection_state{consumers = Consumers} = State) ->
     #{SubscriptionId := Consumer} = Consumers,
-    Stream =
-        Consumer#consumer.configuration#consumer_configuration.stream,
+    #consumer{log = Log,
+              configuration = #consumer_configuration{stream = Stream}} =
+        Consumer,
+    close_log(Log),
     #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
     SubscriptionsForThisStream1 =
         lists:delete(SubscriptionId, SubscriptionsForThisStream),
@@ -3058,3 +3060,7 @@ ssl_info(F,
 get_chunk_selector(Properties) ->
     binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
                             <<"user_data">>)).
+
+close_log(undefined) -> ok;
+close_log(Log) ->
+    osiris_log:close(Log).
