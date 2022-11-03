@@ -79,6 +79,7 @@ setup_node_env() {
     mkdir -p "$TEST_TMPDIR"
     mkdir -p "$RABBITMQ_LOG_BASE"
     mkdir -p "$RABBITMQ_MNESIA_BASE"
+    mkdir -p "$RABBITMQ_PLUGINS_DIR"
     mkdir -p "$RABBITMQ_PLUGINS_EXPAND_DIR"
 }
 
