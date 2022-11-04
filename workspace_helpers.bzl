@@ -135,7 +135,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     git_repository(
         name = "osiris",
-        tag = "v1.3.1",
+        tag = "v1.3.2",
         remote = "https://github.com/rabbitmq/osiris.git",
         patch_cmds = [
             """VERSION=$(git rev-parse HEAD)

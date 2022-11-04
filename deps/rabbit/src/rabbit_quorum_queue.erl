@@ -105,7 +105,8 @@
                     messages_unacknowledged, local_state, type] ++ ?STATISTICS_KEYS).
 
 -define(RPC_TIMEOUT, 1000).
--define(START_CLUSTER_RPC_TIMEOUT, 7000). %% the ra start cluster default is 5000
+-define(START_CLUSTER_TIMEOUT, 5000).
+-define(START_CLUSTER_RPC_TIMEOUT, 7000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
@@ -187,7 +188,6 @@ start_cluster(Q) ->
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
-    Id = {RaName, node()},
     {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
     LeaderId = {RaName, Leader},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
@@ -203,7 +203,8 @@ start_cluster(Q) ->
                                                    ?SNAPSHOT_INTERVAL),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
-            try erpc_call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs],
+            try erpc_call(Leader, ra, start_cluster,
+                          [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
                           ?START_CLUSTER_RPC_TIMEOUT) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
@@ -212,7 +213,7 @@ start_cluster(Q) ->
                     %% keys
                     %% TODO: handle error - what should be done if the
                     %% config cannot be updated
-                    ok = rabbit_fifo_client:update_machine_state(Id,
+                    ok = rabbit_fifo_client:update_machine_state(LeaderId,
                                                                  ra_machine_config(NewQ)),
                     notify_decorators(QName, startup),
                     rabbit_event:notify(queue_created,
