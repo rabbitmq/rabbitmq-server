@@ -375,7 +375,7 @@ test_server(Transport, Stream, Config) ->
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
     CounterKeys = maps:keys(get_osiris_counters(Config)),
     %% find the counter key for the subscriber
-    {value, SubKey} = lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
+    {value, _SubKey} = lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
                                            Q == QName andalso
                                            Id == SubscriptionId;
                                        (_) ->
