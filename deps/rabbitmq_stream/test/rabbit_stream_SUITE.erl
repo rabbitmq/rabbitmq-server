@@ -266,44 +266,6 @@ timeout_close_sent(Config) ->
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
-<<<<<<< HEAD
-=======
-sac_ff(Config) ->
-    Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C),
-    test_authenticate(gen_tcp, S, C),
-    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    test_create_stream(gen_tcp, S, Stream, C),
-    test_declare_publisher(gen_tcp, S, 1, Stream, C),
-    ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
-    Body = <<"hello">>,
-    test_publish_confirm(gen_tcp, S, 1, Body, C),
-
-    SubscriptionId = 42,
-    SubCmd =
-        {request, 1,
-         {subscribe,
-          SubscriptionId,
-          Stream,
-          0,
-          10,
-          #{<<"single-active-consumer">> => <<"true">>,
-            <<"name">> => <<"foo">>}}},
-    SubscribeFrame = rabbit_stream_core:frame(SubCmd),
-    ok = gen_tcp:send(S, SubscribeFrame),
-    {Cmd, C} = receive_commands(gen_tcp, S, C),
-    ?assertMatch({response, 1,
-                  {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
-                 Cmd),
-    test_delete_stream(gen_tcp, S, Stream, C),
-    test_close(gen_tcp, S, C),
-    closed = wait_for_socket_close(gen_tcp, S, 10),
-    ok.
-
->>>>>>> 7739718764 (Streams: close osiris log on unsubscribe)
 max_segment_size_bytes_validation(Config) ->
     Transport = gen_tcp,
     Port = get_stream_port(Config),
@@ -420,30 +382,9 @@ test_server(Transport, Stream, Config) ->
                                            false
                                    end, CounterKeys),
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
-<<<<<<< HEAD
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
     C10 = test_delete_stream(Transport, S, Stream, C9),
     _C11 = test_close(Transport, S, C10),
-=======
-    C8b = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
-
-    C9 = test_unsubscribe(Transport, S, SubscriptionId, C8b),
-
-    %% assert the counter key got removed after unsubscribe
-    ?assertNot(maps:is_key(SubKey, get_osiris_counters(Config))),
-    %% exchange capabilities, which says we support deliver v2
-    %% the connection should adapt its deliver frame accordingly
-    C10 = test_exchange_command_versions(Transport, S, C9),
-    SubscriptionId2 = 43,
-    C11 = test_subscribe(Transport, S, SubscriptionId2, Stream, C10),
-    C12 = test_deliver_v2(Transport, S, SubscriptionId2, 0, Body, C11),
-    C13 = test_deliver_v2(Transport, S, SubscriptionId2, 1, Body, C12),
-
-    C14 = test_stream_stats(Transport, S, Stream, C13),
-
-    C15 = test_delete_stream(Transport, S, Stream, C14),
-    _C16 = test_close(Transport, S, C15),
->>>>>>> 7739718764 (Streams: close osiris log on unsubscribe)
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
