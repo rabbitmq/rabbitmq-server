@@ -235,6 +235,8 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+    repository = "rabbitmq/osiris",
+    tag = "v1.3.2",
     patch_cmds = [
         """VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
@@ -245,8 +247,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
 """,
     ],
-    repository = "rabbitmq/osiris",
-    tag = "v1.3.1",
 )
 
 erlang_package.hex_package(

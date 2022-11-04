@@ -121,7 +121,8 @@ end_per_testcase(_Test, _Config) ->
     ok.
 
 test_global_counters(Config) ->
-    test_server(gen_tcp, Config),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    test_server(gen_tcp, Stream, Config),
     ?assertEqual(#{publishers => 0,
                    consumers => 0,
                    messages_confirmed_total => 2,
@@ -151,11 +152,13 @@ test_global_counters(Config) ->
     ok.
 
 test_stream(Config) ->
-    test_server(gen_tcp, Config),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    test_server(gen_tcp, Stream, Config),
     ok.
 
 test_stream_tls(Config) ->
-    test_server(ssl, Config),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    test_server(ssl, Stream, Config),
     ok.
 
 test_gc_consumers(Config) ->
@@ -342,7 +345,8 @@ get_node_name(Config) ->
 get_node_name(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename).
 
-test_server(Transport, Config) ->
+test_server(Transport, Stream, Config) ->
+    QName = rabbit_misc:r(<<"/">>, queue, Stream),
     Port =
         case Transport of
             gen_tcp ->
@@ -357,7 +361,6 @@ test_server(Transport, Config) ->
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),
-    Stream = <<"stream1">>,
     C3 = test_create_stream(Transport, S, Stream, C2),
     PublisherId = 42,
     ?assertMatch(#{publishers := 0}, get_global_counters(Config)),
@@ -370,6 +373,14 @@ test_server(Transport, Config) ->
     ?assertMatch(#{consumers := 0}, get_global_counters(Config)),
     C7 = test_subscribe(Transport, S, SubscriptionId, Stream, C6),
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
+    CounterKeys = maps:keys(get_osiris_counters(Config)),
+    %% find the counter key for the subscriber
+    {value, _SubKey} = lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
+                                           Q == QName andalso
+                                           Id == SubscriptionId;
+                                       (_) ->
+                                           false
+                                   end, CounterKeys),
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
     C10 = test_delete_stream(Transport, S, Stream, C9),
@@ -487,6 +498,18 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
+test_unsubscribe(Transport,
+                 Socket,
+                 SubscriptionId, C0) ->
+    UnsubCmd = {request, 1,
+                {unsubscribe, SubscriptionId}},
+    UnsubscribeFrame = rabbit_stream_core:frame(UnsubCmd),
+    ok = Transport:send(Socket, UnsubscribeFrame ),
+    {Cmd, C} = receive_commands(Transport, Socket, C0),
+    ?assertMatch({response, 1, {unsubscribe, ?RESPONSE_CODE_OK}}, Cmd),
+    C.
+
+
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
     ct:pal("test_deliver ", []),
     {{deliver, SubscriptionId, Chunk}, C} =
@@ -550,6 +573,12 @@ receive_commands(Transport, S, C0) ->
             Res
     end.
 
+get_osiris_counters(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 osiris_counters,
+                                 overview,
+                                 []).
 get_global_counters(Config) ->
     maps:get([{protocol, stream}],
              rabbit_ct_broker_helpers:rpc(Config,

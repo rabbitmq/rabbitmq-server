@@ -297,7 +297,7 @@ begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
         undefined ->
             {error, no_local_stream_replica_available};
         _ ->
-            CounterSpec = {{?MODULE, QName, self()}, []},
+            CounterSpec = {{?MODULE, QName, Tag, self()}, []},
             {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
             NextOffset = osiris_log:next_offset(Seg0) - 1,
             osiris:register_offset_listener(LocalPid, NextOffset),
