@@ -62,73 +62,67 @@ end_per_testcase(Testcase, Config) ->
 
 connection(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-    {close, _} = rfc6455_client:close(WS),
-    ok.
+    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
+                                {username, "guest"},
+                                {password, "guest"},
+                                {ws_path, "/ws"},
+                                {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C),
+    ok = emqtt:disconnect(C).
 
 pubsub_shared_connection(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-    ok = raw_send(WS,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-pubsub">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS),
-
+    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
+                                {username, "guest"},
+                                {password, "guest"},
+                                {ws_path, "/ws"},
+                                {client_id, ?FUNCTION_NAME},
+                                {clean_start, true},
+                                {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C),
     Dst = <<"/topic/test-web-mqtt">>,
-
-    ok = raw_send(WS, ?SUBSCRIBE_PACKET(1, [{Dst, ?QOS_1}])),
-    {ok, ?SUBACK_PACKET(_, _), _} = raw_recv(WS),
+    {ok, _, [1]} = emqtt:subscribe(C, Dst, qos1),
 
     Payload = <<"a\x00a">>,
+    {ok, PubReply} = emqtt:publish(C, Dst, Payload, [{qos, 1}]),
+    ?assertMatch(#{packet_id := _,
+                   reason_code := 0,
+                   reason_code_name := success
+                  }, PubReply),
 
-    ok = raw_send(WS, ?PUBLISH_PACKET(?QOS_1, Dst, 2, Payload)),
-    {ok, ?PUBLISH_PACKET(_, Dst, _, Payload), _} = raw_recv(WS),
-
-    {close, _} = rfc6455_client:close(WS),
-    ok.
+    ok = emqtt:disconnect(C).
 
 pubsub_separate_connections(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS1 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS1),
-    ok = raw_send(WS1,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-publisher">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS1),
-
-    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS2),
-    ok = raw_send(WS2,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-consumer">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS2),
+    {ok, C1} = emqtt:start_link([{host, "127.0.0.1"},
+                                 {username, "guest"},
+                                 {password, "guest"},
+                                 {ws_path, "/ws"},
+                                 {client_id, "web-mqtt-tests-consumer"},
+                                 {clean_start, true},
+                                 {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C1),
+    {ok, C2} = emqtt:start_link([{host, "127.0.0.1"},
+                                 {username, "guest"},
+                                 {password, "guest"},
+                                 {ws_path, "/ws"},
+                                 {client_id, "web-mqtt-tests-consumer"},
+                                 {clean_start, true},
+                                 {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C2),
 
     Dst = <<"/topic/test-web-mqtt">>,
-    ok = raw_send(WS2, ?SUBSCRIBE_PACKET(1, [{Dst, ?QOS_1}])),
-    {ok, ?SUBACK_PACKET(_, _), _} = raw_recv(WS2),
+    {ok, _, [1]} = emqtt:subscribe(C2, Dst, qos1),
 
     Payload = <<"a\x00a">>,
-    ok = raw_send(WS1, ?PUBLISH_PACKET(?QOS_1, Dst, 2, Payload)),
-    {ok, ?PUBLISH_PACKET(_, Dst, _, Payload), _} = raw_recv(WS2),
+    {ok, PubReply} = emqtt:publish(C1, Dst, Payload, [{qos, 1}]),
+    ?assertMatch(#{packet_id := _,
+                   reason_code := 0,
+                   reason_code_name := success
+                  }, PubReply),
 
-    {close, _} = rfc6455_client:close(WS1),
-    {close, _} = rfc6455_client:close(WS2),
-    ok.
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
 
 last_will_enabled(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
@@ -259,15 +253,15 @@ keepalive(Config) ->
 
 maintenance(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-    ok = raw_send(WS,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"node-drain-test">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
+    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
+                                {username, "guest"},
+                                {password, "guest"},
+                                {ws_path, "/ws"},
+                                {client_id, "node-drain-test"},
+                                {clean_start, true},
+                                {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C),
+    unlink(C),
 
     ?assertEqual(1, num_mqtt_connections(Config, 0)),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),

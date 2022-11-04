@@ -90,6 +90,10 @@ rabbitmq_integration_suite(
     name = "system_SUITE",
     additional_beam = [":test_utils"],
     additional_hdrs = glob(["test/src/*.hrl"]),
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+        "@gun//:erlang_app",
+    ],
 )
 
 assert_suites()
