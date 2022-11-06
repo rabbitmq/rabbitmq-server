@@ -23,7 +23,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation consumer_capacity
             memory slave_pids synchronised_slave_pids state type
-            leader members online)a
+            leader members online
+            mirror_pids synchronised_mirror_pids)a
+  @info_key_aliases [
+    {:mirror_pids, :slave_pids},
+    {:synchronised_mirror_pids, :synchronised_slave_pids}
+  ]
 
   def description(), do: "Lists queues and their properties"
 
@@ -61,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   def validate(args, _opts) do
-    case InfoKeys.validate_info_keys(args, @info_keys) do
+    case InfoKeys.validate_info_keys(args, @info_keys, @info_key_aliases) do
       {:ok, _} -> :ok
       err -> err
     end
@@ -85,12 +90,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
         other -> other
       end
 
-    info_keys = InfoKeys.prepare_info_keys(args)
+    info_keys = InfoKeys.prepare_info_keys(args, @info_key_aliases)
+    broker_keys = InfoKeys.broker_keys(info_keys)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
-      offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
-      local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}
-      online_mfa = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+      offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, broker_keys]}
+      local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, broker_keys]}
+      online_mfa = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, broker_keys]}
 
       {chunks, mfas} =
         case {local_opt, offline, online} do
