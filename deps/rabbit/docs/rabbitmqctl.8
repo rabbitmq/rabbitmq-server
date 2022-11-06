@@ -1394,11 +1394,11 @@ or prefetch count.
 .It Cm memory
 Bytes of memory allocated by the runtime for the
 queue, including stack, heap and internal structures.
-.It Cm slave_pids
+.It Cm mirror_pids
 If the queue is mirrored, this lists the IDs of the mirrors (follower replicas).
 To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
-.It Cm synchronised_slave_pids
+.It Cm synchronised_mirror_pids
 If the queue is mirrored, this gives the IDs of the mirrors (follower replicas) which
 are in sync with the leader replica. To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
@@ -1416,6 +1416,8 @@ be shown with a status of
 (and most other
 .Ar queueinfoitem
 will be unavailable).
+.It Cm type
+Queue type, one of: quorum, stream, classic.
 .El
 .Pp
 If no
@@ -1428,9 +1430,45 @@ each queue of the virtual host named
 .sp
 .Dl rabbitmqctl list_queues -p my-vhost messages consumers
 .\" ------------------------------------------------------------------
-.It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar milliseconds Oc Oo Ar column ... Oc Op Fl -no-table-headers
+.It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar milliseconds Oc Oo Ar queueinfoitem ... Oc Op Fl -no-table-headers
 .Pp
-Tests queues to respond within timeout. Lists those which did not respond
+Tests queues to respond within timeout. Lists those which did not respond.
+.Pp
+Displayed queues can be filtered by their status or location using one
+of the following mutually exclusive options:
+.Bl -tag -width Ds
+.It Fl -all
+List all queues.
+.It Fl -local
+List only those queues whose leader replica is located on the current
+node.
+.El
+.Pp
+The
+.Ar queueinfoitem
+parameter is used to indicate which queue information items to include
+in the results.
+The column order in the results will match the order of the parameters.
+.Ar queueinfoitem
+can take any value from the list that follows:
+.Bl -tag -width Ds
+.It Cm name
+The name of the queue with non\-ASCII characters escaped as in C.
+.It Cm durable
+Whether or not the queue survives server restarts.
+.It Cm auto_delete
+Whether the queue will be deleted automatically when no longer used.
+.It Cm arguments
+Queue arguments.
+.It Cm policy
+Effective policy name for the queue.
+.It Cm pid
+Erlang process identifier of the leader replica.
+.It Cm recoverable_mirrors
+Erlang process identifiers of the mirror replicas that did respond in time.
+.It Cm type
+Queue type, one of: quorum, stream, classic.
+.El
 .Pp
 For example, this command lists only those unresponsive queues whose leader replica
 is hosted on the target node.

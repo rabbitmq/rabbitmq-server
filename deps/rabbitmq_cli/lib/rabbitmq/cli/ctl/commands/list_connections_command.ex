@@ -42,13 +42,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
 
   def run([_ | _] = args, %{node: node_name, timeout: timeout}) do
     info_keys = InfoKeys.prepare_info_keys(args)
+    broker_keys = InfoKeys.broker_keys(info_keys)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
       RpcStream.receive_list_items(
         node_name,
         :rabbit_networking,
         :emit_connection_info_all,
-        [nodes, info_keys],
+        [nodes, broker_keys],
         timeout,
         info_keys,
         Kernel.length(nodes)
