@@ -1,6 +1,6 @@
 module(
     name = "rabbitmq-server",
-    version = "3.10.0",
+    version = "3.10.11",
 )
 
 bazel_dep(
@@ -280,6 +280,10 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+    repository = "rabbitmq/ra",
+    tag = "v2.4.0",
+    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
+"""],
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
@@ -303,11 +307,7 @@ erlang_app(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-""",
-    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
-"""],
-    repository = "rabbitmq/ra",
-    tag = "v2.2.0",
+"""
 )
 
 erlang_package.hex_package(
