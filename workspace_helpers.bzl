@@ -135,7 +135,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     git_repository(
         name = "osiris",
-        tag = "v1.3.2",
+        tag = "v1.3.3",
         remote = "https://github.com/rabbitmq/osiris.git",
         patch_cmds = [
             """VERSION=$(git rev-parse HEAD)
@@ -204,7 +204,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "seshat",
-        version = "0.3.2",
+        version = "0.4.0",
     )
 
     hex_pm_erlang_app(
