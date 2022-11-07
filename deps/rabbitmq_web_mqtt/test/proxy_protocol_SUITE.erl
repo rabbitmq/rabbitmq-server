@@ -8,11 +8,10 @@
 -module(proxy_protocol_SUITE).
 
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("src/emqttc_packet.hrl").
 
 suite() ->
     [
@@ -21,14 +20,14 @@ suite() ->
     ].
 
 all() ->
-    [{group, http_tests}].%,
-%     {group, https_tests}].
+    [{group, http_tests},
+     {group, https_tests}].
 
 groups() ->
     Tests = [
         proxy_protocol
     ],
-    [%{https_tests, [], Tests},
+    [{https_tests, [], Tests},
      {http_tests, [], Tests}].
 
 init_per_suite(Config) ->
@@ -85,12 +84,7 @@ proxy_protocol(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, [], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, _} = rfc6455_client:open(WS),
-    Frame = emqttc_serialiser:serialise(
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            client_id = <<"web-mqtt-tests-proxy-protocol">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    rfc6455_client:send_binary(WS, Frame),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_frame()),
     {binary, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),

@@ -348,7 +348,7 @@ expect_publishes(Topic, [Payload|Rest]) ->
                     payload := Payload}} ->
             expect_publishes(Topic, Rest)
     after 5000 ->
-              throw({publish_not_delivered, Payload})
+              throw({publish_not_received, Payload})
     end.
 
 rpc(Config, M, F, A) ->

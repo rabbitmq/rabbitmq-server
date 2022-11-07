@@ -7,7 +7,8 @@
 
 -module(rabbit_ws_test_util).
 
--export([update_app_env/3, get_web_mqtt_port_str/1]).
+-export([update_app_env/3, get_web_mqtt_port_str/1,
+         mqtt_3_1_1_connect_frame/0]).
 
 update_app_env(Config, Key, Val) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -28,3 +29,31 @@ get_web_mqtt_port_str(Config) ->
             rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls)
     end,
     integer_to_list(Port).
+
+mqtt_3_1_1_connect_frame() ->
+    <<16,
+    24,
+    0,
+    4,
+    77,
+    81,
+    84,
+    84,
+    4,
+    2,
+    0,
+    60,
+    0,
+    12,
+    84,
+    101,
+    115,
+    116,
+    67,
+    111,
+    110,
+    115,
+    117,
+    109,
+    101,
+    114>>.

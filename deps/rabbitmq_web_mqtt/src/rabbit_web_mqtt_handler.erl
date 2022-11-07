@@ -272,8 +272,8 @@ stop(State) ->
     stop(State, 1000, "MQTT died").
 
 stop(State, CloseCode, Error0) ->
-    Error1 = rabbit_data_coercion:to_binary(Error0),
-    {[{close, CloseCode, Error1}], State}.
+    Error = rabbit_data_coercion:to_binary(Error0),
+    {[{close, CloseCode, Error}], State}.
 
 stop_rabbit_mqtt_processor(undefined, _) ->
     ok;

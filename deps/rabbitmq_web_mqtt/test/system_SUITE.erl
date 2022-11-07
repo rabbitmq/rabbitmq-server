@@ -8,9 +8,10 @@
 -module(system_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("src/emqttc_packet.hrl").
 
 -compile([export_all, nowarn_export_all]).
+
+-import(rabbit_ct_broker_helpers, [rpc/5]).
 
 all() ->
     [
@@ -24,7 +25,6 @@ groups() ->
         , pubsub_shared_connection
         , pubsub_separate_connections
         , last_will_enabled
-        , last_will_disabled
         , disconnect
         , keepalive
         , maintenance
@@ -57,9 +57,6 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
--define(DEFAULT_TIMEOUT, 15_000).
-
-
 connection(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
     {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
@@ -76,180 +73,139 @@ pubsub_shared_connection(Config) ->
                                 {username, "guest"},
                                 {password, "guest"},
                                 {ws_path, "/ws"},
-                                {client_id, ?FUNCTION_NAME},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
                                 {clean_start, true},
                                 {port, Port}]),
     {ok, _} = emqtt:ws_connect(C),
-    Dst = <<"/topic/test-web-mqtt">>,
-    {ok, _, [1]} = emqtt:subscribe(C, Dst, qos1),
+    Topic = <<"/topic/test-web-mqtt">>,
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
 
     Payload = <<"a\x00a">>,
-    {ok, PubReply} = emqtt:publish(C, Dst, Payload, [{qos, 1}]),
-    ?assertMatch(#{packet_id := _,
-                   reason_code := 0,
-                   reason_code_name := success
-                  }, PubReply),
-
+    ?assertMatch({ok, #{packet_id := _,
+                        reason_code := 0,
+                        reason_code_name := success
+                       }},
+                 emqtt:publish(C, Topic, Payload, [{qos, 1}])),
+    ok = expect_publishes(C, Topic, [Payload]),
     ok = emqtt:disconnect(C).
 
 pubsub_separate_connections(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C1} = emqtt:start_link([{host, "127.0.0.1"},
-                                 {username, "guest"},
-                                 {password, "guest"},
-                                 {ws_path, "/ws"},
-                                 {client_id, "web-mqtt-tests-consumer"},
-                                 {clean_start, true},
-                                 {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C1),
-    {ok, C2} = emqtt:start_link([{host, "127.0.0.1"},
-                                 {username, "guest"},
-                                 {password, "guest"},
-                                 {ws_path, "/ws"},
-                                 {client_id, "web-mqtt-tests-consumer"},
-                                 {clean_start, true},
-                                 {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C2),
+    {ok, Publisher} = emqtt:start_link([{host, "127.0.0.1"},
+                                        {username, "guest"},
+                                        {password, "guest"},
+                                        {ws_path, "/ws"},
+                                        {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>},
+                                        {clean_start, true},
+                                        {port, Port}]),
+    {ok, _} = emqtt:ws_connect(Publisher),
+    {ok, Consumer} = emqtt:start_link([{host, "127.0.0.1"},
+                                       {username, "guest"},
+                                       {password, "guest"},
+                                       {ws_path, "/ws"},
+                                       {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>},
+                                       {clean_start, true},
+                                       {port, Port}]),
+    {ok, _} = emqtt:ws_connect(Consumer),
 
-    Dst = <<"/topic/test-web-mqtt">>,
-    {ok, _, [1]} = emqtt:subscribe(C2, Dst, qos1),
+    Topic = <<"/topic/test-web-mqtt">>,
+    {ok, _, [1]} = emqtt:subscribe(Consumer, Topic, qos1),
 
     Payload = <<"a\x00a">>,
-    {ok, PubReply} = emqtt:publish(C1, Dst, Payload, [{qos, 1}]),
-    ?assertMatch(#{packet_id := _,
-                   reason_code := 0,
-                   reason_code_name := success
-                  }, PubReply),
-
-    ok = emqtt:disconnect(C1),
-    ok = emqtt:disconnect(C2).
+    ?assertMatch({ok, #{packet_id := _,
+                        reason_code := 0,
+                        reason_code_name := success
+                       }},
+                 emqtt:publish(Publisher, Topic, Payload, [{qos, 1}])),
+    ok = expect_publishes(Consumer, Topic, [Payload]),
+    ok = emqtt:disconnect(Publisher),
+    ok = emqtt:disconnect(Consumer).
 
 last_will_enabled(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-
-    LastWillDst = <<"/topic/web-mqtt-tests-ws1-last-will">>,
+    LastWillTopic = <<"/topic/web-mqtt-tests-ws1-last-will">>,
     LastWillMsg = <<"a last will and testament message">>,
-
-    WS1 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS1),
-    ok = raw_send(WS1,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-last-will-ws1">>,
-            will_flag  = true,
-            will_qos   = ?QOS_1,
-            will_topic = LastWillDst,
-            will_msg   = LastWillMsg,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS1),
-
-    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS2),
-    ok = raw_send(WS2,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-last-will-ws2">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS2),
-
-    ok = raw_send(WS2, ?SUBSCRIBE_PACKET(1, [{LastWillDst, ?QOS_1}])),
-    {ok, ?SUBACK_PACKET(_, _), _} = raw_recv(WS2),
-
-    {close, _} = rfc6455_client:close(WS1),
-    ?assertMatch({ok, ?PUBLISH_PACKET(_, LastWillDst, _, LastWillMsg), _}, raw_recv(WS2, 5000)),
-
-    {close, _} = rfc6455_client:close(WS2),
-    ok.
-
-last_will_disabled(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-
-    LastWillDst = <<"/topic/web-mqtt-tests-ws1-last-will-disabled">>,
-    LastWillMsg = <<"a last will and testament message">>,
-
-    WS1 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS1),
-    ok = raw_send(WS1,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-last-will-ws1-disabled">>,
-            will_flag  = false,
-            will_qos   = ?QOS_1,
-            will_topic = LastWillDst,
-            will_msg   = LastWillMsg,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS1),
-
-    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS2),
-    ok = raw_send(WS2,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id = <<"web-mqtt-tests-last-will-ws2-disabled">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS2),
-
-    ok = raw_send(WS2, ?SUBSCRIBE_PACKET(1, [{LastWillDst, ?QOS_1}])),
-    ?assertMatch({ok, ?SUBACK_PACKET(_, _), _}, raw_recv(WS2)),
-
-    {close, _} = rfc6455_client:close(WS1),
-    ?assertEqual({error, timeout}, raw_recv(WS2, 3000)),
-
-    {close, _} = rfc6455_client:close(WS2),
-    ok.
+    {ok, Publisher} = emqtt:start_link([{host, "127.0.0.1"},
+                                        {username, "guest"},
+                                        {password, "guest"},
+                                        {ws_path, "/ws"},
+                                        {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>},
+                                        {clean_start, true},
+                                        {port, Port},
+                                        {will_topic, LastWillTopic},
+                                        {will_payload, LastWillMsg},
+                                        {will_qos, 1}
+                                       ]),
+    {ok, _} = emqtt:ws_connect(Publisher),
+    {ok, Consumer} = emqtt:start_link([{host, "127.0.0.1"},
+                                       {username, "guest"},
+                                       {password, "guest"},
+                                       {ws_path, "/ws"},
+                                       {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>},
+                                       {clean_start, true},
+                                       {port, Port}
+                                      ]),
+    {ok, _} = emqtt:ws_connect(Consumer),
+    {ok, _, [1]} = emqtt:subscribe(Consumer, LastWillTopic, qos1),
+    ok = emqtt:disconnect(Publisher),
+    ok = expect_publishes(Consumer, LastWillTopic, [LastWillMsg]),
+    ok = emqtt:disconnect(Consumer).
 
 disconnect(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-    ok = raw_send(WS,
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            clean_sess = true,
-            client_id  = <<"web-mqtt-tests-disconnect">>,
-            username   = <<"guest">>,
-            password   = <<"guest">>})),
-
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS),
-
-    ok = raw_send(WS, ?PACKET(?DISCONNECT)),
-    {close, {1000, _}} = rfc6455_client:recv(WS),
-
-    ok.
+    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
+                                {username, "guest"},
+                                {password, "guest"},
+                                {ws_path, "/ws"},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
+                                {clean_start, true},
+                                {port, Port}]),
+    process_flag(trap_exit, true),
+    {ok, _} = emqtt:ws_connect(C),
+    ?assertEqual(1, num_mqtt_connections(Config, 0)),
+    ok = emqtt:disconnect(C),
+    receive
+        {'EXIT', C, normal} ->
+            ok
+    after 5000 ->
+              ct:fail("disconnect didn't terminate client")
+    end,
+    ?assertEqual(0, num_mqtt_connections(Config, 0)).
 
 keepalive(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    PortStr = integer_to_list(Port),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-
     KeepaliveSecs = 1,
     KeepaliveMs = timer:seconds(KeepaliveSecs),
-    ok = raw_send(WS,
-                  ?CONNECT_PACKET(
-                     #mqtt_packet_connect{
-                        keep_alive = KeepaliveSecs,
-                        clean_sess = true,
-                        client_id  = <<"web-mqtt-tests-disconnect">>,
-                        username   = <<"guest">>,
-                        password   = <<"guest">>})),
-    {ok, ?CONNACK_PACKET(?CONNACK_ACCEPT), _} = raw_recv(WS),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
+                                {host, "127.0.0.1"},
+                                {username, "guest"},
+                                {password, "guest"},
+                                {ws_path, "/ws"},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
+                                {clean_start, true},
+                                {port, Port}]),
+    {ok, _} = emqtt:ws_connect(C),
 
-    %% Sanity check that MQTT ping request and ping response work.
+    %% Connection should stay up when client sends PING requests.
     timer:sleep(KeepaliveMs),
-    ok = raw_send(WS, #mqtt_packet{header = #mqtt_packet_header{type = ?PINGREQ}}),
-    {ok, #mqtt_packet{header = #mqtt_packet_header{type = ?PINGRESP}}, <<>>} = raw_recv(WS),
 
-    %% Stop sending any data to the server (including ping requests).
-    %% The server should disconnect us.
-    ?assertEqual({close, {1000, <<"MQTT keepalive timeout">>}},
-                 rfc6455_client:recv(WS, ceil(3 * 0.75 * KeepaliveMs))).
+    %% Mock the server socket to not have received any bytes.
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_net,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]} ]),
+
+    process_flag(trap_exit, true),
+    receive
+        {'EXIT', C, _Reason} ->
+            ok
+    after
+        ceil(3 * 0.75 * KeepaliveMs) ->
+            ct:fail("server did not respect keepalive")
+    end,
+
+    true = rpc(Config, 0, meck, validate, [Mod]),
+    ok = rpc(Config, 0, meck, unload, [Mod]).
 
 maintenance(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
@@ -257,7 +213,7 @@ maintenance(Config) ->
                                 {username, "guest"},
                                 {password, "guest"},
                                 {ws_path, "/ws"},
-                                {client_id, "node-drain-test"},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
                                 {clean_start, true},
                                 {port, Port}]),
     {ok, _} = emqtt:ws_connect(C),
@@ -265,26 +221,21 @@ maintenance(Config) ->
 
     ?assertEqual(1, num_mqtt_connections(Config, 0)),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
-
     ?assertEqual(0, num_mqtt_connections(Config, 0)),
     ok = rabbit_ct_broker_helpers:revive_node(Config, 0).
 
-raw_send(WS, Packet) ->
-    Frame = emqttc_serialiser:serialise(Packet),
-    rfc6455_client:send_binary(WS, Frame).
-
-raw_recv(WS) ->
-    raw_recv(WS, ?DEFAULT_TIMEOUT).
-
-raw_recv(WS, Timeout) ->
-    case rfc6455_client:recv(WS, Timeout) of
-        {binary, P} ->
-            emqttc_parser:parse(P, emqttc_parser:new());
-        {error, timeout} ->
-            {error, timeout}
-    end.
-
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->
-    length(rabbit_ct_broker_helpers:rpc(
-        Config, Node, rabbit_mqtt,local_connection_pids,[])).
+    length(rpc(Config, Node, rabbit_mqtt, local_connection_pids, [])).
+
+expect_publishes(_ClientPid, _Topic, []) ->
+    ok;
+expect_publishes(ClientPid, Topic, [Payload|Rest]) ->
+    receive
+        {publish, #{client_pid := ClientPid,
+                    topic := Topic,
+                    payload := Payload}} ->
+            expect_publishes(ClientPid, Topic, Rest)
+    after 5000 ->
+              throw({publish_not_received, Payload})
+    end.
