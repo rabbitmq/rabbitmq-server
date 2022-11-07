@@ -246,7 +246,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 """,
     ],
     repository = "rabbitmq/osiris",
-    tag = "v1.3.2",
+    tag = "v1.3.3",
 )
 
 erlang_package.hex_package(
@@ -279,14 +279,10 @@ erlang_package.hex_package(
     version = "0.2.1",
 )
 
-erlang_package.git_package(
-    branch = "main",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
-"""],
-    repository = "rabbitmq/ra",
+erlang_package.hex_package(
+    name = "ra",
+    sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
+    version = "2.4.1",
 )
 
 erlang_package.hex_package(
@@ -309,8 +305,8 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "seshat",
-    sha256 = "20d820acbeef9d07298ee863d0c9d06f8e620acba100939ebb2925e4d6b0dfc7",
-    version = "0.3.2",
+    sha256 = "2c3deec7ff86e0d0c05edebd3455c8363123c227be292ffffc1a05eec08bff63",
+    version = "0.4.0",
 )
 
 erlang_package.hex_package(
