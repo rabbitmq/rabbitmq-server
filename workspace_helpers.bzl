@@ -204,7 +204,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "seshat",
-        version = "0.3.2",
+        version = "0.4.0",
     )
 
     hex_pm_erlang_app(
