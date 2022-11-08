@@ -7,5 +7,5 @@ COPY package.json package.json
 
 FROM base as test
 RUN npm install
-ENTRYPOINT [ "npm", "test"]
+ENTRYPOINT [ "npm" ]
 CMD [ "" ]

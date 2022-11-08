@@ -32,7 +32,7 @@ build_routes(Ignore) ->
         [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
-    Routes2 = RootIdxRtes ++ Routes1,
+    Routes2 = RootIdxRtes ++ [{"/login", rabbit_mgmt_login, []}] ++ Routes1,
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->

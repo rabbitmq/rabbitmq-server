@@ -127,6 +127,7 @@ jobs:
 
     - name: Wait for UAA to be Up
       run: |
+<<<<<<< HEAD
         cd ${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa
         ./waitTillUAAReady
 
@@ -177,6 +178,9 @@ jobs:
         docker logs rabbitmq > logs/rabbitmq.log
         docker logs selenium > logs/selenium.log
 
+=======
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
+>>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
 
     - name: Upload Test Artifacts
       if: always()
