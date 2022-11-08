@@ -137,16 +137,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "osiris",
         tag = "v1.3.3",
         remote = "https://github.com/rabbitmq/osiris.git",
-        patch_cmds = [
-            """VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-""",
-            """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-""",
-        ],
     )
 
     hex_pm_erlang_app(
