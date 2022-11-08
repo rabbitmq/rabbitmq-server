@@ -271,10 +271,24 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+<<<<<<< HEAD
     repository = "rabbitmq/ra",
     tag = "v2.0.13",
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
+=======
+<<<<<<< HEAD
+=======
+    repository = "rabbitmq/ra",
+<<<<<<< HEAD
+    tag = "v2.4.0",
+=======
+    tag = "v2.4.1",
+>>>>>>> 24297f5e59 (Bump Ra to 2.4.1)
+    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
+"""],
+>>>>>>> 257f957924 (Bump Ra to 2.4.1)
+>>>>>>> 522e1fe912 (Bump Ra to 2.4.1)
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"

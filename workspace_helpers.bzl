@@ -167,8 +167,18 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "ra",
+<<<<<<< HEAD
         version = "2.0.13",
         sha256 = "c7c2ff1325095cbf3b95be20a8bea1e81d68da7c3f3cc329331bc71af9d3c8db",
+=======
+<<<<<<< HEAD
+        version = "2.4.0",
+        sha256 = "f716146ee1755823fbff741669053efc76e241caa95465782fc4c0a4389eb40c",
+=======
+        version = "2.4.1",
+        sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
+>>>>>>> 24297f5e59 (Bump Ra to 2.4.1)
+>>>>>>> 522e1fe912 (Bump Ra to 2.4.1)
         deps = [
             "@gen_batch_server//:erlang_app",
         ],
