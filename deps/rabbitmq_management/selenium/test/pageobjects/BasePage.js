@@ -1,9 +1,9 @@
-const {By,Key,until,Builder} = require("selenium-webdriver");
+const { By, Key, until, Builder } = require('selenium-webdriver')
 
 module.exports = class BasePage {
-  driver;
+  driver
 
-  constructor(webdriver) {
+  constructor (webdriver) {
     this.driver = webdriver
   }
 
@@ -39,15 +39,15 @@ module.exports = class BasePage {
   }
 
   async hasElement (locator) {
-    let count = await this.driver.findElements(locator).size();
-    throw new Error("there are " + count + " warnings");
-    return count > 0;
+    const count = await this.driver.findElements(locator).size()
+    throw new Error('there are ' + count + ' warnings')
+    return count > 0
   }
 
   async getText (locator, retries = 1) {
     try {
-      let element = await this.driver.findElement(locator);
-      let text = element.getText()
+      const element = await this.driver.findElement(locator)
+      const text = element.getText()
       return text
     } catch (err) {
       if (retries === 0) {
@@ -55,6 +55,20 @@ module.exports = class BasePage {
       }
       await this.driver.sleep(250)
       return this.getText(locator, retries - 1)
+    }
+  }
+
+  async getValue (locator, retries = 1) {
+    try {
+      const element = await this.driver.findElement(locator)
+      const value = element.getAttribute('value')
+      return value
+    } catch (err) {
+      if (retries === 0) {
+        throw new Error(`Unable to get ${locator.toString()} text after maximum retries, error : ${err.message}`)
+      }
+      await this.driver.sleep(250)
+      return this.getValue(locator, retries - 1)
     }
   }
 
@@ -70,18 +84,20 @@ module.exports = class BasePage {
       return this.click(locator, retries - 1)
     }
   }
-    async submit (locator, retries = 1) {
-      try {
-        const element = await this.driver.findElement(locator)
-        return element.submit()
-      } catch (err) {
-        if (retries === 0) {
-          throw new Error(`Still not able to submit ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
-        }
-        await this.driver.sleep(250)
-        return this.submit(locator, retries - 1)
+
+  async submit (locator, retries = 1) {
+    try {
+      const element = await this.driver.findElement(locator)
+      return element.submit()
+    } catch (err) {
+      if (retries === 0) {
+        throw new Error(`Still not able to submit ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
       }
+      await this.driver.sleep(250)
+      return this.submit(locator, retries - 1)
     }
+  }
+
   async sendKeys (locator, keys, retries = 1) {
     try {
       const element = await this.driver.findElement(locator)
@@ -96,11 +112,12 @@ module.exports = class BasePage {
       return this.sendKeys(locator, keys, retries - 1)
     }
   }
-  capture() {
+
+  capture () {
     this.driver.takeScreenshot().then(
-        function(image) {
-            require('fs').writeFileSync("/tmp/capture.png", image, "base64");
-        }
-    );
+      function (image) {
+        require('fs').writeFileSync('/tmp/capture.png', image, 'base64')
+      }
+    )
   }
 }

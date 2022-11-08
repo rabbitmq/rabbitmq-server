@@ -12,7 +12,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-
 all() ->
     [
         test_own_scope,
@@ -26,6 +25,7 @@ all() ->
         test_insufficient_permissions_in_a_valid_token,
         test_command_json,
         test_command_pem,
+        test_username_from,
         test_command_pem_no_kid,
         test_token_expiration,
         test_incorrect_kid,
@@ -230,7 +230,24 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
 
 test_post_process_payload_rich_auth_request(_) ->
 
-  Pairs = [
+  Pairs = [  
+  { "should merge all permissions for the current cluster",
+    [
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:finance/vhost:primary-*">>],
+        <<"actions">> => [<<"configure">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"management">> ]
+       },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+       <<"locations">> => [<<"cluster:rabbitmq">>],
+       <<"actions">> => [<<"administrator">> ]
+      }
+    ],
+    [ <<"rabbitmq.tag:management">>, <<"rabbitmq.tag:administrator">> ]
+  },
   { "should filter out those permisions whose type does not match <resource_server_type>",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>],
@@ -255,6 +272,23 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:*/*/*">> ]
   },
+  { "should filter out those permisions whose locations' regexpr do not match the cluster : {resource_server_id} ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbit*">>],
+        <<"actions">> => [<<"read">>]
+       },
+       #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+       <<"locations">> => [<<"cluster:*">>],
+       <<"actions">> => [<<"write">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
+        <<"actions">> => [<<"configure">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">>, <<"rabbitmq.write:*/*/*">>  ]
+  },
+
   { "should ignore permissions without actions",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>]
@@ -558,7 +592,7 @@ test_successful_access_with_a_token(_) ->
 
     VHost    = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
 
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -579,8 +613,8 @@ test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token([<<"rabbitmq.tag:management">>,
-                                                                <<"rabbitmq.tag:policymaker">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(
+        [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>]), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]).
@@ -605,7 +639,8 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field(
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -650,7 +685,8 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_fi
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+    ?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -687,7 +723,8 @@ test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_fie
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_denied(AuthUser, VHost),
@@ -724,7 +761,8 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
@@ -768,7 +806,8 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_sc
     VHost = <<"vhost">>,
     Username = <<"username">>,
     Claims   = [Role1, Role2, Role3],
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
@@ -805,7 +844,8 @@ test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_sco
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_denied(AuthUser, VHost),
@@ -840,7 +880,7 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = ?UTIL_MOD:fixture_jwk(),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
@@ -857,7 +897,7 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = ?UTIL_MOD:fixture_jwk(),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
@@ -876,8 +916,7 @@ test_token_expiration(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    TokenData = ?UTIL_MOD:expirable_token(),
-    Username  = <<"username">>,
+    TokenData =  ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username),
     Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -899,7 +938,7 @@ test_incorrect_kid(_) ->
     Jwk      = ?UTIL_MOD:fixture_jwk(),
     Jwk1     = Jwk#{<<"kid">> := AltKid},
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk1),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk1),
 
     ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [{error,key_not_found}]},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token})).
@@ -912,11 +951,64 @@ test_command_json(_) ->
         [<<"token-key">>],
         #{node => node(), json => Json}),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_vhost_access(User, <<"vhost">>, none)).
+
+test_username_from(_) ->
+    Pairs = [
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS 'sub' ">>,  % Comment
+        [ ],  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"sub">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS 'client_id' ">>,  % Comment
+        [ ],  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"client_id">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
+      { <<"resolve username from 1st claim in the array of configured claims ">>,
+        [<<"user_name">>],
+        #{
+          <<"user_name">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"resolve username from 2nd claim in the array of configured claims">>,
+        [<<"user_name">>, <<"email">>],
+        #{
+          <<"email">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"resolve username from configured string claim ">>,
+        <<"email">>,
+        #{
+          <<"email">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"unresolve username">>,
+        [<<"user_name">>, <<"email">>],
+        #{
+          <<"email2">> => <<"rabbit_user">>
+         },
+        <<"unknown">>
+      }
+    ],
+    lists:foreach(
+        fun(
+          {Comment, PreferredUsernameClaims, Token, ExpectedUsername}) ->
+            ActualUsername = rabbit_auth_backend_oauth2:username_from(PreferredUsernameClaims, Token),
+            ?assertEqual(ExpectedUsername, ActualUsername, Comment)
+            end,
+          Pairs).
 
 test_command_pem_file(Config) ->
     Username = <<"username">>,
@@ -980,7 +1072,7 @@ test_command_pem(Config) ->
         [<<"token-key">>],
         #{node => node(), pem => Pem}),
 
-    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(), Jwk, <<"token-key">>),
+    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
@@ -1006,7 +1098,7 @@ test_command_pem_no_kid(Config) ->
     UaaEnv2 = [{default_key, <<"token-key">>} | UaaEnv1],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv2),
 
-    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
