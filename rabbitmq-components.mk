@@ -117,6 +117,7 @@ dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = hex 4.9.1
 <<<<<<< HEAD
+<<<<<<< HEAD
 dep_ra = hex 2.0.13
 =======
 <<<<<<< HEAD
@@ -125,6 +126,9 @@ dep_ra = hex 2.4.0
 dep_ra = hex 2.4.1
 >>>>>>> 24297f5e59 (Bump Ra to 2.4.1)
 >>>>>>> 522e1fe912 (Bump Ra to 2.4.1)
+=======
+dep_ra = hex 2.4.1
+>>>>>>> d5542ac306 (Resolve conflicts)
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.2
 dep_redbug = hex 2.0.7
