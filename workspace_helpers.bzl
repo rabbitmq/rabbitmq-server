@@ -172,11 +172,16 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
-    git_repository(
+    hex_pm_erlang_app(
         name = "ra",
-        branch = "main",
-        remote = "https://github.com/rabbitmq/ra.git",
-        patch_cmds = [RA_INJECT_GIT_VERSION],
+        version = "2.4.1",
+        sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
+        deps = [
+            "@gen_batch_server//:erlang_app",
+        ],
+        runtime_deps = [
+            "@aten//:erlang_app",
+        ]
     )
 
     hex_archive(
