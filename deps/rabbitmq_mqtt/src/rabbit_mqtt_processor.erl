@@ -7,7 +7,6 @@
 
 -module(rabbit_mqtt_processor).
 
-
 -export([info/2, initial_state/2, initial_state/4,
          process_frame/2, serialise/2, send_will/1,
          terminate/2, handle_pre_hibernate/0,
@@ -115,34 +114,44 @@ process_request(?PUBLISH,
                                                   message_id = MessageId },
                    payload = Payload},
                 PState = #proc_state{retainer_pid = RPid,
-                                     amqp2mqtt_fun = Amqp2MqttFun}) ->
+                                     amqp2mqtt_fun = Amqp2MqttFun,
+                                     unacked_client_pubs = U}) ->
     rabbit_global_counters:messages_received(mqtt, 1),
+    Publish = fun() ->
+                      Msg = #mqtt_msg{retain     = Retain,
+                                      qos        = Qos,
+                                      topic      = Topic,
+                                      dup        = Dup,
+                                      message_id = MessageId,
+                                      payload    = Payload},
+                      case publish_to_queues(Msg, PState) of
+                          {ok, _} = Ok ->
+                              case Retain of
+                                  false ->
+                                      ok;
+                                  true ->
+                                      hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, Msg)
+                              end,
+                              Ok;
+                          Error ->
+                              Error
+                      end
+              end,
     case Qos of
         N when N > ?QOS_0 ->
-            rabbit_global_counters:messages_received_confirm(mqtt, 1);
+            rabbit_global_counters:messages_received_confirm(mqtt, 1),
+            case rabbit_mqtt_confirms:contains(MessageId, U) of
+                false ->
+                    publish_to_queues_with_checks(Topic, Publish, PState);
+                true ->
+                    %% Client re-sent this PUBLISH packet.
+                    %% We already sent this message to target queues awaiting confirmations.
+                    %% Hence, we ignore this re-send.
+                    {ok, PState}
+            end;
         _ ->
-            ok
-    end,
-    publish_to_queues_with_checks(
-      Topic,
-      fun() ->
-              Msg = #mqtt_msg{retain     = Retain,
-                              qos        = Qos,
-                              topic      = Topic,
-                              dup        = Dup,
-                              message_id = MessageId,
-                              payload    = Payload},
-              case publish_to_queues(Msg, PState) of
-                  {ok, _} = Ok ->
-                      case Retain of
-                          false -> ok;
-                          true  -> hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, Msg)
-                      end,
-                      Ok;
-                  Error ->
-                      Error
-              end
-      end, PState);
+            publish_to_queues_with_checks(Topic, Publish, PState)
+    end;
 
 process_request(?SUBSCRIBE,
                 #mqtt_frame{
@@ -1156,7 +1165,7 @@ process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = MsgId},
                         Qs, PState = #proc_state{unacked_client_pubs = U0}) ->
     QNames = lists:map(fun amqqueue:get_name/1, Qs),
-    {ok, U} = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
+    U = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
     PState#proc_state{unacked_client_pubs = U}.
 
 send_puback(MsgIds, PState)

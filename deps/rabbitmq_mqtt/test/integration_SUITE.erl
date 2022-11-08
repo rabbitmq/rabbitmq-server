@@ -15,6 +15,7 @@
 
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
                                    rpc_all/4]).
+-import(rabbit_ct_helpers, [eventually/3]).
 -import(util, [all_connection_pids/1,
                publish_qos1/4]).
 
@@ -121,8 +122,7 @@ publish_to_all_queue_types(Config, QoS) ->
     bind(Ch, SQ, Topic),
 
     NumMsgs = 2000,
-    NumMsgsBin = integer_to_binary(NumMsgs),
-    {C, _} = connect(?FUNCTION_NAME, Config),
+    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
     lists:foreach(fun(_N) ->
                           case QoS of
                               qos0 ->
@@ -132,15 +132,23 @@ publish_to_all_queue_types(Config, QoS) ->
                           end
                   end, lists:seq(1, NumMsgs)),
 
-    Expected = lists:sort([[CQ,  NumMsgsBin],
-                           [CMQ, NumMsgsBin],
-                           [QQ,  NumMsgsBin],
-                           [SQ,  NumMsgsBin]
-                          ]),
-    ?awaitMatch(Expected,
-                lists:sort(rabbitmqctl_list(Config, 0, ["list_queues", "--no-table-headers",
-                                                        "name", "messages_ready"])),
-                20_000, 1000),
+    eventually(?_assert(
+                  begin
+                      L = rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"]),
+                      length(L) =:= 4 andalso
+                      lists:all(fun([Bin]) ->
+                                        N = binary_to_integer(Bin),
+                                        case QoS of
+                                            qos0 ->
+                                                N =:= NumMsgs;
+                                            qos1 ->
+                                                %% Allow for some duplicates when client resends
+                                                %% a message that gets acked at roughly the same time.
+                                                N >= NumMsgs andalso
+                                                N < NumMsgs * 2
+                                        end
+                                end, L)
+                  end), 2000, 10),
 
     delete_queue(Ch, [CQ, CMQ, QQ, SQ]),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),

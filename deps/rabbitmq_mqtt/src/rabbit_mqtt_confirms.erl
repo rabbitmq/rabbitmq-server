@@ -15,7 +15,8 @@
          confirm/3,
          reject/2,
          remove_queue/2,
-         size/1]).
+         size/1,
+         contains/2]).
 
 -type queue_name() :: rabbit_amqqueue:name().
 -opaque state() :: #{packet_id() => #{queue_name() => ok}}.
@@ -29,15 +30,17 @@ init() ->
 size(State) ->
     maps:size(State).
 
--spec insert(packet_id(), [queue_name()], state()) ->
-    {ok, state()} | {error, {duplicate_packet_id, packet_id()}}.
-insert(PktId, _, State)
-  when is_map_key(PktId, State) ->
-    {error, {duplicate_packet_id, PktId}};
+-spec contains(packet_id(), state()) -> boolean().
+contains(PktId, State) ->
+    maps:is_key(PktId, State).
+
+-spec insert(packet_id(), [queue_name()], state()) -> state().
 insert(PktId, QNames, State)
-  when is_integer(PktId) andalso PktId > 0 ->
+  when is_integer(PktId) andalso
+       PktId > 0 andalso
+       not is_map_key(PktId, State) ->
     QMap = maps:from_keys(QNames, ok),
-    {ok, maps:put(PktId, QMap, State)}.
+    maps:put(PktId, QMap, State).
 
 -spec confirm([packet_id()], queue_name(), state()) ->
     {[packet_id()], state()}.
