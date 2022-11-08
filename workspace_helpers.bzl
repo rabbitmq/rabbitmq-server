@@ -174,8 +174,13 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "ra",
+<<<<<<< HEAD
         version = "2.4.0",
         sha256 = "f716146ee1755823fbff741669053efc76e241caa95465782fc4c0a4389eb40c",
+=======
+        version = "2.4.1",
+        sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
+>>>>>>> 24297f5e59 (Bump Ra to 2.4.1)
         deps = [
             "@gen_batch_server//:erlang_app",
         ],
