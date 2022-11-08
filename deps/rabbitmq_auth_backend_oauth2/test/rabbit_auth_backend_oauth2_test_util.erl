@@ -87,6 +87,9 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
 fixture_token() ->
     fixture_token([]).
 
+token_with_sub(TokenFixture, Sub) ->
+    maps:put(<<"sub">>, Sub, TokenFixture).
+
 fixture_token(ExtraScopes) ->
     Scopes = [<<"rabbitmq.configure:vhost/foo">>,
               <<"rabbitmq.write:vhost/foo">>,

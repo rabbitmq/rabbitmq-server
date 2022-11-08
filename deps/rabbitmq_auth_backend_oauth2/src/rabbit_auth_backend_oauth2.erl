@@ -42,6 +42,9 @@
 -define(COMPLEX_CLAIM_APP_ENV_KEY, extra_scopes_source).
 %% scope aliases map "role names" to a set of scopes
 -define(SCOPE_MAPPINGS_APP_ENV_KEY, scope_aliases).
+%% list of JWT claims (such as <<"sub">>) used to determine the username
+-define(PREFERRED_USERNAME_CLAIMS, preferred_username_claims).
+-define(DEFAULT_PREFERRED_USERNAME_CLAIMS, [<<"sub">>, <<"client_id">>]).
 
 %%
 %% Key JWT fields
@@ -119,7 +122,7 @@ update_state(AuthUser, NewToken) ->
 
 %%--------------------------------------------------------------------
 
-authenticate(Username0, AuthProps0) ->
+authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
@@ -131,7 +134,9 @@ authenticate(Username0, AuthProps0) ->
           {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
         {ok, DecodedToken} ->
             Func = fun() ->
-                        Username = username_from(Username0, DecodedToken),
+                        Username = username_from(
+                          application:get_env(?APP, ?PREFERRED_USERNAME_CLAIMS, []),
+                          DecodedToken),
                         Tags     = tags_from(DecodedToken),
 
                         {ok, #auth_user{username = Username,
@@ -426,7 +431,7 @@ map_rich_auth_permissions_to_scopes(ResourceServerId,
   [ #{?ACTIONS_FIELD := Actions, ?LOCATIONS_FIELD := Locations }  | T ], Acc) ->
   ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
   case ResourcePaths of
-    [] -> Acc;
+    [] -> map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc);
     _ -> Scopes = case Actions of
           undefined -> [];
           ActionsAsList when is_list(ActionsAsList) ->
@@ -542,24 +547,35 @@ token_from_context(AuthProps) ->
 %%   <<"sub">>         => <<"rabbit_client">>,
 %%   <<"zid">>         => <<"uaa">>}
 
--spec username_from(binary(), map()) -> binary() | undefined.
-username_from(ClientProvidedUsername, DecodedToken) ->
-    ClientId = uaa_jwt:client_id(DecodedToken, undefined),
-    Sub      = uaa_jwt:sub(DecodedToken, undefined),
+-spec username_from(list(), map()) -> binary() | undefined.
+username_from(PreferredUsernameClaims, DecodedToken) ->
+    UsernameClaims = append_or_return_default(PreferredUsernameClaims, ?DEFAULT_PREFERRED_USERNAME_CLAIMS),
+    ResolvedUsernameClaims = lists:filtermap(fun(Claim) -> find_claim_in_token(Claim, DecodedToken) end, UsernameClaims),
+    Username = case ResolvedUsernameClaims of
+      [ ] -> <<"unknown">>;
+      [ _One ] -> _One;
+      [ _One | _ ] -> _One
+    end,
+    rabbit_log:debug("Computing username from client's JWT token: ~ts -> ~ts ",
+      [lists:flatten(io_lib:format("~p",[ResolvedUsernameClaims])), Username]),
+    Username.
 
-    rabbit_log:debug("Computing username from client's JWT token, client ID: '~ts', sub: '~ts'",
-                     [ClientId, Sub]),
+append_or_return_default(ListOrBinary, Default) ->
+  case ListOrBinary of
+    undefined  -> Default;
+    <<>> -> Default;
+    [] -> Default;
+    VarList when is_list(VarList) -> VarList ++ Default;
+    VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
+    _ -> Default
+  end.
 
-    case uaa_jwt:client_id(DecodedToken, Sub) of
-        undefined ->
-            case ClientProvidedUsername of
-                undefined -> undefined;
-                <<>>      -> undefined;
-                _Other    -> ClientProvidedUsername
-            end;
-        Value     ->
-            Value
-    end.
+find_claim_in_token(Claim, Token) ->
+  case maps:get(Claim, Token, undefined) of
+    undefined -> false;
+    ClaimValue when is_binary(ClaimValue) -> {true, ClaimValue};
+    _ -> false
+  end.
 
 -define(TAG_SCOPE_PREFIX, <<"tag:">>).
 

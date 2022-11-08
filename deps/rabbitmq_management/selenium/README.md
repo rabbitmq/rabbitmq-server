@@ -95,16 +95,24 @@ Start RabbitMQ from source (it runs `make run-broker`):
 make start-rabbitmq
 ```
 
-Access the test case folder:
+To run all tests under `with-uaa`:
 ```
-cd with-uaa
-```
-
-To run all tests under the suite:
-```
-make test
+make test TEST=with-uaa
 ```
 Or to run a single tests under the suite:
 ```
-make test TEST=landing.js
+make test TEST=with-uaa/landing.js
 ```
+
+**VERY IMPORTANT NOTE**: `make start-rabbitmq` will always load `rabbitmq-localhost.config`
+regardless of the test suite we are running. Therefore, if your suite requires a specific
+configuration ensure that configuration is in `rabbitmq-localhost.config`.
+
+If you had a specific configuration file, such as `rabbitmq-localhost-keycloak.config` you can run
+`make start-rabbitmq` with that configuration like this:
+```
+make RABBITMQ_CONFIG_FILE=rabbitmq-localhost-keycloak.config start-rabbitmq
+```
+
+We do not have this issue when we run the headless suites because they use dedicated files
+for each suite. Doing the same when running locally, i.e using `localhost`, would be too tedious.
