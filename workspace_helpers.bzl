@@ -137,16 +137,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "osiris",
         tag = "v1.3.3",
         remote = "https://github.com/rabbitmq/osiris.git",
-        patch_cmds = [
-            """VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-""",
-            """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-""",
-        ],
     )
 
     hex_pm_erlang_app(
@@ -176,12 +166,31 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         name = "ra",
         version = "2.4.1",
         sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
-        deps = [
-            "@gen_batch_server//:erlang_app",
-        ],
-        runtime_deps = [
-            "@aten//:erlang_app",
-        ]
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+NAME = "ra"
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@aten//:erlang_app",
+    "@seshat//:erlang_app",
+]
+
+erlang_app(
+    app_name = NAME,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+""",
     )
 
     hex_archive(
