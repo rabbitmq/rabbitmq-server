@@ -54,7 +54,7 @@ confirm(PktIds, QName, State0) ->
 reject(PktId, State0)
   when is_integer(PktId) ->
     case maps:take(PktId, State0) of
-        {_QMap, State} ->
+        {_, State} ->
             {ok, State};
         error ->
             {error, not_found}

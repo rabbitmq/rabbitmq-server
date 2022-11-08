@@ -12,6 +12,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(rabbit_ct_helpers, [eventually/1]).
 
 all() ->
     [
@@ -162,7 +163,7 @@ disconnect(Config) ->
                                 {port, Port}]),
     process_flag(trap_exit, true),
     {ok, _} = emqtt:ws_connect(C),
-    ?assertEqual(1, num_mqtt_connections(Config, 0)),
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = emqtt:disconnect(C),
     receive
         {'EXIT', C, normal} ->
@@ -170,7 +171,8 @@ disconnect(Config) ->
     after 5000 ->
               ct:fail("disconnect didn't terminate client")
     end,
-    ?assertEqual(0, num_mqtt_connections(Config, 0)).
+    eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
+    ok.
 
 keepalive(Config) ->
     KeepaliveSecs = 1,
@@ -219,9 +221,9 @@ maintenance(Config) ->
     {ok, _} = emqtt:ws_connect(C),
     unlink(C),
 
-    ?assertEqual(1, num_mqtt_connections(Config, 0)),
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
-    ?assertEqual(0, num_mqtt_connections(Config, 0)),
+    eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
     ok = rabbit_ct_broker_helpers:revive_node(Config, 0).
 
 %% Web mqtt connections are tracked together with mqtt connections

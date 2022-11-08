@@ -31,7 +31,8 @@ groups() ->
     ].
 
 tests() ->
-    [publish_to_all_queue_types_qos0
+    [quorum_queue_rejects
+     ,publish_to_all_queue_types_qos0
      ,publish_to_all_queue_types_qos1
      ,events
      ,event_authentication_failure
@@ -85,6 +86,35 @@ end_per_testcase(Testcase, Config) ->
 %% Testsuite cases
 %% -------------------------------------------------------------------
 
+quorum_queue_rejects(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Name = atom_to_binary(?FUNCTION_NAME),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"qq-policy">>, Name, <<"queues">>, [{<<"max-length">>, 1},
+                                                            {<<"overflow">>, <<"reject-publish">>}]),
+    declare_queue(Ch, Name, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    bind(Ch, Name, Name),
+
+    {C, _} = connect(Name, Config, [{retry_interval, 1}]),
+    {ok, _} = emqtt:publish(C, Name, <<"m1">>, qos1),
+    {ok, _} = emqtt:publish(C, Name, <<"m2">>, qos1),
+    %% We expect m3 to be rejected and dropped.
+    ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 700)),
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true})),
+    %% m3 is re-sent by emqtt.
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m3">>}},
+                amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true}),
+                2000, 200),
+
+    ok = emqtt:disconnect(C),
+    delete_queue(Ch, Name),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"qq-policy">>).
+
 publish_to_all_queue_types_qos0(Config) ->
     publish_to_all_queue_types(Config, qos0).
 
@@ -99,7 +129,7 @@ publish_to_all_queue_types(Config, QoS) ->
     Result = rpc_all(Config, application, set_env, [rabbit, stream_messages_soft_limit, 25]),
     ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
 
-    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     CQ = <<"classic-queue">>,
     CMQ = <<"classic-mirrored-queue">>,
@@ -153,13 +183,7 @@ publish_to_all_queue_types(Config, QoS) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),
     ok = emqtt:disconnect(C),
     ?awaitMatch([], all_connection_pids(Config), 10_000, 1000),
-
-    Result = rpc_all(Config, application, unset_env, [rabbit, credit_flow_default_credit]),
-    Result = rpc_all(Config, application, unset_env, [rabbit, quorum_commands_soft_limit]),
-    Result = rpc_all(Config, application, unset_env, [rabbit, stream_messages_soft_limit]),
-    ok.
-
-%%TODO add test where target quorum queue rejects message
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
