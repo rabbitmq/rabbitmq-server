@@ -16,8 +16,7 @@
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
                                    rpc_all/4]).
 -import(rabbit_ct_helpers, [eventually/3]).
--import(util, [all_connection_pids/1,
-               publish_qos1/4]).
+-import(util, [all_connection_pids/1]).
 
 all() ->
     [
@@ -128,7 +127,7 @@ publish_to_all_queue_types(Config, QoS) ->
                               qos0 ->
                                   ok = emqtt:publish(C, Topic, <<"m">>);
                               qos1 ->
-                                  {ok, _} = publish_qos1(C, Topic, <<"m">>, 1000)
+                                  {ok, _} = emqtt:publish(C, Topic, <<"m">>, [{qos, 1}])
                           end
                   end, lists:seq(1, NumMsgs)),
 

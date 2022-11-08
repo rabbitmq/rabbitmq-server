@@ -1,7 +1,7 @@
 -module(util).
 
 -export([all_connection_pids/1,
-         publish_qos1/4,
+         publish_qos1_timeout/4,
          sync_publish_result/3]).
 
 all_connection_pids(Config) ->
@@ -13,7 +13,7 @@ all_connection_pids(Config) ->
                         Acc
                 end, [], Result).
 
-publish_qos1(Client, Topic, Payload, Timeout) ->
+publish_qos1_timeout(Client, Topic, Payload, Timeout) ->
     Mref = erlang:monitor(process, Client),
     ok = emqtt:publish_async(Client, Topic, #{}, Payload, [{qos, 1}], infinity,
                              {fun ?MODULE:sync_publish_result/3, [self(), Mref]}),

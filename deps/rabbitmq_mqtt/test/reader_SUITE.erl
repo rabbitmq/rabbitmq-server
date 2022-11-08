@@ -13,7 +13,7 @@
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
 -import(util, [all_connection_pids/1,
-               publish_qos1/4]).
+               publish_qos1_timeout/4]).
 
 all() ->
     [
@@ -101,15 +101,15 @@ block(Config) ->
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
 
     {ok, _, _} = emqtt:subscribe(C, <<"Topic1">>),
-    {ok, _} = publish_qos1(C, <<"Topic1">>, <<"Not blocked yet">>, 1000),
+    {ok, _} = emqtt:publish(C, <<"Topic1">>, <<"Not blocked yet">>, [{qos, 1}]),
 
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
     % %% Let it block
     timer:sleep(100),
 
     %% Blocked, but still will publish
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Now blocked">>, 1000),
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Still blocked">>, 1000),
+    puback_timeout = publish_qos1_timeout(C, <<"Topic1">>, <<"Now blocked">>, 1000),
+    puback_timeout = publish_qos1_timeout(C, <<"Topic1">>, <<"Still blocked">>, 1000),
 
     %% Unblock
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
