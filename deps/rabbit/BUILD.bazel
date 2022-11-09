@@ -1026,6 +1026,25 @@ suites = [
             "//deps/rabbit_common:erlang_app",
         ],
     ),
+<<<<<<< HEAD
+=======
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "direct_exchange_routing_v2_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_direct_reply_to_prop_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:erlang_app",
+        ],
+    ),
+>>>>>>> 428ce5bf1a (fix rabbit_direct_reply_to:compute_key_and_suffix_v1 type signature)
 ]
 
 assert_suites(
