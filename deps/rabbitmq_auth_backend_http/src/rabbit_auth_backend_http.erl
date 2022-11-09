@@ -40,7 +40,7 @@ user_login_authentication(Username, AuthProps) ->
                                       T <- string:tokens(Rest, " ")],
                            {ok, #auth_user{username = Username,
                                            tags     = Tags,
-                                           impl     = none}};
+                                           impl     = fun() -> none end}};
         Other           -> {error, {bad_response, Other}}
     end.
 
