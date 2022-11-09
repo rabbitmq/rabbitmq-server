@@ -88,8 +88,9 @@ user_login_authorization(Username, AuthProps) ->
     end.
 
 check_vhost_access(User = #auth_user{username = Username,
-                                     impl     = #impl{user_dn = UserDN}},
+                                     impl     = ImplFun},
                    VHost, AuthzData) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(AuthzData, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
@@ -104,10 +105,11 @@ check_vhost_access(User = #auth_user{username = Username,
     R1.
 
 check_resource_access(User = #auth_user{username = Username,
-                                        impl     = #impl{user_dn = UserDN}},
+                                        impl     = ImplFun},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission,
                       AuthzContext) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(AuthzContext, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
@@ -125,10 +127,11 @@ check_resource_access(User = #auth_user{username = Username,
     R1.
 
 check_topic_access(User = #auth_user{username = Username,
-                                     impl     = #impl{user_dn = UserDN}},
+                                     impl     = ImplFun},
                    #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
                    Permission,
                    Context) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(Context, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
@@ -220,7 +223,8 @@ evaluate0({in_group, DNPattern}, Args, User, LDAP) ->
     evaluate({in_group, DNPattern, "member"}, Args, User, LDAP);
 
 evaluate0({in_group, DNPattern, Desc}, Args,
-          #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
+          #auth_user{impl = ImplFun}, LDAP) ->
+    UserDN = (ImplFun())#impl.user_dn,
     Filter = eldap:equalityMatch(Desc, UserDN),
     DN = fill(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
@@ -234,7 +238,7 @@ evaluate0({in_group_nested, DNPattern, Desc}, Args, User, LDAP) ->
     evaluate({in_group_nested, DNPattern, Desc, subtree},
              Args, User, LDAP);
 evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
-          #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
+          #auth_user{impl = ImplFun}, LDAP) ->
     GroupsBase = case env(group_lookup_base) of
                      none ->
                          get_expected_env_str(dn_lookup_base, none);
@@ -250,6 +254,7 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
             onelevel     -> eldap:singleLevel();
             one_level    -> eldap:singleLevel()
         end,
+    UserDN = (ImplFun())#impl.user_dn,
     search_nested_group(LDAP, Desc, GroupsBase, EldapScope, UserDN, GroupDN, []);
 
 evaluate0({'not', SubQuery}, Args, User, LDAP) ->
@@ -786,8 +791,9 @@ do_login(Username, PrebindUserDN, Password, VHost, LDAP) ->
                  _       -> PrebindUserDN
              end,
     User = #auth_user{username     = Username,
-                      impl         = #impl{user_dn  = UserDN,
-                                           password = Password}},
+                      impl         = fun() -> #impl{user_dn  = UserDN,
+                                                    password = Password}
+                                     end},
     DTQ = fun (LDAPn) -> do_tag_queries(Username, UserDN, User, VHost, LDAPn) end,
     TagRes = case env(other_bind) of
                  as_user -> DTQ(LDAP);
@@ -882,7 +888,8 @@ creds(User) -> creds(User, env(other_bind)).
 
 creds(none, as_user) ->
     {error, "'other_bind' set to 'as_user' but no password supplied"};
-creds(#auth_user{impl = #impl{user_dn = UserDN, password = PW}}, as_user) ->
+creds(#auth_user{impl = ImplFun}, as_user) ->
+    #impl{user_dn = UserDN, password = PW} = ImplFun(),
     {ok, {UserDN, PW}};
 creds(_, Creds) ->
     {ok, Creds}.
