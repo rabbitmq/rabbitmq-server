@@ -271,13 +271,10 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-<<<<<<< HEAD
     repository = "rabbitmq/ra",
     tag = "v2.0.13",
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
-=======
->>>>>>> 8bfd041cce (Adopt otp 24.3.4.6)
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
