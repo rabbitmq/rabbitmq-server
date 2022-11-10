@@ -779,7 +779,7 @@ invalid_pagination(Type,Reason, ReqData, Context) ->
     halt_response(400, Type, Reason, ReqData, Context).
 
 redirect_to_home(ReqData, Reason, Context) ->
-    Home = cowboy_req:uri(ReqData, #{path => rabbit_mgmt_util:get_path_prefix(), qs => Reason}),
+    Home = cowboy_req:uri(ReqData, #{path => rabbit_mgmt_util:get_path_prefix() ++ "/", qs => Reason}),
     rabbit_log:info("redirect_to_home ~ts ~ts", [Reason, iolist_to_binary(Home)]),
     ReqData1 = cowboy_req:reply(302,
         #{<<"Location">> => iolist_to_binary(Home) },
