@@ -177,16 +177,6 @@
  [rabbitmq_peer_discovery_consul]}
 
 
- , {consul_use_longname,
-  "cluster_formation.consul.use_longname = true",
-  [{rabbit, [{cluster_formation, [
-                                  {peer_discovery_consul, [
-                                                           {consul_use_longname, true}
-                                                          ]}
-                                 ]}]}],
- [rabbitmq_peer_discovery_consul]}
-
-
  , {lock_prefix,
   "cluster_formation.consul.lock_prefix = prefix",
   [{rabbit, [{cluster_formation, [

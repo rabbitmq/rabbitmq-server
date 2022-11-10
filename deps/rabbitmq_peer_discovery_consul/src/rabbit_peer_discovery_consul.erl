@@ -497,13 +497,13 @@ service_ttl(Value) ->
 -spec maybe_add_domain(Domain :: atom()) -> atom().
 maybe_add_domain(Value) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  case get_config_key(consul_use_longname, M) of
-      true ->
+  case rabbit_nodes:name_type() of
+      longnames ->
           rabbit_data_coercion:to_atom(string:join([atom_to_list(Value),
                                     "node",
                                     get_config_key(consul_domain, M)],
                                    "."));
-      false -> Value
+      shortnames -> Value
   end.
 
 %%--------------------------------------------------------------------

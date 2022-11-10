@@ -93,11 +93,6 @@
                                                    env_variable  = "CONSUL_DEREGISTER_AFTER",
                                                    default_value = ""
                                                   },
-          consul_use_longname                => #peer_discovery_config_entry_meta{
-                                                   type          = atom,
-                                                   env_variable  = "CONSUL_USE_LONGNAME",
-                                                   default_value = false
-                                                  },
           consul_lock_prefix                 => #peer_discovery_config_entry_meta{
                                                    type          = string,
                                                    env_variable  = "CONSUL_LOCK_PREFIX",
