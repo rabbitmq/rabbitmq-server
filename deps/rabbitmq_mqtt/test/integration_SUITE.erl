@@ -21,13 +21,15 @@
 all() ->
     [
      {group, cluster_size_1},
-     {group, cluster_size_3}
+     {group, cluster_size_3},
+     {group, single_node}
     ].
 
 groups() ->
     [
      {cluster_size_1, [], tests()},
-     {cluster_size_3, [], tests()}
+     {cluster_size_3, [], tests()},
+     {single_node, [], [test_global_counters_v3, test_global_counters_v4]}
     ].
 
 tests() ->
@@ -57,7 +59,10 @@ init_per_group(cluster_size_1 = Group, Config0) ->
                     rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}]));
 init_per_group(cluster_size_3 = Group, Config0) ->
     init_per_group0(Group,
-                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}])).
+                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}]));
+init_per_group(single_node = Group, Config0) ->
+    init_per_group0(Group,
+                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}])).
 
 init_per_group0(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
@@ -262,6 +267,45 @@ event_authentication_failure(Config) ->
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
+test_global_counters_v3(Config) ->
+    test_global_counters(Config, v3).
+test_global_counters_v4(Config) ->
+    test_global_counters(Config, v4).
+test_global_counters(Config, ProtoVer) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = emqtt:start_link([{host, "localhost"},
+                                {port, Port},
+                                {proto_ver, ProtoVer},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)}]),
+    {ok, _Properties} = emqtt:connect(C),
+
+    Topic = <<"test-topic">>,
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, [{qos, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, <<"testm">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, <<"testm">>, [{qos, 1}]),
+
+    ?assertEqual(#{publishers => 1,
+                   consumers => 1,
+                   messages_confirmed_total => 2,
+                   messages_received_confirm_total => 2,
+                   messages_received_total => 2,
+                   messages_routed_total => 2,
+                   messages_unroutable_dropped_total => 0,
+                   messages_unroutable_returned_total => 0},
+                 get_global_counters(Config, ProtoVer)),
+
+    ok = emqtt:disconnect(C),
+
+    ?assertEqual(#{publishers => 0,
+                   consumers => 0,
+                   messages_confirmed_total => 2,
+                   messages_received_confirm_total => 2,
+                   messages_received_total => 2,
+                   messages_routed_total => 2,
+                   messages_unroutable_dropped_total => 0,
+                   messages_unroutable_returned_total => 0},
+                 get_global_counters(Config, ProtoVer)).
+
 %% -------------------------------------------------------------------
 %% Internal helpers
 %% -------------------------------------------------------------------
@@ -325,3 +369,18 @@ assert_event_prop(ExpectedProps, Event)
     lists:foreach(fun(P) ->
                           assert_event_prop(P, Event)
                   end, ExpectedProps).
+
+get_global_counters(Config, v3) ->
+    maps:get([{protocol, mqtt301}],
+             rabbit_ct_broker_helpers:rpc(Config,
+                                          0,
+                                          rabbit_global_counters,
+                                          overview,
+                                          []));
+get_global_counters(Config, v4) ->
+    maps:get([{protocol, mqtt311}],
+             rabbit_ct_broker_helpers:rpc(Config,
+                                         0,
+                                         rabbit_global_counters,
+                                         overview,
+                                         [])).

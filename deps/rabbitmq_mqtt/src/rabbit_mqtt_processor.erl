@@ -113,10 +113,18 @@ process_request(?PUBLISH,
                    variable = #mqtt_frame_publish{topic_name = Topic,
                                                   message_id = MessageId },
                    payload = Payload},
-                PState = #proc_state{retainer_pid = RPid,
+                PState = #proc_state{isPublisher = IsPublisher,
+                                     retainer_pid = RPid,
                                      amqp2mqtt_fun = Amqp2MqttFun,
                                      unacked_client_pubs = U}) ->
-    rabbit_global_counters:messages_received(mqtt, 1),
+    counters_messages_received(PState),
+    PState1 = case IsPublisher of
+        true ->
+            PState;
+        _ ->
+            counters_publisher_created(PState),
+            PState#proc_state{isPublisher = true}
+        end,
     Publish = fun() ->
                       Msg = #mqtt_msg{retain     = Retain,
                                       qos        = Qos,
@@ -124,7 +132,7 @@ process_request(?PUBLISH,
                                       dup        = Dup,
                                       message_id = MessageId,
                                       payload    = Payload},
-                      case publish_to_queues(Msg, PState) of
+                      case publish_to_queues(Msg, PState1) of
                           {ok, _} = Ok ->
                               case Retain of
                                   false ->
@@ -139,18 +147,18 @@ process_request(?PUBLISH,
               end,
     case Qos of
         N when N > ?QOS_0 ->
-            rabbit_global_counters:messages_received_confirm(mqtt, 1),
+            counters_messages_received_confirm(PState1),
             case rabbit_mqtt_confirms:contains(MessageId, U) of
                 false ->
-                    publish_to_queues_with_checks(Topic, Publish, PState);
+                    publish_to_queues_with_checks(Topic, Publish, PState1);
                 true ->
                     %% Client re-sent this PUBLISH packet.
                     %% We already sent this message to target queues awaiting confirmations.
                     %% Hence, we ignore this re-send.
-                    {ok, PState}
+                    {ok, PState1}
             end;
         _ ->
-            publish_to_queues_with_checks(Topic, Publish, PState)
+            publish_to_queues_with_checks(Topic, Publish, PState1)
     end;
 
 process_request(?SUBSCRIBE,
@@ -243,6 +251,7 @@ process_request(?UNSUBSCRIBE,
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
                   variable = #mqtt_frame_suback{message_id = MessageId}},
       PState),
+    counters_consumer_deleted(PState),
     {ok, PState};
 
 process_request(?PINGREQ, #mqtt_frame{}, PState = #proc_state{send_fun = SendFun}) ->
@@ -976,6 +985,7 @@ consume(Q, QoS, #proc_state{
                 rabbit_mqtt_qos0_queue ->
                     %% Messages get delivered directly to our process without
                     %% explicitly calling rabbit_queue_type:consume/3.
+                    counters_consumer_created(PState0),
                     {ok, PState0};
                 _ ->
                     Spec = #{no_ack => QoS =:= ?QOS_0,
@@ -990,7 +1000,7 @@ consume(Q, QoS, #proc_state{
                              acting_user => Username},
                     case rabbit_queue_type:consume(Q, Spec, QStates0) of
                         {ok, QStates} ->
-                            % rabbit_global_counters:consumer_created(mqtt),
+                            counters_consumer_created(PState0),
                             PState = PState0#proc_state{queue_states = QStates},
                             {ok, PState};
                         {error, Reason} = Err ->
@@ -1127,7 +1137,7 @@ deliver_to_queues(Delivery,
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
         {ok, QStates, Actions} ->
-            rabbit_global_counters:messages_routed(mqtt, length(Qs)),
+            counters_messages_routed(PState0, length(Qs)),
             PState = process_routing_confirm(Delivery, Qs,
                                              PState0#proc_state{queue_states = QStates}),
             %% Actions must be processed after registering confirms as actions may
@@ -1140,16 +1150,16 @@ deliver_to_queues(Delivery,
     end.
 
 process_routing_confirm(#delivery{confirm = false}, [], PState) ->
-    rabbit_global_counters:messages_unroutable_dropped(mqtt, 1),
+    counters_messages_unroutable_dropped(PState),
     PState;
 process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = undefined}, [], PState) ->
     %% unroutable will message with QoS > 0
-    rabbit_global_counters:messages_unroutable_dropped(mqtt, 1),
+    counters_messages_unroutable_dropped(PState),
     PState;
 process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = MsgId}, [], PState) ->
-    rabbit_global_counters:messages_unroutable_returned(mqtt, 1),
+    counters_messages_unroutable_returned(PState),
     %% MQTT 5 spec:
     %% If the Server knows that there are no matching subscribers, it MAY use
     %% Reason Code 0x10 (No matching subscribers) instead of 0x00 (Success).
@@ -1174,7 +1184,7 @@ send_puback(MsgIds, PState)
                           send_puback(Id, PState)
                   end, MsgIds);
 send_puback(MsgId, PState = #proc_state{send_fun = SendFun}) ->
-    rabbit_global_counters:messages_confirmed(mqtt, 1),
+    counters_messages_confirmed(PState),
     SendFun(
       #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PUBACK},
                   variable = #mqtt_frame_publish{message_id = MsgId}},
@@ -1200,6 +1210,8 @@ terminate(PState, ConnName) ->
                                             {pid, self()}]),
     rabbit_networking:unregister_non_amqp_connection(self()),
     maybe_unregister_client(PState),
+    counters_consumer_deleted(PState),
+    counters_publisher_deleted(PState),
     maybe_delete_mqtt_qos0_queue(PState).
 
 maybe_unregister_client(#proc_state{client_id = ClientId})
@@ -1586,3 +1598,58 @@ format_status(#proc_state{queue_states = QState,
 
 soft_limit_exceeded(#proc_state{soft_limit_exceeded = SLE}) ->
     not sets:is_empty(SLE).
+
+%% Handle global counters
+counters_messages_received(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:messages_received(mqtt301, 1);
+counters_messages_received(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:messages_received(mqtt311, 1).
+
+counters_messages_received_confirm(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:messages_received_confirm(mqtt301, 1);
+counters_messages_received_confirm(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:messages_received_confirm(mqtt311, 1).
+
+counters_messages_confirmed(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:messages_confirmed(mqtt301, 1);
+counters_messages_confirmed(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:messages_confirmed(mqtt311, 1).
+
+counters_consumer_created(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:consumer_created(mqtt301);
+counters_consumer_created(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:consumer_created(mqtt311).
+
+counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, subscriptions = Sub}) when Sub /= #{} ->
+    rabbit_global_counters:consumer_deleted(mqtt301);
+counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, subscriptions = Sub}) when Sub /= #{} ->
+    rabbit_global_counters:consumer_deleted(mqtt311);
+counters_consumer_deleted(_) ->
+    ok.
+
+counters_publisher_created(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:publisher_created(mqtt301);
+counters_publisher_created(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:publisher_created(mqtt311).
+
+counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, isPublisher = true}) ->
+    rabbit_global_counters:publisher_deleted(mqtt301);
+counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, isPublisher = true}) ->
+    rabbit_global_counters:publisher_deleted(mqtt311);
+counters_publisher_deleted(_) ->
+    ok.
+
+counters_messages_routed(#proc_state{proto_ver = ?MQTT_PROTO_V3}, Num) ->
+    rabbit_global_counters:messages_routed(mqtt301, Num);
+counters_messages_routed(#proc_state{proto_ver = ?MQTT_PROTO_V4}, Num) ->
+    rabbit_global_counters:messages_routed(mqtt311, Num).
+
+counters_messages_unroutable_dropped(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:messages_unroutable_dropped(mqtt301, 1);
+counters_messages_unroutable_dropped(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:messages_unroutable_dropped(mqtt311, 1).
+
+counters_messages_unroutable_returned(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
+    rabbit_global_counters:messages_unroutable_returned(mqtt301, 1);
+counters_messages_unroutable_returned(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
+    rabbit_global_counters:messages_unroutable_returned(mqtt311, 1).
