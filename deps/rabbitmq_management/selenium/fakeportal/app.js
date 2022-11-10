@@ -3,7 +3,7 @@ const app = express();
 var path = require('path');
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
-const rabbitmq = process.env.RABBITMQ_URL;
+const rabbitmq_url = process.env.RABBITMQ_URL;
 const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
 const uaa_url = process.env.UAA_URL;
@@ -16,8 +16,8 @@ app.get('/', function(req, res){
   let id =  default_if_blank(req.query.client_id, client_id);
   let secret =  default_if_blank(req.query.client_secret, client_secret);
   res.render('rabbitmq', {
-    url: rabbitmq + "/login",
-    name: rabbitmq + " for " + id,
+    url: rabbitmq_url.replace(/\/?$/, '/') + "login",
+    name: rabbitmq_url + " for " + id,
     access_token: access_token(id, secret)
   });
 });

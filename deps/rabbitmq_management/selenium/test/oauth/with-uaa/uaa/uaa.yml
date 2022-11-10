@@ -63,7 +63,7 @@ jwt:
     policy:
       # Will override global validity policies for the default zone only.
 #      accessTokenValiditySeconds: 150
-      accessTokenValiditySeconds: 25
+      accessTokenValiditySeconds: 150
       keys:
         legacy-token-key:
           signingKey: |
@@ -142,9 +142,9 @@ oauth:
       secret: rabbit_idp_user
       authorized-grant-types: client_credentials
       #scope: openid,profile,rabbitmq.tag:management
-      authorities: uaa.resource,openid,profile,rabbitmq.tag:management
-      redirect-uri: http://localhost:15672
-      #redirect-uri: http://localhost:15672/my-prefix/another-prefix/
+      authorities: uaa.resource,openid,profile,rabbitmq.tag:administrator
+      #redirect-uri: http://localhost:15672
+      redirect-uri: http://localhost:15672/my-prefix/another-prefix/
       autoapprove: true
       allowpublic: true
     mgt_api_client_2:
