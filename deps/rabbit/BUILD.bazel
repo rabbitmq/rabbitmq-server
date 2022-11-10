@@ -969,22 +969,6 @@ suites = [
         size = "medium",
         flaky = True,
     ),
-<<<<<<< HEAD
-=======
-    rabbitmq_suite(
-        name = "unit_classic_mirrored_queue_sync_throttling_SUITE",
-        size = "small",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "unit_classic_mirrored_queue_throughput_SUITE",
-        size = "small",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_direct_reply_to_prop_SUITE",
@@ -993,11 +977,6 @@ suites = [
             "@proper//:erlang_app",
         ],
     ),
-<<<<<<< HEAD
->>>>>>> 428ce5bf1a (fix rabbit_direct_reply_to:compute_key_and_suffix_v1 type signature)
->>>>>>> 7f7bc932b7 (fix rabbit_direct_reply_to:compute_key_and_suffix_v1 type signature)
-=======
->>>>>>> 15c7e11913 (Resolve a conflict)
 ]
 
 assert_suites(
