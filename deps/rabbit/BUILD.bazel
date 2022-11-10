@@ -969,6 +969,14 @@ suites = [
         size = "medium",
         flaky = True,
     ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_direct_reply_to_prop_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:erlang_app",
+        ],
+    ),
 ]
 
 assert_suites(
