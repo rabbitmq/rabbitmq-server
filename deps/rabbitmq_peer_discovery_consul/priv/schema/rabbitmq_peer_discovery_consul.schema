@@ -231,6 +231,20 @@ fun(Conf) ->
 end}.
 
 
+%% use long node names?
+
+{mapping, "cluster_formation.consul.use_longname", "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.use_longname", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
 %% service tags
 
 {mapping, "cluster_formation.consul.svc_tags", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_tags", [
