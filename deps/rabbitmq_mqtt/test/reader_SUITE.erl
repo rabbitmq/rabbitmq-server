@@ -12,6 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(rabbit_ct_helpers, [consistently/1]).
 -import(util, [all_connection_pids/1,
                publish_qos1_timeout/4]).
 
@@ -28,6 +29,7 @@ groups() ->
                                 handle_invalid_frames,
                                 login_timeout,
                                 keepalive,
+                                keepalive_turned_off,
                                 stats,
                                 clean_session_disconnect_client,
                                 clean_session_kill_node,
@@ -220,6 +222,30 @@ keepalive(Config) ->
 
     true = rpc(Config, 0, meck, validate, [Mod]),
     ok = rpc(Config, 0, meck, unload, [Mod]).
+
+keepalive_turned_off(Config) ->
+    %% "A Keep Alive value of zero (0) has the effect of turning off the keep alive mechanism."
+    KeepaliveSecs = 0,
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
+                                {host, "localhost"},
+                                {port, P},
+                                {clientid, atom_to_binary(?FUNCTION_NAME)},
+                                {proto_ver, v4}
+                               ]),
+    {ok, _Properties} = emqtt:connect(C),
+
+    %% Mock the server socket to not have received any bytes.
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_net,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]} ]),
+
+    consistently(?_assert(erlang:is_process_alive(C))),
+
+    true = rpc(Config, 0, meck, validate, [Mod]),
+    ok = rpc(Config, 0, meck, unload, [Mod]),
+    ok = emqtt:disconnect(C).
 
 stats(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),

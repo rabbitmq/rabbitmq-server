@@ -21,15 +21,18 @@
 all() ->
     [
      {group, cluster_size_1},
-     {group, cluster_size_3},
-     {group, single_node}
+     {group, cluster_size_3}
     ].
 
 groups() ->
     [
-     {cluster_size_1, [], tests()},
-     {cluster_size_3, [], tests()},
-     {single_node, [], [test_global_counters_v3, test_global_counters_v4]}
+     {cluster_size_1, [],
+      [global_counters_v3, global_counters_v4]
+      ++ tests()
+     },
+     {cluster_size_3, [],
+      [queue_down_qos1]}
+     ++ tests()
     ].
 
 tests() ->
@@ -59,10 +62,7 @@ init_per_group(cluster_size_1 = Group, Config0) ->
                     rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}]));
 init_per_group(cluster_size_3 = Group, Config0) ->
     init_per_group0(Group,
-                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}]));
-init_per_group(single_node = Group, Config0) ->
-    init_per_group0(Group,
-                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}])).
+                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}])).
 
 init_per_group0(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
@@ -267,11 +267,13 @@ event_authentication_failure(Config) ->
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
-test_global_counters_v3(Config) ->
-    test_global_counters(Config, v3).
-test_global_counters_v4(Config) ->
-    test_global_counters(Config, v4).
-test_global_counters(Config, ProtoVer) ->
+global_counters_v3(Config) ->
+    global_counters(Config, v3).
+
+global_counters_v4(Config) ->
+    global_counters(Config, v4).
+
+global_counters(Config, ProtoVer) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, Port},
@@ -305,6 +307,29 @@ test_global_counters(Config, ProtoVer) ->
                    messages_unroutable_dropped_total => 0,
                    messages_unroutable_returned_total => 0},
                  get_global_counters(Config, ProtoVer)).
+
+queue_down_qos1(Config) ->
+    {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
+    CQ = Topic = atom_to_binary(?FUNCTION_NAME),
+    declare_queue(Ch1, CQ, []),
+    bind(Ch1, CQ, Topic),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Ch1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+
+    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
+    %% classic queue is down, therefore message is rejected
+    ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 500)),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    %% classic queue is up, therefore message should arrive
+    eventually(?_assertEqual([[<<"1">>]],
+                             rabbitmqctl_list(Config, 1, ["list_queues", "messages", "--no-table-headers"])),
+               500, 20),
+
+    {Conn0, Ch0} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    delete_queue(Ch0, CQ),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn0, Ch0),
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% Internal helpers
@@ -371,16 +396,14 @@ assert_event_prop(ExpectedProps, Event)
                   end, ExpectedProps).
 
 get_global_counters(Config, v3) ->
-    maps:get([{protocol, mqtt301}],
+    get_global_counters0(Config, mqtt301);
+get_global_counters(Config, v4) ->
+    get_global_counters0(Config, mqtt311).
+
+get_global_counters0(Config, Proto) ->
+    maps:get([{protocol, Proto}],
              rabbit_ct_broker_helpers:rpc(Config,
                                           0,
                                           rabbit_global_counters,
                                           overview,
-                                          []));
-get_global_counters(Config, v4) ->
-    maps:get([{protocol, mqtt311}],
-             rabbit_ct_broker_helpers:rpc(Config,
-                                         0,
-                                         rabbit_global_counters,
-                                         overview,
-                                         [])).
+                                          [])).

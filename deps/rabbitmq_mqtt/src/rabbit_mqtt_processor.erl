@@ -1324,8 +1324,8 @@ handle_queue_actions(Actions, #proc_state{} = PState0) ->
               send_puback(ConfirmMsgIds, S),
               S#proc_state{unacked_client_pubs = U};
           ({rejected, _QName, MsgIds}, S = #proc_state{unacked_client_pubs = U0}) ->
-              %% Negative acks are supported in MQTT 5 only.
-              %% Therefore, in MQTT 3 we ignore rejected messages.
+              %% Negative acks are supported in MQTT v5 only.
+              %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
               U = lists:foldl(
                     fun(MsgId, Acc0) ->
                             case rabbit_mqtt_confirms:reject(MsgId, Acc0) of
@@ -1337,7 +1337,12 @@ handle_queue_actions(Actions, #proc_state{} = PState0) ->
           ({block, QName}, S = #proc_state{soft_limit_exceeded = SLE}) ->
               S#proc_state{soft_limit_exceeded = sets:add_element(QName, SLE)};
           ({unblock, QName}, S = #proc_state{soft_limit_exceeded = SLE}) ->
-              S#proc_state{soft_limit_exceeded = sets:del_element(QName, SLE)}
+              S#proc_state{soft_limit_exceeded = sets:del_element(QName, SLE)};
+          ({queue_down, _QName}, S) ->
+              %% classic queue is down, but not deleted
+              %% TODO if we were consuming from that queue:
+              %% remove subscription? recover if we support classic mirrored queues? see channel
+              S
       end, PState0, Actions).
 
 deliver_to_client(Msgs, Ack, PState) ->
