@@ -1628,7 +1628,7 @@ stop_node_after(Config, Node, Sleep) ->
 
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
-    cover_remove_node(Node),
+    cover_remove_node(Config, Node),
     Cmd = case os:type() of
               {win32, _} ->
                   case os:find_executable("taskkill.exe") of
@@ -1920,17 +1920,24 @@ user(Username) ->
           tags           = [administrator],
           authz_backends = [{rabbit_auth_backend_internal, none}]}.
 
-cover_add_node(Node) ->
+cover_add_node(Node)
+  when is_atom(Node) andalso Node =/= undefined ->
     if_cover(
       fun() ->
               {ok, [Node]} = ct_cover:add_nodes([Node])
       end).
 
-cover_remove_node(Node) ->
+cover_remove_node(Node)
+  when is_atom(Node) andalso Node =/= undefined ->
     if_cover(
       fun() ->
               ok = ct_cover:remove_nodes([Node])
       end).
+
+cover_remove_node(Config, Node) ->
+    NodeConfig = get_node_config(Config, Node),
+    Nodename = ?config(nodename, NodeConfig),
+    cover_remove_node(Nodename).
 
 if_cover(F) ->
     case os:getenv("COVER") of
