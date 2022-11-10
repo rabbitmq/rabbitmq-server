@@ -805,6 +805,7 @@ query_node(Config, NodeConfig) ->
                    ct:pal("NO RABBITMQ_FEATURE_FLAGS_FILE"),
                    Vars0
            end,
+    cover_add_node(Nodename),
     rabbit_ct_helpers:set_config(NodeConfig, Vars).
 
 maybe_cluster_nodes(Config) ->
@@ -1002,9 +1003,10 @@ stop_rabbitmq_nodes(Config) ->
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
+    Nodename = ?config(nodename, NodeConfig),
+    cover_remove_node(Nodename),
     SrcDir = ?config(effective_srcdir, NodeConfig),
     InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
-    Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
     MakeVars = InitialMakeVars ++ [
       {"RABBITMQ_NODENAME=~ts", [Nodename]},
@@ -1626,7 +1628,7 @@ stop_node_after(Config, Node, Sleep) ->
 
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
-    %% FIXME maybe_flush_cover(Cfg),
+    cover_remove_node(Node),
     Cmd = case os:type() of
               {win32, _} ->
                   case os:find_executable("taskkill.exe") of
@@ -1917,3 +1919,23 @@ user(Username) ->
     #user{username       = Username,
           tags           = [administrator],
           authz_backends = [{rabbit_auth_backend_internal, none}]}.
+
+cover_add_node(Node) ->
+    if_cover(
+      fun() ->
+              {ok, [Node]} = ct_cover:add_nodes([Node])
+      end).
+
+cover_remove_node(Node) ->
+    if_cover(
+      fun() ->
+              ok = ct_cover:remove_nodes([Node])
+      end).
+
+if_cover(F) ->
+    case os:getenv("COVER") of
+        false ->
+            ok;
+        _ ->
+            F()
+    end.
