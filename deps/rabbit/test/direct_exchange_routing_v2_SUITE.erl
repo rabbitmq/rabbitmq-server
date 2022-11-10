@@ -321,8 +321,7 @@ recover_bindings(Config) ->
     assert_index_table_empty(Config),
     rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["import_definitions", Path], 10_000),
     ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE, table_size(Config, ?INDEX_TABLE_NAME)),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
     ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, table_size(Config, ?INDEX_TABLE_NAME)),
 
     %% cleanup

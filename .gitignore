@@ -61,6 +61,7 @@
 /plugins.lock
 /sbin/
 /sbin.lock
+ct.cover.spec
 erl_crash.dump
 rebar3.crashdump
 .envrc
