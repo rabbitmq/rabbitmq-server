@@ -541,6 +541,11 @@ handle_ra_event(From, {applied, Seqs},
                   [] ->
                       lists:reverse(Actions0);
                   _ ->
+                      %%TODO consider using lists:foldr/3 above because
+                      %% Corrs is returned in the wrong order here.
+                      %% The wrong order does not matter much because the channel sorts the
+                      %% sequence numbers before confirming to the client. But rabbit_fifo_client
+                      %% is sequence numer agnostic: it handles any correlation terms.
                       [{settled, QRef, Corrs}
                        | lists:reverse(Actions0)]
               end,

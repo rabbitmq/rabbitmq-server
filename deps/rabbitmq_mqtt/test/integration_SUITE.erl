@@ -28,8 +28,9 @@ groups() ->
     [
      {cluster_size_1, [],
       [
-        {global_counters, [], [global_counters_v3, global_counters_v4]}, % separate RMQ so global counters start from 0
-        {common_tests, [], common_tests()}
+       %% separate RMQ so global counters start from 0
+       {global_counters, [], [global_counters_v3, global_counters_v4]},
+       {common_tests, [], common_tests()}
       ]},
      {cluster_size_3, [],
       [queue_down_qos1]
@@ -37,7 +38,8 @@ groups() ->
     ].
 
 common_tests() ->
-    [quorum_queue_rejects
+    [delete_create_queue
+     ,quorum_queue_rejects
      ,publish_to_all_queue_types_qos0
      ,publish_to_all_queue_types_qos1
      ,events
@@ -68,15 +70,18 @@ init_per_group(Group, Config) when Group =:= global_counters orelse Group =:= co
     init_per_group0(Group,Config).
 
 init_per_group0(Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [{rmq_nodename_suffix, Group},
-                {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                                       tcp_port_mqtt_tls_extra]}]),
-    rabbit_ct_helpers:run_steps(
-      Config,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config1 = rabbit_ct_helpers:set_config(
+                Config0,
+                [{rmq_nodename_suffix, Group},
+                 {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
+                                        tcp_port_mqtt_tls_extra]}]),
+    Config = rabbit_ct_helpers:run_steps(
+               Config1,
+               rabbit_ct_broker_helpers:setup_steps() ++
+               rabbit_ct_client_helpers:setup_steps()),
+    Result = rpc_all(Config, application, set_env, [rabbit, classic_queue_default_version, 2]),
+    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
+    Config.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
@@ -160,12 +165,14 @@ publish_to_all_queue_types(Config, QoS) ->
 
     NumMsgs = 2000,
     {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
-    lists:foreach(fun(_N) ->
-                          case QoS of
-                              qos0 ->
-                                  ok = emqtt:publish(C, Topic, <<"m">>);
-                              qos1 ->
-                                  {ok, _} = emqtt:publish(C, Topic, <<"m">>, [{qos, 1}])
+    lists:foreach(fun(N) ->
+                          case emqtt:publish(C, Topic, integer_to_binary(N), QoS) of
+                              ok ->
+                                  ok;
+                              {ok, _} ->
+                                  ok;
+                              Other ->
+                                  ct:fail("Failed to publish: ~p", [Other])
                           end
                   end, lists:seq(1, NumMsgs)),
 
@@ -337,6 +344,78 @@ queue_down_qos1(Config) ->
     delete_queue(Ch0, CQ),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn0, Ch0),
     ok = emqtt:disconnect(C).
+
+delete_create_queue(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    CQ1 = <<"classic-queue-1-delete-create">>,
+    CQ2 = <<"classic-queue-2-delete-create">>,
+    QQ = <<"quorum-queue-delete-create">>,
+    Topic = atom_to_binary(?FUNCTION_NAME),
+
+    DeclareQueues = fun() ->
+                            declare_queue(Ch, CQ1, []),
+                            bind(Ch, CQ1, Topic),
+                            declare_queue(Ch, CQ2, []),
+                            bind(Ch, CQ2, Topic),
+                            declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+                            bind(Ch, QQ, Topic)
+                    end,
+    DeclareQueues(),
+
+    %% some large retry_interval to avoid re-sending
+    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 300}]),
+    NumMsgs = 50,
+    TestPid = self(),
+    spawn(
+      fun() ->
+              lists:foreach(
+                fun(N) ->
+                        ok = emqtt:publish_async(C, Topic, integer_to_binary(N), qos1,
+                                                 {fun(N0, {ok, #{reason_code_name := success}}) ->
+                                                          TestPid ! {self(), N0}
+                                                  end, [N]})
+                end, lists:seq(1, NumMsgs))
+      end),
+
+    %% Delete queues while sending to them.
+    %% We want to test the path where a queue is deleted while confirms are outstanding.
+    timer:sleep(2),
+    delete_queue(Ch, [CQ1, QQ]),
+    %% Give queues some time to be fully deleted
+    timer:sleep(2000),
+
+    %% We expect all confirms in the right order (because emqtt publishes with increasing packet ID).
+    %% Confirm here does not mean that messages made it ever to the deleted queues.
+    ok = await_confirms(C, 1, NumMsgs),
+
+    %% Recreate the same queues.
+    DeclareQueues(),
+
+    %% Sending a message to each of them should work.
+    {ok, _} = emqtt:publish(C, Topic, <<"m">>, qos1),
+    eventually(?_assertEqual(lists:sort([[CQ1, <<"1">>],
+                                         %% This queue should have all messages because we did not delete it.
+                                         [CQ2, integer_to_binary(NumMsgs + 1)],
+                                         [QQ, <<"1">>]]),
+                             lists:sort(rabbitmqctl_list(Config, 0, ["list_queues", "name", "messages", "--no-table-headers"]))),
+               1000, 10),
+
+    delete_queue(Ch, [CQ1, CQ2, QQ]),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    ok = emqtt:disconnect(C).
+
+await_confirms(_, To, To) ->
+    ok;
+await_confirms(From, N, To) ->
+    Expected = {From, N},
+    receive
+        Expected ->
+            await_confirms(From, N + 1, To);
+        Got ->
+            ct:fail("Received unexpected message. Expected: ~p Got: ~p", [Expected, Got])
+    after 10_000 ->
+              ct:fail("Did not receive expected message: ~p", [Expected])
+    end.
 
 %% -------------------------------------------------------------------
 %% Internal helpers

@@ -1170,8 +1170,11 @@ process_routing_confirm(#delivery{confirm = true,
     U = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
     PState#proc_state{unacked_client_pubs = U}.
 
-send_puback(MsgIds, PState)
-  when is_list(MsgIds) ->
+send_puback(MsgIds0, PState)
+  when is_list(MsgIds0) ->
+    %% Classic queues confirm messages unordered.
+    %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
+    MsgIds = lists:usort(MsgIds0),
     lists:foreach(fun(Id) ->
                           send_puback(Id, PState)
                   end, MsgIds);
@@ -1274,15 +1277,20 @@ handle_ra_event(Evt, PState) ->
     PState.
 
 handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
-            PState0 = #proc_state{queue_states = QStates0}) ->
+            PState0 = #proc_state{queue_states = QStates0,
+                                  unacked_client_pubs = U0}) ->
     credit_flow:peer_down(QPid),
     case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates1, Actions} ->
             PState = PState0#proc_state{queue_states = QStates1},
             handle_queue_actions(Actions, PState);
         {eol, QStates1, QRef} ->
+            {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QRef, U0),
             QStates = rabbit_queue_type:remove(QRef, QStates1),
-            PState0#proc_state{queue_states = QStates}
+            PState = PState0#proc_state{queue_states = QStates,
+                                        unacked_client_pubs = U},
+            send_puback(ConfirmMsgIds, PState),
+            PState
     end.
 
 handle_queue_event({queue_event, rabbit_mqtt_qos0_queue, Msg}, PState0) ->
@@ -1300,7 +1308,9 @@ handle_queue_event({queue_event, QName, Evt},
             %%TODO handle consuming queue down
             % State1 = handle_consuming_queue_down_or_eol(QRef, State0),
             {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
-            PState = PState0#proc_state{unacked_client_pubs = U},
+            QStates = rabbit_queue_type:remove(QName, QStates0),
+            PState = PState0#proc_state{queue_states = QStates,
+                                        unacked_client_pubs = U},
             send_puback(ConfirmMsgIds, PState),
             {ok, PState};
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->
@@ -1334,6 +1344,7 @@ handle_queue_actions(Actions, #proc_state{} = PState0) ->
               %% classic queue is down, but not deleted
               %% TODO if we were consuming from that queue:
               %% remove subscription? recover if we support classic mirrored queues? see channel
+              % State1 = handle_consuming_queue_down_or_eol(QRef, State0),
               S
       end, PState0, Actions).
 
