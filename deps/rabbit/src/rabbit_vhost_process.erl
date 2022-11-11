@@ -15,8 +15,8 @@
 
 %% On termination, the ptocess will notify of vhost going down.
 
-%% The process will also check periodically if the vhost still
-%% present in mnesia DB and stop the vhost supervision tree when it
+%% The process will also check periodically if the vhost is still
+%% present in the database and stop the vhost supervision tree when it
 %% disappears.
 
 -module(rabbit_vhost_process).

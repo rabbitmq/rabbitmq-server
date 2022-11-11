@@ -17,8 +17,8 @@
 -export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-         set_tags/3, set_permissions/6, clear_permissions/3,
-         set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
+         set_tags/3, set_permissions/6, clear_permissions/3, clear_permissions_for_vhost/2,
+         set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4, clear_topic_permissions_for_vhost/2,
          add_user_sans_validation/3, put_user/2, put_user/3,
          update_user/5,
          update_user_with_hash/5,
@@ -119,23 +119,16 @@ internal_check_user_login(Username, Fun) ->
     end.
 
 check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
-    case mnesia:dirty_read({rabbit_user_permission,
-                            #user_vhost{username     = Username,
-                                        virtual_host = VHostPath}}) of
-        []   -> false;
-        [_R] -> true
-    end.
+    rabbit_db_user:get_user_permissions(Username, VHostPath) =/= undefined.
 
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
                       Permission,
                       _AuthContext) ->
-    case mnesia:dirty_read({rabbit_user_permission,
-                            #user_vhost{username     = Username,
-                                        virtual_host = VHostPath}}) of
-        [] ->
+    case rabbit_db_user:get_user_permissions(Username, VHostPath) of
+        undefined ->
             false;
-        [#user_permission{permission = P}] ->
+        #user_permission{permission = P} ->
             PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
                              <<"">> -> <<$^, $$>>;
@@ -151,14 +144,10 @@ check_topic_access(#auth_user{username = Username},
                    #resource{virtual_host = VHostPath, name = Name, kind = topic},
                    Permission,
                    Context) ->
-    case mnesia:dirty_read({rabbit_topic_permission,
-        #topic_permission_key{user_vhost = #user_vhost{username     = Username,
-                                                       virtual_host = VHostPath},
-                                                       exchange     = Name
-                             }}) of
-        [] ->
+    case rabbit_db_user:get_topic_permissions(Username, VHostPath, Name) of
+        undefined ->
             true;
-        [#topic_permission{permission = P}] ->
+        #topic_permission{permission = P} ->
             PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
                              <<"">> -> <<$^, $$>>;
@@ -262,15 +251,7 @@ add_user_sans_validation(Username, PasswordHash, HashingAlgorithm, Tags, Limits,
 
 add_user_sans_validation_in(Username, User, ConvertedTags, Limits, ActingUser) ->
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_user, Username}) of
-                      [] ->
-                          ok = mnesia:write(rabbit_user, User, write);
-                      _ ->
-                          mnesia:abort({user_already_exists, Username})
-                  end
-          end),
+        R = rabbit_db_user:create(User),
         rabbit_log:info("Created user '~ts'", [Username]),
         rabbit_event:notify(user_created, [{name, Username},
                                            {user_who_performed_action, ActingUser}]),
@@ -297,34 +278,17 @@ add_user_sans_validation_in(Username, User, ConvertedTags, Limits, ActingUser) -
 delete_user(Username, ActingUser) ->
     rabbit_log:debug("Asked to delete user '~ts'", [Username]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:delete({rabbit_user, Username}),
-                    [ok = mnesia:delete_object(
-                            rabbit_user_permission, R, write) ||
-                        R <- mnesia:match_object(
-                               rabbit_user_permission,
-                               #user_permission{user_vhost = #user_vhost{
-                                                  username = Username,
-                                                  virtual_host = '_'},
-                                                permission = '_'},
-                               write)],
-                    UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
-                    UserTopicPermissions = UserTopicPermissionsQuery(),
-                    [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
-                    ok
-            end)),
-        rabbit_log:info("Deleted user '~ts'", [Username]),
-        rabbit_event:notify(user_deleted,
-                            [{name, Username},
-                             {user_who_performed_action, ActingUser}]),
-        R
+        case rabbit_db_user:delete(Username) of
+            true ->
+                rabbit_log:info("Deleted user '~ts'", [Username]),
+                rabbit_event:notify(user_deleted,
+                                    [{name, Username},
+                                     {user_who_performed_action, ActingUser}]),
+                ok;
+            false ->
+                ok
+        end
     catch
-        throw:{error, {no_such_user, _}} = Error ->
-            rabbit_log:warning("Failed to delete user '~ts': the user does not exist", [Username]),
-            throw(Error);
         Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to delete user '~ts': ~tp", [Username, Error]),
             erlang:raise(Class, Error, Stacktrace)
@@ -435,22 +399,22 @@ change_password_hash(Username, PasswordHash) ->
 
 
 change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
-    update_user(Username,
-                fun(User) ->
-                        internal_user:set_password_hash(User, PasswordHash, HashingAlgorithm)
-                end).
+    rabbit_db_user:update(Username,
+                          fun(User) ->
+                                  internal_user:set_password_hash(User, PasswordHash, HashingAlgorithm)
+                          end).
 
 update_user_with_hash(Username, PasswordHash, HashingAlgorithm, ConvertedTags, Limits) ->
-    update_user(Username,
-                fun(User0) ->
-                        User1 = internal_user:set_password_hash(User0,
-                                                                PasswordHash, HashingAlgorithm),
-                        User2 = case Limits of
-                                    undefined -> User1;
-                                    _         -> internal_user:update_limits(add, User1, Limits)
-                                end,
-                        internal_user:set_tags(User2, ConvertedTags)
-                end).
+    rabbit_db_user:update(Username,
+                          fun(User0) ->
+                                  User1 = internal_user:set_password_hash(User0,
+                                                                          PasswordHash, HashingAlgorithm),
+                                  User2 = case Limits of
+                                              undefined -> User1;
+                                              _         -> internal_user:update_limits(add, User1, Limits)
+                                          end,
+                                  internal_user:set_tags(User2, ConvertedTags)
+                          end).
 
 -spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
 
@@ -458,9 +422,9 @@ set_tags(Username, Tags, ActingUser) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     rabbit_log:debug("Asked to set user tags for user '~ts' to ~tp", [Username, ConvertedTags]),
     try
-        R = update_user(Username, fun(User) ->
-                                     internal_user:set_tags(User, ConvertedTags)
-                                  end),
+        R = rabbit_db_user:update(Username, fun(User) ->
+                                                    internal_user:set_tags(User, ConvertedTags)
+                                            end),
         notify_user_tags_set(Username, ConvertedTags, ActingUser),
         R
     catch
@@ -499,20 +463,15 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-             rabbit_vhost:with_user_and_vhost(
-                Username, VirtualHost,
-                fun () -> ok = mnesia:write(
-                                 rabbit_user_permission,
-                                 #user_permission{user_vhost = #user_vhost{
-                                                      username     = Username,
-                                                      virtual_host = VirtualHost},
-                                                  permission = #permission{
-                                                      configure  = ConfigurePerm,
-                                                      write      = WritePerm,
-                                                      read       = ReadPerm}},
-                                 write)
-                end)),
+        UserPermission = #user_permission{
+                            user_vhost = #user_vhost{
+                                            username     = Username,
+                                            virtual_host = VirtualHost},
+                            permission = #permission{
+                                            configure  = ConfigurePerm,
+                                            write      = WritePerm,
+                                            read       = ReadPerm}},
+        R = rabbit_db_user:set_user_permissions(UserPermission),
         rabbit_log:info("Successfully set permissions for "
                         "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                         [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
@@ -545,14 +504,7 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
     rabbit_log:debug("Asked to clear permissions for '~ts' in virtual host '~ts'",
                      [Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                    ok = mnesia:delete({rabbit_user_permission,
-                                        #user_vhost{username     = Username,
-                                                    virtual_host = VirtualHost}})
-            end)),
+        R = rabbit_db_user:clear_user_permissions(Username, VirtualHost),
         rabbit_log:info("Successfully cleared permissions for '~ts' in virtual host '~ts'",
                         [Username, VirtualHost]),
         rabbit_event:notify(permission_deleted, [{user,  Username},
@@ -574,15 +526,8 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end.
 
-
-update_user(Username, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user(
-        Username,
-        fun () ->
-                {ok, User} = lookup_user(Username),
-                ok = mnesia:write(rabbit_user, Fun(User), write)
-        end)).
+clear_permissions_for_vhost(VirtualHost, _ActingUser) ->
+    rabbit_db_user:clear_matching_user_permissions('_', VirtualHost).
 
 set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set topic permissions on exchange '~ts' for "
@@ -602,25 +547,19 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
             end
         end, [WritePerm, ReadPerm]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () -> ok = mnesia:write(
-                rabbit_topic_permission,
-                #topic_permission{
-                    topic_permission_key = #topic_permission_key{
-                        user_vhost = #user_vhost{
-                            username     = Username,
-                            virtual_host = VirtualHost},
-                        exchange = Exchange
-                    },
-                    permission = #permission{
-                            write = WritePermRegex,
-                            read  = ReadPermRegex
-                    }
-                },
-                write)
-            end)),
+        TopicPermission = #topic_permission{
+                             topic_permission_key = #topic_permission_key{
+                                                       user_vhost = #user_vhost{
+                                                                       username     = Username,
+                                                                       virtual_host = VirtualHost},
+                                                       exchange = Exchange
+                                                      },
+                             permission = #permission{
+                                             write = WritePermRegex,
+                                             read  = ReadPermRegex
+                                            }
+                            },
+        R = rabbit_db_user:set_topic_permissions(TopicPermission),
         rabbit_log:info("Successfully set topic permissions on exchange '~ts' for "
                          "'~ts' in virtual host '~ts' to '~ts', '~ts'",
                          [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
@@ -651,16 +590,7 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
     rabbit_log:debug("Asked to clear topic permissions for '~ts' in virtual host '~ts'",
                      [Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                ListFunction = match_user_vhost_topic_permission(Username, VirtualHost),
-                List = ListFunction(),
-                lists:foreach(fun(X) ->
-                                ok = mnesia:delete_object(rabbit_topic_permission, X, write)
-                              end, List)
-            end)),
+        R = rabbit_db_user:clear_topic_permissions(Username, VirtualHost, '_'),
         rabbit_log:info("Successfully cleared topic permissions for '~ts' in virtual host '~ts'",
                         [Username, VirtualHost]),
         rabbit_event:notify(topic_permission_deleted, [{user,  Username},
@@ -668,14 +598,6 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
             {user_who_performed_action, ActingUser}]),
         R
     catch
-        throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to clear topic permissions for '~ts': virtual host '~ts' does not exist",
-                               [Username, VirtualHost]),
-            throw(Error);
-        throw:{error, {no_such_user, _}} = Error ->
-            rabbit_log:warning("Failed to clear topic permissions for '~ts': the user does not exist",
-                               [Username]),
-            throw(Error);
         Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear topic permissions for '~ts' in virtual host '~ts': ~tp",
                                [Username, VirtualHost, Error]),
@@ -686,18 +608,8 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
     rabbit_log:debug("Asked to clear topic permissions on exchange '~ts' for '~ts' in virtual host '~ts'",
                      [Exchange, Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                ok = mnesia:delete(rabbit_topic_permission,
-                    #topic_permission_key{
-                        user_vhost = #user_vhost{
-                            username     = Username,
-                            virtual_host = VirtualHost},
-                        exchange = Exchange
-                    }, write)
-            end)),
+        R = rabbit_db_user:clear_topic_permissions(
+              Username, VirtualHost, Exchange),
         rabbit_log:info("Successfully cleared topic permissions on exchange '~ts' for '~ts' in virtual host '~ts'",
                         [Exchange, Username, VirtualHost]),
         rabbit_event:notify(permission_deleted, [{user,  Username},
@@ -705,19 +617,14 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
                                                  {user_who_performed_action, ActingUser}]),
         R
     catch
-        throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to clear topic permissions on exchange '~ts' for '~ts': virtual host '~ts' does not exist",
-                               [Exchange, Username, VirtualHost]),
-            throw(Error);
-        throw:{error, {no_such_user, _}} = Error ->
-            rabbit_log:warning("Failed to clear topic permissions on exchange '~ts' for '~ts': the user does not exist",
-                               [Exchange, Username]),
-            throw(Error);
         Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear topic permissions on exchange '~ts' for '~ts' in virtual host '~ts': ~tp",
                                [Exchange, Username, VirtualHost, Error]),
             erlang:raise(Class, Error, Stacktrace)
     end.
+
+clear_topic_permissions_for_vhost(VirtualHost, _ActingUser) ->
+    rabbit_db_user:clear_matching_topic_permissions('_', VirtualHost, '_').
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
 
@@ -793,7 +700,7 @@ put_user(User, Version, ActingUser) ->
 
 update_user_password(_PassedCredentialValidation = true,  Username, Password, Tags, Limits, ActingUser) ->
     %% change_password, set_tags and limits
-    rabbit_auth_backend_internal:update_user(Username, Password, Tags, Limits, ActingUser);
+    update_user(Username, Password, Tags, Limits, ActingUser);
 update_user_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _Limits, _ActingUser) ->
     %% we don't log here because
     %% rabbit_auth_backend_internal will do it
@@ -855,9 +762,9 @@ set_user_limits(Username, Definition, ActingUser) when is_map(Definition) ->
 validate_parameters_and_update_limit(Username, Term, ActingUser) ->
     case validate_user_limits(Term) of
         ok ->
-            update_user(Username, fun(User) ->
-                                      internal_user:update_limits(add, User, Term)
-                                  end),
+            rabbit_db_user:update(Username, fun(User) ->
+                                                    internal_user:update_limits(add, User, Term)
+                                            end),
             notify_limit_set(Username, ActingUser, Term);
         {errors, [{Reason, Arguments}]} ->
             {error_string, rabbit_misc:format(Reason, Arguments)}
@@ -872,14 +779,14 @@ user_limit_validation() ->
      {<<"max-channels">>, fun rabbit_parameter_validation:integer/2, optional}].
 
 clear_user_limits(Username, <<"all">>, ActingUser) ->
-    update_user(Username, fun(User) ->
-                              internal_user:clear_limits(User)
-                          end),
+    rabbit_db_user:update(Username, fun(User) ->
+                                            internal_user:clear_limits(User)
+                                    end),
     notify_limit_clear(Username, ActingUser);
 clear_user_limits(Username, LimitType, ActingUser) ->
-    update_user(Username, fun(User) ->
-                              internal_user:update_limits(remove, User, LimitType)
-                          end),
+    rabbit_db_user:update(Username, fun(User) ->
+                                            internal_user:update_limits(remove, User, LimitType)
+                                    end),
     notify_limit_clear(Username, ActingUser).
 
 tag_list_from(Tags) when is_list(Tags) ->
@@ -924,7 +831,7 @@ user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
 vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
 user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
-all_users() -> mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+all_users() -> rabbit_db_user:get_all().
 
 -spec list_users() -> [rabbit_types:infos()].
 
@@ -943,16 +850,18 @@ list_users(Ref, AggregatorPid) ->
 -spec list_permissions() -> [rabbit_types:infos()].
 
 list_permissions() ->
-    list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
+    list_permissions(
+      perms_info_keys(),
+      rabbit_db_user:check_and_match_user_permissions('_', '_')).
 
-list_permissions(Keys, QueryThunk) ->
+list_permissions(Keys, UserPermissions) ->
     [extract_user_permission_params(Keys, U) ||
-        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+        U <- UserPermissions].
 
-list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
+list_permissions(Keys, UserPermissions, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
-      rabbit_misc:execute_mnesia_transaction(QueryThunk)).
+      UserPermissions).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
@@ -962,7 +871,7 @@ filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 list_user_permissions(Username) ->
     list_permissions(
       user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
+      rabbit_db_user:check_and_match_user_permissions(Username, '_')).
 
 -spec list_user_permissions
         (rabbit_types:username(), reference(), pid()) -> 'ok'.
@@ -970,7 +879,7 @@ list_user_permissions(Username) ->
 list_user_permissions(Username, Ref, AggregatorPid) ->
     list_permissions(
       user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+      rabbit_db_user:check_and_match_user_permissions(Username, '_'),
       Ref, AggregatorPid).
 
 -spec list_vhost_permissions
@@ -979,7 +888,7 @@ list_user_permissions(Username, Ref, AggregatorPid) ->
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
-      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+      rabbit_db_user:check_and_match_user_permissions('_', VHostPath)).
 
 -spec list_vhost_permissions
         (rabbit_types:vhost(), reference(), pid()) -> 'ok'.
@@ -987,7 +896,7 @@ list_vhost_permissions(VHostPath) ->
 list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
     list_permissions(
       vhost_perms_info_keys(),
-      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
+      rabbit_db_user:check_and_match_user_permissions('_', VHostPath),
       Ref, AggregatorPid).
 
 -spec list_user_vhost_permissions
@@ -996,8 +905,7 @@ list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(
       user_vhost_perms_info_keys(),
-      rabbit_vhost:with_user_and_vhost(
-        Username, VHostPath, match_user_vhost(Username, VHostPath))).
+      rabbit_db_user:check_and_match_user_permissions(Username, VHostPath)).
 
 extract_user_permission_params(Keys, #user_permission{
                                         user_vhost =
@@ -1017,49 +925,29 @@ extract_internal_user_params(User) ->
     [{user, internal_user:get_username(User)},
      {tags, internal_user:get_tags(User)}].
 
-match_user_vhost(Username, VHostPath) ->
-    fun () -> mnesia:match_object(
-                rabbit_user_permission,
-                #user_permission{user_vhost = #user_vhost{
-                                   username     = Username,
-                                   virtual_host = VHostPath},
-                                 permission = '_'},
-                read)
-    end.
-
 list_topic_permissions() ->
-    list_topic_permissions(topic_perms_info_keys(), match_user_vhost_topic_permission('_', '_')).
+    list_topic_permissions(
+      topic_perms_info_keys(),
+      rabbit_db_user:check_and_match_topic_permissions('_', '_', '_')).
 
 list_user_topic_permissions(Username) ->
-    list_topic_permissions(user_topic_perms_info_keys(),
-        rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
+    list_topic_permissions(
+      user_topic_perms_info_keys(),
+      rabbit_db_user:check_and_match_topic_permissions(Username, '_', '_')).
 
 list_vhost_topic_permissions(VHost) ->
-    list_topic_permissions(vhost_topic_perms_info_keys(),
-        rabbit_vhost:with(VHost, match_user_vhost_topic_permission('_', VHost))).
+    list_topic_permissions(
+      vhost_topic_perms_info_keys(),
+      rabbit_db_user:check_and_match_topic_permissions('_', VHost, '_')).
 
 list_user_vhost_topic_permissions(Username, VHost) ->
-    list_topic_permissions(user_vhost_topic_perms_info_keys(),
-        rabbit_vhost:with_user_and_vhost(Username, VHost, match_user_vhost_topic_permission(Username, VHost))).
+    list_topic_permissions(
+      user_vhost_topic_perms_info_keys(),
+      rabbit_db_user:check_and_match_topic_permissions(Username, VHost, '_')).
 
-list_topic_permissions(Keys, QueryThunk) ->
+list_topic_permissions(Keys, TopicPermissions) ->
     [extract_topic_permission_params(Keys, U) ||
-        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
-
-match_user_vhost_topic_permission(Username, VHostPath) ->
-    match_user_vhost_topic_permission(Username, VHostPath, '_').
-
-match_user_vhost_topic_permission(Username, VHostPath, Exchange) ->
-    fun () -> mnesia:match_object(
-        rabbit_topic_permission,
-        #topic_permission{topic_permission_key = #topic_permission_key{
-            user_vhost = #user_vhost{
-                username     = Username,
-                virtual_host = VHostPath},
-            exchange = Exchange},
-            permission = '_'},
-        read)
-    end.
+        U <- TopicPermissions].
 
 extract_topic_permission_params(Keys, #topic_permission{
             topic_permission_key = #topic_permission_key{
