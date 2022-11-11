@@ -7,6 +7,8 @@
 
 -define(CLIENT_ID_MAXLEN, 23).
 -define(PG_SCOPE, pg_scope_rabbitmq_mqtt_clientid).
+-define(V3_GLOBAL_COUNTER_PROTO, mqtt310).
+-define(V4_GLOBAL_COUNTER_PROTO, mqtt311).
 
 -include("rabbit_mqtt_types.hrl").
 
@@ -43,7 +45,7 @@
          clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),
-         isPublisher :: boolean(),
+         has_published :: boolean(),
          ssl_login_name,
          %% Retained messages handler. See rabbit_mqtt_retainer_sup
          %% and rabbit_mqtt_retainer.

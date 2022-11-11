@@ -19,8 +19,8 @@
          local_connection_pids/0]).
 
 start(normal, []) ->
-    rabbit_global_counters:init([{protocol, mqtt301}]),
-    rabbit_global_counters:init([{protocol, mqtt311}]),
+    rabbit_global_counters:init([{protocol, ?V3_GLOBAL_COUNTER_PROTO}]),
+    rabbit_global_counters:init([{protocol, ?V4_GLOBAL_COUNTER_PROTO}]),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     case rabbit_mqtt_ff:track_client_id_in_ra() of

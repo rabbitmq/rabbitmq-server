@@ -8,10 +8,10 @@
 -compile([export_all,
           nowarn_export_all]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include("rabbit_mqtt.hrl").
 
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
                                    rpc_all/4]).
@@ -27,15 +27,16 @@ all() ->
 groups() ->
     [
      {cluster_size_1, [],
-      [global_counters_v3, global_counters_v4]
-      ++ tests()
-     },
+      [
+        {global_counters, [], [global_counters_v3, global_counters_v4]}, % separate RMQ so global counters start from 0
+        {common_tests, [], common_tests()}
+      ]},
      {cluster_size_3, [],
-      [queue_down_qos1]}
-     ++ tests()
+      [queue_down_qos1]
+      ++ common_tests()}
     ].
 
-tests() ->
+common_tests() ->
     [quorum_queue_rejects
      ,publish_to_all_queue_types_qos0
      ,publish_to_all_queue_types_qos1
@@ -57,12 +58,14 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_1 = Group, Config0) ->
+init_per_group(cluster_size_1, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 1}]);
+init_per_group(cluster_size_3 = Group, Config) ->
     init_per_group0(Group,
-                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}]));
-init_per_group(cluster_size_3 = Group, Config0) ->
-    init_per_group0(Group,
-                    rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}])).
+                    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]));
+
+init_per_group(Group, Config) when Group =:= global_counters orelse Group =:= common_tests ->
+    init_per_group0(Group,Config).
 
 init_per_group0(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
@@ -281,10 +284,12 @@ global_counters(Config, ProtoVer) ->
                                 {clientid, atom_to_binary(?FUNCTION_NAME)}]),
     {ok, _Properties} = emqtt:connect(C),
 
-    Topic = <<"test-topic">>,
-    {ok, _, [1]} = emqtt:subscribe(C, Topic, [{qos, 1}]),
-    {ok, _} = emqtt:publish(C, Topic, <<"testm">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(C, Topic, <<"testm">>, [{qos, 1}]),
+    Topic0 = <<"test-topic0">>,
+    Topic1 = <<"test-topic1">>,
+    {ok, _, [1]} = emqtt:subscribe(C, Topic0, qos1),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic1, qos1),
+    {ok, _} = emqtt:publish(C, Topic0, <<"testm">>, qos1),
+    {ok, _} = emqtt:publish(C, Topic1, <<"testm">>, qos1),
 
     ?assertEqual(#{publishers => 1,
                    consumers => 1,
@@ -296,8 +301,10 @@ global_counters(Config, ProtoVer) ->
                    messages_unroutable_returned_total => 0},
                  get_global_counters(Config, ProtoVer)),
 
-    ok = emqtt:disconnect(C),
+    {ok, _, _} = emqtt:unsubscribe(C, Topic1),
+    ?assertEqual(1, maps:get(consumers, get_global_counters(Config, ProtoVer))),
 
+    ok = emqtt:disconnect(C),
     ?assertEqual(#{publishers => 0,
                    consumers => 0,
                    messages_confirmed_total => 2,
@@ -396,10 +403,9 @@ assert_event_prop(ExpectedProps, Event)
                   end, ExpectedProps).
 
 get_global_counters(Config, v3) ->
-    get_global_counters0(Config, mqtt301);
+    get_global_counters0(Config, ?V3_GLOBAL_COUNTER_PROTO);
 get_global_counters(Config, v4) ->
-    get_global_counters0(Config, mqtt311).
-
+    get_global_counters0(Config, ?V4_GLOBAL_COUNTER_PROTO).
 get_global_counters0(Config, Proto) ->
     maps:get([{protocol, Proto}],
              rabbit_ct_broker_helpers:rpc(Config,

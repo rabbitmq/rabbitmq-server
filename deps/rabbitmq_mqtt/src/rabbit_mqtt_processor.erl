@@ -113,18 +113,11 @@ process_request(?PUBLISH,
                    variable = #mqtt_frame_publish{topic_name = Topic,
                                                   message_id = MessageId },
                    payload = Payload},
-                PState = #proc_state{isPublisher = IsPublisher,
-                                     retainer_pid = RPid,
+                PState = #proc_state{retainer_pid = RPid,
                                      amqp2mqtt_fun = Amqp2MqttFun,
                                      unacked_client_pubs = U}) ->
     counters_messages_received(PState),
-    PState1 = case IsPublisher of
-        true ->
-            PState;
-        _ ->
-            counters_publisher_created(PState),
-            PState#proc_state{isPublisher = true}
-        end,
+    PState1 = maybe_increment_publisher(PState),
     Publish = fun() ->
                       Msg = #mqtt_msg{retain     = Retain,
                                       qos        = Qos,
@@ -193,6 +186,7 @@ process_request(?SUBSCRIBE,
                                         %% for the same queue
                                         case consume(Q, QoS, S2) of
                                             {ok, S} ->
+                                                maybe_increment_consumer(S1),
                                                 {[QoS | L], S};
                                             {error, _Reason} ->
                                                 {[?SUBACK_FAILURE | L], S2}
@@ -251,7 +245,7 @@ process_request(?UNSUBSCRIBE,
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
                   variable = #mqtt_frame_suback{message_id = MessageId}},
       PState),
-    counters_consumer_deleted(PState),
+    maybe_decrement_consumer(PState0, PState),
     {ok, PState};
 
 process_request(?PINGREQ, #mqtt_frame{}, PState = #proc_state{send_fun = SendFun}) ->
@@ -985,7 +979,6 @@ consume(Q, QoS, #proc_state{
                 rabbit_mqtt_qos0_queue ->
                     %% Messages get delivered directly to our process without
                     %% explicitly calling rabbit_queue_type:consume/3.
-                    counters_consumer_created(PState0),
                     {ok, PState0};
                 _ ->
                     Spec = #{no_ack => QoS =:= ?QOS_0,
@@ -1000,7 +993,6 @@ consume(Q, QoS, #proc_state{
                              acting_user => Username},
                     case rabbit_queue_type:consume(Q, Spec, QStates0) of
                         {ok, QStates} ->
-                            counters_consumer_created(PState0),
                             PState = PState0#proc_state{queue_states = QStates},
                             {ok, PState};
                         {error, Reason} = Err ->
@@ -1606,55 +1598,75 @@ soft_limit_exceeded(#proc_state{soft_limit_exceeded = SLE}) ->
 
 %% Handle global counters
 counters_messages_received(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:messages_received(mqtt301, 1);
+    rabbit_global_counters:messages_received(?V3_GLOBAL_COUNTER_PROTO, 1);
 counters_messages_received(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
-    rabbit_global_counters:messages_received(mqtt311, 1).
+    rabbit_global_counters:messages_received(?V4_GLOBAL_COUNTER_PROTO, 1).
 
 counters_messages_received_confirm(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:messages_received_confirm(mqtt301, 1);
+    rabbit_global_counters:messages_received_confirm(?V3_GLOBAL_COUNTER_PROTO, 1);
 counters_messages_received_confirm(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
-    rabbit_global_counters:messages_received_confirm(mqtt311, 1).
+    rabbit_global_counters:messages_received_confirm(?V4_GLOBAL_COUNTER_PROTO, 1).
 
 counters_messages_confirmed(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:messages_confirmed(mqtt301, 1);
+    rabbit_global_counters:messages_confirmed(?V3_GLOBAL_COUNTER_PROTO, 1);
 counters_messages_confirmed(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
-    rabbit_global_counters:messages_confirmed(mqtt311, 1).
+    rabbit_global_counters:messages_confirmed(?V4_GLOBAL_COUNTER_PROTO, 1).
 
+%% one or multiple subscriptions from the same connection count as one consumer
+maybe_increment_consumer(PState = #proc_state{subscriptions = Sub}) when map_size(Sub) =:= 0 ->
+    counters_consumer_created(PState);
+maybe_increment_consumer(_) ->
+    ok.
 counters_consumer_created(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:consumer_created(mqtt301);
+    rabbit_global_counters:consumer_created(?V3_GLOBAL_COUNTER_PROTO);
 counters_consumer_created(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
-    rabbit_global_counters:consumer_created(mqtt311).
+    rabbit_global_counters:consumer_created(?V4_GLOBAL_COUNTER_PROTO).
 
-counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, subscriptions = Sub}) when Sub /= #{} ->
-    rabbit_global_counters:consumer_deleted(mqtt301);
-counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, subscriptions = Sub}) when Sub /= #{} ->
-    rabbit_global_counters:consumer_deleted(mqtt311);
+%% only decrement consumer count if there is no other subscription from this connection
+maybe_decrement_consumer(PState0 = #proc_state{subscriptions = Sub0},
+                         #proc_state{subscriptions = Sub})
+                         when map_size(Sub0) =/= 0, map_size(Sub) =:= 0 ->
+    counters_consumer_deleted(PState0);
+maybe_decrement_consumer(_, _) ->
+    ok.
+counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, subscriptions = Sub}) when map_size(Sub) =/= 0 ->
+    rabbit_global_counters:consumer_deleted(?V3_GLOBAL_COUNTER_PROTO);
+counters_consumer_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, subscriptions = Sub}) when map_size(Sub) =/= 0 ->
+    rabbit_global_counters:consumer_deleted(?V4_GLOBAL_COUNTER_PROTO);
 counters_consumer_deleted(_) ->
     ok.
 
+maybe_increment_publisher(PState = #proc_state{has_published = HasPublished}) ->
+    case HasPublished of
+        true ->
+            PState;
+        _ ->
+            counters_publisher_created(PState),
+            PState#proc_state{has_published = true}
+    end.
 counters_publisher_created(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:publisher_created(mqtt301);
+    rabbit_global_counters:publisher_created(?V3_GLOBAL_COUNTER_PROTO);
 counters_publisher_created(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
-    rabbit_global_counters:publisher_created(mqtt311).
+    rabbit_global_counters:publisher_created(?V4_GLOBAL_COUNTER_PROTO).
 
-counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, isPublisher = true}) ->
-    rabbit_global_counters:publisher_deleted(mqtt301);
-counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, isPublisher = true}) ->
-    rabbit_global_counters:publisher_deleted(mqtt311);
+counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V3, has_published = true}) ->
+    rabbit_global_counters:publisher_deleted(?V3_GLOBAL_COUNTER_PROTO);
+counters_publisher_deleted(#proc_state{proto_ver = ?MQTT_PROTO_V4, has_published = true}) ->
+    rabbit_global_counters:publisher_deleted(?V4_GLOBAL_COUNTER_PROTO);
 counters_publisher_deleted(_) ->
     ok.
 
 counters_messages_routed(#proc_state{proto_ver = ?MQTT_PROTO_V3}, Num) ->
-    rabbit_global_counters:messages_routed(mqtt301, Num);
+    rabbit_global_counters:messages_routed(?V3_GLOBAL_COUNTER_PROTO, Num);
 counters_messages_routed(#proc_state{proto_ver = ?MQTT_PROTO_V4}, Num) ->
-    rabbit_global_counters:messages_routed(mqtt311, Num).
+    rabbit_global_counters:messages_routed(?V4_GLOBAL_COUNTER_PROTO, Num).
 
 counters_messages_unroutable_dropped(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:messages_unroutable_dropped(mqtt301, 1);
+    rabbit_global_counters:messages_unroutable_dropped(?V3_GLOBAL_COUNTER_PROTO, 1);
 counters_messages_unroutable_dropped(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
     rabbit_global_counters:messages_unroutable_dropped(mqtt311, 1).
 
 counters_messages_unroutable_returned(#proc_state{proto_ver = ?MQTT_PROTO_V3}) ->
-    rabbit_global_counters:messages_unroutable_returned(mqtt301, 1);
+    rabbit_global_counters:messages_unroutable_returned(?V3_GLOBAL_COUNTER_PROTO, 1);
 counters_messages_unroutable_returned(#proc_state{proto_ver = ?MQTT_PROTO_V4}) ->
     rabbit_global_counters:messages_unroutable_returned(mqtt311, 1).
