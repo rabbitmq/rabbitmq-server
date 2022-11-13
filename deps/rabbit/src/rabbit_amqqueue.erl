@@ -1986,9 +1986,9 @@ maybe_clear_recoverable_node(Node, Q) ->
             %% There is a race with
             %% rabbit_mirror_queue_slave:record_synchronised/1 called
             %% by the incoming mirror node and this function, called
-            %% by the master node. If this function is executed after
+            %% by the leader node. If this function is executed after
             %% record_synchronised/1, the node is erroneously removed
-            %% from the recoverable mirrors list.
+            %% from the recoverable mirror list.
             %%
             %% We check if the mirror node's queue PID is alive. If it is
             %% the case, then this function is executed after. In this

@@ -14,7 +14,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @info_keys ~w(name durable auto_delete
-            arguments pid recoverable_slaves)a
+            arguments pid recoverable_slaves
+            recoverable_mirrors)a
+  @info_key_aliases [recoverable_mirrors: :recoverable_slaves]
 
   def info_keys(), do: @info_keys
 
@@ -39,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   end
 
   def validate(args, _opts) do
-    case InfoKeys.validate_info_keys(args, @info_keys) do
+    case InfoKeys.validate_info_keys(args, @info_keys, @info_key_aliases) do
       {:ok, _} -> :ok
       err -> err
     end
@@ -54,12 +56,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
         queue_timeout: qtimeout,
         local: local_opt
       }) do
-    info_keys = InfoKeys.prepare_info_keys(args)
+    info_keys = InfoKeys.prepare_info_keys(args, @info_key_aliases)
+    broker_keys = InfoKeys.broker_keys(info_keys)
     queue_timeout = qtimeout * 1000
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
-      local_mfa = {:rabbit_amqqueue, :emit_unresponsive_local, [vhost, info_keys, queue_timeout]}
-      all_mfa = {:rabbit_amqqueue, :emit_unresponsive, [nodes, vhost, info_keys, queue_timeout]}
+      local_mfa =
+        {:rabbit_amqqueue, :emit_unresponsive_local, [vhost, broker_keys, queue_timeout]}
+
+      all_mfa = {:rabbit_amqqueue, :emit_unresponsive, [nodes, vhost, broker_keys, queue_timeout]}
 
       {chunks, mfas} =
         case local_opt do
