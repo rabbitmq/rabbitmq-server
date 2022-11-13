@@ -9,37 +9,30 @@
 
 -behaviour(gen_event).
 
--export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_event/2, handle_call/2]).
 
 -import(rabbit_misc, [pget/2]).
 
-init([]) ->
-  {ok, []}.
+-define(STATE, []).
 
-handle_event({event, vhost_created, Info, _, _}, State) ->
-  Name = pget(name, Info),
-  rabbit_mqtt_retainer_sup:child_for_vhost(Name),
-  {ok, State};
-handle_event({event, vhost_deleted, Info, _, _}, State) ->
-  Name = pget(name, Info),
-  rabbit_mqtt_retainer_sup:delete_child(Name),
-  {ok, State};
-handle_event({event, maintenance_connections_closed, _Info, _, _}, State) ->
+init([]) ->
+    {ok, ?STATE}.
+
+handle_event({event, vhost_created, Info, _, _}, ?STATE) ->
+    Name = pget(name, Info),
+    rabbit_mqtt_retainer_sup:child_for_vhost(Name),
+    {ok, ?STATE};
+handle_event({event, vhost_deleted, Info, _, _}, ?STATE) ->
+    Name = pget(name, Info),
+    rabbit_mqtt_retainer_sup:delete_child(Name),
+    {ok, ?STATE};
+handle_event({event, maintenance_connections_closed, _Info, _, _}, ?STATE) ->
     %% we should close our connections
     {ok, NConnections} = rabbit_mqtt:close_local_client_connections("node is being put into maintenance mode"),
     rabbit_log:warning("Closed ~b local MQTT client connections", [NConnections]),
-    {ok, State};
-handle_event(_Event, State) ->
-  {ok, State}.
+    {ok, ?STATE};
+handle_event(_Event, ?STATE) ->
+    {ok, ?STATE}.
 
-handle_call(_Request, State) ->
-  {ok, State}.
-
-handle_info(_Info, State) ->
-  {ok, State}.
-
-terminate(_Reason, _State) ->
-  ok.
-
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+handle_call(_Request, ?STATE) ->
+    {ok, ok, ?STATE}.

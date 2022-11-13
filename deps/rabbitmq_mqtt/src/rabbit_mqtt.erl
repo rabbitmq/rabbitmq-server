@@ -8,6 +8,7 @@
 -module(rabbit_mqtt).
 
 -include("rabbit_mqtt.hrl").
+-include("rabbit_mqtt_frame.hrl").
 
 -behaviour(application).
 
@@ -19,8 +20,8 @@
          local_connection_pids/0]).
 
 start(normal, []) ->
-    rabbit_global_counters:init([{protocol, ?V3_GLOBAL_COUNTER_PROTO}]),
-    rabbit_global_counters:init([{protocol, ?V4_GLOBAL_COUNTER_PROTO}]),
+    rabbit_global_counters:init([{protocol, ?MQTT_PROTO_V3}]),
+    rabbit_global_counters:init([{protocol, ?MQTT_PROTO_V4}]),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     case rabbit_mqtt_ff:track_client_id_in_ra() of

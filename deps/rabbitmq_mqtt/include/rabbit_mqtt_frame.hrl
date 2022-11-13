@@ -5,9 +5,9 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(MQTT_PROTO_V3, 3).
--define(MQTT_PROTO_V4, 4).
--define(PROTOCOL_NAMES,  [{?MQTT_PROTO_V3, "MQIsdp"}, {?MQTT_PROTO_V4, "MQTT"}]).
+-define(PROTOCOL_NAMES,  [{3, "MQIsdp"}, {4, "MQTT"}]).
+-define(MQTT_PROTO_V3, mqtt310).
+-define(MQTT_PROTO_V4, mqtt311).
 
 %% frame types
 

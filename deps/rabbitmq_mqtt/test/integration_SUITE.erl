@@ -11,7 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
--include("rabbit_mqtt.hrl").
+-include("rabbit_mqtt_frame.hrl").
 
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
                                    rpc_all/4]).
@@ -44,6 +44,7 @@ common_tests() ->
      ,publish_to_all_queue_types_qos1
      ,events
      ,event_authentication_failure
+     ,internal_event_handler
     ].
 
 suite() ->
@@ -66,7 +67,9 @@ init_per_group(cluster_size_3 = Group, Config) ->
     init_per_group0(Group,
                     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]));
 
-init_per_group(Group, Config) when Group =:= global_counters orelse Group =:= common_tests ->
+init_per_group(Group, Config)
+  when Group =:= global_counters orelse
+       Group =:= common_tests ->
     init_per_group0(Group,Config).
 
 init_per_group0(Group, Config0) ->
@@ -83,6 +86,8 @@ init_per_group0(Group, Config0) ->
     ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
     Config.
 
+end_per_group(cluster_size_1, Config) ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
       Config,
@@ -276,6 +281,10 @@ event_authentication_failure(Config) ->
                       E),
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
+
+internal_event_handler(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = gen_event:call({rabbit_event, Server}, rabbit_mqtt_internal_event_handler, ignored_request, 1000).
 
 global_counters_v3(Config) ->
     global_counters(Config, v3).
@@ -482,9 +491,9 @@ assert_event_prop(ExpectedProps, Event)
                   end, ExpectedProps).
 
 get_global_counters(Config, v3) ->
-    get_global_counters0(Config, ?V3_GLOBAL_COUNTER_PROTO);
+    get_global_counters0(Config, ?MQTT_PROTO_V3);
 get_global_counters(Config, v4) ->
-    get_global_counters0(Config, ?V4_GLOBAL_COUNTER_PROTO).
+    get_global_counters0(Config, ?MQTT_PROTO_V4).
 get_global_counters0(Config, Proto) ->
     maps:get([{protocol, Proto}],
              rabbit_ct_broker_helpers:rpc(Config,
