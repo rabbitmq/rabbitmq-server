@@ -44,10 +44,9 @@ the target node was not running, or
 .Nm
 could not authenticate to
 the target node successfully.
+
 To learn more, see the
-.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
-and
-.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
+.Lk https://rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
 .\" ------------------------------------------------------------------------------------------------
 .Sh OPTIONS
 .\" ------------------------------------------------------------------------------------------------
@@ -1432,7 +1431,7 @@ each queue of the virtual host named
 .\" ------------------------------------------------------------------
 .It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar milliseconds Oc Oo Ar queueinfoitem ... Oc Op Fl -no-table-headers
 .Pp
-Tests queues to respond within timeout. Lists those which did not respond.
+Tests queue leader replicas to respond within the given timeout. Lists those which did not respond in time.
 .Pp
 Displayed queues can be filtered by their status or location using one
 of the following mutually exclusive options:
@@ -1455,9 +1454,9 @@ can take any value from the list that follows:
 .It Cm name
 The name of the queue with non\-ASCII characters escaped as in C.
 .It Cm durable
-Whether or not the queue survives server restarts.
+Whether or not the queue should survive server restarts.
 .It Cm auto_delete
-Whether the queue will be deleted automatically when no longer used.
+Whether the queue will be deleted automatically when all of its explicit bindings are deleted.
 .It Cm arguments
 Queue arguments.
 .It Cm policy
@@ -1465,7 +1464,7 @@ Effective policy name for the queue.
 .It Cm pid
 Erlang process identifier of the leader replica.
 .It Cm recoverable_mirrors
-Erlang process identifiers of the mirror replicas that did respond in time.
+Erlang process identifiers of the mirror replicas that are considered reachable (available).
 .It Cm type
 Queue type, one of: quorum, stream, classic.
 .El
