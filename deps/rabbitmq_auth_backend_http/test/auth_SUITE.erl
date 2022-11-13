@@ -38,8 +38,9 @@ end_per_suite(_Config) ->
 
 grants_access_to_user(Config) ->
     #{username := U, password := P, tags := T} = ?config(allowed_user, Config),
-    ?assertMatch({ok, #auth_user{username = U, tags = T}},
-		         rabbit_auth_backend_http:user_login_authentication(U, [{password, P}])).
+    {ok, User} = rabbit_auth_backend_http:user_login_authentication(U, [{password, P}]),
+    ?assertMatch({U, T, none},
+                 {User#auth_user.username, User#auth_user.tags, (User#auth_user.impl)()}).
 
 denies_access_to_user(Config) ->
     #{username := U, password := P} = ?config(denied_user, Config),

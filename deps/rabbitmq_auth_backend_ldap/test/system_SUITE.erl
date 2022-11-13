@@ -457,10 +457,10 @@ topic_authorisation_consumption(Config) ->
 topic_authorisation_consumption1(Config) ->
     %% we can't use the LDAP backend record here, falling back to simple tuples
     Alice = {auth_user,<<"Alice">>, [monitor],
-             {impl,"cn=Alice,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+             fun() -> {impl,"cn=Alice,ou=People,dc=rabbitmq,dc=com",<<"password">>} end
     },
     Bob = {auth_user,<<"Bob">>, [monitor],
-           {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+           fun() -> {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>} end
     },
     Resource = #resource{virtual_host = <<"/">>, name = <<"amq.topic">>, kind = topic},
     Context = #{routing_key  => <<"a.b">>,
@@ -946,4 +946,3 @@ expand_options(As, Bs) ->
                             false -> [A | R]
                         end
                 end, Bs, As).
-
