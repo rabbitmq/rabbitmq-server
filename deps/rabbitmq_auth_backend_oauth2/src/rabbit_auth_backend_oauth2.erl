@@ -74,29 +74,29 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{impl = DecodedToken},
+check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
-    with_decoded_token(DecodedToken,
+    with_decoded_token(DecodedTokenFun(),
         fun() ->
-            Scopes      = get_scopes(DecodedToken),
+            Scopes      = get_scopes(DecodedTokenFun()),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
-check_resource_access(#auth_user{impl = DecodedToken},
+check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
-    with_decoded_token(DecodedToken,
+    with_decoded_token(DecodedTokenFun(),
         fun() ->
-            Scopes = get_scopes(DecodedToken),
+            Scopes = get_scopes(DecodedTokenFun()),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
-check_topic_access(#auth_user{impl = DecodedToken},
+check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
-    with_decoded_token(DecodedToken,
+    with_decoded_token(DecodedTokenFun(),
         fun() ->
-            Scopes = get_scopes(DecodedToken),
+            Scopes = get_scopes(DecodedTokenFun()),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
@@ -114,7 +114,7 @@ update_state(AuthUser, NewToken) ->
           Tags = tags_from(DecodedToken),
 
           {ok, AuthUser#auth_user{tags = Tags,
-                                  impl = DecodedToken}}
+                                  impl = fun() -> DecodedToken end}}
   end.
 
 %%--------------------------------------------------------------------
@@ -136,7 +136,7 @@ authenticate(Username0, AuthProps0) ->
 
                         {ok, #auth_user{username = Username,
                                         tags = Tags,
-                                        impl = DecodedToken}}
+                                        impl = fun() -> DecodedToken end}}
                    end,
             case with_decoded_token(DecodedToken, Func) of
                 {error, Err} ->
