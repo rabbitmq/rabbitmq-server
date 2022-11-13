@@ -111,7 +111,7 @@ internal_check_user_login(Username, Fun) ->
             case Fun(User) of
                 true -> {ok, #auth_user{username = Username,
                                         tags     = Tags,
-                                        impl     = none}};
+                                        impl     = fun() -> none end}};
                 _    -> Refused
             end;
         {error, not_found} ->
