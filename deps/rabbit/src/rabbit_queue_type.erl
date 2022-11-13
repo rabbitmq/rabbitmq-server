@@ -58,7 +58,7 @@
 
 -define(STATE, ?MODULE).
 
-%% Recoverable slaves shouldn't really be a generic one, but let's keep it here until
+%% Recoverable mirrors shouldn't really be a generic one, but let's keep it here until
 %% mirrored queues are deprecated.
 -define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, recoverable_slaves, type, state]).
 
