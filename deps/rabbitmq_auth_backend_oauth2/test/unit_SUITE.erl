@@ -230,7 +230,7 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
 
 test_post_process_payload_rich_auth_request(_) ->
 
-  Pairs = [  
+  Pairs = [
   { "should merge all permissions for the current cluster",
     [
       #{<<"type">> => ?RESOURCE_SERVER_TYPE,
@@ -259,6 +259,24 @@ test_post_process_payload_rich_auth_request(_) ->
       }
     ],
     [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should filter out those permisions whose type is the empty string",
+    [
+      #{<<"type">> => <<>>,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [ ]
+  },
+  { "should filter out those permisions with empty string action",
+    [
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => <<>>
+      }
+    ],
+    [ ]
   },
   { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
@@ -292,9 +310,13 @@ test_post_process_payload_rich_auth_request(_) ->
   { "should ignore permissions without actions",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbit*">>],
+        <<"actions">> => [<<"read">>]
       }
-    ]
-    ,[]
+    ],
+    [<<"rabbitmq.read:*/*/*">>]
   },
   { "should ignore permissions without locations",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
@@ -966,6 +988,13 @@ test_username_from(_) ->
          },
         <<"rabbit_user">>  % We expect username to be this one
       },
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS when there are no preferred_username_claims">>,  % Comment
+        <<>>,  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"sub">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
       { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS 'client_id' ">>,  % Comment
         [ ],  % Given this configure preferred_username_claims
         #{ % When we test this Token
@@ -974,9 +1003,10 @@ test_username_from(_) ->
         <<"rabbit_user">>  % We expect username to be this one
       },
       { <<"resolve username from 1st claim in the array of configured claims ">>,
-        [<<"user_name">>],
+        [<<"user_name">>, <<"email">>],
         #{
-          <<"user_name">> => <<"rabbit_user">>
+          <<"user_name">> => <<"rabbit_user">>,
+          <<"email">> => <<"rabbit_user@">>
          },
         <<"rabbit_user">>
       },
