@@ -1194,6 +1194,8 @@ send_puback(MsgId, PState = #proc_state{send_fun = SendFun,
 serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = Sock}) ->
     %%TODO Test sending large frames at high speed:
     %% Will we need garbage collection as done in rabbit_writer:maybe_gc_large_msg/1?
+    %%TODO batch to fill up MTU if there are messages in the Erlang mailbox?
+    %% Check rabbit_writer.erl
     Data = rabbit_mqtt_frame:serialise(Frame, ProtoVer),
     try rabbit_net:port_command(Sock, Data)
     catch _:Error ->

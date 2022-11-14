@@ -11,21 +11,28 @@
 
 all() ->
     [
-        {group, non_parallel_tests}
+     {group, dets},
+     {group, ets},
+     {group, noop}
     ].
 
 groups() ->
     [
-        {non_parallel_tests, [], [
-            coerce_configuration_data,
-            should_translate_amqp2mqtt_on_publish,
-            should_translate_amqp2mqtt_on_retention,
-            should_translate_amqp2mqtt_on_retention_search
-        ]}
+     {dets, [], tests()},
+     {ets, [], tests()},
+     {noop, [], [does_not_retain]}
+    ].
+
+tests() ->
+    [
+     coerce_configuration_data,
+     should_translate_amqp2mqtt_on_publish,
+     should_translate_amqp2mqtt_on_retention,
+     should_translate_amqp2mqtt_on_retention_search
     ].
 
 suite() ->
-    [{timetrap, {seconds, 600}}].
+    [{timetrap, {minutes, 2}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -33,36 +40,38 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-            tcp_port_mqtt_tls_extra]}
-    ]),
-    % see https://github.com/rabbitmq/rabbitmq-mqtt/issues/86
-    RabbitConfig = {rabbit, [
-        {default_user, "guest"},
-        {default_pass, "guest"},
-        {default_vhost, "/"},
-        {default_permissions, [".*", ".*", ".*"]}
-    ]},
-    rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(RabbitConfig, Conf) end ] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()).
-
-merge_app_env(MqttConfig, Config) ->
-    rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
+    Config.
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-        rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) ->
     Config.
+
+init_per_group(Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(
+               Config0,
+               [
+                {rmq_nodename_suffix, Group},
+                {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
+                                       tcp_port_mqtt_tls_extra]}
+               ]),
+    Mod = list_to_atom("rabbit_mqtt_retained_msg_store_" ++ atom_to_list(Group)),
+    Env = [{rabbitmq_mqtt, [{retained_message_store, Mod}]},
+           {rabbit, [
+                     {default_user, "guest"},
+                     {default_pass, "guest"},
+                     {default_vhost, "/"},
+                     {default_permissions, [".*", ".*", ".*"]}
+                    ]}],
+    rabbit_ct_helpers:run_setup_steps(
+      Config,
+      [fun(Conf) -> rabbit_ct_helpers:merge_app_env(Conf, Env) end] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(
+      Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -124,6 +133,19 @@ should_translate_amqp2mqtt_on_retention_search(Config) ->
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
     expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = emqtt:disconnect(C).
+
+does_not_retain(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    C = connect(P),
+    ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
+    {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
+    receive
+        Unexpected ->
+            ct:fail("Unexpected message: ~p", [Unexpected])
+    after 1000 ->
+              ok
+    end,
     ok = emqtt:disconnect(C).
 
 connect(Port) ->
