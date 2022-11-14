@@ -423,15 +423,14 @@ handle_event({osiris_written, From, _WriterId, Corrs},
                           end, [], maps:with(Corrs, Correlation0))),
 
     Correlation = maps:without(Corrs, Correlation0),
-    Slow = case maps:size(Correlation) < SftLmt of
-               true when Slow0 ->
-                   credit_flow:unblock(Name),
-                   false;
-               _ ->
-                   Slow0
-           end,
+    {Slow, Actions} = case maps:size(Correlation) < SftLmt of
+                          true when Slow0 ->
+                              {false, [{unblock, Name}]};
+                          _ ->
+                              {Slow0, []}
+                      end,
     {ok, State#stream_client{correlation = Correlation,
-                             slow = Slow}, [{settled, From, MsgIds}]};
+                             slow = Slow}, [{settled, From, MsgIds} | Actions]};
 handle_event({osiris_offset, _From, _Offs},
              State = #stream_client{local_pid = LocalPid,
                                     readers = Readers0,

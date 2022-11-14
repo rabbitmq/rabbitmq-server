@@ -33,8 +33,12 @@ groups() ->
        {common_tests, [], common_tests()}
       ]},
      {cluster_size_3, [],
-      [queue_down_qos1]
-      ++ common_tests()}
+      [queue_down_qos1] ++
+      common_tests() ++
+      [flow_classic_mirrored_queue,
+       flow_quorum_queue,
+       flow_stream]
+     }
     ].
 
 common_tests() ->
@@ -140,13 +144,6 @@ publish_to_all_queue_types_qos1(Config) ->
     publish_to_all_queue_types(Config, qos1).
 
 publish_to_all_queue_types(Config, QoS) ->
-    %% Give only 1/10 of the default credits.
-    %% We want to test whether sending many messages work when MQTT connection sometimes gets blocked.
-    Result = rpc_all(Config, application, set_env, [rabbit, credit_flow_default_credit, {40, 20}]),
-    Result = rpc_all(Config, application, set_env, [rabbit, quorum_commands_soft_limit, 3]),
-    Result = rpc_all(Config, application, set_env, [rabbit, stream_messages_soft_limit, 25]),
-    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
-
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     CQ = <<"classic-queue">>,
@@ -202,7 +199,54 @@ publish_to_all_queue_types(Config, QoS) ->
     delete_queue(Ch, [CQ, CMQ, QQ, SQ]),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),
     ok = emqtt:disconnect(C),
-    ?awaitMatch([], all_connection_pids(Config), 10_000, 1000),
+    ?awaitMatch([],
+                all_connection_pids(Config), 10_000, 1000),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+flow_classic_mirrored_queue(Config) ->
+    QueueName = <<"flow">>,
+    ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0, QueueName, <<"all">>),
+    flow(Config, [rabbit, credit_flow_default_credit, {2, 1}], <<"classic">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, QueueName).
+
+flow_quorum_queue(Config) ->
+    flow(Config, [rabbit, quorum_commands_soft_limit, 1], <<"quorum">>).
+
+flow_stream(Config) ->
+    flow(Config, [rabbit, stream_messages_soft_limit, 1], <<"stream">>).
+
+flow(Config, Env, QueueType)
+  when is_list(Env), is_binary(QueueType) ->
+    Result = rpc_all(Config, application, set_env, Env),
+    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
+
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QueueName = Topic = atom_to_binary(?FUNCTION_NAME),
+    declare_queue(Ch, QueueName, [{<<"x-queue-type">>, longstr, QueueType}]),
+    bind(Ch, QueueName, Topic),
+
+    NumMsgs = 1000,
+    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 600},
+                                              {max_inflight, NumMsgs}]),
+    TestPid = self(),
+    lists:foreach(
+      fun(N) ->
+              %% Publish async all messages at once to trigger flow control
+              ok = emqtt:publish_async(C, Topic, integer_to_binary(N), qos1,
+                                       {fun(N0, {ok, #{reason_code_name := success}}) ->
+                                                TestPid ! {self(), N0}
+                                        end, [N]})
+      end, lists:seq(1, NumMsgs)),
+    ok = await_confirms(C, 1, NumMsgs),
+    eventually(?_assertEqual(
+                  [[integer_to_binary(NumMsgs)]],
+                  rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"])
+                 ), 1000, 10),
+
+    delete_queue(Ch, QueueName),
+    ok = emqtt:disconnect(C),
+    ?awaitMatch([],
+                all_connection_pids(Config), 10_000, 1000),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 events(Config) ->
