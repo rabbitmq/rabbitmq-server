@@ -562,9 +562,6 @@ username_from(PreferredUsernameClaims, DecodedToken) ->
 
 append_or_return_default(ListOrBinary, Default) ->
   case ListOrBinary of
-    undefined  -> Default;
-    <<>> -> Default;
-    [] -> Default;
     VarList when is_list(VarList) -> VarList ++ Default;
     VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
     _ -> Default
