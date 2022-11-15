@@ -12,7 +12,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
--import(rabbit_ct_helpers, [consistently/1]).
+-import(rabbit_ct_helpers, [consistently/1,
+                            eventually/3]).
 -import(util, [all_connection_pids/1,
                publish_qos1_timeout/4]).
 
@@ -192,33 +193,32 @@ keepalive(Config) ->
     KeepaliveSecs = 1,
     KeepaliveMs = timer:seconds(KeepaliveSecs),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    ProtoVer = v4,
     {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
                                 {host, "localhost"},
                                 {port, P},
                                 {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}
+                                {proto_ver, ProtoVer}
                                ]),
     {ok, _Properties} = emqtt:connect(C),
+    ok = emqtt:publish(C, <<"ignored">>, <<"msg">>),
 
     %% Connection should stay up when client sends PING requests.
     timer:sleep(KeepaliveMs),
+    ?assertMatch(#{publishers := 1},
+                 util:get_global_counters(Config, ProtoVer)),
 
     %% Mock the server socket to not have received any bytes.
     rabbit_ct_broker_helpers:setup_meck(Config),
     Mod = rabbit_net,
     ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
     ok = rpc(Config, 0, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]} ]),
-
     process_flag(trap_exit, true),
-    receive
-        {'EXIT', C, {shutdown, tcp_closed}} ->
-            ok
-    after
-        ceil(3 * 0.75 * KeepaliveMs) ->
-            ct:fail("server did not respect keepalive")
-    end,
-    %%TODO Introduce Prometheus counter for number of connections closed
-    %% due to keepalive timeout and assert here that this counter is 1.
+
+    %% We expect the server to respect the keepalive closing the connection.
+    eventually(?_assertMatch(#{publishers := 0},
+                             util:get_global_counters(Config, ProtoVer)),
+               KeepaliveMs, 3 * KeepaliveSecs),
 
     true = rpc(Config, 0, meck, validate, [Mod]),
     ok = rpc(Config, 0, meck, unload, [Mod]).
@@ -234,6 +234,7 @@ keepalive_turned_off(Config) ->
                                 {proto_ver, v4}
                                ]),
     {ok, _Properties} = emqtt:connect(C),
+    ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
 
     %% Mock the server socket to not have received any bytes.
     rabbit_ct_broker_helpers:setup_meck(Config),

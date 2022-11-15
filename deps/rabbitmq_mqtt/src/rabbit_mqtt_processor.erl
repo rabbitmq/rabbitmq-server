@@ -1208,14 +1208,27 @@ serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
     rabbit_mqtt_frame:serialise(Frame, ProtoVer).
 
 terminate(PState, ConnName) ->
-    rabbit_event:notify(connection_closed, [{name, ConnName},
-                                            {node, node()},
-                                            {pid, self()}]),
+    Infos = [{name, ConnName},
+             {node, node()},
+             {pid, self()},
+             {disconnected_at, os:system_time(milli_seconds)}
+            ] ++ additional_connection_closed_info(PState),
+    rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
     maybe_unregister_client(PState),
     maybe_decrement_consumer(PState),
     maybe_decrement_publisher(PState),
     maybe_delete_mqtt_qos0_queue(PState).
+
+additional_connection_closed_info(
+  #proc_state{info = #info{proto_human = {ProtoName, ProtoVsn}},
+              auth_state = #auth_state{vhost = VHost,
+                                       username = Username}}) ->
+    [{protocol, {ProtoName, binary_to_list(ProtoVsn)}},
+     {vhost, VHost},
+     {user, Username}];
+additional_connection_closed_info(_) ->
+    [].
 
 maybe_unregister_client(#proc_state{client_id = ClientId})
   when ClientId =/= undefined ->

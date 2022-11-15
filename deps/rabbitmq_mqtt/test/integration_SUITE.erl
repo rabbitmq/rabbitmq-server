@@ -11,12 +11,12 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
--include("rabbit_mqtt_frame.hrl").
 
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
                                    rpc_all/4]).
 -import(rabbit_ct_helpers, [eventually/3]).
--import(util, [all_connection_pids/1]).
+-import(util, [all_connection_pids/1,
+               get_global_counters/2]).
 
 all() ->
     [
@@ -263,7 +263,13 @@ events(Config) ->
                        {connection_type, network}],
                       E0),
     assert_event_type(connection_created, E1),
-    assert_event_prop({protocol, {'MQTT', "3.1.1"}}, E1),
+    [ConnectionPid] = all_connection_pids(Config),
+    ExpectedConnectionProps = [{protocol, {'MQTT', "3.1.1"}},
+                               {node, Server},
+                               {vhost, <<"/">>},
+                               {user, <<"guest">>},
+                               {pid, ConnectionPid}],
+    assert_event_prop(ExpectedConnectionProps, E1),
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
 
@@ -296,6 +302,7 @@ events(Config) ->
 
     [E5, E6] = get_events(Server),
     assert_event_type(connection_closed, E5),
+    assert_event_prop(ExpectedConnectionProps, E5),
     assert_event_type(queue_deleted, E6),
     assert_event_prop({name, QueueName}, E6),
 
@@ -533,15 +540,3 @@ assert_event_prop(ExpectedProps, Event)
     lists:foreach(fun(P) ->
                           assert_event_prop(P, Event)
                   end, ExpectedProps).
-
-get_global_counters(Config, v3) ->
-    get_global_counters0(Config, ?MQTT_PROTO_V3);
-get_global_counters(Config, v4) ->
-    get_global_counters0(Config, ?MQTT_PROTO_V4).
-get_global_counters0(Config, Proto) ->
-    maps:get([{protocol, Proto}],
-             rabbit_ct_broker_helpers:rpc(Config,
-                                          0,
-                                          rabbit_global_counters,
-                                          overview,
-                                          [])).

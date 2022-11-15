@@ -1,8 +1,11 @@
 -module(util).
 
+-include("rabbit_mqtt_frame.hrl").
+
 -export([all_connection_pids/1,
          publish_qos1_timeout/4,
-         sync_publish_result/3]).
+         sync_publish_result/3,
+         get_global_counters/2]).
 
 all_connection_pids(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -31,3 +34,15 @@ publish_qos1_timeout(Client, Topic, Payload, Timeout) ->
 
 sync_publish_result(Caller, Mref, Result) ->
     erlang:send(Caller, {Mref, Result}).
+
+get_global_counters(Config, v3) ->
+    get_global_counters(Config, ?MQTT_PROTO_V3);
+get_global_counters(Config, v4) ->
+    get_global_counters(Config, ?MQTT_PROTO_V4);
+get_global_counters(Config, Proto) ->
+    maps:get([{protocol, Proto}],
+             rabbit_ct_broker_helpers:rpc(Config,
+                                          0,
+                                          rabbit_global_counters,
+                                          overview,
+                                          [])).

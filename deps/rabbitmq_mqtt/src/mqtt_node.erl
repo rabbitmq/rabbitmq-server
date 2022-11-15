@@ -43,7 +43,6 @@ start(Delay, AttemptsLeft) ->
           undefined ->
               case Nodes of
                   [] ->
-                      %%TODO use global lock instead
                       %% Since cluster members are not known ahead of time and initial boot can be happening in parallel,
                       %% we wait and check a few times (up to a few seconds) to see if we can discover any peers to
                       %% join before forming a cluster. This reduces the probability of N independent clusters being
