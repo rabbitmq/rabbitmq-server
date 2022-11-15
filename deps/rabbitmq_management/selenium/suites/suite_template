@@ -7,6 +7,7 @@ SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:103.0
 UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
 #UAA_DOCKER_IMAGE=cloudfoundry/uaa:76.0.0
 KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:18.0.0
+HTTPD_DOCKER_IMAGE=httpd:latest
 
 init_suite() {
   TEST_DIR=${SCRIPT}/../test
@@ -197,24 +198,57 @@ start_fakeportal() {
     -v ${FAKE_PORTAL_DIR}:/code/fakeportal \
     mocha-test run fakeportal
 
-  wait_for_fakeportal
+  wait_for_url http://fakeportal:3000/
 }
-wait_for_fakeportal() {
+
+wait_for_url() {
+  url=$1
   max_retry=10
   counter=0
-  until (docker run --net rabbitmq_net --rm curlimages/curl:7.85.0 -L -f -v http://fakeportal:3000/ >/dev/null 2>&1)
-  echo "Waiting for fakeportal to start"
+  until (docker run --net rabbitmq_net --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
+  echo "Waiting for $url to start"
   do
     sleep 5
     [[ counter -eq $max_retry ]] && echo "Failed!" && exit 1
     echo "Trying again. Try #$counter"
     ((counter++))
   done
-  echo "fakeportal is ready"
+  echo "$url is ready"
 }
+
+init_proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}
+  HTTPD_URL=http://proxy:8080
+
+  echo "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  echo "> HTTPD_URL: ${HTTPD_URL}"
+  echo "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
+}
+start_proxy() {
+  echo "Starting proxy ..."
+
+  init_proxy
+  kill_container_if_exist proxy
+
+  docker run \
+    --detach \
+    --name proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 8080:8080 \
+    --mount "type=bind,source=${HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+    wait_for_url $HTTPD_URL
+}
+
 
 test () {
   kill_container_if_exist mocha
+  echo "Running tests with env variables:"
+  echo "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  echo "> UAA_URL: ${UAA_URL}"
+  echo "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+
   docker run \
     --rm \
     --name mocha \
@@ -245,7 +279,6 @@ run() {
   echo "Set up ..."
   [[ $(type -t _setup) == function ]] &&  _setup
 
-  echo "Running test cases ..."
   test
   TEST_RESULT=$?
 
