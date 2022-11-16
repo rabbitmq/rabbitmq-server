@@ -508,7 +508,7 @@ get_queue(QoS, PState) ->
 
 queue_name(QoS, #proc_state{client_id = ClientId,
                             auth_state = #auth_state{vhost = VHost}}) ->
-    QNameBin = rabbit_mqtt_util:queue_name(ClientId, QoS),
+    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
 
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
@@ -896,7 +896,7 @@ ensure_queue(QoS, #proc_state{
         {ok, Q} ->
             {ok, Q};
         {error, not_found} ->
-            QNameBin = rabbit_mqtt_util:queue_name(ClientId, QoS),
+            QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
             QName = rabbit_misc:r(VHost, queue, QNameBin),
             %% configure access to queue required for queue.declare
             case check_resource_access(User, QName, configure, AuthzCtx) of
@@ -992,15 +992,19 @@ consume(Q, QoS, #proc_state{
                              args => [],
                              ok_msg => undefined,
                              acting_user => Username},
-                    case rabbit_queue_type:consume(Q, Spec, QStates0) of
-                        {ok, QStates} ->
-                            PState = PState0#proc_state{queue_states = QStates},
-                            {ok, PState};
-                        {error, Reason} = Err ->
-                            rabbit_log:error("Failed to consume from ~s: ~p",
-                                             [rabbit_misc:rs(QName), Reason]),
-                            Err
-                    end
+                    rabbit_amqqueue:with(
+                      QName,
+                      fun(Q1) ->
+                              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+                                  {ok, QStates} ->
+                                      PState = PState0#proc_state{queue_states = QStates},
+                                      {ok, PState};
+                                  {error, Reason} = Err ->
+                                      rabbit_log:error("Failed to consume from ~s: ~p",
+                                                       [rabbit_misc:rs(QName), Reason]),
+                                      Err
+                              end
+                      end)
             end;
         {error, access_refused} = Err ->
             Err
@@ -1195,7 +1199,7 @@ serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = S
     %%TODO Test sending large frames at high speed:
     %% Will we need garbage collection as done in rabbit_writer:maybe_gc_large_msg/1?
     %%TODO batch to fill up MTU if there are messages in the Erlang mailbox?
-    %% Check rabbit_writer.erl
+    %% Check rabbit_writer:maybe_flush/1
     Data = rabbit_mqtt_frame:serialise(Frame, ProtoVer),
     try rabbit_net:port_command(Sock, Data)
     catch _:Error ->
@@ -1303,15 +1307,20 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
     credit_flow:peer_down(QPid),
     case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates1, Actions} ->
-            PState = PState0#proc_state{queue_states = QStates1},
-            handle_queue_actions(Actions, PState);
+            PState1 = PState0#proc_state{queue_states = QStates1},
+            try handle_queue_actions(Actions, PState1) of
+                PState ->
+                    {ok, PState}
+            catch throw:consuming_queue_down ->
+                      {error, consuming_queue_down}
+            end;
         {eol, QStates1, QRef} ->
             {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QRef, U0),
             QStates = rabbit_queue_type:remove(QRef, QStates1),
             PState = PState0#proc_state{queue_states = QStates,
                                         unacked_client_pubs = U},
             send_puback(ConfirmMsgIds, PState),
-            PState
+            {ok, PState}
     end.
 
 handle_queue_event({queue_event, rabbit_mqtt_qos0_queue, Msg}, PState0) ->
@@ -1361,13 +1370,33 @@ handle_queue_actions(Actions, #proc_state{} = PState0) ->
               S#proc_state{soft_limit_exceeded = sets:add_element(QName, SLE)};
           ({unblock, QName}, S = #proc_state{soft_limit_exceeded = SLE}) ->
               S#proc_state{soft_limit_exceeded = sets:del_element(QName, SLE)};
-          ({queue_down, _QName}, S) ->
-              %% classic queue is down, but not deleted
-              %% TODO if we were consuming from that queue:
-              %% remove subscription? recover if we support classic mirrored queues? see channel
-              % State1 = handle_consuming_queue_down_or_eol(QRef, State0),
-              S
+          ({queue_down, QName}, S) ->
+              handle_queue_down(QName, S)
       end, PState0, Actions).
+
+handle_queue_down(QName, PState0 = #proc_state{client_id = ClientId}) ->
+    %% Classic queue is down.
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            case rabbit_mqtt_util:qos_from_queue_name(QName, ClientId) of
+                no_consuming_queue ->
+                    PState0;
+                QoS ->
+                    %% Consuming classic queue is down.
+                    %% Let's try to re-consume: HA failover for classic mirrored queues.
+                    case consume(Q, QoS, PState0) of
+                        {ok, PState} ->
+                            PState;
+                        {error, Reason} ->
+                            rabbit_log:info("Terminating MQTT connection because consuming ~s "
+                                            "is down and could not re-consume: ~p",
+                                            [rabbit_misc:rs(QName), Reason]),
+                            throw(consuming_queue_down)
+                    end
+            end;
+        {error, not_found} ->
+            PState0
+    end.
 
 deliver_to_client(Msgs, Ack, PState) ->
     lists:foldl(fun(Msg, S) ->

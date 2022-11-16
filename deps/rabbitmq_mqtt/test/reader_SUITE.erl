@@ -15,7 +15,8 @@
 -import(rabbit_ct_helpers, [consistently/1,
                             eventually/3]).
 -import(util, [all_connection_pids/1,
-               publish_qos1_timeout/4]).
+               publish_qos1_timeout/4,
+               expect_publishes/2]).
 
 all() ->
     [
@@ -367,16 +368,6 @@ classic_clean_session_true(Config) ->
 
 classic_clean_session_false(Config) ->
     validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
-
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload|Rest]) ->
-    receive
-        {publish, #{topic := Topic,
-                    payload := Payload}} ->
-            expect_publishes(Topic, Rest)
-    after 5000 ->
-              throw({publish_not_received, Payload})
-    end.
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).

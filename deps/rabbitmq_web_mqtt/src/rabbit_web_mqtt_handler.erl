@@ -36,6 +36,11 @@
           keepalive :: rabbit_mqtt_keepalive:state()
          }).
 
+%% Close frame status codes as defined in https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
+-define(CLOSE_NORMAL, 1000).
+-define(CLOSE_PROTOCOL_ERROR, 1002).
+-define(CLOSE_INCONSISTENT_MSG_TYPE, 1007).
+
 %%TODO call rabbit_networking:register_non_amqp_connection/1 so that we are notified
 %% when need to force load the 'connection_created' event for the management plugin, see
 %% https://github.com/rabbitmq/rabbitmq-management-agent/issues/58
@@ -184,7 +189,7 @@ websocket_info({keepalive, Req}, State = #state{keepalive = KState0,
         {error, timeout} ->
             rabbit_log_connection:error("keepalive timeout in Web MQTT connection ~p",
                                         [ConnName]),
-            stop(State, 1000, <<"MQTT keepalive timeout">>);
+            stop(State, ?CLOSE_NORMAL, <<"MQTT keepalive timeout">>);
         {error, Reason} ->
             rabbit_log_connection:error("keepalive error in Web MQTT connection ~p: ~p",
                                         [ConnName, Reason]),
@@ -198,8 +203,15 @@ websocket_info({ra_event, _From, Evt},
     {[], State#state{proc_state = PState}, hibernate};
 websocket_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
                State = #state{proc_state = PState0}) ->
-    PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
-    handle_credits(State#state{proc_state = PState});
+    case rabbit_mqtt_processor:handle_down(Evt, PState0) of
+        {ok, PState} ->
+            handle_credits(State#state{proc_state = PState});
+        {error, Reason} ->
+            stop(State, ?CLOSE_NORMAL, Reason)
+    end;
+websocket_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid),
+    {[], State, hibernate};
 websocket_info(Msg, State) ->
     rabbit_log_connection:warning("Web MQTT: unexpected message ~p", [Msg]),
     {[], State, hibernate}.
@@ -254,7 +266,9 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                 {error, Reason, _} ->
                     rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
                         [Reason, ConnStr]),
-                    stop(State, 1002, Reason);
+                    stop(State, ?CLOSE_PROTOCOL_ERROR, Reason);
+                {error, Error} ->
+                    stop_with_framing_error(State, Error, ConnStr);
                 {stop, _} ->
                     stop(State)
             end;
@@ -266,10 +280,10 @@ stop_with_framing_error(State, Error0, ConnStr) ->
     Error1 = rabbit_misc:format("~tp", [Error0]),
     rabbit_log_connection:error("MQTT detected framing error '~ts' for connection ~tp",
                                 [Error1, ConnStr]),
-    stop(State, 1007, Error1).
+    stop(State, ?CLOSE_INCONSISTENT_MSG_TYPE, Error1).
 
 stop(State) ->
-    stop(State, 1000, "MQTT died").
+    stop(State, ?CLOSE_NORMAL, "MQTT died").
 
 stop(State, CloseCode, Error0) ->
     Error = rabbit_data_coercion:to_binary(Error0),

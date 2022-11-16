@@ -183,7 +183,7 @@ handle_info({keepalive, Req}, State = #state{keepalive = KState0,
     end;
 
 handle_info(login_timeout, State = #state{received_connect_frame = true}) ->
-    {noreply, State};
+    {noreply, State, ?HIBERNATE_AFTER};
 handle_info(login_timeout, State = #state{conn_name = ConnStr}) ->
     %% The connection is also closed if the CONNECT frame happens to
     %% be already in the `deferred_recv' buffer. This can happen while
@@ -205,8 +205,16 @@ handle_info({ra_event, _From, Evt},
 
 handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
             #state{proc_state = PState0} = State) ->
-    PState = rabbit_mqtt_processor:handle_down(Evt, PState0),
-    maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
+    case rabbit_mqtt_processor:handle_down(Evt, PState0) of
+        {ok, PState} ->
+            maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
+        {error, Reason} ->
+            send_will_and_terminate({shutdown, Reason}, State)
+    end;
+
+handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid),
+    {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.

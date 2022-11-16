@@ -5,7 +5,8 @@
 -export([all_connection_pids/1,
          publish_qos1_timeout/4,
          sync_publish_result/3,
-         get_global_counters/2]).
+         get_global_counters/2,
+         expect_publishes/2]).
 
 all_connection_pids(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -30,6 +31,17 @@ publish_qos1_timeout(Client, Topic, Payload, Timeout) ->
         Timeout ->
             erlang:demonitor(Mref, [flush]),
             puback_timeout
+    end.
+
+expect_publishes(_Topic, []) ->
+    ok;
+expect_publishes(Topic, [Payload|Rest]) ->
+    receive
+        {publish, #{topic := Topic,
+                    payload := Payload}} ->
+            expect_publishes(Topic, Rest)
+    after 5000 ->
+              ct:fail({publish_not_received, Payload})
     end.
 
 sync_publish_result(Caller, Mref, Result) ->

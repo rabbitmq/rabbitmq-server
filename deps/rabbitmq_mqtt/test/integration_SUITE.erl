@@ -16,7 +16,8 @@
                                    rpc_all/4]).
 -import(rabbit_ct_helpers, [eventually/3]).
 -import(util, [all_connection_pids/1,
-               get_global_counters/2]).
+               get_global_counters/2,
+               expect_publishes/2]).
 
 all() ->
     [
@@ -33,7 +34,8 @@ groups() ->
        {common_tests, [], common_tests()}
       ]},
      {cluster_size_3, [],
-      [queue_down_qos1] ++
+      [queue_down_qos1,
+       consuming_classic_mirrored_queue_down] ++
       common_tests() ++
       [flow_classic_mirrored_queue,
        flow_quorum_queue,
@@ -404,6 +406,58 @@ queue_down_qos1(Config) ->
     delete_queue(Ch0, CQ),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn0, Ch0),
     ok = emqtt:disconnect(C).
+
+%% Even though classic mirrored queues are deprecated, we know that some users have set up
+%% a policy to mirror MQTT queues. So, we need to support that use case in RabbitMQ 3.x
+%% and failover consumption when the classic mirrored queue leader fails.
+consuming_classic_mirrored_queue_down(Config) ->
+    [Server1, Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Topic = PolicyName = atom_to_binary(?FUNCTION_NAME),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, Server1, PolicyName, <<".*">>, <<"queues">>,
+           [{<<"ha-mode">>, <<"all">>},
+            {<<"queue-master-locator">>, <<"client-local">>}]),
+
+    %% Declare queue leader on Server1.
+    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
+    ok = emqtt:disconnect(C1),
+
+    %% Consume from Server2.
+    Options = [{host, "localhost"},
+               {port, rabbit_ct_broker_helpers:get_node_config(Config, Server2, tcp_port_mqtt)},
+               {clientid, atom_to_binary(?FUNCTION_NAME)},
+               {proto_ver, v4}],
+    {ok, C2} = emqtt:start_link([{clean_start, false} | Options]),
+    {ok, _} = emqtt:connect(C2),
+
+    %% Sanity check that consumption works.
+    {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
+    expect_publishes(Topic, [<<"m1">>]),
+
+    %% Let's stop the queue leader node.
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+
+    %% Consumption should continue to work.
+    {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
+    expect_publishes(Topic, [<<"m2">>]),
+
+    %% Cleanup
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ?assertMatch([_Q],
+                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_amqqueue, list, [])),
+    %% "When a Client has determined that it has no further use for the session it should do a
+    %% final connect with CleanSession set to 1 and then disconnect."
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Options]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3),
+    ?assertEqual([],
+                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_amqqueue, list, [])),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, Server1, PolicyName).
+
+%%TODO add test where consuming classic queue on different node goes down
 
 delete_create_queue(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),

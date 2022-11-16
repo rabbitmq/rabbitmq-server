@@ -7,10 +7,12 @@
 
 -module(rabbit_mqtt_util).
 
+-include_lib("rabbit_common/include/resource.hrl").
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_frame.hrl").
 
--export([queue_name/2,
+-export([queue_name_bin/2,
+         qos_from_queue_name/2,
          gen_client_id/0,
          env/1,
          table_lookup/2,
@@ -24,10 +26,10 @@
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
 
--spec queue_name(binary(), qos()) ->
+-spec queue_name_bin(binary(), qos()) ->
     binary().
-queue_name(ClientId, QoS) ->
-    Prefix = <<"mqtt-subscription-", ClientId/binary, "qos">>,
+queue_name_bin(ClientId, QoS) ->
+    Prefix = queue_name_prefix(ClientId),
     queue_name0(Prefix, QoS).
 
 queue_name0(Prefix, ?QOS_0) ->
@@ -36,6 +38,23 @@ queue_name0(Prefix, ?QOS_0) ->
     <<Prefix/binary, "0">>;
 queue_name0(Prefix, ?QOS_1) ->
     <<Prefix/binary, "1">>.
+
+-spec qos_from_queue_name(rabbit_amqqueue:name(), binary()) ->
+    qos() | no_consuming_queue.
+qos_from_queue_name(#resource{name = Name}, ClientId) ->
+    Prefix = queue_name_prefix(ClientId),
+    PrefixSize = erlang:byte_size(Prefix),
+    case Name of
+        <<Prefix:PrefixSize/binary, "0">> ->
+            ?QOS_0;
+        <<Prefix:PrefixSize/binary, "1">> ->
+            ?QOS_1;
+        _ ->
+            no_consuming_queue
+    end.
+
+queue_name_prefix(ClientId) ->
+    <<"mqtt-subscription-", ClientId/binary, "qos">>.
 
 cached(CacheName, Fun, Arg) ->
     Cache =
