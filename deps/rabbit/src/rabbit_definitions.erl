@@ -90,9 +90,12 @@ boot() ->
 
 maybe_load_definitions() ->
     %% Classic source: local file or data directory
-    maybe_load_definitions_from_local_filesystem(rabbit, load_definitions),
-    %% Extensible sources
-    maybe_load_definitions_from_pluggable_source(rabbit, definitions).
+    case maybe_load_definitions_from_local_filesystem(rabbit, load_definitions) of
+        ok ->
+            % Extensible sources
+            maybe_load_definitions_from_pluggable_source(rabbit, definitions);
+        {error, E} -> {error, E}
+    end.
 
 -spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
 import_raw(Body) ->
