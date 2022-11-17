@@ -903,9 +903,6 @@ formatting_maybe_with_colors_works(Config, Context, _EscSeqs) ->
     ok.
 
 logging_to_exchange_works(Config) ->
-    Context = rabbit_ct_broker_helpers:rpc(
-                Config, 0,
-                rabbit_prelaunch, get_context, []),
     Handlers = rabbit_ct_broker_helpers:rpc(
                  Config, 0,
                  logger, get_handler_config, []),
