@@ -8,6 +8,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
+-import(util, [expect_publishes/2]).
 
 all() ->
     [
@@ -90,7 +91,7 @@ coerce_configuration_data(Config) ->
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     ok = emqtt:disconnect(C).
 
@@ -105,7 +106,7 @@ should_translate_amqp2mqtt_on_publish(Config) ->
     %% there's an active consumer
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
-    expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
@@ -119,7 +120,7 @@ should_translate_amqp2mqtt_on_retention(Config) ->
     %% publish with retain = true before a consumer comes around
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
-    expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
@@ -132,7 +133,7 @@ should_translate_amqp2mqtt_on_retention_search(Config) ->
     C = connect(P),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
-    expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 does_not_retain(Config) ->
@@ -157,13 +158,3 @@ connect(Port) ->
                  {ack_timeout, 1}]),
     {ok, _Properties} = emqtt:connect(C),
     C.
-
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload|Rest]) ->
-    receive
-        {publish, #{topic := Topic,
-                    payload := Payload}} ->
-            expect_publishes(Topic, Rest)
-    after 1500 ->
-              throw({publish_not_delivered, Payload})
-    end.

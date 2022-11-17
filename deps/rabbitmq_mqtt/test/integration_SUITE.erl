@@ -54,6 +54,7 @@ common_tests() ->
      ,events
      ,event_authentication_failure
      ,internal_event_handler
+     ,non_clean_sess_disconnect
     ].
 
 suite() ->
@@ -437,14 +438,14 @@ consuming_classic_mirrored_queue_down(Config) ->
 
     %% Sanity check that consumption works.
     {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
-    expect_publishes(Topic, [<<"m1">>]),
+    ok = expect_publishes(Topic, [<<"m1">>]),
 
     %% Let's stop the queue leader node.
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
 
     %% Consumption should continue to work.
     {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
-    expect_publishes(Topic, [<<"m2">>]),
+    ok = expect_publishes(Topic, [<<"m2">>]),
 
     %% Cleanup
     ok = emqtt:disconnect(C2),
@@ -566,6 +567,28 @@ delete_create_queue(Config) ->
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     ok = emqtt:disconnect(C).
 
+non_clean_sess_disconnect(Config) ->
+    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    Topic = <<"test-topic1">>,
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    ok = emqtt:disconnect(C1),
+
+    {C2, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+
+    %% shouldn't receive message after unsubscribe
+    {ok, _, _} = emqtt:unsubscribe(C2, Topic),
+    Msg = <<"msg">>,
+    {ok, _} = emqtt:publish(C2, Topic, Msg, qos1),
+    {publish_not_received, Msg} = expect_publishes(Topic, [Msg]),
+
+    %% connect with clean sess true to clean up
+    {C3, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C3).
+
+%% -------------------------------------------------------------------
+%% Internal helpers
+%% -------------------------------------------------------------------
+
 await_confirms(_, To, To) ->
     ok;
 await_confirms(From, N, To) ->
@@ -578,10 +601,6 @@ await_confirms(From, N, To) ->
     after 10_000 ->
               ct:fail("Did not receive expected message: ~p", [Expected])
     end.
-
-%% -------------------------------------------------------------------
-%% Internal helpers
-%% -------------------------------------------------------------------
 
 connect(ClientId, Config) ->
     connect(ClientId, Config, []).

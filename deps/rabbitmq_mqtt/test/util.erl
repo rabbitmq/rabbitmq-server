@@ -42,7 +42,7 @@ expect_publishes(Topic, [Payload|Rest]) ->
                     payload := Payload}} ->
             expect_publishes(Topic, Rest)
     after 5000 ->
-              ct:fail({publish_not_received, Payload})
+              {publish_not_received, Payload}
     end.
 
 sync_publish_result(Caller, Mref, Result) ->

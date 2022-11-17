@@ -180,17 +180,16 @@ process_request(?SUBSCRIBE,
                             {ok, Q} ->
                                 QName = amqqueue:get_name(Q),
                                 case bind(QName, TopicName, S0) of
-                                    {ok, _Output, S1 = #proc_state{subscriptions = Subs0}} ->
-                                        Subs = maps:put(TopicName, QoS, Subs0),
-                                        S2 = S1#proc_state{subscriptions = Subs},
+                                    {ok, _Output, S1} ->
                                         %%TODO check what happens if we basic.consume multiple times
                                         %% for the same queue
-                                        case consume(Q, QoS, S2) of
-                                            {ok, S} ->
-                                                maybe_increment_consumer(S1),
-                                                {[QoS | L], S};
+                                        case consume(Q, QoS, S1) of
+                                            {ok, S2} ->
+                                                S3 = S2#proc_state{has_subs = true},
+                                                maybe_increment_consumer(S3, S2),
+                                                {[QoS | L], S3};
                                             {error, _Reason} ->
-                                                {[?SUBACK_FAILURE | L], S2}
+                                                {[?SUBACK_FAILURE | L], S1}
                                         end;
                                     {error, Reason, S} ->
                                         rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
@@ -225,29 +224,40 @@ process_request(?UNSUBSCRIBE,
                 PState0 = #proc_state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     PState = lists:foldl(
-               fun(#mqtt_topic{name = TopicName},
-                   #proc_state{subscriptions = Subs0} = S0) ->
-                       case maps:take(TopicName, Subs0) of
-                           {QoS, Subs} ->
-                               QName = queue_name(QoS, S0),
-                               case unbind(QName, TopicName, S0) of
-                                   {ok, _Output, S} ->
-                                       S#proc_state{subscriptions = Subs};
-                                   {error, Reason, S} ->
-                                       rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
-                                                        [rabbit_misc:rs(QName), TopicName, Reason]),
-                                       S
-                               end;
-                           error ->
-                               S0
-                       end
-               end, PState0, Topics),
+        fun(#mqtt_topic{name = TopicName}, #proc_state{} = S0) ->
+            case find_queue_name(TopicName, S0) of
+                {ok, QName} ->
+                    case unbind(QName, TopicName, S0) of
+                        {ok, _, _} ->
+                            PState0;
+                        {error, Reason, State} ->
+                            rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
+                                            [rabbit_misc:rs(QName), TopicName, Reason]),
+                            State
+                    end;
+                {not_found, _} ->
+                    PState0
+            end
+        end, PState0, Topics),
     SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
                   variable = #mqtt_frame_suback{message_id = MessageId}},
       PState),
-    maybe_decrement_consumer(PState0, PState),
-    {ok, PState};
+
+    PState3 = case rabbit_binding:list_for_destination(queue_name(?QOS_0, PState)) of
+        [] ->
+            case rabbit_binding:list_for_destination(queue_name(?QOS_1, PState)) of
+                [] ->
+                    PState2 = #proc_state{has_subs = false},
+                    maybe_decrement_consumer(PState, PState2),
+                    PState2;
+                _ ->
+                    PState
+                end;
+        _ ->
+            PState
+        end,
+    {ok, PState3};
 
 process_request(?PINGREQ, #mqtt_frame{}, PState = #proc_state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received a PINGREQ"),
@@ -510,6 +520,29 @@ queue_name(QoS, #proc_state{client_id = ClientId,
                             auth_state = #auth_state{vhost = VHost}}) ->
     QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
+
+find_queue_name(TopicName, #proc_state{exchange = Exchange,
+                            mqtt2amqp_fun = Mqtt2AmqpFun} = PState) ->
+    RoutingKey = Mqtt2AmqpFun(TopicName),
+    QName0 = queue_name(?QOS_0, PState),
+    case lookup_binding(Exchange, QName0, RoutingKey) of
+        true ->
+            {ok, QName0};
+        false ->
+            QName1 = queue_name(?QOS_1, PState),
+            case lookup_binding(Exchange, QName1, RoutingKey) of
+                true ->
+                    {ok, QName1};
+                false ->
+                    {not_found, []}
+            end
+    end.
+
+lookup_binding(Exchange, QueueName, RoutingKey) ->
+    B= #binding{source = Exchange,
+                destination = QueueName,
+                key = RoutingKey},
+    lists:member(B, rabbit_binding:list_for_source_and_destination(Exchange, QueueName)).
 
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
     Topic1 = Amqp2MqttFun(Topic0),
@@ -1594,8 +1627,6 @@ info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
 info(will_msg, #proc_state{will_msg = Val}) -> Val;
 info(retainer_pid, #proc_state{retainer_pid = Val}) -> Val;
 info(exchange, #proc_state{exchange = #resource{name = Val}}) -> Val;
-info(subscriptions, #proc_state{subscriptions = Val}) ->
-    maps:keys(Val);
 info(prefetch, #proc_state{info = #info{prefetch = Val}}) -> Val;
 info(messages_unconfirmed, #proc_state{unacked_client_pubs = Val}) ->
     rabbit_mqtt_confirms:size(Val);
@@ -1618,7 +1649,7 @@ ssl_login_name(Sock) ->
 
 format_status(#proc_state{queue_states = QState,
                           proto_ver = ProtoVersion,
-                          subscriptions = Sub,
+                          has_subs = HasSubs,
                           unacked_client_pubs = UnackClientPubs,
                           unacked_server_pubs = UnackSerPubs,
                           packet_id = PackID,
@@ -1636,7 +1667,7 @@ format_status(#proc_state{queue_states = QState,
                          } = PState) ->
     #{queue_states => rabbit_queue_type:format_status(QState),
       proto_ver => ProtoVersion,
-      subscriptions => Sub,
+      has_subs => HasSubs,
       unacked_client_pubs => UnackClientPubs,
       unacked_server_pubs => UnackSerPubs,
       packet_id => PackID,
@@ -1675,24 +1706,21 @@ maybe_decrement_publisher(_) ->
     ok.
 
 %% multiple subscriptions from the same connection count as one consumer
-maybe_increment_consumer(#proc_state{subscriptions = OldSubs,
-                                     proto_ver = ProtoVer})
-  when map_size(OldSubs) =:= 0 ->
+maybe_increment_consumer(#proc_state{has_subs = true, proto_ver = ProtoVer},
+                         #proc_state{has_subs = false}) ->
     rabbit_global_counters:consumer_created(ProtoVer);
-maybe_increment_consumer(_) ->
+maybe_increment_consumer(_, _) ->
     ok.
 
-maybe_decrement_consumer(#proc_state{subscriptions = Sub,
-                                     proto_ver = ProtoVer})
-  when map_size(Sub) =/= 0 ->
+maybe_decrement_consumer(#proc_state{has_subs = true,
+                                     proto_ver = ProtoVer}) ->
     rabbit_global_counters:consumer_deleted(ProtoVer);
 maybe_decrement_consumer(_) ->
     ok.
 
-maybe_decrement_consumer(#proc_state{subscriptions = OldSubs},
-                         #proc_state{subscriptions = NewSubs,
-                                     proto_ver = ProtoVer})
-  when map_size(OldSubs) =/= 0, map_size(NewSubs) =:= 0 ->
+% when there were subscriptions but not anymore
+maybe_decrement_consumer(#proc_state{has_subs = false, proto_ver = ProtoVer},
+                        #proc_state{has_subs = true}) ->
     rabbit_global_counters:consumer_deleted(ProtoVer);
 maybe_decrement_consumer(_, _) ->
     ok.

@@ -101,7 +101,7 @@ block(Config) ->
     %% Only here to ensure the connection is really up
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
 
     {ok, _, _} = emqtt:subscribe(C, <<"Topic1">>),
@@ -117,7 +117,7 @@ block(Config) ->
 
     %% Unblock
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
-    expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
+    ok = expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
                                     <<"Now blocked">>,
                                     <<"Still blocked">>]),
     ok = emqtt:disconnect(C).
@@ -291,7 +291,7 @@ validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType)
     {ok, _Properties} = emqtt:connect(C),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
-    expect_publishes(<<"TopicB">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicB">>, [<<"Payload">>]),
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicB">>),
     Prefix = <<"mqtt-subscription-">>,
     Suffix = <<"qos1">>,

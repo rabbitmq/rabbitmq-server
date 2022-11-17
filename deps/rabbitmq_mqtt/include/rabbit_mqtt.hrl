@@ -30,7 +30,6 @@
         {socket,
          proto_ver :: mqtt310 | mqtt311,
          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
-         subscriptions = #{} :: #{Topic :: binary() => QoS :: 0..2},
          %% Packet IDs published to queues but not yet confirmed.
          unacked_client_pubs = rabbit_mqtt_confirms:init() :: rabbit_mqtt_confirms:state(),
          %% Packet IDs published to MQTT subscribers but not yet acknowledged.
@@ -43,6 +42,7 @@
          clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),
+         has_subs = false :: boolean(),
          has_published = false :: boolean(),
          ssl_login_name,
          %% Retained messages handler. See rabbit_mqtt_retainer_sup
@@ -107,7 +107,6 @@
          will_msg,
          retainer_pid,
          exchange,
-         subscriptions,
          prefetch,
          messages_unconfirmed,
          messages_unacknowledged

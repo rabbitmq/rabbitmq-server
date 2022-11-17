@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-import(util, [expect_publishes/2]).
 
 -import(rabbit_ct_broker_helpers,
         [setup_steps/0,
@@ -139,7 +140,7 @@ connection_id_tracking(Config) ->
     {ok, MRef1, C1} = connect_to_node(Config, 0, ID),
     {ok, _, _} = emqtt:subscribe(C1, <<"TopicA">>, qos0),
     ok = emqtt:publish(C1, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
     assert_connection_count(Config, 4, 2, 1),
@@ -162,7 +163,7 @@ connection_id_tracking_on_nodedown(Config) ->
     {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 4, 2, 1),
     ok = stop_node(Config, Server),
     await_disconnection(MRef),
@@ -178,7 +179,7 @@ connection_id_tracking_with_decommissioned_node(Config) ->
             {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
             {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
             ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-            expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+            ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
             assert_connection_count(Config, 4, 2, 1),
             {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
@@ -225,14 +226,4 @@ await_disconnection(Ref) ->
         {'DOWN', Ref, _, _, _} -> ok
     after
         20_000 -> exit(missing_down_message)
-    end.
-
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload|Rest]) ->
-    receive
-        {publish, #{topic := Topic,
-                    payload := Payload}} ->
-            expect_publishes(Topic, Rest)
-    after 5000 ->
-              throw({publish_not_delivered, Payload})
     end.
