@@ -42,7 +42,6 @@
          clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),
-         has_subs = false :: boolean(),
          has_published = false :: boolean(),
          ssl_login_name,
          %% Retained messages handler. See rabbit_mqtt_retainer_sup

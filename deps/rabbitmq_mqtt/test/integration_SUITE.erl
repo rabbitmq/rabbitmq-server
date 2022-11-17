@@ -483,9 +483,8 @@ consuming_classic_queue_down(Config) ->
     {ok, C2} = emqtt:start_link([{clean_start, false} | Options]),
     {ok, _} = emqtt:connect(C2),
 
-    %%TODO uncomment below 2 lines once consumers counter works for clean_sess = false
-    % ?assertMatch(#{consumers := 1},
-    %              get_global_counters(Config, ProtoVer, Server3)),
+    ?assertMatch(#{consumers := 1},
+                 get_global_counters(Config, ProtoVer, Server3)),
 
     %% Let's stop the queue leader node.
     process_flag(trap_exit, true),
@@ -574,12 +573,21 @@ non_clean_sess_disconnect(Config) ->
     {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     Topic = <<"test-topic1">>,
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    ?assertMatch(#{consumers := 1},
+                 get_global_counters(Config, v4)),
+
     ok = emqtt:disconnect(C1),
+    ?assertMatch(#{consumers := 0},
+                 get_global_counters(Config, v4)),
 
     {C2, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    ?assertMatch(#{consumers := 1},
+                 get_global_counters(Config, v4)),
 
     %% shouldn't receive message after unsubscribe
     {ok, _, _} = emqtt:unsubscribe(C2, Topic),
+    ?assertMatch(#{consumers := 0},
+                 get_global_counters(Config, v4)),
     Msg = <<"msg">>,
     {ok, _} = emqtt:publish(C2, Topic, Msg, qos1),
     {publish_not_received, Msg} = expect_publishes(Topic, [Msg]),
