@@ -59,25 +59,12 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 connection(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
-                                {username, "guest"},
-                                {password, "guest"},
-                                {ws_path, "/ws"},
-                                {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C),
+    C = ws_connect(?FUNCTION_NAME, Config),
     ok = emqtt:disconnect(C).
 
 pubsub_shared_connection(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
-                                {username, "guest"},
-                                {password, "guest"},
-                                {ws_path, "/ws"},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {clean_start, true},
-                                {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C),
+    C = ws_connect(?FUNCTION_NAME, Config),
+
     Topic = <<"/topic/test-web-mqtt">>,
     {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
 
@@ -91,23 +78,8 @@ pubsub_shared_connection(Config) ->
     ok = emqtt:disconnect(C).
 
 pubsub_separate_connections(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, Publisher} = emqtt:start_link([{host, "127.0.0.1"},
-                                        {username, "guest"},
-                                        {password, "guest"},
-                                        {ws_path, "/ws"},
-                                        {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>},
-                                        {clean_start, true},
-                                        {port, Port}]),
-    {ok, _} = emqtt:ws_connect(Publisher),
-    {ok, Consumer} = emqtt:start_link([{host, "127.0.0.1"},
-                                       {username, "guest"},
-                                       {password, "guest"},
-                                       {ws_path, "/ws"},
-                                       {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>},
-                                       {clean_start, true},
-                                       {port, Port}]),
-    {ok, _} = emqtt:ws_connect(Consumer),
+    Publisher = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config),
+    Consumer = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>, Config),
 
     Topic = <<"/topic/test-web-mqtt">>,
     {ok, _, [1]} = emqtt:subscribe(Consumer, Topic, qos1),
@@ -123,46 +95,21 @@ pubsub_separate_connections(Config) ->
     ok = emqtt:disconnect(Consumer).
 
 last_will_enabled(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
     LastWillTopic = <<"/topic/web-mqtt-tests-ws1-last-will">>,
     LastWillMsg = <<"a last will and testament message">>,
-    {ok, Publisher} = emqtt:start_link([{host, "127.0.0.1"},
-                                        {username, "guest"},
-                                        {password, "guest"},
-                                        {ws_path, "/ws"},
-                                        {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>},
-                                        {clean_start, true},
-                                        {port, Port},
-                                        {will_topic, LastWillTopic},
-                                        {will_payload, LastWillMsg},
-                                        {will_qos, 1}
-                                       ]),
-    {ok, _} = emqtt:ws_connect(Publisher),
-    {ok, Consumer} = emqtt:start_link([{host, "127.0.0.1"},
-                                       {username, "guest"},
-                                       {password, "guest"},
-                                       {ws_path, "/ws"},
-                                       {clientid, <<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>},
-                                       {clean_start, true},
-                                       {port, Port}
-                                      ]),
-    {ok, _} = emqtt:ws_connect(Consumer),
+    PubOpts = [{will_topic, LastWillTopic},
+               {will_payload, LastWillMsg},
+               {will_qos, 1}],
+    Publisher = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config, PubOpts),
+    Consumer = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>, Config),
     {ok, _, [1]} = emqtt:subscribe(Consumer, LastWillTopic, qos1),
     ok = emqtt:disconnect(Publisher),
     ok = expect_publishes(Consumer, LastWillTopic, [LastWillMsg]),
     ok = emqtt:disconnect(Consumer).
 
 disconnect(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
-                                {username, "guest"},
-                                {password, "guest"},
-                                {ws_path, "/ws"},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {clean_start, true},
-                                {port, Port}]),
+    C = ws_connect(?FUNCTION_NAME, Config),
     process_flag(trap_exit, true),
-    {ok, _} = emqtt:ws_connect(C),
     eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = emqtt:disconnect(C),
     receive
@@ -177,16 +124,7 @@ disconnect(Config) ->
 keepalive(Config) ->
     KeepaliveSecs = 1,
     KeepaliveMs = timer:seconds(KeepaliveSecs),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
-                                {host, "127.0.0.1"},
-                                {username, "guest"},
-                                {password, "guest"},
-                                {ws_path, "/ws"},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {clean_start, true},
-                                {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C),
+    C = ws_connect(?FUNCTION_NAME, Config, [{keepalive, KeepaliveSecs}]),
 
     %% Connection should stay up when client sends PING requests.
     timer:sleep(KeepaliveMs),
@@ -210,17 +148,8 @@ keepalive(Config) ->
     ok = rpc(Config, 0, meck, unload, [Mod]).
 
 maintenance(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
-    {ok, C} = emqtt:start_link([{host, "127.0.0.1"},
-                                {username, "guest"},
-                                {password, "guest"},
-                                {ws_path, "/ws"},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {clean_start, true},
-                                {port, Port}]),
-    {ok, _} = emqtt:ws_connect(C),
-    unlink(C),
-
+    C = ws_connect(?FUNCTION_NAME, Config),
+    true = unlink(C),
     eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
     eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
@@ -229,6 +158,22 @@ maintenance(Config) ->
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->
     length(rpc(Config, Node, rabbit_mqtt, local_connection_pids, [])).
+
+ws_connect(ClientId, Config) ->
+    ws_connect(ClientId, Config, []).
+ws_connect(ClientId, Config, AdditionalOpts) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    Options = [{host, "localhost"},
+               {username, "guest"},
+               {password, "guest"},
+               {ws_path, "/ws"},
+               {port, P},
+               {clientid, rabbit_data_coercion:to_binary(ClientId)},
+               {proto_ver, v4}
+              ] ++ AdditionalOpts,
+    {ok, C} = emqtt:start_link(Options),
+    {ok, _Properties} = emqtt:ws_connect(C),
+    C.
 
 expect_publishes(_ClientPid, _Topic, []) ->
     ok;
