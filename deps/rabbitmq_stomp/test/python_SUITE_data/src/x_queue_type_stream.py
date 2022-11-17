@@ -10,7 +10,7 @@ import base
 import time
 import os
 import re
-
+import urllib.request, json
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -25,6 +25,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 headers={
                     'x-queue-name': queueName,
                     'x-queue-type': 'stream',
+                    'x-max-age' : '10h',
                     'durable': True,
                     'auto-delete': False,
                     'id': 1234,
