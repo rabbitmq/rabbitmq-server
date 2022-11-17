@@ -43,6 +43,7 @@
 -define(HEADER_X_DEAD_LETTER_ROUTING_KEY, "x-dead-letter-routing-key").
 -define(HEADER_X_EXPIRES, "x-expires").
 -define(HEADER_X_MAX_LENGTH, "x-max-length").
+-define(HEADER_X_MAX_AGE, "x-max-age").
 -define(HEADER_X_MAX_LENGTH_BYTES, "x-max-length-bytes").
 -define(HEADER_X_MAX_PRIORITY, "x-max-priority").
 -define(HEADER_X_MESSAGE_TTL, "x-message-ttl").
@@ -60,6 +61,7 @@
                            ?HEADER_X_DEAD_LETTER_ROUTING_KEY,
                            ?HEADER_X_EXPIRES,
                            ?HEADER_X_MAX_LENGTH,
+                           ?HEADER_X_MAX_AGE,
                            ?HEADER_X_MAX_LENGTH_BYTES,
                            ?HEADER_X_MAX_PRIORITY,
                            ?HEADER_X_MESSAGE_TTL,
