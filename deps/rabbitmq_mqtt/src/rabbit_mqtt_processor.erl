@@ -1387,10 +1387,9 @@ handle_queue_down(QName, PState0 = #proc_state{client_id = ClientId}) ->
                     case consume(Q, QoS, PState0) of
                         {ok, PState} ->
                             PState;
-                        {error, Reason} ->
-                            rabbit_log:info("Terminating MQTT connection because consuming ~s "
-                                            "is down and could not re-consume: ~p",
-                                            [rabbit_misc:rs(QName), Reason]),
+                        {error, _Reason} ->
+                            rabbit_log:info("Terminating MQTT connection because consuming ~s is down.",
+                                            [rabbit_misc:rs(QName)]),
                             throw(consuming_queue_down)
                     end
             end;

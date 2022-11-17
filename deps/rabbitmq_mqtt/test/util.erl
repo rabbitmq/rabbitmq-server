@@ -6,6 +6,7 @@
          publish_qos1_timeout/4,
          sync_publish_result/3,
          get_global_counters/2,
+         get_global_counters/3,
          expect_publishes/2]).
 
 all_connection_pids(Config) ->
@@ -47,14 +48,13 @@ expect_publishes(Topic, [Payload|Rest]) ->
 sync_publish_result(Caller, Mref, Result) ->
     erlang:send(Caller, {Mref, Result}).
 
-get_global_counters(Config, v3) ->
-    get_global_counters(Config, ?MQTT_PROTO_V3);
-get_global_counters(Config, v4) ->
-    get_global_counters(Config, ?MQTT_PROTO_V4);
-get_global_counters(Config, Proto) ->
+get_global_counters(Config, ProtoVer) ->
+    get_global_counters(Config, ProtoVer, 0).
+
+get_global_counters(Config, v3, Node) ->
+    get_global_counters(Config, ?MQTT_PROTO_V3, Node);
+get_global_counters(Config, v4, Node) ->
+    get_global_counters(Config, ?MQTT_PROTO_V4, Node);
+get_global_counters(Config, Proto, Node) ->
     maps:get([{protocol, Proto}],
-             rabbit_ct_broker_helpers:rpc(Config,
-                                          0,
-                                          rabbit_global_counters,
-                                          overview,
-                                          [])).
+             rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_global_counters, overview, [])).
