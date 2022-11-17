@@ -13,6 +13,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
+                                   rpc/5,
                                    rpc_all/4]).
 -import(rabbit_ct_helpers, [eventually/3,
                             eventually/1]).
@@ -38,11 +39,10 @@ groups() ->
      {cluster_size_3, [],
       [queue_down_qos1,
        consuming_classic_mirrored_queue_down,
-       consuming_classic_queue_down] ++
-      common_tests() ++
-      [flow_classic_mirrored_queue,
+       consuming_classic_queue_down,
+       flow_classic_mirrored_queue,
        flow_quorum_queue,
-       flow_stream]
+       flow_stream] ++ common_tests()
      }
     ].
 
@@ -212,18 +212,19 @@ publish_to_all_queue_types(Config, QoS) ->
 flow_classic_mirrored_queue(Config) ->
     QueueName = <<"flow">>,
     ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0, QueueName, <<"all">>),
-    flow(Config, [rabbit, credit_flow_default_credit, {2, 1}], <<"classic">>),
+    flow(Config, {rabbit, credit_flow_default_credit, {2, 1}}, <<"classic">>),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, QueueName).
 
 flow_quorum_queue(Config) ->
-    flow(Config, [rabbit, quorum_commands_soft_limit, 1], <<"quorum">>).
+    flow(Config, {rabbit, quorum_commands_soft_limit, 1}, <<"quorum">>).
 
 flow_stream(Config) ->
-    flow(Config, [rabbit, stream_messages_soft_limit, 1], <<"stream">>).
+    flow(Config, {rabbit, stream_messages_soft_limit, 1}, <<"stream">>).
 
-flow(Config, Env, QueueType)
-  when is_list(Env), is_binary(QueueType) ->
-    Result = rpc_all(Config, application, set_env, Env),
+flow(Config, {App, Par, Val}, QueueType)
+  when is_binary(QueueType) ->
+    {ok, DefaultVal} = rpc(Config, 0, application, get_env, [App, Par]),
+    Result = rpc_all(Config, application, set_env, [App, Par, Val]),
     ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
 
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -253,7 +254,9 @@ flow(Config, Env, QueueType)
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    Result = rpc_all(Config, application, set_env, [App, Par, DefaultVal]),
+    ok.
 
 events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
@@ -451,19 +454,19 @@ consuming_classic_mirrored_queue_down(Config) ->
     ok = emqtt:disconnect(C2),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     ?assertMatch([_Q],
-                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_amqqueue, list, [])),
+                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
     %% "When a Client has determined that it has no further use for the session it should do a
     %% final connect with CleanSession set to 1 and then disconnect."
     {ok, C3} = emqtt:start_link([{clean_start, true} | Options]),
     {ok, _} = emqtt:connect(C3),
     ok = emqtt:disconnect(C3),
     ?assertEqual([],
-                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_amqqueue, list, [])),
+                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, Server1, PolicyName).
 
 %% Consuming classic queue on a different node goes down.
 consuming_classic_queue_down(Config) ->
-    [Server1, Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, _Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
 
     %% Declare classic queue on Server1.
@@ -472,9 +475,9 @@ consuming_classic_queue_down(Config) ->
     ok = emqtt:disconnect(C1),
 
     ProtoVer = v4,
-    %% Consume from Server2.
+    %% Consume from Server3.
     Options = [{host, "localhost"},
-               {port, rabbit_ct_broker_helpers:get_node_config(Config, Server2, tcp_port_mqtt)},
+               {port, rabbit_ct_broker_helpers:get_node_config(Config, Server3, tcp_port_mqtt)},
                {clientid, ClientId},
                {proto_ver, ProtoVer}],
     {ok, C2} = emqtt:start_link([{clean_start, false} | Options]),
@@ -482,7 +485,7 @@ consuming_classic_queue_down(Config) ->
 
     %%TODO uncomment below 2 lines once consumers counter works for clean_sess = false
     % ?assertMatch(#{consumers := 1},
-    %              get_global_counters(Config, ProtoVer, Server2)),
+    %              get_global_counters(Config, ProtoVer, Server3)),
 
     %% Let's stop the queue leader node.
     process_flag(trap_exit, true),
@@ -491,7 +494,7 @@ consuming_classic_queue_down(Config) ->
     %% When the dedicated MQTT connection (non-mirrored classic) queue goes down, it is reasonable
     %% that the server closes the MQTT connection because the MQTT client cannot consume anymore.
     eventually(?_assertMatch(#{consumers := 0},
-                             get_global_counters(Config, ProtoVer, Server2))),
+                             get_global_counters(Config, ProtoVer, Server3))),
     receive
         {'EXIT', C2, _} ->
             ok
@@ -505,7 +508,7 @@ consuming_classic_queue_down(Config) ->
     {ok, _} = emqtt:connect(C3),
     ok = emqtt:disconnect(C3),
     ?assertEqual([],
-                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_amqqueue, list, [])),
+                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
     ok.
 
 delete_create_queue(Config) ->
