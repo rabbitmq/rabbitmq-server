@@ -654,10 +654,10 @@ test_stream_stats(Transport, S, Stream, C0) ->
     SIFrame = rabbit_stream_core:frame(SICmd),
     ok = Transport:send(S, SIFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
-    ?assertEqual({response, 1,
+    ?assertMatch({response, 1,
                   {stream_stats, ?RESPONSE_CODE_OK,
-                   #{<<"first_chunk_id">> => 0,
-                     <<"committed_chunk_id">> => 1}}},
+                   #{<<"first_chunk_id">> := 0,
+                     <<"committed_chunk_id">> := 1}}},
                  Cmd),
     C.
 
