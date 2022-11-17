@@ -152,7 +152,7 @@ update(Q, State) when ?amqqueue_is_quorum(Q) ->
 -spec handle_event({amqqueue:ra_server_id(), any()},
                    rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
-    eol |
+    {eol, rabbit_queue_type:actions()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event({From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).

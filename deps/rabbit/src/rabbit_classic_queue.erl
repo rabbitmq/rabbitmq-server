@@ -284,7 +284,7 @@ handle_event({down, Pid, QRef, Info}, #?STATE{monitored = Monitored,
     case rabbit_misc:is_abnormal_exit(Info) of
         false when Info =:= normal andalso Pid == MasterPid ->
             %% queue was deleted and masterpid is down
-            eol;
+            {eol, []};
         false ->
             %% this assumes the mirror isn't part of the active set
             MsgSeqNos = maps:keys(

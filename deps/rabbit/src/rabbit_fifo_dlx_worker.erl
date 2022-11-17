@@ -151,8 +151,9 @@ handle_cast({queue_event, QRef, Evt},
             State1 = State0#state{queue_type_state = QTypeState1},
             State = handle_queue_actions(Actions, State1),
             {noreply, State};
-        eol ->
-            remove_queue(QRef, State0);
+        {eol, Actions} ->
+            State = handle_queue_actions(Actions, State0),
+            remove_queue(QRef, State);
         {protocol_error, _Type, _Reason, _Args} ->
             {noreply, State0}
     end;

@@ -750,17 +750,18 @@ handle_cast({queue_event, QRef, Evt},
             State1 = State0#ch{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
             noreply_coalesce(State);
-        eol ->
-            State1 = handle_consuming_queue_down_or_eol(QRef, State0),
+        {eol, Actions} ->
+            State1 = handle_queue_actions(Actions, State0),
+            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
             {ConfirmMXs, UC1} =
-                rabbit_confirms:remove_queue(QRef, State1#ch.unconfirmed),
+                rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
             %% Deleted queue is a special case.
             %% Do not nack the "rejected" messages.
-            State2 = record_confirms(ConfirmMXs,
-                                     State1#ch{unconfirmed = UC1}),
+            State3 = record_confirms(ConfirmMXs,
+                                     State2#ch{unconfirmed = UC1}),
             _ = erase_queue_stats(QRef),
             noreply_coalesce(
-              State2#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+              State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
         {protocol_error, Type, Reason, ReasonArgs} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.

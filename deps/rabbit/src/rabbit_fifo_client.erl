@@ -528,7 +528,7 @@ update_machine_state(Server, Conf) ->
 %% with them.</li>
 -spec handle_ra_event(ra:server_id(), ra_server_proc:ra_event_body(), state()) ->
     {internal, Correlators :: [term()], actions(), state()} |
-    {rabbit_fifo:client_msg(), state()} | eol.
+    {rabbit_fifo:client_msg(), state()} | {eol, actions()}.
 handle_ra_event(From, {applied, Seqs},
                 #state{cfg = #cfg{queue_name = QRef,
                                   soft_limit = SftLmt
@@ -613,8 +613,8 @@ handle_ra_event(_, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
             State = resend_all_pending(State0#state{leader = Leader}),
             {ok, State, []}
     end;
-handle_ra_event(_Leader, {machine, eol}, _State0) ->
-    eol.
+handle_ra_event(_Leader, {machine, eol}, State) ->
+    {eol, [{unblock, cluster_name(State)}]}.
 
 %% @doc Attempts to enqueue a message using cast semantics. This provides no
 %% guarantees or retries if the message fails to achieve consensus or if the

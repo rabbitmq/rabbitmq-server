@@ -191,7 +191,7 @@
 %% this
 -callback handle_event(Event :: event(),
                        queue_state()) ->
-    {ok, queue_state(), actions()} | {error, term()} | eol |
+    {ok, queue_state(), actions()} | {error, term()} | {eol, actions()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback deliver([{amqqueue:amqqueue(), queue_state()}],
@@ -455,7 +455,7 @@ handle_down(Pid, QName, Info, State0) ->
     case handle_event(QName, {down, Pid, QName, Info}, State0) of
         {ok, State, Actions} ->
             {ok, State, Actions};
-        eol ->
+        {eol, []} ->
             {eol, State0, QName};
         Err ->
             Err
@@ -463,7 +463,7 @@ handle_down(Pid, QName, Info, State0) ->
 
 %% messages sent from queues
 -spec handle_event(queue_name(), term(), state()) ->
-    {ok, state(), actions()} | eol | {error, term()} |
+    {ok, state(), actions()} | {eol, actions()} | {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event(QRef, Evt, Ctxs) ->
     %% events can arrive after a queue state has been cleared up
@@ -474,8 +474,8 @@ handle_event(QRef, Evt, Ctxs) ->
             case Mod:handle_event(Evt, State0) of
                 {ok, State, Actions} ->
                     {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
-                Err ->
-                    Err
+                Other ->
+                    Other
             end;
         undefined ->
             {ok, Ctxs, []}

@@ -1368,13 +1368,12 @@ handle_queue_event({queue_event, QName, Evt},
             PState1 = PState0#proc_state{queue_states = QStates},
             PState = handle_queue_actions(Actions, PState1),
             {ok, PState};
-        eol ->
-            %%TODO handle consuming queue down
-            % State1 = handle_consuming_queue_down_or_eol(QRef, State0),
+        {eol, Actions} ->
+            PState1 = handle_queue_actions(Actions, PState0),
             {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
             QStates = rabbit_queue_type:remove(QName, QStates0),
-            PState = PState0#proc_state{queue_states = QStates,
-                                        unacked_client_pubs = U},
+            PState = PState1#proc_state{queue_states = QStates,
+                                         unacked_client_pubs = U},
             send_puback(ConfirmMsgIds, PState),
             {ok, PState};
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->

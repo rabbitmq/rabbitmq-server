@@ -244,7 +244,7 @@ flow(Config, {App, Par, Val}, QueueType)
                                                 TestPid ! {self(), N0}
                                         end, [N]})
       end, lists:seq(1, NumMsgs)),
-    ok = await_confirms(C, 1, NumMsgs),
+    ok = await_confirms_ordered(C, 1, NumMsgs),
     eventually(?_assertEqual(
                   [[integer_to_binary(NumMsgs)]],
                   rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"])
@@ -549,9 +549,12 @@ delete_create_queue(Config) ->
     %% Give queues some time to be fully deleted
     timer:sleep(2000),
 
-    %% We expect all confirms in the right order (because emqtt publishes with increasing packet ID).
+    %% We expect confirms for all messages.
     %% Confirm here does not mean that messages made it ever to the deleted queues.
-    ok = await_confirms(C, 1, NumMsgs),
+    %% It is valid for confirms to sporadically arrive out of order: This happens when the classic
+    %% queue is being deleted while the remaining messages are routed and confirmed to the 2nd and 3rd queues
+    %% before the monitor to the classic queue fires.
+    ok = await_confirms_unordered(C, NumMsgs),
 
     %% Recreate the same queues.
     DeclareQueues(),
@@ -600,17 +603,29 @@ non_clean_sess_disconnect(Config) ->
 %% Internal helpers
 %% -------------------------------------------------------------------
 
-await_confirms(_, To, To) ->
+await_confirms_ordered(_, To, To) ->
     ok;
-await_confirms(From, N, To) ->
+await_confirms_ordered(From, N, To) ->
     Expected = {From, N},
     receive
         Expected ->
-            await_confirms(From, N + 1, To);
+            await_confirms_ordered(From, N + 1, To);
         Got ->
             ct:fail("Received unexpected message. Expected: ~p Got: ~p", [Expected, Got])
     after 10_000 ->
               ct:fail("Did not receive expected message: ~p", [Expected])
+    end.
+
+await_confirms_unordered(_, 0) ->
+    ok;
+await_confirms_unordered(From, Left) ->
+    receive
+        {From, _N} ->
+            await_confirms_unordered(From, Left - 1);
+        Other ->
+            ct:fail("Received unexpected message: ~p", [Other])
+    after 10_000 ->
+              ct:fail("~b confirms are missing", [Left])
     end.
 
 connect(ClientId, Config) ->

@@ -469,8 +469,8 @@ handle_event({stream_local_member_change, Pid}, State = #stream_client{name = QN
 
                          end, #{}, Readers0),
     {ok, State#stream_client{local_pid = Pid, readers = Readers1}, []};
-handle_event(eol, _State) ->
-    eol.
+handle_event(eol, #stream_client{name = Name}) ->
+    {eol, [{unblock, Name}]}.
 
 is_recoverable(Q) ->
     Node = node(),
