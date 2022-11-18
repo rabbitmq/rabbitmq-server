@@ -42,6 +42,8 @@
          clean_sess :: boolean(),
          will_msg,
          exchange :: rabbit_exchange:name(),
+         %% Set if client has at least one subscription with QoS 1.
+         queue_qos1 :: rabbit_amqqueue:name(),
          has_published = false :: boolean(),
          ssl_login_name,
          %% Retained messages handler. See rabbit_mqtt_retainer_sup

@@ -95,8 +95,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     {[], rabbit_queue_type:actions()}.
 deliver([{Q, stateless}], Delivery = #delivery{message = BasicMessage}) ->
     Pid = amqqueue:get_pid(Q),
+    QName = amqqueue:get_name(Q),
     Msg = {queue_event, ?MODULE,
-           {?MODULE, Pid, _QMsgId = none, _Redelivered = false, BasicMessage}},
+           {QName, Pid, _QMsgId = none, _Redelivered = false, BasicMessage}},
     gen_server:cast(Pid, Msg),
     Actions = confirm(Delivery, Q),
     {[], Actions}.

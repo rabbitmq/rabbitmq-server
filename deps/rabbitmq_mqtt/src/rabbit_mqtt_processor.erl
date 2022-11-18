@@ -13,14 +13,6 @@
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
          soft_limit_exceeded/1, format_status/1]).
 
-%%TODO Use single queue per MQTT subscriber connection?
-%% * when publishing we store in x-mqtt-publish-qos header the publishing QoS
-%% * routing key is present in the delivered message
-%% * therefore, we can map routing key -> topic -> subscription -> subscription max QoS
-%% Advantages:
-%% * better scaling when single client creates subscriptions with different QoS levels
-%% * no duplicates when single client creates overlapping subscriptions with different QoS levels
-
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
 
@@ -78,17 +70,15 @@ process_request(?PUBACK,
                 #mqtt_frame{
                    variable = #mqtt_frame_publish{message_id = PacketId}},
                 #proc_state{unacked_server_pubs = U0,
-                            queue_states = QStates0} = PState) ->
+                            queue_states = QStates0,
+                            queue_qos1 = QName} = PState) ->
     case maps:take(PacketId, U0) of
         {QMsgId, U} ->
-            %% TODO creating binary is expensive
-            QName = queue_name(?QOS_1, PState),
             case rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0) of
-                {ok, QStates, [] = _Actions} ->
-                    % incr_queue_stats(QRef, MsgIds, State),
-                    %%TODO handle actions
-                    {ok, PState#proc_state{unacked_server_pubs = U,
-                                           queue_states = QStates }};
+                {ok, QStates, Actions} ->
+                    %%TODO rabbit_channel:incr_queue_stats/3
+                    {ok, handle_queue_actions(Actions, PState#proc_state{unacked_server_pubs = U,
+                                                                         queue_states = QStates})};
                 {protocol_error, _ErrorType, _Reason, _ReasonArgs} = Err ->
                     {error, Err, PState}
             end;
@@ -1032,7 +1022,8 @@ consume(Q, QoS, #proc_state{
                       fun(Q1) ->
                               case rabbit_queue_type:consume(Q1, Spec, QStates0) of
                                   {ok, QStates} ->
-                                      PState = PState0#proc_state{queue_states = QStates},
+                                      PState1 = PState0#proc_state{queue_states = QStates},
+                                      PState = maybe_set_queue_qos1(QoS, PState1),
                                       {ok, PState};
                                   {error, Reason} = Err ->
                                       rabbit_log:error("Failed to consume from ~s: ~p",
@@ -1044,6 +1035,13 @@ consume(Q, QoS, #proc_state{
         {error, access_refused} = Err ->
             Err
     end.
+
+%% To save memory, we only store the queue_qos1 value in process state if there is a QoS 1 subscription.
+%% We store it in the process state such that we don't have to build the binary on every PUBACK we receive.
+maybe_set_queue_qos1(?QOS_1, PState = #proc_state{queue_qos1 = undefined}) ->
+    PState#proc_state{queue_qos1 = queue_name(?QOS_1, PState)};
+maybe_set_queue_qos1(_, PState) ->
+    PState.
 
 bind(QueueName, TopicName, PState) ->
     binding_action_with_checks({QueueName, TopicName, fun rabbit_binding:add/2}, PState).
@@ -1436,7 +1434,7 @@ deliver_to_client(Msgs, Ack, PState) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, PState, Msgs).
 
-deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
+deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
                              #basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}},
                       AckRequired, PState0) ->
     PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
@@ -1454,13 +1452,13 @@ deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
     PState1 = maybe_publish_to_client(Msg, QoS, PState0),
-    PState = maybe_ack(AckRequired, QoS, QNameOrType, QMsgId, PState1),
+    PState = maybe_ack(AckRequired, QoS, QName, QMsgId, PState1),
     %%TODO GC
     % case GCThreshold of
     %     undefined -> ok;
     %     _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
     % end,
-    ok = maybe_notify_sent(QNameOrType, QPid, PState),
+    ok = maybe_notify_sent(QName, QPid, PState),
     PState.
 
 -spec effective_qos(qos(), qos()) -> qos().
@@ -1520,10 +1518,9 @@ increment_packet_id(Id) ->
 maybe_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
           PState = #proc_state{queue_states = QStates0}) ->
     case rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0) of
-        {ok, QStates, [] = _Actions} ->
-            % incr_queue_stats(QRef, MsgIds, State),
-            %%TODO handle actions
-            PState#proc_state{queue_states = QStates};
+        {ok, QStates, Actions} ->
+            %%TODO rabbit_channel:incr_queue_stats/3
+            handle_queue_actions(Actions, PState#proc_state{queue_states = QStates});
         {protocol_error, _ErrorType, _Reason, _ReasonArgs} = Err ->
             %%TODO handle error
             throw(Err)
@@ -1531,8 +1528,6 @@ maybe_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
 maybe_ack(_, _, _, _, PState) ->
     PState.
 
-maybe_notify_sent(rabbit_mqtt_qos0_queue, _, _) ->
-    ok;
 maybe_notify_sent(QName, QPid, #proc_state{queue_states = QStates}) ->
     case rabbit_queue_type:module(QName, QStates) of
         {ok, rabbit_classic_queue} ->
