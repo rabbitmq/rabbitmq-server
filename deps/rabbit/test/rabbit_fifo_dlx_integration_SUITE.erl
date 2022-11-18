@@ -25,6 +25,8 @@
 -import(rabbit_ct_helpers, [eventually/1,
                             eventually/3,
                             consistently/1]).
+-import(rabbit_ct_broker_helpers, [rpc/5,
+                                   rpc/6]).
 -import(quorum_queue_SUITE, [publish/2,
                              consume/3]).
 
@@ -94,9 +96,8 @@ init_per_group(Group, Config, NodesCount) ->
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_tick_interval, 100]),
+    ok = rpc(Config2, 0, application, set_env,
+             [rabbit, channel_tick_interval, 100]),
     case rabbit_ct_broker_helpers:enable_feature_flag(Config2, stream_queue) of
         ok   -> Config2;
         Skip -> Skip
@@ -147,6 +148,10 @@ end_per_testcase(Testcase, Config) ->
     delete_queue(Ch, ?config(target_queue_5, Config)),
     delete_queue(Ch, ?config(target_queue_6, Config)),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dead_letter_exchange, Config)}),
+
+    DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
+    ?assert(lists:all(fun(L) -> L =:= [] end, DlxWorkers)),
+
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -499,7 +504,7 @@ drop_head_falls_back_to_at_most_once(Config) ->
     consistently(
       ?_assertMatch(
          [_, {active, 0}, _, _],
-         rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
+         rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
 
 %% Test that dynamically switching dead-letter-strategy works.
 switch_strategy(Config) ->
@@ -973,12 +978,12 @@ single_dlx_worker(Config) ->
     assert_active_dlx_workers(0, Config, Follower0),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     consistently(
-      ?_assertMatch(
-         [_, {active, 0}, _, _],
-         rabbit_ct_broker_helpers:rpc(Config, Server1, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000))),
+      ?_assertEqual(
+         0,
+         length(rpc(Config, Server1, supervisor, which_children, [rabbit_fifo_dlx_sup], 1000)))),
 
-    Pid = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, whereis, [RaName]),
-    true = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, exit, [Pid, kill]),
+    Pid = rpc(Config, Leader0, erlang, whereis, [RaName]),
+    true = rpc(Config, Leader0, erlang, exit, [Pid, kill]),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
                                         1000),
@@ -989,9 +994,7 @@ single_dlx_worker(Config) ->
     assert_active_dlx_workers(1, Config, Leader1).
 
 assert_active_dlx_workers(N, Config, Server) ->
-    ?assertMatch(
-       [_, {active, N}, _, _],
-       rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000)).
+    ?assertEqual(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000))).
 
 declare_queue(Channel, Queue, Args) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{
@@ -1012,7 +1015,7 @@ delete_queue(Channel, Queue) ->
     #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}).
 
 get_global_counters(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+    rpc(Config, 0, rabbit_global_counters, overview, []).
 
 %% Returns the delta of Metric between testcase start and now.
 counted(Metric, Config) ->
