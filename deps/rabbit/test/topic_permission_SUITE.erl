@@ -127,11 +127,11 @@ topic_permission_database_access1(_Config) ->
     )),
 
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:list_user_topic_permissions(
-        "non-existing-user"
+        <<"non-existing-user">>
     )),
 
     {error, {no_such_vhost, _}} = (catch rabbit_auth_backend_internal:list_vhost_topic_permissions(
-        "non-existing-vhost"
+        <<"non-existing-vhost">>
     )),
 
     {error, {invalid_regexp, _, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
