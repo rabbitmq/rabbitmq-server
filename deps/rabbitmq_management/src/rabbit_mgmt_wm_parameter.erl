@@ -71,8 +71,18 @@ accept_content(ReqData0, Context = #context{user = User}) ->
     end.
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
-    ok = rabbit_runtime_parameters:clear(
-           rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData), Username),
+    VHostName = rabbit_mgmt_util:vhost(ReqData),
+    Comp = component(ReqData),
+    Name = name(ReqData),
+    if
+        VHostName =/= not_found andalso
+        Comp =/= none andalso
+        Name =/= none ->
+            ok = rabbit_runtime_parameters:clear(
+                   VHostName, Comp, Name, Username);
+        true ->
+            ok
+    end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -81,8 +91,17 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 parameter(ReqData) ->
-    rabbit_runtime_parameters:lookup(
-      rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData)).
+    VHostName = rabbit_mgmt_util:vhost(ReqData),
+    Comp = component(ReqData),
+    Name = name(ReqData),
+    if
+        VHostName =/= not_found andalso
+        Comp =/= none andalso
+        Name =/= none ->
+            rabbit_runtime_parameters:lookup(VHostName, Comp, Name);
+        true ->
+            not_found
+    end.
 
 component(ReqData) -> rabbit_mgmt_util:id(component, ReqData).
 name(ReqData)      -> rabbit_mgmt_util:id(name, ReqData).
