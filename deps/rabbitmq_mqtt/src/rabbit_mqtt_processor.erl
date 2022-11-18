@@ -451,7 +451,8 @@ start_keepalive(#mqtt_frame_connect{keep_alive = Seconds},
                 #proc_state{socket = Socket}) ->
     ok = rabbit_mqtt_keepalive:start(Seconds, Socket).
 
-handle_clean_session(_, PState0 = #proc_state{clean_sess = false, proto_ver = ProtoVer}) ->
+handle_clean_session(_, PState0 = #proc_state{clean_sess = false,
+                                              proto_ver = ProtoVer}) ->
     case get_queue(?QOS_1, PState0) of
         {error, not_found} ->
             %% Queue will be created later when client subscribes.
@@ -512,17 +513,17 @@ queue_name(QoS, #proc_state{client_id = ClientId,
     rabbit_misc:r(VHost, queue, QNameBin).
 
 find_queue_name(TopicName, #proc_state{exchange = Exchange,
-                            mqtt2amqp_fun = Mqtt2AmqpFun} = PState) ->
+                                       mqtt2amqp_fun = Mqtt2AmqpFun} = PState) ->
     RoutingKey = Mqtt2AmqpFun(TopicName),
-    QName0 = queue_name(?QOS_0, PState),
-    case lookup_binding(Exchange, QName0, RoutingKey) of
+    QNameQoS0 = queue_name(?QOS_0, PState),
+    case lookup_binding(Exchange, QNameQoS0, RoutingKey) of
         true ->
-            {ok, QName0};
+            {ok, QNameQoS0};
         false ->
-            QName1 = queue_name(?QOS_1, PState),
-            case lookup_binding(Exchange, QName1, RoutingKey) of
+            QNameQoS1 = queue_name(?QOS_1, PState),
+            case lookup_binding(Exchange, QNameQoS1, RoutingKey) of
                 true ->
-                    {ok, QName1};
+                    {ok, QNameQoS1};
                 false ->
                     {not_found, []}
             end
@@ -530,14 +531,14 @@ find_queue_name(TopicName, #proc_state{exchange = Exchange,
 
 lookup_binding(Exchange, QueueName, RoutingKey) ->
     B = #binding{source = Exchange,
-                destination = QueueName,
-                key = RoutingKey},
+                 destination = QueueName,
+                 key = RoutingKey},
     lists:member(B, rabbit_binding:list_for_source_and_destination(Exchange, QueueName)).
 
 has_subs(#proc_state{exchange = Exchange} = PState) ->
-    has_subs_between(Exchange, queue_name(?QOS_0, PState)) orelse
-                    has_subs_between(Exchange, queue_name(?QOS_1, PState)).
-has_subs_between(Exchange, QueueName) ->
+    has_bindings_between(Exchange, queue_name(?QOS_0, PState)) orelse
+    has_bindings_between(Exchange, queue_name(?QOS_1, PState)).
+has_bindings_between(Exchange, QueueName) ->
     case rabbit_binding:list_for_source_and_destination(Exchange, QueueName) of
         [] ->
             false;
@@ -1704,7 +1705,8 @@ maybe_decrement_publisher(_) ->
     ok.
 
 %% multiple subscriptions from the same connection count as one consumer
-maybe_increment_consumer(false, #proc_state{proto_ver = ProtoVer} = PState) -> 
+maybe_increment_consumer(_WasConsumer = false,
+                         #proc_state{proto_ver = ProtoVer} = PState) ->
     case has_subs(PState) of
         true ->
             rabbit_global_counters:consumer_created(ProtoVer);
@@ -1714,8 +1716,8 @@ maybe_increment_consumer(false, #proc_state{proto_ver = ProtoVer} = PState) ->
 maybe_increment_consumer(_, _) ->
     ok.
 
-%% when there were subscriptions but not anymore
-maybe_decrement_consumer(true, #proc_state{proto_ver = ProtoVer} = PState) ->
+maybe_decrement_consumer(_WasConsumer = true,
+                         #proc_state{proto_ver = ProtoVer} = PState) ->
     case has_subs(PState) of
         false ->
             rabbit_global_counters:consumer_deleted(ProtoVer);
@@ -1725,9 +1727,8 @@ maybe_decrement_consumer(true, #proc_state{proto_ver = ProtoVer} = PState) ->
 maybe_decrement_consumer(_, _) ->
     ok.
 
-%% used when connection is terminated
 maybe_decrement_consumer(#proc_state{proto_ver = ProtoVer,
-                          auth_state = #auth_state{vhost = _Vhost}} = PState) ->
+                                     auth_state = #auth_state{vhost = _Vhost}} = PState) ->
     case has_subs(PState) of
         true ->
             rabbit_global_counters:consumer_deleted(ProtoVer);

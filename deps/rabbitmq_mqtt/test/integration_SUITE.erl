@@ -576,21 +576,22 @@ non_clean_sess_disconnect(Config) ->
     {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     Topic = <<"test-topic1">>,
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    ProtoVer = v4,
     ?assertMatch(#{consumers := 1},
-                 get_global_counters(Config, v4)),
+                 get_global_counters(Config, ProtoVer)),
 
     ok = emqtt:disconnect(C1),
     ?assertMatch(#{consumers := 0},
-                 get_global_counters(Config, v4)),
+                 get_global_counters(Config, ProtoVer)),
 
     {C2, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     ?assertMatch(#{consumers := 1},
-                 get_global_counters(Config, v4)),
+                 get_global_counters(Config, ProtoVer)),
 
     %% shouldn't receive message after unsubscribe
     {ok, _, _} = emqtt:unsubscribe(C2, Topic),
     ?assertMatch(#{consumers := 0},
-                 get_global_counters(Config, v4)),
+                 get_global_counters(Config, ProtoVer)),
     Msg = <<"msg">>,
     {ok, _} = emqtt:publish(C2, Topic, Msg, qos1),
     {publish_not_received, Msg} = expect_publishes(Topic, [Msg]),
