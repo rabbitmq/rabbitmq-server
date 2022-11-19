@@ -60,6 +60,9 @@
 -import(rabbit_misc, [pget/2]).
 
 -define(TABLE, rabbit_runtime_parameters).
+-define(INTERNAL_RUNTIME_PARAMETER_NAMES, [
+    imported_definition_hash_value
+]).
 
 %%---------------------------------------------------------------------------
 
@@ -295,12 +298,18 @@ list(VHost, Component) ->
 
 list_global() ->
     %% list only atom keys
-    mnesia:async_dirty(
+    All = mnesia:async_dirty(
         fun () ->
             Match = #runtime_parameters{key = '_', _ = '_'},
             [p(P) || P <- mnesia:match_object(?TABLE, Match, read),
                 is_atom(P#runtime_parameters.key)]
-        end).
+        end),
+    %% filter out global parameters that are not meant to be exposed
+    %% publicly
+    lists:filter(fun(PL) ->
+                    Name = proplists:get_value(name, PL),
+                    not lists:member(Name, ?INTERNAL_RUNTIME_PARAMETER_NAMES)
+                 end, All).
 
 -spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
 
