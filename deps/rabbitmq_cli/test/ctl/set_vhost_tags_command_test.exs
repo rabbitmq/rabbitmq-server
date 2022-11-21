@@ -48,10 +48,10 @@ defmodule SetVhostTagsCommandTest do
     result =
       Enum.find(
         list_vhosts(),
-        fn record -> record[:vhost] == context[:vhost] end
+        fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:tags]
+    assert result[:tags] == [:qa]
   end
 
   @tag vhost: "non/ex1st3nT"
@@ -64,7 +64,7 @@ defmodule SetVhostTagsCommandTest do
            ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
-  @tag user: @vhost, tags: [:qa, :limited]
+  @tag vhost: @vhost, tags: [:qa, :limited]
   test "run: with multiple optional arguments, adds multiple tags", context do
     @command.run(
       [context[:vhost] | context[:tags]],
@@ -74,13 +74,13 @@ defmodule SetVhostTagsCommandTest do
     result =
       Enum.find(
         list_vhosts(),
-        fn record -> record[:vhost] == context[:vhost] end
+        fn record -> record[:name] == context[:vhost] end
       )
 
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: @vhost, tags: [:qa]
+  @tag vhost: @vhost, tags: [:qa]
   test "run: with no optional arguments, clears virtual host tags", context do
     set_vhost_tags(context[:vhost], context[:tags])
 
@@ -89,13 +89,13 @@ defmodule SetVhostTagsCommandTest do
     result =
       Enum.find(
         list_vhosts(),
-        fn record -> record[:vhost] == context[:vhost] end
+        fn record -> record[:name] == context[:vhost] end
       )
 
     assert result[:tags] == []
   end
 
-  @tag user: @vhost, tags: [:qa]
+  @tag vhost: @vhost, tags: [:qa]
   test "run: identical calls are idempotent", context do
     set_vhost_tags(context[:vhost], context[:tags])
 
@@ -107,13 +107,13 @@ defmodule SetVhostTagsCommandTest do
     result =
       Enum.find(
         list_vhosts(),
-        fn record -> record[:vhost] == context[:vhost] end
+        fn record -> record[:name] == context[:vhost] end
       )
 
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: @vhost, old_tags: [:qa], new_tags: [:limited]
+  @tag vhost: @vhost, old_tags: [:qa], new_tags: [:limited]
   test "run: overwrites existing tags them", context do
     set_vhost_tags(context[:vhost], context[:old_tags])
 
@@ -125,13 +125,13 @@ defmodule SetVhostTagsCommandTest do
     result =
       Enum.find(
         list_vhosts(),
-        fn record -> record[:vhost] == context[:vhost] end
+        fn record -> record[:name] == context[:vhost] end
       )
 
     assert result[:tags] == context[:new_tags]
   end
 
-  @tag user: @vhost, tags: ["abc"]
+  @tag vhost: @vhost, tags: ["abc"]
   test "banner", context do
     assert @command.banner(
              [context[:vhost] | context[:tags]],

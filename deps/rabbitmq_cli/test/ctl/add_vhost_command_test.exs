@@ -63,6 +63,7 @@ defmodule AddVhostCommandTest do
     assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
 
+  @tag vhost: @vhost
   test "run: adding the same host twice is idempotent", context do
     add_vhost(context[:vhost])
 
