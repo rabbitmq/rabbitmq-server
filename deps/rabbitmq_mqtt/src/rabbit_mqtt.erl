@@ -20,8 +20,7 @@
          local_connection_pids/0]).
 
 start(normal, []) ->
-    rabbit_global_counters:init([{protocol, ?MQTT_PROTO_V3}]),
-    rabbit_global_counters:init([{protocol, ?MQTT_PROTO_V4}]),
+    global_counters_init(),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     case rabbit_mqtt_ff:track_client_id_in_ra() of
@@ -88,3 +87,12 @@ local_connection_pids() ->
                                   pg:get_local_members(PgScope, Group)
                           end, pg:which_groups(PgScope))
     end.
+
+global_counters_init() ->
+    global_counters_init0(?MQTT_PROTO_V3),
+    global_counters_init0(?MQTT_PROTO_V4).
+global_counters_init0(Proto) ->
+    rabbit_global_counters:init([{protocol, Proto}]),
+    rabbit_global_counters:init([{protocol, Proto}, {queue_type, ?QOS0_QTYPE}]),
+    rabbit_global_counters:init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
+    rabbit_global_counters:init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]).

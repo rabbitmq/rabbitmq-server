@@ -77,6 +77,7 @@ process_request(?PUBACK,
             case rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0) of
                 {ok, QStates, Actions} ->
                     %%TODO rabbit_channel:incr_queue_stats/3
+                    record_message_manual_ack(QName, PState),
                     {ok, handle_queue_actions(Actions, PState#proc_state{unacked_server_pubs = U,
                                                                          queue_states = QStates})};
                 {protocol_error, _ErrorType, _Reason, _ReasonArgs} = Err ->
@@ -1024,7 +1025,7 @@ queue_args(_, _) ->
     end.
 
 queue_type(?QOS_0, true, _) ->
-    rabbit_mqtt_qos0_queue;
+    ?QOS0_QTYPE;
 queue_type(_, _, QArgs) ->
     rabbit_amqqueue:get_queue_type(QArgs).
 
@@ -1040,7 +1041,7 @@ consume(Q, QoS, #proc_state{
     case check_resource_access(User, QName, read, AuthzCtx) of
         ok ->
             case amqqueue:get_type(Q) of
-                rabbit_mqtt_qos0_queue ->
+                ?QOS0_QTYPE ->
                     %% Messages get delivered directly to our process without
                     %% explicitly calling rabbit_queue_type:consume/3.
                     {ok, PState0};
@@ -1323,7 +1324,7 @@ maybe_delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
         {ok, Q} ->
             %% double check we delete the right queue
             case {amqqueue:get_type(Q), amqqueue:get_pid(Q)} of
-                {rabbit_mqtt_qos0_queue, Pid}
+                {?QOS0_QTYPE, Pid}
                   when Pid =:= self() ->
                     rabbit_queue_type:delete(Q, false, false, Username);
                 _ ->
@@ -1394,7 +1395,7 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             {ok, PState}
     end.
 
-handle_queue_event({queue_event, rabbit_mqtt_qos0_queue, Msg}, PState0) ->
+handle_queue_event({queue_event, ?QOS0_QTYPE, Msg}, PState0) ->
     PState = deliver_one_to_client(Msg, false, PState0),
     {ok, PState};
 handle_queue_event({queue_event, QName, Evt},
@@ -1489,7 +1490,7 @@ deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
                             ?QOS_0
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
-    PState1 = maybe_publish_to_client(Msg, QoS, PState0),
+    PState1 = maybe_publish_to_client(Msg, QoS, SubscriberQoS, PState0),
     PState = maybe_ack(AckRequired, QoS, QName, QMsgId, PState1),
     %%TODO GC
     % case GCThreshold of
@@ -1506,15 +1507,15 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     %% [MQTT-3.8.4-8]."
     erlang:min(PublisherQoS, SubscriberQoS).
 
-maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, PState) ->
+maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, _, PState) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     PState;
 maybe_publish_to_client(
-  {_QName, _QPid, QMsgId, Redelivered,
+  {QName, _QPid, QMsgId, Redelivered,
    #basic_message{
       routing_keys = [RoutingKey | _CcRoutes],
       content = #content{payload_fragments_rev = FragmentsRev}}},
-  QoS, PState0 = #proc_state{amqp2mqtt_fun = Amqp2MqttFun,
+  QoS, SubscriberQos, PState0 = #proc_state{amqp2mqtt_fun = Amqp2MqttFun,
                              send_fun = SendFun}) ->
     {PacketId, PState} = queue_message_id_to_packet_id(QMsgId, QoS, PState0),
     %%TODO support iolists when sending to client
@@ -1536,6 +1537,7 @@ maybe_publish_to_client(
                      topic_name = Amqp2MqttFun(RoutingKey)},
        payload = Payload},
     SendFun(Frame, PState),
+    record_message_delivered(QName, Redelivered, SubscriberQos, PState),
     PState.
 
 queue_message_id_to_packet_id(_, ?QOS_0, PState) ->
@@ -1558,6 +1560,7 @@ maybe_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
     case rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0) of
         {ok, QStates, Actions} ->
             %%TODO rabbit_channel:incr_queue_stats/3
+            record_message_auto_ack(QName, PState),
             handle_queue_actions(Actions, PState#proc_state{queue_states = QStates});
         {protocol_error, _ErrorType, _Reason, _ReasonArgs} = Err ->
             %%TODO handle error
@@ -1770,3 +1773,40 @@ maybe_decrement_consumer(#proc_state{proto_ver = ProtoVer,
     end;
 maybe_decrement_consumer(_) ->
     ok.
+
+record_message_delivered(QName, true, SubscriberQoS, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
+    case SubscriberQoS of
+        ?QOS_0 ->
+            rabbit_global_counters:messages_delivered(ProtoVer, ?QOS0_QTYPE, 1),
+            rabbit_global_counters:messages_redelivered(ProtoVer, ?QOS0_QTYPE, 1);
+        ?QOS_1 ->
+            case rabbit_queue_type:module(QName, QStates) of
+                {ok, QType} ->
+                    rabbit_global_counters:messages_delivered(ProtoVer, QType, 1),
+                    rabbit_global_counters:messages_redelivered(ProtoVer, QType, 1);
+                _ ->
+                    noop
+            end
+    end;
+record_message_delivered(QName, false, SubscriberQoS, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
+    case SubscriberQoS of
+        ?QOS_0 ->
+            rabbit_global_counters:messages_delivered(ProtoVer, ?QOS0_QTYPE, 1);
+        ?QOS_1 ->
+            case rabbit_queue_type:module(QName, QStates) of
+                {ok, QType} ->
+                    rabbit_global_counters:messages_delivered(ProtoVer, QType, 1);
+                _ ->
+                    noop
+            end
+    end.
+
+record_message_manual_ack(QName, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
+    {ok, QType} = rabbit_queue_type:module(QName, QStates),
+    rabbit_global_counters:messages_acknowledged(ProtoVer, QType, 1),
+    rabbit_global_counters:messages_delivered_consume_manual_ack(ProtoVer, QType, 1).
+
+record_message_auto_ack(QName, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
+    {ok, QType} = rabbit_queue_type:module(QName, QStates),
+    rabbit_global_counters:messages_acknowledged(ProtoVer, QType, 1),
+    rabbit_global_counters:messages_delivered_consume_auto_ack(ProtoVer, QType, 1).

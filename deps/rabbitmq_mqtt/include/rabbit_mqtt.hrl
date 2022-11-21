@@ -7,6 +7,7 @@
 
 -define(CLIENT_ID_MAXLEN, 23).
 -define(PG_SCOPE, pg_scope_rabbitmq_mqtt_clientid).
+-define(QOS0_QTYPE, rabbit_mqtt_qos0_queue).
 
 -include("rabbit_mqtt_types.hrl").
 

@@ -7,6 +7,7 @@
          sync_publish_result/3,
          get_global_counters/2,
          get_global_counters/3,
+         get_global_counters/4,
          expect_publishes/2]).
 
 all_connection_pids(Config) ->
@@ -49,12 +50,15 @@ sync_publish_result(Caller, Mref, Result) ->
     erlang:send(Caller, {Mref, Result}).
 
 get_global_counters(Config, ProtoVer) ->
-    get_global_counters(Config, ProtoVer, 0).
+    get_global_counters(Config, ProtoVer, 0, []).
 
-get_global_counters(Config, v3, Node) ->
-    get_global_counters(Config, ?MQTT_PROTO_V3, Node);
-get_global_counters(Config, v4, Node) ->
-    get_global_counters(Config, ?MQTT_PROTO_V4, Node);
-get_global_counters(Config, Proto, Node) ->
-    maps:get([{protocol, Proto}],
+get_global_counters(Config, ProtoVer, Node) ->
+    get_global_counters(Config, ProtoVer, Node, []).
+
+get_global_counters(Config, v3, Node, QType) ->
+    get_global_counters(Config, ?MQTT_PROTO_V3, Node, QType);
+get_global_counters(Config, v4, Node, QType) ->
+    get_global_counters(Config, ?MQTT_PROTO_V4, Node, QType);
+get_global_counters(Config, Proto, Node, QType) ->
+    maps:get([{protocol, Proto}] ++ QType,
              rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_global_counters, overview, [])).
