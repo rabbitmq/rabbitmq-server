@@ -89,10 +89,12 @@ local_connection_pids() ->
     end.
 
 global_counters_init() ->
-    global_counters_init0(?MQTT_PROTO_V3),
-    global_counters_init0(?MQTT_PROTO_V4).
-global_counters_init0(Proto) ->
-    rabbit_global_counters:init([{protocol, Proto}]),
-    rabbit_global_counters:init([{protocol, Proto}, {queue_type, ?QOS0_QTYPE}]),
-    rabbit_global_counters:init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
-    rabbit_global_counters:init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]).
+    global_counters_init(?MQTT_PROTO_V3),
+    global_counters_init(?MQTT_PROTO_V4).
+
+global_counters_init(ProtoVer) ->
+    Proto = {protocol, ProtoVer},
+    rabbit_global_counters:init([Proto]),
+    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
+    rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
+    rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]).

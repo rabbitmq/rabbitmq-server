@@ -668,6 +668,10 @@ subscribe_same_topic_different_qos(Config) ->
                                   <<"retained">>, <<"msg2">>,
                                   <<"retained">>, <<"msg3">>]),
 
+    %% There should be exactly one consumer for each queue: qos0 and qos1
+    Consumers = rpc(Config, 0, rabbit_amqqueue, consumers_all, [<<"/">>]),
+    ?assertEqual(2, length(Consumers)),
+
     ok = emqtt:disconnect(C),
     {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C1).

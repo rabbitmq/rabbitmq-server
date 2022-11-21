@@ -160,42 +160,46 @@ process_request(?SUBSCRIBE,
     HasSubsBefore = TopicNamesQos0 =/= [] orelse TopicNamesQos1 =/= [],
 
     {QosResponse, PState1} =
-    lists:foldl(fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
-                        %% Once a subscription failed, mark all following subscriptions
-                        %% as failed instead of creating bindings because we are going
-                        %% to close the client connection anyways.
-                        {[?SUBACK_FAILURE | L], S};
-                   (#mqtt_topic{name = TopicName,
-                                qos = Qos0} = Topic,
-                    {L, S0}) ->
-                        QoS = supported_sub_qos(Qos0),
-                        case maybe_replace_old_sub(Topic, TopicNamesQos0, TopicNamesQos1, S0) of
-                            {ok, S1} ->
-                                case ensure_queue(QoS, S1) of
-                                    {ok, Q} ->
-                                        QName = amqqueue:get_name(Q),
-                                        case bind(QName, TopicName, S1) of
-                                            {ok, _Output, S2} ->
-                                                %%TODO check what happens if we basic.consume multiple times
-                                                %% for the same queue
-                                                case consume(Q, QoS, S2) of
-                                                    {ok, S3} ->
-                                                        {[QoS | L], S3};
-                                                    {error, _Reason} ->
-                                                        {[?SUBACK_FAILURE | L], S2}
-                                                end;
-                                            {error, Reason, S2} ->
-                                                rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
-                                                                 [rabbit_misc:rs(QName), TopicName, Reason]),
-                                                {[?SUBACK_FAILURE | L], S2}
-                                        end;
-                                    {error, _} ->
-                                        {[?SUBACK_FAILURE | L], S1}
-                                end;
-                            {error, _Reason, S1} ->
-                                {[?SUBACK_FAILURE | L], S1}
-                        end
-                end, {[], PState0}, Topics),
+    lists:foldl(
+      fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
+              %% Once a subscription failed, mark all following subscriptions
+              %% as failed instead of creating bindings because we are going
+              %% to close the client connection anyway.
+              {[?SUBACK_FAILURE | L], S};
+         (#mqtt_topic{name = TopicName,
+                      qos = Qos0} = Topic,
+          {L, S0}) ->
+              QoS = supported_sub_qos(Qos0),
+              case maybe_replace_old_sub(Topic, TopicNamesQos0, TopicNamesQos1, S0) of
+                  {ok, S1} ->
+                      case ensure_queue(QoS, S1) of
+                          {ok, Q} ->
+                              QName = amqqueue:get_name(Q),
+                              case bind(QName, TopicName, S1) of
+                                  {ok, _Output, S2} ->
+                                      case self_consumes(Q) of
+                                          false ->
+                                              case consume(Q, QoS, S2) of
+                                                  {ok, S3} ->
+                                                      {[QoS | L], S3};
+                                                  {error, _Reason} ->
+                                                      {[?SUBACK_FAILURE | L], S2}
+                                              end;
+                                          true ->
+                                              {[QoS | L], S2}
+                                      end;
+                                  {error, Reason, S2} ->
+                                      rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
+                                                       [rabbit_misc:rs(QName), TopicName, Reason]),
+                                      {[?SUBACK_FAILURE | L], S2}
+                              end;
+                          {error, _} ->
+                              {[?SUBACK_FAILURE | L], S1}
+                      end;
+                  {error, _Reason, S1} ->
+                      {[?SUBACK_FAILURE | L], S1}
+              end
+      end, {[], PState0}, Topics),
 
     maybe_increment_consumer(HasSubsBefore, PState1),
     SendFun(
@@ -444,6 +448,17 @@ return_connack(?CONNACK_ID_REJECTED, S) ->
     {error, invalid_client_id, S};
 return_connack(?CONNACK_UNACCEPTABLE_PROTO_VER, S) ->
     {error, unsupported_protocol_version, S}.
+
+-spec self_consumes(amqqueue:amqqueue()) -> boolean().
+self_consumes(Queue) ->
+    case amqqueue:get_type(Queue) of
+        ?QUEUE_TYPE_QOS_0 ->
+            false;
+        _ ->
+            lists:any(fun(Consumer) ->
+                              element(1, Consumer) =:= self()
+                      end, rabbit_amqqueue:consumers(Queue))
+    end.
 
 start_keepalive(#mqtt_frame_connect{keep_alive = Seconds},
                 #proc_state{socket = Socket}) ->
@@ -1025,7 +1040,7 @@ queue_args(_, _) ->
     end.
 
 queue_type(?QOS_0, true, _) ->
-    ?QOS0_QTYPE;
+    ?QUEUE_TYPE_QOS_0;
 queue_type(_, _, QArgs) ->
     rabbit_amqqueue:get_queue_type(QArgs).
 
@@ -1041,7 +1056,7 @@ consume(Q, QoS, #proc_state{
     case check_resource_access(User, QName, read, AuthzCtx) of
         ok ->
             case amqqueue:get_type(Q) of
-                ?QOS0_QTYPE ->
+                ?QUEUE_TYPE_QOS_0 ->
                     %% Messages get delivered directly to our process without
                     %% explicitly calling rabbit_queue_type:consume/3.
                     {ok, PState0};
@@ -1324,7 +1339,7 @@ maybe_delete_mqtt_qos0_queue(PState = #proc_state{clean_sess = true,
         {ok, Q} ->
             %% double check we delete the right queue
             case {amqqueue:get_type(Q), amqqueue:get_pid(Q)} of
-                {?QOS0_QTYPE, Pid}
+                {?QUEUE_TYPE_QOS_0, Pid}
                   when Pid =:= self() ->
                     rabbit_queue_type:delete(Q, false, false, Username);
                 _ ->
@@ -1395,7 +1410,7 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             {ok, PState}
     end.
 
-handle_queue_event({queue_event, ?QOS0_QTYPE, Msg}, PState0) ->
+handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg}, PState0) ->
     PState = deliver_one_to_client(Msg, false, PState0),
     {ok, PState};
 handle_queue_event({queue_event, QName, Evt},
@@ -1777,8 +1792,8 @@ maybe_decrement_consumer(_) ->
 record_message_delivered(QName, true, SubscriberQoS, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
     case SubscriberQoS of
         ?QOS_0 ->
-            rabbit_global_counters:messages_delivered(ProtoVer, ?QOS0_QTYPE, 1),
-            rabbit_global_counters:messages_redelivered(ProtoVer, ?QOS0_QTYPE, 1);
+            rabbit_global_counters:messages_delivered(ProtoVer, ?QUEUE_TYPE_QOS_0, 1),
+            rabbit_global_counters:messages_redelivered(ProtoVer, ?QUEUE_TYPE_QOS_0, 1);
         ?QOS_1 ->
             case rabbit_queue_type:module(QName, QStates) of
                 {ok, QType} ->
@@ -1791,7 +1806,7 @@ record_message_delivered(QName, true, SubscriberQoS, #proc_state{proto_ver = Pro
 record_message_delivered(QName, false, SubscriberQoS, #proc_state{proto_ver = ProtoVer, queue_states = QStates} = _PState) ->
     case SubscriberQoS of
         ?QOS_0 ->
-            rabbit_global_counters:messages_delivered(ProtoVer, ?QOS0_QTYPE, 1);
+            rabbit_global_counters:messages_delivered(ProtoVer, ?QUEUE_TYPE_QOS_0, 1);
         ?QOS_1 ->
             case rabbit_queue_type:module(QName, QStates) of
                 {ok, QType} ->
