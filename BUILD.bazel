@@ -180,7 +180,7 @@ OUTPUT_DIR=test.outputs
 if [ $$# -gt 1 ]; then
     OUTPUT_DIR=shard_$$2_of_*/test.outputs
 fi
-cd "bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR"
+cd "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR
 if [ -f outputs.zip ]; then
     unzip -u outputs.zip
 fi
