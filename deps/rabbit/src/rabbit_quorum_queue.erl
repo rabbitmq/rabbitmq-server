@@ -1233,6 +1233,7 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
 
+-spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
 transfer_leadership(Q, Destination) ->
     {RaName, _} = Pid = amqqueue:get_pid(Q),
     case ra:transfer_leadership(Pid, {RaName, Destination}) of

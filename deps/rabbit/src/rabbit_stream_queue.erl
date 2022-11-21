@@ -25,6 +25,9 @@
          credit/4,
          dequeue/4,
          info/2,
+         queue_length/1,
+         get_replicas/1,
+         transfer_leadership/2,
          init/1,
          close/1,
          update/2,
@@ -628,6 +631,20 @@ i(type, _) ->
     stream;
 i(_, _) ->
     ''.
+
+queue_length(Q) ->
+    i(messages, Q).
+
+get_replicas(Q) ->
+    i(members, Q).
+
+-spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
+transfer_leadership(Q, Destination) ->
+    case rabbit_stream_coordinator:restart_stream(Q, #{preferred_leader_node => Destination}) of
+        {ok, NewNode} -> {migrated, NewNode};
+        {error, Reason} -> {not_migrated, Reason};
+        {timeout, _} -> {not_migrated, timeout}
+    end.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.

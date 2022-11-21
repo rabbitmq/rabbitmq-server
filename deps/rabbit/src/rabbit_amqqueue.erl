@@ -456,14 +456,18 @@ maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
 
 %% Stream queues don't yet support rebalance
 filter_per_type(all, Q)  ->
-    ?amqqueue_is_quorum(Q) or ?amqqueue_is_classic(Q);
+    ?amqqueue_is_quorum(Q) or ?amqqueue_is_classic(Q) or ?amqqueue_is_stream(Q);
 filter_per_type(quorum, Q) ->
     ?amqqueue_is_quorum(Q);
+filter_per_type(stream, Q) ->
+    ?amqqueue_is_stream(Q);
 filter_per_type(classic, Q) ->
     ?amqqueue_is_classic(Q).
 
 rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
     rabbit_quorum_queue;
+rebalance_module(Q) when ?amqqueue_is_stream(Q) ->
+    rabbit_stream_queue;
 rebalance_module(Q) when ?amqqueue_is_classic(Q) ->
     rabbit_mirror_queue_misc.
 
@@ -490,14 +494,15 @@ iterative_rebalance(ByNode, MaxQueuesDesired) ->
 maybe_migrate(ByNode, MaxQueuesDesired) ->
     maybe_migrate(ByNode, MaxQueuesDesired, maps:keys(ByNode)).
 
+column_name(rabbit_classic_queue) -> <<"Number of replicated classic queues">>;
+column_name(rabbit_quorum_queue) -> <<"Number of quorum queues">>;
+column_name(rabbit_stream_queue) -> <<"Number of streams">>;
+column_name(Other) -> Other.
+
 maybe_migrate(ByNode, _, []) ->
-    {ok, maps:fold(fun(K, V, Acc) ->
-                           {CQs, QQs} = lists:partition(fun({_, Q, _}) ->
-                                                                ?amqqueue_is_classic(Q)
-                                                        end, V),
-                           [[{<<"Node name">>, K}, {<<"Number of quorum queues">>, length(QQs)},
-                             {<<"Number of replicated classic queues">>, length(CQs)}] | Acc]
-                   end, [], ByNode)};
+    ByNodeAndType = maps:map(fun(_Node, Queues) -> maps:groups_from_list(fun({_, Q, _}) -> column_name(?amqqueue_v2_field_type(Q)) end, Queues) end, ByNode),
+    CountByNodeAndType = maps:map(fun(_Node, Type) -> maps:map(fun (_, Qs)-> length(Qs) end, Type) end, ByNodeAndType),
+    {ok, maps:values(maps:map(fun(Node,Counts) -> [{<<"Node name">>, Node} | maps:to_list(Counts)] end, CountByNodeAndType))};
 maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
     case maps:get(N, ByNode, []) of
         [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
@@ -514,7 +519,7 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
                             rabbit_log:info("Queue ~tp migrated to ~tp", [Name, NewNode]),
-                            {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
+                            {migrated, update_migrated_queue(NewNode, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
                             rabbit_log:warning("Error migrating queue ~tp: ~tp", [Name, Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
@@ -551,9 +556,13 @@ group_by_node(Queues) ->
     ByNode = lists:foldl(fun(Q, Acc) ->
                                  Module = rebalance_module(Q),
                                  Length = Module:queue_length(Q),
-                                 maps:update_with(amqqueue:qnode(Q),
-                                                  fun(L) -> [{Length, Q, false} | L] end,
-                                                  [{Length, Q, false}], Acc)
+                                 case amqqueue:qnode(Q) of
+                                     undefined -> Acc;
+                                     Node ->
+                                         maps:update_with(Node,
+                                                          fun(L) -> [{Length, Q, false} | L] end,
+                                                          [{Length, Q, false}], Acc)
+                                 end
                          end, #{}, Queues),
     maps:map(fun(_K, V) -> lists:keysort(1, V) end, ByNode).
 

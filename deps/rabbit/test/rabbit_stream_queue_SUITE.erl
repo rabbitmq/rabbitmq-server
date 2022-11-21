@@ -56,7 +56,8 @@ groups() ->
            leader_locator_balanced_maintenance,
            select_nodes_with_least_replicas,
            recover_after_leader_and_coordinator_kill,
-           restart_stream
+           restart_stream,
+           rebalance
           ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
@@ -2504,3 +2505,60 @@ ensure_retention_applied(Config, Server) ->
     %% Let's force a call on the retention gen_server, any pending retention would have been
     %% processed when this call returns.
     rabbit_ct_broker_helpers:rpc(Config, Server, gen_server, call, [osiris_retention, test]).
+
+rebalance(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "rebalance test isn't mixed version compatible"};
+        false ->
+            rebalance0(Config)
+    end.
+
+rebalance0(Config) ->
+    [Server0 | _] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+
+    Q1 = <<"st1">>,
+    Q2 = <<"st2">>,
+    Q3 = <<"st3">>,
+    Q4 = <<"st4">>,
+    Q5 = <<"st5">>,
+
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0},
+                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Ch, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
+    ?assertEqual({'queue.declare_ok', Q4, 0, 0},
+                 declare(Ch, Q4, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
+    ?assertEqual({'queue.declare_ok', Q5, 0, 0},
+                 declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
+
+    NumMsgs = 100,
+    Data = crypto:strong_rand_bytes(100),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    [publish(Ch, Q1, Data) || _ <- lists:seq(1, NumMsgs)],
+    [publish(Ch, Q2, Data) || _ <- lists:seq(1, NumMsgs)],
+    [publish(Ch, Q3, Data) || _ <- lists:seq(1, NumMsgs)],
+    [publish(Ch, Q4, Data) || _ <- lists:seq(1, NumMsgs)],
+    [publish(Ch, Q5, Data) || _ <- lists:seq(1, NumMsgs)],
+
+    %% Check that we have at most 2 streams per node
+    ?awaitMatch(true,
+                begin
+                    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [stream, ".*", ".*"]),
+                    lists:all(fun(NodeData) ->
+                                      lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                                   (_) -> true end,
+                                                NodeData)
+                              end, Summary)
+                end, 10000),
+    ok.
