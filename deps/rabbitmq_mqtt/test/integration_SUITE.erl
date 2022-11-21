@@ -55,6 +55,8 @@ common_tests() ->
      ,event_authentication_failure
      ,internal_event_handler
      ,non_clean_sess_disconnect
+     ,subscribe_same_topic_same_qos
+     ,subscribe_same_topic_different_qos
     ].
 
 suite() ->
@@ -599,6 +601,50 @@ non_clean_sess_disconnect(Config) ->
     %% connect with clean sess true to clean up
     {C3, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
+
+subscribe_same_topic_same_qos(Config) ->
+    {C, _} = connect(?FUNCTION_NAME, Config),
+    Topic = <<"a/b">>,
+
+    {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true},
+                                                       {qos, 1}]),
+    %% Subscribe with QoS 0
+    {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg1">>, qos1),
+    %% Subscribe to same topic with same QoS
+    {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg2">>, qos1),
+
+    %% "Any existing retained messages matching the Topic Filter MUST be re-sent" [MQTT-3.8.4-3]
+    ok = expect_publishes(Topic, [<<"retained">>, <<"msg1">>,
+                                  <<"retained">>, <<"msg2">>
+                                 ]),
+    ok = emqtt:disconnect(C).
+
+subscribe_same_topic_different_qos(Config) ->
+    {C, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    Topic = <<"b/c">>,
+
+    {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true},
+                                                       {qos, 1}]),
+    %% Subscribe with QoS 0
+    {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg1">>, qos1),
+    %% Subscribe to same topic with QoS 1
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg2">>, qos1),
+    %% Subscribe to same topic with QoS 0 again
+    {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg3">>, qos1),
+
+    %% "Any existing retained messages matching the Topic Filter MUST be re-sent" [MQTT-3.8.4-3]
+    ok = expect_publishes(Topic, [<<"retained">>, <<"msg1">>,
+                                  <<"retained">>, <<"msg2">>,
+                                  <<"retained">>, <<"msg3">>]),
+
+    ok = emqtt:disconnect(C),
+    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C1).
 
 %% -------------------------------------------------------------------
 %% Internal helpers

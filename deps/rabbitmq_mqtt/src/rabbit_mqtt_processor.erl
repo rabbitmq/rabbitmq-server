@@ -154,7 +154,10 @@ process_request(?SUBSCRIBE,
                 #proc_state{send_fun = SendFun,
                             retainer_pid = RPid} = PState0) ->
     rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
-    HasSubsBefore = has_subs(PState0),
+    TopicNamesQos0 = topic_names(?QOS_0, PState0),
+    TopicNamesQos1 = topic_names(?QOS_1, PState0),
+    HasSubsBefore = TopicNamesQos0 =/= [] orelse TopicNamesQos1 =/= [],
+
     {QosResponse, PState1} =
     lists:foldl(fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
                         %% Once a subscription failed, mark all following subscriptions
@@ -162,33 +165,37 @@ process_request(?SUBSCRIBE,
                         %% to close the client connection anyways.
                         {[?SUBACK_FAILURE | L], S};
                    (#mqtt_topic{name = TopicName,
-                                qos = Qos0},
+                                qos = Qos0} = Topic,
                     {L, S0}) ->
                         QoS = supported_sub_qos(Qos0),
-                        %%TODO check whether new subscription replaces an existing one
-                        %% (i.e. same topic name and different QoS)
-                        case ensure_queue(QoS, S0) of
-                            {ok, Q} ->
-                                QName = amqqueue:get_name(Q),
-                                case bind(QName, TopicName, S0) of
-                                    {ok, _Output, S1} ->
-                                        %%TODO check what happens if we basic.consume multiple times
-                                        %% for the same queue
-                                        case consume(Q, QoS, S1) of
-                                            {ok, S2} ->
-                                                {[QoS | L], S2};
-                                            {error, _Reason} ->
-                                                {[?SUBACK_FAILURE | L], S1}
+                        case maybe_replace_old_sub(Topic, TopicNamesQos0, TopicNamesQos1, S0) of
+                            {ok, S1} ->
+                                case ensure_queue(QoS, S1) of
+                                    {ok, Q} ->
+                                        QName = amqqueue:get_name(Q),
+                                        case bind(QName, TopicName, S1) of
+                                            {ok, _Output, S2} ->
+                                                %%TODO check what happens if we basic.consume multiple times
+                                                %% for the same queue
+                                                case consume(Q, QoS, S2) of
+                                                    {ok, S3} ->
+                                                        {[QoS | L], S3};
+                                                    {error, _Reason} ->
+                                                        {[?SUBACK_FAILURE | L], S2}
+                                                end;
+                                            {error, Reason, S2} ->
+                                                rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
+                                                                 [rabbit_misc:rs(QName), TopicName, Reason]),
+                                                {[?SUBACK_FAILURE | L], S2}
                                         end;
-                                    {error, Reason, S} ->
-                                        rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
-                                                         [rabbit_misc:rs(QName), TopicName, Reason]),
-                                        {[?SUBACK_FAILURE | L], S}
+                                    {error, _} ->
+                                        {[?SUBACK_FAILURE | L], S1}
                                 end;
-                            {error, _} ->
-                                {[?SUBACK_FAILURE | L], S0}
+                            {error, _Reason, S1} ->
+                                {[?SUBACK_FAILURE | L], S1}
                         end
                 end, {[], PState0}, Topics),
+
     maybe_increment_consumer(HasSubsBefore, PState1),
     SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
@@ -215,21 +222,21 @@ process_request(?UNSUBSCRIBE,
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     HasSubsBefore = has_subs(PState0),
     PState = lists:foldl(
-        fun(#mqtt_topic{name = TopicName}, #proc_state{} = S0) ->
-            case find_queue_name(TopicName, S0) of
-                {ok, QName} ->
-                    case unbind(QName, TopicName, S0) of
-                        {ok, _, _} ->
-                            PState0;
-                        {error, Reason, State} ->
-                            rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
-                                            [rabbit_misc:rs(QName), TopicName, Reason]),
-                            State
-                    end;
-                {not_found, _} ->
-                    PState0
-            end
-        end, PState0, Topics),
+               fun(#mqtt_topic{name = TopicName}, #proc_state{} = S0) ->
+                       case find_queue_name(TopicName, S0) of
+                           {ok, QName} ->
+                               case unbind(QName, TopicName, S0) of
+                                   {ok, _, S} ->
+                                       S;
+                                   {error, Reason, S} ->
+                                       rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
+                                                        [rabbit_misc:rs(QName), TopicName, Reason]),
+                                       S
+                               end;
+                           {not_found, _} ->
+                               S0
+                       end
+               end, PState0, Topics),
     SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
                   variable = #mqtt_frame_suback{message_id = MessageId}},
@@ -525,15 +532,46 @@ lookup_binding(Exchange, QueueName, RoutingKey) ->
                  key = RoutingKey},
     lists:member(B, rabbit_binding:list_for_source_and_destination(Exchange, QueueName)).
 
-has_subs(#proc_state{exchange = Exchange} = PState) ->
-    has_bindings_between(Exchange, queue_name(?QOS_0, PState)) orelse
-    has_bindings_between(Exchange, queue_name(?QOS_1, PState)).
-has_bindings_between(Exchange, QueueName) ->
-    case rabbit_binding:list_for_source_and_destination(Exchange, QueueName) of
-        [] ->
-            false;
-        _ ->
-            true
+has_subs(PState) ->
+    topic_names(?QOS_0, PState) =/= [] orelse
+    topic_names(?QOS_1, PState) =/= [].
+
+topic_names(QoS, #proc_state{exchange = Exchange,
+                             amqp2mqtt_fun = Amqp2MqttFun} = PState) ->
+    Bindings = rabbit_binding:list_for_source_and_destination(Exchange, queue_name(QoS, PState)),
+    lists:map(fun(B) -> Amqp2MqttFun(B#binding.key) end, Bindings).
+
+%% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
+%% to an existing Subscription’s Topic Filter then it MUST completely replace that
+%% existing Subscription with a new Subscription. The Topic Filter in the new Subscription
+%% will be identical to that in the previous Subscription, although its maximum QoS value
+%% could be different. [...]" [MQTT-3.8.4-3].
+%%
+%% Therefore, if we receive a QoS 0 subscription for a topic that already has QoS 1,
+%% we unbind QoS 1 (and vice versa).
+maybe_replace_old_sub(#mqtt_topic{name = TopicName, qos = ?QOS_0},
+                      _, OldTopicNamesQos1, PState) ->
+    QName = queue_name(?QOS_1, PState),
+    maybe_unbind(TopicName, OldTopicNamesQos1, QName, PState);
+maybe_replace_old_sub(#mqtt_topic{name = TopicName, qos = QoS},
+                      OldTopicNamesQos0, _, PState)
+  when QoS =:= ?QOS_1 orelse QoS =:= ?QOS_2 ->
+    QName = queue_name(?QOS_0, PState),
+    maybe_unbind(TopicName, OldTopicNamesQos0, QName, PState).
+
+maybe_unbind(TopicName, TopicNames, QName, PState0) ->
+    case lists:member(list_to_binary(TopicName), TopicNames) of
+        false ->
+            {ok, PState0};
+        true ->
+            case unbind(QName, TopicName, PState0) of
+                {ok, _Output, PState} ->
+                    {ok, PState};
+                {error, Reason, _PState} = Err ->
+                    rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
+                                     [rabbit_misc:rs(QName), TopicName, Reason]),
+                    Err
+            end
     end.
 
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
