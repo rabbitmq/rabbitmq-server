@@ -422,8 +422,8 @@ leader_down(_) ->
                                                    state = {stopped, E, N2Tail}}}},
                  S3),
     {S3, []} = evaluate_stream(meta(?LINE), S3, []),
-    N3Tail = {E, 102},
-    #{index := Idx4} = Meta4 = meta(?LINE),
+    N3Tail = {E, 101},
+    #{index := Idx4} = Meta4 = meta(?LINE + 1),
     S4 = update_stream(Meta4, {member_stopped, StreamId,
                                #{node => N3,
                                  index => Idx2,
@@ -1328,9 +1328,9 @@ overview(_Config) ->
     Cmd = {new_stream, StreamId, #{leader_node => node(),
                                    retention => [],
                                    queue => Q}},
-    {S1, _, _} = apply_cmd(#{index => 1,
-                             machine_version => 3,
-                             system_time => 203984982374}, Cmd, S0),
+    {S1, _, _} = apply_cmd(meta(#{index => 1,
+                                  machine_version => 3,
+                                  system_time => 203984982374}), Cmd, S0),
 
     ?assertMatch(#{num_monitors := 0,
                    num_streams := 1,
@@ -1342,9 +1342,11 @@ overview(_Config) ->
     ok.
 
 meta(N) when is_integer(N) ->
-    #{index => N,
-      machine_version => 1,
-      system_time => N + 1000}.
+    meta(#{index => N});
+meta(#{index := N} = M) when is_map(M) ->
+    maps:merge(#{term => 1,
+                 machine_version => rabbit_stream_coordinator:version(),
+                 system_time => N * 2}, M).
 
 started_stream(StreamId, LeaderPid, ReplicaPids) ->
     E = 1,

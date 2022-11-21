@@ -51,7 +51,7 @@
                  listeners = #{} :: #{pid() | %% v0 & v1
                                       {pid(), leader | member} %% v2
                                       := LeaderPid :: pid()} |
-                 {node(), LocalPid :: pid()},
+                                     {node(), LocalPid :: pid()},
                  reply_to :: undefined | from(),
                  mnesia = {updated, 0} :: {updated | updating, osiris:epoch()},
                  target = running :: running | deleted

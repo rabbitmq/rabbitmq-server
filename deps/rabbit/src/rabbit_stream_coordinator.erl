@@ -383,7 +383,7 @@ all_coord_members() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
-version() -> 3.
+version() -> 4.
 
 which_module(_) ->
     ?MODULE.
@@ -1224,16 +1224,16 @@ update_stream0(#{system_time := _Ts},
             %% epochs?
             Stream0
     end;
-update_stream0(#{system_time := _Ts,
-                 machine_version := MachineVersion},
+update_stream0(Meta,
                {member_stopped, _StreamId,
                 #{node := Node,
                   index := Idx,
                   epoch := StoppedEpoch,
-                  tail := Tail}}, #stream{epoch = Epoch,
-                                          target = Target,
-                                          nodes = Nodes,
-                                          members = Members0} = Stream0) ->
+                  tail := Tail}},
+               #stream{epoch = Epoch,
+                       target = Target,
+                       nodes = Nodes,
+                       members = Members0} = Stream0) ->
     IsLeaderInCurrent = case find_leader(Members0) of
                             {#member{role = {writer, Epoch},
                                      target = running,
@@ -1282,7 +1282,7 @@ update_stream0(#{system_time := _Ts,
             case is_quorum(length(Nodes), length(EpochOffsets)) of
                 true ->
                     %% select leader
-                    NewWriterNode = select_leader(MachineVersion, EpochOffsets),
+                    NewWriterNode = select_leader(Meta, EpochOffsets),
                     NextEpoch = Epoch + 1,
                     Members = maps:map(
                                 fun (N, #member{state = {stopped, E, _}} = M)
@@ -1831,7 +1831,7 @@ find_leader(Members) ->
             {undefined, Replicas}
     end.
 
-select_leader(0, EpochOffsets) ->
+select_leader(#{machine_version := 0}, EpochOffsets) ->
     %% this is the version 0 faulty version of this code,
     %% retained for versioning
     [{Node, _} | _] = lists:sort(fun({_, {Ao, E}}, {_, {Bo, E}}) ->
@@ -1844,7 +1844,9 @@ select_leader(0, EpochOffsets) ->
                                          true
                                  end, EpochOffsets),
     Node;
-select_leader(_Version, EpochOffsets) ->
+select_leader(#{machine_version := MacVer}, EpochOffsets)
+  when MacVer =< 3 ->
+    %% this is the logic up til v3
     [{Node, _} | _] = lists:sort(
                         fun({_, {Epoch, OffsetA}}, {_, {Epoch, OffsetB}}) ->
                                 OffsetA >= OffsetB;
@@ -1855,7 +1857,33 @@ select_leader(_Version, EpochOffsets) ->
                            (_, {_, empty}) ->
                                 true
                         end, EpochOffsets),
-    Node.
+    Node;
+select_leader(#{system_time := Ts,
+                index := Idx}, EpochOffsets) ->
+    %% this logic gets all potential nodes and does a selection with some
+    %% degree of random
+    [{_, Spec} | _] = Sorted =
+        lists:sort(fun({_, {Epoch, OffsetA}}, {_, {Epoch, OffsetB}}) ->
+                           OffsetA >= OffsetB;
+                      ({_, {EpochA, _}}, {_, {EpochB, _}}) ->
+                           EpochA >= EpochB;
+                      ({_, empty}, _) ->
+                           false;
+                      (_, {_, empty}) ->
+                           true
+                   end, EpochOffsets),
+    Potential = lists:takewhile(fun ({_N, S}) ->
+                                        S == Spec
+                                end, Sorted),
+    case Potential of
+        [{Node, _}] ->
+            Node;
+        _ ->
+            % there are more than one use modulo to select
+            Nth = ((Ts + Idx) rem length(Potential)) + 1,
+            {Node, _} = lists:nth(Nth, Potential),
+            Node
+    end.
 
 maybe_sleep({{nodedown, _}, _}) ->
     timer:sleep(10000);
