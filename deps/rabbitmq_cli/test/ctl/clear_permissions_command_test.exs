@@ -55,10 +55,9 @@ defmodule ClearPermissionsTest do
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  @tag user: "fake_user"
-  test "run: can't clear permissions for non-existing user", context do
-    assert @command.run([context[:user]], context[:opts]) ==
-             {:error, {:no_such_user, context[:user]}}
+  @tag user: "fake_user", vhost: @default_vhost
+  test "run: clearing permissions for non-existing user still succeeds", context do
+    assert @command.run([context[:user]], context[:opts]) == :ok
   end
 
   @tag user: @user, vhost: @default_vhost
@@ -85,9 +84,8 @@ defmodule ClearPermissionsTest do
   end
 
   @tag user: @user, vhost: "bad_vhost"
-  test "run: on an invalid vhost, return no_such_vhost error", context do
-    assert @command.run([context[:user]], context[:opts]) ==
-             {:error, {:no_such_vhost, context[:vhost]}}
+  test "run: clearing permissions on a non-existent vhost still succeeds", context do
+    assert @command.run([context[:user]], context[:opts]) == :ok
   end
 
   @tag user: @user, vhost: @specific_vhost
