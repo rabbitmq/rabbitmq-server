@@ -133,7 +133,7 @@ def rabbitmq_app(
         extra_srcs = extra_srcs,
         extra_priv = extra_priv,
         erlc_opts = select({
-            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
+            "@rules_erlang//:debug_build": without("-Werror", without("+deterministic", RABBITMQ_ERLC_OPTS)),
             "//conditions:default": RABBITMQ_ERLC_OPTS,
         }) + select({
             Label("//:test_build"): ["-DTEST=1", "+nowarn_export_all"],
