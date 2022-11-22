@@ -9,7 +9,7 @@ different platforms and frameworks:
  * Java and Spring Boot
  * Kotlin and Spring Boot
  * C# and ASP.NET Web API
- * C# and ASP.NET Core 2.1
+ * C# and ASP.NET Core 7
  * PHP
 
 ## Python Example
@@ -124,23 +124,24 @@ Port number may vary but will likely be `62190`.
 
 When the example is hosted on IIS, port 80 will be used by default.
 
-## ASP.NET Core 2.1 Example
+## ASP.NET Core 7 Example
 
 `rabbitmq_auth_backend_webapi_dotnetcore` is a modification of the `rabbitmq_auth_backend_webapi_dotnet` example
-designed for ASP.NET Core 2.1. It's very similar to the original version but it also adds some static typing
+designed for ASP.NET Core 7. It's very similar to the original version but it also adds some static typing
 for requests and responses.
 
 ### Running the Example
 
-Open the solution file, WebApiHttpAuthService.sln` in Visual Studio 2017 or later.
+Open the solution file, `RabbitMqAuthBackendHttp.sln` in Visual Studio 2022 version 17.4 or later.
 
 As with other examples, RabbitMQ [authentication and authorization backends](http://www.rabbitmq.com/access-control.html) must be configured
 to use this plugin and the endpoints provided by this example app.
 
 Then build the solution and run it from Visual Studio.
-`Controllers/AuthController.cs` contains the authentication and authorization logic.
-By default All users get access to all vhosts and resources.
-User "authuser" will be denied access.
+You can try the example with Swagger UI (http://localhost:5000/swagger/index.html)
+
+* `Controllers/AuthController.cs` contains the authentication and authorization logic.
+* By default All users get access to all vhosts and resources.  User "authuser" will be denied access.
 
 ### HTTP Endpoint Examples
 
@@ -150,12 +151,26 @@ Have a look at `AuthController`.
 
 This example was developed using
 
- * ASP.NET Core 2.1
- * Visual Studio 2017 (Visual Studio Code)
+ * .NET SDK 7.0
+ * Visual Studio 2022 version 17.4 or Visual Studio Code
  * Windows 10
 
 It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.
 
+### rabbitmq.config Example
+
+Below is a [RabbitMQ config file](https://www.rabbitmq.com/configure.html) example to go with this
+example:
+
+``` ini
+auth_backends.1 = http
+
+auth_http.http_method   = post
+auth_http.user_path     = http://localhost:5000/auth/user
+auth_http.vhost_path    = http://localhost:5000/auth/vhost
+auth_http.resource_path = http://localhost:5000/auth/resource
+auth_http.topic_path    = http://localhost:5000/auth/topic
+```
 
 ## PHP Example
 
