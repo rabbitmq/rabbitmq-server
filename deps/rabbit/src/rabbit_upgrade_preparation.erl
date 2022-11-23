@@ -7,8 +7,11 @@
 
 -module(rabbit_upgrade_preparation).
 
--export([await_online_quorum_plus_one/1, await_online_synchronised_mirrors/1]).
+-export([await_online_quorum_plus_one/1,
+         await_online_synchronised_mirrors/1,
+         list_with_minimum_quorum_for_cli/0]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 %%
 %% API
 %%
@@ -32,7 +35,10 @@ await_online_synchronised_mirrors(Timeout) ->
 do_await_safe_online_quorum(0) ->
     false;
 do_await_safe_online_quorum(IterationsLeft) ->
-    case rabbit_quorum_queue:list_with_minimum_quorum() of
+    EndangeredQueues = lists:append(
+                         rabbit_quorum_queue:list_with_minimum_quorum(),
+                         rabbit_stream_queue:list_with_minimum_quorum()),
+    case EndangeredQueues of
         []  -> true;
         List when is_list(List) ->
             timer:sleep(?SAMPLING_INTERVAL),
@@ -49,3 +55,18 @@ do_await_online_synchronised_mirrors(IterationsLeft) ->
             timer:sleep(?SAMPLING_INTERVAL),
             do_await_online_synchronised_mirrors(IterationsLeft - 1)
     end.
+
+-spec list_with_minimum_quorum_for_cli() -> [#{binary() => term()}].
+list_with_minimum_quorum_for_cli() ->
+    EndangeredQueues = lists:append(
+                         rabbit_quorum_queue:list_with_minimum_quorum(),
+                         rabbit_stream_queue:list_with_minimum_quorum()),
+    [begin
+         #resource{name = Name} = QName = amqqueue:get_name(Q),
+         #{
+           <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
+           <<"name">> => Name,
+           <<"virtual_host">> => amqqueue:get_vhost(Q),
+           <<"type">> => amqqueue:get_type(Q)
+          }
+     end || Q <- EndangeredQueues].
