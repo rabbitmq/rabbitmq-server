@@ -33,6 +33,8 @@
          capabilities/0,
          notify_decorators/1]).
 
+-export([list_with_minimum_quorum/0]).
+
 -export([set_retention_policy/3]).
 -export([add_replica/3,
          delete_replica/3]).
@@ -1039,3 +1041,14 @@ set_leader_pid(Pid, QName) ->
 close_log(undefined) -> ok;
 close_log(Log) ->
     osiris_log:close(Log).
+
+%% this is best effort only; the state of replicas is slightly stale and things can happen
+%% between the time this function is called and the time decision based on its result is made
+-spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
+list_with_minimum_quorum() ->
+    lists:filter(fun (Q) ->
+                         StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+                         {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+                         RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
+                         map_size(RunningMembers) =< map_size(Members) div 2 + 1
+                 end, rabbit_amqqueue:list_local_stream_queues()).

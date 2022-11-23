@@ -49,7 +49,6 @@
          file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
 -export([list_with_minimum_quorum/0,
-         list_with_minimum_quorum_for_cli/0,
          filter_quorum_critical/1,
          filter_quorum_critical/2,
          all_replica_states/0]).
@@ -353,19 +352,6 @@ all_replica_states() ->
 list_with_minimum_quorum() ->
     filter_quorum_critical(
       rabbit_amqqueue:list_local_quorum_queues()).
-
--spec list_with_minimum_quorum_for_cli() -> [#{binary() => term()}].
-list_with_minimum_quorum_for_cli() ->
-    QQs = list_with_minimum_quorum(),
-    [begin
-         #resource{name = Name} = amqqueue:get_name(Q),
-         #{
-             <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(amqqueue:get_name(Q))),
-             <<"name">> => Name,
-             <<"virtual_host">> => amqqueue:get_vhost(Q),
-             <<"type">> => <<"quorum">>
-         }
-     end || Q <- QQs].
 
 -spec filter_quorum_critical([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
 filter_quorum_critical(Queues) ->
