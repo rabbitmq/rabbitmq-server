@@ -40,9 +40,9 @@ defmodule ForceBootCommandTest do
     stop_rabbitmq_app()
     on_exit(fn -> start_rabbitmq_app() end)
     assert @command.run([], context[:opts]) == :ok
-    mnesia_dir = :rpc.call(get_rabbit_hostname(), :rabbit_mnesia, :dir, [])
+    data_dir = :rpc.call(get_rabbit_hostname(), :rabbit_mnesia, :dir, [])
 
-    path = Path.join(mnesia_dir, "force_load")
+    path = Path.join(data_dir, "force_load")
     assert File.exists?(path)
     File.rm(path)
   end

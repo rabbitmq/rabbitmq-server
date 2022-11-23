@@ -20,7 +20,7 @@ defmodule ForgetClusterNodeCommandTest do
       :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :plugins_dir])
 
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
-    mnesia_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
+    data_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
 
     feature_flags_file =
       :rabbit_misc.rpc_call(node, :rabbit_feature_flags, :enabled_feature_flags_list_file, [])
@@ -33,7 +33,7 @@ defmodule ForgetClusterNodeCommandTest do
      opts: %{
        rabbitmq_home: rabbitmq_home,
        plugins_dir: plugins_dir,
-       mnesia_dir: mnesia_dir,
+       data_dir: data_dir,
        feature_flags_file: feature_flags_file,
        offline: false
      }}
@@ -70,7 +70,7 @@ defmodule ForgetClusterNodeCommandTest do
         %{offline: true, node: :non_exist@localhost}
       )
 
-    opts_without_mnesia = Map.delete(offline_opts, :mnesia_dir)
+    opts_without_mnesia = Map.delete(offline_opts, :data_dir)
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
 
@@ -104,7 +104,7 @@ defmodule ForgetClusterNodeCommandTest do
 
   test "validate_execution_environment: online mode does not fail is mnesia is not loaded",
        context do
-    opts_without_mnesia = Map.delete(context[:opts], :mnesia_dir)
+    opts_without_mnesia = Map.delete(context[:opts], :data_dir)
 
     assert match?(
              :ok,
