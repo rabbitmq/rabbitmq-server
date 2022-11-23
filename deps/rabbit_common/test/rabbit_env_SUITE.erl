@@ -19,7 +19,7 @@
          end_per_group/2,
          init_per_testcase/2,
          end_per_testcase/2,
-         check_data_dir/1,
+         check_home_dir/1,
          check_default_values/1,
          check_values_from_reachable_remote_node/1,
          check_values_from_offline_remote_node/1,
@@ -63,7 +63,7 @@
 
 all() ->
     [
-     check_data_dir,
+     check_home_dir,
      check_default_values,
      check_values_from_reachable_remote_node,
      check_values_from_offline_remote_node,
@@ -126,7 +126,7 @@ end_per_group(_, Config) -> Config.
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(_, Config) -> Config.
 
-check_data_dir(_) ->
+check_home_dir(_) ->
     {Variable, ExpValue} = case os:type() of
                                {win32, _} ->
                                    {"RABBITMQ_BASE",
@@ -137,11 +137,11 @@ check_data_dir(_) ->
                            end,
     Value = "value of " ++ Variable,
     os:putenv(Variable, Value),
-    ?assertMatch(#{data_dir := ExpValue}, rabbit_env:get_context()),
+    ?assertMatch(#{home_dir := ExpValue}, rabbit_env:get_context()),
 
     os:unsetenv(Variable),
-    ?assertNotMatch(#{data_dir := ExpValue}, rabbit_env:get_context()),
-    ?assertMatch(#{data_dir := _}, rabbit_env:get_context()),
+    ?assertNotMatch(#{home_dir := ExpValue}, rabbit_env:get_context()),
+    ?assertMatch(#{home_dir := _}, rabbit_env:get_context()),
 
     os:unsetenv(Variable).
 
@@ -213,7 +213,7 @@ check_default_values(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
          config_base_dir => "/etc/rabbitmq",
-         data_dir => "/var/lib/rabbitmq",
+         home_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,
@@ -264,7 +264,7 @@ check_default_values(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "%APPDATA%/RabbitMQ/rabbitmq-env-conf.bat",
          config_base_dir => "%APPDATA%/RabbitMQ",
-         data_dir => "%APPDATA%/RabbitMQ",
+         home_dir => "%APPDATA%/RabbitMQ",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,
@@ -433,7 +433,7 @@ check_values_from_reachable_remote_node(Config) ->
              amqp_tcp_port => 5672,
              conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
              config_base_dir => "/etc/rabbitmq",
-             data_dir => "/var/lib/rabbitmq",
+             home_dir => "/var/lib/rabbitmq",
              dbg_mods => [],
              dbg_output => stdout,
              default_user => undefined,
@@ -555,7 +555,7 @@ check_values_from_offline_remote_node(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
          config_base_dir => "/etc/rabbitmq",
-         data_dir => "/var/lib/rabbitmq",
+         home_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,

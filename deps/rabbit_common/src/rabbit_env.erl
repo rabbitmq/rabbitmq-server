@@ -118,7 +118,7 @@ get_context_after_logging_init(Context) ->
     Steps = [
              fun sys_prefix/1,
              fun rabbitmq_base/1,
-             fun data_dir/1,
+             fun home_dir/1,
              fun rabbitmq_home/1,
              fun config_base_dir/1,
              fun load_conf_env_file/1,
@@ -813,12 +813,12 @@ mnesia_base_dir_from_node(Context) ->
     %% variables based on it are relevant.
     update_context(Context, mnesia_base_dir, undefined, default).
 
-get_default_mnesia_base_dir(#{data_dir := DataDir} = Context) ->
+get_default_mnesia_base_dir(#{home_dir := HomeDir} = Context) ->
     Basename = case Context of
                    #{os_type := {unix, _}}  -> "mnesia";
                    #{os_type := {win32, _}} -> "db"
                end,
-    normalize_path(DataDir, Basename).
+    normalize_path(HomeDir, Basename).
 
 mnesia_dir(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_MNESIA_DIR") of
@@ -1270,13 +1270,13 @@ rabbitmq_base(#{os_type := {win32, _}} = Context) ->
 rabbitmq_base(Context) ->
     Context.
 
-data_dir(#{os_type := {unix, _},
+home_dir(#{os_type := {unix, _},
            sys_prefix := SysPrefix} = Context) ->
     Dir = normalize_path(SysPrefix, "var", "lib", "rabbitmq"),
-    update_context(Context, data_dir, Dir);
-data_dir(#{os_type := {win32, _},
+    update_context(Context, home_dir, Dir);
+home_dir(#{os_type := {win32, _},
            rabbitmq_base := RabbitmqBase} = Context) ->
-    update_context(Context, data_dir, RabbitmqBase).
+    update_context(Context, home_dir, RabbitmqBase).
 
 rabbitmq_home(Context) ->
     case get_env_var("RABBITMQ_HOME") of
