@@ -1042,11 +1042,13 @@ close_log(undefined) -> ok;
 close_log(Log) ->
     osiris_log:close(Log).
 
+%% this is best effort only; the state of replicas is slightly stale and things can happen
+%% between the time this function is called and the time decision based on its result is made
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 list_with_minimum_quorum() ->
     lists:filter(fun (Q) ->
                          StreamId = maps:get(name, amqqueue:get_type_state(Q)),
                          {ok, Members} = rabbit_stream_coordinator:members(StreamId),
                          RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
-                         length(maps:values(RunningMembers)) =< length(maps:values(Members)) div 2 + 1
+                         map_size(RunningMembers) =< map_size(Members) div 2 + 1
                  end, rabbit_amqqueue:list_local_stream_queues()).

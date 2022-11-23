@@ -62,9 +62,9 @@ list_with_minimum_quorum_for_cli() ->
                          rabbit_quorum_queue:list_with_minimum_quorum(),
                          rabbit_stream_queue:list_with_minimum_quorum()),
     [begin
-         #resource{name = Name} = amqqueue:get_name(Q),
+         #resource{name = Name} = QName = amqqueue:get_name(Q),
          #{
-           <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(amqqueue:get_name(Q))),
+           <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
            <<"name">> => Name,
            <<"virtual_host">> => amqqueue:get_vhost(Q),
            <<"type">> => amqqueue:get_type(Q)
