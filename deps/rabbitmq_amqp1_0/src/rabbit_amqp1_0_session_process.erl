@@ -126,14 +126,14 @@ handle_info(#'basic.credit_drained'{consumer_tag = CTag} = CreditDrained,
 handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
                                                  session    = Session}) ->
     {Reply, LinkHandles, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
-    FlowReplies = 
-        lists:flatmap(fun(LinkHandle) -> 
-                        with_link(in, LinkHandle, 
-                            fun(Link) -> 
-                                {ok, _Replies, _Link2} = 
-                                    rabbit_amqp1_0_incoming_link:ack(LinkHandle, Link)
-                            end, [])
-                        end, LinkHandles),
+    SettleMessages = fun(LinkHandle) -> 
+                        with_link(in, 
+                                  LinkHandle, 
+                                  fun(Link) -> 
+                                     rabbit_amqp1_0_incoming_link:message_settled(LinkHandle, Link)
+                                  end, [])
+                     end,
+    FlowReplies = lists:flatmap(SettleMessages, LinkHandles),
     [rabbit_amqp1_0_writer:send_command(WriterPid, F) ||
         F <- rabbit_amqp1_0_session:flow_fields(Reply ++ FlowReplies, Session1)],
     {noreply, state(Session1, State)};
@@ -456,12 +456,14 @@ with_disposable_channel(Conn, Fun) ->
         catch amqp_channel:close(Ch)
     end.
 
+% Looks up the link in the process dictionary. 
+% The passed in `Fn` should return `{ok, Replies, NewLink}`
 with_link(Type, Handle, Fn, Default) -> 
     case erlang:get({Type, Handle}) of 
         undefined -> 
             Default;
         Link -> 
-            {ok, Replies, Link1} =  Fn(Link),
+            {ok, Replies, Link1} = Fn(Link),
             erlang:put({Type, Handle}, Link1),
             Replies
     end.

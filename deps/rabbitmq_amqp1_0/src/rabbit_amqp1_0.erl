@@ -15,8 +15,8 @@
         ]).
 
 -rabbit_boot_step({?MODULE,
-    [{description, "Setup of AMQP 1.0 listener plugin"},
-    {mfa, {?MODULE, boot, []}}]}).
+                   [{description, "Setup of the AMQP 1.0 listener plugin"},
+                   {mfa, {?MODULE, boot, []}}]}).
 
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->

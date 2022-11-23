@@ -7,7 +7,7 @@
 
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/3, transfer/4, ack/2]).
+-export([attach/3, transfer/4, message_settled/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -22,7 +22,7 @@
                         delivery_count = 0,
                         send_settle_mode = undefined,
                         recv_settle_mode = undefined,
-                        credit_remaining = 0,
+                        credits_until_flow = 0,
                         grant_credit_on = on_publish,
                         msg_acc = [],
                         route_state}).
@@ -42,7 +42,7 @@ attach(#'v1_0.attach'{name = Name,
                          name        = Name,
                          route_state = rabbit_routing_util:init_state(),
                          delivery_count = InitTransfer,
-                         credit_remaining = InitialCreditRemaining
+                         credits_until_flow = InitialCreditRemaining
                         },
                        DCh) of
         {ok, ServerTarget, IncomingLink} ->
@@ -128,13 +128,13 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                           rcv_settle_mode = RcvSettleMode,
                           handle          = Handle},
          MsgPart,
-         #incoming_link{exchange         = X,
-                        routing_key      = LinkRKey,
-                        delivery_count   = Count,
-                        credit_remaining = CreditRemaining,
-                        msg_acc          = MsgAcc,
-                        send_settle_mode = SSM,
-                        recv_settle_mode = RSM} = Link, BCh) ->
+         #incoming_link{exchange           = X,
+                        routing_key        = LinkRKey,
+                        delivery_count     = Count,
+                        credits_until_flow = CreditRemaining,
+                        msg_acc            = MsgAcc,
+                        send_settle_mode   = SSM,
+                        recv_settle_mode   = RSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     ?DEBUG("Inbound content:~n  ~tp",
            [[amqp10_framing:pprint(Section) ||
@@ -152,11 +152,11 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
     #incoming_link{delivery_id = DeliveryId} =
       set_delivery_id(DeliveryId0, Link),
     NewLink = Link#incoming_link{
-                delivery_id      = undefined,
-                send_settle_mode = undefined,
-                delivery_count   = rabbit_amqp1_0_util:serial_add(Count, 1),
-                credit_remaining      = CreditRemaining1,
-                msg_acc          = []},
+                delivery_id        = undefined,
+                send_settle_mode   = undefined,
+                delivery_count     = rabbit_amqp1_0_util:serial_add(Count, 1),
+                credits_until_flow = CreditRemaining1,
+                msg_acc            = []},
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~tp", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
@@ -224,48 +224,41 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
     #'v1_0.flow'{handle         = Handle,
                  delivery_count = {uint, Count},
-                 link_credit    = {uint, ?INCOMING_CREDIT}}.
+                 link_credit    = {uint, max_incoming_credit()}}.
 
 max_incoming_credit() -> 
     ?INCOMING_CREDIT.
 
--spec adjust_credits(Method :: ack | transfer, 
+-spec adjust_credits(Method :: settled | transfer, 
                      CreditRemaining :: integer(), 
                      MsgSettled :: boolean()) -> 
     {boolean(), integer()}.
-% there are credits remaining
-adjust_credits( _Method, CreditRemaining, _MsgSettled) when CreditRemaining > 0 -> 
+% There are credits remaining.
+adjust_credits(_Method, CreditRemaining, _MsgSettled) when CreditRemaining > 0 -> 
     {false, CreditRemaining};
-% if message was settled on transfer, we give more credits on transfer
+% We received a confirm from the queue and have no credit.
+adjust_credits(settled, CreditRemaining, _) when CreditRemaining =< 0 -> 
+    {true, max_incoming_credit() div 2};
+% If message was settled on transfer, we give more credits on transfer.
+% Because we are not using publish confirms we will never receive a confirm.
 adjust_credits(transfer, CreditRemaining, true) when CreditRemaining =< 0 -> 
     {true, max_incoming_credit() div 2};
-% we received an ack and have no credit
-adjust_credits(ack, CreditRemaining,_) when CreditRemaining =< 0 -> 
-    {true, max_incoming_credit() div 2};
-% message is not settled, depending on configuration we either grant or not
-adjust_credits(Method, CreditRemaining, false) when CreditRemaining =< 0 -> 
+% Message is not settled and we just published to the queue.
+adjust_credits(transfer, CreditRemaining, false) when CreditRemaining =< 0 -> 
     GrantCreditOn = persistent_term:get({rabbit_amqp1_0, grant_credit}, on_publish),
     case GrantCreditOn of 
         on_publish -> 
             {true, max_incoming_credit() div 2};
         on_confirm -> 
-            case Method of
-                ack -> 
-                    {true, max_incoming_credit() div 2};
-                transfer ->
-                    {false, CreditRemaining}
-            end
+            {false, CreditRemaining}
     end.
 
-ack(Handle, #incoming_link{
-                 credit_remaining = CreditRemaining
-                 } = Link) ->
-    {SendFlow, CreditRemaining1} = adjust_credits(ack, CreditRemaining, true),
-    Link2 = Link#incoming_link{
-        credit_remaining = CreditRemaining1
-    },
+message_settled(Handle, 
+                #incoming_link{credits_until_flow = CreditRemaining} = Link) ->
+    {SendFlow, CreditRemaining1} = adjust_credits(settled, CreditRemaining, true),
+    Link2 = Link#incoming_link{credits_until_flow = CreditRemaining1},
     Replies = case SendFlow of 
-        true -> [incoming_flow(Link2, Handle)];
-        false -> []
-    end,
+                  true -> [incoming_flow(Link2, Handle)];
+                  false -> []
+              end,
     {ok, Replies, Link2}.
