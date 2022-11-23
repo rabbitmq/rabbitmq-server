@@ -206,7 +206,6 @@ process_request(?SUBSCRIBE,
       #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
                   variable = #mqtt_frame_suback{
                                 message_id = SubscribeMsgId,
-                                %%TODO check correct order of QosResponse
                                 qos_table  = QosResponse}},
       PState1),
     case QosResponse of

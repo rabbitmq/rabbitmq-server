@@ -175,10 +175,16 @@ register_clientid(Vhost, ClientId)
   when is_binary(Vhost), is_binary(ClientId) ->
     PgGroup = {Vhost, ClientId},
     ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
-    ok = erpc:multicast([node() | nodes()],
-                        ?MODULE,
-                        remove_duplicate_clientid_connections,
-                        [PgGroup, self()]).
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            %% Ra node takes care of removing duplicate client ID connections.
+            ok;
+        false ->
+            ok = erpc:multicast([node() | nodes()],
+                                ?MODULE,
+                                remove_duplicate_clientid_connections,
+                                [PgGroup, self()])
+    end.
 
 -spec remove_duplicate_clientid_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
 remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->

@@ -58,6 +58,7 @@ common_tests() ->
      ,non_clean_sess_disconnect
      ,subscribe_same_topic_same_qos
      ,subscribe_same_topic_different_qos
+     ,subscribe_multiple
     ].
 
 suite() ->
@@ -675,6 +676,14 @@ subscribe_same_topic_different_qos(Config) ->
     ok = emqtt:disconnect(C),
     {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C1).
+
+subscribe_multiple(Config) ->
+    {C, _} = connect(?FUNCTION_NAME, Config),
+    %% Subscribe to multiple topics at once
+    ?assertMatch({ok, _, [0, 1]},
+                 emqtt:subscribe(C, [{<<"topic0">>, qos0},
+                                     {<<"topic1">>, qos1}])),
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% Internal helpers
