@@ -55,7 +55,8 @@ groups() ->
            leader_locator_balanced,
            leader_locator_balanced_maintenance,
            select_nodes_with_least_replicas,
-           recover_after_leader_and_coordinator_kill
+           recover_after_leader_and_coordinator_kill,
+           restart_stream
           ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
@@ -121,7 +122,8 @@ all_tests() ->
      purge,
      update_retention_policy,
      queue_info,
-     tracking_status
+     tracking_status,
+     restart_stream
     ].
 
 %% -------------------------------------------------------------------
@@ -1353,6 +1355,29 @@ tracking_status(Config) ->
                   ]],
                  rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, ?FUNCTION_NAME, [Vhost, Q])),
     rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]).
+
+restart_stream(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    publish_confirm(Ch, Q, [<<"msg">>]),
+    Vhost = ?config(rmq_vhost, Config),
+    QName = #resource{virtual_host = Vhost,
+                      kind = queue,
+                      name = Q},
+    %% restart the stream
+    ?assertMatch({ok, {ok, _}, _},
+                 rabbit_ct_broker_helpers:rpc(Config, Server,
+                                              rabbit_stream_coordinator,
+                                              ?FUNCTION_NAME, [QName])),
+
+    publish_confirm(Ch, Q, [<<"msg2">>]),
+    rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
+    ok.
 
 consume_from_last(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

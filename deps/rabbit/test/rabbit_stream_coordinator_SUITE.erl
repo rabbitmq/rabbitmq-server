@@ -32,6 +32,7 @@ all_tests() ->
      leader_down_scenario_1,
      replica_down,
      add_replica,
+     restart_stream,
      delete_stream,
      delete_replica_leader,
      delete_replica,
@@ -78,13 +79,15 @@ apply_cmd(M, C, S) ->
     rabbit_stream_coordinator:apply(M, C, S).
 
 register_listener(Args, S) ->
-    apply_cmd(#{index => 42, machine_version => 2}, {register_listener, Args}, S).
+    apply_cmd(meta(#{index => 42, machine_version => 2}),
+              {register_listener, Args}, S).
 
 eval_listeners(Stream) ->
     rabbit_stream_coordinator:eval_listeners(2, Stream, []).
 
 down(Pid, S) ->
-    apply_cmd(#{index => 42, machine_version => 2}, {down, Pid, reason}, S).
+    apply_cmd(meta(#{index => 42, machine_version => 2}),
+              {down, Pid, reason}, S).
 
 
 listeners(_) ->
@@ -422,7 +425,7 @@ leader_down(_) ->
                                                    state = {stopped, E, N2Tail}}}},
                  S3),
     {S3, []} = evaluate_stream(meta(?LINE), S3, []),
-    N3Tail = {E, 101},
+    N3Tail = {E, 102},
     #{index := Idx4} = Meta4 = meta(?LINE + 1),
     S4 = update_stream(Meta4, {member_stopped, StreamId,
                                #{node => N3,
@@ -828,6 +831,52 @@ leader_down_scenario_1(_) ->
                                                    state = {ready, E3}}
                                     }},
                  S13),
+    ok.
+
+
+restart_stream(_) ->
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N1 = node(LeaderPid),
+    N2 = node(Replica1),
+    N3 = node(Replica2),
+
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    From = {self(), make_ref()},
+    Meta1 = (meta(?LINE))#{from => From},
+    S1 = update_stream(Meta1, {restart_stream, StreamId, #{}}, S0),
+    ?assertMatch(#stream{target = running,
+                         members = #{N3 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N2 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N1 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}}
+                                    }},
+                 S1),
+    {S2, Actions1} = evaluate_stream(Meta1, S1, []),
+    ?assertMatch([{aux, {stop, StreamId, #{node := N1}, _}},
+                  {aux, {stop, StreamId, #{node := N2}, _}},
+                  {aux, {stop, StreamId, #{node := N3}, _}}
+                 ],
+                 lists:sort(Actions1)),
+
+    ?assertMatch(#stream{target = running,
+                         members = #{N3 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _},
+                                     N2 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _},
+                                     N1 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _}
+                                    }},
+                 S2),
     ok.
 
 delete_stream(_) ->

@@ -36,7 +36,8 @@
 -export([list_with_minimum_quorum/0]).
 
 -export([set_retention_policy/3]).
--export([add_replica/3,
+-export([restart_stream/2,
+         add_replica/3,
          delete_replica/3]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
@@ -639,10 +640,10 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            _Pid = amqqueue:get_pid(Q),
             [begin
                  [{role, Role},
                   get_key(node, C),
+                  get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
                   get_key(first_offset, C),
@@ -662,7 +663,7 @@ is_writer(_Member) -> false.
 
 get_counters(Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
-    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+    {ok, #{members := Members}} = rabbit_stream_coordinator:stream_overview(StreamId),
     %% split members to query the writer last
     %% this minimizes the risk of confusing output where replicas are ahead of the writer
     Writer = maps:keys(maps:filter(fun (_, M) -> is_writer(M) end, Members)),
@@ -793,6 +794,20 @@ set_retention_policy(Name, VHost, Policy) ->
                     ok
             end
     end.
+
+restart_stream(VHost, Name) ->
+    QName = rabbit_misc:r(VHost, queue, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_stream(Q) ->
+            rabbit_stream_coordinator:restart_stream(Q);
+        E ->
+            E
+    end.
+
 
 add_replica(VHost, Name, Node) ->
     QName = rabbit_misc:r(VHost, queue, Name),

@@ -29,16 +29,19 @@
          register_local_member_listener/1]).
 
 -export([new_stream/2,
+         restart_stream/1,
          delete_stream/2]).
 
 -export([policy_changed/1]).
 
 -export([local_pid/1,
          writer_pid/1,
-         members/1]).
+         members/1,
+         stream_overview/1]).
 -export([query_local_pid/3,
          query_writer_pid/2,
-         query_members/2]).
+         query_members/2,
+         query_stream_overview/2]).
 
 
 -export([log_overview/1]).
@@ -138,6 +141,21 @@ new_stream(Q, LeaderNode)
                      #{leader_node => LeaderNode,
                        queue => Q}}).
 
+restart_stream(QRes) when element(1, QRes) == resource ->
+    restart_stream(hd(rabbit_amqqueue:lookup([QRes])));
+restart_stream(Q)
+  when ?is_amqqueue(Q) ->
+    #{name := StreamId,
+      nodes := _Nodes} = amqqueue:get_type_state(Q),
+    %% assertion leader is in nodes configuration
+    % true = lists:member(LeaderNode, Nodes),
+    case process_command({restart_stream, StreamId, #{}}) of
+        {ok, {ok, LeaderPid}, _} ->
+            {ok, node(LeaderPid)};
+        Err ->
+            Err
+    end.
+
 delete_stream(Q, ActingUser)
   when ?is_amqqueue(Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
@@ -234,31 +252,26 @@ query_pid(StreamId, MFA) when is_list(StreamId) ->
             {error, timeout}
     end.
 
+
+-spec stream_overview(stream_id()) ->
+    {ok, #{epoch := osiris:epoch(),
+           members := #{node() := #{state := term(),
+                                    role := writer | replica,
+                                    current := term(),
+                                    target := running | stopped}},
+           num_listeners := non_neg_integer(),
+           target := running | stopped}} |
+    {error, term()}.
+stream_overview(StreamId) when is_list(StreamId) ->
+    MFA = {?MODULE, query_stream_overview, [StreamId]},
+    do_query(MFA).
+
 -spec members(stream_id()) ->
     {ok, #{node() := {pid() | undefined, writer | replica}}} |
     {error, not_found}.
 members(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_members, [StreamId]},
-    case ra:local_query({?MODULE, node()}, MFA) of
-        {ok, {_, {ok, _} = Result}, _} ->
-            Result;
-        {ok, {_, {error, not_found}}, _} ->
-            %% fall back to consistent query
-            case ra:consistent_query({?MODULE, node()}, MFA) of
-                {ok, Result, _} ->
-                    Result;
-                {error, _} = Err ->
-                    Err;
-                {timeout, _} ->
-                    {error, timeout}
-            end;
-        {ok, {_, Result}, _} ->
-            Result;
-        {error, _} = Err ->
-            Err;
-        {timeout, _} ->
-            {error, timeout}
-    end.
+    do_query(MFA).
 
 query_members(StreamId, #?MODULE{streams = Streams}) ->
     case Streams of
@@ -270,6 +283,14 @@ query_members(StreamId, #?MODULE{streams = Streams}) ->
                        (_, #member{role = {Role, _}}) ->
                            {undefined, Role}
                    end, Members)};
+        _ ->
+            {error, not_found}
+    end.
+
+query_stream_overview(StreamId, #?MODULE{streams = Streams}) ->
+    case Streams of
+        #{StreamId := #stream{} = Stream} ->
+            {ok, stream_overview0(Stream)};
         _ ->
             {error, not_found}
     end.
@@ -296,6 +317,28 @@ query_writer_pid(StreamId, #?MODULE{streams = Streams}) ->
               end, {error, writer_not_found}, Members);
         _ ->
             {error, stream_not_found}
+    end.
+
+do_query(MFA) ->
+    case ra:local_query({?MODULE, node()}, MFA) of
+        {ok, {_, {ok, _} = Result}, _} ->
+            Result;
+        {ok, {_, {error, not_found}}, _} ->
+            %% fall back to consistent query
+            case ra:consistent_query({?MODULE, node()}, MFA) of
+                {ok, Result, _} ->
+                    Result;
+                {error, _} = Err ->
+                    Err;
+                {timeout, _} ->
+                    {error, timeout}
+            end;
+        {ok, {_, Result}, _} ->
+            Result;
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
     end.
 
 -spec register_listener(amqqueue:amqqueue()) ->
@@ -784,24 +827,8 @@ overview(#?MODULE{streams = Streams,
                   monitors = Monitors,
                   single_active_consumer = Sac}) ->
     StreamsOverview = maps:map(
-                        fun (_, #stream{epoch = Epoch,
-                                        members = Members,
-                                        listeners = StreamListeners,
-                                        target = Target}) ->
-                                MembO = maps:map(
-                                          fun (_, #member{state = MS,
-                                                          role = R,
-                                                          current = C,
-                                                          target = T}) ->
-                                                  #{state => MS,
-                                                    role => R,
-                                                    current => C,
-                                                    target => T}
-                                          end, Members),
-                                #{epoch => Epoch,
-                                  members => MembO,
-                                  num_listeners => map_size(StreamListeners),
-                                  target => Target}
+                        fun (_, Stream) ->
+                                stream_overview0(Stream)
                         end, Streams),
     #{
       num_streams => map_size(Streams),
@@ -809,6 +836,24 @@ overview(#?MODULE{streams = Streams,
       single_active_consumer => rabbit_stream_sac_coordinator:overview(Sac),
       streams => StreamsOverview
      }.
+
+stream_overview0(#stream{epoch = Epoch,
+                         members = Members,
+                         listeners = StreamListeners,
+                         target = Target}) ->
+    MembO = maps:map(fun (_, #member{state = MS,
+                                     role = R,
+                                     current = C,
+                                     target = T}) ->
+                             #{state => MS,
+                               role => R,
+                               current => C,
+                               target => T}
+                     end, Members),
+    #{epoch => Epoch,
+      members => MembO,
+      num_listeners => map_size(StreamListeners),
+      target => Target}.
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
@@ -1130,6 +1175,16 @@ update_stream0(#{system_time := _} = Meta,
             conf = Conf,
             members = Members,
             reply_to = maps:get(from, Meta, undefined)};
+update_stream0(#{machine_version := MacVer} = Meta,
+               {restart_stream, _StreamId, #{}},
+               #stream{members = Members0,
+                       target = _} = Stream0)
+  when MacVer >= 4 ->
+    Members = maps:map(fun (_, M) ->
+                               M#member{target = stopped}
+                       end, Members0),
+    Stream0#stream{members = Members,
+                   reply_to = maps:get(from, Meta, undefined)};
 update_stream0(#{system_time := _Ts} = _Meta,
                {delete_stream, _StreamId, #{}},
                #stream{members = Members0,
