@@ -6,7 +6,7 @@
 
 defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   @moduledoc """
-  Exits with a non-zero code if there are quorum queues that would lose their quorum
+  Exits with a non-zero code if there are quorum queues or streams that would lose their quorum
   if the target node is shut down.
 
   This command is meant to be used as a pre-upgrade (pre-shutdown) check.
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
           false ->
             case :rabbit_misc.rpc_call(
                    node_name,
-                   :rabbit_quorum_queue,
+                   :rabbit_upgrade_preparation,
                    :list_with_minimum_quorum_for_cli,
                    [],
                    timeout
@@ -101,7 +101,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   end
 
   def output({:ok, []}, %{node: node_name}) do
-    {:ok, "Node #{node_name} reported no quorum queues with minimum quorum"}
+    {:ok, "Node #{node_name} reported no queues/streams with minimum quorum"}
   end
 
   def output({:ok, qs}, %{node: node_name, formatter: "json"}) when is_list(qs) do
@@ -128,14 +128,14 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   def help_section(), do: :observability_and_health_checks
 
   def description() do
-    "Health check that exits with a non-zero code if there are queues " <>
-      "with minimum online quorum (queues that would lose their quorum if the target node is shut down)"
+    "Health check that exits with a non-zero code if there are queues/streams " <>
+      "with minimum online quorum (queues/streams that will lose their quorum if the target node shuts down)"
   end
 
   def usage, do: "check_if_node_is_quorum_critical"
 
   def banner([], %{node: node_name}) do
-    "Checking if node #{node_name} is critical for quorum of any quorum queues ..."
+    "Checking if node #{node_name} is critical for quorum of any queues/streams ..."
   end
 
   #
@@ -143,6 +143,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   #
 
   def queue_lines(qs, node_name) do
-    for q <- qs, do: "#{q["readable_name"]} would lose quorum if node #{node_name} is stopped"
+    for q <- qs, do: "#{q["readable_name"]} will become unavailable if node #{node_name} stops"
   end
 end

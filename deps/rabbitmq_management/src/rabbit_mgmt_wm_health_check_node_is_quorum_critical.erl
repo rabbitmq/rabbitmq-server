@@ -34,7 +34,7 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:reply([{status, ok},
                                     {reason, <<"single node cluster">>}], ReqData, Context);
         false ->
-            case rabbit_quorum_queue:list_with_minimum_quorum_for_cli() of
+            case rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli() of
                 [] ->
                     rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
                 Qs when length(Qs) > 0 ->
