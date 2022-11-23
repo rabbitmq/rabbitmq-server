@@ -15,13 +15,17 @@
 
 all() ->
     [
-      {group, clustered}
+      {group, quorum_queue},
+      {group, stream}
     ].
 
 groups() ->
     [
-     {clustered, [], [
-         await_quorum_plus_one
+     {quorum_queue, [], [
+         await_quorum_plus_one_qq
+     ]},
+     {stream, [], [
+         await_quorum_plus_one_stream
      ]}
     ].
 
@@ -75,11 +79,25 @@ end_per_testcase(TestCase, Config) ->
 
 -define(WAITING_INTERVAL, 10000).
 
-await_quorum_plus_one(Config) ->
+await_quorum_plus_one_qq(Config) ->
     catch delete_queues(),
     [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
     declare(Ch, <<"qq.1">>, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    timer:sleep(100),
+    ?assert(await_quorum_plus_one(Config, 0)),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+    ?assertNot(await_quorum_plus_one(Config, 0)),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, B),
+    ?assert(await_quorum_plus_one(Config, 0)).
+
+await_quorum_plus_one_stream(Config) ->
+    catch delete_queues(),
+    [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    declare(Ch, <<"st.1">>, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     timer:sleep(100),
     ?assert(await_quorum_plus_one(Config, 0)),
 
