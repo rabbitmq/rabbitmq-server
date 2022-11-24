@@ -15,7 +15,6 @@
          code_change/3, terminate/2, format_status/1]).
 
 %%TODO check where to best 'hibernate' when returning from callback
-%%TODO use rabbit_global_counters for MQTT protocol
 
 -export([conserve_resources/3,
          close_connection/2]).
