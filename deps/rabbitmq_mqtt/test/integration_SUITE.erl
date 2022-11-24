@@ -398,7 +398,7 @@ global_counters(Config, ProtoVer) ->
                  get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
     ?assertEqual(#{messages_delivered_total => 1,
                    messages_acknowledged_total => 0,
-                   messages_delivered_consume_auto_ack_total => 0,
+                   messages_delivered_consume_auto_ack_total => 1,
                    messages_delivered_consume_manual_ack_total => 0,
                    messages_delivered_get_auto_ack_total => 0,
                    messages_delivered_get_manual_ack_total => 0,
