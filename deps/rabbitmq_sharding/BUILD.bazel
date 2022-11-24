@@ -43,21 +43,23 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_sharding"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_hash_exchange_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_sharding_SUITE",
-        deps = [
-            "//deps/rabbit:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_hash_exchange_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_sharding_SUITE",
+    deps = [
+        "//deps/rabbit:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_sharding",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

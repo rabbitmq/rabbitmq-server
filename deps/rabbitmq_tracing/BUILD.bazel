@@ -63,14 +63,15 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_tracing"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_tracing_SUITE",
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_tracing_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_tracing",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

@@ -64,14 +64,15 @@ rabbitmq_run(
 
 PACKAGE = "deps/rabbitmq_stream_management"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "http_SUITE",
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "http_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_stream_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

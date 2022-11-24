@@ -52,13 +52,18 @@ xref(
 
 plt(
     name = "base_plt",
+    apps = [
+        "erts",
+        "kernel",
+        "stdlib",
+        "ssl",
+    ],
     # this ought to include BUILD_DEPS, but not sure how to
     # get dialyze of elixir code working yet
     deps = without(
         "//deps/rabbitmq_cli:rabbitmqctl",
         BUILD_DEPS + DEPS + RUNTIME_DEPS,
     ),
-    apps = ["erts", "kernel", "stdlib", "ssl"]
 )
 
 dialyze(
@@ -71,57 +76,63 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_amqp1_0"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "amqp10_client_SUITE",
-        size = "medium",
-        runtime_deps = [
-            "//deps/amqp10_client:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "command_SUITE",
-        size = "medium",
-        runtime_deps = [
-            "//deps/amqp10_client:erlang_app",
-        ],
-        deps = [
-            "//deps/amqp10_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "proxy_protocol_SUITE",
-        size = "medium",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-        flaky = True,
-        tags = [
-            "dotnet",
-            "exclusive",
-        ],
-        test_env = {
-            "TMPDIR": "$TEST_TMPDIR",
-        },
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-        deps = [
-            "//deps/amqp10_common:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "amqp10_client_SUITE",
+    size = "medium",
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "command_SUITE",
+    size = "medium",
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+    deps = [
+        "//deps/amqp10_common:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "proxy_protocol_SUITE",
+    size = "medium",
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "system_SUITE",
+    flaky = True,
+    tags = [
+        "dotnet",
+        "exclusive",
+    ],
+    test_env = {
+        "TMPDIR": "$TEST_TMPDIR",
+    },
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "config_schema_SUITE",
+)
+
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+    deps = [
+        "//deps/amqp10_common:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_amqp1_0",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

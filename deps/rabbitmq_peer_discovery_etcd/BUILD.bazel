@@ -52,23 +52,26 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_peer_discovery_etcd"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-        size = "medium",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "config_schema_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "system_SUITE",
+    size = "medium",
+)
+
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_peer_discovery_etcd",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
