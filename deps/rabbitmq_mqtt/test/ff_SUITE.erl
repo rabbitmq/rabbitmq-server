@@ -76,8 +76,9 @@ enable_feature_flag(Config) ->
     ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG)),
 
     %% Ra processes should be gone
-    ?assert(lists:all(fun(Pid) -> Pid =:= undefined end,
-                      rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node]))),
+    rabbit_ct_helpers:eventually(
+      ?_assert(lists:all(fun(Pid) -> Pid =:= undefined end,
+                         rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node])))),
     %% new client ID tracking works
     ?assertEqual(1, length(util:all_connection_pids(Config))),
     ?assert(erlang:is_process_alive(C)),
