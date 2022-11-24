@@ -549,9 +549,10 @@ apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?MODULE{enqueuers = Enqs,
                                          last_active = Ts}, Effects);
-apply(Meta, {down, Pid, _Info}, State0) ->
-    {State, Effects} = handle_down(Meta, Pid, State0),
-    checkout(Meta, State0, State, Effects);
+apply(#{index := Idx} = Meta, {down, Pid, _Info}, State0) ->
+    {State1, Effects1} = handle_down(Meta, Pid, State0),
+    {State, Reply, Effects} = checkout(Meta, State0, State1, Effects1),
+    update_smallest_raft_index(Idx, Reply, State, Effects);
 apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
                                      enqueuers = Enqs0,
                                      service_queue = _SQ0} = State0) ->
