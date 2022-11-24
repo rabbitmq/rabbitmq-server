@@ -71,21 +71,23 @@ rabbitmq_run(
 
 PACKAGE = "deps/rabbitmq_web_dispatch"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_web_dispatch_SUITE",
-        data = [
-            "test/priv/www/index.html",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "rabbit_web_dispatch_unit_SUITE",
-        size = "medium",
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_web_dispatch_SUITE",
+    data = [
+        "test/priv/www/index.html",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "rabbit_web_dispatch_unit_SUITE",
+    size = "medium",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_web_dispatch",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

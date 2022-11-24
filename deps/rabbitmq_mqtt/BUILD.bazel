@@ -96,83 +96,94 @@ rabbitmq_test_helper(
 
 PACKAGE = "deps/rabbitmq_mqtt"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "auth_SUITE",
-        additional_beam = [
-            ":rabbit_auth_backend_mqtt_mock",
-        ],
-        flaky = True,
-        runtime_deps = [
-            "@emqtt//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "cluster_SUITE",
-        size = "large",
-        flaky = True,
-        runtime_deps = [
-            "@emqtt//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "command_SUITE",
-        runtime_deps = [
-            "@emqtt//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "java_SUITE",
-        flaky = True,
-    ),
-    rabbitmq_suite(
-        name = "mqtt_machine_SUITE",
-        size = "small",
-    ),
-    rabbitmq_suite(
-        name = "processor_SUITE",
-        size = "small",
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "proxy_protocol_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "reader_SUITE",
-        runtime_deps = [
-            "@emqtt//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "retainer_SUITE",
-        runtime_deps = [
-            "@emqtt//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "util_SUITE",
-        size = "small",
-        data = [
-            "test/rabbitmq_mqtt.app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "auth_SUITE",
+    additional_beam = [
+        ":rabbit_auth_backend_mqtt_mock",
+    ],
+    flaky = True,
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "cluster_SUITE",
+    size = "large",
+    flaky = True,
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "command_SUITE",
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "config_schema_SUITE",
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "java_SUITE",
+    flaky = True,
+)
+
+rabbitmq_suite(
+    name = "mqtt_machine_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+    name = "processor_SUITE",
+    size = "small",
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "proxy_protocol_SUITE",
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "reader_SUITE",
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "retainer_SUITE",
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "util_SUITE",
+    size = "small",
+    data = [
+        "test/rabbitmq_mqtt.app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_mqtt",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

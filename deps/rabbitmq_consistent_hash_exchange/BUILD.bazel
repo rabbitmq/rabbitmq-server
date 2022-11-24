@@ -53,15 +53,16 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_consistent_hash_exchange"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_exchange_type_consistent_hash_SUITE",
-        shard_count = 3,
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_exchange_type_consistent_hash_SUITE",
+    shard_count = 3,
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_consistent_hash_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

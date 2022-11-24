@@ -58,21 +58,23 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_prometheus"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-        size = "small",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_prometheus_http_SUITE",
-        size = "medium",
-        flaky = True,
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "config_schema_SUITE",
+    size = "small",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "rabbit_prometheus_http_SUITE",
+    size = "medium",
+    flaky = True,
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_prometheus",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

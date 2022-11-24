@@ -50,21 +50,23 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_peer_discovery_consul"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "rabbitmq_peer_discovery_consul_SUITE",
-        size = "medium",
-        runtime_deps = [
-            "@meck//:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "config_schema_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "rabbitmq_peer_discovery_consul_SUITE",
+    size = "medium",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_peer_discovery_consul",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

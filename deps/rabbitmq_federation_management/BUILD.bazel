@@ -57,14 +57,15 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_federation_management"
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "federation_mgmt_SUITE",
-    ),
-]
+rabbitmq_integration_suite(
+    PACKAGE,
+    name = "federation_mgmt_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_federation_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
