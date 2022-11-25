@@ -1993,7 +1993,18 @@ machine_version(1, 2, State = #?MODULE{streams = Streams0,
                    listeners = undefined}, Effects};
 machine_version(2, 3, State) ->
     rabbit_log:info("Stream coordinator machine version changes from 2 to 3, updating state."),
-    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}, []};
+    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()},
+     []};
+machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
+    %% unset the node field in the members record as no longer used
+    Streams = maps:map(
+                fun (_, #stream{members = Members} = S) ->
+                        S#stream{members = maps:map(
+                                             fun (_N, M) ->
+                                                     M#member{reserved = undefined}
+                                             end, Members)}
+                end, Streams0),
+    {State#?MODULE{streams = Streams}, []};
 machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
