@@ -25,7 +25,8 @@ groups() ->
        [connection
         , pubsub_shared_connection
         , pubsub_separate_connections
-        , last_will_enabled
+        , last_will_enabled_disconnect
+        , last_will_enabled_no_disconnect
         , disconnect
         , keepalive
         , maintenance
@@ -94,7 +95,7 @@ pubsub_separate_connections(Config) ->
     ok = emqtt:disconnect(Publisher),
     ok = emqtt:disconnect(Consumer).
 
-last_will_enabled(Config) ->
+last_will_enabled_disconnect(Config) ->
     LastWillTopic = <<"/topic/web-mqtt-tests-ws1-last-will">>,
     LastWillMsg = <<"a last will and testament message">>,
     PubOpts = [{will_topic, LastWillTopic},
@@ -103,8 +104,29 @@ last_will_enabled(Config) ->
     Publisher = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config, PubOpts),
     Consumer = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>, Config),
     {ok, _, [1]} = emqtt:subscribe(Consumer, LastWillTopic, qos1),
+
+    %% Client sends DISCONNECT packet. Therefore, will message should not be sent.
     ok = emqtt:disconnect(Publisher),
-    ok = expect_publishes(Consumer, LastWillTopic, [LastWillMsg]),
+    ?assertEqual({publish_not_received, LastWillMsg},
+                 expect_publishes(Consumer, LastWillTopic, [LastWillMsg])),
+
+    ok = emqtt:disconnect(Consumer).
+
+last_will_enabled_no_disconnect(Config) ->
+    LastWillTopic = <<"/topic/web-mqtt-tests-ws1-last-will">>,
+    LastWillMsg = <<"a last will and testament message">>,
+    PubOpts = [{will_topic, LastWillTopic},
+               {will_payload, LastWillMsg},
+               {will_qos, 1}],
+    _Publisher = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config, PubOpts),
+    [ServerPublisherPid] = rpc(Config, 0, rabbit_mqtt, local_connection_pids, []),
+    Consumer = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(Consumer, LastWillTopic, qos1),
+
+    %% Client does not send DISCONNECT packet. Therefore, will message should be sent.
+    erlang:exit(ServerPublisherPid, test_will),
+    ?assertEqual(ok, expect_publishes(Consumer, LastWillTopic, [LastWillMsg])),
+
     ok = emqtt:disconnect(Consumer).
 
 disconnect(Config) ->
@@ -183,6 +205,6 @@ expect_publishes(ClientPid, Topic, [Payload|Rest]) ->
                     topic := Topic,
                     payload := Payload}} ->
             expect_publishes(ClientPid, Topic, Rest)
-    after 5000 ->
-              throw({publish_not_received, Payload})
+    after 1000 ->
+              {publish_not_received, Payload}
     end.

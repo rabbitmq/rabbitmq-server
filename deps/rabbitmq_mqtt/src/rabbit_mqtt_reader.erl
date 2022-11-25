@@ -14,8 +14,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2, format_status/1]).
 
-%%TODO check where to best 'hibernate' when returning from callback
-
 -export([conserve_resources/3,
          close_connection/2]).
 
@@ -87,11 +85,10 @@ init(Ref) ->
 
 handle_call({info, InfoItems}, _From, State) ->
     Infos = lists:map(
-        fun(InfoItem) ->
-            {InfoItem, info_internal(InfoItem, State)}
-        end,
-        InfoItems),
-    {reply, Infos, State};
+              fun(InfoItem) ->
+                      {InfoItem, info_internal(InfoItem, State)}
+              end, InfoItems),
+    {reply, Infos, State, ?HIBERNATE_AFTER};
 
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
@@ -176,7 +173,7 @@ handle_info({keepalive, Req}, State = #state{keepalive = KState0,
             {noreply, State#state{keepalive = KState}, ?HIBERNATE_AFTER};
         {error, timeout} ->
             rabbit_log_connection:error("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
-            send_will_and_terminate({shutdown, keepalive_timeout}, State);
+            {stop, {shutdown, keepalive_timeout}, State};
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -208,7 +205,7 @@ handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
         {ok, PState} ->
             maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
         {error, Reason} ->
-            send_will_and_terminate({shutdown, Reason}, State)
+            {stop, {shutdown, Reason, State}}
     end;
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
@@ -218,12 +215,14 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate(Reason, State = #state{conn_name = ConnName,
-                                 keepalive = KState0,
-                                 proc_state = PState}) ->
+terminate(Reason, State = #state{}) ->
+    terminate(Reason, {true, State});
+terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
+                                            keepalive = KState0,
+                                            proc_state = PState}}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
-    rabbit_mqtt_processor:terminate(PState, ConnName),
+    rabbit_mqtt_processor:terminate(SendWill, ConnName, PState),
     log_terminate(Reason, State).
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
@@ -332,8 +331,8 @@ process_received_bytes(Bytes,
                     rabbit_log_connection:error("MQTT detected a framing error on connection ~ts: ~tp",
                         [ConnStr, Error]),
                     {stop, {shutdown, Error}, State};
-                {stop, ProcState1} ->
-                    {stop, normal, pstate(State, ProcState1)}
+                {stop, disconnect, ProcState1} ->
+                    {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
             rabbit_log_connection:error("MQTT cannot parse a frame on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
@@ -357,20 +356,6 @@ parse(Bytes, ParseState) ->
             {error, {cannot_parse, Reason, Stacktrace}}
     end.
 
-%% TODO Send will message in all abnormal shutdowns?
-%% => in terminate/2 depending on Reason
-%% "The Will Message MUST be published when the Network Connection is subsequently
-%% closed unless the Will Message has been deleted by the Server on receipt of a
-%% DISCONNECT Packet [MQTT-3.1.2-8]."
-send_will_and_terminate(State) ->
-    send_will_and_terminate({shutdown, conn_closed}, State).
-
-send_will_and_terminate(Reason, State = #state{conn_name = ConnStr,
-                                               proc_state = PState}) ->
-    rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~p", [ConnStr]),
-    rabbit_mqtt_processor:send_will(PState),
-    {stop, Reason, State}.
-
 network_error(closed,
               State = #state{conn_name  = ConnStr,
                              received_connect_frame = Connected}) ->
@@ -380,13 +365,13 @@ network_error(closed,
         true -> rabbit_log_connection:info(Fmt, Args);
         false  -> rabbit_log_connection:debug(Fmt, Args)
     end,
-    send_will_and_terminate(State);
+    {stop, {shutdown, conn_closed}, State};
 
 network_error(Reason,
               State = #state{conn_name  = ConnStr}) ->
     rabbit_log_connection:info("MQTT detected network error for ~p: ~p",
                                [ConnStr, Reason]),
-    send_will_and_terminate(State).
+    {stop, {shutdown, conn_closed}, State}.
 
 run_socket(State = #state{ connection_state = blocked }) ->
     State;

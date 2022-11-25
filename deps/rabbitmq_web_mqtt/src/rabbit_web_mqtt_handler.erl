@@ -210,15 +210,17 @@ websocket_info(Msg, State) ->
     {[], State, hibernate}.
 
 -spec terminate(any(), cowboy_req:req(), any()) -> ok.
+terminate(Reason, Request, #state{} = State) ->
+    terminate(Reason, Request, {true, State});
 terminate(_Reason, _Request,
-          #state{conn_name = ConnName,
-                 proc_state = PState,
-                 keepalive = KState} = State) ->
+          {SendWill, #state{conn_name = ConnName,
+                            proc_state = PState,
+                            keepalive = KState} = State}) ->
     rabbit_log_connection:info("closing Web MQTT connection ~p (~s)", [self(), ConnName]),
     maybe_emit_stats(State),
     rabbit_mqtt_keepalive:cancel_timer(KState),
     ok = file_handle_cache:release(),
-    stop_rabbit_mqtt_processor(PState, ConnName).
+    rabbit_mqtt_processor:terminate(SendWill, ConnName, PState).
 
 %% Internal.
 
@@ -262,8 +264,8 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                     stop(State, ?CLOSE_PROTOCOL_ERROR, Reason);
                 {error, Error} ->
                     stop_with_framing_error(State, Error, ConnStr);
-                {stop, _} ->
-                    stop(State)
+                {stop, disconnect, ProcState1} ->
+                    stop({_SendWill = false, State#state{proc_state = ProcState1}})
             end;
         Other ->
             Other
@@ -281,12 +283,6 @@ stop(State) ->
 stop(State, CloseCode, Error0) ->
     Error = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error}], State}.
-
-stop_rabbit_mqtt_processor(undefined, _) ->
-    ok;
-stop_rabbit_mqtt_processor(PState, ConnName) ->
-    rabbit_mqtt_processor:send_will(PState),
-    rabbit_mqtt_processor:terminate(PState, ConnName).
 
 handle_credits(State0) ->
     %%TODO return hibernate?

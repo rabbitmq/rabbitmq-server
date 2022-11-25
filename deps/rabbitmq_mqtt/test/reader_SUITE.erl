@@ -25,20 +25,22 @@ all() ->
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                block,
-                                block_connack_timeout,
-                                handle_invalid_frames,
-                                login_timeout,
-                                keepalive,
-                                keepalive_turned_off,
-                                stats,
-                                clean_session_disconnect_client,
-                                clean_session_kill_node,
-                                quorum_clean_session_false,
-                                quorum_clean_session_true,
-                                classic_clean_session_true,
-                                classic_clean_session_false
+     {non_parallel_tests, [],
+      [
+       block,
+       block_connack_timeout,
+       handle_invalid_frames,
+       login_timeout,
+       keepalive,
+       keepalive_turned_off,
+       stats,
+       will,
+       clean_session_disconnect_client,
+       clean_session_kill_node,
+       quorum_clean_session_false,
+       quorum_clean_session_true,
+       classic_clean_session_true,
+       classic_clean_session_false
       ]}
     ].
 
@@ -368,6 +370,33 @@ classic_clean_session_true(Config) ->
 
 classic_clean_session_false(Config) ->
     validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
+
+will(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Topic = <<"will/topic">>,
+    Msg = <<"will msg">>,
+    {ok, Publisher} = emqtt:start_link([{port, P},
+                                        {clientid, <<"will-publisher">>},
+                                        {proto_ver, v4},
+                                        {will_topic, Topic},
+                                        {will_payload, Msg},
+                                        {will_qos, qos0},
+                                        {will_retain, false}
+                                       ]),
+    {ok, _} = emqtt:connect(Publisher),
+    [ServerPublisherPid] = all_connection_pids(Config),
+
+    {ok, Subscriber} = emqtt:start_link([{port, P},
+                                         {clientid, <<"will-subscriber">>},
+                                         {proto_ver, v4}]),
+    {ok, _} = emqtt:connect(Subscriber),
+    {ok, _, _} = emqtt:subscribe(Subscriber, Topic, qos0),
+
+    true = unlink(Publisher),
+    erlang:exit(ServerPublisherPid, test_will),
+    ok = expect_publishes(Topic, [Msg]),
+
+    ok = emqtt:disconnect(Subscriber).
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).

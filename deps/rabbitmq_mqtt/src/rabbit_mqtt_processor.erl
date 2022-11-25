@@ -8,8 +8,8 @@
 -module(rabbit_mqtt_processor).
 
 -export([info/2, initial_state/2, initial_state/4,
-         process_frame/2, serialise/2, send_will/1,
-         terminate/2, handle_pre_hibernate/0,
+         process_frame/2, serialise/2,
+         terminate/3, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
          soft_limit_exceeded/1, format_status/1]).
 
@@ -259,7 +259,7 @@ process_request(?PINGREQ, #mqtt_frame{}, PState = #proc_state{send_fun = SendFun
 
 process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
     rabbit_log_connection:debug("Received a DISCONNECT"),
-    {stop, PState}.
+    {stop, disconnect, PState}.
 
 process_connect(#mqtt_frame{
                    variable = #mqtt_frame_connect{
@@ -368,7 +368,7 @@ register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
             ProtoHumanReadable = {'MQTT', human_readable_mqtt_version(ProtoVersion)},
             PState#proc_state{
               exchange = ExchangeName,
-              will_msg   = make_will_msg(Frame),
+              will_msg = make_will_msg(Frame),
               retainer_pid = RetainerPid,
               register_state = RegisterState,
               proto_ver = protocol_integer_to_atom(ProtoVersion),
@@ -1142,25 +1142,6 @@ binding_action(
                        key = RoutingKey},
     BindingFun(Binding, Username).
 
-send_will(#proc_state{will_msg = undefined}) ->
-    ok;
-send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
-                                                              topic = Topic},
-                               retainer_pid = RPid,
-                               amqp2mqtt_fun = Amqp2MqttFun}) ->
-    case check_topic_access(Topic, write, PState) of
-        ok ->
-            publish_to_queues(WillMsg, PState),
-            case Retain of
-                false ->
-                    ok;
-                true ->
-                    hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, WillMsg)
-            end;
-        {error, access_refused = Reason}  ->
-            rabbit_log:error("failed to send will message: ~p", [Reason])
-    end.
-
 publish_to_queues(undefined, PState) ->
     {ok, PState};
 publish_to_queues(
@@ -1297,7 +1278,8 @@ serialise_and_send_to_client(Frame, #proc_state{proto_ver = ProtoVer, socket = S
 serialise(Frame, #proc_state{proto_ver = ProtoVer}) ->
     rabbit_mqtt_frame:serialise(Frame, ProtoVer).
 
-terminate(PState, ConnName) ->
+terminate(SendWill, ConnName, PState) ->
+    maybe_send_will(SendWill, ConnName, PState),
     Infos = [{name, ConnName},
              {node, node()},
              {pid, self()},
@@ -1309,6 +1291,28 @@ terminate(PState, ConnName) ->
     maybe_decrement_consumer(PState),
     maybe_decrement_publisher(PState),
     maybe_delete_mqtt_qos0_queue(PState).
+
+maybe_send_will(true, ConnStr,
+                #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
+                                                           topic = Topic},
+                            retainer_pid = RPid,
+                            amqp2mqtt_fun = Amqp2MqttFun} = PState) ->
+    rabbit_log_connection:debug("sending MQTT will message to topic ~s on connection ~s",
+                                [Topic, ConnStr]),
+    case check_topic_access(Topic, write, PState) of
+        ok ->
+            publish_to_queues(WillMsg, PState),
+            case Retain of
+                false ->
+                    ok;
+                true ->
+                    hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, WillMsg)
+            end;
+        {error, access_refused = Reason}  ->
+            rabbit_log:error("failed to send will message: ~p", [Reason])
+    end;
+maybe_send_will(_, _, _) ->
+    ok.
 
 additional_connection_closed_info(
   #proc_state{info = #info{proto_human = {ProtoName, ProtoVsn}},
@@ -1777,7 +1781,7 @@ maybe_decrement_consumer(_, _) ->
     ok.
 
 maybe_decrement_consumer(#proc_state{proto_ver = ProtoVer,
-                                     auth_state = #auth_state{vhost = _Vhost}} = PState) ->
+                                     auth_state = #auth_state{}} = PState) ->
     case has_subs(PState) of
         true ->
             rabbit_global_counters:consumer_deleted(ProtoVer);
