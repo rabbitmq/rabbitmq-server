@@ -1163,7 +1163,6 @@ update_stream0(#{system_time := _} = Meta,
                                         N -> {writer, E};
                                         _ -> {replica, E}
                                     end,
-                             node = N,
                              state = {ready, E},
                              %% no members are running actions
                              current = undefined}
@@ -1177,8 +1176,7 @@ update_stream0(#{system_time := _} = Meta,
             reply_to = maps:get(from, Meta, undefined)};
 update_stream0(#{machine_version := MacVer} = Meta,
                {restart_stream, _StreamId, #{}},
-               #stream{members = Members0,
-                       target = _} = Stream0)
+               #stream{members = Members0} = Stream0)
   when MacVer >= 4 ->
     Members = maps:map(fun (_, M) ->
                                M#member{target = stopped}
@@ -1209,7 +1207,6 @@ update_stream0(#{system_time := _Ts} = _Meta,
             Stream0;
         false ->
             Members1 = Members0#{Node => #member{role = {replica, Epoch},
-                                                 node = Node,
                                                  target = stopped}},
             Members = set_running_to_stopped(Members1),
             Stream0#stream{members = Members,
@@ -1290,13 +1287,15 @@ update_stream0(Meta,
                        nodes = Nodes,
                        members = Members0} = Stream0) ->
     IsLeaderInCurrent = case find_leader(Members0) of
-                            {#member{role = {writer, Epoch},
-                                     target = running,
-                                     state = {ready, Epoch}}, _} ->
+                            {{_Node, #member{role = {writer, Epoch},
+                                             target = running,
+                                             state = {ready, Epoch}}},
+                             _Replicas} ->
                                 true;
-                            {#member{role = {writer, Epoch},
-                                     target = running,
-                                     state = {running, Epoch, _}}, _} ->
+                            {{_Node, #member{role = {writer, Epoch},
+                                             target = running,
+                                             state = {running, Epoch, _}}},
+                             _Replicas} ->
                                 true;
                             _ ->
                                 false
@@ -1330,9 +1329,9 @@ update_stream0(Meta,
             Members1 = Members0#{Node => Member},
 
             EpochOffsets = [{N, T}
-                            || #member{state = {stopped, E, T},
-                                       target = running,
-                                       node = N} <- maps:values(Members1),
+                            || {N, #member{state = {stopped, E, T},
+                                           target = running}}
+                               <- maps:to_list(Members1),
                                E == Epoch],
             case is_quorum(length(Nodes), length(EpochOffsets)) of
                 true ->
@@ -1453,8 +1452,7 @@ update_stream0(#{system_time := _Ts} = _Meta,
                {nodeup, Node},
                #stream{members = Members0} = Stream0) ->
     Members = maps:map(
-                fun (_, #member{node = N,
-                                current = {sleeping, nodeup}} = M)
+                fun (N, #member{current = {sleeping, nodeup}} = M)
                       when N == Node ->
                         M#member{current = undefined};
                     (_, M) ->
@@ -1513,7 +1511,8 @@ eval_listeners(MachineVersion, #stream{listeners = Listeners0,
                _OldStream, Effects0)
   when MachineVersion =< 1 ->
     case find_leader(Members) of
-        {#member{state = {running, _, LeaderPid}}, _} ->
+        {{_LeaderNode, #member{state = {running, _, LeaderPid}}},
+         _Replicas} ->
             %% a leader is running, check all listeners to see if any of them
             %% has not been notified of the current leader pid
             {Listeners, Effects} =
@@ -1628,47 +1627,47 @@ evaluate_stream(#{index := Idx} = Meta,
                         epoch = Epoch,
                         mnesia = {MnesiaTag, MnesiaEpoch},
                         members = Members0} = Stream0, Effs0) ->
-     case find_leader(Members0) of
-         {#member{state = LState,
-                  node = LeaderNode,
-                  target = deleted,
-                  current = undefined} = Writer0, Replicas}
+    case find_leader(Members0) of
+        {{LeaderNode, #member{state = LState,
+                              target = deleted,
+                              current = undefined} = Writer0},
+         Replicas}
            when LState =/= deleted ->
              Action = {aux, {delete_member, StreamId, LeaderNode,
-                             make_writer_conf(Writer0, Stream0)}},
+                             make_writer_conf(LeaderNode, Stream0)}},
              Writer = Writer0#member{current = {deleting, Idx}},
              Effs = [Action | Effs0],
              Stream = Stream0#stream{reply_to = undefined},
-             eval_replicas(Meta, Writer, Replicas, Stream, Effs);
-         {#member{state = {down, Epoch},
-                  target = stopped,
-                  node = LeaderNode,
-                  current = undefined} = Writer0, Replicas} ->
+             eval_replicas(Meta, {LeaderNode, Writer}, Replicas, Stream, Effs);
+        {{LeaderNode, #member{state = {down, Epoch},
+                              target = stopped,
+                              current = undefined} = Writer0},
+         Replicas} ->
              %% leader is down - all replicas need to be stopped
              %% and tail infos retrieved
              %% some replicas may already be in stopping or ready state
              Args = Meta#{epoch => Epoch,
                           node => LeaderNode},
-             Conf = make_writer_conf(Writer0, Stream0),
+             Conf = make_writer_conf(LeaderNode, Stream0),
              Action = {aux, {stop, StreamId, Args, Conf}},
              Writer = Writer0#member{current = {stopping, Idx}},
-             eval_replicas(Meta, Writer, Replicas, Stream0, [Action | Effs0]);
-         {#member{state = {ready, Epoch}, %% writer ready in current epoch
-                  target = running,
-                  node = LeaderNode,
-                  current = undefined} = Writer0, _Replicas} ->
+             eval_replicas(Meta, {LeaderNode, Writer}, Replicas, Stream0, [Action | Effs0]);
+        {{LeaderNode, #member{state = {ready, Epoch}, %% writer ready in current epoch
+                              target = running,
+                              current = undefined} = Writer0},
+         _Replicas} ->
              %% ready check has been completed and a new leader has been chosen
              %% time to start writer,
              %% if leader start fails, revert back to down state for all and re-run
-             WConf = make_writer_conf(Writer0, Stream0),
+             WConf = make_writer_conf(LeaderNode, Stream0),
              Members = Members0#{LeaderNode =>
                                  Writer0#member{current = {starting, Idx},
                                                 conf = WConf}},
              Args = Meta#{node => LeaderNode, epoch => Epoch},
              Actions = [{aux, {start_writer, StreamId, Args, WConf}} | Effs0],
              {Stream0#stream{members = Members}, Actions};
-         {#member{state = {running, Epoch, LeaderPid},
-                  target = running} = Writer, Replicas} ->
+        {{_WriterNode, #member{state = {running, Epoch, LeaderPid},
+                               target = running}} = Writer, Replicas} ->
              Effs1 = case From of
                          undefined ->
                              Effs0;
@@ -1688,43 +1687,42 @@ evaluate_stream(#{index := Idx} = Meta,
                  false ->
                      eval_replicas(Meta, Writer, Replicas, Stream1, Effs1)
              end;
-         {#member{state = S,
-                  target = stopped,
-                  node = LeaderNode,
-                  current = undefined} = Writer0, Replicas}
+        {{LeaderNode, #member{state = S,
+                              target = stopped,
+                              current = undefined} = Writer0}, Replicas}
            when element(1, S) =/= stopped ->
              %% leader should be stopped
              Args = Meta#{node => LeaderNode, epoch => Epoch},
              Action = {aux, {stop, StreamId, Args,
-                             make_writer_conf(Writer0, Stream0)}},
+                             make_writer_conf(LeaderNode, Stream0)}},
              Writer = Writer0#member{current = {stopping, Idx}},
-             eval_replicas(Meta, Writer, Replicas, Stream0, [Action | Effs0]);
+             eval_replicas(Meta, {LeaderNode, Writer}, Replicas, Stream0,
+                           [Action | Effs0]);
          {Writer, Replicas} ->
              eval_replicas(Meta, Writer, Replicas, Stream0, Effs0)
      end.
 
 eval_replicas(Meta, undefined, Replicas, Stream, Actions0) ->
-    {Members, Actions} = lists:foldl(
-                           fun (R, Acc) ->
-                                   eval_replica(Meta, R, deleted, Stream, Acc)
+    {Members, Actions} = maps:fold(
+                           fun (Node, R, Acc) ->
+                                   eval_replica(Meta, Node, R, deleted, Stream, Acc)
                            end, {#{}, Actions0},
                            Replicas),
     {Stream#stream{members = Members}, Actions};
-eval_replicas(Meta, #member{state = LeaderState,
-                            node = WriterNode} = Writer, Replicas,
+eval_replicas(Meta, {WriterNode, #member{state = LeaderState} = Writer}, Replicas,
               Stream, Actions0) ->
-    {Members, Actions} = lists:foldl(
-                           fun (R, Acc) ->
-                                   eval_replica(Meta, R, LeaderState,
+    {Members, Actions} = maps:fold(
+                           fun (Node, R, Acc) ->
+                                   eval_replica(Meta, Node, R, LeaderState,
                                                 Stream, Acc)
                            end, {#{WriterNode => Writer}, Actions0},
                            Replicas),
     {Stream#stream{members = Members}, Actions}.
 
 eval_replica(#{index := Idx} = Meta,
+             Node,
              #member{state = _State,
                      target = stopped,
-                     node = Node,
                      current = undefined} = Replica,
              _LeaderState,
              #stream{id = StreamId,
@@ -1738,10 +1736,10 @@ eval_replica(#{index := Idx} = Meta,
     Conf = Conf0#{epoch => Epoch},
     {Replicas#{Node => Replica#member{current = {stopping, Idx}}},
      [{aux, {stop, StreamId, Args, Conf}} | Actions]};
-eval_replica(#{index := Idx} = Meta, #member{state = _,
-                                             node = Node,
-                                             current = Current,
-                                             target = deleted} = Replica,
+eval_replica(#{index := Idx} = Meta,
+             Node,
+             #member{current = Current,
+                     target = deleted} = Replica,
              _LeaderState, #stream{id = StreamId,
                                    epoch = Epoch,
                                    conf = Conf}, {Replicas, Actions0}) ->
@@ -1756,10 +1754,10 @@ eval_replica(#{index := Idx} = Meta, #member{state = _,
         _ ->
             {Replicas#{Node => Replica}, Actions0}
     end;
-eval_replica(#{index := Idx} = Meta, #member{state = {State, Epoch},
-                                             node = Node,
-                                             target = running,
-                                             current = undefined} = Replica,
+eval_replica(#{index := Idx} = Meta, Node,
+             #member{state = {State, Epoch},
+                     target = running,
+                     current = undefined} = Replica,
              {running, Epoch, Pid},
              #stream{id = StreamId,
                      epoch = Epoch} = Stream,
@@ -1772,28 +1770,25 @@ eval_replica(#{index := Idx} = Meta, #member{state = {State, Epoch},
     {Replicas#{Node => Replica#member{current = {starting, Idx},
                                       conf = Conf}},
      [{aux, {start_replica, StreamId, Args, Conf}} | Actions]};
-eval_replica(_Meta, #member{state = {running, Epoch, _},
-                            target = running,
-                            node = Node} = Replica,
+eval_replica(_Meta, Node, #member{state = {running, Epoch, _},
+                                  target = running} = Replica,
              {running, Epoch, _}, _Stream, {Replicas, Actions}) ->
     {Replicas#{Node => Replica}, Actions};
-eval_replica(_Meta, #member{state = {stopped, _E, _},
-                            node = Node,
-                            current = undefined} = Replica,
+eval_replica(_Meta, Node, #member{state = {stopped, _E, _},
+                                  current = undefined} = Replica,
              _LeaderState, _Stream,
              {Replicas, Actions}) ->
     %%  if stopped we should just wait for a quorum to reach stopped and
     %%  update_stream will move to ready state
     {Replicas#{Node => Replica}, Actions};
-eval_replica(_Meta, #member{state = {ready, E},
-                            target = running,
-                            node = Node,
-                            current = undefined} = Replica,
+eval_replica(_Meta, Node, #member{state = {ready, E},
+                                  target = running,
+                                  current = undefined} = Replica,
              {ready, E}, _Stream,
              {Replicas, Actions}) ->
     %% if we're ready and so is the leader we just wait a swell
     {Replicas#{Node => Replica}, Actions};
-eval_replica(_Meta, #member{node = Node} = Replica, _LeaderState, _Stream,
+eval_replica(_Meta, Node, #member{} = Replica, _LeaderState, _Stream,
              {Replicas, Actions}) ->
     {Replicas#{Node => Replica}, Actions}.
 
@@ -1803,8 +1798,8 @@ fail_active_actions(Streams, Exclude) ->
                        members = Members,
                        mnesia = Mnesia})
             when not is_map_key(Id, Exclude)  ->
-              _ = maps:map(fun(_, M) ->
-                                   fail_action(Id, M)
+              _ = maps:map(fun(N, M) ->
+                                   fail_action(Id, N, M)
                            end, Members),
               case Mnesia of
                   {updating, E} ->
@@ -1824,11 +1819,10 @@ fail_active_actions(Streams, Exclude) ->
 
     ok.
 
-fail_action(_StreamId, #member{current = undefined}) ->
+fail_action(_StreamId, _, #member{current = undefined}) ->
     ok;
-fail_action(StreamId, #member{role = {_, E},
-                              current = {Action, Idx},
-                              node = Node}) ->
+fail_action(StreamId, Node, #member{role = {_, E},
+                                    current = {Action, Idx}}) ->
     rabbit_log:debug("~ts: failing stale action to trigger retry. "
                      "Stream ID: ~ts, node: ~w, action: ~w",
                      [?MODULE, StreamId, node(), Action]),
@@ -1864,9 +1858,9 @@ make_replica_conf(LeaderPid,
           replica_nodes => lists:delete(LeaderNode, Nodes),
           epoch => Epoch}.
 
-make_writer_conf(#member{node = Node}, #stream{epoch = Epoch,
-                                               nodes = Nodes,
-                                               conf = Conf}) ->
+make_writer_conf(Node, #stream{epoch = Epoch,
+                               nodes = Nodes,
+                               conf = Conf}) ->
     Conf#{leader_node => Node,
           nodes => Nodes,
           replica_nodes => lists:delete(Node, Nodes),
@@ -1875,15 +1869,15 @@ make_writer_conf(#member{node = Node}, #stream{epoch = Epoch,
 
 find_leader(Members) ->
     case lists:partition(
-           fun (#member{target = deleted}) ->
+           fun ({_, #member{target = deleted}}) ->
                    false;
-               (#member{role = {Role, _}}) ->
+               ({_, #member{role = {Role, _}}}) ->
                    Role == writer
-           end, maps:values(Members)) of
+           end, maps:to_list(Members)) of
         {[Writer], Replicas} ->
-            {Writer, Replicas};
+            {Writer, maps:from_list(Replicas)};
         {[], Replicas} ->
-            {undefined, Replicas}
+            {undefined, maps:from_list(Replicas)}
     end.
 
 select_leader(#{machine_version := 0}, EpochOffsets) ->

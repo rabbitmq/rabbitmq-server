@@ -1370,7 +1370,7 @@ restart_stream(Config) ->
                       kind = queue,
                       name = Q},
     %% restart the stream
-    ?assertMatch({ok, {ok, _}, _},
+    ?assertMatch({ok, _},
                  rabbit_ct_broker_helpers:rpc(Config, Server,
                                               rabbit_stream_coordinator,
                                               ?FUNCTION_NAME, [QName])),

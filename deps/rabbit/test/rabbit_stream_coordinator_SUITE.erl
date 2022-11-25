@@ -105,16 +105,12 @@ listeners(_) ->
       ),
 
     LeaderPid0 = spawn(fun() -> ok end),
-    Leader0 = #member{
-                role = {writer, 1},
-                state = {running, 1, LeaderPid0},
-                node = N1
-               },
-    State1 = State0#?STATE{
-                       streams = #{S => #stream{
-                                           listeners = #{},
-                                           members = #{N1 => Leader0},
-                                           queue_ref = Q}
+    Leader0 = #member{role = {writer, 1},
+                      state = {running, 1, LeaderPid0}},
+    State1 = State0#?STATE{streams = #{S => #stream{id = S,
+                                                listeners = #{},
+                                                members = #{N1 => Leader0},
+                                                queue_ref = Q}
                       }},
 
     {State2, ok, Effs2} = register_listener(#{pid => ListPid,
@@ -1408,13 +1404,11 @@ started_stream(StreamId, LeaderPid, ReplicaPids) ->
                       name = list_to_binary(StreamId),
                       virtual_host = VHost},
     Members0 = #{node(LeaderPid) => #member{role = {writer, E},
-                                            node = node(LeaderPid),
                                             state = {running, E, LeaderPid},
                                             current = undefined}},
     Members = lists:foldl(fun (R, Acc) ->
                                   N = node(R),
                                   Acc#{N => #member{role = {replica, E},
-                                                    node = N,
                                                     state = {running, E, R},
                                                     current = undefined}}
                           end, Members0, ReplicaPids),
