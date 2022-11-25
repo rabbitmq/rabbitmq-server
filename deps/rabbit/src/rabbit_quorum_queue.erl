@@ -1054,6 +1054,8 @@ status(Vhost, QueueName) ->
                          ]
                  end
              end || N <- Nodes];
+        {ok, _Q} ->
+            {error, not_quorum_queue};
         {error, not_found} = E ->
             E
     end.
@@ -1089,6 +1091,8 @@ add_member(VHost, Name, Node, Timeout) ->
                             add_member(Q, Node, Timeout)
                     end
             end;
+        {ok, _Q} ->
+            {error, not_quorum_queue};
         {error, not_found} = E ->
                     E
     end.
@@ -1144,6 +1148,8 @@ delete_member(VHost, Name, Node) ->
                 true ->
                     delete_member(Q, Node)
             end;
+        {ok, _Q} ->
+            {error, not_quorum_queue};
         {error, not_found} = E ->
                     E
     end.
@@ -1301,6 +1307,8 @@ reclaim_memory(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                      rabbit_fifo:make_garbage_collection());
+        {ok, _Q} ->
+            {error, not_quorum_queue};
         {error, not_found} = E ->
             E
     end.
@@ -1564,7 +1572,9 @@ peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
             Err
     end;
 peek(_Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_classic(Q) ->
-    {error, classic_queue_not_supported}.
+    {error, classic_queue_not_supported};
+peek(_Pos, Q) when ?is_amqqueue(Q) ->
+    {error, not_quorum_queue}.
 
 online(Q) when ?is_amqqueue(Q) ->
     Nodes = get_connected_nodes(Q),
