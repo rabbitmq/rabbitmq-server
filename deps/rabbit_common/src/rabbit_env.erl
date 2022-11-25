@@ -312,6 +312,7 @@ context_to_app_env_vars1(
        {mnesia, dir, DataDir},
        {ra, data_dir, QuorumQueueDir},
        {osiris, data_dir, StreamQueueDir},
+       {rabbit, data_dir, DataDir},
        {rabbit, feature_flags_file, FFFile},
        {rabbit, plugins_dir, PluginsPath},
        {rabbit, plugins_expand_dir, PluginsExpandDir},
@@ -844,10 +845,22 @@ data_dir_from_env(Context) ->
     end.
 
 data_dir_from_node(#{from_remote_node := Remote} = Context) ->
+    Ret = query_remote(Remote, application, get_env, [rabbit, data_dir]),
+    case Ret of
+        {ok, undefined} ->
+            data_dir_from_node1(Context);
+        {ok, {ok, Value}} ->
+            Dir = normalize_path(Value),
+            update_context(Context, data_dir, Dir, remote_node);
+        {badrpc, nodedown} ->
+            update_context(Context, data_dir, undefined, default)
+    end.
+
+data_dir_from_node1(#{from_remote_node := Remote} = Context) ->
     Ret = query_remote(Remote, application, get_env, [mnesia, dir]),
     case Ret of
         {ok, undefined} ->
-            throw({query, Remote, {mnesia, dir, undefined}});
+            throw({query, Remote, {rabbit, data_dir, undefined}});
         {ok, {ok, Value}} ->
             Dir = normalize_path(Value),
             update_context(Context, data_dir, Dir, remote_node);

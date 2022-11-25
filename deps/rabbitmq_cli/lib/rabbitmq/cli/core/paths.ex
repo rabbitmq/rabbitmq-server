@@ -28,11 +28,22 @@ defmodule RabbitMQ.CLI.Core.Paths do
   end
 
   def require_data_dir(opts) do
-    case Application.get_env(:mnesia, :dir) do
+    case Application.get_env(:rabbit, :data_dir) do
       nil ->
-        case Config.get_option(:data_dir, opts) do
-          nil -> {:error, :data_dir_not_found}
-          val -> Application.put_env(:mnesia, :dir, to_charlist(val))
+        case Application.get_env(:mnesia, :dir) do
+          nil ->
+            case Config.get_option(:data_dir, opts) do
+              nil ->
+                {:error, :data_dir_not_found}
+
+              val ->
+                Application.put_env(:rabbit_, :data_dir, to_charlist(val))
+                Application.put_env(:mnesia, :dir, to_charlist(val))
+            end
+
+          val ->
+            Application.put_env(:rabbit_, :data_dir, to_charlist(val))
+            :ok
         end
 
       _ ->
