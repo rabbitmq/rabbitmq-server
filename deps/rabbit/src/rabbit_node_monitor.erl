@@ -70,13 +70,13 @@ cluster_status_filename() ->
     filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
 
 coordination_filename() ->
-    filename:join(rabbit_mnesia:dir(), "coordination").
+    filename:join(rabbit:data_dir(), "coordination").
 
 quorum_filename() ->
     ra_env:data_dir().
 
 default_quorum_filename() ->
-    filename:join(rabbit_mnesia:dir(), "quorum").
+    filename:join(rabbit:data_dir(), "quorum").
 
 -spec prepare_cluster_status_files() -> 'ok' | no_return().
 

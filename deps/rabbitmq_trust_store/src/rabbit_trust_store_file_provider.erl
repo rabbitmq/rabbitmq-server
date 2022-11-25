@@ -90,7 +90,7 @@ default_directory() ->
     %% Dismantle the directory tree: first the table & meta-data
     %% directory, then the Mesia database directory, finally the node
     %% directory where we will place the default whitelist in `Full`.
-    Table  = filename:split(rabbit_mnesia:dir()),
+    Table  = filename:split(rabbit:data_dir()),
     Node   = lists:sublist(Table, length(Table) - 2),
     Full   = Node ++ ["trust_store", "whitelist"],
     filename:join(Full).

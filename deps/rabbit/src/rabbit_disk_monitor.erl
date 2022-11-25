@@ -250,7 +250,7 @@ safe_ets_lookup(Key, Default) ->
     end.
 
 % the partition / drive containing this directory will be monitored
-dir() -> rabbit_mnesia:dir().
+dir() -> rabbit:data_dir().
 
 set_min_check_interval(MinInterval, State) ->
     ets:insert(?ETS_NAME, {min_check_interval, MinInterval}),

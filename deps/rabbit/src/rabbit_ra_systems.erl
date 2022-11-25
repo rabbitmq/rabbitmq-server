@@ -81,7 +81,7 @@ get_config(quorum_queues = RaSystem) ->
 get_config(coordination = RaSystem) ->
     DefaultConfig = get_default_config(),
     CoordDataDir = filename:join(
-                     [rabbit_mnesia:dir(), "coordination", node()]),
+                     [rabbit:data_dir(), "coordination", node()]),
     DefaultConfig#{name => RaSystem,
                    data_dir => CoordDataDir,
                    wal_data_dir => CoordDataDir,

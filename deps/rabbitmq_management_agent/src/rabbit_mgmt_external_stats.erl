@@ -275,7 +275,7 @@ i(exchange_types, State) ->
 i(log_files, State) ->
     {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:log_locations()]};
 i(db_dir, State) ->
-    {State, rabbit_data_coercion:to_utf8_binary(rabbit_mnesia:dir())};
+    {State, rabbit_data_coercion:to_utf8_binary(rabbit:data_dir())};
 i(config_files, State) ->
     {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:config_files()]};
 i(net_ticktime, State) ->
