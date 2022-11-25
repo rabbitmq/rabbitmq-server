@@ -384,6 +384,7 @@ will(Config) ->
                                         {will_retain, false}
                                        ]),
     {ok, _} = emqtt:connect(Publisher),
+    timer:sleep(100),
     [ServerPublisherPid] = all_connection_pids(Config),
 
     {ok, Subscriber} = emqtt:start_link([{port, P},
