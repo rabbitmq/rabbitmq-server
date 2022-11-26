@@ -13,14 +13,14 @@ Including another URLconf
     1. Import the include() function: from django.conf.urls import url, include
     2. Add a URL to urlpatterns:  url(r'^blog/', include('blog.urls'))
 """
-from django.conf.urls import url
+from django.urls import re_path
 from django.contrib import admin
 import rabbitmq_auth_backend_django.auth.views as views
 
 urlpatterns = [
-    url(r'^auth/user',     views.user),
-    url(r'^auth/vhost',    views.vhost),
-    url(r'^auth/resource', views.resource),
-    url(r'^auth/topic',    views.topic),
-    url(r'^admin/', admin.site.urls),
+    re_path(r'^auth/user',     views.user),
+    re_path(r'^auth/vhost',    views.vhost),
+    re_path(r'^auth/resource', views.resource),
+    re_path(r'^auth/topic',    views.topic),
+    re_path(r'^admin/', admin.site.urls),
 ]
