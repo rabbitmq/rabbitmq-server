@@ -159,8 +159,7 @@ all_tests() ->
 memory_tests() ->
     [
      memory_alarm_rolls_wal,
-     %%reclaim_memory,
-     reclaim_memory_wrong_type
+     reclaim_memory_with_wrong_queue_type
     ].
 
 -define(SUPNAME, ra_server_sup_sup).
@@ -285,6 +284,8 @@ init_per_testcase(Testcase, Config) ->
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
+        reclaim_memory_with_wrong_queue_type when IsMixed ->
+            {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -2440,7 +2441,7 @@ memory_alarm_rolls_wal(Config) ->
     ?awaitMatch([], rabbit_ct_broker_helpers:get_alarms(Config, Server), ?DEFAULT_AWAIT),
     ok.
 
-reclaim_memory_wrong_type(Config) ->
+reclaim_memory_with_wrong_queue_type(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
