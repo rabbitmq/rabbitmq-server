@@ -146,7 +146,7 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
-     peek_wrong_type,
+     peek_with_wrong_queue_type,
      message_ttl,
      per_message_ttl,
      per_message_ttl_mixed_expiry,
@@ -286,6 +286,8 @@ init_per_testcase(Testcase, Config) ->
              "delete_declare isn't mixed versions reliable"};
         reclaim_memory_with_wrong_queue_type when IsMixed ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
+        peek_with_wrong_queue_type when IsMixed ->
+            {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -2569,7 +2571,7 @@ peek(Config) ->
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 
-peek_wrong_type(Config) ->
+peek_with_wrong_queue_type(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
