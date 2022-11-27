@@ -43,10 +43,12 @@ groups() ->
      {clustered, [], [
                       {cluster_size_2, [], [add_member_not_running,
                                             add_member_classic,
+                                            add_member_wrong_type,
                                             add_member_already_a_member,
                                             add_member_not_found,
                                             delete_member_not_running,
                                             delete_member_classic,
+                                            delete_member_wrong_type,
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
@@ -143,6 +145,7 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
+     peek_with_wrong_queue_type,
      message_ttl,
      per_message_ttl,
      per_message_ttl_mixed_expiry,
@@ -154,7 +157,8 @@ all_tests() ->
 
 memory_tests() ->
     [
-     memory_alarm_rolls_wal
+     memory_alarm_rolls_wal,
+     reclaim_memory_with_wrong_queue_type
     ].
 
 -define(SUPNAME, ra_server_sup_sup).
@@ -309,6 +313,10 @@ init_per_testcase(Testcase, Config) ->
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
+        reclaim_memory_with_wrong_queue_type when IsMixed ->
+            {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
+        peek_with_wrong_queue_type when IsMixed ->
+            {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1720,6 +1728,16 @@ add_member_classic(Config) ->
                  rpc:call(Server, rabbit_quorum_queue, add_member,
                           [<<"/">>, CQ, Server, 5000])).
 
+add_member_wrong_type(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', SQ, 0, 0},
+                 declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    ?assertEqual({error, not_quorum_queue},
+                 rpc:call(Server, rabbit_quorum_queue, add_member,
+                          [<<"/">>, SQ, Server, 5000])).
+
 add_member_already_a_member(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1778,6 +1796,16 @@ delete_member_classic(Config) ->
     ?assertEqual({error, classic_queue_not_supported},
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, CQ, Server])).
+
+delete_member_wrong_type(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', SQ, 0, 0},
+                 declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    ?assertEqual({error, not_quorum_queue},
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, SQ, Server])).
 
 delete_member_queue_not_found(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2421,6 +2449,26 @@ memory_alarm_rolls_wal(Config) ->
     ?awaitMatch([], rabbit_ct_broker_helpers:get_alarms(Config, Server), ?DEFAULT_AWAIT),
     ok.
 
+reclaim_memory_with_wrong_queue_type(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    CQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    %% legacy, special case for classic queues
+    ?assertMatch({error, classic_queue_not_supported},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              reclaim_memory, [<<"/">>, CQ])),
+    SQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', SQ, 0, 0},
+                 declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    %% all other (future) queue types get the same error
+    ?assertMatch({error, not_quorum_queue},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              reclaim_memory, [<<"/">>, SQ])),
+    ok.
+
 queue_length_limit_drop_head(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -2527,6 +2575,30 @@ peek(Config) ->
                                               peek, [3, QName])),
 
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+peek_with_wrong_queue_type(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    CQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+
+    CQName = rabbit_misc:r(<<"/">>, queue, CQ),
+    %% legacy, special case for classic queues
+    ?assertMatch({error, classic_queue_not_supported},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [1, CQName])),
+    SQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', SQ, 0, 0},
+                 declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    SQName = rabbit_misc:r(<<"/">>, queue, SQ),
+    %% all other (future) queue types get the same error
+    ?assertMatch({error, not_quorum_queue},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [1, SQName])),
     ok.
 
 message_ttl(Config) ->
