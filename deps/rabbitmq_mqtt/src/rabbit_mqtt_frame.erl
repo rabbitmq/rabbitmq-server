@@ -84,23 +84,23 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
             end;
         {?PUBLISH, <<FrameBin:Length/binary, Rest/binary>>} ->
             {TopicName, Rest1} = parse_utf(FrameBin),
-            {MessageId, Payload} = case Qos of
+            {PacketId, Payload} = case Qos of
                                        0 -> {undefined, Rest1};
                                        _ -> <<M:16/big, R/binary>> = Rest1,
                                             {M, R}
                                    end,
             wrap(Fixed, #mqtt_frame_publish { topic_name = TopicName,
-                                              message_id = MessageId },
+                                              packet_id = PacketId },
                  Payload, Rest);
         {?PUBACK, <<FrameBin:Length/binary, Rest/binary>>} ->
-            <<MessageId:16/big>> = FrameBin,
-            wrap(Fixed, #mqtt_frame_publish { message_id = MessageId }, Rest);
+            <<PacketId:16/big>> = FrameBin,
+            wrap(Fixed, #mqtt_frame_publish { packet_id = PacketId }, Rest);
         {Subs, <<FrameBin:Length/binary, Rest/binary>>}
           when Subs =:= ?SUBSCRIBE orelse Subs =:= ?UNSUBSCRIBE ->
             1 = Qos,
-            <<MessageId:16/big, Rest1/binary>> = FrameBin,
+            <<PacketId:16/big, Rest1/binary>> = FrameBin,
             Topics = parse_topics(Subs, Rest1, []),
-            wrap(Fixed, #mqtt_frame_subscribe { message_id  = MessageId,
+            wrap(Fixed, #mqtt_frame_subscribe { packet_id  = PacketId,
                                                 topic_table = Topics }, Rest);
         {Minimal, Rest}
           when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
@@ -166,11 +166,11 @@ serialise_variable(#mqtt_frame_fixed   { type        = ?CONNACK } = Fixed,
     serialise_fixed(Fixed, VariableBin, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed  { type       = SubAck } = Fixed,
-                   #mqtt_frame_suback { message_id = MessageId,
+                   #mqtt_frame_suback { packet_id = PacketId,
                                         qos_table  = Qos },
                    <<>> = _PayloadBin, Vsn)
   when SubAck =:= ?SUBACK orelse SubAck =:= ?UNSUBACK ->
-    VariableBin = <<MessageId:16/big>>,
+    VariableBin = <<PacketId:16/big>>,
     QosBin = case Vsn of
                  ?MQTT_PROTO_V3 ->
                      << <<?RESERVED:6, Q:2>> || Q <- Qos >>;
@@ -183,20 +183,20 @@ serialise_variable(#mqtt_frame_fixed  { type       = SubAck } = Fixed,
 serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
                                          qos        = Qos } = Fixed,
                    #mqtt_frame_publish { topic_name = TopicName,
-                                         message_id = MessageId },
+                                         packet_id = PacketId },
                    PayloadBin, _Vsn) ->
     TopicBin = serialise_utf(TopicName),
-    MessageIdBin = case Qos of
+    PacketIdBin = case Qos of
                        0 -> <<>>;
-                       1 -> <<MessageId:16/big>>
+                       1 -> <<PacketId:16/big>>
                    end,
-    serialise_fixed(Fixed, <<TopicBin/binary, MessageIdBin/binary>>, PayloadBin);
+    serialise_fixed(Fixed, <<TopicBin/binary, PacketIdBin/binary>>, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed   { type       = ?PUBACK } = Fixed,
-                   #mqtt_frame_publish { message_id = MessageId },
+                   #mqtt_frame_publish { packet_id = PacketId },
                    PayloadBin, _Vsn) ->
-    MessageIdBin = <<MessageId:16/big>>,
-    serialise_fixed(Fixed, MessageIdBin, PayloadBin);
+    PacketIdBin = <<PacketId:16/big>>,
+    serialise_fixed(Fixed, PacketIdBin, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed {} = Fixed,
                    undefined,

@@ -121,7 +121,7 @@ process_request(?CONNECT, Frame, State = #state{socket = Socket}) ->
 
 process_request(?PUBACK,
                 #mqtt_frame{
-                   variable = #mqtt_frame_publish{message_id = PacketId}},
+                   variable = #mqtt_frame_publish{packet_id = PacketId}},
                 #state{unacked_server_pubs = U0,
                        queue_states = QStates0,
                        queue_qos1 = QName} = State) ->
@@ -155,7 +155,7 @@ process_request(?PUBLISH,
                                              retain = Retain,
                                              dup = Dup },
                    variable = #mqtt_frame_publish{topic_name = Topic,
-                                                  message_id = MessageId },
+                                                  packet_id = PacketId },
                    payload = Payload},
                 State0 = #state{retainer_pid = RPid,
                                 amqp2mqtt_fun = Amqp2MqttFun,
@@ -168,7 +168,7 @@ process_request(?PUBLISH,
                                       qos        = Qos,
                                       topic      = Topic,
                                       dup        = Dup,
-                                      message_id = MessageId,
+                                      packet_id = PacketId,
                                       payload    = Payload},
                       case publish_to_queues(Msg, State) of
                           {ok, _} = Ok ->
@@ -186,7 +186,7 @@ process_request(?PUBLISH,
     case Qos of
         N when N > ?QOS_0 ->
             rabbit_global_counters:messages_received_confirm(ProtoVer, 1),
-            case rabbit_mqtt_confirms:contains(MessageId, U) of
+            case rabbit_mqtt_confirms:contains(PacketId, U) of
                 false ->
                     publish_to_queues_with_checks(Topic, Publish, State);
                 true ->
@@ -202,7 +202,7 @@ process_request(?PUBLISH,
 process_request(?SUBSCRIBE,
                 #mqtt_frame{
                    variable = #mqtt_frame_subscribe{
-                                 message_id  = SubscribeMsgId,
+                                 packet_id  = SubscribePktId,
                                  topic_table = Topics},
                    payload = undefined},
                 #state{send_fun = SendFun,
@@ -258,7 +258,7 @@ process_request(?SUBSCRIBE,
     SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
                   variable = #mqtt_frame_suback{
-                                message_id = SubscribeMsgId,
+                                packet_id = SubscribePktId,
                                 qos_table  = QosResponse}},
       State1),
     case QosResponse of
@@ -272,7 +272,7 @@ process_request(?SUBSCRIBE,
     end;
 
 process_request(?UNSUBSCRIBE,
-                #mqtt_frame{variable = #mqtt_frame_subscribe{message_id  = MessageId,
+                #mqtt_frame{variable = #mqtt_frame_subscribe{packet_id  = PacketId,
                                                              topic_table = Topics},
                             payload = undefined},
                 State0 = #state{send_fun = SendFun}) ->
@@ -296,7 +296,7 @@ process_request(?UNSUBSCRIBE,
               end, State0, Topics),
     SendFun(
       #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
-                  variable = #mqtt_frame_suback{message_id = MessageId}},
+                  variable = #mqtt_frame_suback{packet_id = PacketId}},
       State),
 
     maybe_decrement_consumer(HasSubsBefore, State),
@@ -674,7 +674,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
                                      dup  = false,
                                      retain = Msg#mqtt_msg.retain
                                     }, variable = #mqtt_frame_publish{
-                                                     message_id = PacketId,
+                                                     packet_id = PacketId,
                                                      topic_name = Topic1
                                                     },
                           payload = Msg#mqtt_msg.payload},
@@ -1201,7 +1201,7 @@ publish_to_queues(
   #mqtt_msg{qos        = Qos,
             topic      = Topic,
             dup        = Dup,
-            message_id = MessageId,
+            packet_id = PacketId,
             payload    = Payload},
   #state{exchange       = ExchangeName,
          mqtt2amqp_fun  = Mqtt2AmqpFun,
@@ -1233,7 +1233,7 @@ publish_to_queues(
                   confirm = Confirm,
                   sender = self(),
                   message = BasicMessage,
-                  msg_seq_no = MessageId,
+                  msg_seq_no = PacketId,
                   flow = Flow
                  },
     case rabbit_exchange:lookup(ExchangeName) of
@@ -1278,13 +1278,13 @@ process_routing_confirm(#delivery{confirm = true,
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
 process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = MsgId},
+                                  msg_seq_no = PktId},
                         [], State = #state{proto_ver = ProtoVer}) ->
     rabbit_global_counters:messages_unroutable_returned(ProtoVer, 1),
     %% MQTT 5 spec:
     %% If the Server knows that there are no matching subscribers, it MAY use
     %% Reason Code 0x10 (No matching subscribers) instead of 0x00 (Success).
-    send_puback(MsgId, State),
+    send_puback(PktId, State),
     State;
 process_routing_confirm(#delivery{confirm = false}, _, State) ->
     State;
@@ -1293,26 +1293,26 @@ process_routing_confirm(#delivery{confirm = true,
     %% routable will message with QoS > 0
     State;
 process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = MsgId},
+                                  msg_seq_no = PktId},
                         Qs, State = #state{unacked_client_pubs = U0}) ->
     QNames = lists:map(fun amqqueue:get_name/1, Qs),
-    U = rabbit_mqtt_confirms:insert(MsgId, QNames, U0),
+    U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
     State#state{unacked_client_pubs = U}.
 
-send_puback(MsgIds0, State)
-  when is_list(MsgIds0) ->
+send_puback(PktIds0, State)
+  when is_list(PktIds0) ->
     %% Classic queues confirm messages unordered.
     %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
-    MsgIds = lists:usort(MsgIds0),
+    PktIds = lists:usort(PktIds0),
     lists:foreach(fun(Id) ->
                           send_puback(Id, State)
-                  end, MsgIds);
-send_puback(MsgId, State = #state{send_fun = SendFun,
+                  end, PktIds);
+send_puback(PktId, State = #state{send_fun = SendFun,
                                   proto_ver = ProtoVer}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     SendFun(
       #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PUBACK},
-                  variable = #mqtt_frame_publish{message_id = MsgId}},
+                  variable = #mqtt_frame_publish{packet_id = PktId}},
       State).
 
 serialise_and_send_to_client(Frame, #state{proto_ver = ProtoVer, socket = Sock}) ->
@@ -1458,11 +1458,11 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
                       {error, consuming_queue_down}
             end;
         {eol, QStates1, QRef} ->
-            {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QRef, U0),
+            {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QRef, U0),
             QStates = rabbit_queue_type:remove(QRef, QStates1),
             State = State0#state{queue_states = QStates,
                                  unacked_client_pubs = U},
-            send_puback(ConfirmMsgIds, State),
+            send_puback(ConfirmPktIds, State),
             {ok, State}
     end.
 
@@ -1479,11 +1479,11 @@ handle_queue_event({queue_event, QName, Evt},
             {ok, State};
         {eol, Actions} ->
             State1 = handle_queue_actions(Actions, State0),
-            {ConfirmMsgIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
+            {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
             QStates = rabbit_queue_type:remove(QName, QStates0),
             State = State1#state{queue_states = QStates,
                                  unacked_client_pubs = U},
-            send_puback(ConfirmMsgIds, State),
+            send_puback(ConfirmPktIds, State),
             {ok, State};
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->
             {error, Error, State0}
@@ -1493,20 +1493,20 @@ handle_queue_actions(Actions, #state{} = State0) ->
     lists:foldl(
       fun ({deliver, ?CONSUMER_TAG, Ack, Msgs}, S) ->
               deliver_to_client(Msgs, Ack, S);
-          ({settled, QName, MsgIds}, S = #state{unacked_client_pubs = U0}) ->
-              {ConfirmMsgIds, U} = rabbit_mqtt_confirms:confirm(MsgIds, QName, U0),
-              send_puback(ConfirmMsgIds, S),
+          ({settled, QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
+              {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
+              send_puback(ConfirmPktIds, S),
               S#state{unacked_client_pubs = U};
-          ({rejected, _QName, MsgIds}, S = #state{unacked_client_pubs = U0}) ->
+          ({rejected, _QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
               %% Negative acks are supported in MQTT v5 only.
               %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
               U = lists:foldl(
-                    fun(MsgId, Acc0) ->
-                            case rabbit_mqtt_confirms:reject(MsgId, Acc0) of
+                    fun(PktId, Acc0) ->
+                            case rabbit_mqtt_confirms:reject(PktId, Acc0) of
                                 {ok, Acc} -> Acc;
                                 {error, not_found} -> Acc0
                             end
-                    end, U0, MsgIds),
+                    end, U0, PktIds),
               S#state{unacked_client_pubs = U};
           ({block, QName}, S = #state{soft_limit_exceeded = SLE}) ->
               S#state{soft_limit_exceeded = sets:add_element(QName, SLE)};
@@ -1588,7 +1588,7 @@ maybe_publish_to_client(
       content = #content{payload_fragments_rev = FragmentsRev}}},
   QoS, SubscriberQos, State0 = #state{amqp2mqtt_fun = Amqp2MqttFun,
                                       send_fun = SendFun}) ->
-    {PacketId, State} = queue_message_id_to_packet_id(QMsgId, QoS, State0),
+    {PacketId, State} = queue_packet_id_to_packet_id(QMsgId, QoS, State0),
     %%TODO support iolists when sending to client
     Payload = list_to_binary(lists:reverse(FragmentsRev)),
     Frame =
@@ -1604,18 +1604,18 @@ maybe_publish_to_client(
                   %% Therefore, we do not consider header value <<"x-mqtt-dup">> here.
                   dup = Redelivered},
        variable = #mqtt_frame_publish{
-                     message_id = PacketId,
+                     packet_id = PacketId,
                      topic_name = Amqp2MqttFun(RoutingKey)},
        payload = Payload},
     SendFun(Frame, State),
     message_delivered(QName, Redelivered, SubscriberQos, QoS, State),
     State.
 
-queue_message_id_to_packet_id(_, ?QOS_0, State) ->
+queue_packet_id_to_packet_id(_, ?QOS_0, State) ->
     %% "A PUBLISH packet MUST NOT contain a Packet Identifier if its QoS value is set to 0 [MQTT-2.2.1-2]."
     {undefined, State};
-queue_message_id_to_packet_id(QMsgId, ?QOS_1, #state{packet_id = PktId,
-                                                     unacked_server_pubs = U} = State) ->
+queue_packet_id_to_packet_id(QMsgId, ?QOS_1, #state{packet_id = PktId,
+                                                    unacked_server_pubs = U} = State) ->
     {PktId, State#state{packet_id = increment_packet_id(PktId),
                         unacked_server_pubs = maps:put(PktId, QMsgId, U)}}.
 
