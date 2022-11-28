@@ -11,7 +11,7 @@
 
 -rabbit_feature_flag(
    {delete_ra_cluster_mqtt_node,
-    #{desc          => "Delete Ra cluster 'mqtt_node' because from now on MQTT client IDs are tracked locally",
+    #{desc          => "Delete Ra cluster 'mqtt_node' since MQTT client IDs are tracked locally",
       stability     => stable,
       callbacks     => #{enable => {mqtt_node, delete}}
      }}).

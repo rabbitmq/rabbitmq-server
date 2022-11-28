@@ -22,13 +22,14 @@ behaviour_info(_Other) ->
 table_name_for(VHost) ->
   rabbit_mqtt_util:vhost_name_to_table_name(VHost).
 
-%% TODO
-%% Support retained messages in RabbitMQ cluster:
-%% * SUBSCRIBE on a different node than PUBLISH with retain
-%% * replicate retained message for data safety
+%% TODO Support retained messages in RabbitMQ cluster, for
+%% 1. support PUBLISH with retain on a different node than SUBSCRIBE
+%% 2. replicate retained message for data safety
 %%
-%% Possible solutions:
+%% Possible solution for 1.
+%% * retained message store backend does RPCs to peer nodes to lookup and delete
+%%
+%% Possible solutions for 2.
 %% * rabbitmq_mqtt_retained_msg_store_mnesia
 %% * rabbitmq_mqtt_retained_msg_store_khepri
-%% * rabbitmq_mqtt_retained_msg_store_ra (implementing our own ra machine) or
-%% * use existing mqtt_machine
+%% * rabbitmq_mqtt_retained_msg_store_ra (implementing our own ra machine)

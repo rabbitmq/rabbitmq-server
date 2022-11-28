@@ -5,82 +5,14 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(CLIENT_ID_MAXLEN, 23).
 -define(PG_SCOPE, pg_scope_rabbitmq_mqtt_clientid).
+
 -define(QUEUE_TYPE_QOS_0, rabbit_mqtt_qos0_queue).
 
--include("rabbit_mqtt_types.hrl").
+-define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
 
-%% reader state
--record(state,
-        {socket,
-         proxy_socket,
-         conn_name,
-         await_recv,
-         deferred_recv,
-         received_connect_frame,
-         connection_state,
-         conserve,
-         parse_state,
-         proc_state,
-         stats_timer,
-         keepalive :: rabbit_mqtt_keepalive:state()}).
-
-%% processor state
--record(proc_state,
-        {socket,
-         proto_ver :: mqtt310 | mqtt311,
-         queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
-         %% Packet IDs published to queues but not yet confirmed.
-         unacked_client_pubs = rabbit_mqtt_confirms:init() :: rabbit_mqtt_confirms:state(),
-         %% Packet IDs published to MQTT subscribers but not yet acknowledged.
-         unacked_server_pubs = #{} :: #{packet_id() => QueueMsgId :: non_neg_integer()},
-         %% Packet ID of next PUBLISH packet (with QoS > 0) sent from server to client.
-         %% (Not to be confused with packet IDs sent from client to server which can be the
-         %% same IDs because client and server assign IDs independently of each other.)
-         packet_id = 1 :: packet_id(),
-         client_id :: binary(),
-         clean_sess :: boolean(),
-         will_msg,
-         exchange :: rabbit_exchange:name(),
-         %% Set if client has at least one subscription with QoS 1.
-         queue_qos1 :: rabbit_amqqueue:name(),
-         has_published = false :: boolean(),
-         ssl_login_name,
-         %% Retained messages handler. See rabbit_mqtt_retainer_sup
-         %% and rabbit_mqtt_retainer.
-         retainer_pid,
-         auth_state,
-         peer_addr,
-         send_fun :: fun((Frame :: tuple(), proc_state()) -> term()),
-         %%TODO remove funs from state?
-         mqtt2amqp_fun,
-         amqp2mqtt_fun,
-         register_state,
-         conn_name,
-         info,
-         delivery_flow :: flow | noflow,
-         %% quorum queues and streams whose soft limit has been exceeded
-         soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set()
-         }).
-
--type proc_state() :: #proc_state{}.
-
--record(auth_state, {username,
-                     user,
-                     vhost,
-                     authz_ctx}).
-
--record(info, {prefetch,
-               host,
-               port,
-               peer_host,
-               peer_port,
-               proto_human}).
-
-%% does not include vhost because vhost is used in the (D)ETS table name
--record(retained_message, {topic,
-                           mqtt_msg}).
+-define(MQTT_PROTO_V3, mqtt310).
+-define(MQTT_PROTO_V4, mqtt311).
 
 -define(INFO_ITEMS,
         [protocol,
@@ -113,5 +45,3 @@
          messages_unconfirmed,
          messages_unacknowledged
         ]).
-
--define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).

@@ -11,6 +11,7 @@
 -export([serialise/2]).
 
 -include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt.hrl").
 
 -define(RESERVED, 0).
 -define(MAX_LEN, 16#fffffff).

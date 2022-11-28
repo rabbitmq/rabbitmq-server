@@ -8,7 +8,7 @@
 -module(rabbit_mqtt_retained_msg_store_ets).
 
 -behaviour(rabbit_mqtt_retained_msg_store).
--include("rabbit_mqtt.hrl").
+-include("rabbit_mqtt_retain.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 

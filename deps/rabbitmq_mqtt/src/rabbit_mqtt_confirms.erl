@@ -7,7 +7,7 @@
 
 -module(rabbit_mqtt_confirms).
 
--include("rabbit_mqtt_types.hrl").
+-include("rabbit_mqtt_frame.hrl").
 -compile({no_auto_import, [size/1]}).
 
 -export([init/0,

@@ -100,7 +100,7 @@ rabbitmq_test_helper(
         "//deps/rabbit_common:erlang_app",
     ],
     hdrs = [
-        "include/rabbit_mqtt_frame.hrl"
+        "include/rabbit_mqtt.hrl"
     ],
 )
 

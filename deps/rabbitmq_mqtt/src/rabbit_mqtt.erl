@@ -7,10 +7,9 @@
 
 -module(rabbit_mqtt).
 
--include("rabbit_mqtt.hrl").
--include("rabbit_mqtt_frame.hrl").
-
 -behaviour(application).
+
+-include("rabbit_mqtt.hrl").
 
 -export([start/2, stop/1]).
 -export([emit_connection_info_all/4,

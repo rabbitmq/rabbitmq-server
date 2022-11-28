@@ -1,6 +1,6 @@
 -module(util).
 
--include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt.hrl").
 
 -export([all_connection_pids/1,
          publish_qos1_timeout/4,

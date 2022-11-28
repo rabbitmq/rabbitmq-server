@@ -5,9 +5,9 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(PROTOCOL_NAMES,  [{3, "MQIsdp"}, {4, "MQTT"}]).
--define(MQTT_PROTO_V3, mqtt310).
--define(MQTT_PROTO_V4, mqtt311).
+-define(PROTOCOL_NAMES,
+        [{3, "MQIsdp"},
+         {4, "MQTT"}]).
 
 %% frame types
 
@@ -49,8 +49,9 @@
 -define(SUBACK_FAILURE, 16#80).
 
 -type qos() :: ?QOS_0 | ?QOS_1 | ?QOS_2.
-%%TODO remove message_id()
--type message_id() :: any().
+
+%% Packet identifier is a non zero two byte integer.
+-type packet_id() :: 1..16#ffff.
 
 -record(mqtt_frame, {fixed,
                      variable,
@@ -77,16 +78,16 @@
                               return_code}).
 
 -record(mqtt_frame_publish,  {topic_name,
-                              message_id}).
+                              message_id :: packet_id()}).
 
 -record(mqtt_topic,          {name,
                               qos}).
 
--record(mqtt_frame_subscribe,{message_id,
+-record(mqtt_frame_subscribe,{message_id :: packet_id(),
                               topic_table :: nonempty_list(#mqtt_topic{})
                              }).
 
--record(mqtt_frame_suback,   {message_id,
+-record(mqtt_frame_suback,   {message_id :: packet_id(),
                               qos_table = []}).
 
 -record(mqtt_frame_other,    {other}).
@@ -95,7 +96,7 @@
                               qos :: qos(),
                               topic :: string(),
                               dup :: boolean(),
-                              message_id :: message_id(),
+                              message_id :: packet_id(),
                               payload :: binary()}).
 
 -type mqtt_msg() :: #mqtt_msg{}.

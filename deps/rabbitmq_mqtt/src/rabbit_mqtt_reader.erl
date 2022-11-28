@@ -25,6 +25,20 @@
 -define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
 -define(HIBERNATE_AFTER, 1000).
 
+-record(state,
+        {socket,
+         proxy_socket,
+         conn_name,
+         await_recv,
+         deferred_recv,
+         received_connect_frame,
+         connection_state,
+         conserve,
+         parse_state,
+         proc_state,
+         stats_timer,
+         keepalive :: rabbit_mqtt_keepalive:state()}).
+
 %%----------------------------------------------------------------------------
 
 start_link(Ref, _Transport, []) ->
@@ -344,7 +358,9 @@ process_received_bytes(Bytes,
             {stop, {shutdown, Error}, State}
     end.
 
-pstate(State = #state {}, PState = #proc_state{}) ->
+-spec pstate(#state{}, rabbit_mqtt_processor:state())
+    -> #state{}.
+pstate(State = #state {}, PState) ->
     State #state{ proc_state = PState }.
 
 %%----------------------------------------------------------------------------
