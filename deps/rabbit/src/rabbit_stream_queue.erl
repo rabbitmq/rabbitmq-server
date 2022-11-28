@@ -36,7 +36,7 @@
 -export([list_with_minimum_quorum/0]).
 
 -export([set_retention_policy/3]).
--export([restart_stream/2,
+-export([restart_stream/3,
          add_replica/3,
          delete_replica/3]).
 -export([format_osiris_event/2]).
@@ -795,7 +795,8 @@ set_retention_policy(Name, VHost, Policy) ->
             end
     end.
 
-restart_stream(VHost, Name) ->
+restart_stream(VHost, Name, Options) ->
+    rabbit_log:info("restarting stream ~s with options ~p", [Name, Options]),
     QName = rabbit_misc:r(VHost, queue, Name),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
@@ -803,7 +804,7 @@ restart_stream(VHost, Name) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            rabbit_stream_coordinator:restart_stream(Q);
+            rabbit_stream_coordinator:restart_stream(Q, Options);
         E ->
             E
     end.

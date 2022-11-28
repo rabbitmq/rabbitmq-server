@@ -30,6 +30,7 @@
 
 -export([new_stream/2,
          restart_stream/1,
+         restart_stream/2,
          delete_stream/2]).
 
 -export([policy_changed/1]).
@@ -141,15 +142,23 @@ new_stream(Q, LeaderNode)
                      #{leader_node => LeaderNode,
                        queue => Q}}).
 
-restart_stream(QRes) when element(1, QRes) == resource ->
-    restart_stream(hd(rabbit_amqqueue:lookup([QRes])));
-restart_stream(Q)
+restart_stream(QRes) ->
+    restart_stream(QRes, #{}).
+
+-spec restart_stream(amqqueue:amqqueue() | rabbit_types:r(queue),
+                     #{preferred_leader_node => node()}) ->
+    {ok, node()} |
+    {error, term()} |
+    {timeout, term()}.
+restart_stream(QRes, Options)
+  when element(1, QRes) == resource ->
+    restart_stream(hd(rabbit_amqqueue:lookup([QRes])), Options);
+restart_stream(Q, Options)
   when ?is_amqqueue(Q) ->
-    #{name := StreamId,
-      nodes := _Nodes} = amqqueue:get_type_state(Q),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
     %% assertion leader is in nodes configuration
     % true = lists:member(LeaderNode, Nodes),
-    case process_command({restart_stream, StreamId, #{}}) of
+    case process_command({restart_stream, StreamId, Options}) of
         {ok, {ok, LeaderPid}, _} ->
             {ok, node(LeaderPid)};
         Err ->
@@ -1175,11 +1184,16 @@ update_stream0(#{system_time := _} = Meta,
             members = Members,
             reply_to = maps:get(from, Meta, undefined)};
 update_stream0(#{machine_version := MacVer} = Meta,
-               {restart_stream, _StreamId, #{}},
+               {restart_stream, _StreamId, Options},
                #stream{members = Members0} = Stream0)
   when MacVer >= 4 ->
-    Members = maps:map(fun (_, M) ->
-                               M#member{target = stopped}
+    Preferred = maps:get(preferred_leader_node, Options, undefined),
+    Members = maps:map(fun (N, M) when N == Preferred ->
+                               M#member{preferred = true,
+                                        target = stopped};
+                           (_N, M) ->
+                               M#member{preferred = false,
+                                        target = stopped}
                        end, Members0),
     Stream0#stream{members = Members,
                    reply_to = maps:get(from, Meta, undefined)};
@@ -1328,15 +1342,18 @@ update_stream0(Meta,
 
             Members1 = Members0#{Node => Member},
 
-            EpochOffsets = [{N, T}
-                            || {N, #member{state = {stopped, E, T},
-                                           target = running}}
-                               <- maps:to_list(Members1),
-                               E == Epoch],
-            case is_quorum(length(Nodes), length(EpochOffsets)) of
+            StoppedInCurrent =
+                maps:filter(fun (_N, #member{state = {stopped, E, _T},
+                                             target = running})
+                                  when E == Epoch ->
+                                    true;
+                                (_, _) ->
+                                    false
+                            end, Members1),
+            case is_quorum(length(Nodes), map_size(StoppedInCurrent)) of
                 true ->
                     %% select leader
-                    NewWriterNode = select_leader(Meta, EpochOffsets),
+                    NewWriterNode = select_leader(Meta, StoppedInCurrent),
                     NextEpoch = Epoch + 1,
                     Members = maps:map(
                                 fun (N, #member{state = {stopped, E, _}} = M)
@@ -1345,15 +1362,18 @@ update_stream0(Meta,
                                             N ->
                                                 %% new leader
                                                 M#member{role = {writer, NextEpoch},
+                                                         preferred = false,
                                                          state = {ready, NextEpoch}};
                                             _ ->
                                                 M#member{role = {replica, NextEpoch},
+                                                         preferred = false,
                                                          state = {ready, NextEpoch}}
                                         end;
                                     (_N, #member{target = deleted} = M) ->
                                         M;
                                     (_N, M) ->
-                                        M#member{role = {replica, NextEpoch}}
+                                        M#member{role = {replica, NextEpoch},
+                                                 preferred = false}
                                 end, Members1),
                     Stream0#stream{epoch = NextEpoch,
                                    members = Members};
@@ -1880,7 +1900,8 @@ find_leader(Members) ->
             {undefined, maps:from_list(Replicas)}
     end.
 
-select_leader(#{machine_version := 0}, EpochOffsets) ->
+select_leader(#{machine_version := 0}, EpochOffsets)
+  when is_list(EpochOffsets) ->
     %% this is the version 0 faulty version of this code,
     %% retained for versioning
     [{Node, _} | _] = lists:sort(fun({_, {Ao, E}}, {_, {Bo, E}}) ->
@@ -1894,7 +1915,8 @@ select_leader(#{machine_version := 0}, EpochOffsets) ->
                                  end, EpochOffsets),
     Node;
 select_leader(#{machine_version := MacVer}, EpochOffsets)
-  when MacVer =< 3 ->
+  when MacVer =< 3
+  andalso is_list(EpochOffsets) ->
     %% this is the logic up til v3
     [{Node, _} | _] = lists:sort(
                         fun({_, {Epoch, OffsetA}}, {_, {Epoch, OffsetB}}) ->
@@ -1908,31 +1930,58 @@ select_leader(#{machine_version := MacVer}, EpochOffsets)
                         end, EpochOffsets),
     Node;
 select_leader(#{system_time := Ts,
-                index := Idx}, EpochOffsets) ->
+                machine_version := MacVer,
+                index := Idx},
+              Stopped)
+  when is_map(Stopped) andalso MacVer >= 4 ->
     %% this logic gets all potential nodes and does a selection with some
     %% degree of random
-    [{_, Spec} | _] = Sorted =
-        lists:sort(fun({_, {Epoch, OffsetA}}, {_, {Epoch, OffsetB}}) ->
+    [{_, #member{state = MState}} | _] = Sorted =
+        lists:sort(fun({_, #member{state = {stopped, _, {Epoch, OffsetA}}}},
+                       {_, #member{state = {stopped, _, {Epoch, OffsetB}}}}) ->
+                           %% same epoch, compare last chunk ids
                            OffsetA >= OffsetB;
-                      ({_, {EpochA, _}}, {_, {EpochB, _}}) ->
+                      ({_, #member{state = {stopped, _, {EpochA, _}}}},
+                       {_, #member{state = {stopped, _, {EpochB, _}}}}) ->
                            EpochA >= EpochB;
-                      ({_, empty}, _) ->
+                      ({_, #member{state = {stopped, _, empty}}}, _) ->
                            false;
-                      (_, {_, empty}) ->
+                      (_, {_, #member{state = {stopped, _, empty}}}) ->
                            true
-                   end, EpochOffsets),
-    Potential = lists:takewhile(fun ({_N, S}) ->
-                                        S == Spec
+                   end, maps:to_list(Stopped)),
+    Potential = lists:takewhile(fun ({_N, #member{state = S}}) ->
+                                        S == MState
                                 end, Sorted),
     case Potential of
         [{Node, _}] ->
             Node;
         _ ->
-            % there are more than one use modulo to select
-            Nth = ((Ts + Idx) rem length(Potential)) + 1,
-            {Node, _} = lists:nth(Nth, Potential),
-            Node
-    end.
+            case preferred_leader(Potential) of
+                undefined ->
+                    % there are more than one and no preferred leader
+                    % use modulo to select
+                    Nth = ((Ts + Idx) rem length(Potential)) + 1,
+                    {Node, _} = lists:nth(Nth, Potential),
+                    Node;
+                N ->
+                    N
+            end
+    end;
+select_leader(Meta, Stopped) ->
+    %% recurse with old format
+    select_leader(Meta,
+                  maps:to_list(
+                    maps:map(
+                      fun (_N, #member{state = {stopped, _, Tail}}) ->
+                              Tail
+                      end, Stopped))).
+
+preferred_leader([]) ->
+    undefined;
+preferred_leader([{N, #member{preferred = true}} | _Rem]) ->
+    N;
+preferred_leader([{_N, #member{}} | Rem]) ->
+    preferred_leader(Rem).
 
 maybe_sleep({{nodedown, _}, _}) ->
     timer:sleep(10000);
@@ -2001,7 +2050,7 @@ machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
                 fun (_, #stream{members = Members} = S) ->
                         S#stream{members = maps:map(
                                              fun (_N, M) ->
-                                                     M#member{reserved = undefined}
+                                                     M#member{preferred = false}
                                              end, Members)}
                 end, Streams0),
     {State#?MODULE{streams = Streams}, []};

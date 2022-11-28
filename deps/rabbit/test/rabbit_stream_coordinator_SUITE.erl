@@ -96,28 +96,30 @@ listeners(_) ->
     ListPid = spawn(fun() -> ok end),
     N1 = r@n1,
     State0 = #?STATE{streams = #{}, monitors = #{}},
-    ?assertMatch(
-       {_, stream_not_found, []},
-       register_listener(#{pid => ListPid,
-                           node => N1,
-                           stream_id => S,
-                           type => leader}, State0)
-      ),
+    StreamId = "stream1",
+    ?assertMatch({_, stream_not_found, []},
+                 register_listener(#{pid => ListPid,
+                                     node => N1,
+                                     stream_id => S,
+                                     type => leader}, State0)
+                ),
 
     LeaderPid0 = spawn(fun() -> ok end),
     Leader0 = #member{role = {writer, 1},
                       state = {running, 1, LeaderPid0}},
-    State1 = State0#?STATE{streams = #{S => #stream{id = S,
-                                                listeners = #{},
-                                                members = #{N1 => Leader0},
-                                                queue_ref = Q}
-                      }},
+    Conf = #{name => StreamId},
+    State1 = State0#?STATE{streams = #{StreamId => #stream{id = StreamId,
+                                                           conf = Conf,
+                                                           nodes = [N1],
+                                                           listeners = #{},
+                                                           members = #{N1 => Leader0},
+                                                           queue_ref = Q}}},
 
     {State2, ok, Effs2} = register_listener(#{pid => ListPid,
                                               node => N1,
-                                              stream_id => S,
+                                              stream_id => StreamId,
                                               type => leader}, State1),
-    Stream2 = maps:get(S, State2#?STATE.streams),
+    Stream2 = maps:get(StreamId, State2#?STATE.streams),
     ?assertEqual(
        #{{ListPid, leader} => LeaderPid0},
        Stream2#stream.listeners
@@ -131,15 +133,15 @@ listeners(_) ->
        Effs2
       ),
     ?assertEqual(
-       #{ListPid => {#{S => ok}, listener}},
+       #{ListPid => {#{StreamId => ok}, listener}},
        State2#?STATE.monitors
       ),
 
     {State3, ok, Effs3} = register_listener(#{pid => ListPid,
                                               node => N1,
-                                              stream_id => S,
+                                              stream_id => StreamId,
                                               type => local_member}, State2),
-    Stream3 = maps:get(S, State3#?STATE.streams),
+    Stream3 = maps:get(StreamId, State3#?STATE.streams),
     ?assertEqual(
        #{{ListPid, leader} => LeaderPid0,
          {ListPid, member} => {N1, LeaderPid0}},
@@ -154,7 +156,7 @@ listeners(_) ->
        Effs3
       ),
     ?assertEqual(
-       #{ListPid => {#{S => ok}, listener}},
+       #{ListPid => {#{StreamId => ok}, listener}},
        State3#?STATE.monitors
       ),
 
@@ -185,11 +187,11 @@ listeners(_) ->
        Effs5
       ),
 
-    State5 = State3#?STATE{streams = #{S => Stream5}},
+    State5 = State3#?STATE{streams = #{StreamId => Stream5}},
 
     {State6, ok, []} = down(ListPid, State5),
 
-    Stream6 = maps:get(S, State6#?STATE.streams),
+    Stream6 = maps:get(StreamId, State6#?STATE.streams),
     ?assertEqual(
        #{},
        Stream6#stream.listeners
@@ -841,15 +843,19 @@ restart_stream(_) ->
     S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
     From = {self(), make_ref()},
     Meta1 = (meta(?LINE))#{from => From},
-    S1 = update_stream(Meta1, {restart_stream, StreamId, #{}}, S0),
+    S1 = update_stream(Meta1, {restart_stream, StreamId,
+                               #{preferred_leader_node => N2}}, S0),
     ?assertMatch(#stream{target = running,
                          members = #{N3 := #member{target = stopped,
+                                                   preferred = false,
                                                    current = undefined,
                                                    state = {running, _, _}},
                                      N2 := #member{target = stopped,
+                                                   preferred = true,
                                                    current = undefined,
                                                    state = {running, _, _}},
                                      N1 := #member{target = stopped,
+                                                   preferred = false,
                                                    current = undefined,
                                                    state = {running, _, _}}
                                     }},

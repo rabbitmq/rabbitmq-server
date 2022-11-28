@@ -14,20 +14,28 @@ defmodule RabbitMQ.CLI.Streams.Commands.RestartStreamCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  def switches() do
+    [preferred_leader_node: :string]
+  end
+
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name] = _args, %{vhost: vhost, node: node_name}) do
+  def run([name], %{vhost: vhost, node: node_name} = switches) do
+    preferred = Map.get(switches, :preferred_leader_node, :undefined)
+
+    options = %{preferred_leader_node: to_atom(preferred)}
+
     case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :restart_stream, [
            vhost,
-           name
+           name,
+           options
          ]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot restart a classic queue"}
 
       {:error, :quorum_queue_not_supported} ->
-        {:error, "Cannot restart to a quorum queue"}
+        {:error, "Cannot restart a quorum queue"}
 
       {:ok, LeaderNode} ->
         LeaderNode
@@ -39,11 +47,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.RestartStreamCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "restart_stream [--vhost <vhost>] <stream>"
+  def usage, do: "restart_stream [--vhost <vhost>] <stream> [--preferred_leader_node <node>]"
 
   def usage_additional do
     [
-      ["<stream>", "stream name"]
+      ["<stream>", "stream name"],
+      ["--preferred_leader_node", "preferred leader node"]
     ]
   end
 

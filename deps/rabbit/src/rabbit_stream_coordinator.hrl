@@ -21,7 +21,7 @@
                               | {running | disconnected, osiris:epoch(), pid()}
                               | deleted,
          role :: {writer | replica, osiris:epoch()},
-         reserved :: term(),
+         preferred = false :: term(),
          %% the currently running action, if any
          current :: undefined |
                     {updating |
