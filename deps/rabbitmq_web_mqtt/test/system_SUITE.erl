@@ -119,6 +119,7 @@ last_will_enabled_no_disconnect(Config) ->
                {will_payload, LastWillMsg},
                {will_qos, 1}],
     _Publisher = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config, PubOpts),
+    timer:sleep(100),
     [ServerPublisherPid] = rpc(Config, 0, rabbit_mqtt, local_connection_pids, []),
     Consumer = ws_connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_consumer">>, Config),
     {ok, _, [1]} = emqtt:subscribe(Consumer, LastWillTopic, qos1),
