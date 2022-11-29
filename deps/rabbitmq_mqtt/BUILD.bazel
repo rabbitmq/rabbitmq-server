@@ -142,6 +142,9 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "@emqtt//:erlang_app",
     ],
+    additional_beam = [
+        ":util",
+    ],
 )
 
 rabbitmq_integration_suite(

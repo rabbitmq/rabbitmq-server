@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
+-import(util, [connect/3]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
@@ -80,27 +81,14 @@ run(Config) ->
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C1} = emqtt:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {clientid, <<"simpleClient">>},
-                                 {proto_ver, v4},
-                                 {ack_timeout, 1}]),
-    {ok, _} = emqtt:connect(C1),
+    C1 = connect(<<"simpleClient">>, Config, [{ack_timeout, 1}]),
+
     timer:sleep(100),
 
     [[{client_id, <<"simpleClient">>}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
-
-    {ok, C2} = emqtt:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {clientid, <<"simpleClient1">>},
-                                 {proto_ver, v4},
-                                 {username, <<"guest">>},
-                                 {password, <<"guest">>},
-                                 {ack_timeout, 1}]),
-    {ok, _} = emqtt:connect(C2),
+    C2 = connect(<<"simpleClient1">>, Config, [{ack_timeout, 1}]),
     timer:sleep(200),
 
     [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],

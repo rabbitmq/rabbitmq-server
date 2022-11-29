@@ -21,7 +21,9 @@
                get_global_counters/2,
                get_global_counters/3,
                get_global_counters/4,
-               expect_publishes/2]).
+               expect_publishes/2,
+               connect/2,
+               connect/3]).
 
 all() ->
     [
@@ -128,7 +130,7 @@ quorum_queue_rejects(Config) ->
     declare_queue(Ch, Name, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
     bind(Ch, Name, Name),
 
-    {C, _} = connect(Name, Config, [{retry_interval, 1}]),
+    C = connect(Name, Config, [{retry_interval, 1}]),
     {ok, _} = emqtt:publish(C, Name, <<"m1">>, qos1),
     {ok, _} = emqtt:publish(C, Name, <<"m2">>, qos1),
     %% We expect m3 to be rejected and dropped.
@@ -176,7 +178,7 @@ publish_to_all_queue_types(Config, QoS) ->
     bind(Ch, SQ, Topic),
 
     NumMsgs = 2000,
-    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
+    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
     lists:foreach(fun(N) ->
                           case emqtt:publish(C, Topic, integer_to_binary(N), QoS) of
                               ok ->
@@ -237,7 +239,7 @@ flow(Config, {App, Par, Val}, QueueType)
     bind(Ch, QueueName, Topic),
 
     NumMsgs = 1000,
-    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 600},
+    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 600},
                                               {max_inflight, NumMsgs}]),
     TestPid = self(),
     lists:foreach(
@@ -268,7 +270,7 @@ events(Config) ->
     ok = gen_event:add_handler({rabbit_event, Server}, event_recorder, []),
 
     ClientId = atom_to_binary(?FUNCTION_NAME),
-    {C, _} = connect(ClientId, Config),
+    C = connect(ClientId, Config),
 
     [E0, E1] = get_events(Server),
     assert_event_type(user_authentication_success, E0),
@@ -357,12 +359,7 @@ global_counters_v4(Config) ->
     global_counters(Config, v4).
 
 global_counters(Config, ProtoVer) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, Port},
-                                {proto_ver, ProtoVer},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config, [{proto_ver, ProtoVer}]),
 
     Topic0 = <<"test-topic0">>,
     Topic1 = <<"test-topic1">>,
@@ -432,7 +429,8 @@ queue_down_qos1(Config) ->
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Ch1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
 
-    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
+    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
+
     %% classic queue is down, therefore message is rejected
     ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 500)),
 
@@ -460,7 +458,7 @@ consuming_classic_mirrored_queue_down(Config) ->
             {<<"queue-master-locator">>, <<"client-local">>}]),
 
     %% Declare queue leader on Server1.
-    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C1 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
     ok = emqtt:disconnect(C1),
 
@@ -503,7 +501,7 @@ consuming_classic_queue_down(Config) ->
     ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
 
     %% Declare classic queue on Server1.
-    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C1 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
     ok = emqtt:disconnect(C1),
 
@@ -561,7 +559,7 @@ delete_create_queue(Config) ->
     DeclareQueues(),
 
     %% some large retry_interval to avoid re-sending
-    {C, _} = connect(?FUNCTION_NAME, Config, [{retry_interval, 300}]),
+    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 300}]),
     NumMsgs = 50,
     TestPid = self(),
     spawn(
@@ -606,7 +604,7 @@ delete_create_queue(Config) ->
     ok = emqtt:disconnect(C).
 
 non_clean_sess_disconnect(Config) ->
-    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C1 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     Topic = <<"test-topic1">>,
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     ProtoVer = v4,
@@ -617,7 +615,7 @@ non_clean_sess_disconnect(Config) ->
     ?assertMatch(#{consumers := 0},
                  get_global_counters(Config, ProtoVer)),
 
-    {C2, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C2 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config, ProtoVer)),
 
@@ -628,13 +626,14 @@ non_clean_sess_disconnect(Config) ->
     Msg = <<"msg">>,
     {ok, _} = emqtt:publish(C2, Topic, Msg, qos1),
     {publish_not_received, Msg} = expect_publishes(Topic, [Msg]),
+    ok = emqtt:disconnect(C2),
 
     %% connect with clean sess true to clean up
-    {C3, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    C3 = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 
 subscribe_same_topic_same_qos(Config) ->
-    {C, _} = connect(?FUNCTION_NAME, Config),
+    C = connect(?FUNCTION_NAME, Config),
     Topic = <<"a/b">>,
 
     {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true},
@@ -653,7 +652,7 @@ subscribe_same_topic_same_qos(Config) ->
     ok = emqtt:disconnect(C).
 
 subscribe_same_topic_different_qos(Config) ->
-    {C, _} = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
     Topic = <<"b/c">>,
 
     {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true},
@@ -678,11 +677,11 @@ subscribe_same_topic_different_qos(Config) ->
     ?assertEqual(2, length(Consumers)),
 
     ok = emqtt:disconnect(C),
-    {C1, _} = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    C1 = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C1).
 
 subscribe_multiple(Config) ->
-    {C, _} = connect(?FUNCTION_NAME, Config),
+    C = connect(?FUNCTION_NAME, Config),
     %% Subscribe to multiple topics at once
     ?assertMatch({ok, _, [0, 1]},
                  emqtt:subscribe(C, [{<<"topic0">>, qos0},
@@ -717,22 +716,6 @@ await_confirms_unordered(From, Left) ->
     after 10_000 ->
               ct:fail("~b confirms are missing", [Left])
     end.
-
-connect(ClientId, Config) ->
-    connect(ClientId, Config, []).
-
-connect(ClientId, Config, AdditionalOpts) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    Options = [{host, "localhost"},
-               {port, P},
-               {clientid, rabbit_data_coercion:to_binary(ClientId)},
-               {proto_ver, v4}
-              ] ++ AdditionalOpts,
-    {ok, C} = emqtt:start_link(Options),
-    {ok, _Properties} = emqtt:connect(C),
-    true = unlink(C),
-    MRef = monitor(process, C),
-    {C, MRef}.
 
 declare_queue(Ch, QueueName, Args)
   when is_pid(Ch), is_binary(QueueName), is_list(Args) ->

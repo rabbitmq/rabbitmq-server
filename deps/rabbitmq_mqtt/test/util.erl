@@ -8,7 +8,9 @@
          get_global_counters/2,
          get_global_counters/3,
          get_global_counters/4,
-         expect_publishes/2]).
+         expect_publishes/2,
+         connect/2,
+         connect/3]).
 
 all_connection_pids(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -62,3 +64,17 @@ get_global_counters(Config, v4, Node, QType) ->
 get_global_counters(Config, Proto, Node, QType) ->
     maps:get([{protocol, Proto}] ++ QType,
              rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_global_counters, overview, [])).
+
+connect(ClientId, Config) ->
+    connect(ClientId, Config, []).
+
+connect(ClientId, Config, AdditionalOpts) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Options = [{host, "localhost"},
+               {port, P},
+               {clientid, rabbit_data_coercion:to_binary(ClientId)},
+               {proto_ver, v4}
+              ] ++ AdditionalOpts,
+    {ok, C} = emqtt:start_link(Options),
+    {ok, _Properties} = emqtt:connect(C),
+    C.

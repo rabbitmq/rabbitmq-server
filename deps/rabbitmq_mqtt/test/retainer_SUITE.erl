@@ -8,7 +8,8 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
--import(util, [expect_publishes/2]).
+-import(util, [expect_publishes/2,
+               connect/3]).
 
 all() ->
     [
@@ -86,8 +87,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 coerce_configuration_data(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    C = connect(P),
+    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
@@ -101,8 +101,7 @@ coerce_configuration_data(Config) ->
 %% sent messages for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_publish(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    C = connect(P),
+    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
     %% there's an active consumer
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
@@ -115,8 +114,7 @@ should_translate_amqp2mqtt_on_publish(Config) ->
 %% sent the retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    C = connect(P),
+    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
     %% publish with retain = true before a consumer comes around
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
@@ -129,16 +127,14 @@ should_translate_amqp2mqtt_on_retention(Config) ->
 %% sent retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention_search(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    C = connect(P),
+    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
     ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 does_not_retain(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    C = connect(P),
+    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     receive
@@ -148,13 +144,3 @@ does_not_retain(Config) ->
               ok
     end,
     ok = emqtt:disconnect(C).
-
-connect(Port) ->
-    {ok, C} = emqtt:start_link(
-                [{host, "localhost"},
-                 {port, Port},
-                 {clientid, <<"simpleClientRetainer">>},
-                 {proto_ver, v4},
-                 {ack_timeout, 1}]),
-    {ok, _Properties} = emqtt:connect(C),
-    C.

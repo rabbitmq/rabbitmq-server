@@ -16,7 +16,9 @@
                             eventually/3]).
 -import(util, [all_connection_pids/1,
                publish_qos1_timeout/4,
-               expect_publishes/2]).
+               expect_publishes/2,
+               connect/2,
+               connect/3]).
 
 all() ->
     [
@@ -93,12 +95,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 block(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config),
 
     %% Only here to ensure the connection is really up
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>),
@@ -195,15 +192,9 @@ login_timeout(Config) ->
 keepalive(Config) ->
     KeepaliveSecs = 1,
     KeepaliveMs = timer:seconds(KeepaliveSecs),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     ProtoVer = v4,
-    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
-                                {host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, ProtoVer}
-                               ]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config, [{keepalive, KeepaliveSecs},
+                                         {proto_ver, ProtoVer}]),
     ok = emqtt:publish(C, <<"ignored">>, <<"msg">>),
 
     %% Connection should stay up when client sends PING requests.
@@ -229,14 +220,7 @@ keepalive(Config) ->
 keepalive_turned_off(Config) ->
     %% "A Keep Alive value of zero (0) has the effect of turning off the keep alive mechanism."
     KeepaliveSecs = 0,
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{keepalive, KeepaliveSecs},
-                                {host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}
-                               ]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config, [{keepalive, KeepaliveSecs}]),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
 
     %% Mock the server socket to not have received any bytes.
@@ -252,12 +236,7 @@ keepalive_turned_off(Config) ->
     ok = emqtt:disconnect(C).
 
 stats(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config),
     %% Wait for stats being emitted (every 100ms)
     timer:sleep(300),
     %% Retrieve the connection Pid
@@ -283,14 +262,8 @@ get_env() ->
     rabbit_mqtt_util:env(durable_queue_type).
 
 validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clean_start, CleanSession},
-                                {clientid, ClientName},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(ClientName, Config, [{clean_start, CleanSession}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
     ok = expect_publishes(<<"TopicB">>, [<<"Payload">>]),
@@ -302,13 +275,7 @@ validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType)
     ok = emqtt:disconnect(C).
 
 clean_session_disconnect_client(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{clean_start, true},
-                                {host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config),
 
     {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
     L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
@@ -325,13 +292,7 @@ clean_session_disconnect_client(Config) ->
     ?assertEqual(0, length(L)).
 
 clean_session_kill_node(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{clean_start, true},
-                                {host, "localhost"},
-                                {port, P},
-                                {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(?FUNCTION_NAME, Config),
 
     {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
     L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
@@ -372,25 +333,16 @@ classic_clean_session_false(Config) ->
     validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
 
 will(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Topic = <<"will/topic">>,
     Msg = <<"will msg">>,
-    {ok, Publisher} = emqtt:start_link([{port, P},
-                                        {clientid, <<"will-publisher">>},
-                                        {proto_ver, v4},
-                                        {will_topic, Topic},
-                                        {will_payload, Msg},
-                                        {will_qos, qos0},
-                                        {will_retain, false}
-                                       ]),
-    {ok, _} = emqtt:connect(Publisher),
+    Publisher = connect(<<"will-publisher">>, Config, [{will_topic, Topic},
+                                                       {will_payload, Msg},
+                                                       {will_qos, qos0},
+                                                       {will_retain, false}]),
     timer:sleep(100),
     [ServerPublisherPid] = all_connection_pids(Config),
 
-    {ok, Subscriber} = emqtt:start_link([{port, P},
-                                         {clientid, <<"will-subscriber">>},
-                                         {proto_ver, v4}]),
-    {ok, _} = emqtt:connect(Subscriber),
+    Subscriber = connect(<<"will-subscriber">>, Config),
     {ok, _, _} = emqtt:subscribe(Subscriber, Topic, qos0),
 
     true = unlink(Publisher),
