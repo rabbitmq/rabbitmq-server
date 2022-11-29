@@ -691,8 +691,7 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                                               backing_queue_state = BQS,
                                               msg_id_to_channel   = MTC}) ->
     case rabbit_queue_consumers:deliver(
-           fun (true)  -> true = BQ:is_empty(BQS),
-                          {AckTag, BQS1} =
+           fun (true)  -> {AckTag, BQS1} =
                               BQ:publish_delivered(
                                 Message, Props, SenderPid, Flow, BQS),
                           {{Message, Delivered, AckTag}, {BQS1, MTC}};
