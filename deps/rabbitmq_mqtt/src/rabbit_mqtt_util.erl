@@ -141,7 +141,6 @@ env(Key) ->
         undefined -> undefined
     end.
 
-%% TODO: move to rabbit_common
 coerce_env_value(default_pass, Val) -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(default_user, Val) -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(exchange, Val)     -> rabbit_data_coercion:to_binary(Val);

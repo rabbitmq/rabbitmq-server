@@ -6,14 +6,18 @@
 
 -module(ff_SUITE).
 
-%% Test suite for the feature flag delete_ra_cluster_mqtt_node
-
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(FEATURE_FLAG, delete_ra_cluster_mqtt_node).
+-import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(rabbit_ct_helpers, [eventually/1]).
+-import(util, [expect_publishes/2,
+               get_global_counters/4
+              ]).
+
+-define(PROTO_VER, v4).
 
 all() ->
     [
@@ -22,12 +26,13 @@ all() ->
 
 groups() ->
     [
-     {cluster_size_3, [], [enable_feature_flag]}
+     {cluster_size_3, [], [delete_ra_cluster_mqtt_node,
+                           rabbit_mqtt_qos0_queue]}
     ].
 
 suite() ->
     [
-     {timetrap, {minutes, 5}}
+     {timetrap, {minutes, 2}}
     ].
 
 init_per_suite(Config) ->
@@ -40,31 +45,31 @@ end_per_suite(Config) ->
 init_per_group(Group = cluster_size_3, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3},
                                                      {rmq_nodename_suffix, Group}]),
-    Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1, {rabbit, [{forced_feature_flags_on_init, []}]}),
-    Config = rabbit_ct_helpers:run_steps(Config2,
-                                         rabbit_ct_broker_helpers:setup_steps() ++
-                                         rabbit_ct_client_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, ?FEATURE_FLAG) of
-        true ->
-            Config;
-        false ->
-            end_per_group(Group, Config),
-            {skip, io_lib:format("feature flag ~s is unsupported", [?FEATURE_FLAG])}
-    end.
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    rabbit_ct_helpers:run_steps(Config,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_client_helpers:teardown_steps() ++
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(_TestCase, Config) ->
-    Config.
+init_per_testcase(TestCase, Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, TestCase) of
+        true ->
+            Config;
+        false ->
+            {skip, io_lib:format("feature flag ~s is unsupported",
+                                 [TestCase])}
+    end.
 
 end_per_testcase(_TestCase, Config) ->
     Config.
 
-enable_feature_flag(Config) ->
+delete_ra_cluster_mqtt_node(Config) ->
+    FeatureFlag = ?FUNCTION_NAME,
     C = connect_to_node(Config, 1, <<"my-client">>),
     timer:sleep(500),
     %% old client ID tracking works
@@ -73,7 +78,8 @@ enable_feature_flag(Config) ->
     ?assert(lists:all(fun erlang:is_pid/1,
                       rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node]))),
 
-    ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG)),
+    ?assertEqual(ok,
+                 rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
 
     %% Ra processes should be gone
     rabbit_ct_helpers:eventually(
@@ -84,12 +90,52 @@ enable_feature_flag(Config) ->
     ?assert(erlang:is_process_alive(C)),
     ok = emqtt:disconnect(C).
 
+rabbit_mqtt_qos0_queue(Config) ->
+    FeatureFlag = ?FUNCTION_NAME,
+    Msg = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+
+    C1 = connect_to_node(Config, 0, ClientId),
+    {ok, _, [0]} = emqtt:subscribe(C1, Topic, qos0),
+    ok = emqtt:publish(C1, Topic, Msg, qos0),
+    ok = expect_publishes(Topic, [Msg]),
+    ?assertEqual(1,
+                 length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]))),
+
+    ?assertEqual(ok,
+                 rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
+
+    %% Queue type does not chanage for existing connection.
+    ?assertEqual(1,
+                 length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]))),
+    ok = emqtt:publish(C1, Topic, Msg, qos0),
+    ok = expect_publishes(Topic, [Msg]),
+    ?assertMatch(#{messages_delivered_total := 2,
+                   messages_delivered_consume_auto_ack_total := 2},
+                 get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, rabbit_classic_queue}])),
+
+    %% Reconnecting with the same client ID will terminate the old connection.
+    true = unlink(C1),
+    C2 = connect_to_node(Config, 0, ClientId),
+    {ok, _, [0]} = emqtt:subscribe(C2, Topic, qos0),
+    %% This time, we get the new queue type.
+    eventually(
+      ?_assertEqual(0,
+                    length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue])))),
+    ?assertEqual(1,
+                 length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [FeatureFlag]))),
+    ok = emqtt:publish(C2, Topic, Msg, qos0),
+    ok = expect_publishes(Topic, [Msg]),
+    ?assertMatch(#{messages_delivered_total := 1,
+                   messages_delivered_consume_auto_ack_total := 1},
+                 get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, FeatureFlag}])),
+    ok = emqtt:disconnect(C2).
+
 connect_to_node(Config, Node, ClientID) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
     {ok, C} = emqtt:start_link([{host, "localhost"},
                                 {port, Port},
                                 {clientid, ClientID},
-                                {proto_ver, v4},
+                                {proto_ver, ?PROTO_VER},
                                 {connect_timeout, 1},
                                 {ack_timeout, 1}]),
     {ok, _Properties} = emqtt:connect(C),

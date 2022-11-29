@@ -7,7 +7,15 @@
 
 -module(rabbit_mqtt_ff).
 
+-include("rabbit_mqtt.hrl").
+
 -export([track_client_id_in_ra/0]).
+
+-rabbit_feature_flag(
+   {?QUEUE_TYPE_QOS_0,
+    #{desc          => "Support pseudo queue type for MQTT QoS 0 omitting a queue process",
+      stability     => stable
+     }}).
 
 -rabbit_feature_flag(
    {delete_ra_cluster_mqtt_node,

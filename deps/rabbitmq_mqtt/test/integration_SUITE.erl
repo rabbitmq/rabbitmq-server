@@ -45,7 +45,8 @@ groups() ->
        consuming_classic_queue_down,
        flow_classic_mirrored_queue,
        flow_quorum_queue,
-       flow_stream] ++ common_tests()
+       flow_stream,
+       rabbit_mqtt_qos0_queue] ++ common_tests()
      }
     ].
 
@@ -288,15 +289,30 @@ events(Config) ->
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
 
-    [E2, E3] = get_events(Server),
-    assert_event_type(queue_created, E2),
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
+    [E2, E3 | E4] = get_events(Server),
+    QueueType = case rabbit_ct_helpers:is_mixed_versions(Config) of
+                    false ->
+                        ?assertEqual([], E4),
+                        rabbit_mqtt_qos0_queue;
+                    true ->
+                        %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+                        [ConsumerCreated] = E4,
+                        assert_event_type(consumer_created, ConsumerCreated),
+                        assert_event_prop([{queue, QueueName},
+                                           {ack_required, false},
+                                           {exclusive, false},
+                                           {arguments, []}],
+                                          ConsumerCreated),
+                        classic
+                end,
+    assert_event_type(queue_created, E2),
     assert_event_prop([{name, QueueName},
                        {durable, true},
                        {auto_delete, false},
                        {exclusive, true},
-                       {type, rabbit_mqtt_qos0_queue},
+                       {type, QueueType},
                        {arguments, []}],
                       E2),
     assert_event_type(binding_created, E3),
@@ -310,16 +326,25 @@ events(Config) ->
 
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
 
-    [E4] = get_events(Server),
-    assert_event_type(binding_deleted, E4),
+    [E5] = get_events(Server),
+    assert_event_type(binding_deleted, E5),
 
     ok = emqtt:disconnect(C),
 
-    [E5, E6] = get_events(Server),
-    assert_event_type(connection_closed, E5),
-    assert_event_prop(ExpectedConnectionProps, E5),
-    assert_event_type(queue_deleted, E6),
-    assert_event_prop({name, QueueName}, E6),
+    [E6, E7 | E8] = get_events(Server),
+    assert_event_type(connection_closed, E6),
+    assert_event_prop(ExpectedConnectionProps, E6),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            assert_event_type(queue_deleted, E7),
+            assert_event_prop({name, QueueName}, E7);
+        true ->
+            assert_event_type(consumer_deleted, E7),
+            assert_event_prop({queue, QueueName}, E7),
+            [QueueDeleted] = E8,
+            assert_event_type(queue_deleted, QueueDeleted),
+            assert_event_prop({name, QueueName}, QueueDeleted)
+    end,
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
@@ -388,24 +413,38 @@ global_counters(Config, ProtoVer) ->
                    messages_unroutable_returned_total => 1},
                  get_global_counters(Config, ProtoVer)),
 
-    ?assertEqual(#{messages_delivered_total => 2,
-                   messages_acknowledged_total => 1,
-                   messages_delivered_consume_auto_ack_total => 1,
-                   messages_delivered_consume_manual_ack_total => 1,
-                   messages_delivered_get_auto_ack_total => 0,
-                   messages_delivered_get_manual_ack_total => 0,
-                   messages_get_empty_total => 0,
-                   messages_redelivered_total => 0},
-                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
-    ?assertEqual(#{messages_delivered_total => 1,
-                   messages_acknowledged_total => 0,
-                   messages_delivered_consume_auto_ack_total => 1,
-                   messages_delivered_consume_manual_ack_total => 0,
-                   messages_delivered_get_auto_ack_total => 0,
-                   messages_delivered_get_manual_ack_total => 0,
-                   messages_get_empty_total => 0,
-                   messages_redelivered_total => 0},
-                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}])),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            ?assertEqual(#{messages_delivered_total => 2,
+                           messages_acknowledged_total => 1,
+                           messages_delivered_consume_auto_ack_total => 1,
+                           messages_delivered_consume_manual_ack_total => 1,
+                           messages_delivered_get_auto_ack_total => 0,
+                           messages_delivered_get_manual_ack_total => 0,
+                           messages_get_empty_total => 0,
+                           messages_redelivered_total => 0},
+                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
+            ?assertEqual(#{messages_delivered_total => 1,
+                           messages_acknowledged_total => 0,
+                           messages_delivered_consume_auto_ack_total => 1,
+                           messages_delivered_consume_manual_ack_total => 0,
+                           messages_delivered_get_auto_ack_total => 0,
+                           messages_delivered_get_manual_ack_total => 0,
+                           messages_get_empty_total => 0,
+                           messages_redelivered_total => 0},
+                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}]));
+        true ->
+            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+            ?assertEqual(#{messages_delivered_total => 3,
+                           messages_acknowledged_total => 1,
+                           messages_delivered_consume_auto_ack_total => 2,
+                           messages_delivered_consume_manual_ack_total => 1,
+                           messages_delivered_get_auto_ack_total => 0,
+                           messages_delivered_get_manual_ack_total => 0,
+                           messages_get_empty_total => 0,
+                           messages_redelivered_total => 0},
+                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}]))
+    end,
 
     {ok, _, _} = emqtt:unsubscribe(C, Topic1),
     ?assertEqual(1, maps:get(consumers, get_global_counters(Config, ProtoVer))),
@@ -688,6 +727,30 @@ subscribe_multiple(Config) ->
                                      {<<"topic1">>, qos1}])),
     ok = emqtt:disconnect(C).
 
+%% This test is mostly interesting in mixed version mode where feature flag
+%% rabbit_mqtt_qos0_queue is disabled and therefore a classic queue gets created.
+rabbit_mqtt_qos0_queue(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+
+    %% Place MQTT subscriber process on new node in mixed version.
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+
+    %% Place MQTT publisher process on old node in mixed version.
+    {ok, Pub} = emqtt:start_link(
+                  [{port, rabbit_ct_broker_helpers:get_node_config(Config, 1, tcp_port_mqtt)},
+                   {clientid, <<"publisher">>},
+                   {proto_ver, v4}
+                  ]),
+    {ok, _Properties} = emqtt:connect(Pub),
+
+    Msg = <<"msg">>,
+    ok = emqtt:publish(Pub, Topic, Msg, qos0),
+    ok = expect_publishes(Topic, [Msg]),
+
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub).
+
 %% -------------------------------------------------------------------
 %% Internal helpers
 %% -------------------------------------------------------------------
@@ -745,7 +808,7 @@ bind(Ch, QueueName, Topic)
                                              routing_key = Topic}).
 
 get_events(Node) ->
-    timer:sleep(100), %% events are sent and processed asynchronously
+    timer:sleep(300), %% events are sent and processed asynchronously
     Result = gen_event:call({rabbit_event, Node}, event_recorder, take_state),
     ?assert(is_list(Result)),
     Result.

@@ -276,14 +276,18 @@ validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType)
 
 clean_session_disconnect_client(Config) ->
     C = connect(?FUNCTION_NAME, Config),
-
     {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
-    L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
-    ?assertEqual(1, length(L0)),
-
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
-    L1 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    ?assertEqual(1, length(L1)),
+    QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            ?assertEqual(1, length(QsQos0)),
+            ?assertEqual(1, length(QsClassic));
+        true ->
+            ?assertEqual(0, length(QsQos0)),
+            ?assertEqual(2, length(QsClassic))
+    end,
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
@@ -293,15 +297,18 @@ clean_session_disconnect_client(Config) ->
 
 clean_session_kill_node(Config) ->
     C = connect(?FUNCTION_NAME, Config),
-
     {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
-    L0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
-    ?assertEqual(1, length(L0)),
-
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
-    L1 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    ?assertEqual(1, length(L1)),
-
+    QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            ?assertEqual(1, length(QsQos0)),
+            ?assertEqual(1, length(QsClassic));
+        true ->
+            ?assertEqual(0, length(QsQos0)),
+            ?assertEqual(2, length(QsClassic))
+    end,
     ?assertEqual(2, rpc(Config, ets, info, [rabbit_durable_queue, size])),
 
     process_flag(trap_exit, true),
@@ -352,4 +359,4 @@ will(Config) ->
     ok = emqtt:disconnect(Subscriber).
 
 rpc(Config, M, F, A) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
+    rpc(Config, 0, M, F, A).

@@ -519,7 +519,7 @@ start_keepalive(#mqtt_frame_connect{keep_alive = Seconds},
 handle_clean_session(_, State0 = #state{clean_sess = false,
                                         proto_ver = ProtoVer}) ->
     case get_queue(?QOS_1, State0) of
-        {error, not_found} ->
+        {error, _} ->
             %% Queue will be created later when client subscribes.
             {ok, _SessionPresent = false, State0};
         {ok, Q} ->
@@ -539,27 +539,14 @@ handle_clean_session(_, State = #state{clean_sess = true,
                                                                 username = Username,
                                                                 authz_ctx = AuthzCtx}}) ->
     case get_queue(?QOS_1, State) of
-        {error, not_found} ->
+        {error, _} ->
             {ok, _SessionPresent = false, State};
         {ok, Q0} ->
             QName = amqqueue:get_name(Q0),
             %% configure access to queue required for queue.delete
             case check_resource_access(User, QName, configure, AuthzCtx) of
                 ok ->
-                    rabbit_amqqueue:with(
-                      QName,
-                      fun (Q) ->
-                              rabbit_queue_type:delete(Q, false, false, Username)
-                      end,
-                      fun (not_found) ->
-                              ok;
-                          ({absent, Q, crashed}) ->
-                              rabbit_classic_queue:delete_crashed(Q, Username);
-                          ({absent, Q, stopped}) ->
-                              rabbit_classic_queue:delete_crashed(Q, Username);
-                          ({absent, _Q, _Reason}) ->
-                              ok
-                      end),
+                    delete_queue(QName, Username),
                     {ok, _SessionPresent = false, State};
                 {error, access_refused} ->
                     {error, ?CONNACK_NOT_AUTHORIZED}
@@ -567,10 +554,24 @@ handle_clean_session(_, State = #state{clean_sess = true,
     end.
 
 -spec get_queue(qos(), state()) ->
-    {ok, amqqueue:amqqueue()} | {error, not_found}.
+    {ok, amqqueue:amqqueue()} |
+    {error, not_found | {resource_locked, amqqueue:amqqueue()}}.
 get_queue(QoS, State) ->
     QName = queue_name(QoS, State),
-    rabbit_amqqueue:lookup(QName).
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} = Ok ->
+            try rabbit_amqqueue:check_exclusive_access(Q, self()) of
+                ok ->
+                    Ok
+            catch
+                exit:#amqp_error{name = resource_locked} ->
+                    %% This can happen when same client ID re-connects
+                    %% while its old connection is not yet closed.
+                    {error, {resource_locked, Q}}
+            end;
+        {error, not_found} = Err ->
+            Err
+    end.
 
 queue_name(QoS, #state{client_id = ClientId,
                        auth_state = #auth_state{vhost = VHost}}) ->
@@ -1015,55 +1016,65 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
-ensure_queue(QoS, #state{
+ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username = Username}}}) ->
+    case get_queue(QoS, State) of
+        {ok, Q} ->
+            {ok, Q};
+        {error, {resource_locked, Q}} ->
+            QName = amqqueue:get_name(Q),
+            rabbit_log:debug("MQTT deleting exclusive ~s owned by ~p",
+                             [rabbit_misc:rs(QName),
+                              ?amqqueue_v2_field_exclusive_owner(Q)]),
+            delete_queue(QName, Username),
+            create_queue(QoS, State);
+        {error, not_found} ->
+            create_queue(QoS, State)
+    end.
+
+create_queue(QoS, #state{
                      client_id = ClientId,
                      clean_sess = CleanSess,
                      auth_state = #auth_state{
                                      vhost = VHost,
                                      user = User = #user{username = Username},
                                      authz_ctx = AuthzCtx}
-                    } = State) ->
-    case get_queue(QoS, State) of
-        {ok, Q} ->
-            {ok, Q};
-        {error, not_found} ->
-            QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
-            QName = rabbit_misc:r(VHost, queue, QNameBin),
-            %% configure access to queue required for queue.declare
-            case check_resource_access(User, QName, configure, AuthzCtx) of
-                ok ->
-                    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-                        false ->
-                            rabbit_core_metrics:queue_declared(QName),
-                            QArgs = queue_args(QoS, CleanSess),
-                            Q0 = amqqueue:new(QName,
-                                              self(),
-                                              _Durable = true,
-                                              _AutoDelete = false,
-                                              queue_owner(QoS, CleanSess),
-                                              QArgs,
-                                              VHost,
-                                              #{user => Username},
-                                              queue_type(QoS, CleanSess, QArgs)
-                                             ),
-                            case rabbit_queue_type:declare(Q0, node()) of
-                                {new, Q} when ?is_amqqueue(Q) ->
-                                    rabbit_core_metrics:queue_created(QName),
-                                    {ok, Q};
-                                Other ->
-                                    rabbit_log:error("Failed to declare ~s: ~p",
-                                                     [rabbit_misc:rs(QName), Other]),
-                                    {error, queue_declare}
-                            end;
-                        {true, Limit} ->
-                            rabbit_log:error("cannot declare ~s because "
-                                             "queue limit ~p in vhost '~s' is reached",
-                                             [rabbit_misc:rs(QName), Limit, VHost]),
-                            {error, access_refused}
+                    }) ->
+    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
+    QName = rabbit_misc:r(VHost, queue, QNameBin),
+    %% configure access to queue required for queue.declare
+    case check_resource_access(User, QName, configure, AuthzCtx) of
+        ok ->
+            case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+                false ->
+                    rabbit_core_metrics:queue_declared(QName),
+                    QArgs = queue_args(QoS, CleanSess),
+                    Q0 = amqqueue:new(QName,
+                                      self(),
+                                      _Durable = true,
+                                      _AutoDelete = false,
+                                      queue_owner(QoS, CleanSess),
+                                      QArgs,
+                                      VHost,
+                                      #{user => Username},
+                                      queue_type(QoS, CleanSess, QArgs)
+                                     ),
+                    case rabbit_queue_type:declare(Q0, node()) of
+                        {new, Q} when ?is_amqqueue(Q) ->
+                            rabbit_core_metrics:queue_created(QName),
+                            {ok, Q};
+                        Other ->
+                            rabbit_log:error("Failed to declare ~s: ~p",
+                                             [rabbit_misc:rs(QName), Other]),
+                            {error, queue_declare}
                     end;
-                {error, access_refused} = E ->
-                    E
-            end
+                {true, Limit} ->
+                    rabbit_log:error("cannot declare ~s because "
+                                     "queue limit ~p in vhost '~s' is reached",
+                                     [rabbit_misc:rs(QName), Limit, VHost]),
+                    {error, access_refused}
+            end;
+        {error, access_refused} = E ->
+            E
     end.
 
 queue_owner(QoS, CleanSess)
@@ -1091,8 +1102,13 @@ queue_args(_, _) ->
             Args
     end.
 
-queue_type(?QOS_0, true, _) ->
-    ?QUEUE_TYPE_QOS_0;
+queue_type(?QOS_0, true, QArgs) ->
+    case rabbit_feature_flags:is_enabled(?QUEUE_TYPE_QOS_0) of
+        true ->
+            ?QUEUE_TYPE_QOS_0;
+        false ->
+            rabbit_amqqueue:get_queue_type(QArgs)
+    end;
 queue_type(_, _, QArgs) ->
     rabbit_amqqueue:get_queue_type(QArgs).
 
@@ -1401,11 +1417,27 @@ maybe_delete_mqtt_qos0_queue(State = #state{clean_sess = true,
                 _ ->
                     ok
             end;
-        {error, not_found} ->
+        _ ->
             ok
     end;
 maybe_delete_mqtt_qos0_queue(_) ->
     ok.
+
+delete_queue(QName, Username) ->
+    rabbit_amqqueue:with(
+      QName,
+      fun (Q) ->
+              rabbit_queue_type:delete(Q, false, false, Username)
+      end,
+      fun (not_found) ->
+              ok;
+          ({absent, Q, crashed}) ->
+              rabbit_classic_queue:delete_crashed(Q, Username);
+          ({absent, Q, stopped}) ->
+              rabbit_classic_queue:delete_crashed(Q, Username);
+          ({absent, _Q, _Reason}) ->
+              ok
+      end).
 
 handle_pre_hibernate() ->
     erase(permission_cache),
@@ -1544,7 +1576,7 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
+deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
                              #basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}},
                       AckRequired, State0) ->
     PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
@@ -1561,14 +1593,14 @@ deliver_one_to_client(Msg = {QName, QPid, QMsgId, _Redelivered,
                             ?QOS_0
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
-    State1 = maybe_publish_to_client(Msg, QoS, SubscriberQoS, State0),
-    State = maybe_auto_ack(AckRequired, QoS, QName, QMsgId, State1),
+    State1 = maybe_publish_to_client(Msg, QoS, State0),
+    State = maybe_auto_ack(AckRequired, QoS, QNameOrType, QMsgId, State1),
     %%TODO GC
     % case GCThreshold of
     %     undefined -> ok;
     %     _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
     % end,
-    ok = maybe_notify_sent(QName, QPid, State),
+    ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
 
 -spec effective_qos(qos(), qos()) -> qos().
@@ -1578,16 +1610,16 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     %% [MQTT-3.8.4-8]."
     erlang:min(PublisherQoS, SubscriberQoS).
 
-maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, _, State) ->
+maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     State;
 maybe_publish_to_client(
-  {QName, _QPid, QMsgId, Redelivered,
+  {QNameOrType, _QPid, QMsgId, Redelivered,
    #basic_message{
       routing_keys = [RoutingKey | _CcRoutes],
       content = #content{payload_fragments_rev = FragmentsRev}}},
-  QoS, SubscriberQos, State0 = #state{amqp2mqtt_fun = Amqp2MqttFun,
-                                      send_fun = SendFun}) ->
+  QoS, State0 = #state{amqp2mqtt_fun = Amqp2MqttFun,
+                       send_fun = SendFun}) ->
     {PacketId, State} = queue_packet_id_to_packet_id(QMsgId, QoS, State0),
     %%TODO support iolists when sending to client
     Payload = list_to_binary(lists:reverse(FragmentsRev)),
@@ -1608,7 +1640,7 @@ maybe_publish_to_client(
                      topic_name = Amqp2MqttFun(RoutingKey)},
        payload = Payload},
     SendFun(Frame, State),
-    message_delivered(QName, Redelivered, SubscriberQos, QoS, State),
+    message_delivered(QNameOrType, Redelivered, QoS, State),
     State.
 
 queue_packet_id_to_packet_id(_, ?QOS_0, State) ->
@@ -1639,6 +1671,8 @@ maybe_auto_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
 maybe_auto_ack(_, _, _, _, State) ->
     State.
 
+maybe_notify_sent(?QUEUE_TYPE_QOS_0, _, _) ->
+    ok;
 maybe_notify_sent(QName, QPid, #state{queue_states = QStates}) ->
     case rabbit_queue_type:module(QName, QStates) of
         {ok, rabbit_classic_queue} ->
@@ -1679,9 +1713,11 @@ check_resource_access(User, Resource, Perm, Context) ->
                     CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
                     put(permission_cache, [V | CacheTail]),
                     ok
-            catch exit:{amqp_error, access_refused, Msg, _AmqpMethod} ->
-                      rabbit_log:error("MQTT resource access refused: ~s", [Msg]),
-                      {error, access_refused}
+            catch
+                exit:#amqp_error{name = access_refused,
+                                 explanation = Msg} ->
+                    rabbit_log:error("MQTT resource access refused: ~s", [Msg]),
+                    {error, access_refused}
             end
     end.
 
@@ -1714,7 +1750,8 @@ check_topic_access(TopicName, Access,
                     put(topic_permission_cache, [Key | CacheTail]),
                     ok
             catch
-                exit:{amqp_error, access_refused, Msg, _AmqpMethod} ->
+                exit:#amqp_error{name = access_refused,
+                                 explanation = Msg} ->
                     rabbit_log:error("MQTT topic access refused: ~s", [Msg]),
                     {error, access_refused}
             end
@@ -1853,20 +1890,16 @@ message_acknowledged(QName, #state{proto_ver = ProtoVer,
             ok
     end.
 
-message_delivered(_, _Redelivered = false, _SubscriberQoS = ?QOS_0, _QoS = ?QOS_0,
-                  #state{clean_sess = true,
-                         proto_ver = ProtoVer
-                        }) ->
+message_delivered(?QUEUE_TYPE_QOS_0, false, ?QOS_0, #state{proto_ver = ProtoVer}) ->
     rabbit_global_counters:messages_delivered(ProtoVer, ?QUEUE_TYPE_QOS_0, 1),
     %% Technically, the message is not acked to a queue at all.
     %% However, from a user perspective it is still auto acked because:
     %% "In automatic acknowledgement mode, a message is considered to be successfully
     %% delivered immediately after it is sent."
     rabbit_global_counters:messages_delivered_consume_auto_ack(ProtoVer, ?QUEUE_TYPE_QOS_0, 1);
-message_delivered(QName, Redelivered, _, QoS,
-                  #state{proto_ver = ProtoVer,
-                         queue_states = QStates
-                        }) ->
+message_delivered(QName, Redelivered, QoS, #state{proto_ver = ProtoVer,
+                                                  queue_states = QStates
+                                                 }) ->
     case rabbit_queue_type:module(QName, QStates) of
         {ok, QType} ->
             rabbit_global_counters:messages_delivered(ProtoVer, QType, 1),

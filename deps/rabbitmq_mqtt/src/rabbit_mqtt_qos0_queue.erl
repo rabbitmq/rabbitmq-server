@@ -16,13 +16,6 @@
 %%
 %% All messages are delivered at most once.
 
-%% TODO
-% Write test for mixed version cluster where the new node declares new
-% queue type and old node routes to new queue, but does not know
-% the new queuey type module yet. This might either require a feature
-% flag or dropping the MQTT at-most-once message during the rolling
-% update from and old to a new node.
-
 -module(rabbit_mqtt_qos0_queue).
 -behaviour(rabbit_queue_type).
 
@@ -95,9 +88,8 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     {[], rabbit_queue_type:actions()}.
 deliver([{Q, stateless}], Delivery = #delivery{message = BasicMessage}) ->
     Pid = amqqueue:get_pid(Q),
-    QName = amqqueue:get_name(Q),
     Msg = {queue_event, ?MODULE,
-           {QName, Pid, _QMsgId = none, _Redelivered = false, BasicMessage}},
+           {?MODULE, Pid, _QMsgId = none, _Redelivered = false, BasicMessage}},
     gen_server:cast(Pid, Msg),
     Actions = confirm(Delivery, Q),
     {[], Actions}.
