@@ -77,21 +77,35 @@ initialize_registry() ->
 %% flags.
 
 initialize_registry(NewSupportedFeatureFlags) ->
-    %% The first step is to get the feature flag states: if this is the
-    %% first time we initialize it, we read the list from disk (the
-    %% `feature_flags` file). Otherwise we query the existing registry
-    %% before it is replaced.
+    %% The first step is to get the feature flag states. We start from the
+    %% recorded states on disk (the `feature_flags' file).
+    %%
+    %% If this is the first time we initialize the registry, we use the
+    %% recorded states. If the registry is refreshed, we merged the current
+    %% in-memory states (which should have been recorded on disk already) on
+    %% top of the on-disk states.
+    %%
+    %% This takes care of plugins initialized during node startup. A plugin's
+    %% feature flags might have been enabled in a previous instance of the
+    %% RabbitMQ node. Their state will be recorded on disk, but the in-memory
+    %% registry (loaded earlier during startup⁾ doesn't have their state
+    %% because the feature flags were not known at that time. That's why the
+    %% on-disk states are read every time.
+
+    AlreadyEnabledFeatureNames =
+    rabbit_feature_flags:read_enabled_feature_flags_list(),
+    FeatureStates0 =
+    rabbit_feature_flags:enabled_feature_flags_to_feature_states(
+      AlreadyEnabledFeatureNames),
+
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
-    FeatureStates =
-    case RegistryInitialized of
-        true ->
-            rabbit_ff_registry:states();
-        false ->
-            EnabledFeatureNames =
-            rabbit_feature_flags:read_enabled_feature_flags_list(),
-            rabbit_feature_flags:enabled_feature_flags_to_feature_states(
-              EnabledFeatureNames)
-    end,
+    FeatureStates = case RegistryInitialized of
+                        true ->
+                            CurrentFeatureStates = rabbit_ff_registry:states(),
+                            maps:merge(FeatureStates0, CurrentFeatureStates);
+                        false ->
+                            FeatureStates0
+                    end,
 
     %% We also record if the feature flags state was correctly written
     %% to disk. Currently we don't use this information, but in the
