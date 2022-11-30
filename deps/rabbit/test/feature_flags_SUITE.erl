@@ -28,6 +28,7 @@
          enable_feature_flag_with_a_network_partition/1,
          mark_feature_flag_as_enabled_with_a_network_partition/1,
          required_feature_flag_enabled_by_default/1,
+         plugin_ff_still_enabled_after_node_restart/1,
 
          clustering_ok_with_ff_disabled_everywhere/1,
          clustering_ok_with_ff_enabled_on_some_nodes/1,
@@ -58,7 +59,8 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       required_feature_flag_enabled_by_default
+       required_feature_flag_enabled_by_default,
+       plugin_ff_still_enabled_after_node_restart
       ]},
      {enabling_in_cluster, [],
       [
@@ -120,10 +122,10 @@ init_per_group(feature_flags_v2, Config) ->
             rabbit_ct_helpers:set_config(
               Config, {enable_feature_flags_v2, true});
         true ->
-            %% Before we run `feature_flags_v2'-related tests, we must ensure that
-            %% both umbrellas support them. Otherwise there is no point in running
-            %% them. The `feature_flags_v1' group already covers testing in that
-            %% case.
+            %% Before we run `feature_flags_v2'-related tests, we must ensure
+            %% that both umbrellas support them. Otherwise there is no point
+            %% in running them. The `feature_flags_v1' group already covers
+            %% testing in that case.
             %% To determine that `feature_flags_v2' are supported, we can't
             %% query RabbitMQ which is not started. Therefore, we check if the
             %% source or bytecode of `rabbit_ff_controller' is present.
@@ -164,9 +166,10 @@ init_per_group(feature_flags_v2, Config) ->
             end
     end;
 init_per_group(enabling_on_single_node, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 1}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 1}]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(enabling_in_cluster, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -184,7 +187,7 @@ init_per_group(activating_plugin, Config) ->
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, true},
                  {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1,[fun prepare_my_plugin/1]);
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(_, Config) ->
     Config.
 
@@ -1050,6 +1053,22 @@ required_feature_flag_enabled_by_default(Config) ->
     ?assertEqual(
        True,
        is_feature_flag_enabled(Config, RequiredFName)).
+
+plugin_ff_still_enabled_after_node_restart(Config) ->
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([false], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ?assertEqual(ok, enable_feature_flag_on(Config, 0, plugin_ff)),
+
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ?assertEqual(ok, rabbit_ct_broker_helpers:restart_node(Config, 0)),
+
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ok.
 
 clustering_ok_with_supported_required_ff(Config) ->
     %% All feature flags are disabled. Clustering the two nodes should be
