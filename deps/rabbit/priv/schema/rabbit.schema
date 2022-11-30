@@ -890,7 +890,12 @@ fun(Conf) ->
     case {Absolute, Relative} of
         {undefined, undefined} -> cuttlefish:invalid("No vm watermark defined");
         {_,         undefined} -> {absolute, Absolute};
-        _                      -> Relative
+        {undefined, _}         -> Relative;
+        _                      ->
+            cuttlefish:warn("Both vm_memory_high_watermark.absolute and "
+                            "vm_memory_high_watermark.relative are configured. "
+                            "vm_memory_high_watermark.absolute has precedence"),
+            {absolute, Absolute}
     end
 end}.
 
@@ -958,7 +963,12 @@ fun(Conf) ->
     case {Absolute, Relative} of
         {undefined, undefined} -> cuttlefish:invalid("No disk limit defined");
         {_,         undefined} -> Absolute;
-        _                      -> {mem_relative, Relative}
+        {undefined, _}         -> {mem_relative, Relative};
+        _                      ->
+            cuttlefish:warn("Both disk_free_limit.absolute and "
+                            "disk_free_limit.relative are configured. "
+                            "disk_free_limit.absolute has precedence"),
+            Absolute
     end
 end}.
 

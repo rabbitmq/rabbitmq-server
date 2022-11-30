@@ -100,6 +100,24 @@ ssl_options.fail_if_no_peer_cert = true",
  {socket_writer_gc_threshold_off,
   "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
 
+ {disk_free_limit_absolute_priority,
+  "disk_free_limit.relative = 1.0
+   disk_free_limit.absolute = 50000",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
+ {disk_free_limit_absolute_priority_regardless_of_order,
+  "disk_free_limit.absolute = 50000
+    disk_free_limit.relative = 1.0",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
+ {disk_free_limit_only_relative,
+  "disk_free_limit.relative = 1.0",
+   [{rabbit, [{disk_free_limit, {mem_relative, 1.0}}]}],[]},
+
+ {disk_free_limit_only_absolute,
+  "disk_free_limit.absolute = 50000",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
  {default_user_settings,
   "default_user = guest
 default_pass = guest
@@ -185,6 +203,11 @@ tcp_listen_options.exit_on_close = false",
  {vm_memory_watermark_absolute_units,
   "vm_memory_high_watermark.absolute = 1024MB",
   [{rabbit,[{vm_memory_high_watermark,{absolute,"1024MB"}}]}],
+  []},
+ {vm_memory_watermark_absolute_priority,
+  "vm_memory_high_watermark.absolute = 1073741824
+   vm_memory_high_watermark.relative = 0.4",
+  [{rabbit,[{vm_memory_high_watermark,{absolute,1073741824}}]}],
   []},
  {vm_memory_watermark_paging_ratio,
   "vm_memory_high_watermark_paging_ratio = 0.75
