@@ -2515,11 +2515,13 @@ ensure_retention_applied(Config, Server) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, gen_server, call, [osiris_retention, test]).
 
 rebalance(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "rebalance test isn't mixed version compatible"};
-        false ->
-            rebalance0(Config)
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+        ok ->
+            rebalance0(Config);
+        _ ->
+            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
+                   [?FUNCTION_NAME]),
+            ok
     end.
 
 rebalance0(Config) ->
