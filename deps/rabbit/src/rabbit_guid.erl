@@ -42,7 +42,7 @@ start_link() ->
 -spec filename() -> string().
 
 filename() ->
-    filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME).
+    filename:join(rabbit:data_dir(), ?SERIAL_FILENAME).
 
 update_disk_serial() ->
     Filename = filename(),

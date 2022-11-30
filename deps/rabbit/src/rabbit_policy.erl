@@ -293,7 +293,7 @@ recover0() ->
     ok.
 
 invalid_file() ->
-    filename:join(rabbit_mnesia:dir(), "policies_are_invalid").
+    filename:join(rabbit:data_dir(), "policies_are_invalid").
 
 %%----------------------------------------------------------------------------
 

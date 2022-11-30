@@ -76,7 +76,7 @@ plugins_expand_dir() ->
         {ok, ExpandDir} ->
             ExpandDir;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "plugins_expand_dir"])
+            filename:join([rabbit:data_dir(), "plugins_expand_dir"])
     end.
 
 -spec plugins_dir() -> file:filename().
@@ -85,7 +85,7 @@ plugins_dir() ->
         {ok, PluginsDistDir} ->
             PluginsDistDir;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "plugins_dir_stub"])
+            filename:join([rabbit:data_dir(), "plugins_dir_stub"])
     end.
 
 -spec enabled_plugins_file() -> file:filename().
@@ -94,7 +94,7 @@ enabled_plugins_file() ->
         {ok, Val} ->
             Val;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
+            filename:join([rabbit:data_dir(), "enabled_plugins"])
     end.
 
 -spec enabled_plugins() -> [atom()].

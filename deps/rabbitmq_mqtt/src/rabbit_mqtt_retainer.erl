@@ -88,7 +88,7 @@ handle_info(Info, State) ->
     {stop, {unknown_info, Info}, State}.
 
 store_dir() ->
-    rabbit_mnesia:dir().
+    rabbit:data_dir().
 
 terminate(_Reason, #retainer_state{store = Store, store_mod = Mod}) ->
     Mod:terminate(Store),

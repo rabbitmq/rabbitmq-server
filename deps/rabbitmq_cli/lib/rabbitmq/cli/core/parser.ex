@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
       file: :string,
       script_name: :string,
       rabbitmq_home: :string,
-      mnesia_dir: :string,
+      data_dir: :string,
       plugins_dir: :string,
       enabled_plugins_file: :string,
       aliases_file: :string,
@@ -46,6 +46,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
       # for backwards compatibility,
       # not all commands support timeouts
       t: :timeout,
+      # For backwards compatibility, `mnesia_dir` was renamed to `data_dir`.
+      mnesia_dir: :data_dir,
       "?": :help
     ]
   end

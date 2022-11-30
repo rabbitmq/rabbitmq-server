@@ -26,9 +26,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_load_next_boot, []) do
       {:badrpc, :nodedown} ->
-        case Config.get_option(:mnesia_dir, opts) do
+        case Config.get_option(:data_dir, opts) do
           nil ->
-            {:error, :mnesia_dir_not_found}
+            {:error, :data_dir_not_found}
 
           dir ->
             File.write(Path.join(dir, "force_load"), "")

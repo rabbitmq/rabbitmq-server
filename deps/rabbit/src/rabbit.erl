@@ -21,6 +21,7 @@
 
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
+-export([data_dir/0]).
 -export([product_info/0,
          product_name/0,
          product_version/0,
@@ -728,7 +729,7 @@ status() ->
           {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
     S6 = [{config_files, config_files()},
            {log_files, log_locations()},
-           {data_directory, rabbit_mnesia:dir()},
+           {data_directory, data_dir()},
            {raft_data_directory, ra_env:data_dir()}],
     Totals = case is_running() of
                  true ->
@@ -1094,6 +1095,29 @@ get_default_data_param(Param) ->
     end.
 
 %%---------------------------------------------------------------------------
+%% Data directory.
+
+-spec data_dir() -> DataDir when
+      DataDir :: file:filename().
+%% @doc Returns the data directory.
+%%
+%% This directory is used by many subsystems to store their files, either
+%% directly underneath or in subdirectories.
+%%
+%% Here are a few examples:
+%% <ul>
+%% <li>Mnesia</li>
+%% <li>Feature flags state</li>
+%% <li>Ra systems's WAL and segment files</li>
+%% <li>Classic queues' messages</li>
+%% </ul>
+
+data_dir() ->
+    {ok, DataDir} = application:get_env(rabbit, data_dir),
+    ?assertEqual(DataDir, rabbit_mnesia:dir()),
+    DataDir.
+
+%%---------------------------------------------------------------------------
 %% logging
 
 -spec set_log_level(logger:level()) -> ok.
@@ -1271,7 +1295,7 @@ log_banner() ->
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log(s)",         FirstLog}] ++
                OtherLogs ++
-               [{"database dir",   rabbit_mnesia:dir()}],
+               [{"data dir",       data_dir()}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(

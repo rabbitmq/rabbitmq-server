@@ -91,7 +91,7 @@ file_handle_cache1(_Config) ->
     %% test copying when there is just one spare handle
     Limit = file_handle_cache:get_limit(),
     ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
-    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    TmpDir = filename:join(rabbit:data_dir(), "tmp"),
     ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
     [Src1, Dst1, Src2, Dst2] = Files =
         [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
@@ -223,7 +223,7 @@ file_handle_cache_reserve_open_file_above_limit1(_Config) ->
     ok = file_handle_cache:set_reservation(7),
 
     Self = self(),
-    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    TmpDir = filename:join(rabbit:data_dir(), "tmp"),
     spawn(fun () -> {ok, _} = file_handle_cache:open(
                                 filename:join(TmpDir, "file_above_limit"),
                                 [write], []),

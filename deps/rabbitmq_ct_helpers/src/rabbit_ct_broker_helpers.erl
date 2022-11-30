@@ -780,13 +780,13 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 query_node(Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
     PidFile = rpc(Config, Nodename, os, getenv, ["RABBITMQ_PID_FILE"]),
-    MnesiaDir = rpc(Config, Nodename, mnesia, system_info, [directory]),
+    DataDir = rpc(Config, Nodename, mnesia, system_info, [directory]),
     {ok, PluginsDir} = rpc(Config, Nodename, application, get_env,
       [rabbit, plugins_dir]),
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
     Vars0 = [{pid_file, PidFile},
-             {mnesia_dir, MnesiaDir},
+             {data_dir, DataDir},
              {plugins_dir, PluginsDir},
              {enabled_plugins_file, EnabledPluginsFile}],
     Vars = try
@@ -1078,7 +1078,7 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
     Env0 = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
-      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)}
@@ -1109,7 +1109,7 @@ rabbitmq_queues(Config, Node, Args) ->
     Env0 = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
-      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)}
@@ -1886,7 +1886,7 @@ plugin_action(Config, Node, Args) ->
     Env = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqplugins)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
-      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)}

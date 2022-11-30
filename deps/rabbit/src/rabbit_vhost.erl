@@ -598,7 +598,7 @@ msg_store_dir_wildcard() ->
     rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), "*"])).
 
 msg_store_dir_base() ->
-    Dir = rabbit_mnesia:dir(),
+    Dir = rabbit:data_dir(),
     filename:join([Dir, "msg_stores", "vhosts"]).
 
 config_file_path(VHost) ->
