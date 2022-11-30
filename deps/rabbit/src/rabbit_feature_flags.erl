@@ -1034,7 +1034,8 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                 throw(
                   {required_feature_flag_with_migration_fun, FeatureName});
             #{migration_fun := MigrationFunMF} ->
-                ?assertMatch({_, _}, MigrationFunMF),
+                ?assert(is_tuple(MigrationFunMF)),
+                ?assertEqual(2, size(MigrationFunMF)),
                 {MigrationMod, MigrationFun} = MigrationFunMF,
                 ?assert(is_atom(MigrationMod)),
                 ?assert(is_atom(MigrationFun)),
