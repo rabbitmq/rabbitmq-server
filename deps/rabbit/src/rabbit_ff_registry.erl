@@ -33,6 +33,31 @@
 -on_load(on_load/0).
 -endif.
 
+%% Initially, is_registry_initialized/0 always returns false and this `Call'
+%% is always called. The case statement is here to convince Dialyzer that the
+%% function could return values of type `__ReturnedIfUninitialized' or
+%% `__NeverReturned'.
+%%
+%% If the function was only calling itself (`Call'), Dialyzer would consider
+%% that it would never return.
+%%
+%% With just `is_registry_initialized()' case, Dialyzer would conclude that
+%% `__ReturnedIfUninitialized' is always returned and other values will never
+%% be returned and there is no point in expecting them.
+%%
+%% With both cases in place, it seems that we can convince Dialyzer that the
+%% function returns values matching its spec.
+-define(convince_dialyzer(__Call, __ReturnedIfUninitialized, __NeverReturned),
+        case is_registry_initialized() of
+            false ->
+                __Call;
+            true ->
+                case always_return_true() of
+                    true  -> __ReturnedIfUninitialized;
+                    false -> __NeverReturned
+                end
+        end).
+
 -spec get(rabbit_feature_flags:feature_name()) ->
     rabbit_feature_flags:feature_props() | undefined.
 %% @doc
@@ -46,13 +71,7 @@
 
 get(FeatureName) ->
     rabbit_ff_registry_factory:initialize_registry(),
-    %% Initially, is_registry_initialized/0 always returns `false`
-    %% and this ?MODULE:get(FeatureName) is always called. The case
-    %% statement is here to please Dialyzer.
-    case is_registry_initialized() of
-        false -> ?MODULE:get(FeatureName);
-        true  -> undefined
-    end.
+    ?convince_dialyzer(?MODULE:get(FeatureName), undefined, #{}).
 
 -spec list(all | enabled | disabled) -> rabbit_feature_flags:feature_flags().
 %% @doc
@@ -67,11 +86,7 @@ get(FeatureName) ->
 
 list(Which) ->
     rabbit_ff_registry_factory:initialize_registry(),
-    %% See get/1 for an explanation of the case statement below.
-    case is_registry_initialized() of
-        false -> ?MODULE:list(Which);
-        true  -> #{}
-    end.
+    ?convince_dialyzer(?MODULE:list(Which), #{}, #{}).
 
 -spec states() -> rabbit_feature_flags:feature_states().
 %% @doc
@@ -84,11 +99,7 @@ list(Which) ->
 
 states() ->
     rabbit_ff_registry_factory:initialize_registry(),
-    %% See get/1 for an explanation of the case statement below.
-    case is_registry_initialized() of
-        false -> ?MODULE:states();
-        true  -> #{}
-    end.
+    ?convince_dialyzer(?MODULE:states(), #{}, #{}).
 
 -spec is_supported(rabbit_feature_flags:feature_name()) -> boolean().
 %% @doc
@@ -103,11 +114,7 @@ states() ->
 
 is_supported(FeatureName) ->
     rabbit_ff_registry_factory:initialize_registry(),
-    %% See get/1 for an explanation of the case statement below.
-    case is_registry_initialized() of
-        false -> ?MODULE:is_supported(FeatureName);
-        true  -> false
-    end.
+    ?convince_dialyzer(?MODULE:is_supported(FeatureName), false, true).
 
 -spec is_enabled(rabbit_feature_flags:feature_name()) -> boolean() | state_changing.
 %% @doc
@@ -122,11 +129,7 @@ is_supported(FeatureName) ->
 
 is_enabled(FeatureName) ->
     rabbit_ff_registry_factory:initialize_registry(),
-    %% See get/1 for an explanation of the case statement below.
-    case is_registry_initialized() of
-        false -> ?MODULE:is_enabled(FeatureName);
-        true  -> false
-    end.
+    ?convince_dialyzer(?MODULE:is_enabled(FeatureName), false, true).
 
 -spec is_registry_initialized() -> boolean().
 %% @doc
