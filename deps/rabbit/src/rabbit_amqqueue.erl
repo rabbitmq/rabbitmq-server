@@ -204,7 +204,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
 
 
-%% The Node argument suggests where the queue (master if mirrored)
+%% The Node argument suggests where the queue (leader if mirrored)
 %% should be. Note that in some cases (e.g. with "nodes" policy in
 %% effect) this might not be possible to satisfy.
 
@@ -492,7 +492,7 @@ is_match(Subj, RegEx) ->
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
         {ok, Summary} ->
-            rabbit_log:info("All queue masters are balanced"),
+            rabbit_log:info("All queue leaders are balanced"),
             {ok, Summary};
         {migrated, Other} ->
             iterative_rebalance(Other, MaxQueuesDesired);
@@ -604,7 +604,7 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
               fun () -> retry_wait(Q, F, E, RetriesLeft) end,
               fun () -> F(Q) end);
         %% The queue is supposed to be active.
-        %% The master node can go away or queue can be killed
+        %% The leader node can go away or queue can be killed
         %% so we retry, waiting for a mirror to take over.
         {ok, Q} when ?amqqueue_state_is(Q, live) ->
             %% We check is_process_alive(QPid) in case we receive a
@@ -713,7 +713,7 @@ priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
 priv_absent(QueueName, QPid, _IsDurable, alive) ->
     rabbit_misc:protocol_error(
       not_found,
-      "failed to perform operation on ~ts: its master replica ~w may be stopping or being demoted",
+      "failed to perform operation on ~ts: its leader ~w may be stopping or being demoted",
       [rabbit_misc:rs(QueueName), QPid]).
 
 -spec assert_equivalence
@@ -1383,7 +1383,7 @@ count(VHost) ->
   try
     %% this is certainly suboptimal but there is no way to count
     %% things using a secondary index in Mnesia. Our counter-table-per-node
-    %% won't work here because with master migration of mirrored queues
+    %% won't work here because with leader migration of mirrored queues
     %% the "ownership" of queues by nodes becomes a non-trivial problem
     %% that requires a proper consensus algorithm.
     length(list_for_count(VHost))
@@ -1870,7 +1870,7 @@ forget_all_durable(Node) ->
     ok.
 
 %% Try to promote a mirror while down - it should recover as a
-%% master. We try to take the oldest mirror here for best chance of
+%% leader. We try to take the oldest mirror here for best chance of
 %% recovery.
 forget_node_for_queue(_DeadNode, Q)
   when ?amqqueue_is_quorum(Q) ->
