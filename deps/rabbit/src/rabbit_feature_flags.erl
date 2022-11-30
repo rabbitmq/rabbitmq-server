@@ -1070,6 +1070,64 @@ prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
 prepare_queried_feature_flags([], AllFeatureFlags) ->
     AllFeatureFlags.
 
+<<<<<<< HEAD
+=======
+assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
+    try
+        ?assert(is_atom(FeatureName)),
+        ?assert(is_map(FeatureProps)),
+        Stability = get_stability(FeatureProps),
+        ?assert(Stability =:= stable orelse
+                Stability =:= experimental orelse
+                Stability =:= required),
+        case FeatureProps of
+            #{migration_fun := _} when Stability =:= required ->
+                rabbit_log_feature_flags:error(
+                  "Feature flags: `~s`: a required feature flag can't have a "
+                  "migration function",
+                  [FeatureName]),
+                throw(
+                  {required_feature_flag_with_migration_fun, FeatureName});
+            #{migration_fun := MigrationFunMF} ->
+                ?assert(is_tuple(MigrationFunMF)),
+                ?assertEqual(2, size(MigrationFunMF)),
+                {MigrationMod, MigrationFun} = MigrationFunMF,
+                ?assert(is_atom(MigrationMod)),
+                ?assert(is_atom(MigrationFun)),
+                ?assert(
+                   erlang:function_exported(MigrationMod, MigrationFun, 3)),
+                ?assertNot(maps:is_key(callbacks, FeatureProps));
+            #{callbacks := Callbacks} ->
+                Known = [enable,
+                         post_enable],
+                ?assert(is_map(Callbacks)),
+                ?assertEqual([], maps:keys(Callbacks) -- Known),
+                lists:foreach(
+                  fun(CallbackMF) ->
+                          ?assertMatch({_, _}, CallbackMF),
+                          {CallbackMod, CallbackFun} = CallbackMF,
+                          ?assert(is_atom(CallbackMod)),
+                          ?assert(is_atom(CallbackFun)),
+                          ?assert(erlang:function_exported(
+                                    CallbackMod, CallbackFun, 1))
+                  end, maps:values(Callbacks)),
+                ?assertNot(maps:is_key(migration_fun, FeatureProps));
+            _ ->
+                ok
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: `~s`: invalid properties:~n"
+              "Feature flags: `~s`:   Properties: ~p~n"
+              "Feature flags: `~s`:   Error: ~p",
+              [FeatureName,
+               FeatureName, FeatureProps,
+               FeatureName, Reason]),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+>>>>>>> ce594e0072 (rabbit_feature_flags: Change an assertion to fix a Dialyzer warning)
 -spec merge_new_feature_flags(feature_flags(),
                               atom(),
                               feature_name(),
