@@ -892,7 +892,13 @@ terminate(_Reason,
           end, CM),
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()},
-                                         {user_who_performed_action, Username}]).
+                                         {user_who_performed_action, Username}]),
+    case rabbit_confirms:size(State#ch.unconfirmed) of
+        0 -> ok;
+        NumConfirms ->
+            rabbit_log:warning("Channel is stopping with ~b pending publisher confirms",
+                               [NumConfirms])
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
