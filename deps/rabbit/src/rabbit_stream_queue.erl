@@ -642,8 +642,8 @@ get_replicas(Q) ->
 transfer_leadership(Q, Destination) ->
     case rabbit_stream_coordinator:restart_stream(Q, #{preferred_leader_node => Destination}) of
         {ok, NewNode} -> {migrated, NewNode};
-        {error, Reason} -> {not_migrated, Reason};
-        {timeout, _} -> {not_migrated, timeout}
+        {error, coordinator_unavailable} -> {not_migrated, timeout};
+        {error, Reason} -> {not_migrated, Reason}
     end.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
@@ -812,16 +812,18 @@ set_retention_policy(Name, VHost, Policy) ->
             end
     end.
 
-restart_stream(VHost, Name, Options) ->
-    rabbit_log:info("restarting stream ~s with options ~p", [Name, Options]),
-    QName = rabbit_misc:r(VHost, queue, Name),
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} when ?amqqueue_is_classic(Q) ->
-            {error, classic_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {error, quorum_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_stream(Q) ->
+-spec restart_stream(VHost :: binary(), Queue :: binary(),
+                     #{preferred_leader_node => node()}) ->
+    {ok, node()} |
+    {error, term()}.
+restart_stream(VHost, Queue, Options)
+  when is_binary(VHost) andalso
+       is_binary(Queue) ->
+    case rabbit_amqqueue:lookup(Queue, VHost) of
+        {ok, Q} when ?amqqueue_type_is(Q, ?MODULE) ->
             rabbit_stream_coordinator:restart_stream(Q, Options);
+        {ok, Q} ->
+            {error, {not_supported_for_type, amqqueue:get_type(Q)}};
         E ->
             E
     end.

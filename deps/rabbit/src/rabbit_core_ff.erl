@@ -111,6 +111,14 @@
       depends_on    => [stream_queue]
      }}).
 
+-rabbit_feature_flag(
+   {restart_streams,
+    #{desc          => "Support for restarting streams with optional preferred next leader argument. "
+                       "Used to implement stream leader rebalancing",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
+
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------

@@ -154,15 +154,21 @@ restart_stream(QRes, Options)
   when element(1, QRes) == resource ->
     restart_stream(hd(rabbit_amqqueue:lookup([QRes])), Options);
 restart_stream(Q, Options)
-  when ?is_amqqueue(Q) ->
-    #{name := StreamId} = amqqueue:get_type_state(Q),
-    %% assertion leader is in nodes configuration
-    % true = lists:member(LeaderNode, Nodes),
-    case process_command({restart_stream, StreamId, Options}) of
-        {ok, {ok, LeaderPid}, _} ->
-            {ok, node(LeaderPid)};
-        Err ->
-            Err
+  when ?is_amqqueue(Q) andalso
+       ?amqqueue_is_stream(Q) ->
+    case rabbit_feature_flags:is_enabled(restart_streams) of
+        true ->
+            rabbit_log:info("restarting stream ~s in vhost ~s with options ~p",
+                            [amqqueue:get_name(Q), amqqueue:get_vhost(Q), Options]),
+            #{name := StreamId} = amqqueue:get_type_state(Q),
+            case process_command({restart_stream, StreamId, Options}) of
+                {ok, {ok, LeaderPid}, _} ->
+                    {ok, node(LeaderPid)};
+                Err ->
+                    Err
+            end;
+        false ->
+            {error, {feature_flag_not_enabled, restart_stream}}
     end.
 
 delete_stream(Q, ActingUser)

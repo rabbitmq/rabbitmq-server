@@ -1358,27 +1358,35 @@ tracking_status(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]).
 
 restart_stream(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+        ok ->
+            [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    Q = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+            Q = ?config(queue_name, Config),
+            ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                         declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    publish_confirm(Ch, Q, [<<"msg">>]),
-    Vhost = ?config(rmq_vhost, Config),
-    QName = #resource{virtual_host = Vhost,
-                      kind = queue,
-                      name = Q},
-    %% restart the stream
-    ?assertMatch({ok, _},
-                 rabbit_ct_broker_helpers:rpc(Config, Server,
-                                              rabbit_stream_coordinator,
-                                              ?FUNCTION_NAME, [QName])),
+            publish_confirm(Ch, Q, [<<"msg">>]),
+            Vhost = ?config(rmq_vhost, Config),
+            QName = #resource{virtual_host = Vhost,
+                              kind = queue,
+                              name = Q},
+            %% restart the stream
+            ?assertMatch({ok, _},
+                         rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                      rabbit_stream_coordinator,
+                                                      ?FUNCTION_NAME, [QName])),
 
-    publish_confirm(Ch, Q, [<<"msg2">>]),
-    rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
-    ok.
+            publish_confirm(Ch, Q, [<<"msg2">>]),
+            rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
+            ok;
+        _ ->
+            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
+                   [?FUNCTION_NAME]),
+            ok
+    end.
+
 
 consume_from_last(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
