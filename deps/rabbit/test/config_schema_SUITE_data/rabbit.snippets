@@ -100,8 +100,6 @@ ssl_options.fail_if_no_peer_cert = true",
  {socket_writer_gc_threshold_off,
   "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
 
-<<<<<<< HEAD
-=======
  {disk_free_limit_absolute_priority,
   "disk_free_limit.relative = 1.0
    disk_free_limit.absolute = 50000",
@@ -120,29 +118,6 @@ ssl_options.fail_if_no_peer_cert = true",
   "disk_free_limit.absolute = 50000",
    [{rabbit, [{disk_free_limit, 50000}]}],[]},
 
-
- {default_vhost_limits_with_two_limits,
- "
-  default_limits.vhosts.a.pattern = .*
-  default_limits.vhosts.a.max_queues = 10
-  default_limits.vhosts.a.max_connections = 100
- ",
-  [{rabbit, [{default_limits, [{vhosts, [
-      {<<".*">>, [{<<"max-connections">>, 100}, {<<"max-queues">>, 10}]}
-                                       ]}]}]}],
-  []},
-
- {default_vhost_limits_with_one_limit,
- "
-  default_limits.vhosts.a.pattern = .*
-  default_limits.vhosts.a.max_queues = 10
- ",
-  [{rabbit, [{default_limits, [{vhosts, [
-      {<<".*">>, [{<<"max-queues">>, 10}]}
-                                       ]}]}]}],
-  []},
-
->>>>>>> 20946691f2 (See #4980. Give *.absolute precedence over *.relative configuration)
  {default_user_settings,
   "default_user = guest
 default_pass = guest
