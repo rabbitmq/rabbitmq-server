@@ -1061,7 +1061,7 @@ enable_dependencies1(
       Nodes :: [node()],
       FeatureName :: rabbit_feature_flags:feature_name(),
       Command :: rabbit_feature_flags:callback_name(),
-      Extra :: rabbit_feature_flags:callbacks_args(),
+      Extra :: map(),
       Timeout :: timeout(),
       Rets :: #{node() => term()}.
 
