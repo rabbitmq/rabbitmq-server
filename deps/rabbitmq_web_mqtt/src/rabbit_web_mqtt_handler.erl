@@ -67,7 +67,6 @@ init(Req, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req),
     SockInfo = maps:get(proxy_header, Req, undefined),
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-    %%TODO is compress needed?
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
     Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
                undefined -> Req;
@@ -317,7 +316,8 @@ send_reply(Frame, PState) ->
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
 
-%% TODO if #state.stats_timer is undefined, rabbit_event:if_enabled crashes
+maybe_emit_stats(#state{stats_timer = undefined}) ->
+    ok;
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                                 fun() -> emit_stats(State) end).
