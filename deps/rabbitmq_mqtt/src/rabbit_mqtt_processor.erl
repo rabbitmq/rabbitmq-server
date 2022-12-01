@@ -66,7 +66,7 @@
          auth_state,
          peer_addr,
          send_fun :: fun((Frame :: tuple(), state()) -> term()),
-         %%TODO remove funs from state?
+         %%TODO remove funs from state? 11 words each of the funs.
          mqtt2amqp_fun,
          amqp2mqtt_fun,
          register_state,

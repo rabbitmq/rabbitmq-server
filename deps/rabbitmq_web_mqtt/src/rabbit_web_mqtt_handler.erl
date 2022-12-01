@@ -92,14 +92,15 @@ websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
     ok = file_handle_cache:obtain(),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
+            ConnName = rabbit_data_coercion:to_binary(ConnStr),
             State = State0#state{
-                      conn_name          = ConnStr,
+                      conn_name          = ConnName,
                       socket             = Sock
                      },
-            rabbit_log_connection:info("Accepting Web MQTT connection ~p (~s)", [self(), ConnStr]),
+            rabbit_log_connection:info("Accepting Web MQTT connection ~p (~s)", [self(), ConnName]),
             RealSocket = rabbit_net:unwrap_socket(Sock),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket,
-                                                                 ConnStr,
+                                                                 ConnName,
                                                                  fun send_reply/2,
                                                                  PeerAddr),
             process_flag(trap_exit, true),
@@ -223,28 +224,28 @@ terminate(_Reason, _Request,
 
 %% Internal.
 
-handle_data(Data, State0 = #state{conn_name = ConnStr}) ->
+handle_data(Data, State0 = #state{conn_name = ConnName}) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}, hibernate} ->
             {[{active, false}], State1, hibernate};
         {error, Error} ->
-            stop_with_framing_error(State0, Error, ConnStr);
+            stop_with_framing_error(State0, Error, ConnName);
         Other ->
             Other
     end.
 
 handle_data1(<<>>, State0 = #state{received_connect_frame = false,
                                    proc_state = PState,
-                                   conn_name = ConnStr}) ->
+                                   conn_name = ConnName}) ->
     rabbit_log_connection:info("Accepted web MQTT connection ~p (~s, client id: ~s)",
-                               [self(), ConnStr, rabbit_mqtt_processor:info(client_id, PState)]),
+                               [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     State = State0#state{received_connect_frame = true},
     {ok, ensure_stats_timer(control_throttle(State)), hibernate};
 handle_data1(<<>>, State) ->
     {ok, ensure_stats_timer(control_throttle(State)), hibernate};
 handle_data1(Data, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
-                                       conn_name   = ConnStr }) ->
+                                       conn_name   = ConnName }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
             {ok, ensure_stats_timer(control_throttle(
@@ -259,10 +260,10 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                                   proc_state = ProcState1});
                 {error, Reason, _} ->
                     rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
-                        [Reason, ConnStr]),
+                        [Reason, ConnName]),
                     stop(State, ?CLOSE_PROTOCOL_ERROR, Reason);
                 {error, Error} ->
-                    stop_with_framing_error(State, Error, ConnStr);
+                    stop_with_framing_error(State, Error, ConnName);
                 {stop, disconnect, ProcState1} ->
                     stop({_SendWill = false, State#state{proc_state = ProcState1}})
             end;
@@ -270,10 +271,10 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
             Other
     end.
 
-stop_with_framing_error(State, Error0, ConnStr) ->
+stop_with_framing_error(State, Error0, ConnName) ->
     Error1 = rabbit_misc:format("~tp", [Error0]),
     rabbit_log_connection:error("MQTT detected framing error '~ts' for connection ~tp",
-                                [Error1, ConnStr]),
+                                [Error1, ConnName]),
     stop(State, ?CLOSE_INCONSISTENT_MSG_TYPE, Error1).
 
 stop(State) ->
