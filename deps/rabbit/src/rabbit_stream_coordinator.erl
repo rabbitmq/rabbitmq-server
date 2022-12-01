@@ -159,7 +159,7 @@ restart_stream(Q, Options)
     case rabbit_feature_flags:is_enabled(restart_streams) of
         true ->
             rabbit_log:info("restarting stream ~s in vhost ~s with options ~p",
-                            [amqqueue:get_name(Q), amqqueue:get_vhost(Q), Options]),
+                            [maps:get(name, amqqueue:get_type_state(Q)), amqqueue:get_vhost(Q), Options]),
             #{name := StreamId} = amqqueue:get_type_state(Q),
             case process_command({restart_stream, StreamId, Options}) of
                 {ok, {ok, LeaderPid}, _} ->
