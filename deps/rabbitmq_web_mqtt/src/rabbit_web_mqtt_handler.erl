@@ -68,22 +68,25 @@ init(Req, Opts) ->
     SockInfo = maps:get(proxy_header, Req, undefined),
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-    Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
-               undefined -> Req;
-               %%TODO check whether client offers mqtt:
-               %% MQTT spec:
-               %% "The Client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers"
-               SecWsProtocol ->
-                   cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
-           end,
-    {?MODULE, Req2, #state{
-                       parse_state        = rabbit_mqtt_frame:initial_state(),
-                       state              = running,
-                       conserve_resources = false,
-                       socket             = SockInfo,
-                       peername           = PeerAddr,
-                       received_connect_frame = false
-                      }, WsOpts}.
+    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+        undefined ->
+            no_supported_sub_protocol(undefined, Req);
+        Protocol ->
+            case lists:member(<<"mqtt">>, Protocol) of
+                false ->
+                    no_supported_sub_protocol(Protocol, Req);
+                true ->
+                    {?MODULE, cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
+                    #state{
+                        parse_state        = rabbit_mqtt_frame:initial_state(),
+                        state              = running,
+                        conserve_resources = false,
+                        socket             = SockInfo,
+                        peername           = PeerAddr,
+                        received_connect_frame = false
+                        }, WsOpts}
+            end
+    end.
 
 -spec websocket_init(State) ->
     {cowboy_websocket:commands(), State} |
@@ -210,6 +213,8 @@ websocket_info(Msg, State) ->
     {[], State, hibernate}.
 
 -spec terminate(any(), cowboy_req:req(), any()) -> ok.
+terminate(_Reason, _Req, #state{state = undefined}) ->
+    ok;
 terminate(Reason, Request, #state{} = State) ->
     terminate(Reason, Request, {true, State});
 terminate(_Reason, _Request,
@@ -223,6 +228,10 @@ terminate(_Reason, _Request,
     rabbit_mqtt_processor:terminate(SendWill, ConnName, PState).
 
 %% Internal.
+
+no_supported_sub_protocol(Protocol, Req) ->
+    rabbit_log_connection:error("Web MQTT: mqtt not found in client supported protocol, protocol: ~tp", [Protocol]),
+    {ok, cowboy_req:reply(400, Req), #state{}}.
 
 handle_data(Data, State0 = #state{conn_name = ConnName}) ->
     case handle_data1(Data, State0) of

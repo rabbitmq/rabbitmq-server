@@ -30,13 +30,16 @@ groups() ->
         , disconnect
         , keepalive
         , maintenance
+        , client_no_supported_protocol
+        , client_not_support_mqtt
         ]}
     ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+        {protocol, "ws"}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -177,6 +180,21 @@ maintenance(Config) ->
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
     eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
     ok = rabbit_ct_broker_helpers:revive_node(Config, 0).
+
+client_no_supported_protocol(Config) ->
+    client_protocol_test(Config, []).
+
+client_not_support_mqtt(Config) ->
+    client_protocol_test(Config, ["not-mqtt-protocol"]).
+
+client_protocol_test(Config, Protocol) ->
+    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+    WS = rfc6455_client:new("ws://localhost:" ++ PortStr ++ "/ws", self(), undefined, Protocol),
+    {_, [{http_response, Res}]} = rfc6455_client:open(WS),
+    {'HTTP/1.1', 400, <<"Bad Request">>, _} = cow_http:parse_status_line(rabbit_data_coercion:to_binary(Res)),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_frame()),
+    {close, _P} = rfc6455_client:recv(WS),
+    ok.
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->

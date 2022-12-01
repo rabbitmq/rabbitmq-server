@@ -90,6 +90,7 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "@emqtt//:erlang_app",
         "@gun//:erlang_app",
+        "@cowlib//:erlang_app",
     ],
 )
 
