@@ -32,7 +32,7 @@ is_in_the_past({_Y, _M, _D} = Date) ->
 
     DateInDays < TodayInDays.
 
--spec parse_duration(string()) -> datetime_plist().
+-spec parse_duration(string()) -> {ok, datetime_plist()} | error.
 parse_duration(Bin)
     when is_binary(Bin) -> %TODO extended format
     parse_duration(binary_to_list(Bin));

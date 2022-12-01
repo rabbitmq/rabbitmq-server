@@ -47,9 +47,11 @@ encode(Term, Opts) ->
     %% Fixup for JSON encoding
     %% * Transforms any Funs into strings
     %% See rabbit_mgmt_format:format_nulls/1
-    F = fun(V) when is_function(V) ->
+    F = fun
+            (V) when is_function(V) ->
                 rabbit_data_coercion:to_binary(V);
-            (V) -> V
+            (V) ->
+                V
         end,
     thoas:encode(fixup_terms(Term, F), Opts).
 
