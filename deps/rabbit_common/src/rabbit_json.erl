@@ -38,15 +38,36 @@ try_decode(JSON, Opts) ->
         {error, Reason}
     end.
 
+<<<<<<< HEAD
 -spec encode(jsx:json_term()) -> jsx:json_text().
+=======
+-spec encode(thoas:input_term()) -> iodata().
+>>>>>>> b7bcedfc82 (Fix dialyzer warnings in rabbit_common)
 encode(Term) ->
     encode(Term, []).
 
+<<<<<<< HEAD
 -spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
 encode(Term, Opts) ->
     jsx:encode(fixup_terms(Term), Opts).
 
 -spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
+=======
+-spec encode(thoas:input_term(), thoas:encode_options()) -> iodata().
+encode(Term, Opts) ->
+    %% Fixup for JSON encoding
+    %% * Transforms any Funs into strings
+    %% See rabbit_mgmt_format:format_nulls/1
+    F = fun
+            (V) when is_function(V) ->
+                rabbit_data_coercion:to_binary(V);
+            (V) ->
+                V
+        end,
+    thoas:encode(fixup_terms(Term, F), Opts).
+
+-spec try_encode(thoas:json_term()) -> {ok, iodata()} |
+>>>>>>> b7bcedfc82 (Fix dialyzer warnings in rabbit_common)
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).
