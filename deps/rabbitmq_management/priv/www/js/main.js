@@ -56,7 +56,16 @@ function dispatcher() {
         dispatcher_modules[i](this);
     }
 }
-
+function has_auth_pref() {
+    return get_pref('auth') != undefined && get_cookie_value("auth") != undefined;
+}
+function get_auth_pref() {
+    return get_pref('auth');
+}
+function clear_auth_pref() {
+    clear_local_pref('auth');
+    clear_cookie_value('auth');
+}
 function set_auth_pref(userinfo) {
     // clear a local storage value used by earlier versions
     clear_local_pref('auth');
@@ -71,7 +80,15 @@ function set_auth_pref(userinfo) {
         // 8 hours from now
         date.setHours(date.getHours() + 8);
     }
-    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
+    store_pref('auth', encodeURIComponent(b64));
+    store_cookie_value_with_expiration('auth', "", date); // session marker
+
+}
+
+function initiateLogoutIfSessionHasExpired(event) {
+  if (get_cookie_value("auth") == undefined && has_auth_pref()) {
+      initiate_logout();
+  }
 }
 
 function getParameterByName(name) {
@@ -107,12 +124,11 @@ function start_app_login () {
     } else {
       app.run();
     }
-  } else {
-    app.run();
-    if (get_cookie_value('auth') != null) {
-      check_login();
+  } else
+    if (!has_auth_pref() || !check_login()) {
+      app.run();
     }
-  }
+
 }
 
 
@@ -133,7 +149,7 @@ function check_login () {
   hide_popup_warn()
   replace_content('outer', format('layout', {}))
   var user_login_session_timeout = parseInt(user.login_session_timeout)
-  if (has_auth_cookie_value() && !isNaN(user_login_session_timeout) &&
+  if (has_auth_pref() && !isNaN(user_login_session_timeout) &&
         user_login_session_timeout !== get_login_session_timeout()) {
     update_login_session_timeout(user_login_session_timeout)
   }
@@ -146,7 +162,7 @@ function check_login () {
 }
 
 function print_logging_session_info (user_login_session_timeout) {
-  let var_has_auth_cookie_value = has_auth_cookie_value()
+  let var_has_auth_cookie_value = has_auth_pref()
   let login_session_timeout = get_login_session_timeout()
   console.log('user_login_session_timeout: ' + user_login_session_timeout)
   console.log('has_auth_cookie_value: ' + var_has_auth_cookie_value)
@@ -159,16 +175,16 @@ function get_login_session_timeout() {
 }
 
 function update_login_session_timeout(login_session_timeout) {
-    var auth_info = get_cookie_value('auth');
+    //var auth_info = get_cookie_value('auth');
     var date = new Date();
     date.setMinutes(date.getMinutes() + login_session_timeout);
     store_cookie_value('login_session_timeout', login_session_timeout);
-    store_cookie_value_with_expiration('auth', auth_info, date);
+    store_cookie_value_with_expiration('auth', "", date);
 }
 
 function update_login_session_with_expiry(expiryDate) {
-    var auth_info = get_cookie_value('auth');
-    store_cookie_value_with_expiration('auth', auth_info, expiryDate);
+    //var auth_info = get_cookie_value('auth');
+    store_cookie_value_with_expiration('auth', "", expiryDate);
 }
 
 function start_app() {
@@ -631,7 +647,7 @@ function submit_import(form) {
             if (oauth.enabled) {
                 var form_action = "/definitions" + vhost_part + '?token=' + oauth.access_token;
             } else {
-                var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
+                var form_action = "/definitions" + vhost_part + '?auth=' + get_auth_pref();
             };
             var fd = new FormData();
             fd.append('file', file);
@@ -1236,16 +1252,12 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function has_auth_cookie_value() {
-    return get_cookie_value('auth') != null;
-}
-
 function auth_header() {
-    if(has_auth_cookie_value() && oauth.enabled) {
+    if (has_auth_pref() && oauth.enabled) {
         return "Bearer " + decodeURIComponent(oauth.access_token);
     } else {
-        if(has_auth_cookie_value()) {
-            return "Basic " + decodeURIComponent(get_cookie_value('auth'));
+        if (has_auth_pref()) {
+            return "Basic " + decodeURIComponent(get_auth_pref());
         } else {
             return null;
         }
@@ -1253,7 +1265,7 @@ function auth_header() {
 }
 
 function with_req(method, path, body, fun) {
-    if(!has_auth_cookie_value()) {
+    if(!has_auth_pref()) {
         // navigate to the login form
         location.reload();
         return;
