@@ -2119,7 +2119,7 @@ is_rabbitmq_loaded_on_remote_node(
 
 maybe_stop_dist_for_remote_query(
   #{dist_started_for_remote_query := true} = Context) ->
-    net_kernel:stop(),
+    _ = net_kernel:stop(),
     maps:remove(dist_started_for_remote_query, Context);
 maybe_stop_dist_for_remote_query(Context) ->
     Context.
