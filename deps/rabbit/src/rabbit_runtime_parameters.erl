@@ -193,7 +193,7 @@ clear(VHost, Component, Name, ActingUser) ->
 clear_global(Key, ActingUser) ->
     KeyAsAtom = rabbit_data_coercion:to_atom(Key),
     Notify = fun() ->
-                    event_notify(parameter_set, none, global,
+                    event_notify(parameter_cleared, none, global,
                                  [{name,  KeyAsAtom},
                                   {user_who_performed_action, ActingUser}]),
                     ok
