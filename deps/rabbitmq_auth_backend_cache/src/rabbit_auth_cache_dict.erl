@@ -59,7 +59,7 @@ do_delete(Key) ->
     erase({items, Key}),
     case erlang:get({timers, Key}) of
         undefined -> ok;
-        Tref      -> timer:cancel(Tref),
+        Tref      -> _ = timer:cancel(Tref),
                      erase({timers, Key})
 
     end.

@@ -52,8 +52,8 @@ init() ->
     ok.
 
 stop(State) ->
-    rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
-    rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
+    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
+    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
     State.
 
 -spec list_connections() -> [pid()].
@@ -126,7 +126,7 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
 
 
 start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
-  rabbit_networking:ensure_ssl(),
+  _ = rabbit_networking:ensure_ssl(),
   NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
       undefined     -> get_env(num_acceptors, 10);
       {ok, NumSsl}  -> NumSsl

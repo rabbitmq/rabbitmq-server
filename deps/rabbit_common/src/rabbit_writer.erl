@@ -361,7 +361,7 @@ internal_send_command_async(MethodRecord, Content,
                                             writer_gc_threshold = GCThreshold}) ->
     Frames = assemble_frames(Channel, MethodRecord, Content, FrameMax,
                              Protocol),
-    maybe_gc_large_msg(Content, GCThreshold),
+    _ = maybe_gc_large_msg(Content, GCThreshold),
     maybe_flush(State#wstate{pending = [Frames | Pending]}).
 
 %% When the amount of protocol method data buffered exceeds

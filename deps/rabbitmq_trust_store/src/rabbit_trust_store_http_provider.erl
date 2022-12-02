@@ -68,7 +68,7 @@ join_url(BaseUrl, CertPath)  ->
 
 init(Config) ->
     inets:start(httpc, [{profile, ?PROFILE}]),
-    application:ensure_all_started(ssl),
+    _ = application:ensure_all_started(ssl),
     Options = proplists:get_value(proxy_options, Config, []),
     httpc:set_options(Options, ?PROFILE).
 

@@ -407,7 +407,7 @@ auth_attempt_failed(RemoteAddress, Username, Protocol) ->
 update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It should default to false as per ip/user metrics could keep growing indefinitely
     %% It's up to the operator to enable them, and reset it required
-    case application:get_env(rabbit, track_auth_attempt_source) of
+    _ = case application:get_env(rabbit, track_auth_attempt_source) of
         {ok, true} ->
             case {RemoteAddress, Username} of
                 {<<>>, <<>>} ->
