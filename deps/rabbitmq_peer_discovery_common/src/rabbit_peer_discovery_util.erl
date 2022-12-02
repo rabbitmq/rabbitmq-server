@@ -282,7 +282,7 @@ node_prefix() ->
   case getenv("RABBITMQ_NODENAME") of
       false -> ?DEFAULT_NODE_PREFIX;
       Value ->
-          rabbit_data_coercion:to_list(getenv("RABBITMQ_NODENAME")),
+          _ = rabbit_data_coercion:to_list(getenv("RABBITMQ_NODENAME")),
           lists:nth(1, string:tokens(Value, "@"))
   end.
 

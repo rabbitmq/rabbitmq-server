@@ -253,12 +253,12 @@ close_channels_and_connection(Config, Node) ->
     end.
 
 publish(Ch, QName, Count) ->
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    [amqp_channel:call(Ch,
-                       #'basic.publish'{routing_key = QName},
-                       #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
-                                 payload = list_to_binary(integer_to_list(I))})
-     || I <- lists:seq(1, Count)],
+    _ = amqp_channel:call(Ch, #'confirm.select'{}),
+    _ = [amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = list_to_binary(integer_to_list(I))})
+         || I <- lists:seq(1, Count)],
     amqp_channel:wait_for_confirms(Ch).
 
 consume(Ch, QName, Count) ->
@@ -296,7 +296,7 @@ accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) ->
 
 
 fetch(Ch, QName, Count) ->
-    [{#'basic.get_ok'{}, _} =
-         amqp_channel:call(Ch, #'basic.get'{queue = QName}) ||
-        _ <- lists:seq(1, Count)],
+    _ = [{#'basic.get_ok'{}, _} =
+             amqp_channel:call(Ch, #'basic.get'{queue = QName}) ||
+            _ <- lists:seq(1, Count)],
     ok.

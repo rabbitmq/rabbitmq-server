@@ -39,8 +39,9 @@ put(Key, Value, TTL) ->
     ok.
 
 delete(Key) ->
-    [ets:delete(Table, Key)
-     || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)].
+    _ = [ets:delete(Table, Key)
+         || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)],
+    ok.
 
 gc() ->
     case whereis(?MODULE) of
@@ -79,7 +80,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State = #state{gc_timer = Timer}) ->
-    timer:cancel(Timer),
+    _ = timer:cancel(Timer),
     State.
 
 partition_expired_segments(Segments) ->

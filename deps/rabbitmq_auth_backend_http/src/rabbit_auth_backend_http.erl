@@ -149,10 +149,7 @@ do_http_req(Path0, Query) ->
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             rabbit_log:debug("auth_backend_http: response code is ~p, body: ~p", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
-                true  -> case parse_resp(Body) of
-                             {error, _} = E -> E;
-                             Resp           -> Resp
-                         end;
+                true  -> parse_resp(Body);
                 false -> {error, {Code, Body}}
             end;
         {error, _} = E ->
