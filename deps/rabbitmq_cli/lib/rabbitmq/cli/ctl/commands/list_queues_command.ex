@@ -15,7 +15,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   @default_timeout 60_000
   @info_keys ~w(name durable auto_delete
-            arguments policy pid owner_pid exclusive exclusive_consumer_pid
+            arguments policy operator_policy effective_policy_definition
+            pid owner_pid exclusive exclusive_consumer_pid
             exclusive_consumer_tag messages_ready messages_unacknowledged messages
             messages_ready_ram messages_unacknowledged_ram messages_ram
             messages_persistent message_bytes message_bytes_ready
