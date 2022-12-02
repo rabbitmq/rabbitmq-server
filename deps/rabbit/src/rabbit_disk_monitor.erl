@@ -118,9 +118,6 @@ start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([Limit]) ->
-    process_flag(trap_exit, true),
-    process_flag(priority, low),
-
     Dir = dir(),
     {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
     {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
@@ -151,7 +148,7 @@ init([Limit]) ->
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
     rabbit_log:info("Cannot set disk free limit: "
-		    "disabled disk free space monitoring", []),
+                    "disabled disk free space monitoring", []),
     {reply, ok, State};
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
@@ -187,9 +184,6 @@ handle_info(try_enable, #state{retries = Retries} = State) ->
 
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
-
-handle_info({'EXIT', Port, Reason}, #state{port=Port}=State) ->
-    {stop, {port_died, Reason}, State#state{port=not_used}};
 
 handle_info(Info, State) ->
     rabbit_log:debug("~tp unhandled msg: ~tp", [?MODULE, Info]),
@@ -402,7 +396,7 @@ interpret_limit(Absolute) ->
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Free disk space is ~s. Free bytes: ~b. Limit: ~b",
+      "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->
@@ -421,24 +415,30 @@ interval(#state{limit        = Limit,
 enable(#state{retries = 0} = State) ->
     rabbit_log:error("Free disk space monitor failed to start!"),
     State;
-enable(#state{dir = Dir,
-              interval = Interval,
-              limit = Limit,
-              retries = Retries,
-              os = OS,
-              port = Port} = State) ->
-    case {catch get_disk_free(Dir, OS, Port),
-          vm_memory_monitor:get_total_memory()} of
-        {N1, N2} when is_integer(N1), is_integer(N2) ->
-            rabbit_log:info("Enabling free disk space monitoring", []),
-            start_timer(set_disk_limits(State, Limit));
-        Err ->
-            rabbit_log:error("Free disk space monitor encountered an error "
-                             "(e.g. failed to parse output from OS tools): ~tp, retries left: ~b",
-                            [Err, Retries]),
-            erlang:send_after(Interval, self(), try_enable),
-            State#state{enabled = false}
-    end.
+enable(#state{dir = Dir, os = OS, port = Port} = State) ->
+    enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
+
+enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
+    enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
+enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = State) ->
+    rabbit_log:warning("Free disk space monitor encountered an error "
+                       "(e.g. failed to parse output from OS tools). "
+                       "Retries left: ~b Error:~n~tp",
+                       [Retries, Error]),
+    erlang:send_after(Interval, self(), try_enable),
+    State#state{enabled = false}.
+
+enable_handle_total_memory(TotalMemory, DiskFree, #state{limit = Limit} = State) when is_integer(TotalMemory) ->
+    rabbit_log:info("Enabling free disk space monitoring "
+                    "(disk free space: ~b, total memory: ~b)", [DiskFree, TotalMemory]),
+    start_timer(set_disk_limits(State, Limit));
+enable_handle_total_memory(Error, _DiskFree, #state{interval = Interval, retries = Retries} = State) ->
+    rabbit_log:warning("Free disk space monitor encountered an error "
+                       "retrieving total memory. "
+                       "Retries left: ~b Error:~n~tp",
+                       [Retries, Error]),
+    erlang:send_after(Interval, self(), try_enable),
+    State#state{enabled = false}.
 
 run_os_cmd(Cmd) ->
     Pid = self(),
