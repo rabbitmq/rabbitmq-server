@@ -73,7 +73,7 @@ terminate(_Reason, State = #state{}) ->
 do_delete(Key, Table, Timers) ->
     true = ets:delete(Table, Key),
     case ets:lookup(Timers, Key) of
-        [{Key, Tref}] -> timer:cancel(Tref),
+        [{Key, Tref}] -> _ = timer:cancel(Tref),
                          true = ets:delete(Timers, Key);
         []            -> ok
     end.

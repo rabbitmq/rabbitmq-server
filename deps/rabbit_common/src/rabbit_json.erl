@@ -29,7 +29,7 @@ try_decode(JSON) ->
     try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
+-spec try_decode(jsx:json_text(), jsx_to_term:config()) ->
 			{ok, jsx:json_term()} | {error, Reason :: term()}.
 try_decode(JSON, Opts) ->
     try
@@ -46,7 +46,7 @@ encode(Term) ->
 encode(Term, Opts) ->
     jsx:encode(fixup_terms(Term), Opts).
 
--spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
+-spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} |
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).

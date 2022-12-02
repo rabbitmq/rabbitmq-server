@@ -10,7 +10,7 @@
 -export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
 -export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 
--spec to_binary(Val :: binary() | list() | atom() | integer()) -> binary().
+-spec to_binary(Val :: binary() | list() | atom() | integer() | function()) -> binary().
 to_binary(Val) when is_list(Val)     -> list_to_binary(Val);
 to_binary(Val) when is_atom(Val)     -> atom_to_binary(Val, utf8);
 to_binary(Val) when is_integer(Val)  -> integer_to_binary(Val);

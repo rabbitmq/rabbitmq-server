@@ -45,7 +45,8 @@ groups() ->
             frame_encoding_does_not_fail_with_empty_binary_payload,
             amqp_table_conversion,
             name_type,
-            get_erl_path
+            get_erl_path,
+            hexify
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -464,6 +465,12 @@ get_erl_path(_) ->
         _ ->
             ?assertNotMatch(nomatch, string:find(Exe, "erl"))
     end,
+    ok.
+
+hexify(_) ->
+    ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify(<<"hello">>)),
+    ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify("hello")),
+    ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify(hello)),
     ok.
 
 date_time_parse_duration(_) ->
