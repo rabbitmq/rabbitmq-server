@@ -31,7 +31,8 @@
 -export([new_stream/2,
          restart_stream/1,
          restart_stream/2,
-         delete_stream/2]).
+         delete_stream/2,
+         transfer_leadership/1]).
 
 -export([policy_changed/1]).
 
@@ -2064,3 +2065,28 @@ machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
     {State, []}.
+
+-spec transfer_leadership([node()]) -> {ok, in_progress | undefined | node()} | {error, any()}.
+transfer_leadership([Destination | _] = _TransferCandidates) ->
+    case ra_leaderboard:lookup_leader(?MODULE) of
+        {Name, Node} = Id when Node == node() ->
+            case ra:transfer_leadership(Id, {Name, Destination}) of
+                ok ->
+                    case ra:members(Id) of
+                        {_, _, {_, NewNode}} ->
+                            {ok, NewNode};
+                        {timeout, _} ->
+                            {error, not_migrated}
+                    end;
+                already_leader ->
+                    {ok, Destination};
+                {error, _} = Error ->
+                    Error;
+                {timeout, _} ->
+                    {error, timeout}
+            end;
+        {_, Node} ->
+            {ok, Node};
+        undefined ->
+            {ok, undefined}
+    end.
