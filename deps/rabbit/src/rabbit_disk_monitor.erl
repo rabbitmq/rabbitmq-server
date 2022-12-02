@@ -118,9 +118,6 @@ start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([Limit]) ->
-    process_flag(trap_exit, true),
-    process_flag(priority, low),
-
     Dir = dir(),
     {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
     {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
@@ -151,7 +148,7 @@ init([Limit]) ->
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
     rabbit_log:info("Cannot set disk free limit: "
-		    "disabled disk free space monitoring", []),
+                    "disabled disk free space monitoring", []),
     {reply, ok, State};
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
@@ -188,11 +185,8 @@ handle_info(try_enable, #state{retries = Retries} = State) ->
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
-handle_info({'EXIT', Port, Reason}, #state{port=Port}=State) ->
-    {stop, {port_died, Reason}, State#state{port=not_used}};
-
 handle_info(Info, State) ->
-    rabbit_log:debug("~p unhandled msg: ~p", [?MODULE, Info]),
+    rabbit_log:debug("~tp unhandled msg: ~tp", [?MODULE, Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -207,22 +201,25 @@ code_change(_OldVsn, State, _Extra) ->
 
 start_portprogram() ->
     Args = ["-s", "rabbit_disk_monitor"],
-    Opts = [stderr_to_stdout, stream, {args, Args}],
+    Opts = [stream, stderr_to_stdout, {args, Args}],
     erlang:open_port({spawn_executable, "/bin/sh"}, Opts).
 
 run_port_cmd(Cmd0, Port) ->
     %% Insert a carriage return, ^M or ASCII 13, after the command,
     %% to indicate end of output
-    Cmd = io_lib:format("(~s\n) </dev/null; echo \"\^M\"\n", [Cmd0]),
-    Port ! {self(), {command, [Cmd, 10]}}, % The 10 at the end is a newline
+    Cmd1 = io_lib:format("~ts < /dev/null; echo \"\^M\"~n", [Cmd0]),
+    Cmd2 = rabbit_data_coercion:to_utf8_binary(Cmd1),
+    Port ! {self(), {command, [Cmd2, 10]}}, % The 10 at the end is a newline
     get_reply(Port, []).
 
 get_reply(Port, O) ->
     receive
         {Port, {data, N}} ->
             case newline(N, O) of
-                {ok, Str} -> Str;
-                {more, Acc} -> get_reply(Port, Acc)
+                {ok, Str} ->
+                    Str;
+                {more, Acc} ->
+                    get_reply(Port, Acc)
             end;
         {'EXIT', Port, Reason} ->
             exit({port_died, Reason})
@@ -266,7 +263,7 @@ set_max_check_interval(MaxInterval, State) ->
 set_disk_limits(State, Limit0) ->
     Limit = interpret_limit(Limit0),
     State1 = State#state { limit = Limit },
-    rabbit_log:info("Disk free limit set to ~pMB",
+    rabbit_log:info("Disk free limit set to ~bMB",
                     [trunc(Limit / 1000000)]),
     ets:insert(?ETS_NAME, {disk_free_limit, Limit}),
     internal_update(State1).
@@ -294,10 +291,10 @@ internal_update(State = #state{limit   = Limit,
 get_disk_free(Dir, {unix, Sun}, Port)
   when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
     Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -k " ++ Dir, Port));
+    parse_free_unix(run_port_cmd(Df ++ " -k '" ++ Dir ++ "'", Port));
 get_disk_free(Dir, {unix, _}, Port) ->
     Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -kP " ++ Dir, Port));
+    parse_free_unix(run_port_cmd(Df ++ " -kP '" ++ Dir ++ "'", Port));
 get_disk_free(Dir, {win32, _}, not_used) ->
     % Dir:
     % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
@@ -305,12 +302,12 @@ get_disk_free(Dir, {win32, _}, not_used) ->
         error ->
             rabbit_log:warning("Expected the mnesia directory absolute "
                                "path to start with a drive letter like "
-                               "'C:'. The path is: '~p'", [Dir]),
+                               "'C:'. The path is: '~tp'", [Dir]),
             {ok, Free} = win32_get_disk_free_dir(Dir),
             Free;
         DriveLetter ->
-            % Note: yes, "$ " is the $char sequence for an ASCII space
-            F = fun([D, $:, $\\, $  | _]) when D =:= DriveLetter ->
+            % Note: yes, "$\s" is the $char sequence for an ASCII space
+            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
                         true;
                    (_) -> false
                 end,
@@ -320,7 +317,7 @@ get_disk_free(Dir, {win32, _}, not_used) ->
 
             % Note: DriveInfoStr is in this format
             % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-            [DriveLetter, $:, $\\, $  | DriveInfo] = DriveInfoStr,
+            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
 
             % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
             % lib/os_mon/c_src/win32sysinfo.c:
@@ -392,14 +389,14 @@ interpret_limit(Absolute) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
         {ok, ParsedAbsolute} -> ParsedAbsolute;
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse disk_free_limit value ~p",
+            rabbit_log:error("Unable to parse disk_free_limit value ~tp",
                              [Absolute]),
             ?DEFAULT_DISK_FREE_LIMIT
     end.
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Free disk space is ~s. Free bytes: ~p. Limit: ~p",
+      "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->
@@ -418,24 +415,30 @@ interval(#state{limit        = Limit,
 enable(#state{retries = 0} = State) ->
     rabbit_log:error("Free disk space monitor failed to start!"),
     State;
-enable(#state{dir = Dir,
-              interval = Interval,
-              limit = Limit,
-              retries = Retries,
-              os = OS,
-              port = Port} = State) ->
-    case {catch get_disk_free(Dir, OS, Port),
-          vm_memory_monitor:get_total_memory()} of
-        {N1, N2} when is_integer(N1), is_integer(N2) ->
-            rabbit_log:info("Enabling free disk space monitoring", []),
-            start_timer(set_disk_limits(State, Limit));
-        Err ->
-            rabbit_log:error("Free disk space monitor encountered an error "
-                             "(e.g. failed to parse output from OS tools): ~p, retries left: ~b",
-                            [Err, Retries]),
-            erlang:send_after(Interval, self(), try_enable),
-            State#state{enabled = false}
-    end.
+enable(#state{dir = Dir, os = OS, port = Port} = State) ->
+    enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
+
+enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
+    enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
+enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = State) ->
+    rabbit_log:warning("Free disk space monitor encountered an error "
+                       "(e.g. failed to parse output from OS tools). "
+                       "Retries left: ~b Error:~n~tp",
+                       [Retries, Error]),
+    erlang:send_after(Interval, self(), try_enable),
+    State#state{enabled = false}.
+
+enable_handle_total_memory(TotalMemory, DiskFree, #state{limit = Limit} = State) when is_integer(TotalMemory) ->
+    rabbit_log:info("Enabling free disk space monitoring "
+                    "(disk free space: ~b, total memory: ~b)", [DiskFree, TotalMemory]),
+    start_timer(set_disk_limits(State, Limit));
+enable_handle_total_memory(Error, _DiskFree, #state{interval = Interval, retries = Retries} = State) ->
+    rabbit_log:warning("Free disk space monitor encountered an error "
+                       "retrieving total memory. "
+                       "Retries left: ~b Error:~n~tp",
+                       [Retries, Error]),
+    erlang:send_after(Interval, self(), try_enable),
+    State#state{enabled = false}.
 
 run_os_cmd(Cmd) ->
     Pid = self(),
@@ -450,6 +453,6 @@ run_os_cmd(Cmd) ->
             CmdResult
     after 5000 ->
         exit(CmdPid, kill),
-        rabbit_log:error("Command timed out: '~s'", [Cmd]),
+        rabbit_log:error("Command timed out: '~ts'", [Cmd]),
         {error, timeout}
     end.
