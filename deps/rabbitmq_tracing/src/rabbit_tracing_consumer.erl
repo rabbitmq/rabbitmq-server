@@ -115,7 +115,7 @@ handle_info(_I, State) ->
 
 terminate(shutdown, State = #state{conn = Conn, ch = Ch,
                                    file = F, filename = Filename}) ->
-    flush(State),
+    _ = flush(State),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch prim_file:close(F),
@@ -196,7 +196,7 @@ log(text, Record, State) ->
     print_log(io_lib:format(Fmt, Args), State);
 
 log(json, Record, State) ->
-    print_log([rabbit_json:encode(
+    _ = print_log([rabbit_json:encode(
                 #{timestamp     => Record#log_record.timestamp,
                   type          => Record#log_record.type,
                   node          => Record#log_record.node,
@@ -223,7 +223,7 @@ maybe_flush(State) ->
     State.
 
 flush(State = #state{file = F, buf = Buf}) ->
-    prim_file:write(F, lists:reverse(Buf)),
+    _ = prim_file:write(F, lists:reverse(Buf)),
     State#state{buf = [], buf_cnt = 0}.
 
 truncate(Payload, #state{max_payload = Max}) ->

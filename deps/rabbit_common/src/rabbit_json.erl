@@ -38,11 +38,11 @@ try_decode(JSON, Opts) ->
         {error, Reason}
     end.
 
--spec encode(thoas:json_term()) -> iodata().
+-spec encode(thoas:input_term()) -> iodata().
 encode(Term) ->
     encode(Term, ?DEFAULT_ENCODE_OPTIONS).
 
--spec encode(thoas:json_term(), thoas:encode_options()) -> iodata().
+-spec encode(thoas:input_term(), thoas:encode_options()) -> iodata().
 encode(Term, Opts) ->
     %% Fixup for JSON encoding
     %% * Transforms any Funs into strings
