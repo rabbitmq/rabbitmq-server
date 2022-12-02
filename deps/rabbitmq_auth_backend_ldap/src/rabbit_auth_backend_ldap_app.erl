@@ -36,7 +36,7 @@ start(_Type, _StartArgs) ->
     {ok, TLS} = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
     case SSL orelse TLS of
         true  ->
-            rabbit_networking:ensure_ssl(),
+            _ = rabbit_networking:ensure_ssl(),
             ok;
         false -> ok
     end,
