@@ -100,7 +100,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     http_archive(
-        name = "inet_tcp_proxy",
+        name = "inet_tcp_proxy_dist",
         build_file = rabbitmq_workspace + "//:BUILD.inet_tcp_proxy",
         strip_prefix = "inet_tcp_proxy-master",
         urls = ["https://github.com/rabbitmq/inet_tcp_proxy/archive/master.zip"],
