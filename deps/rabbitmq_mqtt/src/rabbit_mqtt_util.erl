@@ -19,12 +19,17 @@
          path_for/2,
          path_for/3,
          vhost_name_to_table_name/1,
-         get_topic_translation_funs/0,
          register_clientid/2,
-         remove_duplicate_clientid_connections/2
+         remove_duplicate_clientid_connections/2,
+         init_sparkplug/0,
+         mqtt_to_amqp/1,
+         amqp_to_mqtt/1
         ]).
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
+
+-define(SPARKPLUG_MP_MQTT_TO_AMQP, sparkplug_mp_mqtt_to_amqp).
+-define(SPARKPLUG_MP_AMQP_TO_MQTT, sparkplug_mp_amqp_to_mqtt).
 
 -spec queue_name_bin(binary(), qos()) ->
     binary().
@@ -56,14 +61,53 @@ qos_from_queue_name(#resource{name = Name}, ClientId) ->
 queue_name_prefix(ClientId) ->
     <<"mqtt-subscription-", ClientId/binary, "qos">>.
 
-cached(CacheName, Fun, Arg) ->
-    Cache =
-        case get(CacheName) of
-            undefined ->
-                [];
-            Other ->
-                Other
+init_sparkplug() ->
+    case env(sparkplug) of
+        true ->
+            {ok, M2A_SpRe} = re:compile("^sp[AB]v\\d+\\.\\d+/"),
+            {ok, A2M_SpRe} = re:compile("^sp[AB]v\\d+___\\d+\\."),
+            ok = persistent_term:put(?SPARKPLUG_MP_MQTT_TO_AMQP, M2A_SpRe),
+            ok = persistent_term:put(?SPARKPLUG_MP_AMQP_TO_MQTT, A2M_SpRe);
+        _ ->
+            ok
+    end.
+
+mqtt_to_amqp(Topic) ->
+    T = case persistent_term:get(?SPARKPLUG_MP_MQTT_TO_AMQP, no_sparkplug) of
+            no_sparkplug ->
+                Topic;
+            M2A_SpRe ->
+                case re:run(Topic, M2A_SpRe) of
+                    nomatch ->
+                        Topic;
+                    {match, _} ->
+                        string:replace(Topic, ".", "___", leading)
+                end
         end,
+    cached(mta_cache, fun to_amqp/1, T).
+
+amqp_to_mqtt(Topic) ->
+    T = cached(atm_cache, fun to_mqtt/1, Topic),
+    case persistent_term:get(?SPARKPLUG_MP_AMQP_TO_MQTT, no_sparkplug) of
+        no_sparkplug ->
+            T;
+        A2M_SpRe ->
+            case re:run(Topic, A2M_SpRe) of
+                nomatch ->
+                    T;
+                {match, _} ->
+                    T1 = string:replace(T, "___", ".", leading),
+                    erlang:iolist_to_binary(T1)
+            end
+    end.
+
+cached(CacheName, Fun, Arg) ->
+    Cache = case get(CacheName) of
+                undefined ->
+                    [];
+                Other ->
+                    Other
+            end,
     case lists:keyfind(Arg, 1, Cache) of
         {_, V} ->
             V;
@@ -74,6 +118,11 @@ cached(CacheName, Fun, Arg) ->
             V
     end.
 
+%% amqp mqtt descr
+%% *    +    match one topic level
+%% #    #    match multiple topic levels
+%% .    /    topic level separator
+
 to_amqp(T0) ->
     T1 = string:replace(T0, "/", ".", all),
     T2 = string:replace(T1, "+", "*", all),
@@ -83,53 +132,6 @@ to_mqtt(T0) ->
     T1 = string:replace(T0, "*", "+", all),
     T2 = string:replace(T1, ".", "/", all),
     erlang:iolist_to_binary(T2).
-
-%% amqp mqtt descr
-%% *    +    match one topic level
-%% #    #    match multiple topic levels
-%% .    /    topic level separator
-get_topic_translation_funs() ->
-    SparkplugB = env(sparkplug),
-    ToAmqpFun = fun(Topic) ->
-                        cached(mta_cache, fun to_amqp/1, Topic)
-                end,
-    ToMqttFun = fun(Topic) ->
-                        cached(atm_cache, fun to_mqtt/1, Topic)
-                end,
-    {M2AFun, A2MFun} = case SparkplugB of
-        true ->
-            {ok, M2A_SpRe} = re:compile("^sp[AB]v\\d+\\.\\d+/"),
-            {ok, A2M_SpRe} = re:compile("^sp[AB]v\\d+___\\d+\\."),
-            M2A = fun(T0) ->
-                case re:run(T0, M2A_SpRe) of
-                    nomatch ->
-                        ToAmqpFun(T0);
-                    {match, _} ->
-                        T1 = string:replace(T0, ".", "___", leading),
-                        ToAmqpFun(T1)
-                end
-            end,
-            A2M = fun(T0) ->
-                case re:run(T0, A2M_SpRe) of
-                    nomatch ->
-                        ToMqttFun(T0);
-                    {match, _} ->
-                        T1 = ToMqttFun(T0),
-                        T2 = string:replace(T1, "___", ".", leading),
-                        erlang:iolist_to_binary(T2)
-                end
-            end,
-            {M2A, A2M};
-        _ ->
-            M2A = fun(T) ->
-                ToAmqpFun(T)
-            end,
-            A2M = fun(T) ->
-                ToMqttFun(T)
-            end,
-            {M2A, A2M}
-    end,
-    {ok, {mqtt2amqp_fun, M2AFun}, {amqp2mqtt_fun, A2MFun}}.
 
 -spec gen_client_id() -> binary().
 gen_client_id() ->

@@ -18,6 +18,9 @@
 
 -export_type([state/0]).
 
+-import(rabbit_mqtt_util, [mqtt_to_amqp/1,
+                           amqp_to_mqtt/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
@@ -66,9 +69,6 @@
          auth_state,
          peer_addr,
          send_fun :: fun((Frame :: tuple(), state()) -> term()),
-         %%TODO remove funs from state? 11 words each of the funs.
-         mqtt2amqp_fun,
-         amqp2mqtt_fun,
          register_state,
          conn_name,
          info,
@@ -87,7 +87,6 @@ initial_state(Socket, ConnectionName) ->
                   PeerAddr).
 
 initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
-    {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} = rabbit_mqtt_util:get_topic_translation_funs(),
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
                true   -> flow;
                false  -> noflow
@@ -97,8 +96,6 @@ initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
            ssl_login_name = ssl_login_name(Socket),
            peer_addr      = PeerAddr,
            send_fun       = SendFun,
-           mqtt2amqp_fun  = M2A,
-           amqp2mqtt_fun  = A2M,
            delivery_flow  = Flow}.
 
 process_frame(#mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}},
@@ -158,7 +155,6 @@ process_request(?PUBLISH,
                                                   packet_id = PacketId },
                    payload = Payload},
                 State0 = #state{retainer_pid = RPid,
-                                amqp2mqtt_fun = Amqp2MqttFun,
                                 unacked_client_pubs = U,
                                 proto_ver = ProtoVer}) ->
     rabbit_global_counters:messages_received(ProtoVer, 1),
@@ -176,7 +172,7 @@ process_request(?PUBLISH,
                                   false ->
                                       ok;
                                   true ->
-                                      hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, Msg)
+                                      hand_off_to_retainer(RPid, Topic, Msg)
                               end,
                               Ok;
                           Error ->
@@ -578,9 +574,8 @@ queue_name(QoS, #state{client_id = ClientId,
     QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
 
-find_queue_name(TopicName, #state{exchange = Exchange,
-                                  mqtt2amqp_fun = Mqtt2AmqpFun} = State) ->
-    RoutingKey = Mqtt2AmqpFun(TopicName),
+find_queue_name(TopicName, #state{exchange = Exchange} = State) ->
+    RoutingKey = mqtt_to_amqp(TopicName),
     QNameQoS0 = queue_name(?QOS_0, State),
     case lookup_binding(Exchange, QNameQoS0, RoutingKey) of
         true ->
@@ -605,10 +600,9 @@ has_subs(State) ->
     topic_names(?QOS_0, State) =/= [] orelse
     topic_names(?QOS_1, State) =/= [].
 
-topic_names(QoS, #state{exchange = Exchange,
-                        amqp2mqtt_fun = Amqp2MqttFun} = State) ->
+topic_names(QoS, #state{exchange = Exchange} = State) ->
     Bindings = rabbit_binding:list_for_source_and_destination(Exchange, queue_name(QoS, State)),
-    lists:map(fun(B) -> Amqp2MqttFun(B#binding.key) end, Bindings).
+    lists:map(fun(B) -> amqp_to_mqtt(B#binding.key) end, Bindings).
 
 %% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
 %% to an existing Subscription’s Topic Filter then it MUST completely replace that
@@ -643,20 +637,19 @@ maybe_unbind(TopicName, TopicNames, QName, State0) ->
             end
     end.
 
-hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
-    Topic1 = Amqp2MqttFun(Topic0),
+hand_off_to_retainer(RetainerPid, Topic0, #mqtt_msg{payload = <<"">>}) ->
+    Topic1 = amqp_to_mqtt(Topic0),
     rabbit_mqtt_retainer:clear(RetainerPid, Topic1),
     ok;
-hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, Msg) ->
-    Topic1 = Amqp2MqttFun(Topic0),
+hand_off_to_retainer(RetainerPid, Topic0, Msg) ->
+    Topic1 = amqp_to_mqtt(Topic0),
     rabbit_mqtt_retainer:retain(RetainerPid, Topic1, Msg),
     ok.
 
 maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos},
-                            #state{amqp2mqtt_fun = Amqp2MqttFun,
-                                   packet_id = PacketId0,
+                            #state{packet_id = PacketId0,
                                    send_fun = SendFun} = State0) ->
-    Topic1 = Amqp2MqttFun(Topic0),
+    Topic1 = amqp_to_mqtt(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
         undefined ->
             State0;
@@ -1203,9 +1196,9 @@ binding_action(
   {QueueName, TopicName, BindingFun},
   #state{exchange = ExchangeName,
          auth_state = #auth_state{
-                         user = #user{username = Username}},
-         mqtt2amqp_fun = Mqtt2AmqpFun}) ->
-    RoutingKey = Mqtt2AmqpFun(TopicName),
+                         user = #user{username = Username}}
+        }) ->
+    RoutingKey = mqtt_to_amqp(TopicName),
     Binding = #binding{source = ExchangeName,
                        destination = QueueName,
                        key = RoutingKey},
@@ -1220,9 +1213,8 @@ publish_to_queues(
             packet_id = PacketId,
             payload    = Payload},
   #state{exchange       = ExchangeName,
-         mqtt2amqp_fun  = Mqtt2AmqpFun,
          delivery_flow  = Flow} = State) ->
-    RoutingKey = Mqtt2AmqpFun(Topic),
+    RoutingKey = mqtt_to_amqp(Topic),
     Confirm = Qos > ?QOS_0,
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
                {<<"x-mqtt-dup">>, bool, Dup}],
@@ -1364,8 +1356,8 @@ terminate(SendWill, ConnName, State) ->
 maybe_send_will(true, ConnStr,
                 #state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
                                                       topic = Topic},
-                       retainer_pid = RPid,
-                       amqp2mqtt_fun = Amqp2MqttFun} = State) ->
+                       retainer_pid = RPid
+                      } = State) ->
     rabbit_log_connection:debug("sending MQTT will message to topic ~s on connection ~s",
                                 [Topic, ConnStr]),
     case check_topic_access(Topic, write, State) of
@@ -1375,7 +1367,7 @@ maybe_send_will(true, ConnStr,
                 false ->
                     ok;
                 true ->
-                    hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, WillMsg)
+                    hand_off_to_retainer(RPid, Topic, WillMsg)
             end;
         {error, access_refused = Reason}  ->
             rabbit_log:error("failed to send will message: ~p", [Reason])
@@ -1618,8 +1610,7 @@ maybe_publish_to_client(
    #basic_message{
       routing_keys = [RoutingKey | _CcRoutes],
       content = #content{payload_fragments_rev = FragmentsRev}}},
-  QoS, State0 = #state{amqp2mqtt_fun = Amqp2MqttFun,
-                       send_fun = SendFun}) ->
+  QoS, State0 = #state{send_fun = SendFun}) ->
     {PacketId, State} = queue_packet_id_to_packet_id(QMsgId, QoS, State0),
     %%TODO support iolists when sending to client
     Payload = list_to_binary(lists:reverse(FragmentsRev)),
@@ -1637,7 +1628,7 @@ maybe_publish_to_client(
                   dup = Redelivered},
        variable = #mqtt_frame_publish{
                      packet_id = PacketId,
-                     topic_name = Amqp2MqttFun(RoutingKey)},
+                     topic_name = amqp_to_mqtt(RoutingKey)},
        payload = Payload},
     SendFun(Frame, State),
     message_delivered(QNameOrType, Redelivered, QoS, State),
@@ -1727,8 +1718,8 @@ check_topic_access(TopicName, Access,
                                                vhost = VHost,
                                                authz_ctx = AuthzCtx},
                       exchange = #resource{name = ExchangeBin},
-                      client_id = ClientId,
-                      mqtt2amqp_fun = Mqtt2AmqpFun}) ->
+                      client_id = ClientId
+                     }) ->
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
@@ -1741,7 +1732,7 @@ check_topic_access(TopicName, Access,
             Resource = #resource{virtual_host = VHost,
                                  kind = topic,
                                  name = ExchangeBin},
-            RoutingKey = Mqtt2AmqpFun(TopicName),
+            RoutingKey = mqtt_to_amqp(TopicName),
             Context = #{routing_key  => RoutingKey,
                         variable_map => AuthzCtx},
             try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
