@@ -333,8 +333,8 @@ maybe_configure_proxy() ->
              "Configured HTTP proxy: ~tp, HTTPS proxy: ~tp, exclusions: ~tp",
              [HttpProxy, HttpsProxy, ProxyExclusions],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-          maybe_set_proxy(proxy, HttpProxy, ProxyExclusions),
-          maybe_set_proxy(https_proxy, HttpsProxy, ProxyExclusions),
+          _ = maybe_set_proxy(proxy, HttpProxy, ProxyExclusions),
+          _ = maybe_set_proxy(https_proxy, HttpsProxy, ProxyExclusions),
           ok
   end.
 

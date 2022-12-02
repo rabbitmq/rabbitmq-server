@@ -38,7 +38,7 @@
     refresh_interval :: integer()
 }).
 -record(entry, {
-    name :: string(),
+    name :: string() | undefined,
     cert_id :: term(),
     provider :: module(),
     issuer_id :: tuple(),
@@ -124,16 +124,16 @@ is_whitelisted(#'OTPCertificate'{}=C) ->
 
 init([]) ->
     erlang:process_flag(trap_exit, true),
-    ets:new(table_name(), table_options()),
+    _ = ets:new(table_name(), table_options()),
     Config = application:get_all_env(rabbitmq_trust_store),
     ProvidersState = refresh_certs(Config, []),
     Interval = refresh_interval(Config),
-    if
-        Interval =:= 0 ->
-            ok;
-        Interval  >  0 ->
-            erlang:send_after(Interval, erlang:self(), refresh)
-    end,
+    _ = if
+            Interval =:= 0 ->
+                ok;
+            Interval  >  0 ->
+                erlang:send_after(Interval, erlang:self(), refresh)
+        end,
     State = #state{
         providers_state = ProvidersState,
         refresh_interval = Interval},
@@ -275,13 +275,9 @@ load_and_decode_cert(Provider, CertId, Attributes, Config) ->
     try
         case Provider:load_cert(CertId, Attributes, Config) of
             {ok, Cert} ->
-                case public_key:pkix_decode_cert(Cert, otp) of
-                    {error, Reason} ->
-                        {error, Reason};
-                    DecodedCert ->
-                        Id = extract_issuer_id(DecodedCert),
-                        {ok, Cert, Id}
-                end;
+                DecodedCert = public_key:pkix_decode_cert(Cert, otp),
+                Id = extract_issuer_id(DecodedCert),
+                {ok, Cert, Id};
             {error, Reason} -> {error, Reason}
         end
     catch _:Error:Stacktrace ->

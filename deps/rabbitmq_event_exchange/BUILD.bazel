@@ -37,7 +37,6 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()

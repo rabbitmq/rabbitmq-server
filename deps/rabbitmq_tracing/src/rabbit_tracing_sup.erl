@@ -29,8 +29,8 @@ start_child(Id, Args) ->
        [rabbit_tracing_consumer_sup]}).
 
 stop_child(Id) ->
-    supervisor:terminate_child(?SUPERVISOR, Id),
-    supervisor:delete_child(?SUPERVISOR, Id),
+    _ = supervisor:terminate_child(?SUPERVISOR, Id),
+    _ = supervisor:delete_child(?SUPERVISOR, Id),
     ok.
 
 %%----------------------------------------------------------------------------

@@ -25,7 +25,7 @@ handle_event(_Event, State) ->
   {ok, State}.
 
 handle_call(_Request, State) ->
-  {ok, State}.
+  {ok, undefined, State}.
 
 handle_info(_Info, State) ->
   {ok, State}.
