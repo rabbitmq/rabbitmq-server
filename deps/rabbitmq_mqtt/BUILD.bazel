@@ -151,6 +151,12 @@ rabbitmq_integration_suite(
     name = "config_schema_SUITE",
 )
 
+
+rabbitmq_integration_suite(
+    name = "config_SUITE",
+    size = "small",
+)
+
 rabbitmq_integration_suite(
     name = "java_SUITE",
     flaky = True,

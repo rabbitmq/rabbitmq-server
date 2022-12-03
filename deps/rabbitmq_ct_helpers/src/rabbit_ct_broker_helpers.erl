@@ -639,6 +639,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    AdditionalErlArgs = rabbit_ct_helpers:get_config(Config, additional_erl_args, []),
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
@@ -735,7 +736,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~ts", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
-      "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
+      {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}

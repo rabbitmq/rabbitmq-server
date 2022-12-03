@@ -122,8 +122,13 @@ set_default_config() ->
                 {schedule_ms_limit, 0},
                 {heap_word_limit, 0},
                 {busy_port, false},
-                {busy_dist_port, true}]}
-                | OsirisConfig
+                {busy_dist_port, true}]},
+              {mnesia,
+               [
+                {dump_log_write_threshold, 5000},
+                {dump_log_time_threshold, 90000}
+               ]}
+              | OsirisConfig
              ],
     apply_erlang_term_based_config(Config).
 
