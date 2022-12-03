@@ -1321,7 +1321,11 @@ Whether the queue will be deleted automatically when no longer used.
 .It Cm arguments
 Queue arguments.
 .It Cm policy
-Effective policy name for the queue.
+Name of the user policy that is applied to the queue.
+.It Cm operator_policy
+Name of the operator policy that is applied to the queue.
+.It Cm effective_policy_definition
+Effective policy definition for the queue: both user and operator policy definitions merged.
 .It Cm pid
 Erlang process identifier of the queue.
 .It Cm owner_pid
