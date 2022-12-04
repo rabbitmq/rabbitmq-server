@@ -31,7 +31,7 @@
          conn_name,
          await_recv,
          deferred_recv,
-         received_connect_frame,
+         received_connect_packet,
          connection_state,
          conserve,
          parse_state,
@@ -82,9 +82,9 @@ init(Ref) ->
                       conn_name              = ConnName,
                       await_recv             = false,
                       connection_state       = running,
-                      received_connect_frame = false,
+                      received_connect_packet = false,
                       conserve               = false,
-                      parse_state            = rabbit_mqtt_frame:initial_state(),
+                      parse_state            = rabbit_mqtt_packet:initial_state(),
                       proc_state             = ProcessorState }), #state.stats_timer)
              );
         {network_error, Reason} ->
@@ -193,10 +193,10 @@ handle_info({keepalive, Req}, State = #state{keepalive = KState0,
             {stop, Reason, State}
     end;
 
-handle_info(login_timeout, State = #state{received_connect_frame = true}) ->
+handle_info(login_timeout, State = #state{received_connect_packet = true}) ->
     {noreply, State, ?HIBERNATE_AFTER};
 handle_info(login_timeout, State = #state{conn_name = ConnName}) ->
-    %% The connection is also closed if the CONNECT frame happens to
+    %% The connection is also closed if the CONNECT packet happens to
     %% be already in the `deferred_recv' buffer. This can happen while
     %% the connection is blocked because of a resource alarm. However
     %% we don't know what is in the buffer, it can be arbitrary bytes,
@@ -293,12 +293,12 @@ log_tls_alert(Alert, ConnName) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: alert ~ts",
        [ConnName, Alert]).
 
-process_received_bytes(<<>>, State = #state{received_connect_frame = false,
+process_received_bytes(<<>>, State = #state{received_connect_packet = false,
                                             proc_state = PState,
                                             conn_name = ConnName}) ->
     rabbit_log_connection:info("Accepted MQTT connection ~p (~s, client id: ~s)",
                                [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
-    {noreply, ensure_stats_timer(State#state{received_connect_frame = true}), ?HIBERNATE_AFTER};
+    {noreply, ensure_stats_timer(State#state{received_connect_packet = true}), ?HIBERNATE_AFTER};
 process_received_bytes(<<>>, State) ->
     {noreply, ensure_stats_timer(State), ?HIBERNATE_AFTER};
 process_received_bytes(Bytes,
@@ -310,10 +310,10 @@ process_received_bytes(Bytes,
             {noreply,
              ensure_stats_timer( State #state{ parse_state = ParseState1 }),
              ?HIBERNATE_AFTER};
-        {ok, Frame, Rest} ->
-            case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
+        {ok, Packet, Rest} ->
+            case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
                 {ok, ProcState1} ->
-                    PS = rabbit_mqtt_frame:initial_state(),
+                    PS = rabbit_mqtt_packet:initial_state(),
                     process_received_bytes(
                       Rest,
                       State #state{parse_state = PS,
@@ -322,15 +322,15 @@ process_received_bytes(Bytes,
                 {error, unauthorized = Reason, ProcState1} ->
                     rabbit_log_connection:error("MQTT connection ~ts is closing due to an authorization failure", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                %% CONNECT frames only
+                %% CONNECT packets only
                 {error, unauthenticated = Reason, ProcState1} ->
                     rabbit_log_connection:error("MQTT connection ~ts is closing due to an authentication failure", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                %% CONNECT frames only
+                %% CONNECT packets only
                 {error, invalid_client_id = Reason, ProcState1} ->
                     rabbit_log_connection:error("MQTT cannot accept connection ~ts: client uses an invalid ID", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                %% CONNECT frames only
+                %% CONNECT packets only
                 {error, unsupported_protocol_version = Reason, ProcState1} ->
                     rabbit_log_connection:error("MQTT cannot accept connection ~ts: incompatible protocol version", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
@@ -350,7 +350,7 @@ process_received_bytes(Bytes,
                     {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
-            rabbit_log_connection:error("MQTT cannot parse a frame on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
+            rabbit_log_connection:error("MQTT cannot parse a packet on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
                 [ConnName, Bytes, Error, Stacktrace]),
             {stop, {shutdown, Error}, State};
         {error, Error} ->
@@ -367,7 +367,7 @@ pstate(State = #state {}, PState) ->
 %%----------------------------------------------------------------------------
 parse(Bytes, ParseState) ->
     try
-        rabbit_mqtt_frame:parse(Bytes, ParseState)
+        rabbit_mqtt_packet:parse(Bytes, ParseState)
     catch
         _:Reason:Stacktrace ->
             {error, {cannot_parse, Reason, Stacktrace}}
@@ -375,7 +375,7 @@ parse(Bytes, ParseState) ->
 
 network_error(closed,
               State = #state{conn_name  = ConnName,
-                             received_connect_frame = Connected}) ->
+                             received_connect_packet = Connected}) ->
     Fmt = "MQTT connection ~p will terminate because peer closed TCP connection",
     Args = [ConnName],
     case Connected of
@@ -430,7 +430,7 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#state{received_connect_frame = false}) ->
+emit_stats(State=#state{received_connect_packet = false}) ->
     %% Avoid emitting stats on terminate when the connection has not yet been
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
@@ -469,7 +469,7 @@ info_internal(reductions, _State) ->
     Reductions;
 info_internal(conn_name, #state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
-info_internal(connection_state, #state{received_connect_frame = false}) ->
+info_internal(connection_state, #state{received_connect_packet = false}) ->
     starting;
 info_internal(connection_state, #state{connection_state = Val}) ->
     Val;
@@ -511,7 +511,7 @@ format_state(#state{proc_state = PState,
                     conn_name = ConnName,
                     await_recv = AwaitRecv,
                     deferred_recv = DeferredRecv,
-                    received_connect_frame = ReceivedConnectFrame,
+                    received_connect_packet = ReceivedConnectPacket,
                     connection_state = ConnectionState,
                     conserve = Conserve,
                     stats_timer = StatsTimer,
@@ -523,7 +523,7 @@ format_state(#state{proc_state = PState,
       conn_name => ConnName,
       await_recv => AwaitRecv,
       deferred_recv => DeferredRecv,
-      received_connect_frame => ReceivedConnectFrame,
+      received_connect_packet => ReceivedConnectPacket,
       connection_state => ConnectionState,
       conserve => Conserve,
       stats_timer => StatsTimer,

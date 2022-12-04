@@ -192,7 +192,7 @@ client_protocol_test(Config, Protocol) ->
     WS = rfc6455_client:new("ws://localhost:" ++ PortStr ++ "/ws", self(), undefined, Protocol),
     {_, [{http_response, Res}]} = rfc6455_client:open(WS),
     {'HTTP/1.1', 400, <<"Bad Request">>, _} = cow_http:parse_status_line(rabbit_data_coercion:to_binary(Res)),
-    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_frame()),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {close, _P} = rfc6455_client:recv(WS),
     ok.
 

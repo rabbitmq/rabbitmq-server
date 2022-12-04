@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/resource.hrl").
 -include("rabbit_mqtt.hrl").
--include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt_packet.hrl").
 
 -export([queue_name_bin/2,
          qos_from_queue_name/2,

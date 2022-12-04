@@ -84,7 +84,7 @@ proxy_protocol(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, _} = rfc6455_client:open(WS),
-    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_frame()),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {binary, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),

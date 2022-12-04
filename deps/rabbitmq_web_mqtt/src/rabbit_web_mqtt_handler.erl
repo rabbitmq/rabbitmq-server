@@ -32,7 +32,7 @@
           socket,
           peername,
           stats_timer,
-          received_connect_frame,
+          received_connect_packet,
           keepalive :: rabbit_mqtt_keepalive:state()
          }).
 
@@ -78,12 +78,12 @@ init(Req, Opts) ->
                 true ->
                     {?MODULE, cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
                     #state{
-                        parse_state        = rabbit_mqtt_frame:initial_state(),
+                        parse_state        = rabbit_mqtt_packet:initial_state(),
                         state              = running,
                         conserve_resources = false,
                         socket             = SockInfo,
                         peername           = PeerAddr,
-                        received_connect_frame = false
+                        received_connect_packet = false
                         }, WsOpts}
             end
     end.
@@ -243,26 +243,26 @@ handle_data(Data, State0 = #state{conn_name = ConnName}) ->
             Other
     end.
 
-handle_data1(<<>>, State0 = #state{received_connect_frame = false,
+handle_data1(<<>>, State0 = #state{received_connect_packet = false,
                                    proc_state = PState,
                                    conn_name = ConnName}) ->
     rabbit_log_connection:info("Accepted web MQTT connection ~p (~s, client id: ~s)",
                                [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
-    State = State0#state{received_connect_frame = true},
+    State = State0#state{received_connect_packet = true},
     {ok, ensure_stats_timer(control_throttle(State)), hibernate};
 handle_data1(<<>>, State) ->
     {ok, ensure_stats_timer(control_throttle(State)), hibernate};
 handle_data1(Data, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnName }) ->
-    case rabbit_mqtt_frame:parse(Data, ParseState) of
+    case rabbit_mqtt_packet:parse(Data, ParseState) of
         {more, ParseState1} ->
             {ok, ensure_stats_timer(control_throttle(
                 State #state{ parse_state = ParseState1 })), hibernate};
-        {ok, Frame, Rest} ->
-            case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
+        {ok, Packet, Rest} ->
+            case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
                 {ok, ProcState1} ->
-                    PS = rabbit_mqtt_frame:initial_state(),
+                    PS = rabbit_mqtt_packet:initial_state(),
                     handle_data1(
                       Rest,
                       State#state{parse_state = PS,
@@ -320,8 +320,8 @@ control_throttle(State = #state{state = CS,
             State
     end.
 
-send_reply(Frame, PState) ->
-    self() ! {reply, rabbit_mqtt_processor:serialise(Frame, PState)}.
+send_reply(Packet, PState) ->
+    self() ! {reply, rabbit_mqtt_processor:serialise(Packet, PState)}.
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
@@ -332,7 +332,7 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                                 fun() -> emit_stats(State) end).
 
-emit_stats(State=#state{received_connect_frame = false}) ->
+emit_stats(State=#state{received_connect_packet = false}) ->
     %% Avoid emitting stats on terminate when the connection has not yet been
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),

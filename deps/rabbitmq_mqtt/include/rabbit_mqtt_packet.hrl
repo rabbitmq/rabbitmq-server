@@ -9,7 +9,7 @@
         [{3, "MQIsdp"},
          {4, "MQTT"}]).
 
-%% frame types
+%% packet types
 
 -define(CONNECT,      1).
 -define(CONNACK,      2).
@@ -53,50 +53,50 @@
 %% Packet identifier is a non zero two byte integer.
 -type packet_id() :: 1..16#ffff.
 
--record(mqtt_frame, {fixed,
-                     variable,
-                     payload}).
+-record(mqtt_packet, {fixed,
+                      variable,
+                      payload}).
 
--record(mqtt_frame_fixed,    {type   = 0,
-                              dup    = 0,
-                              qos    = 0,
-                              retain = 0}).
+-record(mqtt_packet_fixed,    {type   = 0,
+                               dup    = 0,
+                               qos    = 0,
+                               retain = 0}).
 
--record(mqtt_frame_connect,  {proto_ver,
-                              will_retain,
-                              will_qos,
-                              will_flag,
-                              clean_sess,
-                              keep_alive,
-                              client_id,
-                              will_topic,
-                              will_msg,
-                              username,
-                              password}).
+-record(mqtt_packet_connect,  {proto_ver,
+                               will_retain,
+                               will_qos,
+                               will_flag,
+                               clean_sess,
+                               keep_alive,
+                               client_id,
+                               will_topic,
+                               will_msg,
+                               username,
+                               password}).
 
--record(mqtt_frame_connack,  {session_present,
-                              return_code}).
+-record(mqtt_packet_connack,  {session_present,
+                               return_code}).
 
--record(mqtt_frame_publish,  {topic_name,
-                              packet_id :: packet_id()}).
+-record(mqtt_packet_publish,  {topic_name,
+                               packet_id :: packet_id()}).
 
--record(mqtt_topic,          {name,
-                              qos}).
+-record(mqtt_topic,           {name,
+                               qos}).
 
--record(mqtt_frame_subscribe,{packet_id :: packet_id(),
-                              topic_table :: nonempty_list(#mqtt_topic{})
-                             }).
+-record(mqtt_packet_subscribe,{packet_id :: packet_id(),
+                               topic_table :: nonempty_list(#mqtt_topic{})
+                              }).
 
--record(mqtt_frame_suback,   {packet_id :: packet_id(),
-                              qos_table = []}).
+-record(mqtt_packet_suback,   {packet_id :: packet_id(),
+                               qos_table = []}).
 
--record(mqtt_frame_other,    {other}).
+-record(mqtt_packet_other,    {other}).
 
--record(mqtt_msg,            {retain :: boolean(),
-                              qos :: qos(),
-                              topic :: string(),
-                              dup :: boolean(),
-                              packet_id :: packet_id(),
-                              payload :: binary()}).
+-record(mqtt_msg,             {retain :: boolean(),
+                               qos :: qos(),
+                               topic :: string(),
+                               dup :: boolean(),
+                               packet_id :: packet_id(),
+                               payload :: binary()}).
 
 -type mqtt_msg() :: #mqtt_msg{}.

@@ -8,7 +8,7 @@
 -module(rabbit_mqtt_processor).
 
 -export([info/2, initial_state/2, initial_state/4,
-         process_frame/2, serialise/2,
+         process_packet/2, serialise/2,
          terminate/3, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
          soft_limit_exceeded/1, format_status/1]).
@@ -25,7 +25,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -include("rabbit_mqtt.hrl").
--include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt_packet.hrl").
 
 -define(APP, rabbitmq_mqtt).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
@@ -68,7 +68,7 @@
          retainer_pid,
          auth_state,
          peer_addr,
-         send_fun :: fun((Frame :: tuple(), state()) -> term()),
+         send_fun :: fun((Packet :: tuple(), state()) -> term()),
          register_state,
          conn_name,
          info,
@@ -98,14 +98,14 @@ initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
            send_fun       = SendFun,
            delivery_flow  = Flow}.
 
-process_frame(#mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}},
+process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
               State = #state{auth_state = undefined})
   when Type =/= ?CONNECT ->
     {error, connect_expected, State};
-process_frame(Frame = #mqtt_frame{fixed = #mqtt_frame_fixed{type = Type}}, State) ->
-    process_request(Type, Frame, State).
+process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}}, State) ->
+    process_request(Type, Packet, State).
 
-process_request(?CONNECT, Frame, State = #state{socket = Socket}) ->
+process_request(?CONNECT, Packet, State = #state{socket = Socket}) ->
     %% Check whether peer closed the connection.
     %% For example, this can happen when connection was blocked because of resource
     %% alarm and client therefore disconnected due to client side CONNACK timeout.
@@ -113,12 +113,12 @@ process_request(?CONNECT, Frame, State = #state{socket = Socket}) ->
         {error, Reason} ->
             {error, {socket_ends, Reason}, State};
         _ ->
-            process_connect(Frame, State)
+            process_connect(Packet, State)
     end;
 
 process_request(?PUBACK,
-                #mqtt_frame{
-                   variable = #mqtt_frame_publish{packet_id = PacketId}},
+                #mqtt_packet{
+                   variable = #mqtt_packet_publish{packet_id = PacketId}},
                 #state{unacked_server_pubs = U0,
                        queue_states = QStates0,
                        queue_qos1 = QName} = State) ->
@@ -138,21 +138,21 @@ process_request(?PUBACK,
     end;
 
 process_request(?PUBLISH,
-                Frame = #mqtt_frame{
-                           fixed = Fixed = #mqtt_frame_fixed{qos = ?QOS_2}},
+                Packet = #mqtt_packet{
+                           fixed = Fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
                 State) ->
     % Downgrade QOS_2 to QOS_1
     process_request(?PUBLISH,
-                    Frame#mqtt_frame{
-                      fixed = Fixed#mqtt_frame_fixed{qos = ?QOS_1}},
+                    Packet#mqtt_packet{
+                      fixed = Fixed#mqtt_packet_fixed{qos = ?QOS_1}},
                     State);
 process_request(?PUBLISH,
-                #mqtt_frame{
-                   fixed = #mqtt_frame_fixed{qos = Qos,
-                                             retain = Retain,
-                                             dup = Dup },
-                   variable = #mqtt_frame_publish{topic_name = Topic,
-                                                  packet_id = PacketId },
+                #mqtt_packet{
+                   fixed = #mqtt_packet_fixed{qos = Qos,
+                                              retain = Retain,
+                                              dup = Dup },
+                   variable = #mqtt_packet_publish{topic_name = Topic,
+                                                   packet_id = PacketId },
                    payload = Payload},
                 State0 = #state{retainer_pid = RPid,
                                 unacked_client_pubs = U,
@@ -164,7 +164,7 @@ process_request(?PUBLISH,
                                       qos        = Qos,
                                       topic      = Topic,
                                       dup        = Dup,
-                                      packet_id = PacketId,
+                                      packet_id  = PacketId,
                                       payload    = Payload},
                       case publish_to_queues(Msg, State) of
                           {ok, _} = Ok ->
@@ -196,8 +196,8 @@ process_request(?PUBLISH,
     end;
 
 process_request(?SUBSCRIBE,
-                #mqtt_frame{
-                   variable = #mqtt_frame_subscribe{
+                #mqtt_packet{
+                   variable = #mqtt_packet_subscribe{
                                  packet_id  = SubscribePktId,
                                  topic_table = Topics},
                    payload = undefined},
@@ -252,10 +252,10 @@ process_request(?SUBSCRIBE,
 
     maybe_increment_consumer(HasSubsBefore, State1),
     SendFun(
-      #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
-                  variable = #mqtt_frame_suback{
-                                packet_id = SubscribePktId,
-                                qos_table  = QosResponse}},
+      #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
+                   variable = #mqtt_packet_suback{
+                                 packet_id = SubscribePktId,
+                                 qos_table  = QosResponse}},
       State1),
     case QosResponse of
         [?SUBACK_FAILURE | _] ->
@@ -268,8 +268,8 @@ process_request(?SUBSCRIBE,
     end;
 
 process_request(?UNSUBSCRIBE,
-                #mqtt_frame{variable = #mqtt_frame_subscribe{packet_id  = PacketId,
-                                                             topic_table = Topics},
+                #mqtt_packet{variable = #mqtt_packet_subscribe{packet_id  = PacketId,
+                                                               topic_table = Topics},
                             payload = undefined},
                 State0 = #state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
@@ -291,32 +291,32 @@ process_request(?UNSUBSCRIBE,
                       end
               end, State0, Topics),
     SendFun(
-      #mqtt_frame{fixed    = #mqtt_frame_fixed {type       = ?UNSUBACK},
-                  variable = #mqtt_frame_suback{packet_id = PacketId}},
+      #mqtt_packet{fixed    = #mqtt_packet_fixed {type       = ?UNSUBACK},
+                   variable = #mqtt_packet_suback{packet_id = PacketId}},
       State),
 
     maybe_decrement_consumer(HasSubsBefore, State),
     {ok, State};
 
-process_request(?PINGREQ, #mqtt_frame{}, State = #state{send_fun = SendFun}) ->
+process_request(?PINGREQ, #mqtt_packet{}, State = #state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received a PINGREQ"),
     SendFun(
-      #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PINGRESP}},
+      #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PINGRESP}},
       State),
     rabbit_log_connection:debug("Sent a PINGRESP"),
     {ok, State};
 
-process_request(?DISCONNECT, #mqtt_frame{}, State) ->
+process_request(?DISCONNECT, #mqtt_packet{}, State) ->
     rabbit_log_connection:debug("Received a DISCONNECT"),
     {stop, disconnect, State}.
 
-process_connect(#mqtt_frame{
-                   variable = #mqtt_frame_connect{
+process_connect(#mqtt_packet{
+                   variable = #mqtt_packet_connect{
                                  username   = Username,
                                  proto_ver  = ProtoVersion,
                                  clean_sess = CleanSess,
                                  client_id  = ClientId,
-                                 keep_alive = Keepalive} = FrameConnect},
+                                 keep_alive = Keepalive} = PacketConnect},
                 State0 = #state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received a CONNECT, client ID: ~s, username: ~s, "
                                 "clean session: ~s, protocol version: ~p, keepalive: ~p",
@@ -330,17 +330,17 @@ process_connect(#mqtt_frame{
                                fun notify_connection_created/2,
                                fun start_keepalive/2,
                                fun handle_clean_session/2],
-                              FrameConnect, State0) of
+                              PacketConnect, State0) of
         {ok, SessionPresent0, State1} ->
             {?CONNACK_ACCEPT, SessionPresent0, State1};
         {error, ReturnCode0, State1} ->
             {ReturnCode0, false, State1}
     end,
-    ResponseFrame = #mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?CONNACK},
-                                variable = #mqtt_frame_connack{
-                                              session_present = SessionPresent,
-                                              return_code = ReturnCode}},
-    SendFun(ResponseFrame, State),
+    ResponsePacket = #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?CONNACK},
+                                  variable = #mqtt_packet_connack{
+                                                session_present = SessionPresent,
+                                                return_code = ReturnCode}},
+    SendFun(ResponsePacket, State),
     return_connack(ReturnCode, State).
 
 client_id(<<>>) ->
@@ -349,7 +349,7 @@ client_id(ClientId)
   when is_binary(ClientId) ->
     ClientId.
 
-check_protocol_version(#mqtt_frame_connect{proto_ver = ProtoVersion}) ->
+check_protocol_version(#mqtt_packet_connect{proto_ver = ProtoVersion}) ->
     case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
         true ->
             ok;
@@ -357,14 +357,14 @@ check_protocol_version(#mqtt_frame_connect{proto_ver = ProtoVersion}) ->
             {error, ?CONNACK_UNACCEPTABLE_PROTO_VER}
     end.
 
-check_client_id(#mqtt_frame_connect{clean_sess = false,
-                                    client_id = []}) ->
+check_client_id(#mqtt_packet_connect{clean_sess = false,
+                                     client_id = []}) ->
     {error, ?CONNACK_ID_REJECTED};
 check_client_id(_) ->
     ok.
 
-check_credentials(Frame = #mqtt_frame_connect{username = Username,
-                                              password = Password},
+check_credentials(Packet = #mqtt_packet_connect{username = Username,
+                                                password = Password},
                   State = #state{ssl_login_name = SslLoginName,
                                  peer_addr = PeerAddr}) ->
     Ip = list_to_binary(inet:ntoa(PeerAddr)),
@@ -382,11 +382,11 @@ check_credentials(Frame = #mqtt_frame_connect{username = Username,
             rabbit_log_connection:error("MQTT login failed for user '~p': no password provided", [User]),
             {error, ?CONNACK_BAD_CREDENTIALS};
         {UserBin, PassBin} ->
-            {ok, {UserBin, PassBin, Frame}, State}
+            {ok, {UserBin, PassBin, Packet}, State}
     end.
 
 login({UserBin, PassBin,
-       Frame = #mqtt_frame_connect{client_id = ClientId0,
+       Packet = #mqtt_packet_connect{client_id = ClientId0,
                                    clean_sess = CleanSess}},
       State0) ->
     ClientId = client_id(ClientId0),
@@ -394,7 +394,7 @@ login({UserBin, PassBin,
         already_connected ->
             {ok, already_connected};
         {ok, State} ->
-            {ok, Frame, State#state{clean_sess = CleanSess,
+            {ok, Packet, State#state{clean_sess = CleanSess,
                                     client_id = ClientId}};
         {error, _Reason, _State} = Err ->
             Err
@@ -402,7 +402,7 @@ login({UserBin, PassBin,
 
 register_client(already_connected, _State) ->
     ok;
-register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
+register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
                 State = #state{client_id = ClientId,
                                socket = Socket,
                                auth_state = #auth_state{vhost = VHost}}) ->
@@ -417,7 +417,7 @@ register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
             ProtoHumanReadable = {'MQTT', human_readable_mqtt_version(ProtoVersion)},
             State#state{
               exchange = ExchangeName,
-              will_msg = make_will_msg(Frame),
+              will_msg = make_will_msg(Packet),
               retainer_pid = RetainerPid,
               register_state = RegisterState,
               proto_ver = protocol_integer_to_atom(ProtoVersion),
@@ -451,7 +451,7 @@ register_client(Frame = #mqtt_frame_connect{proto_ver = ProtoVersion},
 notify_connection_created(already_connected, _State) ->
     ok;
 notify_connection_created(
-  _Frame,
+  _Packet,
   #state{socket = Sock,
          conn_name = ConnName,
          info = #info{proto_human = {ProtoName, ProtoVsn}},
@@ -508,7 +508,7 @@ self_consumes(Queue) ->
                       end, rabbit_amqqueue:consumers(Queue))
     end.
 
-start_keepalive(#mqtt_frame_connect{keep_alive = Seconds},
+start_keepalive(#mqtt_packet_connect{keep_alive = Seconds},
                 #state{socket = Socket}) ->
     ok = rabbit_mqtt_keepalive:start(Seconds, Socket).
 
@@ -662,26 +662,26 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
                                         {PacketId0, State0#state{packet_id = increment_packet_id(PacketId0)}}
                                 end,
             SendFun(
-              #mqtt_frame{fixed = #mqtt_frame_fixed{
-                                     type = ?PUBLISH,
-                                     qos  = Qos,
-                                     dup  = false,
-                                     retain = Msg#mqtt_msg.retain
-                                    }, variable = #mqtt_frame_publish{
-                                                     packet_id = PacketId,
-                                                     topic_name = Topic1
-                                                    },
+              #mqtt_packet{fixed = #mqtt_packet_fixed{
+                                      type = ?PUBLISH,
+                                      qos  = Qos,
+                                      dup  = false,
+                                      retain = Msg#mqtt_msg.retain
+                                     }, variable = #mqtt_packet_publish{
+                                                      packet_id = PacketId,
+                                                      topic_name = Topic1
+                                                     },
                           payload = Msg#mqtt_msg.payload},
               State),
             State
     end.
 
-make_will_msg(#mqtt_frame_connect{will_flag   = false}) ->
+make_will_msg(#mqtt_packet_connect{will_flag   = false}) ->
     undefined;
-make_will_msg(#mqtt_frame_connect{will_retain = Retain,
-                                  will_qos    = Qos,
-                                  will_topic  = Topic,
-                                  will_msg    = Msg}) ->
+make_will_msg(#mqtt_packet_connect{will_retain = Retain,
+                                   will_qos    = Qos,
+                                   will_topic  = Topic,
+                                   will_msg    = Msg}) ->
     #mqtt_msg{retain  = Retain,
               qos     = Qos,
               topic   = Topic,
@@ -1210,7 +1210,7 @@ publish_to_queues(
   #mqtt_msg{qos        = Qos,
             topic      = Topic,
             dup        = Dup,
-            packet_id = PacketId,
+            packet_id  = PacketId,
             payload    = Payload},
   #state{exchange       = ExchangeName,
          delivery_flow  = Flow} = State) ->
@@ -1319,25 +1319,22 @@ send_puback(PktId, State = #state{send_fun = SendFun,
                                   proto_ver = ProtoVer}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     SendFun(
-      #mqtt_frame{fixed = #mqtt_frame_fixed{type = ?PUBACK},
-                  variable = #mqtt_frame_publish{packet_id = PktId}},
+      #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
+                  variable = #mqtt_packet_publish{packet_id = PktId}},
       State).
 
-serialise_and_send_to_client(Frame, #state{proto_ver = ProtoVer, socket = Sock}) ->
-    %%TODO Test sending large frames at high speed:
-    %% Will we need garbage collection as done in rabbit_writer:maybe_gc_large_msg/1?
-    %%TODO batch to fill up MTU if there are messages in the Erlang mailbox?
-    %% Check rabbit_writer:maybe_flush/1
-    Data = rabbit_mqtt_frame:serialise(Frame, ProtoVer),
+serialise_and_send_to_client(Packet, #state{proto_ver = ProtoVer, socket = Sock}) ->
+    Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
     try rabbit_net:port_command(Sock, Data)
-    catch _:Error ->
-              rabbit_log_connection:error("MQTT: a socket write failed, the socket might already be closed"),
-              rabbit_log_connection:debug("Failed to write to socket ~p, error: ~p, frame: ~p",
-                                          [Sock, Error, Frame])
+    catch error:Error ->
+              rabbit_log_connection:error(
+                "MQTT: a socket write failed: ~p", [Error]),
+              rabbit_log_connection:debug(
+                "Failed to write to socket ~p, error: ~p, packet: ~p", [Sock, Error, Packet])
     end.
 
-serialise(Frame, #state{proto_ver = ProtoVer}) ->
-    rabbit_mqtt_frame:serialise(Frame, ProtoVer).
+serialise(Packet, #state{proto_ver = ProtoVer}) ->
+    rabbit_mqtt_packet:serialise(Packet, ProtoVer).
 
 terminate(SendWill, ConnName, State) ->
     maybe_send_will(SendWill, ConnName, State),
@@ -1587,11 +1584,6 @@ deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
     State1 = maybe_publish_to_client(Msg, QoS, State0),
     State = maybe_auto_ack(AckRequired, QoS, QNameOrType, QMsgId, State1),
-    %%TODO GC
-    % case GCThreshold of
-    %     undefined -> ok;
-    %     _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
-    % end,
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
 
@@ -1614,9 +1606,9 @@ maybe_publish_to_client(
     {PacketId, State} = queue_packet_id_to_packet_id(QMsgId, QoS, State0),
     %%TODO support iolists when sending to client
     Payload = list_to_binary(lists:reverse(FragmentsRev)),
-    Frame =
-    #mqtt_frame{
-       fixed = #mqtt_frame_fixed{
+    Packet =
+    #mqtt_packet{
+       fixed = #mqtt_packet_fixed{
                   type = ?PUBLISH,
                   qos = QoS,
                   %% "The value of the DUP flag from an incoming PUBLISH packet is not
@@ -1626,11 +1618,11 @@ maybe_publish_to_client(
                   %% the outgoing PUBLISH packet is a retransmission [MQTT-3.3.1-3]."
                   %% Therefore, we do not consider header value <<"x-mqtt-dup">> here.
                   dup = Redelivered},
-       variable = #mqtt_frame_publish{
+       variable = #mqtt_packet_publish{
                      packet_id = PacketId,
                      topic_name = amqp_to_mqtt(RoutingKey)},
        payload = Payload},
-    SendFun(Frame, State),
+    SendFun(Packet, State),
     message_delivered(QNameOrType, Redelivered, QoS, State),
     State.
 

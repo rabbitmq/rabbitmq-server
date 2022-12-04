@@ -31,7 +31,7 @@ groups() ->
       [
        block,
        block_connack_timeout,
-       handle_invalid_frames,
+       handle_invalid_packets,
        login_timeout,
        keepalive,
        keepalive_turned_off,
@@ -129,7 +129,7 @@ block_connack_timeout(Config) ->
     %% Let connection block.
     timer:sleep(100),
 
-    %% We can still connect via TCP, but CONNECT frame will not be processed on the server.
+    %% We can still connect via TCP, but CONNECT packet will not be processed on the server.
     {ok, Client} = emqtt:start_link([{host, "localhost"},
                                      {port, P},
                                      {clientid, atom_to_binary(?FUNCTION_NAME)},
@@ -151,7 +151,7 @@ block_connack_timeout(Config) ->
     {connected, MqttReader} = rpc(Config, erlang, port_info, [NewPort, connected]),
     MqttReaderMRef = monitor(process, MqttReader),
 
-    %% Unblock connection. CONNECT frame will be processed on the server.
+    %% Unblock connection. CONNECT packet will be processed on the server.
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
 
     receive
@@ -166,7 +166,7 @@ block_connack_timeout(Config) ->
     ?assertEqual([], all_connection_pids(Config)),
     ok.
 
-handle_invalid_frames(Config) ->
+handle_invalid_packets(Config) ->
     N = rpc(Config, ets, info, [connection_metrics, size]),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = gen_tcp:connect("localhost", P, []),

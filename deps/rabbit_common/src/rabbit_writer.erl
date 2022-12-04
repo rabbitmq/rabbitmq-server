@@ -64,7 +64,7 @@
 
 -define(HIBERNATE_AFTER, 5000).
 %% 1GB
--define(DEFAULT_GC_THRESHOLD, 1000000000).
+-define(DEFAULT_GC_THRESHOLD, 1_000_000_000).
 
 %%---------------------------------------------------------------------------
 

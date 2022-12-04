@@ -64,7 +64,7 @@ proxy_protocol(Config) ->
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-    ok = inet:send(Socket, mqtt_3_1_1_connect_frame()),
+    ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
@@ -78,7 +78,7 @@ proxy_protocol_tls(Config) ->
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
-    ok = ssl:send(SslSocket, mqtt_3_1_1_connect_frame()),
+    ok = ssl:send(SslSocket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
@@ -95,7 +95,7 @@ connection_name() ->
 merge_app_env(MqttConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
 
-mqtt_3_1_1_connect_frame() ->
+mqtt_3_1_1_connect_packet() ->
     <<16,
     24,
     0,
