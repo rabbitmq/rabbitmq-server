@@ -53,14 +53,16 @@
 %% Packet identifier is a non zero two byte integer.
 -type packet_id() :: 1..16#ffff.
 
--record(mqtt_packet, {fixed,
-                      variable,
-                      payload}).
-
 -record(mqtt_packet_fixed,    {type   = 0,
                                dup    = 0,
                                qos    = 0,
-                               retain = 0}).
+                               retain = 0
+                              }).
+
+-record(mqtt_packet,          {fixed :: #mqtt_packet_fixed{},
+                               variable :: tuple(),
+                               payload :: iodata()
+                              }).
 
 -record(mqtt_packet_connect,  {proto_ver,
                                will_retain,
@@ -89,8 +91,6 @@
 
 -record(mqtt_packet_suback,   {packet_id :: packet_id(),
                                qos_table = []}).
-
--record(mqtt_packet_other,    {other}).
 
 -record(mqtt_msg,             {retain :: boolean(),
                                qos :: qos(),

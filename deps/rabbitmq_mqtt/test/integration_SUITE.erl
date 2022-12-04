@@ -37,7 +37,7 @@ groups() ->
       [
        %% separate RMQ so global counters start from 0
        {global_counters, [], [global_counters_v3, global_counters_v4]},
-       {common_tests, [], common_tests()}
+       {common_tests, [], tests()}
       ]},
      {cluster_size_3, [],
       [queue_down_qos1,
@@ -46,11 +46,11 @@ groups() ->
        flow_classic_mirrored_queue,
        flow_quorum_queue,
        flow_stream,
-       rabbit_mqtt_qos0_queue] ++ common_tests()
+       rabbit_mqtt_qos0_queue] ++ tests()
      }
     ].
 
-common_tests() ->
+tests() ->
     [delete_create_queue
      ,quorum_queue_rejects
      ,publish_to_all_queue_types_qos0
@@ -62,6 +62,8 @@ common_tests() ->
      ,subscribe_same_topic_same_qos
      ,subscribe_same_topic_different_qos
      ,subscribe_multiple
+     ,large_message_mqtt_to_mqtt
+     ,large_message_amqp_to_mqtt
     ].
 
 suite() ->
@@ -157,7 +159,7 @@ publish_to_all_queue_types_qos1(Config) ->
     publish_to_all_queue_types(Config, qos1).
 
 publish_to_all_queue_types(Config, QoS) ->
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     CQ = <<"classic-queue">>,
     CMQ = <<"classic-mirrored-queue">>,
@@ -214,7 +216,7 @@ publish_to_all_queue_types(Config, QoS) ->
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
 
 flow_classic_mirrored_queue(Config) ->
     QueueName = <<"flow">>,
@@ -234,7 +236,7 @@ flow(Config, {App, Par, Val}, QueueType)
     Result = rpc_all(Config, application, set_env, [App, Par, Val]),
     ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
 
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     QueueName = Topic = atom_to_binary(?FUNCTION_NAME),
     declare_queue(Ch, QueueName, [{<<"x-queue-type">>, longstr, QueueType}]),
     bind(Ch, QueueName, Topic),
@@ -261,7 +263,7 @@ flow(Config, {App, Par, Val}, QueueType)
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     Result = rpc_all(Config, application, set_env, [App, Par, DefaultVal]),
     ok.
 
@@ -461,11 +463,11 @@ global_counters(Config, ProtoVer) ->
                  get_global_counters(Config, ProtoVer)).
 
 queue_down_qos1(Config) ->
-    {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 1),
     CQ = Topic = atom_to_binary(?FUNCTION_NAME),
     declare_queue(Ch1, CQ, []),
     bind(Ch1, CQ, Topic),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Ch1),
+    ok = rabbit_ct_client_helpers:close_channel(Ch1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
 
     C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
@@ -479,9 +481,9 @@ queue_down_qos1(Config) ->
                              rabbitmqctl_list(Config, 1, ["list_queues", "messages", "--no-table-headers"])),
                500, 20),
 
-    {Conn0, Ch0} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, 0),
     delete_queue(Ch0, CQ),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn0, Ch0),
+    ok = rabbit_ct_client_helpers:close_channel(Ch0),
     ok = emqtt:disconnect(C).
 
 %% Even though classic mirrored queues are deprecated, we know that some users have set up
@@ -581,7 +583,7 @@ consuming_classic_queue_down(Config) ->
     ok.
 
 delete_create_queue(Config) ->
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     CQ1 = <<"classic-queue-1-delete-create">>,
     CQ2 = <<"classic-queue-2-delete-create">>,
     QQ = <<"quorum-queue-delete-create">>,
@@ -639,7 +641,7 @@ delete_create_queue(Config) ->
                1000, 10),
 
     delete_queue(Ch, [CQ1, CQ2, QQ]),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 non_clean_sess_disconnect(Config) ->
@@ -725,6 +727,35 @@ subscribe_multiple(Config) ->
     ?assertMatch({ok, _, [0, 1]},
                  emqtt:subscribe(C, [{<<"topic0">>, qos0},
                                      {<<"topic1">>, qos1}])),
+    ok = emqtt:disconnect(C).
+
+large_message_mqtt_to_mqtt(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
+
+    Payload0 = binary:copy(<<"x">>, 1_000_000),
+    Payload = <<Payload0/binary, "y">>,
+    {ok, _} = emqtt:publish(C, Topic, Payload, qos1),
+    ok = expect_publishes(Topic, [Payload]),
+
+    ok = emqtt:disconnect(C).
+
+large_message_amqp_to_mqtt(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Payload0 = binary:copy(<<"x">>, 1_000_000),
+    Payload = <<Payload0/binary, "y">>,
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = <<"amq.topic">>,
+                                       routing_key = Topic},
+                      #amqp_msg{payload = Payload}),
+    ok = expect_publishes(Topic, [Payload]),
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 %% This test is mostly interesting in mixed version mode where feature flag

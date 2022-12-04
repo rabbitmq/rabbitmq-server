@@ -1604,8 +1604,6 @@ maybe_publish_to_client(
       content = #content{payload_fragments_rev = FragmentsRev}}},
   QoS, State0 = #state{send_fun = SendFun}) ->
     {PacketId, State} = queue_packet_id_to_packet_id(QMsgId, QoS, State0),
-    %%TODO support iolists when sending to client
-    Payload = list_to_binary(lists:reverse(FragmentsRev)),
     Packet =
     #mqtt_packet{
        fixed = #mqtt_packet_fixed{
@@ -1621,7 +1619,7 @@ maybe_publish_to_client(
        variable = #mqtt_packet_publish{
                      packet_id = PacketId,
                      topic_name = amqp_to_mqtt(RoutingKey)},
-       payload = Payload},
+       payload = lists:reverse(FragmentsRev)},
     SendFun(Packet, State),
     message_delivered(QNameOrType, Redelivered, QoS, State),
     State.

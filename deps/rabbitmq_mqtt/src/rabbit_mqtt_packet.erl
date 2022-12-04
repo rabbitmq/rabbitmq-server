@@ -24,9 +24,9 @@ parse(<<>>, none) ->
     {more, fun(Bin) -> parse(Bin, none) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->
     parse_remaining_len(Rest, #mqtt_packet_fixed{ type   = MessageType,
-                                                 dup    = bool(Dup),
-                                                 qos    = QoS,
-                                                 retain = bool(Retain) });
+                                                  dup    = bool(Dup),
+                                                  qos    = QoS,
+                                                  retain = bool(Retain) });
 parse(Bin, Cont) -> Cont(Bin).
 
 parse_remaining_len(<<>>, Fixed) ->
@@ -45,7 +45,7 @@ parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value) ->
     parse_packet(Rest, Fixed, Value + Len * Multiplier).
 
 parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
-                                    qos  = Qos } = Fixed, Length) ->
+                                      qos  = Qos } = Fixed, Length) ->
     case {Type, Bin} of
         {?CONNECT, <<PacketBin:Length/binary, Rest/binary>>} ->
             {ProtoName, Rest1} = parse_utf(PacketBin),
@@ -90,7 +90,7 @@ parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
                                             {M, R}
                                    end,
             wrap(Fixed, #mqtt_packet_publish { topic_name = TopicName,
-                                              packet_id = PacketId },
+                                               packet_id = PacketId },
                  Payload, Rest);
         {?PUBACK, <<PacketBin:Length/binary, Rest/binary>>} ->
             <<PacketId:16/big>> = PacketBin,
@@ -101,7 +101,7 @@ parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
             <<PacketId:16/big, Rest1/binary>> = PacketBin,
             Topics = parse_topics(Subs, Rest1, []),
             wrap(Fixed, #mqtt_packet_subscribe { packet_id  = PacketId,
-                                                topic_table = Topics }, Rest);
+                                                 topic_table = Topics }, Rest);
         {Minimal, Rest}
           when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
             Length = 0,
@@ -109,7 +109,7 @@ parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
         {_, TooShortBin} ->
             {more, fun(BinMore) ->
                            parse_packet(<<TooShortBin/binary, BinMore/binary>>,
-                                       Fixed, Length)
+                                        Fixed, Length)
                    end}
      end.
 
@@ -150,24 +150,29 @@ bool(1) -> true.
 
 %% serialisation
 
+-spec serialise(#mqtt_packet{}, ?MQTT_PROTO_V3 | ?MQTT_PROTO_V4) ->
+    iodata().
 serialise(#mqtt_packet{fixed    = Fixed,
-                      variable = Variable,
-                      payload  = Payload}, Vsn) ->
+                       variable = Variable,
+                       payload  = Payload}, Vsn) ->
     serialise_variable(Fixed, Variable, serialise_payload(Payload), Vsn).
 
-serialise_payload(undefined)           -> <<>>;
-serialise_payload(B) when is_binary(B) -> B.
+serialise_payload(undefined) ->
+    <<>>;
+serialise_payload(P)
+  when is_binary(P) orelse is_list(P) ->
+    P.
 
 serialise_variable(#mqtt_packet_fixed   { type        = ?CONNACK } = Fixed,
                    #mqtt_packet_connack { session_present = SessionPresent,
-                                         return_code = ReturnCode },
+                                          return_code = ReturnCode },
                    <<>> = PayloadBin, _Vsn) ->
     VariableBin = <<?RESERVED:7, (opt(SessionPresent)):1, ReturnCode:8>>,
     serialise_fixed(Fixed, VariableBin, PayloadBin);
 
 serialise_variable(#mqtt_packet_fixed  { type       = SubAck } = Fixed,
                    #mqtt_packet_suback { packet_id = PacketId,
-                                        qos_table  = Qos },
+                                         qos_table  = Qos },
                    <<>> = _PayloadBin, Vsn)
   when SubAck =:= ?SUBACK orelse SubAck =:= ?UNSUBACK ->
     VariableBin = <<PacketId:16/big>>,
@@ -181,16 +186,16 @@ serialise_variable(#mqtt_packet_fixed  { type       = SubAck } = Fixed,
     serialise_fixed(Fixed, VariableBin, QosBin);
 
 serialise_variable(#mqtt_packet_fixed   { type       = ?PUBLISH,
-                                         qos        = Qos } = Fixed,
+                                          qos        = Qos } = Fixed,
                    #mqtt_packet_publish { topic_name = TopicName,
-                                         packet_id = PacketId },
-                   PayloadBin, _Vsn) ->
+                                          packet_id = PacketId },
+                   Payload, _Vsn) ->
     TopicBin = serialise_utf(TopicName),
     PacketIdBin = case Qos of
                        0 -> <<>>;
                        1 -> <<PacketId:16/big>>
                    end,
-    serialise_fixed(Fixed, <<TopicBin/binary, PacketIdBin/binary>>, PayloadBin);
+    serialise_fixed(Fixed, <<TopicBin/binary, PacketIdBin/binary>>, Payload);
 
 serialise_variable(#mqtt_packet_fixed   { type       = ?PUBACK } = Fixed,
                    #mqtt_packet_publish { packet_id = PacketId },
@@ -204,15 +209,15 @@ serialise_variable(#mqtt_packet_fixed {} = Fixed,
     serialise_fixed(Fixed, <<>>, <<>>).
 
 serialise_fixed(#mqtt_packet_fixed{ type   = Type,
-                                   dup    = Dup,
-                                   qos    = Qos,
-                                   retain = Retain }, VariableBin, PayloadBin)
+                                    dup    = Dup,
+                                    qos    = Qos,
+                                    retain = Retain }, VariableBin, Payload)
   when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?DISCONNECT ->
-    Len = size(VariableBin) + size(PayloadBin),
+    Len = size(VariableBin) + iolist_size(Payload),
     true = (Len =< ?MAX_LEN),
     LenBin = serialise_len(Len),
-    <<Type:4, (opt(Dup)):1, (opt(Qos)):2, (opt(Retain)):1,
-      LenBin/binary, VariableBin/binary, PayloadBin/binary>>.
+    [<<Type:4, (opt(Dup)):1, (opt(Qos)):2, (opt(Retain)):1,
+       LenBin/binary, VariableBin/binary>>, Payload].
 
 serialise_utf(String) ->
     StringBin = unicode:characters_to_binary(String),
