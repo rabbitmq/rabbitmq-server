@@ -19,6 +19,7 @@
 -type ra_system_name() :: atom().
 
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
+-define(QUORUM_AER_MAX_RPC_SIZE, 16).
 
 -spec setup() -> ok | no_return().
 
@@ -75,7 +76,10 @@ get_config(quorum_queues = RaSystem) ->
     Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
     WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
-    DefaultConfig#{name => RaSystem, % names => ra_system:derive_names(quorum)
+    AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
+                                       ?QUORUM_AER_MAX_RPC_SIZE),
+    DefaultConfig#{name => RaSystem,
+                   default_max_append_entries_rpc_batch_size => AERBatchSize,
                    wal_compute_checksums => WalChecksums,
                    segment_compute_checksums => SegmentChecksums};
 get_config(coordination = RaSystem) ->
