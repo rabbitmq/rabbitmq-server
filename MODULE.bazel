@@ -314,7 +314,35 @@ erlang_package.hex_package(
     name = "ra",
     sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
     version = "2.4.3",
+<<<<<<< HEAD
 >>>>>>> a0f3b6b452 (Update Ra to 2.4.3)
+=======
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+NAME = "ra"
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@aten//:erlang_app",
+    "@seshat//:erlang_app",
+]
+
+erlang_app(
+    app_name = NAME,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+""",
+>>>>>>> 7bfc42abac (Add deps info for ra when it is fetched from hex.pm)
 )
 
 erlang_package.hex_package(
