@@ -174,6 +174,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     hex_pm_erlang_app(
         name = "ra",
+<<<<<<< HEAD
         version = "2.4.1",
         sha256 = "b4e7ff475d63d27bb1e544bd43200ce110079c078f8e7d0ac87565262482be52",
         deps = [
@@ -181,7 +182,40 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         ],
         runtime_deps = [
             "@aten//:erlang_app",
+<<<<<<< HEAD
         ],
+=======
+        ]
+=======
+        version = "2.4.3",
+        sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+NAME = "ra"
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@aten//:erlang_app",
+    "@seshat//:erlang_app",
+]
+
+erlang_app(
+    app_name = NAME,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+""",
+>>>>>>> a0f3b6b452 (Update Ra to 2.4.3)
+>>>>>>> ce2dccec7c (Update Ra to 2.4.3)
     )
 
     hex_archive(
