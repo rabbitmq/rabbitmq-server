@@ -39,6 +39,7 @@
 %% Close frame status codes as defined in https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
 -define(CLOSE_NORMAL, 1000).
 -define(CLOSE_PROTOCOL_ERROR, 1002).
+-define(CLOSE_INVALID_DATA, 1003).
 -define(CLOSE_INCONSISTENT_MSG_TYPE, 1007).
 
 %% cowboy_sub_protcol
@@ -135,14 +136,11 @@ websocket_handle({Ping, _}, State)
 websocket_handle(Ping, State)
   when Ping =:= ping orelse Ping =:= pong ->
     {[], State, hibernate};
-%% Log any other unexpected frames.
+%% Log and close connection when receiving any other unexpected frames.
 websocket_handle(Frame, State) ->
     rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~tp",
                     [Frame]),
-    %%TODO close connection instead?
-    %%"MQTT Control Packets MUST be sent in WebSocket binary data frames.
-    %% If any other type of data frame is received the recipient MUST close the Network Connection"
-    {[], State, hibernate}.
+    stop(State, ?CLOSE_INVALID_DATA, "unexpected WebSocket frame").
 
 -spec websocket_info(any(), State) ->
     {cowboy_websocket:commands(), State} |
