@@ -231,7 +231,7 @@ terminate(_Reason, _Request,
 
 no_supported_sub_protocol(Protocol, Req) ->
     rabbit_log_connection:error("Web MQTT: mqtt not found in client supported protocol, protocol: ~tp", [Protocol]),
-    {ok, cowboy_req:reply(400, Req), #state{}}.
+    {ok, cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req), #state{}}.
 
 handle_data(Data, State0 = #state{conn_name = ConnName}) ->
     case handle_data1(Data, State0) of
