@@ -33,6 +33,7 @@ groups() ->
         , client_no_supported_protocol
         , client_not_support_mqtt
         , invalid_data
+        , duplicate_id
         ]}
     ].
 
@@ -202,6 +203,20 @@ invalid_data(Config) ->
     {ok, _} = rfc6455_client:open(WS),
     rfc6455_client:send(WS, "not-binary-data"),
     {close, {1003, _}} = rfc6455_client:recv(WS, timer:seconds(1)).
+
+duplicate_id(Config) ->
+    C1 = ws_connect(?FUNCTION_NAME, Config),
+    process_flag(trap_exit, true),
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
+    C2 = ws_connect(?FUNCTION_NAME, Config),
+    receive
+        {'EXIT', C1, _Reason} ->
+            ok
+    after 5000 ->
+              ct:fail("server did not disconnect a client with duplicate ID")
+    end,
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
+    ok = emqtt:disconnect(C2).
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->
