@@ -271,8 +271,6 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "ra",
-    sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
-    version = "2.4.3",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
@@ -298,6 +296,8 @@ erlang_app(
     deps = DEPS,
 )
 """,
+    sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
+    version = "2.4.3",
 )
 
 erlang_package.hex_package(
