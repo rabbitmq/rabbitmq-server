@@ -270,11 +270,16 @@ erlang_package.hex_package(
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
 )
 
+<<<<<<< HEAD
 erlang_package.git_package(
     repository = "rabbitmq/ra",
     tag = "v2.0.13",
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
+=======
+erlang_package.hex_package(
+    name = "ra",
+>>>>>>> 114f473901 (Adopt otp 24.3.4.6)
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
@@ -299,6 +304,8 @@ erlang_app(
     deps = DEPS,
 )
 """,
+    sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
+    version = "2.4.3",
 )
 
 erlang_package.hex_package(
