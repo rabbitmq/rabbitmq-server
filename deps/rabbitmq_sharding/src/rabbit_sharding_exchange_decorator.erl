@@ -13,8 +13,7 @@
                            [exchange_decorator, <<"sharding">>, ?MODULE]}},
                     {cleanup, {rabbit_registry, unregister,
                                [exchange_decorator, <<"sharding">>]}},
-                    {requires, rabbit_registry},
-                    {enables, recovery}]}).
+                    {requires, [rabbit_registry, recovery]}]}).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
