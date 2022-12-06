@@ -292,12 +292,11 @@ stop(State, CloseCode, Error0) ->
     {[{close, CloseCode, Error}], State}.
 
 handle_credits(State0) ->
-    %%TODO return hibernate?
     case control_throttle(State0) of
         State = #state{state = running} ->
-            {[{active, true}], State};
+            {[{active, true}], State, hibernate};
         State ->
-            {[], State}
+            {[], State, hibernate}
     end.
 
 control_throttle(State = #state{state = CS,
