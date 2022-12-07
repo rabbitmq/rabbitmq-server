@@ -10,22 +10,29 @@ RabbitmqHomeInfo = provider(
 )
 
 def _copy_script(ctx, script):
-    dest = ctx.actions.declare_file(path_join(ctx.label.name, "sbin", script.basename))
+    dest = ctx.actions.declare_file(
+        path_join(ctx.label.name, "sbin", script.basename),
+    )
     ctx.actions.expand_template(
         template = script,
         output = dest,
         substitutions = {},
+        is_executable = True,
     )
     return dest
 
-def link_escript(ctx, escript):
+def copy_escript(ctx, escript):
     e = ctx.attr._rabbitmqctl_escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", escript.basename))
-    ctx.actions.symlink(
-        output = s,
-        target_file = e,
+    dest = ctx.actions.declare_file(
+        path_join(ctx.label.name, "escript", escript.basename),
     )
-    return s
+    ctx.actions.run(
+        inputs = [e],
+        outputs = [dest],
+        executable = "cp",
+        arguments = [e.path, dest.path],
+    )
+    return dest
 
 def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangAppInfo]
@@ -80,7 +87,7 @@ def _impl(ctx):
         source_scripts = ctx.files._scripts_windows
     scripts = [_copy_script(ctx, script) for script in source_scripts]
 
-    escripts = [link_escript(ctx, escript) for escript in ctx.files._scripts]
+    escripts = [copy_escript(ctx, escript) for escript in ctx.files._scripts]
 
     plugins = flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
