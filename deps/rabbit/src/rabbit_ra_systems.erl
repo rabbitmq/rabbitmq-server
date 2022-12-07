@@ -78,10 +78,12 @@ get_config(quorum_queues = RaSystem) ->
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
+    CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, false),
     DefaultConfig#{name => RaSystem,
                    default_max_append_entries_rpc_batch_size => AERBatchSize,
                    wal_compute_checksums => WalChecksums,
-                   segment_compute_checksums => SegmentChecksums};
+                   segment_compute_checksums => SegmentChecksums,
+                   compress_mem_tables => CompressMemTables};
 get_config(coordination = RaSystem) ->
     DefaultConfig = get_default_config(),
     CoordDataDir = filename:join(
