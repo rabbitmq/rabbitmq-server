@@ -8,16 +8,15 @@
 %% TODO rename this
 -module(rabbit_federation_exchange).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
+
 -rabbit_boot_step({?MODULE,
                    [{description, "federation exchange decorator"},
                     {mfa, {rabbit_registry, register,
                            [exchange_decorator, <<"federation">>, ?MODULE]}},
-                    {requires, rabbit_registry},
                     {cleanup, {rabbit_registry, unregister,
                                [exchange_decorator, <<"federation">>]}},
-                    {enables, recovery}]}).
-
--include_lib("amqp_client/include/amqp_client.hrl").
+                    {requires, [rabbit_registry, recovery]}]}).
 
 -behaviour(rabbit_exchange_decorator).
 
