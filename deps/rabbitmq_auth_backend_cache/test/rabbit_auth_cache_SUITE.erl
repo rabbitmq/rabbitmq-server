@@ -155,11 +155,11 @@ get_deleted(Config) ->
 
 
 random_timing(Config) ->
-    random_timing(Config, 30000, 1000).
+    random_timing(Config, 15000, 1000).
 
 random_timing(Config, MaxTTL, Parallel) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
-    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 1000} || N <- lists:seq(1, Parallel)],
+    RandomTTls = [{N, rabbit_misc:random(MaxTTL-1000) + 1000} || N <- lists:seq(1, Parallel)],
     Pid = self(),
     Ref = make_ref(),
     Pids = lists:map(
@@ -188,7 +188,7 @@ random_timing(Config, MaxTTL, Parallel) ->
                             end
                     end,
                     % expiry error
-                    timer:sleep(TTL + 200),
+                    timer:sleep(TTL + 500),
                     {error, not_found} = AuthCacheModule:get(Key),
                     Pid ! {ok, self(), Ref}
                 end)
