@@ -306,8 +306,8 @@ erlang_app(
     deps = DEPS,
 )
 """,
-    sha256 = "fbfded7fcdc2d8bead3564601543d158ab068aeeeaeafa1c77ca9b77e0e653e3",
-    version = "2.4.3",
+    sha256 = "241e6842a11a8e6e895a0ce1810c8f48b8ac842883e286b47c38a2d327d79930",
+    version = "2.4.4",
 )
 
 erlang_package.hex_package(
