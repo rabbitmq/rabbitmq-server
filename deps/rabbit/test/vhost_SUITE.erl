@@ -24,6 +24,7 @@ all() ->
 groups() ->
     ClusterSize1Tests = [
         vhost_is_created_with_default_limits,
+        vhost_is_created_with_operator_policies,
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
         vhost_creation_idempotency,
@@ -321,19 +322,26 @@ vhost_creation_idempotency(Config) ->
     end.
 
 vhost_is_created_with_default_limits(Config) ->
-    VHost = <<"limits-test">>,
-    Pattern = "^limits-.*$",
+    VHost = <<"vhost1">>,
     Limits = [{<<"max-connections">>, 10}, {<<"max-queues">>, 1}],
-    Env = [{vhosts, [{Pattern, Limits}]}],
-    try
-        ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                      application, set_env, [rabbit, default_limits, Env])),
-        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-        ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                          rabbit_vhost_limit, list, [VHost]))
-    after
-        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
-    end.
+    Pattern = [{<<"pattern">>, ".*"}],
+    Env = [{vhosts, [{<<"id">>, Limits++Pattern}]}],
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            application, set_env, [rabbit, default_limits, Env])),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            rabbit_vhost_limit, list, [VHost])).
+
+vhost_is_created_with_operator_policies(Config) ->
+    VHost = <<"vhost1">>,
+    PolicyName = <<"default-operator-policy">>,
+    Definition = [{<<"expires">>, 10}],
+    Env = [{operator, [{PolicyName, Definition}]}],
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            application, set_env, [rabbit, default_policies, Env])),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            rabbit_policy, lookup_op, [VHost, PolicyName])).
 
 parse_tags(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_tags1, [Config]).

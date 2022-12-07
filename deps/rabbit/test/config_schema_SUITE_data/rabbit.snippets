@@ -118,26 +118,26 @@ ssl_options.fail_if_no_peer_cert = true",
   "disk_free_limit.absolute = 50000",
    [{rabbit, [{disk_free_limit, 50000}]}],[]},
 
-
- {default_vhost_limits_with_two_limits,
+ {default_policies_operator,
  "
-  default_limits.vhosts.a.pattern = .*
-  default_limits.vhosts.a.max_queues = 10
-  default_limits.vhosts.a.max_connections = 100
+  default_policies.operator.a.expires = 1h
+  default_policies.operator.a.queue_pattern = apple
+  default_policies.operator.a.vhost_pattern = banana
  ",
-  [{rabbit, [{default_limits, [{vhosts, [
-      {<<".*">>, [{<<"max-connections">>, 100}, {<<"max-queues">>, 10}]}
-                                       ]}]}]}],
+  [{rabbit, [{default_policies, [{operator, [
+      {<<"a">>, [{<<"expires">>, 3600000},
+                 {<<"queue-pattern">>, "apple"},
+                 {<<"vhost-pattern">>, "banana"}]}]}]}]}],
   []},
 
- {default_vhost_limits_with_one_limit,
+ {default_vhost_limits,
  "
-  default_limits.vhosts.a.pattern = .*
+  default_limits.vhosts.a.pattern = banana
   default_limits.vhosts.a.max_queues = 10
  ",
   [{rabbit, [{default_limits, [{vhosts, [
-      {<<".*">>, [{<<"max-queues">>, 10}]}
-                                       ]}]}]}],
+      {<<"a">>, [{<<"pattern">>, "banana"},
+                 {<<"max-queues">>, 10}]}]}]}]}],
   []},
 
  {default_user_settings,
