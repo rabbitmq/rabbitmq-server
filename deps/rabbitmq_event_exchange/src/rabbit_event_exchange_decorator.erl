@@ -14,10 +14,9 @@
                    [{description, "event exchange decorator"},
                     {mfa, {rabbit_registry, register,
                            [exchange_decorator, <<"event">>, ?MODULE]}},
-                    {requires, rabbit_registry},
                     {cleanup, {rabbit_registry, unregister,
                                [exchange_decorator, <<"event">>]}},
-                    {enables, recovery}]}).
+                    {requires, [rabbit_registry, recovery]}]}).
 
 -behaviour(rabbit_exchange_decorator).
 
