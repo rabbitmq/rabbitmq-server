@@ -141,6 +141,7 @@ _APP_ENV = """[
 DEPS = [
     "//deps/amqp10_common:erlang_app",
     "//deps/rabbit_common:erlang_app",
+    "@cuttlefish//:erlang_app",
     "@ra//:erlang_app",
     "@ranch//:erlang_app",
     "@stdout_formatter//:erlang_app",
@@ -149,7 +150,6 @@ DEPS = [
 
 RUNTIME_DEPS = [
     "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
-    "@cuttlefish//:erlang_app",
     "@observer_cli//:erlang_app",
     "@osiris//:erlang_app",
     "@recon//:erlang_app",
@@ -1036,6 +1036,13 @@ suites = [
         size = "small",
         deps = [
             "//deps/rabbit_common:erlang_app",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_cuttlefish_SUITE",
+        size = "small",
+        deps = [
+            "@cuttlefish//:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
