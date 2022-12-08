@@ -45,10 +45,12 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def load_commands(scope, opts) do
-    nopts = case Helpers.normalise_node_option(opts) do
-      {:error, _} -> opts
-      {:ok, options} -> options
-    end
+    nopts =
+      case Helpers.normalise_node_option(opts) do
+        {:error, _} -> opts
+        {:ok, options} -> options
+      end
+
     make_module_map(plugin_modules(nopts) ++ ctl_modules(), scope)
   end
 
