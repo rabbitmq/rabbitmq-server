@@ -249,7 +249,12 @@
           <th><label>Type:</label></th>
           <td>
             <select name="queuetype" onchange="select_queue_type(queuetype)">
-              <option value="classic">Classic</option>
+              <option value="default">Default for virtual host</option>
+              <% if (queue_type == "classic") { %>
+               <option value="classic" selected>Classic</option>
+              <% } else { %>
+               <option value="classic">Classic</option>
+              <% } %>
               <% if (queue_type == "quorum") { %>
                <option value="quorum" selected>Quorum</option>
               <% } else { %>
@@ -267,7 +272,7 @@
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
-<% if (queue_type == "classic") { %>
+<% if (queue_type == "classic" || queue_type == "default") { %>
         <tr>
           <th><label>Durability:</label></th>
           <td>
