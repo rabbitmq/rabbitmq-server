@@ -11,9 +11,8 @@ load("@rules_erlang//:source_tree.bzl", "source_tree")
 load(
     ":rabbitmq_home.bzl",
     "RABBITMQ_HOME_ATTRS",
-    "RabbitmqHomeInfo",
+    "copy_escript",
     "flatten",
-    "link_escript",
 )
 load(
     ":rabbitmq.bzl",
@@ -77,7 +76,7 @@ def _sbin_dir_private_impl(ctx):
     ]
 
 def _escript_dir_private_impl(ctx):
-    escripts = [link_escript(ctx, escript) for escript in ctx.files._scripts]
+    escripts = [copy_escript(ctx, escript) for escript in ctx.files._scripts]
 
     return [
         DefaultInfo(
