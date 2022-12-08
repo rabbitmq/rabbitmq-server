@@ -10,7 +10,8 @@
          get_global_counters/4,
          expect_publishes/2,
          connect/2,
-         connect/3]).
+         connect/3,
+         connect/4]).
 
 all_connection_pids(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -69,7 +70,10 @@ connect(ClientId, Config) ->
     connect(ClientId, Config, []).
 
 connect(ClientId, Config, AdditionalOpts) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    connect(ClientId, Config, 0, AdditionalOpts).
+
+connect(ClientId, Config, Node, AdditionalOpts) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
     Options = [{host, "localhost"},
                {port, P},
                {clientid, rabbit_data_coercion:to_binary(ClientId)},

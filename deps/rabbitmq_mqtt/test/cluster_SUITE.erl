@@ -9,7 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--import(util, [expect_publishes/2]).
+-import(util, [expect_publishes/2, connect/4]).
 
 -import(rabbit_ct_broker_helpers,
         [setup_steps/0,
@@ -205,21 +205,10 @@ assert_connection_count(Config, Retries, NodeId, NumElements) ->
     end.
 
 connect_to_node(Config, Node, ClientID) ->
-  Port = get_node_config(Config, Node, tcp_port_mqtt),
-  {ok, C} = connect(Port, ClientID),
+  C = connect(ClientID, Config, Node, [{connect_timeout, 1}, {ack_timeout, 1}]),
+  unlink(C),
   MRef = erlang:monitor(process, C),
   {ok, MRef, C}.
-
-connect(Port, ClientID) ->
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, Port},
-                                {clientid, ClientID},
-                                {proto_ver, v4},
-                                {connect_timeout, 1},
-                                {ack_timeout, 1}]),
-    {ok, _Properties} = emqtt:connect(C),
-    unlink(C),
-    {ok, C}.
 
 await_disconnection(Ref) ->
     receive
