@@ -14,8 +14,8 @@
 -import(rabbit_ct_broker_helpers, [rpc/5]).
 -import(rabbit_ct_helpers, [eventually/1]).
 -import(util, [expect_publishes/2,
-               get_global_counters/4
-              ]).
+               get_global_counters/4,
+               connect_to_node/3]).
 
 -define(PROTO_VER, v4).
 
@@ -70,7 +70,7 @@ end_per_testcase(_TestCase, Config) ->
 
 delete_ra_cluster_mqtt_node(Config) ->
     FeatureFlag = ?FUNCTION_NAME,
-    C = connect_to_node(Config, 1, <<"my-client">>),
+    {ok, _, C} = connect_to_node(Config, 1, <<"my-client">>),
     timer:sleep(500),
     %% old client ID tracking works
     ?assertEqual(1, length(util:all_connection_pids(Config))),
@@ -94,7 +94,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     FeatureFlag = ?FUNCTION_NAME,
     Msg = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
 
-    C1 = connect_to_node(Config, 0, ClientId),
+    {ok, _, C1} = connect_to_node(Config, 0, ClientId),
     {ok, _, [0]} = emqtt:subscribe(C1, Topic, qos0),
     ok = emqtt:publish(C1, Topic, Msg, qos0),
     ok = expect_publishes(Topic, [Msg]),
@@ -115,7 +115,7 @@ rabbit_mqtt_qos0_queue(Config) ->
 
     %% Reconnecting with the same client ID will terminate the old connection.
     true = unlink(C1),
-    C2 = connect_to_node(Config, 0, ClientId),
+    {ok, _, C2} = connect_to_node(Config, 0, ClientId),
     {ok, _, [0]} = emqtt:subscribe(C2, Topic, qos0),
     %% This time, we get the new queue type.
     eventually(
@@ -129,14 +129,3 @@ rabbit_mqtt_qos0_queue(Config) ->
                    messages_delivered_consume_auto_ack_total := 1},
                  get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, FeatureFlag}])),
     ok = emqtt:disconnect(C2).
-
-connect_to_node(Config, Node, ClientID) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, Port},
-                                {clientid, ClientID},
-                                {proto_ver, ?PROTO_VER},
-                                {connect_timeout, 1},
-                                {ack_timeout, 1}]),
-    {ok, _Properties} = emqtt:connect(C),
-    C.
