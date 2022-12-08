@@ -21,6 +21,11 @@
       <tr>
         <th>Tracing enabled:</th>
         <td><%= fmt_boolean(vhost.tracing) %></td>
+      </tr>
+      <tr>
+        <th>Default queue type:</th>
+        <td><%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" :vhost.default_queue_type %></td>
+      </tr>
       <tr>
         <th>State:</th>
         <td>

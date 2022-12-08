@@ -120,7 +120,8 @@ var ALL_COLUMNS =
                   ['connected_at', 'Connected at', false]]},
 
      'vhosts':
-     {'Overview': [['cluster-state',   'Cluster state',  false],
+     {'Overview': [['default-queue-type', 'Default queue type', false],
+                   ['cluster-state',   'Cluster state',  false],
                    ['description',   'Description',  false],
                    ['tags',   'Tags',  false]],
       'Messages': [['msgs-ready',      'Ready',          true],
@@ -685,7 +686,7 @@ function setup_global_vars() {
     }
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
 
-    queue_type = "classic";
+    queue_type = "default";
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
 

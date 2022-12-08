@@ -23,6 +23,9 @@
       <th><%= fmt_sort('Name', 'name') %></th>
       <th>Users <span class="help" id="internal-users-only"></span></th>
       <th>State</th>
+<% if (show_column('vhosts',           'default-queue-type')) { %>
+      <th>Default queue type</th>
+<% } %>
 <% if (show_column('vhosts',           'cluster-state')) { %>
       <th>Cluster state</th>
 <% } %>
@@ -69,6 +72,11 @@
          <td class="c"><%= fmt_permissions(vhost, permissions, 'vhost', 'user',
                            '<p class="warning">No users</p>') %></td>
          <td><%= fmt_vhost_state(vhost) %></td>
+<% if (show_column('vhosts', 'default-queue-type')) { %>
+   <td>
+     <%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" :vhost.default_queue_type %>
+   </td>
+<% } %>
 <% if (show_column('vhosts', 'cluster-state')) { %>
          <td>
              <table>
