@@ -100,6 +100,11 @@ rabbitmqctl(
     home = ":broker-home",
 )
 
+rabbitmqctl(
+    name = "rabbitmq-streams",
+    home = ":broker-home",
+)
+
 shell(
     name = "repl",
     deps = PLUGINS,
