@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         error
 
       results when errors_only ->
-        for {{:resource, vhost, _kind, name}, {:errors, _, _} = res} <- results,
+        for {{:resource, vhost, _kind, name}, {:error, _, _} = res} <- results,
             do: [
               {:vhost, vhost},
               {:name, name},
@@ -146,6 +146,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   end
 
   defp format_result({:error, _size, err}) do
-    :io.format("error: ~W", [err, 10])
+    to_string(:io_lib.format("error: ~W", [err, 10]))
   end
 end
