@@ -107,6 +107,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   end
 
   defp format_result({:error, _size, err}) do
-    :io.format("error: ~W", [err, 10])
+    to_string(:io_lib.format("error: ~W", [err, 10]))
   end
 end
