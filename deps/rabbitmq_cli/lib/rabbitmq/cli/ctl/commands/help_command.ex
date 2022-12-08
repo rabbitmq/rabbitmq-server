@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def run([command_name | _], opts) do
     CommandModules.load(opts)
 
-    module_map = CommandModules.module_map()
+    module_map = CommandModules.module_map(opts)
 
     case module_map[command_name] do
       nil ->
