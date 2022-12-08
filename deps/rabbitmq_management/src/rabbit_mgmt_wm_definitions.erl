@@ -99,14 +99,15 @@ vhost_definitions(ReqData, VHost, Context) ->
     Bs = [strip_vhost(B) || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                             export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
-    Parameters = [rabbit_mgmt_format:parameter(
-                    rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(P))
+    Parameters = [strip_vhost(
+                    rabbit_mgmt_format:parameter(
+                      rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(P)))
                   || P <- rabbit_runtime_parameters:list(VHost)],
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
           filter(
             [{parameters,  Parameters},
-             {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
+             {policies,    [strip_vhost(P) || P <- rabbit_mgmt_wm_policies:basic(ReqData)]},
              {queues,      Qs},
              {exchanges,   Xs},
              {bindings,    Bs}]),

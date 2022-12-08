@@ -729,12 +729,11 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     Name = R#resource.name,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
-add_queue_int(Queue, Name, ActingUser) ->
+add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
     case rabbit_amqqueue:exists(Name) of
         true ->
             ok;
         false ->
-            VHostName = maps:get(vhost, Queue, rabbit_vhost:default_name()),
             AutoDelete = maps:get(auto_delete, Queue, false),
             DurableDeclare = maps:get(durable, Queue, true),
             ExclusiveDeclare = maps:get(exclusive, Queue, false),
