@@ -37,9 +37,9 @@
     fd_total,
     fhc_stats,
     node_owners,
-    last_ts,
     interval,
-    error_logged_time
+    error_logged_time,
+    fd_warning_logged
 }).
 
 %%--------------------------------------------------------------------
@@ -102,80 +102,38 @@ get_used_fd({unix, _}, State0) ->
     end;
 
 %% handle.exe can be obtained from
-%% https://technet.microsoft.com/en-us/sysinternals/bb896655.aspx
-
-%% Output looks like:
-
-%% Handle v3.42
-%% Copyright (C) 1997-2008 Mark Russinovich
-%% Sysinternals - www.sysinternals.com
-%%
-%% Handle type summary:
-%%   ALPC Port       : 2
-%%   Desktop         : 1
-%%   Directory       : 1
-%%   Event           : 108
-%%   File            : 25
-%%   IoCompletion    : 3
-%%   Key             : 7
-%%   KeyedEvent      : 1
-%%   Mutant          : 1
-%%   Process         : 3
-%%   Process         : 38
-%%   Thread          : 41
-%%   Timer           : 3
-%%   TpWorkerFactory : 2
-%%   WindowStation   : 2
-%% Total handles: 238
-
-%% Nthandle v4.22 - Handle viewer
-%% Copyright (C) 1997-2019 Mark Russinovich
-%% Sysinternals - www.sysinternals.com
-%%
-%% Handle type summary:
-%%   <Unknown type>  : 1
-%%   <Unknown type>  : 166
-%%   ALPC Port       : 11
-%%   Desktop         : 1
-%%   Directory       : 2
-%%   Event           : 226
-%%   File            : 122
-%%   IoCompletion    : 8
-%%   IRTimer         : 6
-%%   Key             : 42
-%%   Mutant          : 7
-%%   Process         : 3
-%%   Section         : 2
-%%   Semaphore       : 43
-%%   Thread          : 36
-%%   TpWorkerFactory : 3
-%%   WaitCompletionPacket: 25
-%%   WindowStation   : 2
-%% Total handles: 706
-
+%% https://learn.microsoft.com/en-us/sysinternals/downloads/handle
 %% Note that the "File" number appears to include network sockets too; I assume
 %% that's the number we care about. Note also that if you omit "-s" you will
 %% see a list of file handles *without* network sockets. If you then add "-a"
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
-
 get_used_fd({win32, _}, State0) ->
-    Handle = rabbit_misc:os_cmd(
-               "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
-    case Handle of
-        [] ->
-            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals", [], State0),
-            {State1, 0};
-        _  ->
-            case find_files_line(string:tokens(Handle, "\r\n")) of
-                unknown ->
-                    State1 = log_fd_error("handle.exe output did not contain "
-                                          "a line beginning with '  File ', unable "
-                                          "to determine used file descriptor "
-                                          "count: ~tp", [Handle], State0),
-                    {State1, 0};
-                UsedFd ->
-                    {State0, UsedFd}
+    Pid = os:getpid(),
+    case os:find_executable("handle.exe") of
+        false ->
+            State1 = log_fd_warning_once("Could not find handle.exe, using powershell to determine handle count", [], State0),
+            UsedFd = get_used_fd_via_powershell(Pid),
+            {State1, UsedFd};
+        HandleExe ->
+            Handle = rabbit_misc:os_cmd("\"" ++ HandleExe ++ "\" /accepteula -s -p " ++ Pid ++ " 2> nul"),
+            case Handle of
+                [] ->
+                    State1 = log_fd_warning_once("Could not execute handle.exe, using powershell to determine handle count", [], State0),
+                    UsedFd = get_used_fd_via_powershell(Pid),
+                    {State1, UsedFd};
+                _  ->
+                    case find_files_line(string:tokens(Handle, "\r\n")) of
+                        unknown ->
+                            State1 = log_fd_warning_once("handle.exe output did not contain "
+                                                         "a line beginning with 'File', using "
+                                                         "powershell to determine used file descriptor "
+                                                         "count: ~tp", [Handle], State0),
+                            UsedFd = get_used_fd_via_powershell(Pid),
+                            {State1, UsedFd};
+                        UsedFd ->
+                            {State0, UsedFd}
+                    end
             end
     end.
 
@@ -186,6 +144,11 @@ find_files_line(["  File " ++ Rest | _T]) ->
     list_to_integer(Files);
 find_files_line([_H | T]) ->
     find_files_line(T).
+
+get_used_fd_via_powershell(Pid) ->
+    PwshExe = find_powershell(),
+    Handle = rabbit_misc:os_cmd("\"" ++ PwshExe ++ "\" -NoLogo -NoProfile -NonInteractive -Command (Get-Process -Id " ++ Pid ++ ").Handles"),
+    list_to_integer(string:trim(Handle)).
 
 -define(SAFE_CALL(Fun, NoProcFailResult),
     try
@@ -198,6 +161,13 @@ get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
 
 get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
+
+log_fd_warning_once(Fmt, Args, #state{fd_warning_logged = undefined}=State) ->
+    % no warning has been logged, so log it and make a note of when
+    ok = rabbit_log:warning(Fmt, Args),
+    State#state{fd_warning_logged = true};
+log_fd_warning_once(_Fmt, _Args, #state{fd_warning_logged = true}=State) ->
+    State.
 
 log_fd_error(Fmt, Args, #state{error_logged_time = undefined}=State) ->
     % rabbitmq/rabbitmq-management#90
@@ -460,3 +430,16 @@ get_fhc_stats() ->
 
 get_ra_io_metrics() ->
     lists:sort(ets:tab2list(ra_io_metrics)).
+
+find_powershell() ->
+    case os:find_executable("pwsh.exe") of
+        false ->
+            case os:find_executable("powershell.exe") of
+                false ->
+                    "powershell.exe";
+                PowershellExe ->
+                    PowershellExe
+            end;
+        PwshExe ->
+            PwshExe
+    end.
