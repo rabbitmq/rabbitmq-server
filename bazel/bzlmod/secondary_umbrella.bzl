@@ -28,10 +28,10 @@ def secondary_umbrella():
         name = "rabbitmq-server-generic-unix-3.11",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-        strip_prefix = "rabbitmq_server-3.11.2",
+        strip_prefix = "rabbitmq_server-3.11.4",
         # This file if produced by the .github/workflows/secondary-umbrella.yaml
         # GitHub Actions workflow.
         urls = [
-            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.11.2.tar.xz",
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.11.4.tar.xz",
         ],
     )
