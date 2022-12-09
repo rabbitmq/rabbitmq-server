@@ -30,6 +30,7 @@
          close_dest/1,
          ack/3,
          nack/3,
+         status/1,
          forward/4
         ]).
 
@@ -301,6 +302,14 @@ nack(Tag, true, State = #{source := #{current := #{session := Session},
     ok = amqp10_client_session:disposition(Session, receiver, First,
                                            Tag, true, accepted),
     State#{source => Src#{last_nacked_tag => Tag}}.
+
+status(#{dest := #{current := #{link_state := attached}}}) ->
+    flow;
+status(#{dest := #{current := #{link_state := credited}}}) ->
+    running;
+status(_) ->
+    %% Destination not yet connected
+    ignore.
 
 -spec forward(Tag :: tag(), Props :: #{atom() => any()},
               Payload :: binary(), state()) -> state().
