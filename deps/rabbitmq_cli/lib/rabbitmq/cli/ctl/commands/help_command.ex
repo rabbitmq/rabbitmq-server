@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def run([command_name | _], opts) do
     CommandModules.load(opts)
 
-    module_map = CommandModules.module_map()
+    module_map = CommandModules.module_map(opts)
 
     case module_map[command_name] do
       nil ->
@@ -58,7 +58,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
     case opts[:list_commands] do
       true ->
-        {:ok, commands_description()}
+        {:ok, commands_description(opts)}
 
       _ ->
         {:ok, all_usage(opts)}
@@ -98,7 +98,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
     tool_usage(tool_name) ++
       ["\n\nAvailable commands:\n"] ++
-      commands_description() ++
+      commands_description(opts) ++
       help_footer(tool_name)
   end
 
@@ -228,8 +228,8 @@ short            | long          | description
     nil != CommandBehaviour.switches(command)[:timeout]
   end
 
-  defp commands_description() do
-    module_map = CommandModules.module_map()
+  defp commands_description(opts) do
+    module_map = CommandModules.module_map(opts)
 
     pad_commands_to =
       Enum.reduce(module_map, 0, fn {name, _}, longest ->
