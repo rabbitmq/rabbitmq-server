@@ -27,6 +27,7 @@
          forward/4,
          ack/3,
          nack/3,
+         status/1,
          % common functions
          decr_remaining_unacked/1,
          decr_remaining/2
@@ -80,7 +81,7 @@
 -callback nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback forward(Tag :: tag(), Props :: #{atom() => any()},
                   Payload :: binary(), state()) -> state().
-
+-callback status(state()) -> rabbit_shovel_status:blocked_status() | ignore.
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
     source_config() | dest_config().
@@ -150,6 +151,9 @@ ack(Tag, Multi, #{source := #{module := Mod}} = State) ->
 -spec nack(tag(), boolean(), state()) -> state().
 nack(Tag, Multi, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tag, Multi, State).
+
+status(#{dest := #{module := Mod}} = State) ->
+    Mod:status(State).
 
 %% Common functions
 

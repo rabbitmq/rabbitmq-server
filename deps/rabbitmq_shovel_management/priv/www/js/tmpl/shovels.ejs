@@ -46,7 +46,7 @@
     </td>
     <td><%= shovel.timestamp %></td>
 <% } else { %>
-    <td><%= fmt_state('green', shovel.state) %></td>
+    <td><%= fmt_object_state(shovel) %></td>
       <td><%= fmt_string(shovel.src_protocol) %></td>
       <td><%= shovel.src_uri == undefined ? fmt_string(shovel.src_uri) : fmt_string(fmt_uri_with_credentials(shovel.src_uri)) %></td>
       <td><%= fmt_shovel_endpoint('src_', shovel) %></td>
