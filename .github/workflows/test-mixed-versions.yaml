@@ -27,8 +27,8 @@ jobs:
     name: Prepare Artifacts
     runs-on: ubuntu-latest
     env:
-      # otp-min
-      otp_version_id: 25_0
+      # must be a version supported by builds on both this and the secondary umbrella branch
+      otp_version_id: 24
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
