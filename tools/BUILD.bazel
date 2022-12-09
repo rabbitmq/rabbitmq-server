@@ -5,7 +5,10 @@ erlang_ls_tree(
     name = "erlang_ls_files",
     apps = all_plugins(
         rabbitmq_workspace = "",
-    ),
+    ) + [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+        "//deps/rabbitmq_ct_client_helpers:erlang_app",
+    ],
 )
 
 erlang_ls_config(
