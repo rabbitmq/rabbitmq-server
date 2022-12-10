@@ -61,7 +61,7 @@
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
--export([os_cmd/1, pwsh_cmd/1]).
+-export([os_cmd/1, pwsh_cmd/1, win32_cmd/2]).
 -export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
 -export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0,
@@ -1181,8 +1181,12 @@ is_os_process_alive(Pid) ->
                                      os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
 =======
                                      Cmd = format("(Get-Process -Id ~ts).ProcessName", [PidS]),
+<<<<<<< HEAD
                                      {ok, Res} = pwsh_cmd(Cmd),
 >>>>>>> f7b65abc15 (Execute powershell directly)
+=======
+                                     {ok, [Res]} = pwsh_cmd(Cmd),
+>>>>>>> 10fcc64b74 (Use win32_cmd/2 to run handle.exe because it is great.)
                                      case Res of
                                          "erl"  -> true;
                                          "werl" -> true;
@@ -1190,7 +1194,7 @@ is_os_process_alive(Pid) ->
                                      end;
                                  TasklistExe ->
                                      Args = ["/nh", "/fi", "pid eq " ++ PidS],
-                                     {ok, Res} = do_win32_cmd(TasklistExe, Args),
+                                     {ok, [Res]} = win32_cmd(TasklistExe, Args),
                                      match =:= re:run(Res, "erl\\.exe", [{capture, none}])
                              end
                      end}]).
@@ -1466,44 +1470,46 @@ whereis_name(Name) ->
 %% End copypasta from gen_server2.erl
 %% -------------------------------------------------------------------------
 
-%% This will execute a Powershell command that is expected to return a
-%% single-line result. Output lines can't exceed 512 bytes. If multiple
-%% lines are returned by the command, these functions will return the
-%% last line.
+%% This will execute a Powershell command without an intervening cmd.exe
+%% process. Output lines can't exceed 512 bytes.
 %%
 %% Inspired by os:cmd/1 in lib/kernel/src/os.erl
 do_pwsh_cmd(Command) ->
     Pwsh = find_powershell(),
-    A1 = ["-NoLogo",
-          "-NonInteractive",
-          "-NoProfile",
-          "-InputFormat", "Text",
-          "-OutputFormat", "Text",
-          "-Command", Command],
-    do_win32_cmd(Pwsh, A1).
+    Args = ["-NoLogo",
+            "-NonInteractive",
+            "-NoProfile",
+            "-InputFormat", "Text",
+            "-OutputFormat", "Text",
+            "-Command", Command],
+    win32_cmd(Pwsh, Args).
 
-do_win32_cmd(Exe, Args) ->
+win32_cmd(Exe, Args) ->
     SystemRootDir = os:getenv("SystemRoot", "/"),
     % Note: 'hide' must be used or this will not work!
     A0 = [exit_status, stderr_to_stdout, in, hide,
           {cd, SystemRootDir}, {line, 512}, {arg0, Exe}, {args, Args}],
     Port = erlang:open_port({spawn_executable, Exe}, A0),
     MonRef = erlang:monitor(port, Port),
-    Result = win32_cmd_receive(Port, MonRef, <<>>),
+    Result = win32_cmd_receive(Port, MonRef, []),
     true = erlang:demonitor(MonRef, [flush]),
     Result.
 
-win32_cmd_receive(Port, MonRef, Data0) ->
+win32_cmd_receive(Port, MonRef, Acc0) ->
     receive
         {Port, {exit_status, 0}} ->
             win32_cmd_receive_finish(Port, MonRef),
-            {ok, Data0};
+            {ok, lists:reverse(Acc0)};
         {Port, {exit_status, Status}} ->
             win32_cmd_receive_finish(Port, MonRef),
             {error, {exit_status, Status}};
-        {Port, {data, {eol, Data1}}} ->
-            Data2 = string:trim(Data1),
-            win32_cmd_receive(Port, MonRef, Data2);
+        {Port, {data, {eol, Data0}}} ->
+            Data1 = string:trim(Data0),
+            Acc1 = case Data1 of
+                       [] -> Acc0; % Note: skip empty lines in output
+                       Data2 -> [Data2 | Acc0]
+                   end,
+            win32_cmd_receive(Port, MonRef, Acc1);
         {'DOWN', MonRef, _, _, _} ->
             flush_exit(Port),
             {error, nodata}
