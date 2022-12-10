@@ -116,19 +116,20 @@ get_used_fd({win32, _}, State0) ->
             UsedFd = get_used_fd_via_powershell(Pid),
             {State1, UsedFd};
         HandleExe ->
-            Handle = rabbit_misc:os_cmd("\"" ++ HandleExe ++ "\" /accepteula -s -p " ++ Pid ++ " 2> nul"),
-            case Handle of
+            Args = ["/accepteula", "-s", "-p", Pid],
+            HandleExeOutput = rabbit_misc:win32_cmd(HandleExe, Args),
+            case HandleExeOutput of
                 [] ->
                     State1 = log_fd_warning_once("Could not execute handle.exe, using powershell to determine handle count", [], State0),
                     UsedFd = get_used_fd_via_powershell(Pid),
                     {State1, UsedFd};
                 _  ->
-                    case find_files_line(string:tokens(Handle, "\r\n")) of
+                    case find_files_line(HandleExeOutput) of
                         unknown ->
                             State1 = log_fd_warning_once("handle.exe output did not contain "
                                                          "a line beginning with 'File', using "
                                                          "powershell to determine used file descriptor "
-                                                         "count: ~tp", [Handle], State0),
+                                                         "count: ~tp", [HandleExeOutput], State0),
                             UsedFd = get_used_fd_via_powershell(Pid),
                             {State1, UsedFd};
                         UsedFd ->
@@ -147,7 +148,7 @@ find_files_line([_H | T]) ->
 
 get_used_fd_via_powershell(Pid) ->
     Cmd = "Get-Process -Id " ++ Pid ++ " | Select-Object -ExpandProperty HandleCount",
-    {ok, Result} = rabbit_misc:pwsh_cmd(Cmd),
+    {ok, [Result]} = rabbit_misc:pwsh_cmd(Cmd),
     list_to_integer(Result).
 
 -define(SAFE_CALL(Fun, NoProcFailResult),
