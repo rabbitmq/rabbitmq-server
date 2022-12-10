@@ -135,7 +135,7 @@ get_used_fd({win32, _}, State0) ->
             {State1, UsedFd};
         HandleExe ->
             Args = ["/accepteula", "-s", "-p", Pid],
-            HandleExeOutput = rabbit_misc:win32_cmd(HandleExe, Args),
+            {ok, HandleExeOutput} = rabbit_misc:win32_cmd(HandleExe, Args),
             case HandleExeOutput of
                 [] ->
                     State1 = log_fd_warning_once("Could not execute handle.exe, using powershell to determine handle count", [], State0),
@@ -159,7 +159,10 @@ get_used_fd({win32, _}, State0) ->
 
 find_files_line([]) ->
     unknown;
-find_files_line(["  File " ++ Rest | _T]) ->
+% Note:
+% rabbit_misc:win32_cmd trims the output, so there will be no
+% leading/trailing whitespace
+find_files_line(["File " ++ Rest | _T]) ->
     [Files] = string:tokens(Rest, ": "),
     list_to_integer(Files);
 find_files_line([_H | T]) ->
