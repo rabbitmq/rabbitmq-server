@@ -146,9 +146,9 @@ find_files_line([_H | T]) ->
     find_files_line(T).
 
 get_used_fd_via_powershell(Pid) ->
-    PwshExe = find_powershell(),
-    Handle = rabbit_misc:os_cmd("\"" ++ PwshExe ++ "\" -NoLogo -NoProfile -NonInteractive -Command (Get-Process -Id " ++ Pid ++ ").Handles"),
-    list_to_integer(string:trim(Handle)).
+    Cmd = "Get-Process -Id " ++ Pid ++ " | Select-Object -ExpandProperty HandleCount",
+    {ok, Result} = rabbit_misc:pwsh_cmd(Cmd),
+    list_to_integer(Result).
 
 -define(SAFE_CALL(Fun, NoProcFailResult),
     try
@@ -430,16 +430,3 @@ get_fhc_stats() ->
 
 get_ra_io_metrics() ->
     lists:sort(ets:tab2list(ra_io_metrics)).
-
-find_powershell() ->
-    case os:find_executable("pwsh.exe") of
-        false ->
-            case os:find_executable("powershell.exe") of
-                false ->
-                    "powershell.exe";
-                PowershellExe ->
-                    PowershellExe
-            end;
-        PwshExe ->
-            PwshExe
-    end.

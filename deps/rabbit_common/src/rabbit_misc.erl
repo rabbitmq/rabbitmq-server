@@ -62,7 +62,7 @@
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
--export([os_cmd/1]).
+-export([os_cmd/1, pwsh_cmd/1]).
 -export([is_os_process_alive/1]).
 -export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0,
          rabbitmq_and_erlang_versions/0, which_applications/0]).
@@ -1156,6 +1156,14 @@ os_cmd(Command) ->
             end
     end.
 
+pwsh_cmd(Command) ->
+    case os:type() of
+        {win32, _} ->
+            do_pwsh_cmd(Command);
+        _ ->
+            {error, invalid_os_type}
+    end.
+
 is_os_process_alive(Pid) ->
     with_os([{unix, fun () ->
                             run_ps(Pid) =:= 0
@@ -1164,26 +1172,17 @@ is_os_process_alive(Pid) ->
                              PidS = rabbit_data_coercion:to_list(Pid),
                              case os:find_executable("tasklist.exe") of
                                  false ->
-                                     Cmd =
-                                     format(
-                                       "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
-                                       "\"(Get-Process -Id ~ts).ProcessName\"",
-                                       [PidS]),
-                                     Res =
-                                     os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
+                                     Cmd = format("(Get-Process -Id ~ts).ProcessName", [PidS]),
+                                     {ok, Res} = pwsh_cmd(Cmd),
                                      case Res of
                                          "erl"  -> true;
                                          "werl" -> true;
                                          _      -> false
                                      end;
-                                 _ ->
-                                     Cmd =
-                                     "tasklist /nh /fi "
-                                     "\"pid eq " ++ PidS ++ "\"",
-                                     Res = os_cmd(Cmd ++ " 2>&1"),
-                                     match =:= re:run(Res,
-                                                      "erl\\.exe",
-                                                      [{capture, none}])
+                                 TasklistExe ->
+                                     Args = ["/nh", "/fi", "pid eq " ++ PidS],
+                                     {ok, Res} = do_win32_cmd(TasklistExe, Args),
+                                     match =:= re:run(Res, "erl\\.exe", [{capture, none}])
                              end
                      end}]).
 
@@ -1472,3 +1471,82 @@ whereis_name(Name) ->
 
 %% End copypasta from gen_server2.erl
 %% -------------------------------------------------------------------------
+
+%% This will execute a Powershell command that is expected to return a
+%% single-line result. Output lines can't exceed 512 bytes. If multiple
+%% lines are returned by the command, these functions will return the
+%% last line.
+%%
+%% Inspired by os:cmd/1 in lib/kernel/src/os.erl
+do_pwsh_cmd(Command) ->
+    Pwsh = find_powershell(),
+    A1 = ["-NoLogo",
+          "-NonInteractive",
+          "-NoProfile",
+          "-InputFormat", "Text",
+          "-OutputFormat", "Text",
+          "-Command", Command],
+    do_win32_cmd(Pwsh, A1).
+
+do_win32_cmd(Exe, Args) ->
+    SystemRootDir = os:getenv("SystemRoot", "/"),
+    % Note: 'hide' must be used or this will not work!
+    A0 = [exit_status, stderr_to_stdout, in, hide,
+          {cd, SystemRootDir}, {line, 512}, {arg0, Exe}, {args, Args}],
+    Port = erlang:open_port({spawn_executable, Exe}, A0),
+    MonRef = erlang:monitor(port, Port),
+    Result = win32_cmd_receive(Port, MonRef, <<>>),
+    true = erlang:demonitor(MonRef, [flush]),
+    Result.
+
+win32_cmd_receive(Port, MonRef, Data0) ->
+    receive
+        {Port, {exit_status, 0}} ->
+            win32_cmd_receive_finish(Port, MonRef),
+            {ok, Data0};
+        {Port, {exit_status, Status}} ->
+            win32_cmd_receive_finish(Port, MonRef),
+            {error, {exit_status, Status}};
+        {Port, {data, {eol, Data1}}} ->
+            Data2 = string:trim(Data1),
+            win32_cmd_receive(Port, MonRef, Data2);
+        {'DOWN', MonRef, _, _, _} ->
+            flush_exit(Port),
+            {error, nodata}
+    after 5000 ->
+              {error, timeout}
+    end.
+
+win32_cmd_receive_finish(Port, MonRef) ->
+    catch erlang:port_close(Port),
+    flush_until_down(Port, MonRef).
+
+flush_until_down(Port, MonRef) ->
+    receive
+        {Port, {data, _Bytes}} ->
+            flush_until_down(Port, MonRef);
+        {'DOWN', MonRef, _, _, _} ->
+            flush_exit(Port)
+    after 500 ->
+              flush_exit(Port)
+    end.
+
+flush_exit(Port) ->
+    receive
+        {'EXIT', Port, _} -> ok
+    after 0 ->
+              ok
+    end.
+
+find_powershell() ->
+    case os:find_executable("pwsh.exe") of
+        false ->
+            case os:find_executable("powershell.exe") of
+                false ->
+                    "powershell.exe";
+                PowershellExe ->
+                    PowershellExe
+            end;
+        PwshExe ->
+            PwshExe
+    end.
