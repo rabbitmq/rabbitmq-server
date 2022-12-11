@@ -109,24 +109,6 @@ get_used_fd({unix, _}, State0) ->
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
 get_used_fd({win32, _}, State0) ->
-<<<<<<< HEAD
-    Handle = rabbit_misc:os_cmd(
-               "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
-    case Handle of
-        [] ->
-            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals", [], State0),
-            {State1, 0};
-        _  ->
-            case find_files_line(string:tokens(Handle, "\r\n")) of
-                unknown ->
-                    State1 = log_fd_error("handle.exe output did not contain "
-                                          "a line beginning with '  File ', unable "
-                                          "to determine used file descriptor "
-                                          "count: ~p", [Handle], State0),
-                    {State1, 0};
-                UsedFd ->
-                    {State0, UsedFd}
-=======
     Pid = os:getpid(),
     case os:find_executable("handle.exe") of
         false ->
@@ -153,7 +135,6 @@ get_used_fd({win32, _}, State0) ->
                         UsedFd ->
                             {State0, UsedFd}
                     end
->>>>>>> 9eb993eb65 (Use powershell as a backup to handle.exe)
             end
     end.
 
