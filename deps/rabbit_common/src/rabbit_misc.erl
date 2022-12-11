@@ -1173,22 +1173,8 @@ is_os_process_alive(Pid) ->
                              PidS = rabbit_data_coercion:to_list(Pid),
                              case os:find_executable("tasklist.exe") of
                                  false ->
-<<<<<<< HEAD
-                                     Cmd =
-                                     format(
-                                       "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
-                                       "\"(Get-Process -Id ~s).ProcessName\"",
-                                       [PidS]),
-                                     Res =
-                                     os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
-=======
                                      Cmd = format("(Get-Process -Id ~ts).ProcessName", [PidS]),
-<<<<<<< HEAD
-                                     {ok, Res} = pwsh_cmd(Cmd),
->>>>>>> f7b65abc15 (Execute powershell directly)
-=======
                                      {ok, [Res]} = pwsh_cmd(Cmd),
->>>>>>> 10fcc64b74 (Use win32_cmd/2 to run handle.exe because it is great.)
                                      case Res of
                                          "erl"  -> true;
                                          "werl" -> true;
