@@ -186,9 +186,6 @@ OUTPUT_DIR=test.outputs
 if [ $$# -gt 1 ]; then
     OUTPUT_DIR=shard_$$2_of_*/test.outputs
 fi
-<<<<<<< HEAD
-cd "bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR"
-=======
 
 if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
     echo "Test output dir not found, perhaps shard_index needed?"
@@ -197,7 +194,6 @@ if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
 fi
 
 cd "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR
->>>>>>> 20b23526e7 (See #6645. Improving error output)
 if [ -f outputs.zip ]; then
     unzip -u outputs.zip
 fi
