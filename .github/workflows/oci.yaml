@@ -148,7 +148,7 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   build-publish-dev-bazel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
