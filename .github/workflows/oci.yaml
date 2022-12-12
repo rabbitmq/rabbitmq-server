@@ -28,7 +28,7 @@ jobs:
   # * main-otp-max (image OTP 26)
 
   build-publish-dev-bazel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
