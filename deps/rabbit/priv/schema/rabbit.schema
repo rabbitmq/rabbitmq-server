@@ -2203,8 +2203,6 @@ end}.
     end
 }.
 
-<<<<<<< HEAD
-=======
 {mapping, "raft.adaptive_failure_detector.poll_interval", "aten.poll_interval", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
@@ -2219,29 +2217,6 @@ end}.
   end
 }.
 
-%%
-%% Backing queue version
-%%
-
-{mapping, "classic_queue.default_version", "rabbit.classic_queue_default_version", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
-]}.
-
-{translation, "rabbit.classic_queue_default_version",
-    fun(Conf) ->
-        case cuttlefish:conf_get("classic_queue.default_version", Conf, 1) of
-            1 -> 1;
-            2 -> 2;
-            _ -> cuttlefish:unset()
-        end
-    end
-}.
-
-{mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
-    {datatype, {enum, [true, false]}}]}.
-
->>>>>>> 95755f1de0 (Expose aten poll interval in rabbitmq.conf)
 % ===============================
 % Validators
 % ===============================
