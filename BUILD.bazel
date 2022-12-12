@@ -182,10 +182,18 @@ RELATIVE=$${1#//}
 PACKAGE=$${RELATIVE%%:*}
 SUITE=$${RELATIVE##*:}
 OUTPUT_DIR=test.outputs
+
 if [ $$# -gt 1 ]; then
     OUTPUT_DIR=shard_$$2_of_*/test.outputs
 fi
-cd "bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR"
+
+if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+cd "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR
 if [ -f outputs.zip ]; then
     unzip -u outputs.zip
 fi
@@ -222,7 +230,15 @@ OUTPUT_DIR=test.outputs
 if [ $$# -gt 1 ]; then
     OUTPUT_DIR=shard_$$2_of_*/test.outputs
 fi
+
 TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+
+if [ ! -d "$$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR" ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
 cd "$$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR" && unzip -u outputs.zip
 open index.html
 EOF
@@ -248,6 +264,13 @@ cat << 'EOF' > $@
     if [ $$# -gt 1 ]; then
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
+
+    if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
+        echo "Test output dir not found, perhaps shard_index needed?"
+        echo "Usage: bazel run test-node-data TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
     cd bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR
     if [ -f outputs.zip ]; then
         unzip -u outputs.zip
@@ -276,10 +299,19 @@ cat << 'EOF' > $@
     PACKAGE=$${RELATIVE%%:*}
     SUITE=$${RELATIVE##*:}
     OUTPUT_DIR=test.outputs
+
     if [ $$# -gt 1 ]; then
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
+
     TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+
+    if [ ! -d $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR ]; then
+        echo "Test output dir not found, perhaps shard_index needed?"
+        echo "Usage: bazel run remote-test-node-data TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
     cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip -u outputs.zip
     open index.html
     open ct_run.*/deps.*/run.*/log_private
