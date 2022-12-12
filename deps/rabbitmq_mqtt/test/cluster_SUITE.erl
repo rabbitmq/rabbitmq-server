@@ -10,8 +10,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -import(util, [expect_publishes/2,
-               connect/4,
-               connect_to_node/3]).
+               connect/3,
+               connect/4]).
 
 -import(rabbit_ct_broker_helpers,
         [setup_steps/0,
@@ -22,6 +22,9 @@
          stop_node/2,
          drain_node/2,
          revive_node/2]).
+
+-define(OPTS, [{connect_timeout, 1},
+               {ack_timeout, 1}]).
 
 all() ->
     [
@@ -105,9 +108,10 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 maintenance(Config) ->
-    {ok, MRef0, C0} = connect_to_node(Config, 0, <<"client-0">>),
-    {ok, MRef1a, C1a} = connect_to_node(Config, 1, <<"client-1a">>),
-    {ok, MRef1b, C1b} = connect_to_node(Config, 1, <<"client-1b">>),
+    C0 = connect(<<"client-0">>, Config, 0, ?OPTS),
+    C1a = connect(<<"client-1a">>, Config, 1, ?OPTS),
+    C1b = connect(<<"client-1b">>, Config, 1, ?OPTS),
+
     timer:sleep(500),
 
     ok = drain_node(Config, 2),
@@ -115,13 +119,14 @@ maintenance(Config) ->
     timer:sleep(500),
     [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
 
+    process_flag(trap_exit, true),
     ok = drain_node(Config, 1),
-    [await_disconnection(Ref) || Ref <- [MRef1a, MRef1b]],
+    [await_disconnection(Pid) || Pid <- [C1a, C1b]],
     ok = revive_node(Config, 1),
     ?assert(erlang:is_process_alive(C0)),
 
     ok = drain_node(Config, 0),
-    await_disconnection(MRef0),
+    await_disconnection(C0),
     ok = revive_node(Config, 0).
 
 %% Note about running this testsuite in a mixed-versions cluster:
@@ -138,8 +143,8 @@ maintenance(Config) ->
 %% nodes, the minimum to use Ra in proper conditions.
 
 connection_id_tracking(Config) ->
-    ID = <<"duplicate-id">>,
-    {ok, MRef1, C1} = connect_to_node(Config, 0, ID),
+    Id = <<"duplicate-id">>,
+    C1 = connect(Id, Config, 0, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C1, <<"TopicA">>, qos0),
     ok = emqtt:publish(C1, <<"TopicA">>, <<"Payload">>),
     ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
@@ -148,27 +153,27 @@ connection_id_tracking(Config) ->
     assert_connection_count(Config, 4, 2, 1),
 
     %% connect to the same node (A or 0)
-    {ok, MRef2, _C2} = connect_to_node(Config, 0, ID),
-    %% C1 is disconnected
-    await_disconnection(MRef1),
+    process_flag(trap_exit, true),
+    C2 = connect(Id, Config, 0, ?OPTS),
+    await_disconnection(C1),
     assert_connection_count(Config, 4, 2, 1),
 
     %% connect to a different node (C or 2)
-    {ok, _, C3} = connect_to_node(Config, 2, ID),
-    %% C2 is disconnected
-    await_disconnection(MRef2),
+    C3 = connect(Id, Config, 2, ?OPTS),
+    await_disconnection(C2),
     assert_connection_count(Config, 4, 2, 1),
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
     Server = get_node_config(Config, 0, nodename),
-    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
+    C = connect(<<"simpleClient">>, Config, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 4, 2, 1),
+    process_flag(trap_exit, true),
     ok = stop_node(Config, Server),
-    await_disconnection(MRef),
+    await_disconnection(C),
     assert_connection_count(Config, 4, 2, 0),
     ok.
 
@@ -178,14 +183,15 @@ connection_id_tracking_with_decommissioned_node(Config) ->
             {skip, "This test requires client ID tracking in Ra"};
         true ->
             Server = get_node_config(Config, 0, nodename),
-            {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
+            C = connect(<<"simpleClient">>, Config, ?OPTS),
             {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
             ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
             ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
             assert_connection_count(Config, 4, 2, 1),
+            process_flag(trap_exit, true),
             {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-            await_disconnection(MRef),
+            await_disconnection(C),
             assert_connection_count(Config, 4, 2, 0),
             ok
     end.
@@ -206,9 +212,9 @@ assert_connection_count(Config, Retries, NodeId, NumElements) ->
             assert_connection_count(Config, Retries-1, NodeId, NumElements)
     end.
 
-await_disconnection(Ref) ->
+await_disconnection(Client) ->
     receive
-        {'DOWN', Ref, _, _, _} -> ok
+        {'EXIT', Client, _} -> ok
     after
-        20_000 -> exit(missing_down_message)
+        20_000 -> ct:fail({missing_exit, Client})
     end.

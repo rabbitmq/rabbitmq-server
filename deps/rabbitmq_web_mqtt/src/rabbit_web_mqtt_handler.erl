@@ -39,7 +39,7 @@
 %% Close frame status codes as defined in https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
 -define(CLOSE_NORMAL, 1000).
 -define(CLOSE_PROTOCOL_ERROR, 1002).
--define(CLOSE_INVALID_DATA, 1003).
+-define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
 -define(CLOSE_INCONSISTENT_MSG_TYPE, 1007).
 
 %% cowboy_sub_protcol
@@ -139,8 +139,8 @@ websocket_handle(Ping, State)
 %% Log and close connection when receiving any other unexpected frames.
 websocket_handle(Frame, State) ->
     rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~tp",
-                    [Frame]),
-    stop(State, ?CLOSE_INVALID_DATA, "unexpected WebSocket frame").
+                               [Frame]),
+    stop(State, ?CLOSE_UNACCEPTABLE_DATA_TYPE, <<"unexpected WebSocket frame">>).
 
 -spec websocket_info(any(), State) ->
     {cowboy_websocket:commands(), State} |
@@ -228,7 +228,9 @@ terminate(_Reason, _Request,
 %% Internal.
 
 no_supported_sub_protocol(Protocol, Req) ->
-    rabbit_log_connection:error("Web MQTT: mqtt not found in client supported protocol, protocol: ~tp", [Protocol]),
+    %% The client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
+    rabbit_log_connection:error(
+      "Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
     {ok, cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req), #state{}}.
 
 handle_data(Data, State0 = #state{conn_name = ConnName}) ->

@@ -11,8 +11,8 @@
          expect_publishes/2,
          connect/2,
          connect/3,
-         connect/4,
-         connect_to_node/3]).
+         connect/4
+        ]).
 
 all_connection_pids(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -83,9 +83,3 @@ connect(ClientId, Config, Node, AdditionalOpts) ->
     {ok, C} = emqtt:start_link(Options),
     {ok, _Properties} = emqtt:connect(C),
     C.
-
-connect_to_node(Config, Node, ClientID) ->
-  C = connect(ClientID, Config, Node, [{connect_timeout, 1}, {ack_timeout, 1}]),
-  unlink(C),
-  MRef = erlang:monitor(process, C),
-  {ok, MRef, C}.

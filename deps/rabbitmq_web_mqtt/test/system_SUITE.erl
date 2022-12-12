@@ -32,7 +32,7 @@ groups() ->
         , maintenance
         , client_no_supported_protocol
         , client_not_support_mqtt
-        , invalid_data
+        , unacceptable_data_type
         , duplicate_id
         ]}
     ].
@@ -197,7 +197,7 @@ client_protocol_test(Config, Protocol) ->
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {close, _} = rfc6455_client:recv(WS, timer:seconds(1)).
 
-invalid_data(Config) ->
+unacceptable_data_type(Config) ->
     PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
     WS = rfc6455_client:new("ws://localhost:" ++ PortStr ++ "/ws", self(), undefined, ["mqtt"]),
     {ok, _} = rfc6455_client:open(WS),
@@ -206,8 +206,8 @@ invalid_data(Config) ->
 
 duplicate_id(Config) ->
     C1 = ws_connect(?FUNCTION_NAME, Config),
-    process_flag(trap_exit, true),
     eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
+    process_flag(trap_exit, true),
     C2 = ws_connect(?FUNCTION_NAME, Config),
     receive
         {'EXIT', C1, _Reason} ->

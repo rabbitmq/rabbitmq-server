@@ -15,7 +15,8 @@
 -import(rabbit_ct_helpers, [eventually/1]).
 -import(util, [expect_publishes/2,
                get_global_counters/4,
-               connect_to_node/3]).
+               connect/2,
+               connect/4]).
 
 -define(PROTO_VER, v4).
 
@@ -70,7 +71,7 @@ end_per_testcase(_TestCase, Config) ->
 
 delete_ra_cluster_mqtt_node(Config) ->
     FeatureFlag = ?FUNCTION_NAME,
-    {ok, _, C} = connect_to_node(Config, 1, <<"my-client">>),
+    C = connect(<<"my-client">>, Config, 1, []),
     timer:sleep(500),
     %% old client ID tracking works
     ?assertEqual(1, length(util:all_connection_pids(Config))),
@@ -94,7 +95,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     FeatureFlag = ?FUNCTION_NAME,
     Msg = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
 
-    {ok, _, C1} = connect_to_node(Config, 0, ClientId),
+    C1 = connect(ClientId, Config),
     {ok, _, [0]} = emqtt:subscribe(C1, Topic, qos0),
     ok = emqtt:publish(C1, Topic, Msg, qos0),
     ok = expect_publishes(Topic, [Msg]),
@@ -115,7 +116,7 @@ rabbit_mqtt_qos0_queue(Config) ->
 
     %% Reconnecting with the same client ID will terminate the old connection.
     true = unlink(C1),
-    {ok, _, C2} = connect_to_node(Config, 0, ClientId),
+    C2 = connect(ClientId, Config),
     {ok, _, [0]} = emqtt:subscribe(C2, Topic, qos0),
     %% This time, we get the new queue type.
     eventually(
