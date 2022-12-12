@@ -2206,8 +2206,8 @@ end}.
 <<<<<<< HEAD
 =======
 {mapping, "raft.adaptive_failure_detector.poll_interval", "aten.poll_interval", [
-{datatype, integer},
-{validators, ["non_zero_positive_integer"]}
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
 ]}.
 
 {translation, "aten.poll_interval",
