@@ -2312,6 +2312,20 @@ end}.
     end
 }.
 
+{mapping, "raft.adaptive_failure_detector.poll_interval", "aten.poll_interval", [
+{datatype, integer},
+{validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "aten.poll_interval",
+  fun(Conf) ->
+      case cuttlefish:conf_get("raft.adaptive_failure_detector.poll_interval", Conf, undefined) of
+          undefined -> cuttlefish:unset();
+          Val       -> Val
+      end
+  end
+}.
+
 %%
 %% Backing queue version
 %%
