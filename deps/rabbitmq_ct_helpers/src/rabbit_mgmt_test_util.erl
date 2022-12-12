@@ -49,6 +49,12 @@ http_get_no_auth(Config, Path, CodeExp) ->
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
+http_get_no_decode(Config, Path, User, Pass, CodeExp) ->
+    {ok, {{_HTTP, CodeAct, _}, _Headers, ResBody}} =
+        req(Config, 0, get, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
+    ResBody.
+
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).
 
