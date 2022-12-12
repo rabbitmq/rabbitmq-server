@@ -18,11 +18,8 @@
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
-<<<<<<< HEAD
                                 http_get_as_proplist/2,
-=======
                                 http_get_no_decode/5,
->>>>>>> 32097035dc (See #6016. Add HTTP to fetch app environment config)
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -154,14 +151,8 @@ all_tests() -> [
     disable_basic_auth_test,
     login_test,
     csp_headers_test,
-<<<<<<< HEAD
-    auth_attempts_test
-=======
     auth_attempts_test,
-    user_limits_list_test,
-    user_limit_set_test,
     config_environment_test
->>>>>>> 32097035dc (See #6016. Add HTTP to fetch app environment config)
 ].
 
 %% -------------------------------------------------------------------
