@@ -19,6 +19,9 @@ build:buildbuddy --remote_download_minimal
 build:buildbuddy --build_metadata=REPO_URL=https://github.com/rabbitmq/rabbitmq-server.git
 build:buildbuddy --experimental_remote_cache_compression
 build:buildbuddy --experimental_remote_cache_async
+build:buildbuddy --noslim_profile
+build:buildbuddy --experimental_profile_include_target_label
+build:buildbuddy --experimental_profile_include_primary_output
 
 build:rbe --config=buildbuddy
 
