@@ -729,7 +729,7 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     Name = R#resource.name,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
-add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
+add_queue_int(Queue, Name, ActingUser) ->
     case rabbit_amqqueue:exists(Name) of
         true ->
             ok;
