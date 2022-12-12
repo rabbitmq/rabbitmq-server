@@ -734,20 +734,6 @@ add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
         true ->
             ok;
         false ->
-<<<<<<< HEAD
-=======
-            AutoDelete = maps:get(auto_delete, Queue, false),
-            DurableDeclare = maps:get(durable, Queue, true),
-            ExclusiveDeclare = maps:get(exclusive, Queue, false),
-
-            Args0 = args(maps:get(arguments, Queue, #{})),
-            Args1 = rabbit_amqqueue:augment_declare_args(VHostName,
-                                                         DurableDeclare,
-                                                         ExclusiveDeclare,
-                                                         AutoDelete,
-                                                         Args0),
-
->>>>>>> d0dc66da08 (Fix default queue type handling for single vhost imports)
             rabbit_amqqueue:declare(Name,
                                     maps:get(durable, Queue, undefined),
                                     maps:get(auto_delete, Queue, undefined),
