@@ -12,8 +12,6 @@
 -export([accept_multipart/2]).
 -export([variances/2]).
 
--export([apply_defs/3, apply_defs/5]).
-
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -209,15 +207,6 @@ apply_defs(Body, ActingUser) ->
 
 apply_defs(Body, ActingUser, VHost) ->
     rabbit_definitions:apply_defs(Body, ActingUser, VHost).
-
--spec apply_defs(Map :: #{atom() => any()},
-                ActingUser :: rabbit_types:username(),
-                SuccessFun :: fun(() -> 'ok'),
-                ErrorFun :: fun((any()) -> 'ok'),
-                VHost :: vhost:name()) -> 'ok' | {error, term()}.
-
-apply_defs(Body, ActingUser, SuccessFun, ErrorFun, VHost) ->
-    rabbit_definitions:apply_defs(Body, ActingUser, SuccessFun, ErrorFun, VHost).
 
 get_all_parts(Req) ->
     get_all_parts(Req, []).
