@@ -138,7 +138,7 @@ gen_client_id() ->
     rabbit_misc:base64url(rabbit_guid:gen_secure()).
 
 env(Key) ->
-    case application:get_env(rabbitmq_mqtt, Key) of
+    case application:get_env(?APP_NAME, Key) of
         {ok, Val} -> coerce_env_value(Key, Val);
         undefined -> undefined
     end.

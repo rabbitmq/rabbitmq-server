@@ -10,6 +10,7 @@
 -behaviour(application).
 
 -include("rabbit_mqtt.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([start/2, stop/1]).
 -export([emit_connection_info_all/4,
@@ -20,7 +21,7 @@
 
 start(normal, []) ->
     init_global_counters(),
-    rabbit_mqtt_util:init_sparkplug(),
+    persist_static_configuration(),
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     case rabbit_mqtt_ff:track_client_id_in_ra() of
@@ -50,7 +51,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
             %% remaining nodes, we send back 'finished' so that the CLI does not time out.
             [AggregatorPid ! {Ref, finished} || _ <- lists:seq(1, length(Nodes) - 1)];
         false ->
-            Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,
+            Pids = [spawn_link(Node, ?MODULE, emit_connection_info_local,
                                [Items, Ref, AggregatorPid])
                     || Node <- Nodes],
             rabbit_control_misc:await_emitters_termination(Pids)
@@ -98,3 +99,10 @@ init_global_counters(ProtoVer) ->
     rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]).
+
+persist_static_configuration() ->
+    rabbit_mqtt_util:init_sparkplug(),
+
+    {ok, MailboxSoftLimit} = application:get_env(?APP_NAME, mailbox_soft_limit),
+    ?assert(is_number(MailboxSoftLimit)),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit).

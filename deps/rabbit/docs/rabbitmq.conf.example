@@ -755,7 +755,7 @@
 # stomp.tcp_listen_options.nodelay   = true
 #
 # stomp.tcp_listen_options.exit_on_close = true
-# stomp.tcp_listen_options.send_timeout  = 120
+# stomp.tcp_listen_options.send_timeout  = 120000
 
 ## Proxy protocol support
 ##
@@ -838,7 +838,7 @@
 # mqtt.tcp_listen_options.nodelay   = true
 #
 # mqtt.tcp_listen_options.exit_on_close = true
-# mqtt.tcp_listen_options.send_timeout  = 120
+# mqtt.tcp_listen_options.send_timeout  = 120000
 
 ## TLS listener settings
 ## ## See https://rabbitmq.com/mqtt.html and https://rabbitmq.com/ssl.html for details.

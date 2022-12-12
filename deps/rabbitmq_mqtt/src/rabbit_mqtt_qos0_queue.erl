@@ -78,12 +78,6 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     ok = rabbit_amqqueue:internal_delete(QName, ActingUser),
     {ok, 0}.
 
-%%TODO implement some form of flow control to not overwhelm the destination
-%% MQTT connection process?
-%% E.g. drop this message if destination queue is already long?
-% erlang:process_info(Pid, message_queue_len)
-%% However that seems to be expensive due to locking (see lcnt).
-%% Alternatively, use credits? use rabbit_amqqueue_common:notify_sent/2 on the consuming side?
 -spec deliver([{amqqueue:amqqueue(), stateless}], Delivery :: term()) ->
     {[], rabbit_queue_type:actions()}.
 deliver([{Q, stateless}], Delivery = #delivery{message = BasicMessage}) ->

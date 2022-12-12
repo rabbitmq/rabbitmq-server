@@ -9,6 +9,7 @@
 
 -behaviour(gen_server2).
 -include("rabbit_mqtt_retain.hrl").
+-include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -56,7 +57,7 @@ init([StoreMod, VHost]) ->
     {ok, State}.
 
 store_module() ->
-    case application:get_env(rabbitmq_mqtt, retained_message_store) of
+    case application:get_env(?APP_NAME, retained_message_store) of
         {ok, Mod} -> Mod;
         undefined -> undefined
     end.

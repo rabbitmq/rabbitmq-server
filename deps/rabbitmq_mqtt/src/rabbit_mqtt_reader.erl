@@ -63,7 +63,7 @@ close_connection(Pid, Reason) ->
 init(Ref) ->
     process_flag(trap_exit, true),
     {ok, Sock} = rabbit_networking:handshake(Ref,
-        application:get_env(rabbitmq_mqtt, proxy_protocol, false)),
+        application:get_env(?APP_NAME, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
@@ -71,7 +71,7 @@ init(Ref) ->
             rabbit_log_connection:debug("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
             rabbit_alarm:register(
               self(), {?MODULE, conserve_resources, []}),
-            LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
+            LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnName),
             gen_server:enter_loop(?MODULE, [],

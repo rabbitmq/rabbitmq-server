@@ -35,9 +35,9 @@ groups() ->
     [
      {cluster_size_1, [],
       [
-       %% separate RMQ so global counters start from 0
+       %% separate node so global counters start from 0
        {global_counters, [], [global_counters_v3, global_counters_v4]},
-       {common_tests, [], tests()}
+       {tests, [], tests()}
       ]},
      {cluster_size_3, [],
       [queue_down_qos1,
@@ -64,6 +64,7 @@ tests() ->
      ,subscribe_multiple
      ,large_message_mqtt_to_mqtt
      ,large_message_amqp_to_mqtt
+     ,rabbit_mqtt_qos0_queue_overflow
     ].
 
 suite() ->
@@ -85,11 +86,10 @@ init_per_group(cluster_size_1, Config) ->
 init_per_group(cluster_size_3 = Group, Config) ->
     init_per_group0(Group,
                     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]));
-
 init_per_group(Group, Config)
   when Group =:= global_counters orelse
-       Group =:= common_tests ->
-    init_per_group0(Group,Config).
+       Group =:= tests ->
+    init_per_group0(Group, Config).
 
 init_per_group0(Group, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(
@@ -782,9 +782,76 @@ rabbit_mqtt_qos0_queue(Config) ->
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
 
+%% Test that queue type rabbit_mqtt_qos0_queue drops QoS 0 messages when its
+%% max length is reached.
+rabbit_mqtt_qos0_queue_overflow(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Msg = binary:copy(<<"x">>, 1000),
+    NumMsgs = 10_000,
+
+    %% Provoke TCP back-pressure from client to server by using small buffers.
+    Opts = [{tcp_opts, [{recbuf, 1500},
+                        {buffer, 1500}]}],
+    Sub = connect(<<"subscriber">>, Config, Opts),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+    [ServerConnectionPid] = all_connection_pids(Config),
+
+    %% Suspend the receiving client such that it stops reading from its socket
+    %% causing TCP back-pressure to the server being applied.
+    true = erlang:suspend_process(Sub),
+
+    %% Let's overflow the receiving server MQTT connection process
+    %% (i.e. the rabbit_mqtt_qos0_queue) by sending many large messages.
+    Pub = connect(<<"publisher">>, Config),
+    lists:foreach(fun(_) ->
+                          ok = emqtt:publish(Pub, Topic, Msg, qos0)
+                  end, lists:seq(1, NumMsgs)),
+
+    %% Give the server some time to process (either send or drop) the messages.
+    timer:sleep(2000),
+
+    %% Let's resume the receiving client to receive any remaining messages that did
+    %% not get dropped.
+    true = erlang:resume_process(Sub),
+    NumReceived = num_received(Topic, Msg, 0),
+
+    {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
+    [State] = [S || {data, [{"State", S}]} <- Misc],
+    #{proc_state := #{qos0_messages_dropped := NumDropped}} = State,
+    ct:pal("NumReceived=~b~nNumDropped=~b", [NumReceived, NumDropped]),
+
+    %% We expect that
+    %% 1. all sent messages were either received or dropped
+    ?assertEqual(NumMsgs, NumReceived + NumDropped),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            %% 2. at least one message was dropped (otherwise our whole test case did not
+            %%    test what it was supposed to test: that messages are dropped due to the
+            %%    server being overflowed with messages while the client receives too slowly)
+            ?assert(NumDropped >= 1);
+        true ->
+            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+            ?assertEqual(0, NumDropped)
+    end,
+    %% 3. we received at least 1000 messages because everything below the default
+    %% of mailbox_soft_limit=1000 should not be dropped
+    ?assert(NumReceived >= 1000),
+
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub).
+
 %% -------------------------------------------------------------------
 %% Internal helpers
 %% -------------------------------------------------------------------
+
+num_received(Topic, Payload, N) ->
+    receive
+        {publish, #{topic := Topic,
+                    payload := Payload}} ->
+            num_received(Topic, Payload, N + 1)
+    after 1000 ->
+              N
+    end.
 
 await_confirms_ordered(_, To, To) ->
     ok;

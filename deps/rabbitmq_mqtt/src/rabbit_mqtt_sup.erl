@@ -20,14 +20,14 @@ start_link(Listeners, []) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([{Listeners, SslListeners0}]) ->
-    NumTcpAcceptors = application:get_env(rabbitmq_mqtt, num_tcp_acceptors, 10),
-    ConcurrentConnsSups = application:get_env(rabbitmq_mqtt, num_conns_sups, 1),
-    {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
+    NumTcpAcceptors = application:get_env(?APP_NAME, num_tcp_acceptors, 10),
+    ConcurrentConnsSups = application:get_env(?APP_NAME, num_conns_sups, 1),
+    {ok, SocketOpts} = application:get_env(?APP_NAME, tcp_listen_options),
     {SslOpts, NumSslAcceptors, SslListeners}
         = case SslListeners0 of
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
-                     application:get_env(rabbitmq_mqtt, num_ssl_acceptors, 10),
+                     application:get_env(?APP_NAME, num_ssl_acceptors, 10),
                      case rabbit_networking:poodle_check('MQTT') of
                          ok     -> SslListeners0;
                          danger -> []

@@ -36,9 +36,13 @@ APP_ENV = """[
 	    {num_tcp_acceptors, 10},
 	    {num_ssl_acceptors, 10},
 	    {tcp_listen_options, [{backlog,   128},
-	                          {nodelay,   true}]},
+	                          {nodelay,   true},
+	                          {send_timeout, 15000},
+	                          {send_timeout_close, true}
+	                         ]},
 	    {proxy_protocol, false},
-	    {sparkplug, false}
+	    {sparkplug, false},
+	    {mailbox_soft_limit, 1000}
 	  ]"""
 
 BUILD_DEPS = [

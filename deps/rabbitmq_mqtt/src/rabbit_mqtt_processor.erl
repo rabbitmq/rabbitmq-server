@@ -27,7 +27,6 @@
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
--define(APP, rabbitmq_mqtt).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, mqtt).
 
@@ -74,7 +73,8 @@
          info,
          delivery_flow :: flow | noflow,
          %% quorum queues and streams whose soft limit has been exceeded
-         soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set()
+         soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
+         qos0_messages_dropped = 0 :: non_neg_integer()
          }).
 
 -opaque state() :: #state{}.
@@ -913,7 +913,7 @@ get_vhost_ssl(UserBin, SslLoginName, Port) ->
     end.
 
 vhost_in_username(UserBin) ->
-    case application:get_env(?APP, ignore_colons_in_username) of
+    case application:get_env(?APP_NAME, ignore_colons_in_username) of
         {ok, true} -> false;
         _ ->
             %% split at the last colon, disallowing colons in username
@@ -925,7 +925,7 @@ vhost_in_username(UserBin) ->
 
 get_vhost_username(UserBin) ->
     Default = {rabbit_mqtt_util:env(vhost), UserBin},
-    case application:get_env(?APP, ignore_colons_in_username) of
+    case application:get_env(?APP_NAME, ignore_colons_in_username) of
         {ok, true} -> Default;
         _ ->
             %% split at the last colon, disallowing colons in username
@@ -972,8 +972,8 @@ human_readable_vhost_lookup_strategy(Val) ->
 creds(User, Pass, SSLLoginName) ->
     DefaultUser   = rabbit_mqtt_util:env(default_user),
     DefaultPass   = rabbit_mqtt_util:env(default_pass),
-    {ok, Anon}    = application:get_env(?APP, allow_anonymous),
-    {ok, TLSAuth} = application:get_env(?APP, ssl_cert_login),
+    {ok, Anon}    = application:get_env(?APP_NAME, allow_anonymous),
+    {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
     HaveDefaultCreds = Anon =:= true andalso
     is_binary(DefaultUser) andalso
     is_binary(DefaultPass),
@@ -1320,7 +1320,7 @@ send_puback(PktId, State = #state{send_fun = SendFun,
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     SendFun(
       #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
-                  variable = #mqtt_packet_publish{packet_id = PktId}},
+                   variable = #mqtt_packet_publish{packet_id = PktId}},
       State).
 
 serialise_and_send_to_client(Packet, #state{proto_ver = ProtoVer, socket = Sock}) ->
@@ -1487,8 +1487,14 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             {ok, State}
     end.
 
-handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg}, State0) ->
-    State = deliver_one_to_client(Msg, false, State0),
+handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg},
+                   State0 = #state{qos0_messages_dropped = N}) ->
+    State = case drop_qos0_message(State0) of
+                false ->
+                    deliver_one_to_client(Msg, false, State0);
+                true ->
+                    State0#state{qos0_messages_dropped = N + 1}
+            end,
     {ok, State};
 handle_queue_event({queue_event, QName, Evt},
                    State0 = #state{queue_states = QStates0,
@@ -1738,6 +1744,36 @@ check_topic_access(TopicName, Access,
             end
     end.
 
+-spec drop_qos0_message(state()) ->
+    boolean().
+drop_qos0_message(State) ->
+    mailbox_soft_limit_exceeded() andalso
+    is_socket_busy(State#state.socket).
+
+-spec mailbox_soft_limit_exceeded() ->
+    boolean().
+mailbox_soft_limit_exceeded() ->
+    case persistent_term:get(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT) of
+        Limit when Limit > 0 ->
+            case erlang:process_info(self(), message_queue_len) of
+                {message_queue_len, Len} when Len > Limit ->
+                    true;
+                _ ->
+                    false
+            end;
+        _ ->
+            false
+    end.
+
+is_socket_busy(Socket) ->
+    case rabbit_net:getstat(Socket, [send_pend]) of
+        {ok, [{send_pend, NumBytes}]}
+          when is_number(NumBytes) andalso NumBytes > 0 ->
+            true;
+        _ ->
+            false
+    end.
+
 info(protocol, #state{info = #info{proto_human = Val}}) -> Val;
 info(host, #state{info = #info{host = Val}}) -> Val;
 info(port, #state{info = #info{port = Val}}) -> Val;
@@ -1787,7 +1823,8 @@ format_status(#state{queue_states = QState,
                      peer_addr = PeerAddr,
                      register_state = RegisterState,
                      conn_name = ConnName,
-                     info = Info
+                     info = Info,
+                     qos0_messages_dropped = Qos0MsgsDropped
                     } = State) ->
     #{queue_states => rabbit_queue_type:format_status(QState),
       proto_ver => ProtoVersion,
@@ -1805,7 +1842,8 @@ format_status(#state{queue_states = QState,
       register_state => RegisterState,
       conn_name => ConnName,
       info => Info,
-      soft_limit_exceeded => soft_limit_exceeded(State)}.
+      soft_limit_exceeded => soft_limit_exceeded(State),
+      qos0_messages_dropped => Qos0MsgsDropped}.
 
 soft_limit_exceeded(#state{soft_limit_exceeded = SLE}) ->
     not sets:is_empty(SLE).
