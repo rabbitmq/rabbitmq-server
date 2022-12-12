@@ -465,47 +465,6 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
         rabbit_runtime:gc_all_processes()
     end.
 
-<<<<<<< HEAD
--spec apply_defs(Map :: #{atom() => any()},
-                ActingUser :: rabbit_types:username(),
-                SuccessFun :: fun(() -> 'ok'),
-                ErrorFun :: fun((any()) -> 'ok'),
-                VHost :: vhost:name()) -> 'ok' | {error, term()}.
-
-apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
-    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
-                    [VHost, ActingUser]),
-    try
-        validate_limits(Map, VHost),
-
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
-        sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
-        %% importing policies concurrently can be unsafe as queues will be getting
-        %% potentially out of order notifications of applicable policy changes
-        sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
-
-        rabbit_nodes:if_reached_target_cluster_size(
-            fun() ->
-                concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-                concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3)
-            end,
-
-            fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
-                                " skipping queue and binding import from definitions",
-                                [rabbit_nodes:target_cluster_size_hint()])
-            end
-        ),
-
-        SuccessFun()
-    catch {error, E} -> ErrorFun(format(E));
-          exit:E     -> ErrorFun(format(E))
-    after
-        rabbit_runtime:gc_all_processes()
-    end.
-
-=======
->>>>>>> aa0104c49f (Remove unused rabbit_definitions:apply_defs/5)
 sequential_for_all(Category, ActingUser, Definitions, Fun) ->
     try
         sequential_for_all0(Category, ActingUser, Definitions, Fun)
