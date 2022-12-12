@@ -18,7 +18,11 @@
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
+<<<<<<< HEAD
                                 http_get_as_proplist/2,
+=======
+                                http_get_no_decode/5,
+>>>>>>> 32097035dc (See #6016. Add HTTP to fetch app environment config)
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -150,7 +154,14 @@ all_tests() -> [
     disable_basic_auth_test,
     login_test,
     csp_headers_test,
+<<<<<<< HEAD
     auth_attempts_test
+=======
+    auth_attempts_test,
+    user_limits_list_test,
+    user_limit_set_test,
+    config_environment_test
+>>>>>>> 32097035dc (See #6016. Add HTTP to fetch app environment config)
 ].
 
 %% -------------------------------------------------------------------
@@ -299,6 +310,10 @@ end_per_testcase0(permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
+    Config;
+end_per_testcase0(config_environment_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbit, config_environment_test_env]),
     Config;
 end_per_testcase0(_, Config) -> Config.
 
@@ -2970,6 +2985,7 @@ extensions_test(Config) ->
     [#{javascript := <<"dispatcher.js">>}] = http_get(Config, "/extensions", ?OK),
     passed.
 
+
 cors_test(Config) ->
     %% With CORS disabled. No header should be received.
     R = req(Config, get, "/overview", [auth_header("guest", "guest")]),
@@ -3486,6 +3502,23 @@ auth_attempts_test(Config) ->
     ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_3)),
 
     passed.
+
+
+config_environment_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management,
+                                  config_environment_test_env,
+                                  config_environment_test_value]),
+    ResultString = http_get_no_decode(Config, "/config/effective",
+                                      "guest", "guest", ?OK),
+    CleanString = re:replace(ResultString, "\\s+", "", [global,{return,list}]),
+    {ok, Tokens, _} = erl_scan:string(CleanString++"."),
+    {ok, AbsForm} = erl_parse:parse_exprs(Tokens),
+    {value, EnvList, _} = erl_eval:exprs(AbsForm, erl_eval:new_bindings()),
+    V = proplists:get_value(config_environment_test_env,
+                            proplists:get_value(rabbitmq_management, EnvList)),
+    ?assertEqual(config_environment_test_value, V).
+
 
 %% -------------------------------------------------------------------
 %% Helpers.
