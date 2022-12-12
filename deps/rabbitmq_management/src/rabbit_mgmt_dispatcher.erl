@@ -181,5 +181,6 @@ dispatcher() ->
      {"/auth",                                                 rabbit_mgmt_wm_auth, []},
      {"/auth/attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, [all]},
      {"/auth/attempts/:node/source",                           rabbit_mgmt_wm_auth_attempts, [by_source]},
-     {"/login",                                                rabbit_mgmt_wm_login, []}
+     {"/login",                                                rabbit_mgmt_wm_login, []},
+     {"/config/effective",                                     rabbit_mgmt_wm_environment, []}
     ].
