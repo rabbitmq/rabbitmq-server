@@ -1677,7 +1677,7 @@ long_definitions_vhosts(long_definitions_multipart_test) ->
 defs_default_queue_type_vhost(Config, QueueType) ->
     register_parameters_and_policy_validator(Config),
 
-    %% Create test vhost
+    %% Create a test vhost
     http_put(Config, "/vhosts/test-vhost", #{defaultqueuetype => QueueType}, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
@@ -1689,9 +1689,9 @@ defs_default_queue_type_vhost(Config, QueueType) ->
 
     %% And check whether it was indeed created with the default type
     Q = http_get(Config, "/queues/test-vhost/test-queue", ?OK),
-    QueueType = maps:get(type, Q),
+    ?assertEqual(QueueType, maps:get(type, Q)),
 
-    %% Remove test vhost
+    %% Remove the test vhost
     http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
     ok.
 
