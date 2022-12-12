@@ -728,13 +728,8 @@ add_queue_int(_Queue, R = #resource{kind = queue,
                                     name = <<"amq.", _/binary>>}, ActingUser) ->
     Name = R#resource.name,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
-<<<<<<< HEAD
-                       "name: ~s, acting user: ~s", [Name, ActingUser]);
-add_queue_int(Queue, Name, ActingUser) ->
-=======
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
 add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
->>>>>>> 4bfe352168 (Fix default queue type handling for single vhost imports)
     case rabbit_amqqueue:exists(Name) of
         true ->
             ok;
