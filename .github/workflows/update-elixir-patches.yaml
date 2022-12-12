@@ -6,7 +6,7 @@ on:
 jobs:
   update-toolchains:
     name: Update Elixir Versions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       max-parallel: 1
       fail-fast: false

@@ -30,7 +30,7 @@ concurrency:
 jobs:
   ensure-mixed-version-archive:
     name: Prepare Artifacts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     env:
       # otp-min
       otp_version_id: 25_0
@@ -120,7 +120,7 @@ jobs:
 
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: ensure-mixed-version-archive
     strategy:
       fail-fast: false
@@ -163,7 +163,7 @@ jobs:
           --verbose_failures
   test-exclusive-mixed-versions:
     name: Test (Exclusive Tests with Mixed Version Cluster)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: ensure-mixed-version-archive
     strategy:
       matrix:
