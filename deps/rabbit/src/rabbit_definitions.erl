@@ -43,7 +43,7 @@
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          import_parsed_with_hashing/1, import_parsed_with_hashing/2,
-         apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
+         apply_defs/2, apply_defs/3,
          should_skip_if_unchanged/0]).
 
 -export([all_definitions/0]).
@@ -465,6 +465,7 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
         rabbit_runtime:gc_all_processes()
     end.
 
+<<<<<<< HEAD
 -spec apply_defs(Map :: #{atom() => any()},
                 ActingUser :: rabbit_types:username(),
                 SuccessFun :: fun(() -> 'ok'),
@@ -503,6 +504,8 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
         rabbit_runtime:gc_all_processes()
     end.
 
+=======
+>>>>>>> aa0104c49f (Remove unused rabbit_definitions:apply_defs/5)
 sequential_for_all(Category, ActingUser, Definitions, Fun) ->
     try
         sequential_for_all0(Category, ActingUser, Definitions, Fun)
