@@ -164,8 +164,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "ra",
-        version = "2.4.4",
-        sha256 = "241e6842a11a8e6e895a0ce1810c8f48b8ac842883e286b47c38a2d327d79930",
+        version = "2.4.5",
+        sha256 = "9315fb67d1e1ae0c83cb7b0481851c90e5c0fe65a7040359ddbd2fb179ce01df",
         build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
