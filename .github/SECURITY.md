@@ -10,7 +10,7 @@ the observed behavior.
 RabbitMQ Core team really appreciates responsible vulnerability reports
 from security researchers and our user community.
 
-To responsibly disclose a vulnerability, please email `security@rabbitmq.com` or
+To responsibly disclose a vulnerability, please use [GitHub Security Advisories](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability) or email `security@rabbitmq.com` or
 [sign up for RabbitMQ community Slack](https://rabbitmq-slack.herokuapp.com) and
 send a DM to @michaelklishin. For reports received via Slack, a separate private
 channel will be set up so that multiple RabbitMQ maintainers can access the disclosed
