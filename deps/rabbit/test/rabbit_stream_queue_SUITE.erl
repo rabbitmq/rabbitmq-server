@@ -911,7 +911,7 @@ consume(Config) ->
             _ = amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = <<"ctag">>}),
             ok = amqp_channel:close(Ch1)
     after 5000 ->
-            exit(timeout)
+            ct:fail(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 

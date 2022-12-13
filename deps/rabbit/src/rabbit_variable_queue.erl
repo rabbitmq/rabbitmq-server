@@ -69,7 +69,7 @@
 %%   is stored in the per-vhost shared rabbit_msg_store
 %%
 %% When messages must be read from disk, message bodies will
-%% also be read from disk except if the message in stored
+%% also be read from disk except if the message is stored
 %% in the per-vhost shared rabbit_msg_store. In that case
 %% the message gets read before it needs to be sent to the
 %% consumer. Messages are read from rabbit_msg_store one
