@@ -47,12 +47,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.RestartStreamCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "restart_stream [--vhost <vhost>] <stream> [--preferred_leader_node <node>]"
+  def usage, do: "restart_stream [--vhost <vhost>] <stream> [--preferred-leader-node <node>]"
 
   def usage_additional do
     [
       ["<stream>", "stream name"],
-      ["--preferred_leader_node", "preferred leader node"]
+      ["--preferred-leader-node", "preferred leader node"]
     ]
   end
 

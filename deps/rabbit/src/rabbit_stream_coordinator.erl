@@ -2052,7 +2052,9 @@ machine_version(2, 3, State) ->
     {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()},
      []};
 machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
-    %% unset the node field in the members record as no longer used
+    rabbit_log:info("Stream coordinator machine version changes from 3 to 4, updating state."),
+    %% the "preferred" field takes the place of the "node" field in this version
+    %% initializing the "preferred" field to false
     Streams = maps:map(
                 fun (_, #stream{members = Members} = S) ->
                         S#stream{members = maps:map(

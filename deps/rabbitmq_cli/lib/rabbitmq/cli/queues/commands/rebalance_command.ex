@@ -58,7 +58,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def usage,
     do:
-      "rebalance < all | classic | quorum | steram > [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
+      "rebalance < all | classic | quorum | stream > [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
 
   def usage_additional do
     [
