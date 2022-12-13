@@ -10,25 +10,7 @@
   <script src="./oidc-client-ts.js" ></script>
   <script src="./helper.js"></script>
     <script type="text/javascript">
-      function set_auth_pref(userinfo) {
-          // clear a local storage value used by earlier versions
-          clear_local_pref('auth');
-
-          var b64 = b64_encode_utf8(userinfo);
-          var date  = new Date();
-          date.setHours(date.getHours() + 8);
-
-          store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
-      }
-      function b64_encode_utf8(str) {
-          return base64.encode(encode_utf8(str));
-      }
-      // encodeURIComponent handles utf-8, unescape does not. Neat!
-      function encode_utf8(str) {
-        return unescape(encodeURIComponent(str));
-      }
-
-
+      
       if (oauth_initialize_if_required()) oauth_completeLogin()
     </script>
 </body>
