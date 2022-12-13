@@ -31,10 +31,10 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name = Name},
+route(#exchange{name = Name, type = Type},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking) of
-        true ->
+    case {Type, rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking)} of
+        {direct, true} ->
             route_v2(Name, Routes);
         _ ->
             rabbit_router:match_routing_key(Name, Routes)
