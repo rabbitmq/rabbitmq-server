@@ -98,6 +98,9 @@ initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
            send_fun       = SendFun,
            delivery_flow  = Flow}.
 
+-spec process_packet(mqtt_packet(), state()) ->
+    {ok, state()} |
+    {error, Reason :: term(), state()}.
 process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
               State = #state{auth_state = undefined})
   when Type =/= ?CONNECT ->
@@ -105,6 +108,9 @@ process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
 process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}}, State) ->
     process_request(Type, Packet, State).
 
+-spec process_request(packet_types(), mqtt_packet(), state()) ->
+    {ok, state()} |
+    {error, Reason :: term(), state()}.
 process_request(?CONNECT, Packet, State = #state{socket = Socket}) ->
     %% Check whether peer closed the connection.
     %% For example, this can happen when connection was blocked because of resource

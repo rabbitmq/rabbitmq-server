@@ -271,8 +271,6 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                     rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
                         [Reason, ConnName]),
                     stop(State, ?CLOSE_PROTOCOL_ERROR, Reason);
-                {error, Error} ->
-                    stop_with_framing_error(State, Error, ConnName);
                 {stop, disconnect, ProcState1} ->
                     stop({_SendWill = false, State#state{proc_state = ProcState1}})
             end;

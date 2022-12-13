@@ -26,6 +26,11 @@
 -define(PINGRESP,    13).
 -define(DISCONNECT,  14).
 
+-type packet_types() :: ?CONNECT | ?CONNACK |
+                        ?PUBLISH | ?PUBACK | ?PUBREC | ?PUBREL | ?PUBCOMP |
+                        ?SUBSCRIBE | ?SUBACK | ?UNSUBSCRIBE | ?UNSUBACK |
+                        ?PINGREQ | ?PINGRESP | ?DISCONNECT.
+
 %% connect return codes
 
 %% Connection accepted.
@@ -63,6 +68,8 @@
                                variable :: tuple(),
                                payload :: iodata()
                               }).
+
+-type mqtt_packet() :: #mqtt_packet{}.
 
 -record(mqtt_packet_connect,  {proto_ver,
                                will_retain,

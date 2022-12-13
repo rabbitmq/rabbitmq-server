@@ -342,10 +342,6 @@ process_received_bytes(Bytes,
                     rabbit_log_connection:error("MQTT protocol error on connection ~ts: ~tp",
                         [ConnName, Reason]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                {error, Error} ->
-                    rabbit_log_connection:error("MQTT detected a framing error on connection ~ts: ~tp",
-                        [ConnName, Error]),
-                    {stop, {shutdown, Error}, State};
                 {stop, disconnect, ProcState1} ->
                     {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
             end;
