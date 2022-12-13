@@ -342,7 +342,7 @@ win32_get_disk_free_pwsh(DriveLetter) when
       (DriveLetter >= $A andalso DriveLetter =< $Z) ->
     % DriveLetter $c
     PoshCmd = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command (Get-PSDrive " ++ [DriveLetter] ++ ").Free",
-    case run_cmd(PoshCmd) of
+    case run_os_cmd(PoshCmd) of
         {error, timeout} ->
             error;
         PoshResult ->
