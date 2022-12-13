@@ -75,7 +75,8 @@
 
 -record(qs, {
     %% Store directory - same as the queue index.
-    dir :: file:filename(),
+    %% Stored as binary() as opposed to file:filename() to save memory.
+    dir :: binary(),
 
     %% We keep up to one write fd open at any time.
     %% Because queues are FIFO, writes are mostly sequential
@@ -139,10 +140,14 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
     ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = rabbit_classic_queue_index_v2:queue_dir(VHostDir, Name),
+<<<<<<< HEAD
     #qs{
         dir = Dir,
         on_sync = OnSyncFun
     }.
+=======
+    #qs{dir = rabbit_file:filename_to_binary(Dir)}.
+>>>>>>> 8f0800e578 (Make classic queues v2 memory efficient)
 
 -spec terminate(State) -> State when State::state().
 
@@ -497,4 +502,5 @@ check_crc32() ->
 %% Same implementation as rabbit_classic_queue_index_v2:segment_file/2,
 %% but with a different state record.
 segment_file(Segment, #qs{ dir = Dir }) ->
-    filename:join(Dir, integer_to_list(Segment) ++ ?SEGMENT_EXTENSION).
+    filename:join(rabbit_file:binary_to_filename(Dir),
+                  integer_to_list(Segment) ++ ?SEGMENT_EXTENSION).
