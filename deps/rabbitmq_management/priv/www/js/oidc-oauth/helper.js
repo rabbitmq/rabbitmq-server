@@ -114,6 +114,7 @@ function oauth_initialize(authSettings) {
       _management_logger.error("token expiring failed due to ", err);
     });
     mgr.events.addUserLoaded(function(user) {
+      console.log("addUserLoaded   setting oauth.access_token ")
       oauth.access_token = user.access_token;
     });
 
@@ -155,14 +156,15 @@ function oauth_initiateLogin() {
 }
 
 function oauth_redirectToHome(oauth) {
-  set_auth_pref(oauth.user_name + ":" + oauth.access_token);
-  go_to_home();
+  console.log("oauth_redirectToHome set_token_auth")
+  set_token_auth(oauth.access_token)
+  go_to_home()
 }
 function go_to_home() {
   location.href = rabbit_path_prefix + "/"
 }
 function go_to_authority() {
-  location.href = oauth.authority;
+  location.href = oauth.authority
 }
 function oauth_redirectToLogin(error) {
   if (!error) location.href = rabbit_path_prefix + "/"
@@ -172,18 +174,19 @@ function oauth_redirectToLogin(error) {
 }
 function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(user => oauth_redirectToHome(user)).catch(function(err) {
-        _management_logger.error(err);
+        _management_logger.error(err)
         oauth_redirectToLogin(err)
     });
 }
 
 function oauth_initiateLogout() {
   if (oauth.sp_initiated) {
-    mgr.signoutRedirect();
+    mgr.signoutRedirect()
   } else {
-    go_to_authority();
+    go_to_authority()
   }
 }
 function oauth_completeLogout() {
-    mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin());
+    clear_auth()
+    mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
 }

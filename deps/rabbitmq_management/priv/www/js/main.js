@@ -56,40 +56,6 @@ function dispatcher() {
         dispatcher_modules[i](this);
     }
 }
-function has_auth_pref() {
-    return get_pref('auth') != undefined && get_cookie_value("auth") != undefined;
-}
-function get_auth_pref() {
-    return get_pref('auth');
-}
-function clear_auth_pref() {
-    clear_local_pref('auth');
-    clear_cookie_value('auth');
-}
-function set_auth_pref(userinfo) {
-    // clear a local storage value used by earlier versions
-    clear_local_pref('auth');
-
-    var b64 = b64_encode_utf8(userinfo);
-    var date  = new Date();
-    var login_session_timeout = get_login_session_timeout();
-
-    if (login_session_timeout) {
-        date.setMinutes(date.getMinutes() + login_session_timeout);
-    } else {
-        // 8 hours from now
-        date.setHours(date.getHours() + 8);
-    }
-    store_pref('auth', encodeURIComponent(b64));
-    store_cookie_value_with_expiration('auth', "", date); // session marker
-
-}
-
-function initiateLogoutIfSessionHasExpired(event) {
-  if (get_cookie_value("auth") == undefined && has_auth_pref()) {
-      initiate_logout();
-  }
-}
 
 function getParameterByName(name) {
     var match = RegExp('[#&]' + name + '=([^&]*)').exec(window.location.hash);
@@ -106,26 +72,20 @@ function start_app_login () {
     this.get('#/', function () {})
     if (!oauth.enabled) {
       this.put('#/login', function() {
-        username = this.params['username'];
-        password = this.params['password'];
-        set_auth_pref(username + ':' + password);
-        check_login();
+        set_basic_auth(this.params['username'], this.params['password'])
+        check_login()
       });
     }
   })
+  // TODO REFACTOR: this code can be simplified
   if (oauth.enabled) {
-    var token = oauth.access_token;
-    if (token != null) {
-      if (oauth.sp_initiated) set_auth_pref(oauth.user_name + ':' + oauth.access_token);
-      else if (has_auth_cookie_value()) set_auth_pref(oauth.access_token);
-      check_login();
-    } else if (has_auth_cookie_value()) {
+    if (has_auth_credentials()) {
       check_login();
     } else {
       app.run();
     }
   } else
-    if (!has_auth_pref() || !check_login()) {
+    if (!has_auth_credentials() || !check_login()) {
       app.run();
     }
 
@@ -149,7 +109,7 @@ function check_login () {
   hide_popup_warn()
   replace_content('outer', format('layout', {}))
   var user_login_session_timeout = parseInt(user.login_session_timeout)
-  if (has_auth_pref() && !isNaN(user_login_session_timeout) &&
+  if (has_auth_credentials() && !isNaN(user_login_session_timeout) &&
         user_login_session_timeout !== get_login_session_timeout()) {
     update_login_session_timeout(user_login_session_timeout)
   }
@@ -162,16 +122,12 @@ function check_login () {
 }
 
 function print_logging_session_info (user_login_session_timeout) {
-  let var_has_auth_cookie_value = has_auth_pref()
+  let var_has_auth_cookie_value = has_auth_credentials()
   let login_session_timeout = get_login_session_timeout()
   console.log('user_login_session_timeout: ' + user_login_session_timeout)
   console.log('has_auth_cookie_value: ' + var_has_auth_cookie_value)
   console.log('login_session_timeout: ' + login_session_timeout)
   console.log('isNaN(user_login_session_timeout): ' + isNaN(user_login_session_timeout))
-}
-
-function get_login_session_timeout() {
-    parseInt(get_cookie_value('login_session_timeout'));
 }
 
 function update_login_session_timeout(login_session_timeout) {
@@ -645,9 +601,9 @@ function submit_import(form) {
             }
 
             if (oauth.enabled) {
-                var form_action = "/definitions" + vhost_part + '?token=' + oauth.access_token;
+                var form_action = "/definitions" + vhost_part + '?token=' + get_auth_credentials();
             } else {
-                var form_action = "/definitions" + vhost_part + '?auth=' + get_auth_pref();
+                var form_action = "/definitions" + vhost_part + '?auth=' + get_auth_credentials();
             };
             var fd = new FormData();
             fd.append('file', file);
@@ -1252,20 +1208,10 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function auth_header() {
-    if (has_auth_pref() && oauth.enabled) {
-        return "Bearer " + decodeURIComponent(oauth.access_token);
-    } else {
-        if (has_auth_pref()) {
-            return "Basic " + decodeURIComponent(get_auth_pref());
-        } else {
-            return null;
-        }
-    }
-}
+
 
 function with_req(method, path, body, fun) {
-    if(!has_auth_pref()) {
+    if(!has_auth_credentials()) {
         // navigate to the login form
         location.reload();
         return;
@@ -1274,7 +1220,7 @@ function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
-    var header = auth_header();
+    var header = authorization_header();
     if (header !== null) {
         req.setRequestHeader('authorization', header);
     }
@@ -1337,7 +1283,7 @@ function sync_req(type, params0, path_template, options) {
     var req = xmlHttpRequest();
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.setRequestHeader('authorization', auth_header());
+    req.setRequestHeader('authorization', authorization_header());
 
     if (options != undefined || options != null) {
         if (options.headers != undefined || options.headers != null) {
@@ -1652,18 +1598,6 @@ function xmlHttpRequest() {
     return res;
 }
 
-// Our base64 library takes a string that is really a byte sequence,
-// and will throw if given a string with chars > 255 (and hence not
-// DTRT for chars > 127). So encode a unicode string as a UTF-8
-// sequence of "bytes".
-function b64_encode_utf8(str) {
-    return base64.encode(encode_utf8(str));
-}
-
-// encodeURIComponent handles utf-8, unescape does not. Neat!
-function encode_utf8(str) {
-  return unescape(encodeURIComponent(str));
-}
 
 (function($){
     $.fn.extend({
