@@ -297,11 +297,12 @@ with_fun_in_mnesia_tx(VHostName, TxFun)
 %% delete().
 %% -------------------------------------------------------------------
 
--spec delete(VHostName) -> ok when
-      VHostName :: vhost:name().
-%% @doc Deletes a virtual host record.
+-spec delete(VHostName) -> Existed when
+      VHostName :: vhost:name(),
+      Existed :: boolean().
+%% @doc Deletes a virtual host record from the database.
 %%
-%% @returns `ok', even if the record didn't exist before. It throws an
+%% @returns a boolean indicating if the vhost existed or not. It throws an
 %% exception if the transaction fails.
 %%
 %% @private
@@ -315,5 +316,6 @@ delete_in_mnesia(VHostName) ->
       fun() -> delete_in_mnesia_tx(VHostName) end).
 
 delete_in_mnesia_tx(VHostName) ->
+    Existed = mnesia:wread({?MNESIA_TABLE, VHostName}) =/= [],
     mnesia:delete({?MNESIA_TABLE, VHostName}),
-    ok.
+    Existed.
