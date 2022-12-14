@@ -606,6 +606,8 @@ qnode(Queue) when ?is_amqqueue(Queue) ->
     qnode(QPid);
 qnode(QPid) when is_pid(QPid) ->
     node(QPid);
+qnode(none) ->
+    undefined;
 qnode({_, Node}) ->
     Node.
 

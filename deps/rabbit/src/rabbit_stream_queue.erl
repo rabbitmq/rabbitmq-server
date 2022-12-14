@@ -25,6 +25,9 @@
          credit/4,
          dequeue/4,
          info/2,
+         queue_length/1,
+         get_replicas/1,
+         transfer_leadership/2,
          init/1,
          close/1,
          update/2,
@@ -36,7 +39,8 @@
 -export([list_with_minimum_quorum/0]).
 
 -export([set_retention_policy/3]).
--export([add_replica/3,
+-export([restart_stream/3,
+         add_replica/3,
          delete_replica/3]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
@@ -628,6 +632,20 @@ i(type, _) ->
 i(_, _) ->
     ''.
 
+queue_length(Q) ->
+    i(messages, Q).
+
+get_replicas(Q) ->
+    i(members, Q).
+
+-spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
+transfer_leadership(Q, Destination) ->
+    case rabbit_stream_coordinator:restart_stream(Q, #{preferred_leader_node => Destination}) of
+        {ok, NewNode} -> {migrated, NewNode};
+        {error, coordinator_unavailable} -> {not_migrated, timeout};
+        {error, Reason} -> {not_migrated, Reason}
+    end.
+
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.
 status(Vhost, QueueName) ->
@@ -639,10 +657,10 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            _Pid = amqqueue:get_pid(Q),
             [begin
                  [{role, Role},
                   get_key(node, C),
+                  get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
                   get_key(first_offset, C),
@@ -662,7 +680,7 @@ is_writer(_Member) -> false.
 
 get_counters(Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
-    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+    {ok, #{members := Members}} = rabbit_stream_coordinator:stream_overview(StreamId),
     %% split members to query the writer last
     %% this minimizes the risk of confusing output where replicas are ahead of the writer
     Writer = maps:keys(maps:filter(fun (_, M) -> is_writer(M) end, Members)),
@@ -793,6 +811,23 @@ set_retention_policy(Name, VHost, Policy) ->
                     ok
             end
     end.
+
+-spec restart_stream(VHost :: binary(), Queue :: binary(),
+                     #{preferred_leader_node => node()}) ->
+    {ok, node()} |
+    {error, term()}.
+restart_stream(VHost, Queue, Options)
+  when is_binary(VHost) andalso
+       is_binary(Queue) ->
+    case rabbit_amqqueue:lookup(Queue, VHost) of
+        {ok, Q} when ?amqqueue_type_is(Q, ?MODULE) ->
+            rabbit_stream_coordinator:restart_stream(Q, Options);
+        {ok, Q} ->
+            {error, {not_supported_for_type, amqqueue:get_type(Q)}};
+        E ->
+            E
+    end.
+
 
 add_replica(VHost, Name, Node) ->
     QName = rabbit_misc:r(VHost, queue, Name),

@@ -107,6 +107,11 @@ drain() ->
     transfer_leadership_of_quorum_queues(TransferCandidates),
     stop_local_quorum_queue_followers(),
 
+    case whereis(rabbit_stream_coordinator) of
+        undefined -> ok;
+        _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
+    end,
+
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
         reason => <<"node is being put into maintenance">>
@@ -292,6 +297,25 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
          end
      end || Q <- Queues],
     rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
+
+-spec transfer_leadership_of_stream_coordinator([node()]) -> ok.
+transfer_leadership_of_stream_coordinator([]) ->
+    rabbit_log:warning("Skipping leadership transfer of stream coordinator: no candidate "
+                       "(online, not under maintenance) nodes to transfer to!");
+transfer_leadership_of_stream_coordinator(TransferCandidates) ->
+    % try to transfer to the node with the lowest uptime; the assumption is that
+    % nodes are usually restarted in a rolling fashion, in a consistent order;
+    % therefore, the youngest node has already been restarted  or (if we are draining the first node)
+    % that it will be restarted last. either way, this way we limit the number of transfers
+    Uptimes = rabbit_misc:append_rpc_all_nodes(TransferCandidates, erlang, statistics, [wall_clock]),
+    Candidates = lists:zipwith(fun(N, {U, _}) -> {N, U}  end, TransferCandidates, Uptimes),
+    BestCandidate = element(1, hd(lists:keysort(2, Candidates))),
+    case rabbit_stream_coordinator:transfer_leadership([BestCandidate]) of
+        {ok, Node} ->
+            rabbit_log:info("Leadership transfer for stream coordinator completed. The new leader is ~p", [Node]);
+        Error ->
+            rabbit_log:warning("Skipping leadership transfer of stream coordinator: ~p", [Error])
+    end.
 
 -spec stop_local_quorum_queue_followers() -> ok.
 stop_local_quorum_queue_followers() ->

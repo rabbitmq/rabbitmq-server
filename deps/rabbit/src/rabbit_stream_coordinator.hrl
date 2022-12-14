@@ -21,7 +21,7 @@
                               | {running | disconnected, osiris:epoch(), pid()}
                               | deleted,
          role :: {writer | replica, osiris:epoch()},
-         node :: node(),
+         preferred = false :: term(),
          %% the currently running action, if any
          current :: undefined |
                     {updating |
@@ -33,12 +33,12 @@
          conf :: undefined | osiris:config(),
          target = running :: running | stopped | deleted}).
 
-%% member lifecycle
-%% down -> stopped(tail) -> running | disconnected -> deleted
-%%
-%% split the handling of incoming events (down, success | fail of operations)
-%% and the actioning of current state (i.e. member A is down but the cluster target
-%% is `up` - start a current action to turn member A -> running
+%% member lifecycle:
+%% down(epoch) ->
+%% stopped(epoch, tail) ->
+%% ready(epoch+1) ->
+%% running(epoch+1) | disconnected(epoch+1) ->
+%% deleted
 
 -type from() :: {pid(), reference()}.
 
@@ -51,7 +51,7 @@
                  listeners = #{} :: #{pid() | %% v0 & v1
                                       {pid(), leader | member} %% v2
                                       := LeaderPid :: pid()} |
-                 {node(), LocalPid :: pid()},
+                                     {node(), LocalPid :: pid()},
                  reply_to :: undefined | from(),
                  mnesia = {updated, 0} :: {updated | updating, osiris:epoch()},
                  target = running :: running | deleted
@@ -66,6 +66,7 @@
          %% not used as of v2
          listeners = #{} :: undefined | #{stream_id() =>
                                           #{pid() := queue_ref()}},
-         single_active_consumer = undefined :: undefined | rabbit_stream_sac_coordinator:state(),
+         single_active_consumer = undefined :: undefined |
+                                               rabbit_stream_sac_coordinator:state(),
          %% future extensibility
          reserved_2}).

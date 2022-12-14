@@ -32,6 +32,7 @@ all_tests() ->
      leader_down_scenario_1,
      replica_down,
      add_replica,
+     restart_stream,
      delete_stream,
      delete_replica_leader,
      delete_replica,
@@ -78,13 +79,15 @@ apply_cmd(M, C, S) ->
     rabbit_stream_coordinator:apply(M, C, S).
 
 register_listener(Args, S) ->
-    apply_cmd(#{index => 42, machine_version => 2}, {register_listener, Args}, S).
+    apply_cmd(meta(#{index => 42, machine_version => 2}),
+              {register_listener, Args}, S).
 
 eval_listeners(Stream) ->
     rabbit_stream_coordinator:eval_listeners(2, Stream, []).
 
 down(Pid, S) ->
-    apply_cmd(#{index => 42, machine_version => 2}, {down, Pid, reason}, S).
+    apply_cmd(meta(#{index => 42, machine_version => 2}),
+              {down, Pid, reason}, S).
 
 
 listeners(_) ->
@@ -93,32 +96,30 @@ listeners(_) ->
     ListPid = spawn(fun() -> ok end),
     N1 = r@n1,
     State0 = #?STATE{streams = #{}, monitors = #{}},
-    ?assertMatch(
-       {_, stream_not_found, []},
-       register_listener(#{pid => ListPid,
-                           node => N1,
-                           stream_id => S,
-                           type => leader}, State0)
-      ),
+    StreamId = "stream1",
+    ?assertMatch({_, stream_not_found, []},
+                 register_listener(#{pid => ListPid,
+                                     node => N1,
+                                     stream_id => S,
+                                     type => leader}, State0)
+                ),
 
     LeaderPid0 = spawn(fun() -> ok end),
-    Leader0 = #member{
-                role = {writer, 1},
-                state = {running, 1, LeaderPid0},
-                node = N1
-               },
-    State1 = State0#?STATE{
-                       streams = #{S => #stream{
-                                           listeners = #{},
-                                           members = #{N1 => Leader0},
-                                           queue_ref = Q}
-                      }},
+    Leader0 = #member{role = {writer, 1},
+                      state = {running, 1, LeaderPid0}},
+    Conf = #{name => StreamId},
+    State1 = State0#?STATE{streams = #{StreamId => #stream{id = StreamId,
+                                                           conf = Conf,
+                                                           nodes = [N1],
+                                                           listeners = #{},
+                                                           members = #{N1 => Leader0},
+                                                           queue_ref = Q}}},
 
     {State2, ok, Effs2} = register_listener(#{pid => ListPid,
                                               node => N1,
-                                              stream_id => S,
+                                              stream_id => StreamId,
                                               type => leader}, State1),
-    Stream2 = maps:get(S, State2#?STATE.streams),
+    Stream2 = maps:get(StreamId, State2#?STATE.streams),
     ?assertEqual(
        #{{ListPid, leader} => LeaderPid0},
        Stream2#stream.listeners
@@ -132,15 +133,15 @@ listeners(_) ->
        Effs2
       ),
     ?assertEqual(
-       #{ListPid => {#{S => ok}, listener}},
+       #{ListPid => {#{StreamId => ok}, listener}},
        State2#?STATE.monitors
       ),
 
     {State3, ok, Effs3} = register_listener(#{pid => ListPid,
                                               node => N1,
-                                              stream_id => S,
+                                              stream_id => StreamId,
                                               type => local_member}, State2),
-    Stream3 = maps:get(S, State3#?STATE.streams),
+    Stream3 = maps:get(StreamId, State3#?STATE.streams),
     ?assertEqual(
        #{{ListPid, leader} => LeaderPid0,
          {ListPid, member} => {N1, LeaderPid0}},
@@ -155,7 +156,7 @@ listeners(_) ->
        Effs3
       ),
     ?assertEqual(
-       #{ListPid => {#{S => ok}, listener}},
+       #{ListPid => {#{StreamId => ok}, listener}},
        State3#?STATE.monitors
       ),
 
@@ -186,11 +187,11 @@ listeners(_) ->
        Effs5
       ),
 
-    State5 = State3#?STATE{streams = #{S => Stream5}},
+    State5 = State3#?STATE{streams = #{StreamId => Stream5}},
 
     {State6, ok, []} = down(ListPid, State5),
 
-    Stream6 = maps:get(S, State6#?STATE.streams),
+    Stream6 = maps:get(StreamId, State6#?STATE.streams),
     ?assertEqual(
        #{},
        Stream6#stream.listeners
@@ -423,7 +424,7 @@ leader_down(_) ->
                  S3),
     {S3, []} = evaluate_stream(meta(?LINE), S3, []),
     N3Tail = {E, 102},
-    #{index := Idx4} = Meta4 = meta(?LINE),
+    #{index := Idx4} = Meta4 = meta(?LINE + 1),
     S4 = update_stream(Meta4, {member_stopped, StreamId,
                                #{node => N3,
                                  index => Idx2,
@@ -828,6 +829,56 @@ leader_down_scenario_1(_) ->
                                                    state = {ready, E3}}
                                     }},
                  S13),
+    ok.
+
+
+restart_stream(_) ->
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N1 = node(LeaderPid),
+    N2 = node(Replica1),
+    N3 = node(Replica2),
+
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    From = {self(), make_ref()},
+    Meta1 = (meta(?LINE))#{from => From},
+    S1 = update_stream(Meta1, {restart_stream, StreamId,
+                               #{preferred_leader_node => N2}}, S0),
+    ?assertMatch(#stream{target = running,
+                         members = #{N3 := #member{target = stopped,
+                                                   preferred = false,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N2 := #member{target = stopped,
+                                                   preferred = true,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N1 := #member{target = stopped,
+                                                   preferred = false,
+                                                   current = undefined,
+                                                   state = {running, _, _}}
+                                    }},
+                 S1),
+    {S2, Actions1} = evaluate_stream(Meta1, S1, []),
+    ?assertMatch([{aux, {stop, StreamId, #{node := N1}, _}},
+                  {aux, {stop, StreamId, #{node := N2}, _}},
+                  {aux, {stop, StreamId, #{node := N3}, _}}
+                 ],
+                 lists:sort(Actions1)),
+
+    ?assertMatch(#stream{target = running,
+                         members = #{N3 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _},
+                                     N2 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _},
+                                     N1 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = _}
+                                    }},
+                 S2),
     ok.
 
 delete_stream(_) ->
@@ -1328,9 +1379,9 @@ overview(_Config) ->
     Cmd = {new_stream, StreamId, #{leader_node => node(),
                                    retention => [],
                                    queue => Q}},
-    {S1, _, _} = apply_cmd(#{index => 1,
-                             machine_version => 3,
-                             system_time => 203984982374}, Cmd, S0),
+    {S1, _, _} = apply_cmd(meta(#{index => 1,
+                                  machine_version => 3,
+                                  system_time => 203984982374}), Cmd, S0),
 
     ?assertMatch(#{num_monitors := 0,
                    num_streams := 1,
@@ -1342,9 +1393,11 @@ overview(_Config) ->
     ok.
 
 meta(N) when is_integer(N) ->
-    #{index => N,
-      machine_version => 1,
-      system_time => N + 1000}.
+    meta(#{index => N});
+meta(#{index := N} = M) when is_map(M) ->
+    maps:merge(#{term => 1,
+                 machine_version => rabbit_stream_coordinator:version(),
+                 system_time => N * 2}, M).
 
 started_stream(StreamId, LeaderPid, ReplicaPids) ->
     E = 1,
@@ -1357,13 +1410,11 @@ started_stream(StreamId, LeaderPid, ReplicaPids) ->
                       name = list_to_binary(StreamId),
                       virtual_host = VHost},
     Members0 = #{node(LeaderPid) => #member{role = {writer, E},
-                                            node = node(LeaderPid),
                                             state = {running, E, LeaderPid},
                                             current = undefined}},
     Members = lists:foldl(fun (R, Acc) ->
                                   N = node(R),
                                   Acc#{N => #member{role = {replica, E},
-                                                    node = N,
                                                     state = {running, E, R},
                                                     current = undefined}}
                           end, Members0, ReplicaPids),

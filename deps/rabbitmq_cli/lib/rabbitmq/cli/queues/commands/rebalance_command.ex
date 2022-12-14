@@ -13,7 +13,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
   @known_types [
     "all",
     "classic",
-    "quorum"
+    "quorum",
+    "stream"
   ]
 
   defp default_opts, do: %{vhost_pattern: ".*", queue_pattern: ".*"}
@@ -44,7 +45,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
         :ok
 
       false ->
-        {:error, "type #{type} is not supported. Try one of all, classic, quorum."}
+        {:error, "type #{type} is not supported. Try one of all, classic, quorum, stream."}
     end
   end
 
@@ -57,11 +58,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def usage,
     do:
-      "rebalance < all | classic | quorum > [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
+      "rebalance < all | classic | quorum | stream > [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
 
   def usage_additional do
     [
-      ["<type>", "queue type, must be one of: all, classic, quorum"],
+      ["<type>", "queue type, must be one of: all, classic, quorum, stream"],
       ["--queue-pattern <pattern>", "regular expression to match queue names"],
       ["--vhost-pattern <pattern>", "regular expression to match virtual host names"]
     ]
@@ -88,6 +89,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def banner([:quorum], _) do
     "Re-balancing leaders of quorum queues..."
+  end
+
+  def banner([:stream], _) do
+    "Re-balancing leaders of streams..."
   end
 
   def banner([type], _) do
