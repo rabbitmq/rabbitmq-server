@@ -286,9 +286,15 @@ delete(VHost, ActingUser) ->
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
     _ = [rabbit_policy:delete(VHost, proplists:get_value(name, Info), ActingUser)
          || Info <- rabbit_policy:list(VHost)],
-    ok = rabbit_db_vhost:delete(VHost),
-    ok = rabbit_event:notify(vhost_deleted, [{name, VHost},
-                                             {user_who_performed_action, ActingUser}]),
+    case rabbit_db_vhost:delete(VHost) of
+        true ->
+            ok = rabbit_event:notify(
+                   vhost_deleted,
+                   [{name, VHost},
+                    {user_who_performed_action, ActingUser}]);
+        false ->
+            ok
+    end,
     %% After vhost was deleted from the database, we try to stop vhost
     %% supervisors on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
