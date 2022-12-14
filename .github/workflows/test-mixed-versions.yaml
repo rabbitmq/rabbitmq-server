@@ -126,7 +126,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - "25_1"
+        - "25_2"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -168,7 +168,7 @@ jobs:
     strategy:
       matrix:
         include:
-        - erlang_version: "25.1"
+        - erlang_version: "25.2"
           elixir_version: 1.14.0
     timeout-minutes: 60
     steps:
