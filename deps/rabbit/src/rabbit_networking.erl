@@ -467,8 +467,13 @@ node_listeners_mnesia(Node) ->
 
 node_listeners_ets(Node) ->
     case rabbit_misc:rpc_call(Node, ets, tab2list, [?ETS_TABLE]) of
-        {badrpc, nodedown} -> [];
-        Listeners -> Listeners
+        {badrpc, _} ->
+            %% Some of the reasons are the node being down or is
+            %% shutting down and the ETS table does not exist any
+            %% more.
+            [];
+        Listeners when is_list(Listeners) ->
+            Listeners
     end.
 
 -spec node_client_listeners(node()) -> [rabbit_types:listener()].
