@@ -10,11 +10,40 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
+<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
         erlang_version:
         - "25.0"
         include:
         - erlang_version: "25.0"
           name: '25'
+=======
+<<<<<<< HEAD
+=======
+        erlang_version:
+        - "24.3"
+        - "25.0"
+        - "25.1"
+        - "25.2"
+>>>>>>> d78b8b3a2a (Adopt OTP 25.2)
+        include:
+        - erlang_version: "25.0"
+          name: '25_0'
+        - erlang_version: "25.1"
+          name: '25_1'
+<<<<<<< HEAD
+=======
+          branch: main
+          labels: |
+            backport-v3.11.x
+            backport-v3.10.x
+        - erlang_version: "25.2"
+          name: '25_2'
+          branch: main
+          labels: |
+            backport-v3.11.x
+            backport-v3.10.x
+>>>>>>> d78b8b3a2a (Adopt OTP 25.2)
+>>>>>>> cb8ee9c4bd (Adopt OTP 25.2):.github/workflows/update-otp-patches.yaml
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY

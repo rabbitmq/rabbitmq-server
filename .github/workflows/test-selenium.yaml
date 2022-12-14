@@ -1,0 +1,188 @@
+name: Test Management UI with Selenium
+on:
+  push:
+    branches:
+      - main
+      - v3.11.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-selenium.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  selenimum:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - "25.2"
+        browser:
+        - chrome
+        include:
+        - erlang_version: "25.2"
+          elixir_version: 1.13.4
+    env:
+      SELENIUM_DIR: deps/rabbitmq_management/selenium
+      DOCKER_NETWORK: rabbitmq_net
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure OTP & Elixir
+      uses: erlef/setup-beam@v1.15
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+
+    - name: Mount Bazel Cache
+      uses: actions/cache@v3.0.11
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
+
+    - name: Configure Bazel
+      run: |
+        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
+
+          build:buildbuddy --remote_download_toplevel
+
+          build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@rules_erlang//:erlang_home=${ERLANG_HOME}
+          build --//:elixir_home=${ELIXIR_HOME}
+        EOF
+
+    - name: Build & Load RabbitMQ OCI
+      run: |
+        bazelisk run packaging/docker-image:rabbitmq \
+          --config=buildbuddy
+
+    - name: Configure Docker Network
+      run: |
+        docker network create ${DOCKER_NETWORK}
+
+    - name: Start RabbitMQ
+      run: |
+        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"
+        docker run \
+          --detach \
+          --name rabbitmq \
+          --net ${DOCKER_NETWORK} \
+          -p 15672:15672 -p 5672:5672 \
+          -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
+          -v ${RABBITMQ_CONFIG_DIR}/rabbitmq-headless.config:/etc/rabbitmq/rabbitmq.config:ro \
+          -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
+          bazel/packaging/docker-image:rabbitmq
+
+    - name: Start Selenium
+      run: |
+        docker run \
+          --detach \
+          --name selenium \
+          --net ${DOCKER_NETWORK} \
+          -p 4444:4444 \
+          --shm-size=2g \
+          selenium/standalone-${{ matrix.browser }}:103.0
+
+    - name: Start UAA
+      run: |
+        UAA_CONFIG="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa/uaa-headless"
+        docker run \
+          --detach \
+          --name uaa \
+          --net ${DOCKER_NETWORK} \
+          --publish 8080:8080 \
+          --mount "type=bind,source=${UAA_CONFIG},target=/uaa" \
+          --env UAA_CONFIG_PATH="/uaa" \
+          --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
+          cloudfoundry/uaa:75.21.0
+
+    - name: Build Test Runner Image
+      run: |
+        cd ${SELENIUM_DIR}
+        docker build -t mocha-test --target test .
+
+    - name: Wait for UAA to be Up
+      run: |
+        cd ${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa
+        ./waitTillUAAReady
+
+
+    - name: Run Suite Test oauth/with-uaa
+      run: |
+        TEST_DIR="${PWD}/${SELENIUM_DIR}/test"
+        docker run \
+          --rm \
+          --name mocha \
+          --net ${DOCKER_NETWORK} \
+          --env RABBITMQ_URL=http://rabbitmq:15672 \
+          --env RUN_LOCAL=false \
+          -v ${TEST_DIR}:/code/test \
+          -v ${PWD}/screens:/screens \
+          mocha-test /code/test/oauth/with-uaa
+
+    - name: Save UAA Logs
+      if: always()
+      run: |
+        mkdir logs
+        docker logs uaa > logs/uaa.log
+
+    - name: Stop UAA
+      run: |
+        docker kill uaa && docker rm uaa
+
+    - name: Run Suite Test oauth/with-uaa-down
+      run: |
+        TEST_DIR="${PWD}/${SELENIUM_DIR}/test"
+        docker run \
+          --rm \
+          --name mocha \
+          --net ${DOCKER_NETWORK} \
+          --env RABBITMQ_URL=http://rabbitmq:15672 \
+          --env RUN_LOCAL=false \
+          -v ${TEST_DIR}:/code/test \
+          -v ${PWD}/screens:/screens \
+          mocha-test /code/test/oauth/with-uaa-down
+
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    #!   if: always()
+
+    - name: Save Logs
+      if: always()
+      run: |
+        docker logs rabbitmq > logs/rabbitmq.log
+        docker logs selenium > logs/selenium.log
+
+
+    - name: Upload Test Artifacts
+      if: always()
+      uses: actions/upload-artifact@v3.1.1
+      with:
+        name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
+        path: |
+          logs/*
+          screens/*
