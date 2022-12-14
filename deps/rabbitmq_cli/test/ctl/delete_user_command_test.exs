@@ -45,8 +45,8 @@ defmodule DeleteUserCommandTest do
   end
 
   @tag user: @user
-  test "run: An invalid username returns an error", context do
-    assert @command.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+  test "run: deleting a non-existing user still succeeds", context do
+    assert @command.run(["no_one"], context[:opts]) == :ok
   end
 
   @tag user: @user

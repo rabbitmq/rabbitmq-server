@@ -164,8 +164,8 @@ defmodule RabbitMQCtlTest do
   end
 
   test "a command that fails with an error exits with a reasonable error code" do
-    command = ["delete_user", "voldemort"]
-    capture_io(:stderr, fn -> error_check(command, exit_nouser()) end)
+    command = ["set_vhost_tags", "voldemort", "mytag"]
+    capture_io(:stderr, fn -> error_check(command, exit_dataerr()) end)
   end
 
   test "a mcommand with an unsupported option as the first command-line arg fails gracefully" do

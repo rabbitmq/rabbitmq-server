@@ -152,7 +152,7 @@ parse_set(VHost, Defn, ActingUser) ->
                 rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
--spec set(rabbit_types:name(), {binary(), binary()}, rabbit_types:user() | rabbit_types:username()) ->
+-spec set(vhost:name(), [{binary(), binary()}], rabbit_types:user() | rabbit_types:username()) ->
     rabbit_runtime_parameters:ok_or_error_string().
 set(VHost, Defn, ActingUser) ->
     rabbit_runtime_parameters:set_any(VHost, <<"vhost-limits">>,
@@ -183,13 +183,9 @@ vhost_limit_validation() ->
      {<<"max-queues">>,      fun rabbit_parameter_validation:integer/2, optional}].
 
 update_vhost(VHostName, Limits) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              rabbit_vhost:update(VHostName,
-                                  fun(VHost) ->
-                                          rabbit_vhost:set_limits(VHost, Limits)
-                                  end)
-      end),
+    _ = rabbit_db_vhost:update(
+          VHostName,
+          fun(VHost) -> rabbit_vhost:set_limits(VHost, Limits) end),
     ok.
 
 get_limit(VirtualHost, Limit) ->
