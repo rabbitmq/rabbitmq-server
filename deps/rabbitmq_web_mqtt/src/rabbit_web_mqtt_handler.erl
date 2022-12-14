@@ -233,12 +233,10 @@ no_supported_sub_protocol(Protocol, Req) ->
       "Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
     {ok, cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req), #state{}}.
 
-handle_data(Data, State0 = #state{conn_name = ConnName}) ->
+handle_data(Data, State0 = #state{}) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}, hibernate} ->
             {[{active, false}], State1, hibernate};
-        {error, Error} ->
-            stop_with_framing_error(State0, Error, ConnName);
         Other ->
             Other
     end.
@@ -255,7 +253,7 @@ handle_data1(<<>>, State) ->
 handle_data1(Data, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnName }) ->
-    case rabbit_mqtt_packet:parse(Data, ParseState) of
+    case parse(Data, ParseState) of
         {more, ParseState1} ->
             {ok, ensure_stats_timer(control_throttle(
                 State #state{ parse_state = ParseState1 })), hibernate};
@@ -274,15 +272,21 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                 {stop, disconnect, ProcState1} ->
                     stop({_SendWill = false, State#state{proc_state = ProcState1}})
             end;
-        Other ->
-            Other
+        {error, Error} ->
+            rabbit_log_connection:error("MQTT parsing error ~tp for connection ~tp",
+                                        [Error, ConnName]),
+            stop(State, ?CLOSE_INCONSISTENT_MSG_TYPE, Error)
     end.
 
-stop_with_framing_error(State, Error0, ConnName) ->
-    Error1 = rabbit_misc:format("~tp", [Error0]),
-    rabbit_log_connection:error("MQTT detected framing error '~ts' for connection ~tp",
-                                [Error1, ConnName]),
-    stop(State, ?CLOSE_INCONSISTENT_MSG_TYPE, Error1).
+parse(Data, ParseState) ->
+    try
+        rabbit_mqtt_packet:parse(Data, ParseState)
+    catch
+        _:Error:Stacktrace ->
+            rabbit_log_connection:error("MQTT cannot parse a packet; payload: ~tp, error: {~tp, ~tp} ",
+                                        [Data, Error, Stacktrace]),
+            {error, cannot_parse}
+    end.
 
 stop(State) ->
     stop(State, ?CLOSE_NORMAL, "MQTT died").

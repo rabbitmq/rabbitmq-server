@@ -34,6 +34,7 @@ groups() ->
         , client_not_support_mqtt
         , unacceptable_data_type
         , duplicate_id
+        , handle_invalid_packets
         ]}
     ].
 
@@ -217,6 +218,14 @@ duplicate_id(Config) ->
     end,
     eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = emqtt:disconnect(C2).
+
+handle_invalid_packets(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+    WS = rfc6455_client:new("ws://localhost:" ++ PortStr ++ "/ws", self(), undefined, ["mqtt"]),
+    {ok, _} = rfc6455_client:open(WS),
+    Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
+    rfc6455_client:send_binary(WS, Bin),
+    {close, {1007, _}} = rfc6455_client:recv(WS, timer:seconds(1)).
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->
