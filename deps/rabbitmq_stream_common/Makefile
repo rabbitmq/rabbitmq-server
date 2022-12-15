@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_stream_common
 PROJECT_DESCRIPTION = RabbitMQ Stream Common
-PROJECT_MOD = rabbit_stream_common
 
 define PROJECT_ENV
 [
