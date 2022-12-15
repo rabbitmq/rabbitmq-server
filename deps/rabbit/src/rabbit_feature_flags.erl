@@ -1826,15 +1826,19 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin) ->
 %% @private
 
 sync_feature_flags_with_cluster(Nodes, NodeIsVirgin, Timeout) ->
+    Clustered = Nodes =/= [],
     case is_enabled(feature_flags_v2) of
-        true  -> rabbit_ff_controller:sync_cluster();
-        false -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
+        true when Clustered    -> rabbit_ff_controller:sync_cluster();
+        true when NodeIsVirgin -> rabbit_ff_controller:enable_default();
+        true                   -> ok;
+        false                  -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
     end.
 
 sync_cluster_v1([], NodeIsVirgin, _) ->
     case NodeIsVirgin of
         true ->
-            FeatureNames = get_forced_feature_flag_names(),
+            FeatureNames =
+            rabbit_ff_controller:get_forced_feature_flag_names(),
             case remote_nodes() of
                 [] when FeatureNames =:= undefined ->
                     rabbit_log_feature_flags:debug(
@@ -2067,75 +2071,6 @@ do_sync_feature_flags_with_node([FeatureFlag | Rest]) ->
     end;
 do_sync_feature_flags_with_node([]) ->
     ok.
-
--spec get_forced_feature_flag_names() -> [feature_name()] | undefined.
-%% @private
-%% @doc
-%% Returns the (possibly empty) list of feature flags the user want
-%% to enable out-of-the-box when starting a node for the first time.
-%%
-%% Without this, the default is to enable all the supported feature
-%% flags.
-%%
-%% There are two ways to specify that list:
-%% <ol>
-%% <li>Using the `$RABBITMQ_FEATURE_FLAGS' environment variable; for
-%%   instance `RABBITMQ_FEATURE_FLAGS=quorum_queue,mnevis'.</li>
-%% <li>Using the `forced_feature_flags_on_init' configuration parameter;
-%%   for instance
-%%   `{rabbit, [{forced_feature_flags_on_init, [quorum_queue, mnevis]}]}'.</li>
-%% </ol>
-%%
-%% The environment variable has precedence over the configuration
-%% parameter.
-
-get_forced_feature_flag_names() ->
-    Ret = case get_forced_feature_flag_names_from_env() of
-              undefined -> get_forced_feature_flag_names_from_config();
-              List      -> List
-          end,
-    case Ret of
-        undefined -> ok;
-        []        -> rabbit_log_feature_flags:info(
-                       "Feature flags: automatic enablement of feature "
-                       "flags disabled (i.e. none will be enabled "
-                       "automatically)");
-        _         -> rabbit_log_feature_flags:info(
-                       "Feature flags: automatic enablement of feature "
-                       "flags limited to the following list: ~tp", [Ret])
-    end,
-    Ret.
-
--spec get_forced_feature_flag_names_from_env() -> [feature_name()] | undefined.
-%% @private
-
-get_forced_feature_flag_names_from_env() ->
-    case rabbit_prelaunch:get_context() of
-        #{forced_feature_flags_on_init := ForcedFFs}
-          when is_list(ForcedFFs) ->
-            ForcedFFs;
-        _ ->
-            undefined
-    end.
-
--spec get_forced_feature_flag_names_from_config() -> [feature_name()] | undefined.
-%% @private
-
-get_forced_feature_flag_names_from_config() ->
-    Value = application:get_env(rabbit,
-                                forced_feature_flags_on_init,
-                                undefined),
-    case Value of
-        undefined ->
-            Value;
-        _ when is_list(Value) ->
-            case lists:all(fun is_atom/1, Value) of
-                true  -> Value;
-                false -> undefined
-            end;
-        _ ->
-            undefined
-    end.
 
 -spec verify_which_feature_flags_are_actually_enabled() ->
     ok | {error, any()} | no_return().

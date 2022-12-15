@@ -33,9 +33,11 @@
 
 -export([is_supported/1, is_supported/2,
          enable/1,
+         enable_default/0,
          check_node_compatibility/1,
          sync_cluster/0,
-         refresh_after_app_load/0]).
+         refresh_after_app_load/0,
+         get_forced_feature_flag_names/0]).
 
 %% Internal use only.
 -export([start/0,
@@ -95,6 +97,25 @@ enable(FeatureNames) when is_list(FeatureNames) ->
        [FeatureNames],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     gen_statem:call(?LOCAL_NAME, {enable, FeatureNames}).
+
+enable_default() ->
+    ?LOG_DEBUG(
+       "Feature flags: configure initial feature flags state",
+       [],
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    case erlang:whereis(?LOCAL_NAME) of
+        Pid when is_pid(Pid) ->
+            %% The function is called while `rabbit' is running.
+            gen_statem:call(?LOCAL_NAME, enable_default);
+        undefined ->
+            %% The function is called while `rabbit' is stopped. We need to
+            %% start a one-off controller, again to make sure concurrent
+            %% changes are blocked.
+            {ok, Pid} = start_link(),
+            Ret = gen_statem:call(Pid, enable_default),
+            gen_statem:stop(Pid),
+            Ret
+    end.
 
 check_node_compatibility(RemoteNode) ->
     ThisNode = node(),
@@ -248,6 +269,8 @@ updating_feature_flag_states(
 
 proceed_with_task({enable, FeatureNames}) ->
     enable_task(FeatureNames);
+proceed_with_task(enable_default) ->
+    enable_default_task();
 proceed_with_task(sync_cluster) ->
     sync_cluster_task();
 proceed_with_task(refresh_after_app_load) ->
@@ -449,6 +472,122 @@ enable_task(FeatureNames) ->
                "clustered nodes are missing, stopped or unreachable: ~tp",
                [AllNodes -- RunningNodes]),
             {error, missing_clustered_nodes}
+    end.
+
+enable_default_task() ->
+    FeatureNames = get_forced_feature_flag_names(),
+    case FeatureNames of
+        undefined ->
+            ?LOG_DEBUG(
+              "Feature flags: starting an unclustered node for the first "
+              "time: all stable feature flags will be enabled by default",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            {ok, Inventory} = collect_inventory_on_nodes([node()]),
+            #{feature_flags := FeatureFlags} = Inventory,
+            StableFeatureNames =
+            maps:fold(
+              fun
+                  (FeatureName, #{stability := stable}, Acc) ->
+                      [FeatureName | Acc];
+                  (_FeatureName, _FeatureProps, Acc) ->
+                      Acc
+              end, [], FeatureFlags),
+            enable_many(Inventory, StableFeatureNames);
+        [] ->
+            ?LOG_DEBUG(
+              "Feature flags: starting an unclustered node for the first "
+              "time: all feature flags are forcibly left disabled from "
+              "the $RABBITMQ_FEATURE_FLAGS environment variable",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            ok;
+        _ ->
+            ?LOG_DEBUG(
+               "Feature flags: starting an unclustered node for the first "
+               "time: only the following feature flags specified in the "
+               "$RABBITMQ_FEATURE_FLAGS environment variable will be enabled: "
+               "~tp",
+               [FeatureNames],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            {ok, Inventory} = collect_inventory_on_nodes([node()]),
+            enable_many(Inventory, FeatureNames)
+    end.
+
+-spec get_forced_feature_flag_names() -> Ret when
+      Ret :: FeatureNames | undefined,
+      FeatureNames :: [rabbit_feature_flags:feature_name()].
+%% @doc Returns the (possibly empty) list of feature flags the user wants to
+%% enable out-of-the-box when starting a node for the first time.
+%%
+%% Without this, the default is to enable all the supported stable feature
+%% flags.
+%%
+%% There are two ways to specify that list:
+%% <ol>
+%% <li>Using the `$RABBITMQ_FEATURE_FLAGS' environment variable; for
+%%   instance `RABBITMQ_FEATURE_FLAGS=quorum_queue,mnevis'.</li>
+%% <li>Using the `forced_feature_flags_on_init' configuration parameter;
+%%   for instance
+%%   `{rabbit, [{forced_feature_flags_on_init, [quorum_queue, mnevis]}]}'.</li>
+%% </ol>
+%%
+%% The environment variable has precedence over the configuration parameter.
+%%
+%% @private
+
+get_forced_feature_flag_names() ->
+    Ret = case get_forced_feature_flag_names_from_env() of
+              undefined -> get_forced_feature_flag_names_from_config();
+              List      -> List
+          end,
+    case Ret of
+        undefined ->
+            ok;
+        [] ->
+            ?LOG_INFO(
+               "Feature flags: automatic enablement of feature flags "
+               "disabled (i.e. none will be enabled automatically)",
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS});
+        _ ->
+            ?LOG_INFO(
+               "Feature flags: automatic enablement of feature flags "
+               "limited to the following list: ~tp",
+               [Ret],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+    end,
+    Ret.
+
+-spec get_forced_feature_flag_names_from_env() -> Ret when
+      Ret :: FeatureNames | undefined,
+      FeatureNames :: [rabbit_feature_flags:feature_name()].
+%% @private
+
+get_forced_feature_flag_names_from_env() ->
+    case rabbit_prelaunch:get_context() of
+        #{forced_feature_flags_on_init := ForcedFFs}
+          when is_list(ForcedFFs) ->
+            ForcedFFs;
+        _ ->
+            undefined
+    end.
+
+-spec get_forced_feature_flag_names_from_config() -> Ret when
+      Ret :: FeatureNames | undefined,
+      FeatureNames :: [rabbit_feature_flags:feature_name()].
+%% @private
+
+get_forced_feature_flag_names_from_config() ->
+    Value = application:get_env(
+              rabbit, forced_feature_flags_on_init, undefined),
+    case Value of
+        undefined ->
+            Value;
+        _ when is_list(Value) ->
+            case lists:all(fun is_atom/1, Value) of
+                true  -> Value;
+                false -> undefined
+            end;
+        _ ->
+            undefined
     end.
 
 -spec sync_cluster_task() -> Ret when
