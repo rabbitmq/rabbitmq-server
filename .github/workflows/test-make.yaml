@@ -1,4 +1,4 @@
-name: Test with GNU Make
+name: GNU Make Smoke Test
 on:
   workflow_dispatch:
   push:
@@ -6,7 +6,7 @@ on:
     - rin/makefile-updates
 jobs:
   test:
-    name: Test with GNU Make
+    name: GNU Make Smoke Test
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -26,9 +26,15 @@ jobs:
     - name: BUILD
       run: |
         make
-    - name: CHECK
+    - name: CHECK rabbit_common
       run: |
-        make check
+        make -C deps/rabbit_common check
+    - name: TEST rabbitmq_cli
+      run: |
+        make -C deps/rabbitmq_cli tests
+    - name: CT-FAST rabbit
+      run: |
+        make -C deps/rabbit ct-fast
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v3.1.1
