@@ -1,28 +1,16 @@
-name: Update OTP Versions for OCI Workflow
+name: Update OTP Patch Versions for Bazel Based Workflows
 on:
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
 jobs:
-  update-rbe-images:
+  update-toolchains:
     name: Update OTP Versions
     runs-on: ubuntu-20.04
     strategy:
       max-parallel: 1
       fail-fast: false
       matrix:
-<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
-<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
-        erlang_version:
-        - "25.0"
-        include:
-        - erlang_version: "25.0"
-          name: '25'
-=======
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 28b4b4af8f (Resolve a conflict):.github/workflows/update-otp-patches.yaml
         erlang_version:
         - "24.3"
         - "25.0"
@@ -51,11 +39,6 @@ jobs:
           labels: |
             backport-v3.11.x
             backport-v3.10.x
-<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
->>>>>>> d78b8b3a2a (Adopt OTP 25.2)
->>>>>>> cb8ee9c4bd (Adopt OTP 25.2):.github/workflows/update-otp-patches.yaml
-=======
->>>>>>> 28b4b4af8f (Resolve a conflict):.github/workflows/update-otp-patches.yaml
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -66,21 +49,16 @@ jobs:
       id: check-for-branch
       run: |
         set +e
-        git ls-remote --exit-code --heads origin bump-otp-for-oci
+        git ls-remote --exit-code --heads origin bump-otp-${{ matrix.erlang_version }}
         echo "::set-output name=c::$?"
     - name: DETERMINE LATEST PATCH & SHA
       if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
-        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+        VERSION=${TAG_NAME#OTP-}
 
-<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
-        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
-
-        echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
-=======
         if [[ -z "${VERSION}" ]]; then
           echo "Failed to determine latest VERSION for OTP-${{ matrix.erlang_version }}"
           exit 1
@@ -105,7 +83,6 @@ jobs:
         fi
 
         echo "::set-output name=VERSION::${VERSION}"
->>>>>>> 18c9352ab8 (Sync /workflows/update-otp-patches.yaml with main):.github/workflows/update-otp-patches.yaml
         echo "::set-output name=SHA::${SHA}"
         echo "::set-output name=SHA2::${SHA2}"
     - name: MODIFY VERSION FILE
@@ -162,16 +139,6 @@ jobs:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
-<<<<<<< HEAD:.github/workflows/update-otp-for-oci.yaml
-        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
-        commit-message: |
-          Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
-        labels: |
-          backport-v3.10.x
-          backport-v3.9.x
-          backport-v3.8.x
-        branch: bump-otp-for-oci
-=======
         title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         body: >
            Automated changes created by
@@ -182,5 +149,4 @@ jobs:
           Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         labels: ${{ matrix.labels }}
         branch: bump-otp-${{ matrix.erlang_version }}
->>>>>>> 18c9352ab8 (Sync /workflows/update-otp-patches.yaml with main):.github/workflows/update-otp-patches.yaml
         delete-branch: true
