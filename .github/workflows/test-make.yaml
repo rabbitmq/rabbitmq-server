@@ -45,6 +45,6 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3.1.1
       with:
-        name: test-artifacts-${{ matrix.erlang_version }}-${{ matrix.elixir_version }}
+        name: deps-rabbit-logs-${{ matrix.erlang_version }}-${{ matrix.elixir_version }}
         path: |
-          logs/*
+          deps/rabbit/logs
