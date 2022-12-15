@@ -40,7 +40,6 @@
 -define(CLOSE_NORMAL, 1000).
 -define(CLOSE_PROTOCOL_ERROR, 1002).
 -define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
--define(CLOSE_INCONSISTENT_MSG_TYPE, 1007).
 
 %% cowboy_sub_protcol
 upgrade(Req, Env, Handler, HandlerState) ->
@@ -266,16 +265,12 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                       State#state{parse_state = PS,
                                   proc_state = ProcState1});
                 {error, Reason, _} ->
-                    rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
-                        [Reason, ConnName]),
-                    stop(State, ?CLOSE_PROTOCOL_ERROR, Reason);
+                    stop_mqtt_protocol_error(State, Reason, ConnName);
                 {stop, disconnect, ProcState1} ->
                     stop({_SendWill = false, State#state{proc_state = ProcState1}})
             end;
-        {error, Error} ->
-            rabbit_log_connection:error("MQTT parsing error ~tp for connection ~tp",
-                                        [Error, ConnName]),
-            stop(State, ?CLOSE_INCONSISTENT_MSG_TYPE, Error)
+        {error, Reason} ->
+            stop_mqtt_protocol_error(State, Reason, ConnName)
     end.
 
 parse(Data, ParseState) ->
@@ -287,6 +282,11 @@ parse(Data, ParseState) ->
                                         [Data, Error, Stacktrace]),
             {error, cannot_parse}
     end.
+
+stop_mqtt_protocol_error(State, Reason, ConnName) ->
+    rabbit_log_connection:info("MQTT protocol error ~tp for connection ~tp",
+                        [Reason, ConnName]),
+    stop(State, ?CLOSE_PROTOCOL_ERROR, Reason).
 
 stop(State) ->
     stop(State, ?CLOSE_NORMAL, "MQTT died").

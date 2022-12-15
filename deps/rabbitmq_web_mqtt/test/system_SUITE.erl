@@ -214,7 +214,7 @@ duplicate_id(Config) ->
         {'EXIT', C1, _Reason} ->
             ok
     after 5000 ->
-              ct:fail("server did not disconnect a client with duplicate ID")
+            ct:fail("server did not disconnect a client with duplicate ID")
     end,
     eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
     ok = emqtt:disconnect(C2).
@@ -225,7 +225,7 @@ handle_invalid_packets(Config) ->
     {ok, _} = rfc6455_client:open(WS),
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
     rfc6455_client:send_binary(WS, Bin),
-    {close, {1007, _}} = rfc6455_client:recv(WS, timer:seconds(1)).
+    {close, {1002, _}} = rfc6455_client:recv(WS, timer:seconds(1)).
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->

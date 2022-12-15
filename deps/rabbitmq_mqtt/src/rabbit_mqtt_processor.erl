@@ -100,6 +100,7 @@ initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
 
 -spec process_packet(mqtt_packet(), state()) ->
     {ok, state()} |
+    {stop, disconnect, state()} |
     {error, Reason :: term(), state()}.
 process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
               State = #state{auth_state = undefined})
