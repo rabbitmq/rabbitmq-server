@@ -11,6 +11,15 @@ const CHANNELS_TAB = By.css('div#menu ul#tabs li a[href="#/channels"]')
 const QUEUES_TAB = By.css('div#menu ul#tabs li a[href="#/queues"]')
 const ADMIN_TAB = By.css('div#menu ul#tabs li a[href="#/users"]')
 
+const UPLOAD_DEFINITIONS_SECTION = By.css('div#upload-definitions')
+const CHOOSE_BROKER_UPLOAD_FILE = By.css('input[name="file"]')
+const UPLOAD_BROKER_FILE = By.css('input[type=submit][name="upload-definitions"]')
+const POP_UP = By.css('div.form-popup-info')
+
+const DOWNLOAD_DEFINITIONS_SECTION = By.css('div#download-definitions')
+const CHOOSE_BROKER_DOWNLOAD_FILE = By.css('input#download-filename')
+const DOWNLOAD_BROKER_FILE = By.css('button#upload-definitions')
+
 module.exports = class OverviewPage extends BasePage {
   async isLoaded () {
     return await this.waitForDisplayed(MENU_TABS)
@@ -38,5 +47,23 @@ module.exports = class OverviewPage extends BasePage {
 
   async clickOnQueuesTab () {
     return this.click(QUEUES_TAB)
+  }
+
+  async uploadBrokerDefinitions(file) {
+    await this.click(UPLOAD_DEFINITIONS_SECTION)
+    await this.chooseFile(CHOOSE_BROKER_UPLOAD_FILE, file)
+    await this.driver.sleep(1000)
+    await this.click(UPLOAD_BROKER_FILE)
+    await this.acceptAlert()
+    let popup = await this.waitForDisplayed(POP_UP)
+    await this.click(POP_UP)
+    return popup.getText()
+  }
+  async downloadBrokerDefinitions(filename) {
+    await this.click(DOWNLOAD_DEFINITIONS_SECTION)
+    await this.driver.sleep(1000)
+    await this.sendKeys(CHOOSE_BROKER_DOWNLOAD_FILE, filename)
+    await this.click(DOWNLOAD_BROKER_FILE)
+    return driver.sleep(5000);
   }
 }

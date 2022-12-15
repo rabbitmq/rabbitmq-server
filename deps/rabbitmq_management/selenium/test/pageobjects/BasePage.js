@@ -105,11 +105,42 @@ module.exports = class BasePage {
       await element.clear()
       return element.sendKeys(keys)
     } catch (err) {
+      console.log(err)
       if (retries === 0) {
         throw new Error(`Unable to send keys to ${locator.toString()} after maximum retries, error : ${err.message}`)
       }
       await this.driver.sleep(250)
       return this.sendKeys(locator, keys, retries - 1)
+    }
+  }
+
+  async chooseFile (locator, file, retries = 1) {
+    try {
+      const element = await this.driver.findElement(locator)
+      return element.sendKeys(file)
+    } catch (err) {
+      console.log(err)
+      if (retries === 0) {
+        throw new Error(`Unable to send keys to ${locator.toString()} after maximum retries, error : ${err.message}`)
+      }
+      await this.driver.sleep(250)
+      return this.chooseFile(locator, file, retries - 1)
+    }
+  }
+  async acceptAlert (retries = 3) {
+    try {
+      await this.driver.wait(until.alertIsPresent());
+      await this.driver.sleep(250)
+      let alert = await this.driver.switchTo().alert();
+      await this.driver.sleep(250)
+      return alert.accept();
+    } catch (err) {
+      console.log(err)
+      if (retries === 0) {
+        throw new Error(`Unable to send keys to ${locator.toString()} after maximum retries, error : ${err.message}`)
+      }
+      await this.driver.sleep(250)
+      return this.alertAccept(retries - 1)
     }
   }
 
