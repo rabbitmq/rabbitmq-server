@@ -15,6 +15,7 @@ jobs:
         - "24.3"
         - "25.0"
         - "25.1"
+        - "25.2"
         include:
         - erlang_version: "24.3"
           name: '24'
@@ -28,6 +29,12 @@ jobs:
             backport-v3.11.x
         - erlang_version: "25.1"
           name: '25_1'
+          branch: main
+          labels: |
+            backport-v3.11.x
+            backport-v3.10.x
+        - erlang_version: "25.2"
+          name: '25_2'
           branch: main
           labels: |
             backport-v3.11.x
