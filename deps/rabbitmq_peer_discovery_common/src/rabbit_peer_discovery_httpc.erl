@@ -428,21 +428,8 @@ decode_body(?CONTENT_JSON, Body) ->
 -spec parse_response({ok, integer(), string()} | {error, any()}) -> {ok, string()} | {error, any()}.
 
 parse_response({error, Reason}) ->
-<<<<<<< HEAD
-  ?LOG_DEBUG("HTTP error ~p", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-  {error, lists:flatten(io_lib:format("~p", [Reason]))};
-
-parse_response({ok, 200, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
-parse_response({ok, 201, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
-parse_response({ok, 204, _})     -> {ok, []};
-parse_response({ok, Code, Body}) ->
-  ?LOG_DEBUG("HTTP Response (~p) ~s", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-  {error, integer_to_list(Code)};
-
-=======
   ?LOG_DEBUG("HTTP error ~tp", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, lists:flatten(io_lib:format("~tp", [Reason]))};
->>>>>>> 04de0c704a (Delete function clauses that can never match)
 parse_response({ok, {{_,200,_}, Headers, Body}}) ->
   {ok, decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body)};
 parse_response({ok,{{_,201,_}, Headers, Body}}) ->
