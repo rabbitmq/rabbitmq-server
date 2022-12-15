@@ -27,11 +27,11 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "25.1"
+        - "25.2"
         browser:
         - chrome
         include:
-        - erlang_version: "25.1"
+        - erlang_version: "25.2"
           elixir_version: 1.13.4
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
