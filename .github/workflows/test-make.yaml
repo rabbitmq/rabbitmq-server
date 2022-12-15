@@ -31,7 +31,13 @@ jobs:
         make -C deps/rabbit_common check
     - name: TEST rabbitmq_cli
       run: |
+        make start-background-broker \
+          RABBITMQ_VERSION=3.12.0 \
+          PLUGINS="rabbitmq_stomp rabbitmq_federation rabbitmq_stream_management"
+
         make -C deps/rabbitmq_cli tests
+
+        make stop-node
     - name: CT-FAST rabbit
       run: |
         make -C deps/rabbit ct-fast
