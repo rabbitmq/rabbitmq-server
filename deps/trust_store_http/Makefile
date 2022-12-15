@@ -18,5 +18,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+# Make sure we know where the applications are located.
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk

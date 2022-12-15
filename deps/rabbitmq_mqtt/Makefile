@@ -44,8 +44,12 @@ dep_emqtt = git https://github.com/emqx/emqtt.git 1.7.0-rc.2
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+# Make sure we know where the applications are located.
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 
 clean::

@@ -29,5 +29,9 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+# Make sure we know where the applications are located.
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk

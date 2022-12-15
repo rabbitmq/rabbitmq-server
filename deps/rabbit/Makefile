@@ -167,8 +167,12 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+# Make sure we know where the applications are located.
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 # See above why we mess with `$(APPS_DIR)`.
 unexport APPS_DIR
