@@ -600,11 +600,7 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            if (oauth.enabled) {
-                var form_action = "/definitions" + vhost_part + '?token=' + get_auth_credentials();
-            } else {
-                var form_action = "/definitions" + vhost_part + '?auth=' + get_auth_credentials();
-            };
+            var form_action = "/definitions" + vhost_part;
             var fd = new FormData();
             fd.append('file', file);
             with_req('POST', form_action, fd, function(resp) {
