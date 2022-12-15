@@ -1,0 +1,38 @@
+name: Test with GNU Make
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - rin/makefile-updates
+jobs:
+  test:
+    name: Test with GNU Make
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - erlang_version: "25.1"
+          elixir_version: 1.14.0
+    timeout-minutes: 240
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+    - name: CONFIGURE ERLANG
+      uses: erlef/setup-beam@v1.15
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+    - name: BUILD
+      run: |
+        make
+    - name: CHECK
+      run: |
+        make check
+    - name: UPLOAD TEST ARTIFACTS
+      if: always()
+      uses: actions/upload-artifact@v3.1.1
+      with:
+        name: test-artifacts-${{ matrix.erlang_version }}-${{ matrix.elixir_version }}
+        path: |
+          logs/*
