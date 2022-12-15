@@ -26,10 +26,7 @@
 -define(PINGRESP,    13).
 -define(DISCONNECT,  14).
 
--type packet_types() :: ?CONNECT | ?CONNACK |
-                        ?PUBLISH | ?PUBACK | ?PUBREC | ?PUBREL | ?PUBCOMP |
-                        ?SUBSCRIBE | ?SUBACK | ?UNSUBSCRIBE | ?UNSUBACK |
-                        ?PINGREQ | ?PINGRESP | ?DISCONNECT.
+-type packet_type() :: ?CONNECT .. ?DISCONNECT.
 
 %% connect return codes
 

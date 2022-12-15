@@ -108,8 +108,9 @@ process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
 process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}}, State) ->
     process_request(Type, Packet, State).
 
--spec process_request(packet_types(), mqtt_packet(), state()) ->
+-spec process_request(packet_type(), mqtt_packet(), state()) ->
     {ok, state()} |
+    {stop, disconnect, state()} |
     {error, Reason :: term(), state()}.
 process_request(?CONNECT, Packet, State = #state{socket = Socket}) ->
     %% Check whether peer closed the connection.
@@ -444,10 +445,6 @@ register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
                     %% e.g. this node was removed from the MQTT cluster members
                     rabbit_log_connection:error("MQTT cannot accept a connection: "
                                                 "client ID tracker is unavailable: ~p", [Err]),
-                    {error, ?CONNACK_SERVER_UNAVAILABLE};
-                {timeout, _} ->
-                    rabbit_log_connection:error("MQTT cannot accept a connection: "
-                                                "client ID registration timed out"),
                     {error, ?CONNACK_SERVER_UNAVAILABLE}
             end;
         false ->
