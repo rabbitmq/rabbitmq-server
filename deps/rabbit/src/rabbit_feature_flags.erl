@@ -1826,15 +1826,19 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin) ->
 %% @private
 
 sync_feature_flags_with_cluster(Nodes, NodeIsVirgin, Timeout) ->
+    Clustered = Nodes =/= [],
     case is_enabled(feature_flags_v2) of
-        true  -> rabbit_ff_controller:sync_cluster();
-        false -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
+        true when Clustered    -> rabbit_ff_controller:sync_cluster();
+        true when NodeIsVirgin -> rabbit_ff_controller:enable_default();
+        true                   -> ok;
+        false                  -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
     end.
 
 sync_cluster_v1([], NodeIsVirgin, _) ->
     case NodeIsVirgin of
         true ->
-            FeatureNames = get_forced_feature_flag_names(),
+            FeatureNames =
+            rabbit_ff_controller:get_forced_feature_flag_names(),
             case remote_nodes() of
                 [] when FeatureNames =:= undefined ->
                     rabbit_log_feature_flags:debug(
@@ -2068,6 +2072,7 @@ do_sync_feature_flags_with_node([FeatureFlag | Rest]) ->
 do_sync_feature_flags_with_node([]) ->
     ok.
 
+<<<<<<< HEAD
 -spec get_forced_feature_flag_names() -> [feature_name()] | undefined.
 %% @private
 %% @doc
@@ -2137,6 +2142,8 @@ get_forced_feature_flag_names_from_config() ->
             undefined
     end.
 
+=======
+>>>>>>> 9fb4e6754e (rabbit_feature_flags: Support virgin node init with feature flags v2)
 -spec verify_which_feature_flags_are_actually_enabled() ->
     ok | {error, any()} | no_return().
 %% @private
