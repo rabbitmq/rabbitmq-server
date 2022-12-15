@@ -60,10 +60,13 @@ module.exports = class OverviewPage extends BasePage {
     return popup.getText()
   }
   async downloadBrokerDefinitions(filename) {
-    await this.click(DOWNLOAD_DEFINITIONS_SECTION)
+    return this.click(DOWNLOAD_DEFINITIONS_SECTION)
+
+    /*
     await this.driver.sleep(1000)
     await this.sendKeys(CHOOSE_BROKER_DOWNLOAD_FILE, filename)
     await this.click(DOWNLOAD_BROKER_FILE)
     return driver.sleep(5000);
+    */
   }
 }
