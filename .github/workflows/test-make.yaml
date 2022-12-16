@@ -23,6 +23,9 @@ jobs:
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
+    - name: DEPS
+      run: |
+        make deps
     - name: BUILD
       run: |
         make
