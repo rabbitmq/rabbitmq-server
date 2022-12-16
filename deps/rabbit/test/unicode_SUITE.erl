@@ -6,6 +6,9 @@
 
 -compile(export_all).
 
+%% Unicode U+1F407
+-define(UNICODE_STRING, "bunny🐇bunny").
+
 all() ->
     [
      {group, queues}
@@ -34,8 +37,7 @@ end_per_suite(Config) ->
 
 init_per_group(Group, Config0) ->
     PrivDir0 = ?config(priv_dir, Config0),
-    %% Put unicode char U+1F407 in directory name
-    PrivDir = filename:join(PrivDir0, "bunny🐇bunny"),
+    PrivDir = filename:join(PrivDir0, ?UNICODE_STRING),
     ok = file:make_dir(PrivDir),
     Config = rabbit_ct_helpers:set_config(Config0, [{priv_dir, PrivDir},
                                                     {rmq_nodename_suffix, Group}]),
@@ -69,7 +71,8 @@ quorum_queue(Config) ->
     ok = queue(Config, ?FUNCTION_NAME, [{<<"x-queue-type">>, longstr, <<"quorum">>}]).
 
 queue(Config, QName0, Args) ->
-    QName = rabbit_data_coercion:to_binary(QName0),
+    QName1 = rabbit_data_coercion:to_binary(QName0),
+    QName = <<QName1/binary, ?UNICODE_STRING/utf8>>,
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     amqp_channel:call(Ch, #'queue.declare'{queue     = QName,
@@ -85,7 +88,8 @@ queue(Config, QName0, Args) ->
 stream(Config) ->
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    ConsumerTag = QName = atom_to_binary(?FUNCTION_NAME),
+    ConsumerTag = QName0 = atom_to_binary(?FUNCTION_NAME),
+    QName = <<QName0/binary, ?UNICODE_STRING/utf8>>,
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     amqp_channel:call(Ch, #'queue.declare'{queue     = QName,
                                            durable   = true,
