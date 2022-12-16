@@ -44,7 +44,7 @@
 
 -record(state,
         {socket,
-         proto_ver :: mqtt310 | mqtt311,
+         proto_ver :: option(mqtt310 | mqtt311),
          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
          %% Packet IDs published to queues but not yet confirmed.
          unacked_client_pubs = rabbit_mqtt_confirms:init() :: rabbit_mqtt_confirms:state(),
@@ -54,12 +54,12 @@
          %% (Not to be confused with packet IDs sent from client to server which can be the
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
-         client_id :: binary(),
-         clean_sess :: boolean(),
+         client_id :: option(binary()),
+         clean_sess :: option(boolean()),
          will_msg,
-         exchange :: rabbit_exchange:name(),
+         exchange :: option(rabbit_exchange:name()),
          %% Set if client has at least one subscription with QoS 1.
-         queue_qos1 :: rabbit_amqqueue:name(),
+         queue_qos1 :: option(rabbit_amqqueue:name()),
          has_published = false :: boolean(),
          ssl_login_name,
          %% Retained messages handler. See rabbit_mqtt_retainer_sup

@@ -7,7 +7,9 @@
 
 -export_type([state/0]).
 
--record(state, {timer :: reference(),
+-type option(T) :: undefined | T.
+
+-record(state, {timer :: option(reference()),
                 interval_ms :: pos_integer(),
                 socket :: inet:socket(),
                 recv_oct :: non_neg_integer(),

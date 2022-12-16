@@ -55,6 +55,8 @@
 %% Packet identifier is a non zero two byte integer.
 -type packet_id() :: 1..16#ffff.
 
+-type option(T) :: undefined | T.
+
 -record(mqtt_packet_fixed,    {type   = 0,
                                dup    = 0,
                                qos    = 0,
@@ -62,8 +64,8 @@
                               }).
 
 -record(mqtt_packet,          {fixed :: #mqtt_packet_fixed{},
-                               variable :: tuple(),
-                               payload :: iodata()
+                               variable :: option(tuple()),
+                               payload :: option(iodata())
                               }).
 
 -type mqtt_packet() :: #mqtt_packet{}.
@@ -99,8 +101,8 @@
 -record(mqtt_msg,             {retain :: boolean(),
                                qos :: qos(),
                                topic :: string(),
-                               dup :: boolean(),
-                               packet_id :: packet_id(),
+                               dup :: option(boolean()),
+                               packet_id :: option(packet_id()),
                                payload :: binary()}).
 
 -type mqtt_msg() :: #mqtt_msg{}.
