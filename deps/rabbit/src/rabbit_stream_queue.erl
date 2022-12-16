@@ -889,8 +889,7 @@ policy_precedence(PolVal, _ArgVal) ->
 
 stream_name(#resource{virtual_host = VHost, name = Name}) ->
     Timestamp = erlang:integer_to_binary(erlang:system_time()),
-    osiris_util:to_base64uri(erlang:binary_to_list(<<VHost/binary, "_", Name/binary, "_",
-                                                     Timestamp/binary>>)).
+    osiris_util:to_base64uri(<<VHost/binary, "_", Name/binary, "_", Timestamp/binary>>).
 
 recover(Q) ->
     {ok, Q}.
