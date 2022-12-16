@@ -70,7 +70,7 @@
 -rabbit_feature_flag(
     {feature_flags_v2,
      #{desc          => "Feature flags subsystem V2",
-       stability     => stable
+       stability     => required
      }}).
 
 -rabbit_feature_flag(
