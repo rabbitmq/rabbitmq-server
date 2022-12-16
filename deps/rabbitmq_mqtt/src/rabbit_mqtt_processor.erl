@@ -969,9 +969,7 @@ human_readable_vhost_lookup_strategy(port_to_vhost_mapping) ->
 human_readable_vhost_lookup_strategy(cert_to_vhost_mapping) ->
     "client certificate to vhost mapping";
 human_readable_vhost_lookup_strategy(default_vhost) ->
-    "plugin configuration or default";
-human_readable_vhost_lookup_strategy(Val) ->
-    atom_to_list(Val).
+    "plugin configuration or default".
 
 creds(User, Pass, SSLLoginName) ->
     DefaultUser   = rabbit_mqtt_util:env(default_user),
@@ -1208,8 +1206,6 @@ binding_action(
                        key = RoutingKey},
     BindingFun(Binding, Username).
 
-publish_to_queues(undefined, State) ->
-    {ok, State};
 publish_to_queues(
   #mqtt_msg{qos        = Qos,
             topic      = Topic,

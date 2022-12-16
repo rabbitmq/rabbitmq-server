@@ -87,9 +87,6 @@ init(Ref) ->
                       parse_state            = rabbit_mqtt_packet:initial_state(),
                       proc_state             = ProcessorState }), #state.stats_timer)
              );
-        {network_error, Reason} ->
-            rabbit_net:fast_close(RealSocket),
-            terminate({shutdown, Reason}, undefined);
         {error, enotconn} ->
             rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);

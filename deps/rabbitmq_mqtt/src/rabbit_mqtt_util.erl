@@ -133,7 +133,7 @@ to_mqtt(T0) ->
     T2 = string:replace(T1, ".", "/", all),
     erlang:iolist_to_binary(T2).
 
--spec gen_client_id() -> binary().
+-spec gen_client_id() -> string().
 gen_client_id() ->
     rabbit_misc:base64url(rabbit_guid:gen_secure()).
 
