@@ -83,6 +83,13 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-25.1.2.tar.gz"],
 )
 
+http_file(
+    name = "otp_src_25_2",
+    downloaded_file_path = "OTP-25.2.tar.gz",
+    sha256 = "d33a988f39e534aff67799c5b9635612858459c9d8890772546d71ea38de897a",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.2.tar.gz"],
+)
+
 http_archive(
     name = "io_buildbuddy_buildbuddy_toolchain",
     sha256 = "a2a5cccec251211e2221b1587af2ce43c36d32a42f5d881737db3b546a536510",
@@ -144,6 +151,11 @@ erlang_config(
             name = "25_1",
             sha256 = "5442dea694e7555d479d80bc81f1428020639c258f8e40b2052732d1cc95cca5",
             version = "25.1.2",
+        ),
+        internal_erlang_from_github_release(
+            name = "25_2",
+            sha256 = "aee1ef294ee048c976d6a126a430367076354f484f557eacaf08bf086cb1314d",
+            version = "25.2",
         ),
         internal_erlang_from_http_archive(
             name = "git_master",

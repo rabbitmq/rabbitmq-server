@@ -14,10 +14,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+<<<<<<< HEAD
         - erlang_version: "24"
           elixir_version: 1.13.4
         #! - erlang_version: "25"
         #!   elixir_version: 1.13.4
+=======
+        - erlang_version: "25.2"
+          elixir_version: 1.14.0
+>>>>>>> cb8ee9c4bd (Adopt OTP 25.2)
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY

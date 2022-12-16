@@ -120,9 +120,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+<<<<<<< HEAD
         erlang_major:
         - "24"
         #! - "25"
+=======
+        otp_version_id:
+        - "25_2"
+>>>>>>> cb8ee9c4bd (Adopt OTP 25.2)
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -164,10 +169,15 @@ jobs:
     strategy:
       matrix:
         include:
+<<<<<<< HEAD
         - erlang_version: "24"
           elixir_version: 1.13.4
         #! - erlang_version: "25"
         #!   elixir_version: 1.13.4
+=======
+        - erlang_version: "25.2"
+          elixir_version: 1.14.0
+>>>>>>> cb8ee9c4bd (Adopt OTP 25.2)
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
