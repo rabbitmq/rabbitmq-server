@@ -11,12 +11,12 @@ const CHANNELS_TAB = By.css('div#menu ul#tabs li a[href="#/channels"]')
 const QUEUES_TAB = By.css('div#menu ul#tabs li a[href="#/queues"]')
 const ADMIN_TAB = By.css('div#menu ul#tabs li a[href="#/users"]')
 
-const UPLOAD_DEFINITIONS_SECTION = By.css('div#upload-definitions')
+const UPLOAD_DEFINITIONS_SECTION = By.css('div#upload-definitions-section')
 const CHOOSE_BROKER_UPLOAD_FILE = By.css('input[name="file"]')
 const UPLOAD_BROKER_FILE = By.css('input[type=submit][name="upload-definitions"]')
 const POP_UP = By.css('div.form-popup-info')
 
-const DOWNLOAD_DEFINITIONS_SECTION = By.css('div#download-definitions')
+const DOWNLOAD_DEFINITIONS_SECTION = By.css('div#download-definitions-section')
 const CHOOSE_BROKER_DOWNLOAD_FILE = By.css('input#download-filename')
 const DOWNLOAD_BROKER_FILE = By.css('button#upload-definitions')
 
