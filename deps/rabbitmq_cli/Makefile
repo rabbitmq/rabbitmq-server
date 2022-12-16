@@ -22,8 +22,8 @@ MIX_TEST := $(MIX_TEST) --trace
 endif
 
 # Make sure we know where the applications are located.
-ROOT_DIR ?= ../..
-DEPS_DIR ?= ../../deps
+ROOT_DIR ?= $(abspath ../..)
+DEPS_DIR ?= $(abspath ../../deps)
 
 include $(ROOT_DIR)/rabbitmq-components.mk
 include $(ROOT_DIR)/erlang.mk

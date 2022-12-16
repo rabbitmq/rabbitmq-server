@@ -51,8 +51,8 @@ ifneq ($(filter hex-%,$(MAKECMDGOALS)),)
 include rabbitmq-components.mk
 include erlang.mk
 else
-ROOT_DIR ?= ../..
-DEPS_DIR ?= ../../deps
+ROOT_DIR ?= $(abspath ../..)
+DEPS_DIR ?= $(abspath ../../deps)
 include $(ROOT_DIR)/rabbitmq-components.mk
 include $(ROOT_DIR)/erlang.mk
 endif
