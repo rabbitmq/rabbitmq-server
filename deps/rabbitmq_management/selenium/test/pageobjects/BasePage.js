@@ -117,6 +117,8 @@ module.exports = class BasePage {
   async chooseFile (locator, file, retries = 1) {
     try {
       const element = await this.driver.findElement(locator)
+      var remote = require('selenium-webdriver/remote');
+      driver.setFileDetector(new remote.FileDetector);       
       return element.sendKeys(file)
     } catch (err) {
       console.log(err)
