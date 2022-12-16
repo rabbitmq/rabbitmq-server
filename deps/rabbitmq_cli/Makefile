@@ -21,8 +21,12 @@ ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace
 endif
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+# Make sure we know where the applications are located.
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 # rabbitmq-mix.mk is generated during the creation of the RabbitMQ
 # source archive. It sets some environment variables to allow

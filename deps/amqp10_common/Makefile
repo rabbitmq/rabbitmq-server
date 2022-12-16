@@ -44,8 +44,17 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
+# if attempting to hex publish, treat this not as part
+# of the umbrella
+ifneq ($(filter hex-%,$(MAKECMDGOALS)),)
 include rabbitmq-components.mk
 include erlang.mk
+else
+ROOT_DIR ?= ../..
+DEPS_DIR ?= ../../deps
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
+endif
 
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt
