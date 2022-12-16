@@ -19,8 +19,8 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 # Make sure we know where the applications are located.
-ROOT_DIR ?= $(abspath ../..)
-DEPS_DIR ?= $(abspath ../../deps)
+ROOT_DIR ?= ../..
+DEPS_DIR ?= $(abspath ..)
 
 include $(ROOT_DIR)/rabbitmq-components.mk
 include $(ROOT_DIR)/erlang.mk

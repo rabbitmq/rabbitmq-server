@@ -28,8 +28,8 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 # Make sure we know where the applications are located.
-ROOT_DIR ?= $(abspath ../..)
-DEPS_DIR ?= $(abspath ../../deps)
+ROOT_DIR ?= ../..
+DEPS_DIR ?= $(abspath ..)
 
 include $(ROOT_DIR)/rabbitmq-components.mk
 include $(ROOT_DIR)/erlang.mk

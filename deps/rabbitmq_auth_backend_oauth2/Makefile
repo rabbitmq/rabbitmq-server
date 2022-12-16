@@ -12,8 +12,8 @@ dep_jose = git https://github.com/michaelklishin/erlang-jose mk-thoas-support
 dep_base64url = hex 1.0.1
 
 # Make sure we know where the applications are located.
-ROOT_DIR ?= $(abspath ../..)
-DEPS_DIR ?= $(abspath ../../deps)
+ROOT_DIR ?= ../..
+DEPS_DIR ?= $(abspath ..)
 
 include $(ROOT_DIR)/rabbitmq-components.mk
 include $(ROOT_DIR)/erlang.mk

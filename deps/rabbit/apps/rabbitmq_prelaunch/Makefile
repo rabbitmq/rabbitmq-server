@@ -8,5 +8,8 @@ dep_cuttlefish = hex 3.1.0
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 
-include ../../../../rabbitmq-components.mk
-include ../../../../erlang.mk
+
+ROOT_DIR ?= ../../../..
+DEPS_DIR ?= $(abspath ../../..)
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
