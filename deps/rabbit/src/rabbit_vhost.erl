@@ -227,7 +227,6 @@ do_add(Name, Metadata, ActingUser) ->
                             [Name, Description, Tags])
     end,
     DefaultLimits = default_limits(Name),
-<<<<<<< HEAD
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
@@ -249,6 +248,15 @@ do_add(Name, Metadata, ActingUser) ->
                       [] -> ok;
                       _  -> rabbit_vhost_limit:set(Name, DefaultLimits, ActingUser)
                   end,
+                  ok = case default_operator_policies(Name) of
+                    not_found ->
+                        ok;
+                    {PolicyName, QPattern, Definition} = Policy ->
+                        ok = rabbit_policy:set_op(Name, PolicyName, QPattern, Definition,
+                                            undefined, undefined, ActingUser),
+                        rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
+                                        [Name, Policy])
+                  end,
                   [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
                     rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
@@ -265,46 +273,6 @@ do_add(Name, Metadata, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   VHost1
           end),
-=======
-    {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
-    case NewOrNot of
-        new ->
-            rabbit_log:info("Inserted a virtual host record ~tp", [VHost]);
-        existing ->
-            ok
-    end,
-    case DefaultLimits of
-        [] ->
-            ok;
-        _  ->
-            ok = rabbit_vhost_limit:set(Name, DefaultLimits, ActingUser),
-            rabbit_log:info("Applied default limits to vhost '~tp': ~tp",
-                            [Name, DefaultLimits])
-    end,
-    case default_operator_policies(Name) of
-        not_found ->
-            ok;
-        {PolicyName, QPattern, Definition} = Policy ->
-            ok = rabbit_policy:set_op(Name, PolicyName, QPattern, Definition,
-                                undefined, undefined, ActingUser),
-            rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
-                            [Name, Policy])
-    end,
-    [begin
-         Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-         rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
-         _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
-     end || {ExchangeName, Type, Internal} <-
-            [{<<"">>,                   direct,  false},
-             {<<"amq.direct">>,         direct,  false},
-             {<<"amq.topic">>,          topic,   false},
-             %% per 0-9-1 pdf
-             {<<"amq.match">>,          headers, false},
-             %% per 0-9-1 xml
-             {<<"amq.headers">>,        headers, false},
-             {<<"amq.fanout">>,         fanout,  false},
-             {<<"amq.rabbitmq.trace">>, topic,   true}]],
->>>>>>> e07ed47d83 (Parse and apply default_policies.operator)
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
