@@ -597,14 +597,14 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
 
 enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     Supported = rabbit_ct_broker_helpers:is_feature_flag_supported(
-                  Config, stream_queue),
+                  Config, ff_from_testsuite),
     case Supported of
         true  -> do_enable_feature_flag_when_ff_file_is_unwritable(Config);
-        false -> {skip, "Stream queues are unsupported"}
+        false -> {skip, "Test feature flag is unsupported"}
     end.
 
 do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
-    FeatureName = stream_queue,
+    FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
     Node = ClusterSize - 1,
     True = lists:duplicate(ClusterSize, true),
@@ -1135,14 +1135,19 @@ prepare_my_plugin(Config) ->
         false ->
             build_my_plugin(Config);
         _ ->
-            MyPluginDir = filename:dirname(filename:dirname(code:where_is_file("my_plugin.app"))),
+            MyPluginDir = filename:dirname(
+                            filename:dirname(
+                              code:where_is_file("my_plugin.app"))),
             PluginsDir = filename:dirname(MyPluginDir),
-            rabbit_ct_helpers:set_config(Config,
-                                         [{rmq_plugins_dir, PluginsDir}])
+            rabbit_ct_helpers:set_config(
+              Config, [{rmq_plugins_dir, PluginsDir}])
     end.
 
 build_my_plugin(Config) ->
-    PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
+    DataDir = filename:join(
+                filename:dirname(filename:dirname(?config(data_dir, Config))),
+                ?MODULE_STRING ++ "_data"),
+    PluginSrcDir = filename:join(DataDir, "my_plugin"),
     PluginsDir = filename:join(PluginSrcDir, "plugins"),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_plugins_dir, PluginsDir}]),
