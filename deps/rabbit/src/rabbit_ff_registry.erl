@@ -168,9 +168,11 @@ is_registry_written_to_disk() ->
 -spec inventory() -> rabbit_feature_flags:inventory().
 
 inventory() ->
-    #{applications => [],
-      feature_flags => #{},
-      states => #{}}.
+    _ = rabbit_ff_registry_factory:initialize_registry(),
+    Inventory = #{applications => [],
+                  feature_flags => #{},
+                  states => #{}},
+    ?convince_dialyzer(?MODULE:inventory(), Inventory, Inventory).
 
 always_return_true() ->
     %% This function is here to trick Dialyzer. We want some functions
