@@ -119,7 +119,7 @@ merge_metadata_in_mnesia_tx(VHostName, Metadata) ->
 
 -spec set_tags(VHostName, Tags) -> VHost when
       VHostName :: vhost:name(),
-      Tags :: [vhost:tags() | binary() | string()],
+      Tags :: [vhost:tag() | binary() | string()],
       VHost :: vhost:vhost().
 %% @doc Sets the tags of an existing virtual host record.
 %%
