@@ -7,7 +7,7 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
-describe.skip('Once user is logged in', function () {
+describe('Once user is logged in', function () {
   let homePage
   let uaaLogin
   let overview

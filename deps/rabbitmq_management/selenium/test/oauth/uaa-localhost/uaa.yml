@@ -63,7 +63,7 @@ jwt:
     policy:
       # Will override global validity policies for the default zone only.
 #      accessTokenValiditySeconds: 150
-      accessTokenValiditySeconds: 1500
+      accessTokenValiditySeconds: 10
       keys:
         legacy-token-key:
           signingKey: |
@@ -129,7 +129,7 @@ oauth:
       authorities: rabbitmq.tag:monitoring
     rabbit_client_code:
       id: rabbit_client_code
-      secret: rabbit_client_code
+      secret: " "
       authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq.*

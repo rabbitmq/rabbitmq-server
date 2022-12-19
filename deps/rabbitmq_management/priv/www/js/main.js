@@ -95,8 +95,7 @@ function start_app_login () {
 function check_login () {
   user = JSON.parse(sync_get('/whoami'));
   if (user == false || user.error) {
-    clear_pref('auth');
-    clear_cookie_value('auth');
+    clear_auth();
     if (oauth.enabled) {
       hide_popup_warn();
       renderWarningMessageInLoginStatus('Not authorized');
@@ -109,8 +108,7 @@ function check_login () {
   hide_popup_warn()
   replace_content('outer', format('layout', {}))
   var user_login_session_timeout = parseInt(user.login_session_timeout)
-  if (has_auth_credentials() && !isNaN(user_login_session_timeout) &&
-        user_login_session_timeout !== get_login_session_timeout()) {
+  if (!isNaN(user_login_session_timeout)) {
     update_login_session_timeout(user_login_session_timeout)
   }
   setup_global_vars()
@@ -121,27 +119,6 @@ function check_login () {
   return true
 }
 
-function print_logging_session_info (user_login_session_timeout) {
-  let var_has_auth_cookie_value = has_auth_credentials()
-  let login_session_timeout = get_login_session_timeout()
-  console.log('user_login_session_timeout: ' + user_login_session_timeout)
-  console.log('has_auth_cookie_value: ' + var_has_auth_cookie_value)
-  console.log('login_session_timeout: ' + login_session_timeout)
-  console.log('isNaN(user_login_session_timeout): ' + isNaN(user_login_session_timeout))
-}
-
-function update_login_session_timeout(login_session_timeout) {
-    //var auth_info = get_cookie_value('auth');
-    var date = new Date();
-    date.setMinutes(date.getMinutes() + login_session_timeout);
-    store_cookie_value('login_session_timeout', login_session_timeout);
-    store_cookie_value_with_expiration('auth', "", date);
-}
-
-function update_login_session_with_expiry(expiryDate) {
-    //var auth_info = get_cookie_value('auth');
-    store_cookie_value_with_expiration('auth', "", expiryDate);
-}
 
 function start_app() {
     if (app !== undefined) {
