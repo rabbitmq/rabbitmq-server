@@ -860,7 +860,7 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
             ?LOG_DEBUG(
                "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
                "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
-               [?MODULE, Function, Args, Node],
+               [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, pre_feature_flags_rabbitmq};
         {badrpc, Reason} = Error ->
@@ -869,7 +869,7 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
                "Feature flags:   ~ts:~ts~tp~n"
                "Feature flags: on node `~ts`:~n"
                "Feature flags:   ~tp",
-               [?MODULE, Function, Args, Node, Reason],
+               [Module, Function, Args, Node, Reason],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, Error};
         Ret ->
