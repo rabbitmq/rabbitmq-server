@@ -8,6 +8,7 @@ const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 describe("Once user is logged in", function() {
   var homePage;
   var uaaLogin;
@@ -15,6 +16,9 @@ describe("Once user is logged in", function() {
   this.timeout(25000); // hard-coded to 25secs because this test requires 25sec to run
 =======
 describe.skip('Once user is logged in', function () {
+=======
+describe('Once user is logged in', function () {
+>>>>>>> 6e84444059 (Test token refresh)
   let homePage
   let uaaLogin
   let overview

@@ -114,8 +114,9 @@ function oauth_initialize(authSettings) {
       _management_logger.error("token expiring failed due to ", err);
     });
     mgr.events.addUserLoaded(function(user) {
-      console.log("addUserLoaded   setting oauth.access_token ")
-      oauth.access_token = user.access_token;
+      console.log("addUserLoaded  setting oauth.access_token ")
+      oauth.access_token = user.access_token  // DEPRECATED
+      set_token_auth(oauth.access_token)
     });
 
     return oauth;
