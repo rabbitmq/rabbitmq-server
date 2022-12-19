@@ -615,47 +615,42 @@ function postprocess() {
         });
 
     $('#download-definitions').on('click', function() {
-        // https://stackoverflow.com/questions/16086162/handle-file-download-from-ajax-post/23797348
-        // https://gist.github.com/zynick/12bae6dbc76f6aacedf0/
-        var idx = $("select[name='vhost-download'] option:selected").index();
-        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
-        var download_filename = esc($('#download-filename').val());
-        var path = 'api/definitions' + vhost + '?download=' + download_filename;
-        var req = xmlHttpRequest();
-        req.open('GET', path, true);
-        req.setRequestHeader('authorization', auth_header());
-        req.responseType = 'blob';
-        req.onload = function (_event) {
-            if (this.status >= 200 && this.status <= 299) {
-                var type = req.getResponseHeader('Content-Type');
-                var blob = new Blob([this.response], { type: type });
+        var idx = $("select[name='vhost-download'] option:selected").index()
+        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()))
+        var download_filename = esc($('#download-filename').val())
+        var path = '/definitions' + vhost
+        with_req('GET', path, null, function(resp) {
+            if (resp.status >= 200 && resp.status <= 299) {
+                var type = resp.getResponseHeader('Content-Type')
+                var blob = new Blob([resp.response], { type: type })
                 if (typeof window.navigator.msSaveBlob !== 'undefined') {
-                    window.navigator.msSaveBlob(blob, download_filename);
+                    window.navigator.msSaveBlob(blob, download_filename)
                 } else {
-                    var URL = window.URL || window.webkitURL;
-                    var downloadUrl = URL.createObjectURL(blob);
-                    var a = document.createElement("a");
+                    var URL = window.URL || window.webkitURL
+                    var downloadUrl = URL.createObjectURL(blob)
+                    var a = document.createElement("a")
                     if (typeof a.download === 'undefined') {
-                        window.location = downloadUrl;
+                        window.location = downloadUrl
                     } else {
-                        a.href = downloadUrl;
-                        a.download = download_filename;
-                        document.body.appendChild(a);
-                        a.click();
+                        a.href = downloadUrl
+                        a.download = download_filename
+                        document.body.appendChild(a)
+                        a.click()
                     }
                     var cleanup = function () {
-                        URL.revokeObjectURL(downloadUrl);
-                        document.body.removeChild(a);
+                        URL.revokeObjectURL(downloadUrl)
+                        document.body.removeChild(a)
                     };
-                    setTimeout(cleanup, 1000);
+                    setTimeout(cleanup, 1000)
                 }
             } else {
                 // Unsuccessful status
-                show_popup('warn', 'Error downloading definitions');
+                show_popup('warn', 'Error downloading definitions')
             }
-        };
-        req.send();
-    });
+
+          });
+
+      });
 
     $('.update-manual').on('click', function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
