@@ -11,4 +11,7 @@ build:buildbuddy --experimental_strict_action_env
 # don't re-run flakes automatically on the local machine
 build --flaky_test_attempts=1
 
+# write common test logs to logs/ dir
+build --@rules_erlang//:ct_logdir=/absolute/expanded/path/to/this/repo/logs
+
 build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
