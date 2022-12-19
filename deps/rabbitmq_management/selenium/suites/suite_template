@@ -180,7 +180,9 @@ wait_for_keycloak() {
 init_fakeportal() {
   FAKE_PORTAL_URL=${FAKE_PORTAL_URL:-http://fakeportal:3000}
   FAKE_PORTAL_DIR=${SCRIPT}/../fakeportal
-  echo "FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+  echo "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+  echo "> UAA_BASE_URL: ${UAA_BASE_URL}"
+  echo "> RABBITMQ_URL: ${RABBITMQ_URL}"
 }
 start_fakeportal() {
   init_fakeportal

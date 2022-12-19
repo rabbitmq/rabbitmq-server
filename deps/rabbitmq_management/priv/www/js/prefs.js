@@ -11,6 +11,7 @@ function local_storage_available() {
 const CREDENTIALS = 'credentials'
 const AUTH_SCHEME = "auth-scheme"
 const LOGGED_IN = 'loggedIn'
+const LOGIN_SESSION_TIMEOUT = "login_session_timeout"
 
 function has_auth_credentials() {
     return get_local_pref(CREDENTIALS) != undefined && get_local_pref(AUTH_SCHEME) != undefined &&
@@ -25,13 +26,14 @@ function get_auth_scheme() {
 function clear_auth() {
     clear_local_pref(CREDENTIALS)
     clear_local_pref(AUTH_SCHEME)
+    clear_cookie_value(LOGIN_SESSION_TIMEOUT)
     clear_cookie_value(LOGGED_IN)
 }
 function set_basic_auth(username, password) {
-    set_auth("Basic", b64_encode_utf8(username + ":" + password), get_session_timeout())
+    set_auth("Basic", b64_encode_utf8(username + ":" + password), default_hard_session_timeout())
 }
 function set_token_auth(token) {
-    set_auth("Bearer", token, get_session_timeout())
+    set_auth("Bearer", token, default_hard_session_timeout())
 }
 function set_auth(auth_scheme, credentials, validUntil) {
     clear_local_pref(CREDENTIALS)
@@ -47,21 +49,32 @@ function authorization_header() {
         return null;
     }
 }
-function get_session_timeout() {
+function default_hard_session_timeout() {
   var date  = new Date();
-  var login_session_timeout = get_login_session_timeout();
-
-  if (login_session_timeout) {
-      date.setMinutes(date.getMinutes() + login_session_timeout);
-  } else {
-      // 8 hours from now
-      date.setHours(date.getHours() + 8);
-  }
+  date.setHours(date.getHours() + 8);
   return date;
 }
-function get_login_session_timeout() {
-    parseInt(get_cookie_value('login_session_timeout'));
+
+function update_login_session_timeout(login_session_timeout) {
+    //var auth_info = get_cookie_value('auth');
+    if (get_cookie_value(LOGIN_SESSION_TIMEOUT) != undefined || !has_auth_credentials()) {
+      return;
+    }
+    var date = new Date();
+    date.setMinutes(date.getMinutes() + login_session_timeout);
+    store_cookie_value(LOGIN_SESSION_TIMEOUT, login_session_timeout);
+    store_cookie_value_with_expiration(LOGGED_IN, "true", date)
 }
+
+function print_logging_session_info (user_login_session_timeout) {
+  let var_has_auth_cookie_value = has_auth_credentials()
+  let login_session_timeout = get_login_session_timeout()
+  console.log('user_login_session_timeout: ' + user_login_session_timeout)
+  console.log('has_auth_cookie_value: ' + var_has_auth_cookie_value)
+  console.log('login_session_timeout: ' + login_session_timeout)
+  console.log('isNaN(user_login_session_timeout): ' + isNaN(user_login_session_timeout))
+}
+
 
 /// End Credential Management
 

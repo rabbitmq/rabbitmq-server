@@ -17,9 +17,9 @@ RABBITMQ_CONFIG_FILENAME=rabbitmq-idp-initiated.config
 source $SCRIPT/suite_template
 
 _setup () {
-  start_uaa
+  start_uaa  
   start_rabbitmq
-  start_fakeportal  
+  start_fakeportal
 }
 _save_logs() {
   save_container_logs rabbitmq

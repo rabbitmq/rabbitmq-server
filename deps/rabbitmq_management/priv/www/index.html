@@ -28,7 +28,7 @@
       if (oauth.enabled) {
         if (!oauth.sp_initiated) {
             oauth.logged_in = has_auth_credentials();
-            oauth.access_token = get_auth_credentials();
+            oauth.access_token = get_auth_credentials(); // DEPRECATED
         } else {
           oauth_is_logged_in().then( status => {
             if (status.loggedIn && !has_auth_credentials()) {
@@ -40,7 +40,7 @@
                 clear_auth();
               } else {
                 oauth.logged_in = true;
-                oauth.access_token = status.user.access_token;
+                oauth.access_token = status.user.access_token;  // DEPRECATED
                 oauth.expiryDate = new Date(status.user.expires_at * 1000);  // it is epoch in seconds
                 let current = new Date();
                 _management_logger.debug('token expires in ', (oauth.expiryDate-current)/1000,

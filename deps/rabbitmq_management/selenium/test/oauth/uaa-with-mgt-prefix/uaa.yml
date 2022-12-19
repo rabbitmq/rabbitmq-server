@@ -129,7 +129,7 @@ oauth:
     rabbit_client_code:
       id: rabbit_client_code
       secret: rabbit_client_code
-      authorized-grant-types: authorization_code
+      authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
       redirect-uri: http://rabbitmq:15672/my-prefix/another-prefix/
