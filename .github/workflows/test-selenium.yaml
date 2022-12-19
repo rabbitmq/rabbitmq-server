@@ -7,7 +7,6 @@ on:
       - bump-otp-for-oci
       - bump-rbe-*
       - bump-rules_erlang
-      -	oidc_idp_initiated_login
     paths:
       - 'deps/**'
       - 'scripts/**'
