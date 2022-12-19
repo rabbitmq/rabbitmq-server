@@ -26,6 +26,9 @@ groups() ->
      ]},
      {stream, [], [
          await_quorum_plus_one_stream
+     ]},
+     {stream_coordinator, [], [
+         await_quorum_plus_one_stream_coordinator
      ]}
     ].
 
@@ -107,6 +110,23 @@ await_quorum_plus_one_stream(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, B),
     ?assert(await_quorum_plus_one(Config, 0)).
 
+await_quorum_plus_one_stream_coordinator(Config) ->
+    catch delete_queues(),
+    [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    declare(Ch, <<"st.1">>, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+    timer:sleep(100),
+    ?assert(await_quorum_plus_one(Config, 0)),
+    delete(Ch, <<"st.1">>),
+    %% no queues/streams beyond this point
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+    %% this should fail because the corrdinator has only 2 running nodes
+    ?assertNot(await_quorum_plus_one(Config, 0)),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, B),
+    ?assert(await_quorum_plus_one(Config, 0)).
+
 %%
 %% Implementation
 %%
@@ -119,6 +139,9 @@ declare(Ch, Q, Args) ->
                                            durable   = true,
                                            auto_delete = false,
                                            arguments = Args}).
+
+delete(Ch, Q) ->
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"tests">>) || Q <- rabbit_amqqueue:list()].
