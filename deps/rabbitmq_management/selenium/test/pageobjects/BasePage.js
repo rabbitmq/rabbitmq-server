@@ -7,34 +7,34 @@ module.exports = class BasePage {
     this.driver = webdriver
   }
 
-  async waitForLocated (driver, locator, retries = 3) {
+  async waitForLocated (locator, retries = 3) {
     try {
-      await driver.wait(until.elementLocated(locator), 7000)
+      await this.driver.wait(until.elementLocated(locator), 2000)
     } catch (err) {
       if (retries === 0) {
         throw new Error(`Still not able to locate element ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
       }
-      await driver.sleep(250)
+      await this.driver.sleep(250)
       return this.waitForLocated(driver, locator, retries - 1)
     }
   }
 
-  async waitForVisible (driver, locator, retries = 3) {
+  async waitForVisible (locator, retries = 3) {
     try {
-      const element = await driver.findElement(locator)
-      await driver.wait(until.elementIsVisible(element), 7000)
+      const element = await this.driver.findElement(locator)
+      await this.driver.wait(until.elementIsVisible(element), 2000)
     } catch (err) {
       if (retries === 0) {
         throw new Error(`Element ${locator.toString()} still not visible after maximum retries, Error message: ${err.message.toString()}`)
       }
-      await driver.sleep(250)
+      await this.driver.sleep(250)
       return this.waitForVisible(driver, locator, retries - 1)
     }
   }
 
   async waitForDisplayed (locator, retries = 3) {
-    await this.waitForLocated(this.driver, locator, retries)
-    await this.waitForVisible(this.driver, locator, retries)
+    await this.waitForLocated(locator, retries)
+    await this.waitForVisible(locator, retries)
     return this.driver.findElement(locator)
   }
 
@@ -118,7 +118,7 @@ module.exports = class BasePage {
     try {
       const element = await this.driver.findElement(locator)
       var remote = require('selenium-webdriver/remote');
-      driver.setFileDetector(new remote.FileDetector);       
+      driver.setFileDetector(new remote.FileDetector);
       return element.sendKeys(file)
     } catch (err) {
       console.log(err)
