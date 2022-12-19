@@ -23,6 +23,9 @@ build:buildbuddy --noslim_profile
 build:buildbuddy --experimental_profile_include_target_label
 build:buildbuddy --experimental_profile_include_primary_output
 
+# buildbuddy implies remote cache, so ct_logdir is restored to its default for reproducibility
+build:buildbuddy --@rules_erlang//:ct_logdir=
+
 build:rbe --config=buildbuddy
 
 build:rbe --remote_executor=grpcs://remote.buildbuddy.io
