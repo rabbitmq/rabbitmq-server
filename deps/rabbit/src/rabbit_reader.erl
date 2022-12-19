@@ -1505,13 +1505,18 @@ i(SockStat,           S) when SockStat =:= recv_oct;
                 fun ([{_, I}]) -> I end, S);
 i(ssl, #v1{sock = Sock, proxy_socket = ProxySock}) ->
     rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
-i(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
-i(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
-i(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
-i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
-i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
-i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
-i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
+i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
+  when SSL =:= ssl;
+       SSL =:= ssl_protocol;
+       SSL =:= ssl_key_exchange;
+       SSL =:= ssl_cipher;
+       SSL =:= ssl_hash ->
+    rabbit_ssl:info(SSL, {Sock, ProxySock});
+i(Cert, #v1{sock = Sock})
+  when Cert =:= peer_cert_issuer;
+       Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_validity ->
+    rabbit_ssl:cert_info(Cert, Sock);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{blocked_by = Reasons,
@@ -1572,25 +1577,6 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
                           _ -> 0
                       end;
         {error, _} -> 0
-    end.
-
-ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
-    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Items} ->
-            P = proplists:get_value(protocol, Items),
-            #{cipher := C,
-              key_exchange := K,
-              mac := H} = proplists:get_value(selected_cipher_suite, Items),
-            F({P, {K, C, H}})
-    end.
-
-cert_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:peercert(Sock) of
-        nossl      -> '';
-        {error, _} -> '';
-        {ok, Cert} -> list_to_binary(F(Cert))
     end.
 
 maybe_emit_stats(State) ->

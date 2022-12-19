@@ -12,24 +12,30 @@
 -define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
 -define(MQTT_PROTO_V3, mqtt310).
 -define(MQTT_PROTO_V4, mqtt311).
--define(INFO_ITEMS,
-        [protocol,
+
+-define(ITEMS,
+        [pid,
+         protocol,
          host,
          port,
          peer_host,
          peer_port,
-         connection,
-         conn_name,
-         connection_state,
          ssl,
          ssl_protocol,
          ssl_key_exchange,
          ssl_cipher,
          ssl_hash,
-         ssl_login_name,
-         client_id,
          vhost,
-         user,
+         user
+        ]).
+
+-define(INFO_ITEMS,
+        ?ITEMS ++
+        [
+         client_id,
+         conn_name,
+         connection_state,
+         ssl_login_name,
          recv_cnt,
          recv_oct,
          send_cnt,
@@ -43,3 +49,31 @@
          messages_unconfirmed,
          messages_unacknowledged
         ]).
+
+-define(CREATION_EVENT_KEYS,
+        ?ITEMS ++
+        [name,
+         client_properties,
+         peer_cert_issuer,
+         peer_cert_subject,
+         peer_cert_validity,
+         auth_mechanism,
+         timeout,
+         frame_max,
+         channel_max,
+         connected_at,
+         node,
+         user_who_performed_action
+        ]).
+
+-define(SIMPLE_METRICS,
+        [pid,
+         recv_oct,
+         send_oct,
+         reductions]).
+-define(OTHER_METRICS,
+        [recv_cnt,
+         send_cnt,
+         send_pend,
+         garbage_collection,
+         state]).

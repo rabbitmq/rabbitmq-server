@@ -11,19 +11,31 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_broker_helpers, [rabbitmqctl_list/3,
-                                   rpc/5,
-                                   rpc_all/4]).
--import(rabbit_ct_helpers, [eventually/3,
-                            eventually/1]).
--import(util, [all_connection_pids/1,
-               get_global_counters/2,
-               get_global_counters/3,
-               get_global_counters/4,
-               expect_publishes/2,
-               connect/2,
-               connect/3]).
+-import(rabbit_ct_broker_helpers,
+        [rabbitmqctl_list/3,
+         rpc/5,
+         rpc_all/4,
+         get_node_config/3]).
+-import(rabbit_ct_helpers,
+        [eventually/3,
+         eventually/1]).
+-import(util,
+        [all_connection_pids/1,
+         get_global_counters/2,
+         get_global_counters/3,
+         get_global_counters/4,
+         expect_publishes/2,
+         connect/2,
+         connect/3]).
+-import(rabbit_mgmt_test_util,
+        [http_get/2,
+         http_delete/3]).
+
+-define(MANAGEMENT_PLUGIN_TESTS,
+        [management_plugin_connection,
+         management_plugin_enable]).
 
 all() ->
     [
@@ -46,11 +58,13 @@ groups() ->
        flow_classic_mirrored_queue,
        flow_quorum_queue,
        flow_stream,
-       rabbit_mqtt_qos0_queue] ++ tests()
+       rabbit_mqtt_qos0_queue
+       ] ++ tests()
      }
     ].
 
 tests() ->
+    ?MANAGEMENT_PLUGIN_TESTS ++
     [delete_create_queue
      ,quorum_queue_rejects
      ,publish_to_all_queue_types_qos0
@@ -114,10 +128,29 @@ end_per_group(_, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
+    maybe_start_inets(Testcase),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    maybe_stop_inets(Testcase),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+maybe_start_inets(Testcase) ->
+    case lists:member(Testcase, ?MANAGEMENT_PLUGIN_TESTS) of
+        true ->
+            ok = inets:start();
+        false ->
+            ok
+    end.
+
+maybe_stop_inets(Testcase) ->
+    case lists:member(Testcase, ?MANAGEMENT_PLUGIN_TESTS) of
+        true ->
+            ok = inets:stop();
+        false ->
+            ok
+    end.
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -215,8 +248,7 @@ publish_to_all_queue_types(Config, QoS) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
-                all_connection_pids(Config), 10_000, 1000),
-    ok = rabbit_ct_client_helpers:close_channel(Ch).
+                all_connection_pids(Config), 10_000, 1000).
 
 flow_classic_mirrored_queue(Config) ->
     QueueName = <<"flow">>,
@@ -263,13 +295,12 @@ flow(Config, {App, Par, Val}, QueueType)
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
     Result = rpc_all(Config, application, set_env, [App, Par, DefaultVal]),
     ok.
 
 events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = get_node_config(Config, 0, nodename),
     ok = gen_event:add_handler({rabbit_event, Server}, event_recorder, []),
 
     ClientId = atom_to_binary(?FUNCTION_NAME),
@@ -282,7 +313,7 @@ events(Config) ->
                       E0),
     assert_event_type(connection_created, E1),
     [ConnectionPid] = all_connection_pids(Config),
-    ExpectedConnectionProps = [{protocol, {'MQTT', "3.1.1"}},
+    ExpectedConnectionProps = [{protocol, {'MQTT', {3,1,1}}},
                                {node, Server},
                                {vhost, <<"/">>},
                                {user, <<"guest">>},
@@ -351,7 +382,7 @@ events(Config) ->
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
 event_authentication_failure(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    P = get_node_config(Config, 0, tcp_port_mqtt),
     ClientId = atom_to_binary(?FUNCTION_NAME),
     {ok, C} = emqtt:start_link([{username, <<"Trudy">>},
                                 {password, <<"fake-password">>},
@@ -362,7 +393,7 @@ event_authentication_failure(Config) ->
     true = unlink(C),
 
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = get_node_config(Config, 0, nodename),
     ok = gen_event:add_handler({rabbit_event, Server}, event_recorder, []),
 
     ?assertMatch({error, _}, emqtt:connect(C)),
@@ -376,7 +407,7 @@ event_authentication_failure(Config) ->
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
 internal_event_handler(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = get_node_config(Config, 0, nodename),
     ok = gen_event:call({rabbit_event, Server}, rabbit_mqtt_internal_event_handler, ignored_request, 1000).
 
 global_counters_v3(Config) ->
@@ -463,11 +494,11 @@ global_counters(Config, ProtoVer) ->
                  get_global_counters(Config, ProtoVer)).
 
 queue_down_qos1(Config) ->
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 1),
+    {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
     CQ = Topic = atom_to_binary(?FUNCTION_NAME),
     declare_queue(Ch1, CQ, []),
     bind(Ch1, CQ, Topic),
-    ok = rabbit_ct_client_helpers:close_channel(Ch1),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Ch1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
 
     C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
@@ -483,7 +514,6 @@ queue_down_qos1(Config) ->
 
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, 0),
     delete_queue(Ch0, CQ),
-    ok = rabbit_ct_client_helpers:close_channel(Ch0),
     ok = emqtt:disconnect(C).
 
 %% Even though classic mirrored queues are deprecated, we know that some users have set up
@@ -505,7 +535,7 @@ consuming_classic_mirrored_queue_down(Config) ->
 
     %% Consume from Server2.
     Options = [{host, "localhost"},
-               {port, rabbit_ct_broker_helpers:get_node_config(Config, Server2, tcp_port_mqtt)},
+               {port, get_node_config(Config, Server2, tcp_port_mqtt)},
                {clientid, atom_to_binary(?FUNCTION_NAME)},
                {proto_ver, v4}],
     {ok, C2} = emqtt:start_link([{clean_start, false} | Options]),
@@ -549,7 +579,7 @@ consuming_classic_queue_down(Config) ->
     ProtoVer = v4,
     %% Consume from Server3.
     Options = [{host, "localhost"},
-               {port, rabbit_ct_broker_helpers:get_node_config(Config, Server3, tcp_port_mqtt)},
+               {port, get_node_config(Config, Server3, tcp_port_mqtt)},
                {clientid, ClientId},
                {proto_ver, ProtoVer}],
     {ok, C2} = emqtt:start_link([{clean_start, false} | Options]),
@@ -565,7 +595,8 @@ consuming_classic_queue_down(Config) ->
     %% When the dedicated MQTT connection (non-mirrored classic) queue goes down, it is reasonable
     %% that the server closes the MQTT connection because the MQTT client cannot consume anymore.
     eventually(?_assertMatch(#{consumers := 0},
-                             get_global_counters(Config, ProtoVer, Server3))),
+                             get_global_counters(Config, ProtoVer, Server3)),
+               1000, 5),
     receive
         {'EXIT', C2, _} ->
             ok
@@ -641,7 +672,6 @@ delete_create_queue(Config) ->
                1000, 10),
 
     delete_queue(Ch, [CQ1, CQ2, QQ]),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 non_clean_sess_disconnect(Config) ->
@@ -755,7 +785,6 @@ large_message_amqp_to_mqtt(Config) ->
                       #amqp_msg{payload = Payload}),
     ok = expect_publishes(Topic, [Payload]),
 
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 %% This test is mostly interesting in mixed version mode where feature flag
@@ -769,7 +798,7 @@ rabbit_mqtt_qos0_queue(Config) ->
 
     %% Place MQTT publisher process on old node in mixed version.
     {ok, Pub} = emqtt:start_link(
-                  [{port, rabbit_ct_broker_helpers:get_node_config(Config, 1, tcp_port_mqtt)},
+                  [{port, get_node_config(Config, 1, tcp_port_mqtt)},
                    {clientid, <<"publisher">>},
                    {proto_ver, v4}
                   ]),
@@ -789,9 +818,9 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     Msg = binary:copy(<<"x">>, 1000),
     NumMsgs = 10_000,
 
-    %% Provoke TCP back-pressure from client to server by using small buffers.
-    Opts = [{tcp_opts, [{recbuf, 1500},
-                        {buffer, 1500}]}],
+    %% Provoke TCP back-pressure from client to server by using very small buffers.
+    Opts = [{tcp_opts, [{recbuf, 512},
+                        {buffer, 512}]}],
     Sub = connect(<<"subscriber">>, Config, Opts),
     {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
     [ServerConnectionPid] = all_connection_pids(Config),
@@ -839,6 +868,46 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
 
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
+
+%% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
+management_plugin_connection(Config) ->
+    KeepaliveSecs = 99,
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Node = atom_to_binary(get_node_config(Config, 0, nodename)),
+    C = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
+
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    [#{client_properties := #{client_id := ClientId},
+       timeout := KeepaliveSecs,
+       node := Node,
+       name := ConnectionName}] = http_get(Config, "/connections"),
+
+    process_flag(trap_exit, true),
+    http_delete(Config,
+                "/connections/" ++ binary_to_list(uri_string:quote((ConnectionName))),
+                ?NO_CONTENT),
+    receive
+        {'EXIT', C, _} ->
+            ok
+    after 5000 ->
+              ct:fail("server did not close connection")
+    end,
+    ?assertEqual([], http_get(Config, "/connections")),
+    ?assertEqual([], all_connection_pids(Config)).
+
+management_plugin_enable(Config) ->
+    ?assertEqual(0, length(http_get(Config, "/connections"))),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management_agent),
+
+    %% If the MQTT connection is established **before** the management plugin is enabled,
+    %% the management plugin should still list the MQTT connection.
+    C = connect(?FUNCTION_NAME, Config),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% Internal helpers

@@ -90,11 +90,14 @@ force_close_connection(ReqData, Conn, Pid) ->
                  undefined -> "Closed via management plugin";
                  V         -> binary_to_list(V)
              end,
-            case proplists:get_value(type, Conn) of
-                direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
-                network -> rabbit_networking:close_connection(Pid, Reason);
-                _       ->
-                    % best effort, this will work for connections to the stream plugin
-                    gen_server:call(Pid, {shutdown, Reason}, infinity)
-            end,
+    case proplists:get_value(type, Conn) of
+        direct ->
+            amqp_direct_connection:server_close(Pid, 320, Reason);
+        network ->
+            rabbit_networking:close_connection(Pid, Reason);
+        _ ->
+            %% Best effort will work for following plugins:
+            %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
+            Pid ! {shutdown, Reason}
+    end,
     ok.

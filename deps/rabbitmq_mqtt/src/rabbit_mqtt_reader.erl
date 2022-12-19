@@ -21,9 +21,8 @@
 
 -include("rabbit_mqtt.hrl").
 
--define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
--define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
 -define(HIBERNATE_AFTER, 1000).
+-define(PROTO_FAMILY, 'MQTT').
 
 -record(state,
         {socket,
@@ -49,11 +48,10 @@ conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
-info(Pid, InfoItems) ->
-    case InfoItems -- ?INFO_ITEMS of
-        [] -> gen_server:call(Pid, {info, InfoItems});
-        UnknownItems -> throw({bad_argument, UnknownItems})
-    end.
+-spec info(pid(), rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Pid, Items) ->
+    gen_server:call(Pid, {info, Items}).
 
 close_connection(Pid, Reason) ->
     gen_server:cast(Pid, {close_connection, Reason}).
@@ -74,19 +72,18 @@ init(Ref) ->
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnName),
-            gen_server:enter_loop(?MODULE, [],
-             rabbit_event:init_stats_timer(
-              control_throttle(
-               #state{socket                 = RealSocket,
-                      proxy_socket           = rabbit_net:maybe_get_proxy_socket(Sock),
-                      conn_name              = ConnName,
-                      await_recv             = false,
-                      connection_state       = running,
-                      received_connect_packet = false,
-                      conserve               = false,
-                      parse_state            = rabbit_mqtt_packet:initial_state(),
-                      proc_state             = ProcessorState }), #state.stats_timer)
-             );
+            State0 = #state{socket = RealSocket,
+                            proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock),
+                            conn_name = ConnName,
+                            await_recv = false,
+                            connection_state = running,
+                            received_connect_packet = false,
+                            conserve = false,
+                            parse_state = rabbit_mqtt_packet:initial_state(),
+                            proc_state = ProcessorState},
+            State1 = control_throttle(State0),
+            State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+            gen_server:enter_loop(?MODULE, [], State);
         {error, enotconn} ->
             rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);
@@ -96,11 +93,7 @@ init(Ref) ->
     end.
 
 handle_call({info, InfoItems}, _From, State) ->
-    Infos = lists:map(
-              fun(InfoItem) ->
-                      {InfoItem, info_internal(InfoItem, State)}
-              end, InfoItems),
-    {reply, Infos, State, ?HIBERNATE_AFTER};
+    {reply, infos(InfoItems, State), State, ?HIBERNATE_AFTER};
 
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
@@ -135,8 +128,20 @@ handle_cast(QueueEvent = {queue_event, _, _},
             {stop, Reason, pstate(State, PState)}
     end;
 
+handle_cast({force_event_refresh, Ref}, State0) ->
+    Infos = infos(?CREATION_EVENT_KEYS, State0),
+    rabbit_event:notify(connection_created, Infos, Ref),
+    State = rabbit_event:init_stats_timer(State0, #state.stats_timer),
+    {noreply, State, ?HIBERNATE_AFTER};
+
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
+
+handle_info(connection_created, State) ->
+    Infos = infos(?CREATION_EVENT_KEYS, State),
+    rabbit_core_metrics:connection_created(self(), Infos),
+    rabbit_event:notify(connection_created, Infos),
+    {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info(timeout, State) ->
     rabbit_mqtt_processor:handle_pre_hibernate(),
@@ -224,6 +229,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     rabbit_amqqueue_common:notify_sent_queue_down(QPid),
     {noreply, State, ?HIBERNATE_AFTER};
 
+handle_info({shutdown, Explanation} = Reason, State = #state{conn_name = ConnName}) ->
+    %% rabbitmq_management plugin requests to close connection.
+    rabbit_log_connection:info("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
+    {stop, Reason, State};
+
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
@@ -234,7 +244,7 @@ terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
                                             proc_state = PState}}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
-    rabbit_mqtt_processor:terminate(SendWill, ConnName, PState),
+    rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState),
     log_terminate(Reason, State).
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnName}, _State) ->
@@ -430,73 +440,77 @@ emit_stats(State=#state{received_connect_packet = false}) ->
     ensure_stats_timer(State1);
 emit_stats(State) ->
     [{_, Pid},
-     {_, Recv_oct},
-     {_, Send_oct},
+     {_, RecvOct},
+     {_, SendOct},
      {_, Reductions}] = infos(?SIMPLE_METRICS, State),
     Infos = infos(?OTHER_METRICS, State),
     rabbit_core_metrics:connection_stats(Pid, Infos),
-    rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+    rabbit_core_metrics:connection_stats(Pid, RecvOct, SendOct, Reductions),
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1).
 
 ensure_stats_timer(State = #state{}) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
 
-infos(Items, State) -> [{Item, info_internal(Item, State)} || Item <- Items].
+infos(Items, State) ->
+    [{Item, i(Item, State)} || Item <- Items].
 
-info_internal(pid, State) -> info_internal(connection, State);
-info_internal(SockStat, #state{socket = Sock}) when SockStat =:= recv_oct;
-                                                    SockStat =:= recv_cnt;
-                                                    SockStat =:= send_oct;
-                                                    SockStat =:= send_cnt;
-                                                    SockStat =:= send_pend ->
+i(SockStat, #state{socket = Sock})
+  when SockStat =:= recv_oct;
+       SockStat =:= recv_cnt;
+       SockStat =:= send_oct;
+       SockStat =:= send_cnt;
+       SockStat =:= send_pend ->
     case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, N}]} when is_number(N) -> N;
-        _ -> 0
+        {ok, [{_, N}]} when is_number(N) ->
+            N;
+        _ ->
+            0
     end;
-info_internal(state, State) -> info_internal(connection_state, State);
-info_internal(garbage_collection, _State) ->
+i(state, S) ->
+    i(connection_state, S);
+i(garbage_collection, _) ->
     rabbit_misc:get_gc_info(self());
-info_internal(reductions, _State) ->
+i(reductions, _) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
-info_internal(conn_name, #state{conn_name = Val}) ->
-    rabbit_data_coercion:to_binary(Val);
-info_internal(connection_state, #state{received_connect_packet = false}) ->
-    starting;
-info_internal(connection_state, #state{connection_state = Val}) ->
+i(name, S) ->
+    i(conn_name, S);
+i(conn_name, #state{conn_name = Val}) ->
     Val;
-info_internal(connection, _State) ->
+i(connection_state, #state{received_connect_packet = false}) ->
+    starting;
+i(connection_state, #state{connection_state = Val}) ->
+    Val;
+i(pid, _) ->
     self();
-info_internal(ssl, #state{socket = Sock, proxy_socket = ProxySock}) ->
-    rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
-info_internal(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
-info_internal(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
-info_internal(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
-info_internal(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
-info_internal(Key, #state{proc_state = ProcState}) ->
+i(SSL, #state{socket = Sock, proxy_socket = ProxySock})
+  when SSL =:= ssl;
+       SSL =:= ssl_protocol;
+       SSL =:= ssl_key_exchange;
+       SSL =:= ssl_cipher;
+       SSL =:= ssl_hash ->
+    rabbit_ssl:info(SSL, {Sock, ProxySock});
+i(Cert, #state{socket = Sock})
+  when Cert =:= peer_cert_issuer;
+       Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_validity ->
+    rabbit_ssl:cert_info(Cert, Sock);
+i(timeout, #state{keepalive = KState}) ->
+    rabbit_mqtt_keepalive:interval_secs(KState);
+i(protocol, #state{proc_state = ProcState}) ->
+    {?PROTO_FAMILY, rabbit_mqtt_processor:proto_version_tuple(ProcState)};
+i(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).
-
-ssl_info(F, #state{socket = Sock, proxy_socket = ProxySock}) ->
-    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Items} ->
-            P = proplists:get_value(protocol, Items),
-            #{cipher := C,
-              key_exchange := K,
-              mac := H} = proplists:get_value(selected_cipher_suite, Items),
-            F({P, {K, C, H}})
-    end.
 
 -spec format_status(map()) -> map().
 format_status(Status) ->
-  maps:map(
-    fun(state,State) ->
-            format_state(State);
-       (_,Value) ->
-            Value
-    end, Status).
+    maps:map(
+      fun(state, State) ->
+              format_state(State);
+         (_, Value) ->
+              Value
+      end, Status).
 
 format_state(#state{proc_state = PState,
                     socket = Socket,

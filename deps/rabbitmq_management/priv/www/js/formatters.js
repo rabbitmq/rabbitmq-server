@@ -275,6 +275,7 @@ function fmt_rate_num(num) {
 }
 
 function fmt_num_thousands(num) {
+    if (num == undefined) return UNKNOWN_REPR;
     var conv_num = parseFloat(num); // to avoid errors, if someone calls fmt_num_thousands(someNumber.toFixed(0))
     return fmt_num_thousands_unfixed(conv_num.toFixed(0));
 }
@@ -288,11 +289,9 @@ function fmt_num_thousands_unfixed(num) {
 }
 
 function fmt_percent(num) {
-    if (num === '') {
-        return 'N/A';
-    } else {
-        return Math.round(num * 100) + '%';
-    }
+    if (num == undefined) return UNKNOWN_REPR;
+    if (num === '') return UNKNOWN_REPR;
+    return Math.round(num * 100) + '%';
 }
 
 function pick_rate(fmt, obj, name, mode) {

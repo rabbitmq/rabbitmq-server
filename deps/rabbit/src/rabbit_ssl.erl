@@ -14,6 +14,7 @@
 -export([cipher_suites_erlang/2, cipher_suites_erlang/1,
          cipher_suites_openssl/2, cipher_suites_openssl/1,
          cipher_suites/1]).
+-export([info/2, cert_info/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -181,3 +182,34 @@ otp_san_type(uri)        -> uniformResourceIdentifier;
 otp_san_type(other_name) -> otherName;
 otp_san_type(Other)      -> Other.
 
+info(ssl_protocol,     Socks) -> info0(fun ({P,         _}) -> P end, Socks);
+info(ssl_key_exchange, Socks) -> info0(fun ({_, {K, _, _}}) -> K end, Socks);
+info(ssl_cipher,       Socks) -> info0(fun ({_, {_, C, _}}) -> C end, Socks);
+info(ssl_hash,         Socks) -> info0(fun ({_, {_, _, H}}) -> H end, Socks);
+info(ssl, {Sock, ProxySock})  -> rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl.
+
+info0(F, {Sock, ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            #{cipher := C,
+              key_exchange := K,
+              mac := H} = proplists:get_value(selected_cipher_suite, Items),
+            F({P, {K, C, H}})
+    end.
+
+cert_info(peer_cert_issuer, Sock) ->
+    cert_info0(fun peer_cert_issuer/1, Sock);
+cert_info(peer_cert_subject, Sock) ->
+    cert_info0(fun peer_cert_subject/1, Sock);
+cert_info(peer_cert_validity, Sock) ->
+    cert_info0(fun peer_cert_validity/1, Sock).
+
+cert_info0(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl      -> '';
+        {error, _} -> '';
+        {ok, Cert} -> list_to_binary(F(Cert))
+    end.

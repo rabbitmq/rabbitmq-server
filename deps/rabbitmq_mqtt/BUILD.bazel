@@ -83,7 +83,11 @@ dialyze(
     warnings_as_errors = False,
 )
 
-broker_for_integration_suites()
+broker_for_integration_suites(
+    extra_plugins = [
+        "//deps/rabbitmq_management:erlang_app",
+    ],
+)
 
 rabbitmq_test_helper(
     name = "rabbit_auth_backend_mqtt_mock",
@@ -158,7 +162,6 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "config_SUITE",
-    size = "small",
 )
 
 rabbitmq_integration_suite(
@@ -227,6 +230,7 @@ rabbitmq_integration_suite(
     size = "large",
     runtime_deps = [
         "@emqtt//:erlang_app",
+         "//deps/rabbitmq_management_agent:erlang_app",
     ],
     additional_beam = [
         ":event_recorder",

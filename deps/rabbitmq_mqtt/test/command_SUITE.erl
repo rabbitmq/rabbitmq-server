@@ -109,31 +109,20 @@ run(Config) ->
     timer:sleep(200),
 
     %% Still two MQTT connections
-    [[{client_id, <<"simpleClient">>}],
-     [{client_id, <<"simpleClient1">>}]] =
-        lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
+    ?assertEqual(
+       [[{client_id, <<"simpleClient">>}],
+        [{client_id, <<"simpleClient1">>}]],
+       lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)))),
 
     %% Verbose returns all keys
-    Infos = lists:map(fun(El) -> atom_to_binary(El, utf8) end, ?INFO_ITEMS),
-    AllKeys1 = 'Elixir.Enum':to_list(?COMMAND:run(Infos, Opts)),
-    AllKeys2 = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
-
-    %% There are two connections
-    [FirstPL, _]  = AllKeys1,
-    [SecondPL, _] = AllKeys2,
-
-    First         = maps:from_list(lists:usort(FirstPL)),
-    Second        = maps:from_list(lists:usort(SecondPL)),
+    AllKeys = lists:map(fun(I) -> atom_to_binary(I) end, ?INFO_ITEMS),
+    [AllInfos1Con1, _AllInfos1Con2] = 'Elixir.Enum':to_list(?COMMAND:run(AllKeys, Opts)),
+    [AllInfos2Con1, _AllInfos2Con2] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
 
     %% Keys are INFO_ITEMS
-    KeysCount = length(?INFO_ITEMS),
-    ?assert(KeysCount =:= maps:size(First)),
-    ?assert(KeysCount =:= maps:size(Second)),
-
-    Keys = maps:keys(First),
-
-    [] = Keys -- ?INFO_ITEMS,
-    [] = ?INFO_ITEMS -- Keys,
+    InfoItemsSorted = lists:sort(?INFO_ITEMS),
+    ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos1Con1))),
+    ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos2Con1))),
 
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).

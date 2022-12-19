@@ -156,5 +156,5 @@ force_close_connection(ReqData, Pid) ->
             V ->
                 binary_to_list(V)
         end,
-    gen_server:call(Pid, {shutdown, Reason}, infinity),
+    Pid ! {shutdown, Reason},
     ok.

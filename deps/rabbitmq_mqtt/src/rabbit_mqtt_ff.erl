@@ -13,7 +13,7 @@
 
 -rabbit_feature_flag(
    {?QUEUE_TYPE_QOS_0,
-    #{desc          => "Support pseudo queue type for MQTT QoS 0 omitting a queue process",
+    #{desc          => "Support pseudo queue type for MQTT QoS 0 subscribers omitting a queue process",
       stability     => stable
      }}).
 

@@ -5,13 +5,15 @@
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+%% This module contains code that is common to MQTT and Web MQTT connections.
 -module(rabbit_mqtt_processor).
 
 -export([info/2, initial_state/2, initial_state/4,
          process_packet/2, serialise/2,
-         terminate/3, handle_pre_hibernate/0,
+         terminate/4, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
-         soft_limit_exceeded/1, format_status/1]).
+         soft_limit_exceeded/1, proto_version_tuple/1,
+         format_status/1]).
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
@@ -40,7 +42,7 @@
                port,
                peer_host,
                peer_port,
-               proto_human}).
+               connected_at}).
 
 -record(state,
         {socket,
@@ -335,8 +337,8 @@ process_connect(#mqtt_packet{
                                fun check_credentials/2,
                                fun login/2,
                                fun register_client/2,
-                               fun notify_connection_created/2,
                                fun start_keepalive/2,
+                               fun notify_connection_created/1,
                                fun handle_clean_session/2],
                               PacketConnect, State0) of
         {ok, SessionPresent0, State1} ->
@@ -422,19 +424,18 @@ register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
             {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Socket, inbound),
             ExchangeBin = rabbit_mqtt_util:env(exchange),
             ExchangeName = rabbit_misc:r(VHost, exchange, ExchangeBin),
-            ProtoHumanReadable = {'MQTT', human_readable_mqtt_version(ProtoVersion)},
             State#state{
               exchange = ExchangeName,
               will_msg = make_will_msg(Packet),
               retainer_pid = RetainerPid,
               register_state = RegisterState,
-              proto_ver = protocol_integer_to_atom(ProtoVersion),
+              proto_ver = proto_integer_to_atom(ProtoVersion),
               info = #info{prefetch = Prefetch,
                            peer_host = PeerHost,
                            peer_port = PeerPort,
                            host = Host,
                            port = Port,
-                           proto_human = ProtoHumanReadable
+                           connected_at = os:system_time(milli_seconds)
                           }}
     end,
     case rabbit_mqtt_ff:track_client_id_in_ra() of
@@ -452,41 +453,12 @@ register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
             {ok, NewProcState(undefined)}
     end.
 
-notify_connection_created(already_connected, _State) ->
+notify_connection_created(already_connected) ->
     ok;
-notify_connection_created(
-  _Packet,
-  #state{socket = Sock,
-         conn_name = ConnName,
-         info = #info{proto_human = {ProtoName, ProtoVsn}},
-         auth_state = #auth_state{vhost = VHost,
-                                  username = Username}} = State) ->
-    {ok, {PeerHost, PeerPort, Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
-    ConnectedAt = os:system_time(milli_seconds),
-    Infos = [{host, Host},
-             {port, Port},
-             {peer_host, PeerHost},
-             {peer_port, PeerPort},
-             {vhost, VHost},
-             {node, node()},
-             {user, Username},
-             {name, ConnName},
-             {connected_at, ConnectedAt},
-             {pid, self()},
-             {protocol, {ProtoName, binary_to_list(ProtoVsn)}},
-             {type, network}
-            ],
-    rabbit_core_metrics:connection_created(self(), Infos),
-    rabbit_event:notify(connection_created, Infos),
+notify_connection_created(#mqtt_packet_connect{}) ->
     rabbit_networking:register_non_amqp_connection(self()),
-    {ok, State#state{
-           %% We won't need conn_name anymore. Use less memmory by setting to undefined.
-           conn_name = undefined}}.
-
-human_readable_mqtt_version(3) ->
-    <<"3.1.0">>;
-human_readable_mqtt_version(4) ->
-    <<"3.1.1">>.
+    self() ! connection_created,
+    ok.
 
 return_connack(?CONNACK_ACCEPT, S) ->
     {ok, S};
@@ -781,7 +753,7 @@ check_user_login(#{vhost := VHost,
                    username_bin := UsernameBin,
                    pass_bin := PassBin,
                    client_id := ClientId
-                  } = In, State) ->
+                  } = In, State0) ->
     AuthProps = case PassBin of
                     none ->
                         %% SSL user name provided.
@@ -795,7 +767,11 @@ check_user_login(#{vhost := VHost,
     case rabbit_access_control:check_user_login(
            UsernameBin, AuthProps) of
         {ok, User = #user{username = Username}} ->
-            notify_auth_result(user_authentication_success, Username, State),
+            notify_auth_result(user_authentication_success, Username, State0),
+            State = State0#state{
+                      %% We won't need conn_name anymore.
+                      %% Use less memmory by setting to undefined.
+                      conn_name = undefined},
             {ok, maps:put(user, User, In), State};
         {refused, Username, Msg, Args} ->
             rabbit_log_connection:error(
@@ -803,7 +779,7 @@ check_user_login(#{vhost := VHost,
               "access refused for user '~s' in vhost '~s' "
               ++ Msg,
               [self(), Username, VHost] ++ Args),
-            notify_auth_result(user_authentication_failure, Username, State),
+            notify_auth_result(user_authentication_failure, Username, State0),
             {error, ?CONNACK_BAD_CREDENTIALS}
     end.
 
@@ -1336,13 +1312,14 @@ serialise_and_send_to_client(Packet, #state{proto_ver = ProtoVer, socket = Sock}
 serialise(Packet, #state{proto_ver = ProtoVer}) ->
     rabbit_mqtt_packet:serialise(Packet, ProtoVer).
 
-terminate(SendWill, ConnName, State) ->
+terminate(SendWill, ConnName, ProtoFamily, State) ->
     maybe_send_will(SendWill, ConnName, State),
     Infos = [{name, ConnName},
              {node, node()},
              {pid, self()},
              {disconnected_at, os:system_time(milli_seconds)}
-            ] ++ additional_connection_closed_info(State),
+            ] ++ additional_connection_closed_info(ProtoFamily, State),
+    rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
     maybe_unregister_client(State),
@@ -1373,13 +1350,13 @@ maybe_send_will(_, _, _) ->
     ok.
 
 additional_connection_closed_info(
-  #state{info = #info{proto_human = {ProtoName, ProtoVsn}},
-         auth_state = #auth_state{vhost = VHost,
-                                  username = Username}}) ->
-    [{protocol, {ProtoName, binary_to_list(ProtoVsn)}},
+  ProtoFamily,
+  State = #state{auth_state = #auth_state{vhost = VHost,
+                                          username = Username}}) ->
+    [{protocol, {ProtoFamily, proto_version_tuple(State)}},
      {vhost, VHost},
      {user, Username}];
-additional_connection_closed_info(_) ->
+additional_connection_closed_info(_, _) ->
     [].
 
 maybe_unregister_client(#state{client_id = ClientId})
@@ -1774,15 +1751,15 @@ is_socket_busy(Socket) ->
             false
     end.
 
-info(protocol, #state{info = #info{proto_human = Val}}) -> Val;
 info(host, #state{info = #info{host = Val}}) -> Val;
 info(port, #state{info = #info{port = Val}}) -> Val;
 info(peer_host, #state{info = #info{peer_host = Val}}) -> Val;
 info(peer_port, #state{info = #info{peer_port = Val}}) -> Val;
+info(connected_at, #state{info = #info{connected_at = Val}}) -> Val;
 info(ssl_login_name, #state{ssl_login_name = Val}) -> Val;
-info(client_id, #state{client_id = Val}) ->
-    rabbit_data_coercion:to_binary(Val);
 info(vhost, #state{auth_state = #auth_state{vhost = Val}}) -> Val;
+info(user_who_performed_action, S) ->
+    info(user, S);
 info(user, #state{auth_state = #auth_state{username = Val}}) -> Val;
 info(clean_sess, #state{clean_sess = Val}) -> Val;
 info(will_msg, #state{will_msg = Val}) -> Val;
@@ -1793,6 +1770,16 @@ info(messages_unconfirmed, #state{unacked_client_pubs = Val}) ->
     rabbit_mqtt_confirms:size(Val);
 info(messages_unacknowledged, #state{unacked_server_pubs = Val}) ->
     maps:size(Val);
+info(node, _) -> node();
+info(client_id, #state{client_id = Val}) -> Val;
+%% for rabbitmq_management/priv/www/js/tmpl/connection.ejs
+info(client_properties, #state{client_id = Val}) ->
+    [{client_id, longstr, Val}];
+info(channel_max, _) -> 0;
+%% Maximum packet size supported only in MQTT 5.0.
+info(frame_max, _) -> 0;
+%% SASL supported only in MQTT 5.0.
+info(auth_mechanism, _) -> none;
 info(Other, _) -> throw({bad_argument, Other}).
 
 -spec ssl_login_name(rabbit_net:socket()) ->
@@ -1848,10 +1835,15 @@ format_status(#state{queue_states = QState,
 soft_limit_exceeded(#state{soft_limit_exceeded = SLE}) ->
     not sets:is_empty(SLE).
 
-protocol_integer_to_atom(3) ->
+proto_integer_to_atom(3) ->
     ?MQTT_PROTO_V3;
-protocol_integer_to_atom(4) ->
+proto_integer_to_atom(4) ->
     ?MQTT_PROTO_V4.
+
+proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V3}) ->
+    {3, 1, 0};
+proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V4}) ->
+    {3, 1, 1}.
 
 maybe_increment_publisher(State = #state{has_published = false,
                                          proto_ver = ProtoVer}) ->

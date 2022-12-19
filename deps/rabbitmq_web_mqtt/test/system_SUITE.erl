@@ -8,11 +8,22 @@
 -module(system_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
--import(rabbit_ct_broker_helpers, [rpc/5]).
--import(rabbit_ct_helpers, [eventually/1]).
+-import(rabbit_ct_broker_helpers,
+        [rpc/5]).
+-import(rabbit_ct_helpers,
+        [eventually/1,
+         eventually/3]).
+-import(rabbit_mgmt_test_util,
+        [http_get/2,
+         http_delete/3]).
+
+-define(MANAGEMENT_PLUGIN_TESTS,
+        [management_plugin_connection,
+         management_plugin_enable]).
 
 all() ->
     [
@@ -21,22 +32,26 @@ all() ->
 
 groups() ->
     [
-      {non_parallel_tests, [],
-       [connection
-        , pubsub_shared_connection
-        , pubsub_separate_connections
-        , last_will_enabled_disconnect
-        , last_will_enabled_no_disconnect
-        , disconnect
-        , keepalive
-        , maintenance
-        , client_no_supported_protocol
-        , client_not_support_mqtt
-        , unacceptable_data_type
-        , duplicate_id
-        , handle_invalid_packets
-        ]}
+     {non_parallel_tests, [],
+      [connection
+       , pubsub_shared_connection
+       , pubsub_separate_connections
+       , last_will_enabled_disconnect
+       , last_will_enabled_no_disconnect
+       , disconnect
+       , keepalive
+       , maintenance
+       , client_no_supported_protocol
+       , client_not_support_mqtt
+       , unacceptable_data_type
+       , duplicate_id
+       , handle_invalid_packets
+      ] ++ ?MANAGEMENT_PLUGIN_TESTS
+     }
     ].
+
+suite() ->
+    [{timetrap, {minutes, 5}}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -60,10 +75,29 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
+    maybe_start_inets(Testcase),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    maybe_stop_inets(Testcase),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+maybe_start_inets(Testcase) ->
+    case lists:member(Testcase, ?MANAGEMENT_PLUGIN_TESTS) of
+        true ->
+            ok = inets:start();
+        false ->
+            ok
+    end.
+
+maybe_stop_inets(Testcase) ->
+    case lists:member(Testcase, ?MANAGEMENT_PLUGIN_TESTS) of
+        true ->
+            ok = inets:stop();
+        false ->
+            ok
+    end.
 
 connection(Config) ->
     C = ws_connect(?FUNCTION_NAME, Config),
@@ -226,6 +260,46 @@ handle_invalid_packets(Config) ->
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
     rfc6455_client:send_binary(WS, Bin),
     {close, {1002, _}} = rfc6455_client:recv(WS, timer:seconds(1)).
+
+%% Test that Web MQTT connection can be listed and closed via the rabbitmq_management plugin.
+management_plugin_connection(Config) ->
+    KeepaliveSecs = 99,
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    C = ws_connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
+
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    [#{client_properties := #{client_id := ClientId},
+       timeout := KeepaliveSecs,
+       node := Node,
+       name := ConnectionName}] = http_get(Config, "/connections"),
+
+    process_flag(trap_exit, true),
+    http_delete(Config,
+                "/connections/" ++ binary_to_list(uri_string:quote((ConnectionName))),
+                ?NO_CONTENT),
+    receive
+        {'EXIT', C, _} ->
+            ok
+    after 5000 ->
+              ct:fail("server did not close connection")
+    end,
+    ?assertEqual([], http_get(Config, "/connections")),
+    ?assertEqual(0, num_mqtt_connections(Config, 0)).
+
+management_plugin_enable(Config) ->
+    ?assertEqual(0, length(http_get(Config, "/connections"))),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management_agent),
+
+    %% If the Web MQTT connection is established **before** the management plugin is enabled,
+    %% the management plugin should still list the Web MQTT connection.
+    C = ws_connect(?FUNCTION_NAME, Config),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+
+    ok = emqtt:disconnect(C).
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->

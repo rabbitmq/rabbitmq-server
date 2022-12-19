@@ -10,9 +10,15 @@
 -export([init/1, handle_event/2, handle_call/2]).
 -define(INIT_STATE, []).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 init(_) ->
     {ok, ?INIT_STATE}.
 
+handle_event(#event{type = node_stats}, State) ->
+    {ok, State};
+handle_event(#event{type = node_node_stats}, State) ->
+    {ok, State};
 handle_event(Event, State) ->
     {ok, [Event | State]}.
 

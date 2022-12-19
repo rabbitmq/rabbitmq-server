@@ -240,8 +240,8 @@ stats(Config) ->
     %% Wait for stats being emitted (every 100ms)
     timer:sleep(300),
     %% Retrieve the connection Pid
-    [Reader] = all_connection_pids(Config),
-    [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
+    [Pid] = all_connection_pids(Config),
+    [{pid, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Pid, [pid]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
