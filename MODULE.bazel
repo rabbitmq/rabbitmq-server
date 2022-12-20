@@ -307,16 +307,9 @@ erlang_package.hex_package(
     sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
 )
 
-<<<<<<< HEAD
-erlang_package.hex_package(
-    name = "recon",
-    version = "2.5.2",
-    sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
-=======
 erlang_package.git_package(
     repository = "ferd/recon",
     commit = "cf5bfc290c6cdd46bea45ae4a6418e9802d511e5",
->>>>>>> 338df031d4 (pin recon to cf5bfc290c6cdd46bea45ae4a6418e9802d511e5)
 )
 
 erlang_package.hex_package(
