@@ -18,6 +18,9 @@ exports_files(glob([
 ]) + ["INSTALL"])
 
 _APP_ENV = """[
+	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% 30 minutes
+	    {consumer_timeout, 1800000},
 	    {tcp_listeners, [5672]},
 	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
