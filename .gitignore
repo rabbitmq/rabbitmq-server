@@ -66,6 +66,8 @@ rebar3.crashdump
 *.plt
 *.lock
 
+/logs/
+
 /topic-branch-scratch/
 
 PACKAGES/
