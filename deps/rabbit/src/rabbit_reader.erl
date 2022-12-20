@@ -519,10 +519,10 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
-        {other, {heartbeat_send_error, Reason}} ->
+        {other, {heartbeat_send_error, _}=ErrHeartbeat} ->
             %% The only portable way to detect disconnect on blocked
             %% connection is to wait for heartbeat send failure.
-            stop(Reason, State);
+            stop(ErrHeartbeat, State);
         {error, Reason} ->
             stop(Reason, State);
         {other, {system, From, Request}} ->
