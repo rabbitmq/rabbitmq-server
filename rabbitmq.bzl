@@ -272,7 +272,7 @@ def rabbitmq_integration_suite(
             # - _main~secondary_umbrella~rabbitmq-server-generic-unix-3.11
             # -     @~secondary_umbrella~rabbitmq-server-generic-unix-3.11
             # -      .secondary_umbrella.rabbitmq-server-generic-unix-3.11
-            "RABBITMQ_RUN_SECONDARY": "$(ls $TEST_SRCDIR/*secondary_umbrella*rabbitmq-server-generic-unix-3./rabbitmq-run)",
+            "RABBITMQ_RUN_SECONDARY": "$(ls $TEST_SRCDIR/*secondary_umbrella*rabbitmq-server-generic-unix-3.8/rabbitmq-run)",
             "LANG": "C.UTF-8",
         }.items() + test_env.items()),
         tools = [
