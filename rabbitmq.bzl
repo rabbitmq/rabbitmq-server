@@ -267,24 +267,36 @@ def rabbitmq_integration_suite(
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
 <<<<<<< HEAD
+<<<<<<< HEAD
             "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/.secondary_umbrella.rabbitmq-server-generic-unix-3.8/rabbitmq-run",
 =======
+=======
+>>>>>>> 1947f245be (Resolve a conflict)
 <<<<<<< HEAD
             "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/.secondary_umbrella.rabbitmq-server-generic-unix-3.9/rabbitmq-run",
 =======
 <<<<<<< HEAD
             "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/.secondary_umbrella.rabbitmq-server-generic-unix-3.10/rabbitmq-run",
 =======
+=======
+>>>>>>> c51e01d5a3 (Resolve a conflict)
 
             # The following variations were observed on different
             # versions of bazel and in different environments:
             # - _main~secondary_umbrella~rabbitmq-server-generic-unix-3.11
             # -     @~secondary_umbrella~rabbitmq-server-generic-unix-3.11
             # -      .secondary_umbrella.rabbitmq-server-generic-unix-3.11
+<<<<<<< HEAD
             "RABBITMQ_RUN_SECONDARY": "$(ls $TEST_SRCDIR/*secondary_umbrella*rabbitmq-server-generic-unix-3.11/rabbitmq-run)",
 >>>>>>> b51304d233 (Bazel 6 compatibility)
 >>>>>>> c7cd429a0c (Bazel 6 compatibility)
+<<<<<<< HEAD
 >>>>>>> 9309a9bf7b (Bazel 6 compatibility)
+=======
+=======
+            "RABBITMQ_RUN_SECONDARY": "$(ls $TEST_SRCDIR/*secondary_umbrella*rabbitmq-server-generic-unix-3.10/rabbitmq-run)",
+>>>>>>> c51e01d5a3 (Resolve a conflict)
+>>>>>>> 1947f245be (Resolve a conflict)
             "LANG": "C.UTF-8",
         }.items() + test_env.items()),
         tools = [
