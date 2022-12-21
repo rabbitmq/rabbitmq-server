@@ -20,28 +20,7 @@ of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!fo
 
 ## Running Tests
 
-To run all tests in a particular project:
-
-```
-cd deps/rabbit
-make tests
-```
-
-To run a specific suite:
-
-```
-cd deps/rabbit
-make ct-cluster_rename
-```
-
-You can also run specific test groups and tests:
-
-```
-cd deps/rabbit
-make ct-cluster_rename t=cluster_size_3:partial_one_by_one
-```
-
-Test output is in the `logs/` subdirectory.
+See [this guide on how to use Bazel and BuildBuddy for RabbitMQ core development](https://github.com/rabbitmq/contribute/wiki/Bazel-and-BuildBuddy).
 
 ## Formatting the RabbitMQ CLI
 
@@ -71,4 +50,5 @@ for the RabbitMQ team at Pivotal to merge your contribution.
 
 ## Where to Ask Questions
 
-If something isn't clear, feel free to ask on our [mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
+If something isn't clear, feel free to ask on our [mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
+and [community Slack](https://rabbitmq-slack.herokuapp.com/).
