@@ -357,9 +357,9 @@ declare_queue(Config) ->
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    
+
     ?assertMatch([_], find_queue_info(Config, [])),
-    
+
     %% Test declare an existing queue with different arguments
     ?assertExit(_, declare(Ch, Q, [])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -1070,7 +1070,7 @@ consume_and_nack(Config) ->
                                                       multiple     = false,
                                                       requeue      = true}),
             %% Nack will throw a not implemented exception. As it is a cast operation,
-            %% we'll detect the conneciton/channel closure on the next call. 
+            %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                         declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
@@ -1294,7 +1294,7 @@ consume_and_reject(Config) ->
             ok = amqp_channel:cast(Ch1, #'basic.reject'{delivery_tag = DeliveryTag,
                                                       requeue      = true}),
             %% Reject will throw a not implemented exception. As it is a cast operation,
-            %% we'll detect the conneciton/channel closure on the next call. 
+            %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                         declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
@@ -1674,7 +1674,12 @@ max_length_bytes(Config) ->
 
     Payload = << <<"1">> || _ <- lists:seq(1, 100) >>,
 
-    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 500)]), %% 100 bytes/msg * 500 = 50000 bytes
+    %% 100 bytes/msg * 500 = 50000 bytes
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
     ensure_retention_applied(Config, Server),
 
     %% We don't yet have reliable metrics, as the committed offset doesn't work
