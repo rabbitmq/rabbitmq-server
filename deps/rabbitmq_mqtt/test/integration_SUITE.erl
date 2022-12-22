@@ -58,7 +58,8 @@ groups() ->
        flow_classic_mirrored_queue,
        flow_quorum_queue,
        flow_stream,
-       rabbit_mqtt_qos0_queue
+       rabbit_mqtt_qos0_queue,
+       cli_list_queues
        ] ++ tests()
      }
     ].
@@ -906,6 +907,34 @@ management_plugin_enable(Config) ->
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
     eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+
+    ok = emqtt:disconnect(C).
+
+%% Test that queues of type rabbit_mqtt_qos0_queue can be listed via rabbitmqctl.
+cli_list_queues(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, _} = emqtt:subscribe(C, <<"a/b/c">>, qos0),
+
+    Qs = rabbit_ct_broker_helpers:rabbitmqctl_list(
+           Config, 1,
+           ["list_queues", "--no-table-headers",
+            "type", "name", "state", "durable", "auto_delete",
+            "arguments", "pid", "owner_pid", "messages", "exclusive_consumer_tag"
+           ]),
+    ExpectedQueueType = case rabbit_ct_helpers:is_mixed_versions(Config) of
+                            false ->
+                                <<"MQTT QoS 0">>;
+                            true ->
+                                <<"classic">>
+                        end,
+    ?assertMatch([[ExpectedQueueType, <<"mqtt-subscription-cli_list_queuesqos0">>,
+                   <<"running">>, <<"true">>, <<"false">>,  <<"[]">>, _, _, <<"0">>, <<"">>]],
+                 Qs),
+
+    ?assertEqual([],
+                 rabbit_ct_broker_helpers:rabbitmqctl_list(
+                   Config, 1, ["list_queues", "--local", "--no-table-headers"])
+                ),
 
     ok = emqtt:disconnect(C).
 

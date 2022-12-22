@@ -20,6 +20,7 @@
 -behaviour(rabbit_queue_type).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 %% rabbit_queue_type callbacks
 -export([
@@ -38,6 +39,9 @@
          capabilities/0,
          notify_decorators/1
         ]).
+
+-define(INFO_KEYS, [type, name, durable, auto_delete, arguments,
+                    pid, owner_pid, state, messages]).
 
 -spec is_stateful() ->
     boolean().
@@ -159,12 +163,6 @@ purge(_Q) ->
 policy_changed(_Q) ->
     ok.
 
-%% general queue info
--spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
-    rabbit_types:infos().
-info(_Q, _Items) ->
-    [].
-
 -spec notify_decorators(amqqueue:amqqueue()) ->
     ok.
 notify_decorators(_) ->
@@ -179,3 +177,45 @@ stat(_Q) ->
     #{atom() := term()}.
 capabilities() ->
     #{}.
+
+-spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Q, all_keys)
+  when ?is_amqqueue(Q) ->
+    info(Q, ?INFO_KEYS);
+info(Q, Items)
+  when ?is_amqqueue(Q) ->
+    [{Item, i(Item, Q)} || Item <- Items].
+
+i(type, _) ->
+    'MQTT QoS 0';
+i(name, Q) ->
+    amqqueue:get_name(Q);
+i(durable, Q) ->
+    amqqueue:is_durable(Q);
+i(auto_delete, Q) ->
+    amqqueue:is_auto_delete(Q);
+i(arguments, Q) ->
+    amqqueue:get_arguments(Q);
+i(pid, Q) ->
+    amqqueue:get_pid(Q);
+i(owner_pid, Q) ->
+    amqqueue:get_exclusive_owner(Q);
+i(state, Q) ->
+    Pid = amqqueue:get_pid(Q),
+    case erpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+        true ->
+            running;
+        false ->
+            down
+    end;
+i(messages, Q) ->
+    Pid = amqqueue:get_pid(Q),
+    case erpc:call(node(Pid), erlang, process_info, [Pid, message_queue_len]) of
+        {message_queue_len, N} ->
+            N;
+        _ ->
+            0
+    end;
+i(_, _) ->
+    ''.
