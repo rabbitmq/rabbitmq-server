@@ -314,9 +314,10 @@ erlang_package.hex_package(
     version = "2.1.0",
 )
 
-erlang_package.git_package(
-    commit = "cf5bfc290c6cdd46bea45ae4a6418e9802d511e5",
-    repository = "ferd/recon",
+erlang_package.hex_package(
+    name = "recon",
+    sha256 = "6c6683f46fd4a1dfd98404b9f78dcabc7fcd8826613a89dcb984727a8c3099d7",
+    version = "2.5.3",
 )
 
 erlang_package.hex_package(
