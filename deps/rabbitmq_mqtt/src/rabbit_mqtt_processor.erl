@@ -30,19 +30,20 @@
 -include("rabbit_mqtt_packet.hrl").
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
--define(CONSUMER_TAG, mqtt).
+-define(CONSUMER_TAG, <<"mqtt">>).
 
--record(auth_state, {username,
-                     user,
-                     vhost,
-                     authz_ctx}).
+-record(auth_state, {username :: binary(),
+                     user :: #user{},
+                     vhost :: rabbit_types:vhost(),
+                     authz_ctx :: #{binary() := binary()}
+                    }).
 
--record(info, {prefetch,
-               host,
-               port,
-               peer_host,
-               peer_port,
-               connected_at}).
+-record(info, {prefetch :: non_neg_integer(),
+               host :: inet:ip_address(),
+               port :: inet:port_number(),
+               peer_host :: inet:ip_address(),
+               peer_port :: inet:port_number(),
+               connected_at :: pos_integer()}).
 
 -record(state,
         {socket,
@@ -58,21 +59,19 @@
          packet_id = 1 :: packet_id(),
          client_id :: option(binary()),
          clean_sess :: option(boolean()),
-         will_msg,
+         will_msg :: option(mqtt_msg()),
          exchange :: option(rabbit_exchange:name()),
          %% Set if client has at least one subscription with QoS 1.
          queue_qos1 :: option(rabbit_amqqueue:name()),
          has_published = false :: boolean(),
-         ssl_login_name,
-         %% Retained messages handler. See rabbit_mqtt_retainer_sup
-         %% and rabbit_mqtt_retainer.
-         retainer_pid,
-         auth_state,
-         peer_addr,
+         ssl_login_name :: none | binary(),
+         retainer_pid :: option(pid()),
+         auth_state :: option(#auth_state{}),
+         peer_addr :: inet:ip_address(),
          send_fun :: fun((Packet :: tuple(), state()) -> term()),
          register_state,
-         conn_name,
-         info,
+         conn_name :: option(binary()),
+         info :: option(#info{}),
          delivery_flow :: flow | noflow,
          %% quorum queues and streams whose soft limit has been exceeded
          soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
@@ -81,6 +80,8 @@
 
 -opaque state() :: #state{}.
 
+-spec initial_state(Socket :: any(), ConnectionName :: binary()) ->
+    state().
 initial_state(Socket, ConnectionName) ->
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(Socket),
     initial_state(Socket,
@@ -88,6 +89,11 @@ initial_state(Socket, ConnectionName) ->
                   fun serialise_and_send_to_client/2,
                   PeerAddr).
 
+-spec initial_state(Socket :: any(),
+                    ConnectionName :: binary(),
+                    SendFun :: fun((mqtt_packet(), state()) -> any()),
+                    PeerAddr :: binary()) ->
+    state().
 initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
                true   -> flow;
@@ -105,7 +111,7 @@ initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
     {stop, disconnect, state()} |
     {error, Reason :: term(), state()}.
 process_packet(#mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
-              State = #state{auth_state = undefined})
+               State = #state{auth_state = undefined})
   when Type =/= ?CONNECT ->
     {error, connect_expected, State};
 process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}}, State) ->
@@ -149,7 +155,7 @@ process_request(?PUBACK,
 
 process_request(?PUBLISH,
                 Packet = #mqtt_packet{
-                           fixed = Fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
+                            fixed = Fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
                 State) ->
     % Downgrade QOS_2 to QOS_1
     process_request(?PUBLISH,
@@ -280,7 +286,7 @@ process_request(?SUBSCRIBE,
 process_request(?UNSUBSCRIBE,
                 #mqtt_packet{variable = #mqtt_packet_subscribe{packet_id  = PacketId,
                                                                topic_table = Topics},
-                            payload = undefined},
+                             payload = undefined},
                 State0 = #state{send_fun = SendFun}) ->
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     HasSubsBefore = has_subs(State0),
@@ -353,12 +359,6 @@ process_connect(#mqtt_packet{
     SendFun(ResponsePacket, State),
     return_connack(ReturnCode, State).
 
-client_id(<<>>) ->
-    rabbit_mqtt_util:gen_client_id();
-client_id(ClientId)
-  when is_binary(ClientId) ->
-    ClientId.
-
 check_protocol_version(#mqtt_packet_connect{proto_ver = ProtoVersion}) ->
     case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
         true ->
@@ -397,18 +397,27 @@ check_credentials(Packet = #mqtt_packet_connect{username = Username,
 
 login({UserBin, PassBin,
        Packet = #mqtt_packet_connect{client_id = ClientId0,
-                                   clean_sess = CleanSess}},
+                                     clean_sess = CleanSess}},
       State0) ->
-    ClientId = client_id(ClientId0),
+    ClientId = ensure_client_id(ClientId0),
     case process_login(UserBin, PassBin, ClientId, State0) of
         already_connected ->
             {ok, already_connected};
         {ok, State} ->
             {ok, Packet, State#state{clean_sess = CleanSess,
-                                    client_id = ClientId}};
+                                     client_id = ClientId}};
         {error, _Reason, _State} = Err ->
             Err
     end.
+
+-spec ensure_client_id(binary()) -> binary().
+ensure_client_id(<<>>) ->
+    rabbit_data_coercion:to_binary(
+      rabbit_misc:base64url(
+        rabbit_guid:gen_secure()));
+ensure_client_id(ClientId)
+  when is_binary(ClientId) ->
+    ClientId.
 
 register_client(already_connected, _State) ->
     ok;
@@ -647,7 +656,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
                                                       packet_id = PacketId,
                                                       topic_name = Topic1
                                                      },
-                          payload = Msg#mqtt_msg.payload},
+                           payload = Msg#mqtt_msg.payload},
               State),
             State
     end.
@@ -786,14 +795,9 @@ check_user_login(#{vhost := VHost,
 notify_auth_result(AuthResult, Username, #state{conn_name = ConnName}) ->
     rabbit_event:notify(
       AuthResult,
-      [
-       {name, case Username of
-                  none -> '';
-                  _ -> Username
-              end},
+      [{name, Username},
        {connection_name, ConnName},
-       {connection_type, network}
-      ]).
+       {connection_type, network}]).
 
 check_user_connection_limit(#{user := #user{username = Username}}) ->
     case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
@@ -1442,6 +1446,8 @@ handle_ra_event(Evt, State) ->
     rabbit_log:debug("unhandled ra_event: ~w ", [Evt]),
     State.
 
+-spec handle_down(term(), state()) ->
+    {ok, state()} | {error, Reason :: any()}.
 handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             State0 = #state{queue_states = QStates0,
                             unacked_client_pubs = U0}) ->
@@ -1464,6 +1470,9 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             {ok, State}
     end.
 
+-spec handle_queue_event(
+        {queue_event, rabbit_amqqueue:name() | ?QUEUE_TYPE_QOS_0, term()}, state()) ->
+    {ok, state()} | {error, Reason :: any(), state()}.
 handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg},
                    State0 = #state{qos0_messages_dropped = N}) ->
     State = case drop_qos0_message(State0) of
@@ -1795,6 +1804,7 @@ ssl_login_name(Sock) ->
         nossl                -> none
     end.
 
+-spec format_status(state()) -> map().
 format_status(#state{queue_states = QState,
                      proto_ver = ProtoVersion,
                      unacked_client_pubs = UnackClientPubs,
@@ -1832,6 +1842,7 @@ format_status(#state{queue_states = QState,
       soft_limit_exceeded => soft_limit_exceeded(State),
       qos0_messages_dropped => Qos0MsgsDropped}.
 
+-spec soft_limit_exceeded(state()) -> boolean().
 soft_limit_exceeded(#state{soft_limit_exceeded = SLE}) ->
     not sets:is_empty(SLE).
 
@@ -1840,6 +1851,7 @@ proto_integer_to_atom(3) ->
 proto_integer_to_atom(4) ->
     ?MQTT_PROTO_V4.
 
+-spec proto_version_tuple(state()) -> tuple().
 proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V3}) ->
     {3, 1, 0};
 proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V4}) ->

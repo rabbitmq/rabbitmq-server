@@ -5,6 +5,8 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+-type option(T) :: undefined | T.
+
 -define(PROTOCOL_NAMES,
         [{3, "MQIsdp"},
          {4, "MQTT"}]).
@@ -55,8 +57,6 @@
 %% Packet identifier is a non zero two byte integer.
 -type packet_id() :: 1..16#ffff.
 
--type option(T) :: undefined | T.
-
 -record(mqtt_packet_fixed,    {type   = 0,
                                dup    = 0,
                                qos    = 0,
@@ -106,3 +106,9 @@
                                payload :: binary()}).
 
 -type mqtt_msg() :: #mqtt_msg{}.
+
+%% does not include vhost because vhost is used in the (D)ETS table name
+-record(retained_message, {topic :: string(),
+                           mqtt_msg :: mqtt_msg()}).
+
+-type retained_message() :: #retained_message{}.

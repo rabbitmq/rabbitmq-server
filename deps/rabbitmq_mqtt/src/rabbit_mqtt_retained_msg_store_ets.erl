@@ -8,7 +8,7 @@
 -module(rabbit_mqtt_retained_msg_store_ets).
 
 -behaviour(rabbit_mqtt_retained_msg_store).
--include("rabbit_mqtt_retain.hrl").
+-include("rabbit_mqtt_packet.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
@@ -22,7 +22,7 @@
 
 new(Dir, VHost) ->
   Path = rabbit_mqtt_util:path_for(Dir, VHost),
-  TableName = rabbit_mqtt_retained_msg_store:table_name_for(VHost),
+  TableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
   file:delete(Path),
   Tid = ets:new(TableName, [set, public, {keypos, #retained_message.topic}]),
   #store_state{table = Tid, filename = Path}.

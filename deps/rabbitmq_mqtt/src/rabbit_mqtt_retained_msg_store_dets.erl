@@ -8,7 +8,7 @@
 -module(rabbit_mqtt_retained_msg_store_dets).
 
 -behaviour(rabbit_mqtt_retained_msg_store).
--include("rabbit_mqtt_retain.hrl").
+-include("rabbit_mqtt_packet.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
@@ -44,8 +44,8 @@ terminate(#store_state{table = T}) ->
   ok = dets:close(T).
 
 open_table(Dir, VHost) ->
-  dets:open_file(rabbit_mqtt_retained_msg_store:table_name_for(VHost),
-    table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))).
+    dets:open_file(rabbit_mqtt_util:vhost_name_to_table_name(VHost),
+                   table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))).
 
 table_options(Path) ->
     [{type, set},

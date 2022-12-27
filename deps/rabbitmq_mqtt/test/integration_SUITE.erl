@@ -894,7 +894,7 @@ management_plugin_connection(Config) ->
               ct:fail("server did not close connection")
     end,
     ?assertEqual([], http_get(Config, "/connections")),
-    ?assertEqual([], all_connection_pids(Config)).
+    eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3).
 
 management_plugin_enable(Config) ->
     ?assertEqual(0, length(http_get(Config, "/connections"))),

@@ -120,7 +120,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
 
--spec add(rabbit_amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
+-spec add(rabbit_amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
           non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
           rabbit_types:username(), state())
          -> state().

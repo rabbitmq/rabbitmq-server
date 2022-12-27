@@ -7,20 +7,25 @@
 
 -module(rabbit_mqtt_retained_msg_store).
 
--export([behaviour_info/1, table_name_for/1]).
+-include("rabbit_mqtt_packet.hrl").
 
-behaviour_info(callbacks) ->
-    [{new,       2},
-     {recover,   2},
-     {insert,    3},
-     {lookup,    2},
-     {delete,    2},
-     {terminate, 1}];
-behaviour_info(_Other) ->
-    undefined.
+-callback new(Directory :: file:name_all(), rabbit_types:vhost()) ->
+    State :: any().
 
-table_name_for(VHost) ->
-  rabbit_mqtt_util:vhost_name_to_table_name(VHost).
+-callback recover(Directory :: file:name_all(), rabbit_types:vhost()) ->
+    {ok, State :: any()} | {error, Reason :: term()}.
+
+-callback insert(Topic :: string(), mqtt_msg(), State :: any()) ->
+    ok.
+
+-callback lookup(Topic :: string(), State :: any()) ->
+    retained_message() | not_found.
+
+-callback delete(Topic :: string(), State :: any()) ->
+    ok.
+
+-callback terminate(State :: any()) ->
+    ok.
 
 %% TODO Support retained messages in RabbitMQ cluster, for
 %% 1. support PUBLISH with retain on a different node than SUBSCRIBE
@@ -30,6 +35,5 @@ table_name_for(VHost) ->
 %% * retained message store backend does RPCs to peer nodes to lookup and delete
 %%
 %% Possible solutions for 2.
-%% * rabbitmq_mqtt_retained_msg_store_mnesia
 %% * rabbitmq_mqtt_retained_msg_store_khepri
 %% * rabbitmq_mqtt_retained_msg_store_ra (implementing our own ra machine)

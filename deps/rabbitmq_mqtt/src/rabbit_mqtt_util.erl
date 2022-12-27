@@ -13,7 +13,6 @@
 
 -export([queue_name_bin/2,
          qos_from_queue_name/2,
-         gen_client_id/0,
          env/1,
          table_lookup/2,
          path_for/2,
@@ -61,6 +60,7 @@ qos_from_queue_name(#resource{name = Name}, ClientId) ->
 queue_name_prefix(ClientId) ->
     <<"mqtt-subscription-", ClientId/binary, "qos">>.
 
+-spec init_sparkplug() -> ok.
 init_sparkplug() ->
     case env(sparkplug) of
         true ->
@@ -133,10 +133,6 @@ to_mqtt(T0) ->
     T2 = string:replace(T1, ".", "/", all),
     erlang:iolist_to_binary(T2).
 
--spec gen_client_id() -> string().
-gen_client_id() ->
-    rabbit_misc:base64url(rabbit_guid:gen_secure()).
-
 env(Key) ->
     case application:get_env(?APP_NAME, Key) of
         {ok, Val} -> coerce_env_value(Key, Val);
@@ -167,9 +163,11 @@ path_for(Dir, VHost, Suffix) ->
   filename:join(Dir, vhost_name_to_dir_name(VHost, Suffix)).
 
 
+-spec vhost_name_to_table_name(rabbit_types:vhost()) ->
+    atom().
 vhost_name_to_table_name(VHost) ->
-  <<Num:128>> = erlang:md5(VHost),
-  list_to_atom("rabbit_mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num])).
+    <<Num:128>> = erlang:md5(VHost),
+    list_to_atom("rabbit_mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num])).
 
 -spec register_clientid(rabbit_types:vhost(), binary()) -> ok.
 register_clientid(Vhost, ClientId)

@@ -66,6 +66,7 @@ proxy_protocol(Config) ->
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
+    timer:sleep(10),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
@@ -80,15 +81,14 @@ proxy_protocol_tls(Config) ->
     {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
     ok = ssl:send(SslSocket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
+    timer:sleep(10),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
 connection_name() ->
-    Connections = ets:tab2list(connection_created),
-    {_Key, Values} = lists:nth(1, Connections),
+    [{_Key, Values}] = ets:tab2list(connection_created),
     {_, Name} = lists:keyfind(name, 1, Values),
     Name.
 

@@ -550,11 +550,11 @@ invalid_transition(Transport, Socket, From, To) ->
     close_immediately(Transport, Socket),
     stop.
 
-resource_alarm(ConnectionPid, disk,
-               {_WasAlarmSetForNode,
-                IsThereAnyAlarmsForSameResourceInTheCluster, _Node}) ->
-    ConnectionPid
-    ! {resource_alarm, IsThereAnyAlarmsForSameResourceInTheCluster},
+-spec resource_alarm(pid(),
+                     rabbit_alarm:resource_alarm_source(),
+                     rabbit_alarm:resource_alert()) -> ok.
+resource_alarm(ConnectionPid, disk, {_, Conserve, _}) ->
+    ConnectionPid ! {resource_alarm, Conserve},
     ok;
 resource_alarm(_ConnectionPid, _Resource, _Alert) ->
     ok.

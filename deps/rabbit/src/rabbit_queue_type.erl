@@ -97,7 +97,7 @@
 
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
-                          limiter_pid => pid(),
+                          limiter_pid => pid() | none,
                           limiter_active => boolean(),
                           prefetch_count => non_neg_integer(),
                           consumer_tag := rabbit_types:ctag(),
@@ -107,9 +107,6 @@
                           acting_user :=  rabbit_types:username()}.
 
 
-
-% copied from rabbit_amqqueue
--type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
 
 -type settle_op() :: 'complete' | 'requeue' | 'discard'.
 
@@ -128,7 +125,7 @@
 
 -callback declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'absent', amqqueue:amqqueue(), absent_reason()} |
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()} |
     {'error', Err :: term() }.
 
@@ -262,7 +259,7 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'absent', amqqueue:amqqueue(), absent_reason()} |
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()} |
     {'error', Err :: term() }.
 declare(Q0, Node) ->
@@ -324,6 +321,7 @@ state_info(#ctx{state = S,
 state_info(_) ->
     #{}.
 
+-spec format_status(state()) -> map().
 format_status(#?STATE{ctxs = Ctxs}) ->
     #{num_queue_clients => maps:size(Ctxs)}.
 

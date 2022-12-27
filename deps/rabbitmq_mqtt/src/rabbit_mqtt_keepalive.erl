@@ -1,6 +1,7 @@
 -module(rabbit_mqtt_keepalive).
 
--export([start/2,
+-export([init/0,
+         start/2,
          handle/2,
          start_timer/1,
          cancel_timer/1,
@@ -8,17 +9,19 @@
 
 -export_type([state/0]).
 
--type option(T) :: undefined | T.
-
 -record(state, {
           %% Keep Alive value as sent in the CONNECT packet.
           interval_secs :: pos_integer(),
-          timer :: option(reference()),
+          timer :: reference(),
           socket :: inet:socket(),
           recv_oct :: non_neg_integer(),
           received :: boolean()}).
 
--opaque(state() :: undefined | #state{}).
+-opaque(state() :: disabled | #state{}).
+
+-spec init() -> state().
+init() ->
+    disabled.
 
 -spec start(IntervalSeconds :: non_neg_integer(), inet:socket()) -> ok.
 start(0, _Sock) ->
@@ -33,11 +36,11 @@ start(Seconds, Sock)
 handle({init, IntervalSecs, Sock}, _State) ->
     case rabbit_net:getstat(Sock, [recv_oct]) of
         {ok, [{recv_oct, RecvOct}]} ->
-            State = #state{socket = Sock,
-                           interval_secs = IntervalSecs,
-                           recv_oct = RecvOct,
-                           received = true},
-            {ok, start_timer(State)};
+            {ok, #state{interval_secs = IntervalSecs,
+                        timer = start_timer0(IntervalSecs),
+                        socket = Sock,
+                        recv_oct = RecvOct,
+                        received = true}};
         {error, _} = Err ->
             Err
     end;
@@ -62,19 +65,22 @@ handle(check, State = #state{socket = Sock,
 
 -spec start_timer(state()) -> state().
 start_timer(#state{interval_secs = Seconds} = State) ->
-    Ref = erlang:send_after(timer_ms(Seconds), self(), {keepalive, check}),
-    State#state{timer = Ref};
-start_timer(undefined) ->
-    undefined.
+    State#state{timer = start_timer0(Seconds)};
+start_timer(disabled) ->
+    disabled.
+
+-spec start_timer0(pos_integer()) -> reference().
+start_timer0(KeepAliveSeconds) ->
+    erlang:send_after(timer_ms(KeepAliveSeconds), self(), {keepalive, check}).
 
 -spec cancel_timer(state()) -> state().
-cancel_timer(undefined) ->
-    undefined;
 cancel_timer(#state{timer = Ref} = State)
   when is_reference(Ref) ->
     ok = erlang:cancel_timer(Ref, [{async, true},
                                    {info, false}]),
-    State.
+    State;
+cancel_timer(disabled) ->
+    disabled.
 
 %% "If the Keep Alive value is non-zero and the Server does not receive a Control
 %% Packet from the Client within one and a half times the Keep Alive time period,
@@ -104,5 +110,5 @@ timer_ms(KeepaliveSeconds) ->
     non_neg_integer().
 interval_secs(#state{interval_secs = Seconds}) ->
     Seconds;
-interval_secs(undefined) ->
+interval_secs(disabled) ->
     0.

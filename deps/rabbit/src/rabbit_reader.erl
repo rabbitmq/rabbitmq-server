@@ -143,12 +143,6 @@
 
 %%--------------------------------------------------------------------------
 
--type resource_alert() :: {WasAlarmSetForNode :: boolean(),
-                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
-                           NodeForWhichAlarmWasSetOrCleared :: node()}.
-
-%%--------------------------------------------------------------------------
-
 -spec start_link(pid(), any()) -> rabbit_types:ok(pid()).
 
 start_link(HelperSup, Ref) ->
@@ -210,7 +204,9 @@ info(Pid, Items) ->
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
 
--spec conserve_resources(pid(), atom(), resource_alert()) -> 'ok'.
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> 'ok'.
 
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},

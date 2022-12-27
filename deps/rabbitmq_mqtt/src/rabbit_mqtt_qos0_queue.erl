@@ -50,7 +50,7 @@ is_stateful() ->
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'absent', amqqueue:amqqueue(), rabbit_queue_type:absent_reason()}.
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
 declare(Q0, _Node) ->
     %% The queue gets persisted such that routing to this
     %% queue (via the topic exchange) works as usual.

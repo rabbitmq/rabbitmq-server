@@ -314,6 +314,9 @@ broadcast(SPids, Msg) ->
          SPid ! Msg
      end || SPid <- SPids].
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.

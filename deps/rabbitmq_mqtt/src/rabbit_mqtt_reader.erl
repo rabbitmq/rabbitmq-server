@@ -26,17 +26,20 @@
 
 -record(state,
         {socket,
-         proxy_socket,
-         conn_name,
-         await_recv,
-         deferred_recv,
-         received_connect_packet,
-         connection_state,
-         conserve,
+         proxy_socket :: undefined | {rabbit_proxy_soket, any(), any()},
+         await_recv :: boolean(),
+         deferred_recv :: undefined | binary(),
          parse_state,
-         proc_state,
+         proc_state :: rabbit_mqtt_processor:state(),
+         connection_state :: running | blocked,
+         conserve :: boolean(),
          stats_timer,
-         keepalive :: rabbit_mqtt_keepalive:state()}).
+         keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
+         conn_name :: binary(),
+         received_connect_packet :: boolean()
+        }).
+
+-type(state() :: #state{}).
 
 %%----------------------------------------------------------------------------
 
@@ -44,6 +47,9 @@ start_link(Ref, _Transport, []) ->
     Pid = proc_lib:spawn_link(?MODULE, init, [Ref]),
     {ok, Pid}.
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
@@ -53,6 +59,7 @@ conserve_resources(Pid, _, {_, Conserve, _}) ->
 info(Pid, Items) ->
     gen_server:call(Pid, {info, Items}).
 
+-spec close_connection(pid(), Reason :: any()) -> ok.
 close_connection(Pid, Reason) ->
     gen_server:cast(Pid, {close_connection, Reason}).
 
@@ -84,12 +91,16 @@ init(Ref) ->
             State1 = control_throttle(State0),
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
             gen_server:enter_loop(?MODULE, [], State);
-        {error, enotconn} ->
+        {error, Reason = enotconn} ->
+            rabbit_log_connection:info(
+              "MQTT could not get connection string: ~s", [Reason]),
             rabbit_net:fast_close(RealSocket),
-            terminate(shutdown, undefined);
+            ignore;
         {error, Reason} ->
+            rabbit_log_connection:error(
+              "MQTT could not get connection string: ~p", [Reason]),
             rabbit_net:fast_close(RealSocket),
-            terminate({network_error, Reason}, undefined)
+            {stop, Reason}
     end.
 
 handle_call({info, InfoItems}, _From, State) ->
@@ -362,8 +373,7 @@ process_received_bytes(Bytes,
             {stop, {shutdown, Error}, State}
     end.
 
--spec pstate(#state{}, rabbit_mqtt_processor:state())
-    -> #state{}.
+-spec pstate(state(), rabbit_mqtt_processor:state()) -> state().
 pstate(State = #state {}, PState) ->
     State #state{ proc_state = PState }.
 
@@ -408,8 +418,8 @@ control_throttle(State = #state{connection_state = Flow,
                                 keepalive = KState,
                                 proc_state = PState}) ->
     Throttle = Conserve orelse
-    rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
-    credit_flow:blocked(),
+               rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
+               credit_flow:blocked(),
     case {Flow, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,
@@ -503,7 +513,8 @@ i(protocol, #state{proc_state = ProcState}) ->
 i(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).
 
--spec format_status(map()) -> map().
+-spec format_status(gen_server:format_status()) ->
+    gen_server:format_status().
 format_status(Status) ->
     maps:map(
       fun(state, State) ->
@@ -512,6 +523,7 @@ format_status(Status) ->
               Value
       end, Status).
 
+-spec format_state(state()) -> map().
 format_state(#state{proc_state = PState,
                     socket = Socket,
                     proxy_socket = ProxySock,

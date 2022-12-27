@@ -26,17 +26,18 @@
          takeover/7]).
 
 -record(state, {
-          conn_name,
+          socket,
           parse_state,
           proc_state,
-          connection_state,
-          conserve_resources,
-          socket,
-          peername,
+          connection_state = running :: running | blocked,
+          conserve = false :: boolean(),
           stats_timer,
-          received_connect_packet,
-          keepalive :: rabbit_mqtt_keepalive:state()
+          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
+          conn_name,
+          received_connect_packet = false :: boolean()
          }).
+
+-type state() :: #state{}.
 
 %% Close frame status codes as defined in https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
 -define(CLOSE_NORMAL, 1000).
@@ -51,7 +52,7 @@ upgrade(Req, Env, Handler, HandlerState) ->
 upgrade(Req, Env, Handler, HandlerState, Opts) ->
     cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
 
-takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
+takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, {HandlerState, PeerAddr}}) ->
     Sock = case HandlerState#state.socket of
                undefined ->
                    Socket;
@@ -59,7 +60,7 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
                    {rabbit_proxy_socket, Socket, ProxyInfo}
            end,
     cowboy_websocket:takeover(Parent, Ref, Socket, Transport, Opts, Buffer,
-                              {Handler, HandlerState#state{socket = Sock}}).
+                              {Handler, {HandlerState#state{socket = Sock}, PeerAddr}}).
 
 %% cowboy_websocket
 -spec init(Req, any()) ->
@@ -80,22 +81,17 @@ init(Req, Opts) ->
                 true ->
                     {?MODULE,
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     #state{
-                        parse_state        = rabbit_mqtt_packet:initial_state(),
-                        connection_state   = running,
-                        conserve_resources = false,
-                        socket             = maps:get(proxy_header, Req, undefined),
-                        peername           = PeerAddr,
-                        received_connect_packet = false
-                       },
+                     {#state{parse_state = rabbit_mqtt_packet:initial_state(),
+                             socket = maps:get(proxy_header, Req, undefined)},
+                      PeerAddr},
                      WsOpts}
             end
     end.
 
--spec websocket_init(State) ->
-    {cowboy_websocket:commands(), State} |
-    {cowboy_websocket:commands(), State, hibernate}.
-websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
+-spec websocket_init({state(), PeerAddr :: binary()}) ->
+    {cowboy_websocket:commands(), state()} |
+    {cowboy_websocket:commands(), state(), hibernate}.
+websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
     ok = file_handle_cache:obtain(),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
@@ -144,7 +140,7 @@ websocket_handle(Frame, State) ->
     {cowboy_websocket:commands(), State} |
     {cowboy_websocket:commands(), State, hibernate}.
 websocket_info({conserve_resources, Conserve}, State) ->
-    NewState = State#state{conserve_resources = Conserve},
+    NewState = State#state{conserve = Conserve},
     handle_credits(NewState);
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -223,7 +219,7 @@ websocket_info(Msg, State) ->
     {[], State, hibernate}.
 
 -spec terminate(any(), cowboy_req:req(), any()) -> ok.
-terminate(_Reason, _Req, #state{connection_state = undefined}) ->
+terminate(_Reason, _Req, #state{proc_state = undefined}) ->
     ok;
 terminate(Reason, Request, #state{} = State) ->
     terminate(Reason, Request, {true, State});
@@ -317,12 +313,12 @@ handle_credits(State0) ->
     end.
 
 control_throttle(State = #state{connection_state = CS,
-                                conserve_resources = Conserve,
+                                conserve = Conserve,
                                 keepalive = KState,
                                 proc_state = PState}) ->
     Throttle = Conserve orelse
-    rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
-    credit_flow:blocked(),
+               rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
+               credit_flow:blocked(),
     case {CS, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,

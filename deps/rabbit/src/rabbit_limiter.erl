@@ -133,7 +133,7 @@
 
 -type lstate() :: #lstate{pid              :: pid(),
                           prefetch_limited :: boolean()}.
--type qstate() :: #qstate{pid :: pid(),
+-type qstate() :: #qstate{pid :: pid() | none,
                           state :: 'dormant' | 'active' | 'suspended'}.
 
 -type credit_mode() :: 'manual' | 'drain' | 'auto'.

@@ -253,6 +253,9 @@ process_received_bytes(Bytes,
             {stop, normal, State}
     end.
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, _Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.

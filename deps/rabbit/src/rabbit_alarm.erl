@@ -29,6 +29,9 @@
 
 -export([remote_conserve_resources/3]). %% Internal use only
 
+-export_type([resource_alarm_source/0,
+              resource_alert/0]).
+
 -define(SERVER, ?MODULE).
 
 -define(FILE_DESCRIPTOR_RESOURCE, <<"file descriptors">>).
@@ -46,6 +49,9 @@
 -type resource_alarm_source() :: 'disk' | 'memory'.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
 -type alarm() :: local_alarm() | resource_alarm().
+-type resource_alert() :: {WasAlarmSetForNode :: boolean(),
+                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
+                           NodeForWhichAlarmWasSetOrCleared :: node()}.
 
 %%----------------------------------------------------------------------------
 
