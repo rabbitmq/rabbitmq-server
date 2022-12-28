@@ -15,13 +15,13 @@
 -callback recover(Directory :: file:name_all(), rabbit_types:vhost()) ->
     {ok, State :: any()} | {error, Reason :: term()}.
 
--callback insert(Topic :: string(), mqtt_msg(), State :: any()) ->
+-callback insert(Topic :: binary(), mqtt_msg(), State :: any()) ->
     ok.
 
--callback lookup(Topic :: string(), State :: any()) ->
+-callback lookup(Topic :: binary(), State :: any()) ->
     retained_message() | not_found.
 
--callback delete(Topic :: string(), State :: any()) ->
+-callback delete(Topic :: binary(), State :: any()) ->
     ok.
 
 -callback terminate(State :: any()) ->

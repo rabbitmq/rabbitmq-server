@@ -27,15 +27,18 @@
 start_link(RetainStoreMod, VHost) ->
     gen_server:start_link(?MODULE, [RetainStoreMod, VHost], []).
 
--spec retain(pid(), string(), mqtt_msg()) -> ok.
+-spec retain(pid(), binary(), mqtt_msg()) -> ok.
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
     gen_server:cast(Pid, {retain, Topic, Msg});
 retain(_Pid, _Topic, Msg = #mqtt_msg{retain = false}) ->
     throw({error, {retain_is_false, Msg}}).
 
+-spec fetch(pid(), binary()) ->
+    undefined | mqtt_msg().
 fetch(Pid, Topic) ->
     gen_server:call(Pid, {fetch, Topic}, ?TIMEOUT).
 
+-spec clear(pid(), binary()) -> ok.
 clear(Pid, Topic) ->
     gen_server:cast(Pid, {clear, Topic}).
 
@@ -51,6 +54,7 @@ init([StoreMod, VHost]) ->
             end,
     {ok, State}.
 
+-spec store_module() -> undefined | module().
 store_module() ->
     case application:get_env(?APP_NAME, retained_message_store) of
         {ok, Mod} -> Mod;

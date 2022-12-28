@@ -8,8 +8,8 @@
 -type option(T) :: undefined | T.
 
 -define(PROTOCOL_NAMES,
-        [{3, "MQIsdp"},
-         {4, "MQTT"}]).
+        [{3, <<"MQIsdp">>},
+         {4, <<"MQTT">>}]).
 
 %% packet types
 
@@ -85,10 +85,10 @@
 -record(mqtt_packet_connack,  {session_present,
                                return_code}).
 
--record(mqtt_packet_publish,  {topic_name,
+-record(mqtt_packet_publish,  {topic_name :: undefined | binary(),
                                packet_id :: packet_id()}).
 
--record(mqtt_topic,           {name,
+-record(mqtt_topic,           {name :: binary(),
                                qos}).
 
 -record(mqtt_packet_subscribe,{packet_id :: packet_id(),
@@ -100,7 +100,7 @@
 
 -record(mqtt_msg,             {retain :: boolean(),
                                qos :: qos(),
-                               topic :: string(),
+                               topic :: binary(),
                                dup :: option(boolean()),
                                packet_id :: option(packet_id()),
                                payload :: binary()}).
@@ -108,7 +108,7 @@
 -type mqtt_msg() :: #mqtt_msg{}.
 
 %% does not include vhost because vhost is used in the (D)ETS table name
--record(retained_message, {topic :: string(),
+-record(retained_message, {topic :: binary(),
                            mqtt_msg :: mqtt_msg()}).
 
 -type retained_message() :: #retained_message{}.

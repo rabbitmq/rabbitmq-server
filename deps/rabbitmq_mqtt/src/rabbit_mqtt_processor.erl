@@ -92,7 +92,7 @@ initial_state(Socket, ConnectionName) ->
 -spec initial_state(Socket :: any(),
                     ConnectionName :: binary(),
                     SendFun :: fun((mqtt_packet(), state()) -> any()),
-                    PeerAddr :: binary()) ->
+                    PeerAddr :: inet:ip_address()) ->
     state().
 initial_state(Socket, ConnectionName, SendFun, PeerAddr) ->
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
@@ -383,11 +383,11 @@ check_credentials(Packet = #mqtt_packet_connect{username = Username,
             rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
             rabbit_log_connection:error("MQTT login failed: no credentials provided"),
             {error, ?CONNACK_BAD_CREDENTIALS};
-        {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
+        {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
             rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
             rabbit_log_connection:error("MQTT login failed: no username is provided"),
             {error, ?CONNACK_BAD_CREDENTIALS};
-        {invalid_creds, {User, undefined}} when is_list(User) ->
+        {invalid_creds, {User, undefined}} when is_binary(User) ->
             rabbit_core_metrics:auth_attempt_failed(Ip, User, mqtt),
             rabbit_log_connection:error("MQTT login failed for user '~p': no password provided", [User]),
             {error, ?CONNACK_BAD_CREDENTIALS};
@@ -608,7 +608,7 @@ maybe_replace_old_sub(#mqtt_topic{name = TopicName, qos = QoS},
     maybe_unbind(TopicName, OldTopicNamesQos0, QName, State).
 
 maybe_unbind(TopicName, TopicNames, QName, State0) ->
-    case lists:member(list_to_binary(TopicName), TopicNames) of
+    case lists:member(TopicName, TopicNames) of
         false ->
             {ok, State0};
         true ->
@@ -622,6 +622,7 @@ maybe_unbind(TopicName, TopicNames, QName, State0) ->
             end
     end.
 
+-spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
 hand_off_to_retainer(RetainerPid, Topic0, #mqtt_msg{payload = <<"">>}) ->
     Topic1 = amqp_to_mqtt(Topic0),
     rabbit_mqtt_retainer:clear(RetainerPid, Topic1),
@@ -680,11 +681,9 @@ process_login(_UserBin, _PassBin, _ClientId,
                                               vhost = VHost
                                              }})
   when Username =/= undefined, User =/= undefined, VHost =/= underfined ->
-    UsernameStr = rabbit_data_coercion:to_list(Username),
-    VHostStr = rabbit_data_coercion:to_list(VHost),
     rabbit_core_metrics:auth_attempt_failed(list_to_binary(inet:ntoa(Addr)), Username, mqtt),
-    rabbit_log_connection:warning("MQTT detected duplicate connect/login attempt for user ~tp, vhost ~tp",
-                                  [UsernameStr, VHostStr]),
+    rabbit_log_connection:warning("MQTT detected duplicate connect/login attempt for user ~ts, vhost ~ts",
+                                  [Username, VHost]),
     already_connected;
 process_login(UserBin, PassBin, ClientId,
               #state{socket = Sock,
@@ -850,7 +849,7 @@ check_user_loopback(#{vhost := VHost,
         not_allowed ->
             rabbit_log_connection:warning(
               "MQTT login failed: user '~s' can only connect via localhost",
-              [binary_to_list(UsernameBin)]),
+              [UsernameBin]),
             {error, ?CONNACK_NOT_AUTHORIZED}
     end.
 
@@ -957,22 +956,16 @@ creds(User, Pass, SSLLoginName) ->
     {ok, Anon}    = application:get_env(?APP_NAME, allow_anonymous),
     {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
     HaveDefaultCreds = Anon =:= true andalso
-    is_binary(DefaultUser) andalso
-    is_binary(DefaultPass),
+        is_binary(DefaultUser) andalso
+        is_binary(DefaultPass),
 
-    CredentialsProvided = User =/= undefined orelse
-    Pass =/= undefined,
-
-    CorrectCredentials = is_list(User) andalso
-    is_list(Pass),
-
-    SSLLoginProvided = TLSAuth =:= true andalso
-    SSLLoginName =/= none,
+    CredentialsProvided = User =/= undefined orelse Pass =/= undefined,
+    CorrectCredentials = is_binary(User) andalso is_binary(Pass),
+    SSLLoginProvided = TLSAuth =:= true andalso SSLLoginName =/= none,
 
     case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
         %% Username and password take priority
-        {true, true, _, _}          -> {list_to_binary(User),
-                                        list_to_binary(Pass)};
+        {true, true, _, _}          -> {User, Pass};
         %% Either username or password is provided
         {true, false, _, _}         -> {invalid_creds, {User, Pass}};
         %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.

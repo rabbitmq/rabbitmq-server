@@ -11,8 +11,6 @@
 -export([start_link/1, init/1, start_child/2,start_child/1, child_for_vhost/1,
          delete_child/1]).
 
--define(ENCODING, utf8).
-
 -spec start_child(binary()) -> supervisor:startchild_ret().
 -spec start_child(term(), binary()) -> supervisor:startchild_ret().
 
