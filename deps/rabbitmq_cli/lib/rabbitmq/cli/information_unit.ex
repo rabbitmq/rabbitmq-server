@@ -42,6 +42,10 @@ defmodule RabbitMQ.CLI.InformationUnit do
     :unknown
   end
 
+  def convert(:NaN, _) do
+    :NaN
+  end
+
   def known_unit?(val) do
     MapSet.member?(known_units(), String.downcase(val))
   end
