@@ -110,15 +110,15 @@ block(Config) ->
     % %% Let it block
     timer:sleep(100),
 
-    %% Blocked, but still will publish
+    %% Blocked, but still will publish when unblocked
     puback_timeout = publish_qos1_timeout(C, <<"Topic1">>, <<"Now blocked">>, 1000),
     puback_timeout = publish_qos1_timeout(C, <<"Topic1">>, <<"Still blocked">>, 1000),
 
     %% Unblock
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
     ok = expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
-                                    <<"Now blocked">>,
-                                    <<"Still blocked">>]),
+                                         <<"Now blocked">>,
+                                         <<"Still blocked">>]),
     ok = emqtt:disconnect(C).
 
 block_connack_timeout(Config) ->

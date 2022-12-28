@@ -33,7 +33,7 @@ all() ->
 groups() ->
     [
      {non_parallel_tests, [],
-      [connection
+      [block
        , pubsub_shared_connection
        , pubsub_separate_connections
        , last_will_enabled_disconnect
@@ -99,8 +99,30 @@ maybe_stop_inets(Testcase) ->
             ok
     end.
 
-connection(Config) ->
-    C = ws_connect(?FUNCTION_NAME, Config),
+%% -------------------------------------------------------------------
+%% Testsuite cases
+%% -------------------------------------------------------------------
+
+block(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = ws_connect(ClientId, Config),
+
+    {ok, _, _} = emqtt:subscribe(C, Topic),
+    {ok, _} = emqtt:publish(C, Topic, <<"Not blocked yet">>, [{qos, 1}]),
+
+    ok = rpc(Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    %% Let it block
+    timer:sleep(100),
+
+    %% Blocked, but still will publish when unblocked
+    puback_timeout = publish_qos1_timeout(C, Topic, <<"Now blocked">>, 1000),
+    puback_timeout = publish_qos1_timeout(C, Topic, <<"Still blocked">>, 1000),
+
+    %% Unblock
+    rpc(Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    ok = expect_publishes(C, Topic, [<<"Not blocked yet">>,
+                                     <<"Now blocked">>,
+                                     <<"Still blocked">>]),
     ok = emqtt:disconnect(C).
 
 pubsub_shared_connection(Config) ->
@@ -332,3 +354,22 @@ expect_publishes(ClientPid, Topic, [Payload|Rest]) ->
     after 1000 ->
               {publish_not_received, Payload}
     end.
+
+publish_qos1_timeout(Client, Topic, Payload, Timeout) ->
+    Mref = erlang:monitor(process, Client),
+    ok = emqtt:publish_async(Client, Topic, #{}, Payload, [{qos, 1}], infinity,
+                             {fun ?MODULE:sync_publish_result/3, [self(), Mref]}),
+    receive
+        {Mref, Reply} ->
+            erlang:demonitor(Mref, [flush]),
+            Reply;
+        {'DOWN', Mref, process, Client, Reason} ->
+            ct:fail("client is down: ~tp", [Reason])
+    after
+        Timeout ->
+            erlang:demonitor(Mref, [flush]),
+            puback_timeout
+    end.
+
+sync_publish_result(Caller, Mref, Result) ->
+    erlang:send(Caller, {Mref, Result}).

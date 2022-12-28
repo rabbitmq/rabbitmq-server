@@ -18,7 +18,9 @@
     websocket_info/2,
     terminate/3
 ]).
--export([close_connection/2]).
+
+-export([conserve_resources/3,
+         close_connection/2]).
 
 %% cowboy_sub_protocol
 -export([upgrade/4,
@@ -97,6 +99,7 @@ websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             rabbit_log_connection:info("Accepting Web MQTT connection ~s", [ConnName]),
+            rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             PState = rabbit_mqtt_processor:initial_state(
                        rabbit_net:unwrap_socket(Sock),
                        ConnName,
@@ -116,6 +119,13 @@ close_connection(Pid, Reason) ->
     rabbit_log_connection:info("Web MQTT: will terminate connection process ~tp, reason: ~ts",
                                [Pid, Reason]),
     sys:terminate(Pid, Reason),
+    ok.
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
+conserve_resources(Pid, _, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Conserve},
     ok.
 
 -spec websocket_handle(ping | pong | {text | binary | ping | pong, binary()}, State) ->
@@ -140,8 +150,7 @@ websocket_handle(Frame, State) ->
     {cowboy_websocket:commands(), State} |
     {cowboy_websocket:commands(), State, hibernate}.
 websocket_info({conserve_resources, Conserve}, State) ->
-    NewState = State#state{conserve = Conserve},
-    handle_credits(NewState);
+    handle_credits(State#state{conserve = Conserve});
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     handle_credits(State);
@@ -305,12 +314,12 @@ stop(State, CloseCode, Error0) ->
     {[{close, CloseCode, Error}], State}.
 
 handle_credits(State0) ->
-    case control_throttle(State0) of
-        State = #state{connection_state = running} ->
-            {[{active, true}], State, hibernate};
-        State ->
-            {[], State, hibernate}
-    end.
+    State = #state{connection_state = CS} = control_throttle(State0),
+    Active = case CS of
+                 running -> true;
+                 blocked -> false
+             end,
+    {[{active, Active}], State, hibernate}.
 
 control_throttle(State = #state{connection_state = CS,
                                 conserve = Conserve,

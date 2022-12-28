@@ -74,8 +74,7 @@ init(Ref) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             rabbit_log_connection:debug("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
-            rabbit_alarm:register(
-              self(), {?MODULE, conserve_resources, []}),
+            rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnName),
