@@ -27,12 +27,12 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, tests}
     ].
 
 groups() ->
     [
-     {non_parallel_tests, [],
+     {tests, [],
       [block
        , pubsub_shared_connection
        , pubsub_separate_connections
@@ -46,6 +46,7 @@ groups() ->
        , unacceptable_data_type
        , duplicate_id
        , handle_invalid_packets
+       , duplicate_connect
       ] ++ ?MANAGEMENT_PLUGIN_TESTS
      }
     ].
@@ -322,6 +323,31 @@ management_plugin_enable(Config) ->
     eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
 
     ok = emqtt:disconnect(C).
+
+%% "A Client can only send the CONNECT Packet once over a Network Connection.
+%% The Server MUST process a second CONNECT Packet sent from a Client as a protocol
+%% violation and disconnect the Client [MQTT-3.1.0-2].
+duplicate_connect(Config) ->
+    Url = "ws://127.0.0.1:" ++ rabbit_ws_test_util:get_web_mqtt_port_str(Config) ++ "/ws",
+    WS = rfc6455_client:new(Url, self(), undefined, ["mqtt"]),
+    {ok, _} = rfc6455_client:open(WS),
+
+    %% 1st CONNECT should succeed.
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+    {binary, _P} = rfc6455_client:recv(WS),
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
+
+    %% 2nd CONNECT should fail.
+    process_flag(trap_exit, true),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+    eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
+    receive {'EXIT', WS, _} -> ok
+    after 500 -> ct:fail("expected web socket to exit")
+    end.
+
+%% -------------------------------------------------------------------
+%% Internal helpers
+%% -------------------------------------------------------------------
 
 %% Web mqtt connections are tracked together with mqtt connections
 num_mqtt_connections(Config, Node) ->

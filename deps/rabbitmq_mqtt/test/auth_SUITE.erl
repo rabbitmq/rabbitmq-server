@@ -24,7 +24,8 @@ all() ->
      {group, no_ssl_user},
      {group, ssl_user},
      {group, client_id_propagation},
-     {group, authz}].
+     {group, authz},
+     {group, limit}].
 
 groups() ->
     [{anonymous_ssl_user, [],
@@ -70,6 +71,7 @@ groups() ->
      },
      {authz, [],
       [no_queue_bind_permission,
+       no_queue_unbind_permission,
        no_queue_consume_permission,
        no_queue_consume_permission_on_connect,
        no_queue_delete_permission,
@@ -79,7 +81,12 @@ groups() ->
        no_topic_write_permission,
        loopback_user_connects_from_remote_host
       ]
-     }
+     },
+     {limit, [],
+      [vhost_connection_limit,
+       vhost_queue_limit,
+       user_connection_limit
+      ]}
     ].
 
 init_per_suite(Config) ->
@@ -115,7 +122,11 @@ init_per_group(Group, Config) ->
     MqttConfig = mqtt_config(Group),
     AuthConfig = auth_config(Group),
     rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+        [ fun(Conf) -> case MqttConfig of
+                           undefined  -> Conf;
+                           _          -> merge_app_env(MqttConfig, Conf)
+                       end
+          end] ++
         [ fun(Conf) -> case AuthConfig of
                             undefined -> Conf;
                             _         -> merge_app_env(AuthConfig, Conf)
@@ -146,7 +157,9 @@ mqtt_config(no_ssl_user) ->
                      {allow_anonymous, false}]};
 mqtt_config(client_id_propagation) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
-                     {allow_anonymous, true}]}.
+                     {allow_anonymous, true}]};
+mqtt_config(_) ->
+    undefined.
 
 auth_config(client_id_propagation) ->
     {rabbit, [
@@ -319,6 +332,7 @@ end_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_ma
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
     rabbit_ct_helpers:testcase_finished(Config, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
 end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
+                                        Testcase == no_queue_unbind_permission;
                                         Testcase == no_queue_consume_permission;
                                         Testcase == no_queue_consume_permission_on_connect;
                                         Testcase == no_queue_delete_permission;
@@ -432,10 +446,13 @@ ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).
 
 connect_anonymous(Config) ->
+    connect_anonymous(Config, <<"simpleClient">>).
+
+connect_anonymous(Config, ClientId) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     emqtt:start_link([{host, "localhost"},
                       {port, P},
-                      {clientid, <<"simpleClient">>},
+                      {clientid, ClientId},
                       {proto_ver, v4}]).
 
 connect_ssl(Config) ->
@@ -521,6 +538,48 @@ no_queue_bind_permission(Config) ->
      "in vhost 'mqtt-vhost' with topic test/topic: access_refused"
     ],
     test_subscribe_permissions_combination(<<".*">>, <<"">>, <<".*">>, Config, ExpectedLogs).
+
+no_queue_unbind_permission(Config) ->
+    User = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    rabbit_ct_broker_helpers:set_permissions(Config, User, Vhost, <<".*">>, <<".*">>, <<".*">>),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Opts = [{host, "localhost"},
+            {port, P},
+            {proto_ver, v4},
+            {clientid, User},
+            {username, User},
+            {password, ?config(mqtt_password, Config)}],
+    {ok, C1} = emqtt:start_link([{clean_start, false} | Opts]),
+    {ok, _} = emqtt:connect(C1),
+    Topic = <<"my/topic">>,
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, Topic, qos1)),
+    ok = emqtt:disconnect(C1),
+
+    %% Revoke read access to amq.topic exchange.
+    rabbit_ct_broker_helpers:set_permissions(Config, User, Vhost, <<".*">>, <<".*">>, <<"^(?!amq\.topic$)">>),
+    {ok, C2} = emqtt:start_link([{clean_start, false} | Opts]),
+    {ok, _} = emqtt:connect(C2),
+    process_flag(trap_exit, true),
+    %% We subscribe with the same client ID to the same topic again, but this time with QoS 0.
+    %% Therefore we trigger the qos1 queue to be unbound (and the qos0 queue to be bound).
+    %% However, unbinding requires read access to the exchange, which we don't have anymore.
+    ?assertMatch({ok, _Properties, [?SUBACK_FAILURE]},
+                 emqtt:subscribe(C2, Topic, qos0)),
+    ok = assert_connection_closed(C2),
+    ExpectedLogs =
+    ["MQTT resource access refused: read access to exchange 'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+     "Failed to unbind queue 'mqtt-subscription-mqtt-userqos1' in vhost 'mqtt-vhost' with topic 'my/topic': access_refused",
+     "MQTT protocol error on connection.*: subscribe_error"
+    ],
+    wait_log(Config, [?FAIL_IF_CRASH_LOG, {ExpectedLogs, fun () -> stop end}]),
+
+    %% Clean up the qos1 queue by connecting with clean session.
+    rabbit_ct_broker_helpers:set_permissions(Config, User, Vhost, <<".*">>, <<".*">>, <<".*">>),
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3).
 
 no_queue_consume_permission(Config) ->
     ExpectedLogs =
@@ -802,6 +861,42 @@ expect_authentication_failure(ConnectFun, Config) ->
     ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 1),
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 0),
     ok.
+
+vhost_connection_limit(Config) ->
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
+    {ok, C1} = connect_anonymous(Config, <<"client1">>),
+    {ok, _} = emqtt:connect(C1),
+    {ok, C2} = connect_anonymous(Config, <<"client2">>),
+    {ok, _} = emqtt:connect(C2),
+    {ok, C3} = connect_anonymous(Config, <<"client3">>),
+    unlink(C3),
+    ?assertMatch({error, {unauthorized_client, _}}, emqtt:connect(C3)),
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
+
+vhost_queue_limit(Config) ->
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, 1),
+    {ok, C} = connect_anonymous(Config),
+    {ok, _} = emqtt:connect(C),
+    process_flag(trap_exit, true),
+    %% qos0 queue can be created, qos1 queue fails to be created.
+    %% (RabbitMQ creates subscriptions in the reverse order of the SUBSCRIBE packet.)
+    ?assertMatch({ok, _Properties, [?SUBACK_FAILURE, ?SUBACK_FAILURE, 0]},
+                 emqtt:subscribe(C, [{<<"topic1">>, qos1},
+                                     {<<"topic2">>, qos1},
+                                     {<<"topic3">>, qos0}])),
+    ok = assert_connection_closed(C).
+
+user_connection_limit(Config) ->
+    DefaultUser = <<"guest">>,
+    ok = rabbit_ct_broker_helpers:set_user_limits(Config, DefaultUser, #{max_connections => 1}),
+    {ok, C1} = connect_anonymous(Config, <<"client1">>),
+    {ok, _} = emqtt:connect(C1),
+    {ok, C2} = connect_anonymous(Config, <<"client2">>),
+    unlink(C2),
+    ?assertMatch({error, {unauthorized_client, _}}, emqtt:connect(C2)),
+    ok = emqtt:disconnect(C1),
+    ok = rabbit_ct_broker_helpers:clear_user_limits(Config, DefaultUser, max_connections).
 
 wait_log(Config, Clauses) ->
     wait_log(Config, Clauses, erlang:monotonic_time(millisecond) + 1000).

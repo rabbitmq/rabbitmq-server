@@ -37,8 +37,6 @@ queue_name_bin(ClientId, QoS) ->
     queue_name0(Prefix, QoS).
 
 queue_name0(Prefix, ?QOS_0) ->
-    %%TODO consider shortening the QoS0 queue name to save memory
-    %%(can't change QoS1 name to not break rolling updates)
     <<Prefix/binary, "0">>;
 queue_name0(Prefix, ?QOS_1) ->
     <<Prefix/binary, "1">>.

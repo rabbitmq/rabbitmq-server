@@ -1461,11 +1461,10 @@ set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
       max_queues      -> <<"max-queues">>;
       Other -> rabbit_data_coercion:to_binary(Other)
     end,
-    Definition = rabbit_json:encode(#{Limit => Value}),
+    Limits = [{Limit, Value}],
     rpc(Config, Node,
-        rabbit_vhost_limit,
-        set,
-        [VHost, Definition, <<"ct-tests">>]).
+        rabbit_vhost_limit, set,
+        [VHost, Limits, <<"ct-tests">>]).
 
 set_user_limits(Config, Username, Limits) ->
     set_user_limits(Config, 0, Username, Limits).

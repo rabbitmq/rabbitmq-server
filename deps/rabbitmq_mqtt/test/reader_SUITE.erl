@@ -193,9 +193,15 @@ keepalive(Config) ->
     KeepaliveSecs = 1,
     KeepaliveMs = timer:seconds(KeepaliveSecs),
     ProtoVer = v4,
-    C = connect(?FUNCTION_NAME, Config, [{keepalive, KeepaliveSecs},
-                                         {proto_ver, ProtoVer}]),
-    ok = emqtt:publish(C, <<"ignored">>, <<"msg">>),
+    WillTopic = <<"will/topic">>,
+    WillPayload = <<"will-payload">>,
+    C1 = connect(?FUNCTION_NAME, Config, [{keepalive, KeepaliveSecs},
+                                          {proto_ver, ProtoVer},
+                                          {will_topic, WillTopic},
+                                          {will_payload, WillPayload},
+                                          {will_retain, true},
+                                          {will_qos, 0}]),
+    ok = emqtt:publish(C1, <<"ignored">>, <<"msg">>),
 
     %% Connection should stay up when client sends PING requests.
     timer:sleep(KeepaliveMs),
@@ -214,8 +220,24 @@ keepalive(Config) ->
                              util:get_global_counters(Config, ProtoVer)),
                KeepaliveMs, 3 * KeepaliveSecs),
 
+    receive {'EXIT', C1, _} -> ok
+    after 1000 -> ct:fail("missing client exit")
+    end,
+
     true = rpc(Config, 0, meck, validate, [Mod]),
-    ok = rpc(Config, 0, meck, unload, [Mod]).
+    ok = rpc(Config, 0, meck, unload, [Mod]),
+
+    C2 = connect(<<"client2">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(C2, WillTopic),
+    receive {publish, #{client_pid := C2,
+                        dup := false,
+                        qos := 0,
+                        retain := true,
+                        topic := WillTopic,
+                        payload := WillPayload}} -> ok
+    after 3000 -> ct:fail("missing will")
+    end,
+    ok = emqtt:disconnect(C2).
 
 keepalive_turned_off(Config) ->
     %% "A Keep Alive value of zero (0) has the effect of turning off the keep alive mechanism."
@@ -344,7 +366,7 @@ will(Config) ->
     Msg = <<"will msg">>,
     Publisher = connect(<<"will-publisher">>, Config, [{will_topic, Topic},
                                                        {will_payload, Msg},
-                                                       {will_qos, qos0},
+                                                       {will_qos, 0},
                                                        {will_retain, false}]),
     timer:sleep(100),
     [ServerPublisherPid] = all_connection_pids(Config),

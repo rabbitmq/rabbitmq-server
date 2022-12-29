@@ -962,6 +962,26 @@ public class MqttTest implements MqttCallback {
         client.disconnect();
     }
 
+    // "A Server MAY allow a Client to supply a ClientId that has a length of zero bytes, however if it does so
+    // the Server MUST treat this as a special case and assign a unique ClientId to that Client." [MQTT-3.1.3-6]
+    // RabbitMQ allows a Client to supply a ClientId that has a length of zero bytes.
+    @Test public void emptyClientId(TestInfo info) throws MqttException, InterruptedException {
+        String emptyClientId = "";
+        MqttConnectOptions client_opts = new TestMqttConnectOptions();
+        MqttClient client = newConnectedClient(emptyClientId, client_opts);
+        MqttClient client2 = newConnectedClient(emptyClientId, client_opts);
+        client.setCallback(this);
+        client2.setCallback(this);
+        client.subscribe("/test-topic/#");
+        client2.subscribe("/test-topic/#");
+
+        publish(client, "/test-topic/1", 0, "my-message".getBytes());
+        waitAtMost(() -> receivedMessagesSize() == 2);
+
+        disconnect(client);
+        disconnect(client2);
+    }
+
     private void publish(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {
     	publish(client, topicName, qos, payload, false);
     }
