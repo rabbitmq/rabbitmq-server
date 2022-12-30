@@ -4,7 +4,7 @@ $(document).ready(function() {
    var url = new URL(url_string);
    var error = url.searchParams.get("error");
    if (error) {
-     renderWarningMessageInLoginStatus(error);
+     renderWarningMessageInLoginStatus(fmt_escape_html(error));
    }else {
       if (oauth.enabled) {
         if (!oauth.logged_in ) {
