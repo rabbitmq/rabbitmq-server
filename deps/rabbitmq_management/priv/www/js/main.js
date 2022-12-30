@@ -1,4 +1,5 @@
 $(document).ready(function() {
+<<<<<<< HEAD
     if (enable_uaa) {
         get(uaa_location + "/info", "application/json", function(req) {
             if (req.status !== 200) {
@@ -11,6 +12,30 @@ $(document).ready(function() {
     } else {
         replace_content('outer', format('login', {}));
         start_app_login();
+=======
+   var url_string = window.location.href;
+   var url = new URL(url_string);
+   var error = url.searchParams.get("error");
+   if (error) {
+     renderWarningMessageInLoginStatus(fmt_escape_html(error));
+   }else {
+      if (oauth.enabled) {
+        if (!oauth.logged_in ) {
+          get(oauth.readiness_url, "application/json", function(req) {
+              if (req.status !== 200) {
+                  renderWarningMessageInLoginStatus(oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate" );
+              } else {
+                  replace_content('outer', format('login_oauth', {}));
+              }
+          });
+        }else {
+          start_app_login();
+        }
+      } else {
+          replace_content('outer', format('login', {}));
+          start_app_login();
+      }
+>>>>>>> e188e4abd3 (Escape the user controlled error parameter)
     }
 });
 
