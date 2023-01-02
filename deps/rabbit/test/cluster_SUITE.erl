@@ -331,11 +331,11 @@ credentials_obfuscation(Config) ->
     ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated2)),
     ok.
 
-obfuscate_secret(Config, Node, Value) -> 
-    {encrypted, _} = Result = rabbit_ct_broker_helpers:rpc(Config, Node, 
+obfuscate_secret(Config, Node, Value) ->
+    {encrypted, _} = Result = rabbit_ct_broker_helpers:rpc(Config, Node,
         credentials_obfuscation, encrypt, [Value]),
     Result.
 
 deobfuscate_secret(Config, Node, Encrypted) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, 
+    rabbit_ct_broker_helpers:rpc(Config, Node,
         credentials_obfuscation, decrypt, [Encrypted]).
