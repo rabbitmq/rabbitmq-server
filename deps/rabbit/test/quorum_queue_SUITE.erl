@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 -module(quorum_queue_SUITE).
 
@@ -2936,7 +2936,7 @@ cancel_and_consume_with_same_tag(Config) ->
 
     ok = cancel(Ch),
 
-    
+
 
     ok.
 

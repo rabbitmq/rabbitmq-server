@@ -38,7 +38,7 @@
 %% 4) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
 %%
-%% All modifications are (C) 2010-2022 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2010-2023 VMware, Inc. or its affiliates.
 %%
 %% %CopyrightBegin%
 %%

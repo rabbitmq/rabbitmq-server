@@ -522,6 +522,6 @@ field will be ignored as long as the token provides a client ID.
 
 ## License and Copyright
 
-(c) 2016-2022 VMware, Inc. or its affiliates.
+(c) 2016-2023 VMware, Inc. or its affiliates.
 
 Released under the Mozilla Public License 2.0, same as RabbitMQ.
