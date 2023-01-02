@@ -139,8 +139,8 @@ event_v1_test(_Config) ->
 			       host => <<"MyHostName">>
 			      }
 		   },
-    ?assertEqual(Expectation, 
-		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
+    ?assertEqual(Expectation,
+		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",
 							     "Normal", "Reason", "MyMessage", "2019-12-06T15:10:23+00:00", "MyHostName")).
 
 lock_single_node(_Config) ->

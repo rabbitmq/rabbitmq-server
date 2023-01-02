@@ -34,7 +34,7 @@ groups() ->
           classic_queue_lazy_mode,
           length_limit_overflow_mode
         ]},
-        
+
         {classic_queue_mirroring_validators, [parallel], [
           classic_queue_ha_mode,
           classic_queue_ha_params
