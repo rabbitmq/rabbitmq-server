@@ -11,7 +11,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%
-%% Copyright Ericsson AB 2011-2022. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2023. All Rights Reserved.
 %% Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 %% This code originated here and has been modified to suit RabbitMQ:

@@ -56,9 +56,9 @@ TL;DR:
     cd rabbitmq-jms-topic-exchange
     make -j dist
     ls plugins/*
-    
+
 ## Copyright and License
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.
 
 See [LICENSE](./LICENSE) for license information.

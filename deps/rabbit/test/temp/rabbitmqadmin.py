@@ -3,7 +3,7 @@
 #  This Source Code Form is subject to the terms of the Mozilla Public
 #  License, v. 2.0. If a copy of the MPL was not distributed with this
 #  file, You can obtain one at https://mozilla.org/MPL/2.0/.
-#  Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved
+#  Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved
 
 import sys
 if sys.version_info[0] < 2 or sys.version_info[1] < 6:

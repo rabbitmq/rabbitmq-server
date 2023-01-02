@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_queue_SUITE).
@@ -317,9 +317,9 @@ declare_queue(Config) ->
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    
+
     ?assertMatch([_], find_queue_info(Config, [])),
-    
+
     %% Test declare an existing queue with different arguments
     ?assertExit(_, declare(Ch, Q, [])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -994,7 +994,7 @@ consume_and_nack(Config) ->
                                                       multiple     = false,
                                                       requeue      = true}),
             %% Nack will throw a not implemented exception. As it is a cast operation,
-            %% we'll detect the conneciton/channel closure on the next call. 
+            %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                         declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
@@ -1149,7 +1149,7 @@ consume_and_reject(Config) ->
             ok = amqp_channel:cast(Ch1, #'basic.reject'{delivery_tag = DeliveryTag,
                                                       requeue      = true}),
             %% Reject will throw a not implemented exception. As it is a cast operation,
-            %% we'll detect the conneciton/channel closure on the next call. 
+            %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                         declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))

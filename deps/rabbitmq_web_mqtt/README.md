@@ -28,6 +28,6 @@ when building plugins from source.
 
 ## Copyright and License
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ. See LICENSE for details.

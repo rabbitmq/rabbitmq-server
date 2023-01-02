@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_coordinator).
@@ -1350,7 +1350,7 @@ inform_listeners_eol(_, _) ->
 
 eval_listeners(MachineVersion, #stream{listeners = Listeners0,
                                        queue_ref = QRef,
-                                       members = Members} = Stream, Effects0) 
+                                       members = Members} = Stream, Effects0)
   when MachineVersion =< 1 ->
     case find_leader(Members) of
         {#member{state = {running, _, LeaderPid}}, _} ->

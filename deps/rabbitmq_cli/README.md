@@ -125,5 +125,5 @@ but not entirely trivial examples.
 The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
 as RabbitMQ.
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.
 

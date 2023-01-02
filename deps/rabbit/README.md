@@ -25,8 +25,8 @@
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
- * [CLI tools guide](https://rabbitmq.com/cli.html) 
- * [Configuration guide](https://rabbitmq.com/configure.html) 
+ * [CLI tools guide](https://rabbitmq.com/cli.html)
+ * [Configuration guide](https://rabbitmq.com/configure.html)
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
  * [Monitoring guide](https://rabbitmq.com/monitoring.html)
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
@@ -62,4 +62,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.

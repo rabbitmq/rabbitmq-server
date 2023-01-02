@@ -22,4 +22,4 @@ See [RabbitMQ federation plugin](https://www.rabbitmq.com/federation.html) on ra
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2015 (c) 2007-2020 VMware, Inc. or its affiliates.
+2007-2015 (c) 2007-2023 VMware, Inc. or its affiliates.
