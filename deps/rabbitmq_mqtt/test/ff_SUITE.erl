@@ -13,7 +13,7 @@
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
 -import(rabbit_ct_helpers, [eventually/1]).
--import(util, [expect_publishes/2,
+-import(util, [expect_publishes/3,
                get_global_counters/4,
                connect/2,
                connect/4]).
@@ -98,7 +98,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     C1 = connect(ClientId, Config),
     {ok, _, [0]} = emqtt:subscribe(C1, Topic, qos0),
     ok = emqtt:publish(C1, Topic, Msg, qos0),
-    ok = expect_publishes(Topic, [Msg]),
+    ok = expect_publishes(C1, Topic, [Msg]),
     ?assertEqual(1,
                  length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]))),
 
@@ -109,7 +109,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     ?assertEqual(1,
                  length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]))),
     ok = emqtt:publish(C1, Topic, Msg, qos0),
-    ok = expect_publishes(Topic, [Msg]),
+    ok = expect_publishes(C1, Topic, [Msg]),
     ?assertMatch(#{messages_delivered_total := 2,
                    messages_delivered_consume_auto_ack_total := 2},
                  get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, rabbit_classic_queue}])),
@@ -125,7 +125,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     ?assertEqual(1,
                  length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [FeatureFlag]))),
     ok = emqtt:publish(C2, Topic, Msg, qos0),
-    ok = expect_publishes(Topic, [Msg]),
+    ok = expect_publishes(C2, Topic, [Msg]),
     ?assertMatch(#{messages_delivered_total := 1,
                    messages_delivered_consume_auto_ack_total := 1},
                  get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, FeatureFlag}])),

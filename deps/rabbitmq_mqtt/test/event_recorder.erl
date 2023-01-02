@@ -15,9 +15,10 @@
 init(_) ->
     {ok, ?INIT_STATE}.
 
-handle_event(#event{type = node_stats}, State) ->
-    {ok, State};
-handle_event(#event{type = node_node_stats}, State) ->
+handle_event(#event{type = T}, State)
+  when T =:= node_stats orelse
+       T =:= node_node_stats orelse
+       T =:= node_node_deleted ->
     {ok, State};
 handle_event(Event, State) ->
     {ok, [Event | State]}.

@@ -86,6 +86,7 @@ dialyze(
 broker_for_integration_suites(
     extra_plugins = [
         "//deps/rabbitmq_management:erlang_app",
+        "//deps/rabbitmq_web_mqtt:erlang_app",
     ],
 )
 
@@ -193,6 +194,7 @@ rabbitmq_integration_suite(
         "@emqtt//:erlang_app",
     ],
     additional_beam = [
+        ":event_recorder",
         ":util",
     ],
 )
@@ -226,16 +228,18 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "integration_SUITE",
-    size = "large",
-    runtime_deps = [
-        "@emqtt//:erlang_app",
-         "//deps/rabbitmq_management_agent:erlang_app",
-    ],
-    additional_beam = [
-        ":event_recorder",
-        ":util",
-    ],
+   name = "shared_SUITE",
+   size = "large",
+   timeout = "eternal",
+   runtime_deps = [
+       "@emqtt//:erlang_app",
+       "//deps/rabbitmq_management_agent:erlang_app",
+       "@gun//:erlang_app",
+   ],
+   additional_beam = [
+       ":event_recorder",
+       ":util",
+   ],
 )
 
 assert_suites()

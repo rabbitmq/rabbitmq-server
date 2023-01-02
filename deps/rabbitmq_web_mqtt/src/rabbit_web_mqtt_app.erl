@@ -12,8 +12,7 @@
     start/2,
     prep_stop/1,
     stop/1,
-    list_connections/0,
-    close_all_client_connections/1
+    list_connections/0
 ]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
@@ -51,14 +50,7 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 list_connections() ->
     PlainPids = connection_pids_of_protocol(?TCP_PROTOCOL),
     TLSPids   = connection_pids_of_protocol(?TLS_PROTOCOL),
-
     PlainPids ++ TLSPids.
-
--spec close_all_client_connections(string()) -> {'ok', non_neg_integer()}.
-close_all_client_connections(Reason) ->
-    Connections = list_connections(),
-    [rabbit_web_mqtt_handler:close_connection(Pid, Reason) || Pid <- Connections],
-    {ok, length(Connections)}.
 
 %%
 %% Implementation

@@ -19,8 +19,7 @@
     terminate/3
 ]).
 
--export([conserve_resources/3,
-         close_connection/2]).
+-export([conserve_resources/3]).
 
 %% cowboy_sub_protocol
 -export([upgrade/4,
@@ -113,13 +112,6 @@ websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
         {error, Reason} ->
             {[{shutdown_reason, Reason}], State0}
     end.
-
--spec close_connection(pid(), string()) -> 'ok'.
-close_connection(Pid, Reason) ->
-    rabbit_log_connection:info("Web MQTT: will terminate connection process ~tp, reason: ~ts",
-                               [Pid, Reason]),
-    sys:terminate(Pid, Reason),
-    ok.
 
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
@@ -321,14 +313,14 @@ handle_credits(State0) ->
              end,
     {[{active, Active}], State, hibernate}.
 
-control_throttle(State = #state{connection_state = CS,
+control_throttle(State = #state{connection_state = ConnState,
                                 conserve = Conserve,
                                 keepalive = KState,
                                 proc_state = PState}) ->
     Throttle = Conserve orelse
                rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
                credit_flow:blocked(),
-    case {CS, Throttle} of
+    case {ConnState, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,
                         keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};

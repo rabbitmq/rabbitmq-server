@@ -76,7 +76,7 @@
          %% quorum queues and streams whose soft limit has been exceeded
          soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
          qos0_messages_dropped = 0 :: non_neg_integer()
-         }).
+        }).
 
 -opaque state() :: #state{}.
 

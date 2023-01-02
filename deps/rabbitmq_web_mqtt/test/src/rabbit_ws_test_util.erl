@@ -7,6 +7,8 @@
 
 -module(rabbit_ws_test_util).
 
+-include_lib("common_test/include/ct.hrl").
+
 -export([update_app_env/3, get_web_mqtt_port_str/1,
          mqtt_3_1_1_connect_packet/0]).
 
@@ -22,12 +24,12 @@ update_app_env(Config, Key, Val) ->
                                       [rabbitmq_web_mqtt]).
 
 get_web_mqtt_port_str(Config) ->
-    Port = case rabbit_ct_helpers:get_config(Config, protocol) of
-        "ws" ->
-            rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt);
-        "wss" ->
-            rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls)
-    end,
+    Port = case ?config(protocol, Config) of
+               "ws" ->
+                   rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt);
+               "wss" ->
+                   rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls)
+           end,
     integer_to_list(Port).
 
 mqtt_3_1_1_connect_packet() ->

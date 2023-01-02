@@ -412,14 +412,14 @@ run_socket(State = #state{ socket = Sock }) ->
     rabbit_net:setopts(Sock, [{active, once}]),
     State#state{ await_recv = true }.
 
-control_throttle(State = #state{connection_state = Flow,
+control_throttle(State = #state{connection_state = ConnState,
                                 conserve = Conserve,
                                 keepalive = KState,
                                 proc_state = PState}) ->
     Throttle = Conserve orelse
                rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
                credit_flow:blocked(),
-    case {Flow, Throttle} of
+    case {ConnState, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,
                         keepalive = rabbit_mqtt_keepalive:cancel_timer(KState)};

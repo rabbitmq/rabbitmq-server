@@ -8,7 +8,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
--import(util, [expect_publishes/2,
+-import(util, [expect_publishes/3,
                connect/3]).
 
 all() ->
@@ -91,7 +91,7 @@ coerce_configuration_data(Config) ->
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
 
     ok = emqtt:disconnect(C).
 
@@ -105,7 +105,7 @@ should_translate_amqp2mqtt_on_publish(Config) ->
     %% there's an active consumer
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
-    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
@@ -118,7 +118,7 @@ should_translate_amqp2mqtt_on_retention(Config) ->
     %% publish with retain = true before a consumer comes around
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
-    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
@@ -130,7 +130,7 @@ should_translate_amqp2mqtt_on_retention_search(Config) ->
     C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
-    ok = expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 does_not_retain(Config) ->

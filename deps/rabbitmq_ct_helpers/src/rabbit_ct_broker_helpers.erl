@@ -38,7 +38,7 @@
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
-    rpc/5, rpc/6,
+    rpc/4, rpc/5, rpc/6,
     rpc_all/4, rpc_all/5,
 
     start_node/2,
@@ -1557,6 +1557,9 @@ add_code_path_to_all_nodes(Config, Module) ->
     [ok = add_code_path_to_node(Nodename, Module)
       || Nodename <- Nodenames],
     ok.
+
+rpc(Config, Module, Function, Args) ->
+    rpc(Config, 0, Module, Function, Args).
 
 rpc(Config, Node, Module, Function, Args)
 when is_atom(Node) andalso Node =/= undefined ->

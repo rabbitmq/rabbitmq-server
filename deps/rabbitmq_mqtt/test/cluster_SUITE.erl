@@ -9,54 +9,52 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--import(util, [expect_publishes/2,
+-import(util, [expect_publishes/3,
                connect/3,
-               connect/4]).
+               connect/4,
+               await_exit/1]).
 
 -import(rabbit_ct_broker_helpers,
         [setup_steps/0,
          teardown_steps/0,
          get_node_config/3,
          rabbitmqctl/3,
-         rpc/5,
-         stop_node/2,
-         drain_node/2,
-         revive_node/2]).
+         rpc/4,
+         stop_node/2
+        ]).
 
 -define(OPTS, [{connect_timeout, 1},
                {ack_timeout, 1}]).
 
 all() ->
     [
-     {group, cluster_size_3},
      {group, cluster_size_5}
     ].
 
 groups() ->
     [
-     {cluster_size_3, [], [
-                           maintenance
-                          ]},
-     {cluster_size_5, [], [
-                           connection_id_tracking,
-                           connection_id_tracking_on_nodedown,
-                           connection_id_tracking_with_decommissioned_node
-                          ]}
+     {cluster_size_5, [],
+      [
+       connection_id_tracking,
+       connection_id_tracking_on_nodedown,
+       connection_id_tracking_with_decommissioned_node
+      ]}
     ].
 
 suite() ->
-    [{timetrap, {minutes, 5}}].
+    [{timetrap, {minutes, 3}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics, basic},
-                                              {collect_statistics_interval, 100}
-                                             ]}).
+    rabbit_ct_helpers:merge_app_env(
+      Config,
+      {rabbit, [
+                {collect_statistics, basic},
+                {collect_statistics_interval, 100}
+               ]}).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -65,20 +63,9 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_3, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "maintenance mode wrongly closes cluster-wide MQTT connections "
-             " in RMQ < 3.11.2 and < 3.10.10"};
-        false ->
-            set_cluster_size(3, Config)
-    end;
 init_per_group(cluster_size_5, Config) ->
-    set_cluster_size(5, Config).
-
-set_cluster_size(NodesCount, Config) ->
     rabbit_ct_helpers:set_config(
-      Config, [{rmq_nodes_count, NodesCount}]).
+      Config, [{rmq_nodes_count, 5}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -107,28 +94,6 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-maintenance(Config) ->
-    C0 = connect(<<"client-0">>, Config, 0, ?OPTS),
-    C1a = connect(<<"client-1a">>, Config, 1, ?OPTS),
-    C1b = connect(<<"client-1b">>, Config, 1, ?OPTS),
-
-    timer:sleep(500),
-
-    ok = drain_node(Config, 2),
-    ok = revive_node(Config, 2),
-    timer:sleep(500),
-    [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
-
-    process_flag(trap_exit, true),
-    ok = drain_node(Config, 1),
-    [await_disconnection(Pid) || Pid <- [C1a, C1b]],
-    ok = revive_node(Config, 1),
-    ?assert(erlang:is_process_alive(C0)),
-
-    ok = drain_node(Config, 0),
-    await_disconnection(C0),
-    ok = revive_node(Config, 0).
-
 %% Note about running this testsuite in a mixed-versions cluster:
 %% All even-numbered nodes will use the same code base when using a
 %% secondary Umbrella. Odd-numbered nodes might use an incompatible code
@@ -147,7 +112,7 @@ connection_id_tracking(Config) ->
     C1 = connect(Id, Config, 0, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C1, <<"TopicA">>, qos0),
     ok = emqtt:publish(C1, <<"TopicA">>, <<"Payload">>),
-    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(C1, <<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
     assert_connection_count(Config, 4, 2, 1),
@@ -155,12 +120,12 @@ connection_id_tracking(Config) ->
     %% connect to the same node (A or 0)
     process_flag(trap_exit, true),
     C2 = connect(Id, Config, 0, ?OPTS),
-    await_disconnection(C1),
+    await_exit(C1),
     assert_connection_count(Config, 4, 2, 1),
 
     %% connect to a different node (C or 2)
     C3 = connect(Id, Config, 2, ?OPTS),
-    await_disconnection(C2),
+    await_exit(C2),
     assert_connection_count(Config, 4, 2, 1),
     ok = emqtt:disconnect(C3).
 
@@ -169,16 +134,16 @@ connection_id_tracking_on_nodedown(Config) ->
     C = connect(<<"simpleClient">>, Config, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 4, 2, 1),
     process_flag(trap_exit, true),
     ok = stop_node(Config, Server),
-    await_disconnection(C),
+    await_exit(C),
     assert_connection_count(Config, 4, 2, 0),
     ok.
 
 connection_id_tracking_with_decommissioned_node(Config) ->
-    case rpc(Config, 0, rabbit_mqtt_ff, track_client_id_in_ra, []) of
+    case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
         false ->
             {skip, "This test requires client ID tracking in Ra"};
         true ->
@@ -186,12 +151,12 @@ connection_id_tracking_with_decommissioned_node(Config) ->
             C = connect(<<"simpleClient">>, Config, ?OPTS),
             {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
             ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-            ok = expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+            ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
 
             assert_connection_count(Config, 4, 2, 1),
             process_flag(trap_exit, true),
             {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-            await_disconnection(C),
+            await_exit(C),
             assert_connection_count(Config, 4, 2, 0),
             ok
     end.
@@ -210,11 +175,4 @@ assert_connection_count(Config, Retries, NodeId, NumElements) ->
         _ ->
             timer:sleep(500),
             assert_connection_count(Config, Retries-1, NodeId, NumElements)
-    end.
-
-await_disconnection(Client) ->
-    receive
-        {'EXIT', Client, _} -> ok
-    after
-        20_000 -> ct:fail({missing_exit, Client})
     end.
