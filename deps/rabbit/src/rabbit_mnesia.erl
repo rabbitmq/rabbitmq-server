@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -826,7 +826,7 @@ create_schema() ->
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
     rabbit_log:debug("Bootstraped a schema database successfully"),
     start_mnesia(),
-    
+
     rabbit_log:debug("Will create schema database tables"),
     ok = rabbit_table:create(),
     rabbit_log:debug("Created schema database tables successfully"),

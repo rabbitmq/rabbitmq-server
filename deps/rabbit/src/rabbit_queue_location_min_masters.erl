@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_queue_location_min_masters).
@@ -47,7 +47,7 @@ queue_master_location(Q) when ?is_amqqueue(Q) ->
         end,
         maps:from_list([{N, 0} || N <- Cluster]),
         QueueNames),
-    
+
     MastersPerNode = maps:filter(fun (Node, _N) ->
                                     not rabbit_maintenance:is_being_drained_local_read(Node)
                                  end, MastersPerNode0),

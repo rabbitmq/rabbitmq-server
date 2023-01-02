@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_maintenance).
@@ -156,12 +156,12 @@ do_revive() ->
     rabbit_event:notify(maintenance_revived, #{}),
 
     ok.
- 
+
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
     rabbit_log:debug("Marking the node as undergoing maintenance"),
     set_maintenance_status_status(?DRAINING_STATUS).
- 
+
 -spec unmark_as_being_drained() -> boolean().
 unmark_as_being_drained() ->
     rabbit_log:debug("Unmarking the node as undergoing maintenance"),
@@ -188,8 +188,8 @@ set_maintenance_status_status(Status) ->
         {atomic, ok} -> true;
         _            -> false
     end.
- 
- 
+
+
 -spec is_being_drained_local_read(node()) -> boolean().
 is_being_drained_local_read(Node) ->
     Status = status_local_read(Node),
@@ -208,7 +208,7 @@ status_local_read(Node) ->
             Status;
         _   -> ?DEFAULT_STATUS
     end.
- 
+
 -spec status_consistent_read(node()) -> maintenance_status().
 status_consistent_read(Node) ->
     case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
@@ -218,15 +218,15 @@ status_consistent_read(Node) ->
         {atomic, _}  -> ?DEFAULT_STATUS;
         {aborted, _Reason} -> ?DEFAULT_STATUS
     end.
- 
+
  -spec filter_out_drained_nodes_local_read([node()]) -> [node()].
 filter_out_drained_nodes_local_read(Nodes) ->
     lists:filter(fun(N) -> not is_being_drained_local_read(N) end, Nodes).
- 
+
 -spec filter_out_drained_nodes_consistent_read([node()]) -> [node()].
 filter_out_drained_nodes_consistent_read(Nodes) ->
     lists:filter(fun(N) -> not is_being_drained_consistent_read(N) end, Nodes).
- 
+
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  %% Pauses all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
@@ -386,7 +386,7 @@ revive_local_quorum_queue_replicas() ->
         end
      end || Q <- Queues],
     rabbit_log:info("Restart of local quorum queue replicas is complete").
- 
+
 %%
 %% Implementation
 %%
@@ -398,11 +398,11 @@ local_listener_fold_fun(Fun) ->
         (_, Acc) ->
             Acc
     end.
- 
+
 ok_or_first_error(ok, Acc) ->
     Acc;
 ok_or_first_error({error, _} = Err, _Acc) ->
     Err.
- 
+
 readable_candidate_list(Nodes) ->
     string:join(lists:map(fun rabbit_data_coercion:to_list/1, Nodes), ", ").

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
@@ -1723,7 +1723,7 @@ activate_limit_all(QRefs, ChPid) ->
 deactivate_limit_all(QRefs, ChPid) ->
     QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
-                                      [{deactivate_limit, ChPid}]}).									  
+                                      [{deactivate_limit, ChPid}]}).
 
 -spec credit(amqqueue:amqqueue(),
              rabbit_types:ctag(),

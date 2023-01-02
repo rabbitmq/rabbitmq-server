@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(delegate).
@@ -227,12 +227,12 @@ group_pids_by_node(Pids) ->
 
 group_local_call_pids_by_node(Pids) ->
     {LocalPids0, Grouped0} = group_pids_by_node(Pids),
-    maps:fold(fun(K, V, {AccIn, MapsIn}) -> 
+    maps:fold(fun(K, V, {AccIn, MapsIn}) ->
         case V of
             %% just one Pid for the node
             [SinglePid] -> {[SinglePid | AccIn], MapsIn};
-            %% If the value is a list of more than one pid, 
-            %% the (K,V) will be put into the new map which will be called 
+            %% If the value is a list of more than one pid,
+            %% the (K,V) will be put into the new map which will be called
             %% through delegate to reduce inter-node communication.
             _ -> {AccIn, maps:update_with(K, fun(V1) -> V1 end, V, MapsIn)}
         end

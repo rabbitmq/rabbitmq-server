@@ -28,9 +28,9 @@ multi-protocol messaging and streaming broker. It supports:
 
 Some key doc guides include
 
- * [CLI tools guide](https://rabbitmq.com/cli.html) 
+ * [CLI tools guide](https://rabbitmq.com/cli.html)
  * [Clustering](https://www.rabbitmq.com/clustering.html) and [Cluster Formation](https://www.rabbitmq.com/cluster-formation.html) guides
- * [Configuration guide](https://rabbitmq.com/configure.html) 
+ * [Configuration guide](https://rabbitmq.com/configure.html)
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
  * [Monitoring](https://rabbitmq.com/monitoring.html) and [Prometheus/Grafana](https://www.rabbitmq.com/prometheus.html) guides
  * [Kubernetes Cluster Operator](https://rabbitmq.com/kubernetes/operator/operator-overview.html)
@@ -75,4 +75,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2022 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.

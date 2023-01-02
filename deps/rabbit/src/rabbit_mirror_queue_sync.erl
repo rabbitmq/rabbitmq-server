@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_sync).
@@ -415,7 +415,7 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         {'$gen_cast', {gm, {delete_and_terminate, Reason}}} ->
             BQ:delete_and_terminate(Reason, BQS),
             {stop, Reason, {[], TRef, undefined}};
-        bump_reduce_memory_use -> 
+        bump_reduce_memory_use ->
             BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS),
             BQS2 = BQ:resume(BQS1),
             slave_sync_loop(Args, {MA, TRef, BQS2})

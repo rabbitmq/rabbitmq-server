@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_networking).
@@ -60,7 +60,7 @@
 
 %% Number of re-try in case of no_epmd_port
 %% it can happen when the DNS is not ready
-%% for example, in Kubernetes during the start-up phase  
+%% for example, in Kubernetes during the start-up phase
 -define(PORT_PLEASE_ATTEMPTS, 10).
 
 %% Wait for retry when erl_epmd:port_please fails

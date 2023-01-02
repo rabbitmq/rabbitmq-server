@@ -7,7 +7,7 @@ instead of credentials (username/password pairs).
 
 ## How it Works
 
-When a client connects and performs TLS upgrade, 
+When a client connects and performs TLS upgrade,
 the username is obtained from the client's
 TLS (x509) certificate. The user's password is not checked.
 
@@ -112,7 +112,7 @@ To use this plugin with MQTT clients, set `mqtt.ssl_cert_login` to `true`:
 
 ``` ini
 # It makes no sense to allow or expect anonymous client connections
-# with certificate-based authentication 
+# with certificate-based authentication
 mqtt.allow_anonymous = false
 
 # require the peer to provide a certificate, enforce certificate exchange
@@ -128,6 +128,6 @@ ssl_cert_login_from = common_name
 
 ## Copyright & License
 
-(c) 2007-2022 VMware, Inc. or its affiliates.
+(c) 2007-2023 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.

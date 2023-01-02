@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_access_control).
@@ -67,8 +67,8 @@ check_user_login(Username, AuthProps) ->
                     {ok, User}
             end,
             {refused, Username, "No modules checked '~s'", [Username]}, Modules)
-        catch 
-            Type:Error:Stacktrace -> 
+        catch
+            Type:Error:Stacktrace ->
                 rabbit_log:debug("User '~s' authentication failed with ~s:~p:~n~p", [Username, Type, Error, Stacktrace]),
                 {refused, Username, "User '~s' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_event_consumer).
@@ -169,7 +169,7 @@ fmt_proplist(Props) ->
                         end
                 end, [], Props).
 
-fmt(K, #resource{virtual_host = VHost, 
+fmt(K, #resource{virtual_host = VHost,
                  name         = Name}) -> [{K,           Name},
                                            {'vhost', VHost}];
 fmt(K, true)                 -> {K, true};

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_quorum_queue).
@@ -160,7 +160,7 @@ handle_event({From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 -spec declare(amqqueue:amqqueue(), node()) ->
-    {new | existing, amqqueue:amqqueue()} | 
+    {new | existing, amqqueue:amqqueue()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
     case rabbit_queue_type_util:run_checks(
