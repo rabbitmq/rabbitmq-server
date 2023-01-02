@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 %%
 -module(queue_parallel_SUITE).
@@ -260,7 +260,7 @@ subscribe_consumers(Config) ->
     ?assertEqual(10, proplists:get_value(prefetch_count, Consumer)),
     ?assertEqual([], proplists:get_value(arguments, Consumer)),
 
-    rabbit_ct_client_helpers:close_channel(Ch).    
+    rabbit_ct_client_helpers:close_channel(Ch).
 
 subscribe_with_autoack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),

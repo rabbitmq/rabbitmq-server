@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2019-2022 VMware, Inc. or its affiliates.
+%% @copyright 2019-2023 VMware, Inc. or its affiliates.
 %%
 %% @doc
 %% This module manages the configuration of the Erlang Logger facility. In
@@ -570,10 +570,10 @@ get_log_app_env() ->
 extract_file_rotation_spec(Defaults) ->
     Spec = lists:filter(fun(Elem) ->
             case Elem of
-                {rotate_on_date, _}     -> true; 
-                {compress_on_rotate, _} -> true; 
-                {max_no_bytes, _}       -> true; 
-                {max_no_files, _}       -> true; 
+                {rotate_on_date, _}     -> true;
+                {compress_on_rotate, _} -> true;
+                {max_no_bytes, _}       -> true;
+                {max_no_files, _}       -> true;
                 _ -> false
             end
         end, Defaults),
