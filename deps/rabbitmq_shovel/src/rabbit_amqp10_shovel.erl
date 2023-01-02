@@ -331,7 +331,7 @@ forward(Tag, Props, Payload,
     Msg = add_timestamp_header(
             State, set_message_properties(
                      Props, add_forward_headers(State, Msg0))),
-    ok = amqp10_client:send_msg(Link, Msg),
+    ok = send_msg(Link, Msg),
     rabbit_shovel_behaviour:decr_remaining_unacked(
       case AckMode of
           no_ack ->
@@ -342,6 +342,17 @@ forward(Tag, Props, Payload,
               State1 = rabbit_shovel_behaviour:ack(Tag, false, State),
               rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
+
+send_msg(Link, Msg) ->
+    case amqp10_client:send_msg(Link, Msg) of
+        ok -> ok;
+        {error, insufficient_credit} ->
+            wait_for_credit(Link),
+            send_msg(Link, Msg)
+    end.
+
+wait_for_credit(Link) ->
+    receive {amqp10_event, {link, Link, credited}} -> ok end.
 
 new_message(Tag, Payload, #{ack_mode := AckMode,
                             dest := #{properties := Props,

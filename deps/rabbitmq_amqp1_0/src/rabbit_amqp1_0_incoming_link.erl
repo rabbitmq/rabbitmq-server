@@ -7,7 +7,7 @@
 
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/3, transfer/4, message_settled/2]).
+-export([attach/3, transfer/4, message_settled/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -23,9 +23,11 @@
                         send_settle_mode = undefined,
                         recv_settle_mode = undefined,
                         credits_until_flow = 0,
-                        grant_credit_on = on_publish,
                         msg_acc = [],
                         route_state}).
+
+-type incoming_link() :: #incoming_link{}.
+-export_type([incoming_link/0]).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -148,7 +150,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
     rabbit_amqp1_0_channel:cast_flow(
       BCh, #'basic.publish'{exchange    = X,
                             routing_key = RKey}, Msg),
-    {SendFlow, CreditRemaining1} = adjust_credits(transfer, CreditRemaining - 1, MessageIsSettled),
+    {SendFlow, CreditRemaining1} = adjust_credits(transfer, CreditRemaining - 1, MessageIsSettled, undefined),
     #incoming_link{delivery_id = DeliveryId} =
       set_delivery_id(DeliveryId0, Link),
     NewLink = Link#incoming_link{
@@ -226,37 +228,51 @@ incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
                  delivery_count = {uint, Count},
                  link_credit    = {uint, max_incoming_credit()}}.
 
-max_incoming_credit() -> 
+max_incoming_credit() ->
     ?INCOMING_CREDIT.
 
 -spec adjust_credits(Method :: settled | transfer, 
-                     CreditRemaining :: integer(), 
-                     MsgSettled :: boolean()) -> 
-    {boolean(), integer()}.
+                     CreditsUntilFlow :: integer(),
+                     MsgSettled :: boolean(),
+                     UnsettledCount :: integer() | undefined) ->
+    {SendFlow :: boolean(), CreditsBeforeFlow :: integer()}.
 % There are credits remaining.
-adjust_credits(_Method, CreditRemaining, _MsgSettled) when CreditRemaining > 0 -> 
-    {false, CreditRemaining};
+adjust_credits(_Method, CreditsUntilFlow, _MsgSettled, _UnsettledCount) when CreditsUntilFlow > 0 ->
+    {false, CreditsUntilFlow};
 % We received a confirm from the queue and have no credit.
-adjust_credits(settled, CreditRemaining, _) when CreditRemaining =< 0 -> 
-    {true, max_incoming_credit() div 2};
+% CreditsUntilFlow can be negative because it is half of the credit we gave out
+% If it goes below negative MaxCreditsBeforeFlow, that means the sender does
+% not care about credits.
+adjust_credits(settled, CreditsUntilFlow, _, UnsettledCount) when CreditsUntilFlow =< 0 ->
+    MaxCreditsBeforeFlow =  max_incoming_credit() div 2,
+    ShouldAdjust = MaxCreditsBeforeFlow > UnsettledCount,
+    case  ShouldAdjust of
+        true  -> {true, MaxCreditsBeforeFlow};
+        false -> {false, CreditsUntilFlow}
+    end;
 % If message was settled on transfer, we give more credits on transfer.
 % Because we are not using publish confirms we will never receive a confirm.
-adjust_credits(transfer, CreditRemaining, true) when CreditRemaining =< 0 -> 
+adjust_credits(transfer, CreditsUntilFlow, true, _UnsettledCount) when CreditsUntilFlow =< 0 ->
     {true, max_incoming_credit() div 2};
-% Message is not settled and we just published to the queue.
-adjust_credits(transfer, CreditRemaining, false) when CreditRemaining =< 0 -> 
+% Message is not settled on publish.
+adjust_credits(transfer, CreditsUntilFlow, false, _UnsettledCount) when CreditsUntilFlow =< 0 ->
     GrantCreditOn = persistent_term:get({rabbit_amqp1_0, grant_credit}, on_publish),
     case GrantCreditOn of 
-        on_publish -> 
+        on_publish ->
             {true, max_incoming_credit() div 2};
-        on_confirm -> 
-            {false, CreditRemaining}
+        on_confirm ->
+            {false, CreditsUntilFlow}
     end.
 
+-spec message_settled(Handle :: integer(),
+                      Link :: #incoming_link{},
+                      UnsettledCount :: integer()) ->
+    {ok, Replies :: [term()], Link :: #incoming_link{}}.
 message_settled(Handle, 
-                #incoming_link{credits_until_flow = CreditRemaining} = Link) ->
-    {SendFlow, CreditRemaining1} = adjust_credits(settled, CreditRemaining, true),
-    Link2 = Link#incoming_link{credits_until_flow = CreditRemaining1},
+                #incoming_link{credits_until_flow = CreditsUntilFlow} = Link,
+                UnsettledCount) ->
+    {SendFlow, CreditsUntilFlow1} = adjust_credits(settled, CreditsUntilFlow, true, UnsettledCount),
+    Link2 = Link#incoming_link{credits_until_flow = CreditsUntilFlow1},
     Replies = case SendFlow of 
                   true -> [incoming_flow(Link2, Handle)];
                   false -> []

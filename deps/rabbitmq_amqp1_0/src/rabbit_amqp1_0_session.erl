@@ -10,7 +10,7 @@
 -export([process_frame/2,
          get_info/1]).
 
--export([init/1, begin_/2, maybe_init_publish_id/2, record_delivery/4,
+-export([init/1, begin_/2, maybe_init_publish_id/2, record_delivery/3,
          incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
          record_transfers/2, bump_outgoing_window/1,
          record_outgoing/4, settle/3, flow_fields/2, channel/1,
@@ -49,7 +49,7 @@
 %% We record confirm_id -> #incoming_delivery{} so we can relay
 %% confirms from the broker back to the sending client. NB we have
 %% only one possible outcome, so there's no need to record it here.
--record(incoming_delivery, {delivery_id, link_handle}).
+-record(incoming_delivery, {delivery_id}).
 
 get_info(Pid) ->
     gen_server2:call(Pid, info, ?CALL_TIMEOUT).
@@ -141,7 +141,7 @@ maybe_init_publish_id(false, Session) ->
 maybe_init_publish_id(true, Session = #session{next_publish_id = Id}) ->
     Session#session{next_publish_id = erlang:max(1, Id)}.
 
-record_delivery(LinkHandle, DeliveryId, Settled,
+record_delivery(DeliveryId, Settled,
                 Session = #session{next_publish_id = Id,
                                    incoming_unsettled_map = Unsettled}) ->
     Id1 = case Id of
@@ -154,8 +154,7 @@ record_delivery(LinkHandle, DeliveryId, Settled,
                      false ->
                          gb_trees:insert(Id,
                                          #incoming_delivery{
-                                           delivery_id = DeliveryId,
-                                           link_handle = LinkHandle },
+                                           delivery_id = DeliveryId },
                                          Unsettled)
                  end,
     Session#session{
@@ -353,27 +352,24 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
 %% using confirms.
 ack(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
     Session = #session{incoming_unsettled_map = Unsettled}) ->
-    {Deliveries, Unsettled1} =
+    {DeliveryIds, Unsettled1} =
         case Multiple of
             true  -> acknowledgement_range(DTag, Unsettled);
             false -> case gb_trees:lookup(DTag, Unsettled) of
-                         {value, #incoming_delivery{ } = D} ->
-                             {[D], gb_trees:delete(DTag, Unsettled)};
+                         {value, #incoming_delivery{ delivery_id = Id }} ->
+                             {[Id], gb_trees:delete(DTag, Unsettled)};
                          none ->
                              {[], Unsettled}
                      end
         end,
-
-    DeliveryIds = lists:map(fun(#incoming_delivery{delivery_id = Id}) -> Id end, Deliveries),
-    LinkHandles = lists:map(fun(#incoming_delivery{link_handle = Handle}) -> Handle end, Deliveries),
     Disposition = case DeliveryIds of
                       [] -> [];
                       _  -> [acknowledgement(
                                DeliveryIds,
                                #'v1_0.disposition'{role = ?RECV_ROLE})]
     end,
-    {Disposition, LinkHandles,
-     Session#session{incoming_unsettled_map = Unsettled1}}.
+    UnsettledCount = gb_trees:size(Unsettled1),
+    {Disposition, UnsettledCount, Session#session{incoming_unsettled_map = Unsettled1}}.
 
 acknowledgement_range(DTag, Unsettled) ->
     acknowledgement_range(DTag, Unsettled, []).
@@ -383,13 +379,13 @@ acknowledgement_range(DTag, Unsettled, Acc) ->
         true ->
             {lists:reverse(Acc), Unsettled};
         false ->
-            {DTag1, #incoming_delivery{} = D} =
+            {DTag1, #incoming_delivery{ delivery_id = Id}} =
                 gb_trees:smallest(Unsettled),
             case DTag1 =< DTag of
                 true ->
                     {_K, _V, Unsettled1} = gb_trees:take_smallest(Unsettled),
                     acknowledgement_range(DTag, Unsettled1,
-                                          [D|Acc]);
+                                          [Id|Acc]);
                 false ->
                     {lists:reverse(Acc), Unsettled}
             end

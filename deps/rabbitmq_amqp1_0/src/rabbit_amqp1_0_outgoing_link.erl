@@ -24,6 +24,8 @@
                         default_outcome,
                         route_state}).
 
+-type outgoing_link() :: #outgoing_link{}.
+-export_type([outgoing_link/0]).
 detach(#'v1_0.detach'{handle = Handle}, BCh,_Link) ->
     CTag = handle_to_ctag(Handle),
     rabbit_amqp1_0_channel:call(BCh, #'basic.cancel'{consumer_tag = CTag}),

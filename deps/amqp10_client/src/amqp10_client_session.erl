@@ -94,7 +94,9 @@
               target_def/0,
               source_def/0,
               properties/0,
-              filter/0]).
+              filter/0,
+              link_handle/0
+            ]).
 
 -record(link,
         {name :: link_name(),

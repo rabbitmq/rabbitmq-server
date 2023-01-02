@@ -15,8 +15,13 @@
 -export([start_link/1]).
 -export([info/1]).
 
+-type link_handle() :: {uint, non_neg_integer()}.
+
 -record(state, {backing_connection, backing_channel, frame_max,
-                reader_pid, writer_pid, buffer, session}).
+                reader_pid, writer_pid, buffer, session,
+                in_links :: #{link_handle() => rabbit_amqp1_0_incoming_link:incoming_link()},
+                out_links :: #{link_handle() => rabbit_amqp1_0_outgoing_link:outgoing_link()}
+            }).
 
 -record(pending, {delivery_tag, frames, link_handle }).
 
@@ -50,7 +55,9 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                                 writer_pid         = WriterPid,
                                 frame_max          = FrameMax,
                                 buffer             = queue:new(),
-                                session            = rabbit_amqp1_0_session:init(Channel)
+                                session            = rabbit_amqp1_0_session:init(Channel),
+                                in_links = #{},
+                                out_links = #{}
                                }};
                 {error, Reason} ->
                     rabbit_log:warning("Closing session for connection ~tp:~n~tp",
@@ -92,7 +99,7 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
                            buffer          = Buffer,
                            session         = Session}) ->
     Handle = ctag_to_handle(ConsumerTag),
-    case get({out, Handle}) of
+    case get_link(out, Handle, State) of
         undefined ->
             %% TODO handle missing link -- why does the queue think it's there?
             rabbit_log:warning("Delivery to non-existent consumer ~tp",
@@ -115,28 +122,26 @@ handle_info(#'basic.credit_drained'{consumer_tag = CTag} = CreditDrained,
             State = #state{writer_pid = WriterPid,
                            session = Session}) ->
     Handle = ctag_to_handle(CTag),
-    Link = get({out, Handle}),
+    Link = get_link(out, Handle, State),
     {Flow0, Link1} = rabbit_amqp1_0_outgoing_link:credit_drained(
                       CreditDrained, Handle, Link),
     Flow = rabbit_amqp1_0_session:flow_fields(Flow0, Session),
     rabbit_amqp1_0_writer:send_command(WriterPid, Flow),
-    put({out, Handle}, Link1),
-    {noreply, State};
+    {noreply, store_link(out, Handle, Link1, State)};
 
 handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
                                                  session    = Session}) ->
-    {Reply, LinkHandles, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
-    SettleMessages = fun(LinkHandle) -> 
-                        with_link(in, 
-                                  LinkHandle, 
-                                  fun(Link) -> 
-                                     rabbit_amqp1_0_incoming_link:message_settled(LinkHandle, Link)
-                                  end, [])
-                     end,
-    FlowReplies = lists:flatmap(SettleMessages, LinkHandles),
+    {Reply, UnsettledCount, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
+
+    % we have to iterate through all links, as we maybe skipped giving credit
+    % to some links because  we had a lot of messages unsettled.
+    {FlowReplies, State2} = with_in_links(fun(LinkHandle, Link) ->
+        rabbit_amqp1_0_incoming_link:message_settled(LinkHandle, Link, UnsettledCount)
+     end, State),
+
     [rabbit_amqp1_0_writer:send_command(WriterPid, F) ||
         F <- rabbit_amqp1_0_session:flow_fields(Reply ++ FlowReplies, Session1)],
-    {noreply, state(Session1, State)};
+    {noreply, state(Session1, State2)};
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -232,9 +237,9 @@ handle_control(#'v1_0.attach'{handle = Handle,
           Conn, fun (DCh) ->
                         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh)
                 end),
-    put({in, Handle}, Link),
+    State2 = store_link(in, Handle, Link, State),
     reply(Reply, state(rabbit_amqp1_0_session:maybe_init_publish_id(
-                         Confirm, session(State)), State));
+                         Confirm, session(State2)), State2));
 
 handle_control(#'v1_0.attach'{handle = Handle,
                               role   = ?RECV_ROLE} = Attach,
@@ -246,14 +251,14 @@ handle_control(#'v1_0.attach'{handle = Handle,
           Conn, fun (DCh) ->
                         rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh)
                 end),
-    put({out, Handle}, Link),
-    reply(Reply, State);
+    State2 = store_link(out, Handle, Link, State),
+    reply(Reply, State2);
 
 handle_control({Txfr = #'v1_0.transfer'{handle = Handle},
                 MsgPart},
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
-    case get({in, Handle}) of
+    case get_link(in, Handle, State) of
         undefined ->
             protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
                            "Unknown link handle ~tp", [Handle]);
@@ -262,13 +267,12 @@ handle_control({Txfr = #'v1_0.transfer'{handle = Handle},
             case rabbit_amqp1_0_incoming_link:transfer(
                    Txfr, MsgPart, Link, BCh) of
                 {message, Reply, Link1, DeliveryId, Settled} ->
-                    put({in, Handle}, Link1),
-                    Session2 = rabbit_amqp1_0_session:record_delivery(
-                                 Link1, DeliveryId, Settled, Session1),
-                    reply(Reply ++ Flows, state(Session2, State));
+                    State2 = store_link(in, Handle, Link1, State),
+                    Session2 = rabbit_amqp1_0_session:record_delivery(DeliveryId, Settled, Session1),
+                    reply(Reply ++ Flows, state(Session2, State2));
                 {ok, Link1} ->
-                    put({in, Handle}, Link1),
-                    reply(Flows, state(Session1, State))
+                    State2 = store_link(in, Handle, Link1, State),
+                    reply(Flows, state(Session1, State2))
             end
     end;
 
@@ -330,15 +334,15 @@ handle_control(#'v1_0.detach'{handle = Handle} = Detach,
                #state{backing_channel = BCh} = State) ->
     %% TODO keep the state around depending on the lifetime
     %% TODO outgoing links?
-    case get({out, Handle}) of
+    State2 = case get_link(out, Handle, State) of
         undefined ->
-            ok;
+            State;
         Link ->
-            erase({out, Handle}),
-            ok = rabbit_amqp1_0_outgoing_link:detach(Detach, BCh, Link)
+            ok = rabbit_amqp1_0_outgoing_link:detach(Detach, BCh, Link),
+            remove_link(out, Handle, State)
     end,
-    erase({in, Handle}),
-    {reply, #'v1_0.detach'{handle = Handle}, State};
+    State3 = remove_link(in, Handle, State2),
+    {reply, #'v1_0.detach'{handle = Handle}, State3};
 
 handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
@@ -356,9 +360,9 @@ handle_control(Flow = #'v1_0.flow'{},
         undefined ->
             {noreply, State2};
         Handle ->
-            case get({in, Handle}) of
+            case get_link(in, Handle, State2) of
                 undefined ->
-                    case get({out, Handle}) of
+                    case get_link(out, Handle, State2) of
                         undefined ->
                             rabbit_log:warning("Flow for unknown link handle ~tp", [Flow]),
                             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
@@ -384,38 +388,39 @@ handle_control(Frame, _State) ->
 run_buffer(State = #state{ writer_pid = WriterPid,
                            session = Session,
                            backing_channel = BCh,
-                           buffer = Buffer }) ->
-    {Session1, Buffer1} =
-        run_buffer1(WriterPid, BCh, Session, Buffer),
-    State#state{ buffer = Buffer1, session = Session1 }.
+                           buffer = Buffer,
+                           out_links = OutLinks }) ->
+    {Session1, OutLinks2, Buffer1} =
+        run_buffer1(WriterPid, BCh, Session, Buffer, OutLinks),
+    State#state{ buffer = Buffer1, session = Session1, out_links = OutLinks2}.
 
-run_buffer1(WriterPid, BCh, Session, Buffer) ->
+run_buffer1(WriterPid, BCh, Session, Buffer, OutLinks) ->
     case rabbit_amqp1_0_session:transfers_left(Session) of
         {LocalSpace, RemoteSpace} when RemoteSpace > 0 andalso LocalSpace > 0 ->
             Space = erlang:min(LocalSpace, RemoteSpace),
             case queue:out(Buffer) of
                 {empty, Buffer} ->
-                    {Session, Buffer};
+                    {Session, OutLinks, Buffer};
                 {{value, #pending{ delivery_tag = DeliveryTag,
                                    frames = Frames,
                                    link_handle = Handle } = Pending},
                  BufferTail} ->
-                    Link = get({out, Handle}),
+                    Link = maps:get(Handle, OutLinks, undefined),
                     case send_frames(WriterPid, Frames, Space) of
                         {all, SpaceLeft} ->
                             NewLink =
                                 rabbit_amqp1_0_outgoing_link:transferred(
                                   DeliveryTag, BCh, Link),
-                            put({out, Handle}, NewLink),
+                            OutLinks2 = maps:put(Handle, NewLink, OutLinks),
                             Session1 = rabbit_amqp1_0_session:record_transfers(
                                          Space - SpaceLeft, Session),
-                            run_buffer1(WriterPid, BCh, Session1, BufferTail);
+                            run_buffer1(WriterPid, BCh, Session1, BufferTail, OutLinks2);
                         {some, Rest} ->
                             Session1 = rabbit_amqp1_0_session:record_transfers(
                                          Space, Session),
                             Buffer1 = queue:in_r(Pending#pending{ frames = Rest },
                                                  BufferTail),
-                            run_buffer1(WriterPid, BCh, Session1, Buffer1)
+                            run_buffer1(WriterPid, BCh, Session1, Buffer1, OutLinks)
                     end
             end;
          {_, RemoteSpace} when RemoteSpace > 0 ->
@@ -424,10 +429,12 @@ run_buffer1(WriterPid, BCh, Session, Buffer) ->
                     rabbit_amqp1_0_writer:send_command(
                       WriterPid,
                       rabbit_amqp1_0_session:flow_fields(Flow, Session1)),
-                    run_buffer1(WriterPid, BCh, Session1, Buffer)
+                    run_buffer1(WriterPid, BCh, Session1, Buffer, OutLinks);
+                {none, Session1} ->
+                    {Session1, OutLinks, Buffer}
             end;
         _ ->
-            {Session, Buffer}
+            {Session, OutLinks, Buffer}
     end.
 
 send_frames(_WriterPid, [], Left) ->
@@ -456,14 +463,45 @@ with_disposable_channel(Conn, Fun) ->
         catch amqp_channel:close(Ch)
     end.
 
-% Looks up the link in the process dictionary. 
-% The passed in `Fn` should return `{ok, Replies, NewLink}`
-with_link(Type, Handle, Fn, Default) -> 
-    case erlang:get({Type, Handle}) of 
-        undefined -> 
-            Default;
-        Link -> 
-            {ok, Replies, Link1} = Fn(Link),
-            erlang:put({Type, Handle}, Link1),
-            Replies
-    end.
+
+% A helper function to iterate through all incoming links.
+% Fn is called with the link handle and the link state.
+% Fn should return {ok, Replies, NewLink}.
+-spec with_in_links(
+                    fun((LinkHandle :: link_handle(), Link :: term())
+                        -> {ok, [AmqpReplies :: term()], NewLink :: term()}),
+                    State :: #state{})
+                -> {[AllAmqpReplies :: term()], NewState :: #state{}}.
+with_in_links(Fn, OriginalState) ->
+    {RepliesList, NextState} = maps:fold(fun(Handle, Link, {Replies, StateAcc}) ->
+        case Fn(Handle, Link) of
+            {ok, Replies1, Link1} ->
+                {[Replies1 | Replies], StateAcc#state{
+                    in_links = maps:put(Handle, Link1, StateAcc#state.in_links)
+                }}
+        end
+    end, {[], OriginalState}, OriginalState#state.in_links),
+    {lists:flatten(RepliesList), NextState}.
+
+-spec get_link(in, Handle :: link_handle(), State :: #state{})
+              -> Link :: rabbit_amqp1_0_incoming_link:incoming_link() | undefined;
+              (out, Handle :: link_handle(), State :: #state{})
+              -> Link :: rabbit_amqp1_0_outgoing_link:outgoing_link() | undefined.
+get_link(in, Handle, #state{
+    in_links = InLinks
+}) ->
+    maps:get(Handle, InLinks, undefined);
+get_link(out, Handle, #state{
+    out_links = OutLinks
+}) ->
+    maps:get(Handle, OutLinks, undefined).
+
+store_link(in, Handle, Link, State) ->
+    State#state{in_links = maps:put(Handle, Link, State#state.in_links)};
+store_link(out, Handle, Link, State) ->
+    State#state{out_links = maps:put(Handle, Link, State#state.out_links)}.
+
+remove_link(in, Handle, State) ->
+    State#state{in_links = maps:remove(Handle, State#state.in_links)};
+remove_link(out, Handle, State) ->
+    State#state{out_links = maps:remove(Handle, State#state.out_links)}.

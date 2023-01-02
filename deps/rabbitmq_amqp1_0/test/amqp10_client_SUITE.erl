@@ -315,18 +315,35 @@ incoming_credit_accounting_with_confirm(Config, IncomingCredit, AckOn, MsgSettle
                                                     EdpointSettleMode,
                                                     EndpointDurability),
 
-    
     wait_for_credit(Sender),
+    SenderLinkName2 = <<"test-sender-2">>,
+    {ok, Sender2} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName2,
+                                                    Address,
+                                                    EdpointSettleMode,
+                                                    EndpointDurability),
+
+    wait_for_credit(Sender2),
     
-    
-    [send_message(Sender, MsgSettled, N) || N <- lists:seq(0,15)],
-    wait_for_accepts(16),
+    % we publish on two links in parallel to make sure everything is working as
+    % expected.
+    spawn_and_wait_for_exit(
+        [fun() ->
+            [send_message(Sender, MsgSettled, N) || N <- lists:seq(0,15)],
+            wait_for_accepts(16)
+         end,
+         fun() ->
+            [send_message(Sender2, MsgSettled, N) || N <- lists:seq(0,15)],
+            wait_for_accepts(16)
+        end]),
+
 
     ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Sender2),
 
-    {ok, Msgs} = drain_queue(Session, Address, 16),
+    {ok, Msgs} = drain_queue(Session, Address, 32),
     
-    ?assertEqual(16, length(Msgs)),
+    ?assertEqual(32, length(Msgs)),
 
     ok = amqp10_client:close_connection(Connection),
     delete_queue(Config, QName),
@@ -508,4 +525,14 @@ perform_send_message(Sender, OutMsg) ->
             wait_for_credit(Sender),
             perform_send_message(Sender, OutMsg)
     end.
-    
+
+spawn_and_wait_for_exit(Funs) ->
+    PidRefs = lists:map(fun erlang:spawn_monitor/1, Funs),
+    lists:foreach(fun({Pid, Ref}) -> 
+                      receive
+                        {'DOWN', Ref, process, Pid, normal} -> ok
+                      after 10000 ->
+                        flush("spawn_and_wait_for_exit timed out"),
+                        exit(spawn_timed_out)
+                      end    
+                   end, PidRefs).
