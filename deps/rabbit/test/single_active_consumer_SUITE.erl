@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(single_active_consumer_SUITE).
@@ -134,7 +134,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     {cancel_ok, FirstActiveConsumer} = wait_for_cancel_ok(),
 
     [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(MessageCount div 2 + 1, MessageCount - 1)],
- 
+
     {ok, {MessagesPerConsumer2, _}} = wait_for_messages(MessageCount div 2 - 1),
     SecondActiveConsumerInList = maps:keys(maps:filter(
         fun(CTag, Count) -> Count > 0 andalso CTag /= FirstActiveConsumer end,

@@ -44,7 +44,7 @@
 %% @end
 %%
 %%
-%% All modifications are (C) 2007-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% All modifications are (C) 2007-2023 VMware, Inc. or its affiliates. All rights reserved.
 %% The Initial Developer of the Original Code is Basho Technologies, Inc.
 
 -module(exometer_slide).
