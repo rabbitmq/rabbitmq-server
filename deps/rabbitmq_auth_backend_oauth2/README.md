@@ -38,7 +38,7 @@ To use this plugin
 1. UAA should be configured to produce encrypted JWT tokens containing a set of RabbitMQ permission scopes
 2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
-4. The token **must** has a value in`aud` that match `resource_server_id` value. 
+4. The token **must** has a value in`aud` that match `resource_server_id` value.
 
 ### Authorization Flow
 
@@ -141,7 +141,7 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 
 ### Variables Configurable in rabbitmq.conf
 
-| Key                                      | Documentation     
+| Key                                      | Documentation
 |------------------------------------------|-----------
 | `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
 | `auth_oauth2.additional_scopes_key`      | Configure the plugin to also look in other fields (maps to `additional_rabbitmq_scopes` in the old format).
@@ -245,7 +245,7 @@ By default the plugin will look for the `scope` key in the token, you can config
   ]},
 ].
 ```
-Token sample: 
+Token sample:
 ```
 {
  "exp": 1618592626,
