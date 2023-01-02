@@ -160,7 +160,7 @@ Note: if both are configured, `jwks_url` takes precedence over `signing_keys`.
 
 ### Variables Configurable in rabbitmq.conf
 
-| Key                                      | Documentation     
+| Key                                      | Documentation
 |------------------------------------------|---------------------------------------------------------------------------
 | `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
 | `auth_oauth2.resource_server_type`       | [The Resource Server Type](#rich-authorization-request)
@@ -333,7 +333,7 @@ RabbitMQ supports JWT tokens compliant with the extension. Below is a sample exa
 {
   "authorization_details": [
     {
-      "type" : "rabbitmq",  
+      "type" : "rabbitmq",
       "locations": ["cluster:finance/vhost:production-*"],
       "actions": [ "read", "write", "configure"  ]
     },
@@ -386,7 +386,7 @@ The supported location attributed are:
 
 For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
 
-### Actions Field  
+### Actions Field
 
 The `actions` field can be either a string containing a single action or a JSON array containing one or more actions.
 
@@ -432,7 +432,7 @@ In the following RAR example
 {
   "authorization_details": [
     {
-      "type" : "rabbitmq",  
+      "type" : "rabbitmq",
       "locations": ["cluster:finance/vhost:primary-*"],
       "actions": [ "read", "write", "configure"  ]
     },
