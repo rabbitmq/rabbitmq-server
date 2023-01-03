@@ -10,4 +10,5 @@ do
   echo "Trying again. Try #$counter"
   ((counter++))
 done
+sleep 10
 echo "UAA is ready"

@@ -259,12 +259,6 @@ is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
     is_authorized(ReqData, Context, Username, Password, Msg, Fun, ReplyWhenFailed).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
-<<<<<<< HEAD
-    ErrFun = fun (Msg) ->
-                     rabbit_log:warning("HTTP access denied: user '~s' - ~s",
-                                        [Username, Msg]),
-                     not_authorised(Msg, ReqData, Context)
-=======
     is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, true).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFailed) ->
@@ -275,7 +269,6 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
                        true -> not_authorised(Msg, ReqData, Context);
                        false -> {false, ReqData, "Not_Authorized"}
                      end
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
              end,
     AuthProps = [{password, Password}] ++ case vhost(ReqData) of
         VHost when is_binary(VHost) -> [{vhost, VHost}];

@@ -547,15 +547,6 @@ token_from_context(AuthProps) ->
 %%   <<"sub">>         => <<"rabbit_client">>,
 %%   <<"zid">>         => <<"uaa">>}
 
-<<<<<<< HEAD
--spec username_from(binary(), map()) -> binary() | undefined.
-username_from(ClientProvidedUsername, DecodedToken) ->
-    ClientId = uaa_jwt:client_id(DecodedToken, undefined),
-    Sub      = uaa_jwt:sub(DecodedToken, undefined),
-
-    rabbit_log:debug("Computing username from client's JWT token, client ID: '~s', sub: '~s'",
-                     [ClientId, Sub]),
-=======
 -spec username_from(list(), map()) -> binary() | undefined.
 username_from(PreferredUsernameClaims, DecodedToken) ->
     UsernameClaims = append_or_return_default(PreferredUsernameClaims, ?DEFAULT_PREFERRED_USERNAME_CLAIMS),
@@ -575,7 +566,6 @@ append_or_return_default(ListOrBinary, Default) ->
     VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
     _ -> Default
   end.
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
 
 find_claim_in_token(Claim, Token) ->
   case maps:get(Claim, Token, undefined) of

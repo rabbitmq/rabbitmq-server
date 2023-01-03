@@ -10,11 +10,7 @@ TEST_CASES_PATH=/oauth/with-uaa
 # Path to the folder where all configuration file reside. It is relative to the selenim/test folder
 TEST_CONFIG_PATH=/oauth
 # Path to the uaa configuration. It is relative to the TEST_CONFIG_PATH
-UAA_CONFIG_PATH=/uaa-with-mgt-prefix
-# Name of the rabbitmq config file. It is relative to the TEST_CONFIG_PATH
-RABBITMQ_CONFIG_FILENAME=rabbitmq-with-mgt-prefix.config
-
-RABBITMQ_URL=http://rabbitmq:15672/my-prefix/another-prefix/
+UAA_CONFIG_PATH=/uaa
 
 source $SCRIPT/suite_template
 

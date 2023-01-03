@@ -2,13 +2,9 @@
 SHELL = bash# we depend on bash expansion for e.g. queue patterns
 
 .DEFAULT_GOAL = help
-<<<<<<< HEAD:deps/rabbitmq_management/selenium/test/oauth/with-uaa/Makefile
-RABBITMQ_SERVER_ROOT = ../../../../../../
-=======
 RABBITMQ_SERVER_ROOT = ../../../../../
 SCREENSHOTS_DIR = ${PWD}/../../screens
 RABBITMQ_CONFIG_FILE = rabbitmq-localhost.config
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth):deps/rabbitmq_management/selenium/test/oauth/Makefile
 
 username := rabbit_admin
 password := rabbit_admin
@@ -22,14 +18,10 @@ start-rabbitmq: ## Start RabbitMQ
 	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
 	@(gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
 		RABBITMQ_ENABLED_PLUGINS="rabbitmq_auth_backend_oauth2,rabbitmq_management" \
-<<<<<<< HEAD:deps/rabbitmq_management/selenium/test/oauth/with-uaa/Makefile
-		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/with-uaa/rabbitmq.config)
-=======
 		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/${RABBITMQ_CONFIG_FILE})
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth):deps/rabbitmq_management/selenium/test/oauth/Makefile
 
 start-uaa: ## Start UAA
-	@(UAA_CONFIG=${PWD}/uaa ./start-uaa.sh)
+	@(UAA_CONFIG=${PWD}/uaa-localhost ./start-uaa.sh)
 stop-uaa: ## Stop UAA
 	@(./stop-uaa.sh)
 

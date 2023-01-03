@@ -7,19 +7,6 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
-<<<<<<< HEAD
-describe("An UAA user with administrator tag", function() {
-  var homePage;
-  var uaaLogin;
-  var overview;
-
-  before(async function() {
-    driver = buildDriver();
-    await goToHome(driver);
-    homePage = new SSOHomePage(driver);
-    uaaLogin = new UAALoginPage(driver);
-    overview = new OverviewPage(driver);
-=======
 describe('An user with administrator tag', function () {
   let homePage
   let uaaLogin
@@ -32,7 +19,6 @@ describe('An user with administrator tag', function () {
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
     overview = new OverviewPage(driver)
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
     captureScreen = captureScreensFor(driver, __filename)
   })
 

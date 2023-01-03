@@ -7,24 +7,12 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-describe("Once user is logged in", function() {
-  var homePage;
-  var uaaLogin;
-  var overview;
-  this.timeout(25000); // hard-coded to 25secs because this test requires 25sec to run
-=======
-describe.skip('Once user is logged in', function () {
-=======
 describe('Once user is logged in', function () {
->>>>>>> 6e84444059 (Test token refresh)
   let homePage
   let uaaLogin
   let overview
   let captureScreen
   this.timeout(25000) // hard-coded to 25secs because this test requires 25sec to run
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
 
   before(async function () {
     driver = buildDriver()

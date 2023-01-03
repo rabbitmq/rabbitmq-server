@@ -5,16 +5,10 @@ const { buildDriver, goToHome, teardown, captureScreensFor } = require('../../ut
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
-<<<<<<< HEAD
-describe("Management UI without UAA running", function() {
-  var driver;
-  var homePage;
-=======
 describe('A user which accesses management ui without a session', function () {
   let driver
   let homePage
   let captureScreen
->>>>>>> 9354397cbf (Support Idp initiated logon in mgt ui with Oauth)
 
   before(async function () {
     driver = buildDriver()
