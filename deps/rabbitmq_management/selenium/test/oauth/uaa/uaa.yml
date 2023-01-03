@@ -99,6 +99,7 @@ scim:
     - rabbit_admin|rabbit_admin|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:administrator
     - rabbitmq_management|rabbitmq_management|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:management
     - rabbit_monitor|rabbit_monitor|scim.read,openid,rabbitmq.tag:monitoring
+    - rabbit_no_management|rabbit_no_management|scim.read,openid,rabbitmq.read:*/*
   groups:
     'rabbitmq.read:*/*': Read all
     'rabbitmq.write:*/*': Write all
@@ -128,12 +129,21 @@ oauth:
     rabbit_client_code:
       id: rabbit_client_code
       secret: rabbit_client_code
-      authorized-grant-types: authorization_code
+      authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
       redirect-uri: http://rabbitmq:15672
       autoapprove: true
-
+      allowpublic: true
+    rabbit_idp_user:
+      id: rabbit_idp_user
+      secret: rabbit_idp_user
+      authorized-grant-types: client_credentials
+      authorities: uaa.resource,rabbitmq.tag:administrator
+      redirect-uri: http://rabbitmq:15672
+      #redirect-uri: http://localhost:15672/my-prefix/another-prefix/
+      autoapprove: true
+      allowpublic: true
     mgt_api_client_2:
       id: mgt_api_client_2
       secret: mgt_api_client_2
@@ -142,22 +152,22 @@ oauth:
     producer:
       id: producer
       secret: producer_secret
-      authorities: rabbitmq.write:%2F/x-* rabbitmq.write:%2F/q-* rabbitmq.read:%2F/x-* rabbitmq.configure:%2F/*
+      authorities: rabbitmq.write:%2F/x-*,rabbitmq.write:%2F/q-*,rabbitmq.read:%2F/x-*,rabbitmq.configure:%2F/*
       authorized-grant-types: client_credentials
     consumer:
       id: consumer
       secret: consumer_secret
-      authorities: rabbitmq.read:*/* rabbitmq.configure:*/* rabbitmq.write:*/x-* rabbitmq.write:*/q-*
+      authorities: rabbitmq.read:*/*,rabbitmq.configure:*/*,rabbitmq.write:*/x-*,rabbitmq.write:*/q-*
       authorized-grant-types: client_credentials
     jms_producer:
       id: jms_producer
       secret: jms_producer_secret
-      authorities: rabbitmq.write:%2F/x-* rabbitmq.write:%2F/q-* rabbitmq.read:%2F/x-* rabbitmq.configure:%2F/* rabbitmq.configure:*/jms.durable.queues rabbitmq.write:*/jms.durable.queues rabbitmq.read:*/jms.durable.queues
+      authorities: rabbitmq.write:%2F/x-*,rabbitmq.write:%2F/q-*,rabbitmq.read:%2F/x-*,rabbitmq.configure:%2F/*,rabbitmq.configure:*/jms.durable.queues,rabbitmq.write:*/jms.durable.queues,rabbitmq.read:*/jms.durable.queues
       authorized-grant-types: client_credentials
     jms_consumer:
       id: jms_consumer
       secret: jms_consumer_secret
-      authorities: rabbitmq.read:*/* rabbitmq.configure:*/* rabbitmq.write:*/x-* rabbitmq.write:*/q-* rabbitmq.write:*/jms.durable.queues
+      authorities: rabbitmq.read:*/*,rabbitmq.configure:*/*,rabbitmq.write:*/x-*,rabbitmq.write:*/q-*,rabbitmq.write:*/jms.durable.queues
       authorized-grant-types: client_credentials
     producer_with_roles:
       id: producer_with_roles
@@ -167,5 +177,5 @@ oauth:
     consumer_with_roles:
       id: consumer_with_roles
       secret: consumer_with_roles_secret
-      authorities: rabbitmq.* api://rabbitmq:Read.All api://rabbitmq:Configure.All api://rabbitmq:Write.All
+      authorities: rabbitmq.* api://rabbitmq:Read.All,api://rabbitmq:Configure.All,api://rabbitmq:Write.All
       authorized-grant-types: client_credentials

@@ -21,22 +21,7 @@ And under `suites` folder we have the test suites where we literally script the 
   - the suite's **teardown**, e.g. stop RabbitMQ and UAA
   - and save all logs and screen captures if any
 
-The idea is that every folder is a suite of test cases which have in common a runtime environment. For instance,
-the test suite `test/oauth/with-uaa` has a `setup.sh` script which deploys RabbitMQ and a UAA server.
-Whereas the test suite `test/oath/with-uaa-down` has a `setup.sh` script which only deploys RabbitMQ.
-
-# How run the tests
-
-But regardless how we run the tests, we are going to compile RabbitMQ server and build its docker image first.
-```
-make package-generic-unix
-make docker-image
-```
-From the output of the `make docker-image` we copy the image's tag and run the following
-command, e.g.
-```
-export RABBITMQ_IMAGE_TAG=3.8.10-1696.g171734f.dirty
-```
+# How to run the tests
 
 There are two ways to run the tests.
 
@@ -48,19 +33,20 @@ from source to speed things up. Otherwise, we would have to build a docker image
 **Headless mode** - If we are not making any code changes to RabbitMQ and instead
 we are only writing tests or simply we want to run them, then we want to run the tests in headless mode.
 
+**IMPORTANT**: RabbitMQ and UAA configuration is different for each mode. The reason is the hostname used
+for both, RabbitMQ and UAA. In headless mode, everything runs in containers and we refer to each container but its
+name, e.g. `rabbitmq` or `uaa`. Whereas in interactive mode, we run most of the components locally (i.e `localhost`), such as RabbitMQ or UAA.
 
 ## Run tests in headless-mode
 
 In this mode, we run suite of tests. This is how to run one suite:
 ```
-make setup SUITE=test/oauth/with-uaa-down
-make run-test SUITE=test/oauth/with-uaa-down
-make teardown SUITE=test/oauth/with-uaa-down
+suites/oauth-with-uaa.sh
 ```
 
-**Note**: If at any stage, the tests take a long time to run, try restarting the selenium-hub by running. Sometimes it becomes unresponsive.
+And this is how we run all suites:
 ```
-make start-chrome
+run-suites.sh
 ```
 
 If you want to test your local changes, you can still build an image with these 2 commands from the
@@ -98,13 +84,9 @@ cd selenium
 npm install
 ```
 
-Access the test suite folder:
-```
-cd test/oauth/with-uaa
-```
-
 Start UAA:
 ```
+cd test/oauth
 make start-uaa
 ```
 
@@ -113,11 +95,24 @@ Start RabbitMQ from source (it runs `make run-broker`):
 make start-rabbitmq
 ```
 
-To run all tests under the suite:
+To run all tests under `with-uaa`:
 ```
-make run-test
+make test TEST=with-uaa
 ```
 Or to run a single tests under the suite:
 ```
-make run-test TEST=landing.js
+make test TEST=with-uaa/landing.js
 ```
+
+**VERY IMPORTANT NOTE**: `make start-rabbitmq` will always load `rabbitmq-localhost.config`
+regardless of the test suite we are running. Therefore, if your suite requires a specific
+configuration ensure that configuration is in `rabbitmq-localhost.config`.
+
+If you had a specific configuration file, such as `rabbitmq-localhost-keycloak.config` you can run
+`make start-rabbitmq` with that configuration like this:
+```
+make RABBITMQ_CONFIG_FILE=rabbitmq-localhost-keycloak.config start-rabbitmq
+```
+
+We do not have this issue when we run the headless suites because they use dedicated files
+for each suite. Doing the same when running locally, i.e using `localhost`, would be too tedious.

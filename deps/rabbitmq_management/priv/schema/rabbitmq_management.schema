@@ -474,6 +474,11 @@ end}.
 {mapping, "management.oauth_metadata_url", "rabbitmq_management.oauth_metadata_url",
       [{datatype, string}]}.
 
+%% Configure the OAuth 2 type allowed for the end users to logon to the management UI
+%% Default type is sp_initiated meaning the standard OAuth 2.0 mode where users come without any token
+%% Other type is idp_initiated meaning users must come with a token
+{mapping, "management.oauth_initiated_logon_type", "rabbitmq_management.oauth_initiated_logon_type",
+    [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
 %% ===========================================================================
 

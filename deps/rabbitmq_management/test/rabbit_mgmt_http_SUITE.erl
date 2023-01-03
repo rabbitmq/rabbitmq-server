@@ -143,7 +143,7 @@ all_tests() -> [
     single_active_consumer_qq_test,
 %%    oauth_test,  %% disabled until we are able to enable oauth2 plugin
     disable_basic_auth_test,
-    login_test,
+    login_test,  
     csp_headers_test,
     auth_attempts_test,
     user_limits_list_test,

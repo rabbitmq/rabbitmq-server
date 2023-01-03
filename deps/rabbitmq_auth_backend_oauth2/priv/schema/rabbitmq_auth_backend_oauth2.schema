@@ -60,6 +60,29 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, {enum, [true, false]}}]}.
 
+%% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
+%% used to determine the user's identity, a.k.a username.
+%% RabbitMQ appends `sub` and `client_id` claims.
+%% e.g. RabbitMQ first looks for username claim. If it is not present, it looks for user_name
+%% and so forth. If it cannot find any, it defauls to unknown.
+%% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
+
+{mapping,
+ "auth_oauth2.preferred_username_claims",
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_oauth2.preferred_username_claims", Conf))
+ end}.
+
+{mapping,
+ "auth_oauth2.additional_scopes_key",
+ "rabbitmq_auth_backend_oauth2.extra_scopes_source",
+ [{datatype, string}]}.
+
 
 %% ID of the default signing key
 %%

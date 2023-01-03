@@ -19,8 +19,8 @@ RABBITMQ_URL=http://rabbitmq:15672/my-prefix/another-prefix/
 source $SCRIPT/suite_template
 
 _setup () {
-  start_rabbitmq
   start_uaa
+  start_rabbitmq
 }
 _save_logs() {
   save_container_logs rabbitmq

@@ -1,0 +1,5 @@
+{
+  "users":[
+    {"name":"newguest","password_hash":"u54HZFjQzZZwMZV+yMgoWJKMkG9AVm/DE1iGtn5at8mFscQC","hashing_algorithm":"rabbit_password_hashing_sha256","tags":["management"]}
+  ]
+}
