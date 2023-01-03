@@ -84,48 +84,12 @@ jobs:
       run: |
         docker network create ${DOCKER_NETWORK}
 
-    - name: Start RabbitMQ
-      run: |
-        RABBITMQ_CONFIG_DIR="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa"
-        docker run \
-          --detach \
-          --name rabbitmq \
-          --net ${DOCKER_NETWORK} \
-          -p 15672:15672 -p 5672:5672 \
-          -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-          -v ${RABBITMQ_CONFIG_DIR}/rabbitmq-headless.config:/etc/rabbitmq/rabbitmq.config:ro \
-          -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
-          bazel/packaging/docker-image:rabbitmq
-
-    - name: Start Selenium
-      run: |
-        docker run \
-          --detach \
-          --name selenium \
-          --net ${DOCKER_NETWORK} \
-          -p 4444:4444 \
-          --shm-size=2g \
-          selenium/standalone-${{ matrix.browser }}:103.0
-
-    - name: Start UAA
-      run: |
-        UAA_CONFIG="${PWD}/${SELENIUM_DIR}/test/oauth/with-uaa/uaa-headless"
-        docker run \
-          --detach \
-          --name uaa \
-          --net ${DOCKER_NETWORK} \
-          --publish 8080:8080 \
-          --mount "type=bind,source=${UAA_CONFIG},target=/uaa" \
-          --env UAA_CONFIG_PATH="/uaa" \
-          --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
-          cloudfoundry/uaa:75.21.0
-
     - name: Build Test Runner Image
       run: |
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Wait for UAA to be Up
+    - name: Run Suites
       run: |
         RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
 
