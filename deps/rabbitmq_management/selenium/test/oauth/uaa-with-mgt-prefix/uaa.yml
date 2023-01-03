@@ -99,6 +99,7 @@ scim:
     - rabbit_admin|rabbit_admin|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:administrator
     - rabbitmq_management|rabbitmq_management|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:management
     - rabbit_monitor|rabbit_monitor|scim.read,openid,rabbitmq.tag:monitoring
+    - rabbit_no_management|rabbit_no_management|scim.read,openid,rabbitmq.read:*/*
   groups:
     'rabbitmq.read:*/*': Read all
     'rabbitmq.write:*/*': Write all
@@ -128,11 +129,12 @@ oauth:
     rabbit_client_code:
       id: rabbit_client_code
       secret: rabbit_client_code
-      authorized-grant-types: authorization_code
+      authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
       redirect-uri: http://rabbitmq:15672/my-prefix/another-prefix/
       autoapprove: true
+      allowpublic: true
 
     mgt_api_client_2:
       id: mgt_api_client_2

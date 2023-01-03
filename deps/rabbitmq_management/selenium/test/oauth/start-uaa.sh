@@ -4,7 +4,7 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 echo "Starting UAA with UAA_CONFIG : ${UAA_CONFIG}"
 
-UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-75.21.0}
+UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-76.0.0}
 UAA_IMAGE_NAME=${UAA_IMAGE_NAME:-cloudfoundry/uaa}
 
 docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net

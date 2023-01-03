@@ -2,33 +2,47 @@
 $(document).ready(function() {
    var url_string = window.location.href;
    var url = new URL(url_string);
-   var error = url.searchParams.get("error");
+   var error = url.searchParams.get('error');
    if (error) {
      renderWarningMessageInLoginStatus(fmt_escape_html(error));
-   }else {
+   } else {
       if (oauth.enabled) {
-        if (!oauth.logged_in ) {
-          get(oauth.readiness_url, "application/json", function(req) {
-              if (req.status !== 200) {
-                  renderWarningMessageInLoginStatus(oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate" );
-              } else {
-                  replace_content('outer', format('login_oauth', {}));
-              }
-          });
-        }else {
-          start_app_login();
-        }
+        startWithOAuthLogin();
       } else {
-          replace_content('outer', format('login', {}));
-          start_app_login();
+        startWithLoginPage();
       }
     }
 });
 
-function renderWarningMessageInLoginStatus(message) {
-  replace_content('outer', format('login_oauth', {}));
-  replace_content('login-status', '<p class="warning">' + message  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+function startWithLoginPage() {
+  replace_content('outer', format('login', {}));
+  start_app_login();
 }
+function startWithOAuthLogin () {
+  if (!oauth.logged_in) {
+    if (oauth.sp_initiated) {
+      get(oauth.readiness_url, 'application/json', function (req) {
+        if (req.status !== 200) {
+          renderWarningMessageInLoginStatus(oauth.authority + ' does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate')
+        } else {
+          replace_content('outer', format('login_oauth', {}))
+          start_app_login()
+        }
+      })
+    } else {
+      replace_content('outer', format('login_oauth', {}))
+      start_app_login()
+    }
+  } else {
+    start_app_login()
+  }
+}
+
+function renderWarningMessageInLoginStatus (message) {
+  replace_content('outer', format('login_oauth', {}))
+  replace_content('login-status', '<p class="warning">' + message + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button>')
+}
+
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
@@ -43,23 +57,6 @@ function dispatcher() {
     }
 }
 
-function set_auth_pref(userinfo) {
-    // clear a local storage value used by earlier versions
-    clear_local_pref('auth');
-
-    var b64 = b64_encode_utf8(userinfo);
-    var date  = new Date();
-    var login_session_timeout = get_login_session_timeout();
-
-    if (login_session_timeout) {
-        date.setMinutes(date.getMinutes() + login_session_timeout);
-    } else {
-        // 8 hours from now
-        date.setHours(date.getHours() + 8);
-    }
-    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
-}
-
 function getParameterByName(name) {
     var match = RegExp('[#&]' + name + '=([^&]*)').exec(window.location.hash);
     return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
@@ -69,94 +66,59 @@ function getAccessToken() {
     return getParameterByName('access_token');
 }
 
-function start_app_login() {
-    //console.log("start_app_login begin");
-    app = new Sammy.Application(function () {
-        this.get('#/', function() {});
-        this.put('#/login', function() {
-            username = this.params['username'];
-            password = this.params['password'];
-            set_auth_pref(username + ':' + password);
-            check_login();
-        });
-    });
-    if (oauth.enabled) {
-        var token = oauth.access_token;
-        if (token != null) {
-            set_auth_pref(oauth.user_name + ':' + oauth.access_token);
-            check_login();
-        } else if(has_auth_cookie_value()) {
-            check_login();
-        };
+function start_app_login () {
+  app = new Sammy.Application(function () {
+    this.get('/', function () {})
+    this.get('#/', function () {})
+    if (!oauth.enabled) {
+      this.put('#/login', function() {
+        set_basic_auth(this.params['username'], this.params['password'])
+        check_login()
+      });
+    }
+  })
+  // TODO REFACTOR: this code can be simplified
+  if (oauth.enabled) {
+    if (has_auth_credentials()) {
+      check_login();
     } else {
-        app.run();
-        if (get_cookie_value('auth') != null) {
-            check_login();
-        }
+      app.run();
     }
-    //console.log("start_app_login end");
-}
-
-
-function check_login() {
-    user = JSON.parse(sync_get('/whoami'));
-    if (user == false || user.error) {
-        // clear a local storage value used by earlier versions
-        clear_pref('auth');
-        clear_cookie_value('auth');
-        if (oauth.enabled) {
-            renderWarningMessageInLoginStatus("Not authorized");
-        } else {
-            replace_content('login-status', '<p>Login failed</p>');
-        }
+  } else
+    if (!has_auth_credentials() || !check_login()) {
+      app.run();
     }
-    else {
-        if (oauth.enabled) {
-          user.name = oauth.user_name;
-          // remove once we are able to configure which oauth2 claim can be used as identity
-          // for now we take the claim
-        }
 
-        hide_popup_warn();
-        replace_content('outer', format('layout', {}));
-        var user_login_session_timeout = parseInt(user.login_session_timeout);
-        // Update auth login_session_timeout if changed
-        if (has_auth_cookie_value() && !isNaN(user_login_session_timeout) &&
-            user_login_session_timeout !== get_login_session_timeout()) {
-            update_login_session_timeout(user_login_session_timeout);
-        }
-        setup_global_vars();
-        setup_constant_events();
-        update_vhosts();
-        update_interval();
-        setup_extensions();
+}
+
+
+function check_login () {
+  user = JSON.parse(sync_get('/whoami'));
+  if (user == false || user.error) {
+    clear_auth();
+    if (oauth.enabled) {
+      hide_popup_warn();
+      renderWarningMessageInLoginStatus('Not authorized');
+    } else {
+      replace_content('login-status', '<p>Login failed</p>');
     }
-}
-function print_logging_session_info(user_login_session_timeout) {
-  let var_has_auth_cookie_value = has_auth_cookie_value()
-  let login_session_timeout = get_login_session_timeout()
-  console.log("user_login_session_timeout: " + user_login_session_timeout)
-  console.log("has_auth_cookie_value: " + var_has_auth_cookie_value)
-  console.log("login_session_timeout: " + login_session_timeout)
-  console.log("isNaN(user_login_session_timeout): " + isNaN(user_login_session_timeout))
+    return false;
+  }
+
+  hide_popup_warn()
+  replace_content('outer', format('layout', {}))
+  var user_login_session_timeout = parseInt(user.login_session_timeout)
+  if (!isNaN(user_login_session_timeout)) {
+    update_login_session_timeout(user_login_session_timeout)
+  }
+  setup_global_vars()
+  setup_constant_events()
+  update_vhosts()
+  update_interval()
+  setup_extensions()
+  return true
 }
 
-function get_login_session_timeout() {
-    parseInt(get_cookie_value('login_session_timeout'));
-}
-
-function update_login_session_timeout(login_session_timeout) {
-    var auth_info = get_cookie_value('auth');
-    var date = new Date();
-    date.setMinutes(date.getMinutes() + login_session_timeout);
-    store_cookie_value('login_session_timeout', login_session_timeout);
-    store_cookie_value_with_expiration('auth', auth_info, date);
-}
-
-function update_login_session_with_expiry(expiryDate) {
-    var auth_info = get_cookie_value('auth');
-    store_cookie_value_with_expiration('auth', auth_info, expiryDate);
-}
 
 function start_app() {
     if (app !== undefined) {
@@ -193,7 +155,7 @@ function start_app() {
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, "#/");
+        this.location = url.replace(/#token_type.+/gi, '#/');
     }
 
     app = new Sammy.Application(dispatcher);
@@ -245,7 +207,7 @@ function setup_extensions() {
     extension_count = 0;
     for (var i in extensions) {
         var extension = extensions[i];
-        if ($.isPlainObject(extension) && extension.hasOwnProperty("javascript")) {
+        if ($.isPlainObject(extension) && extension.hasOwnProperty('javascript')) {
             dynamic_load(extension.javascript);
             extension_count++;
         }
@@ -256,7 +218,7 @@ function dynamic_load(filename) {
     var element = document.createElement('script');
     element.setAttribute('type', 'text/javascript');
     element.setAttribute('src', 'js/' + filename);
-    document.getElementsByTagName("head")[0].appendChild(element);
+    document.getElementsByTagName('head')[0].appendChild(element);
 }
 
 function update_interval() {
@@ -615,11 +577,7 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            if (oauth.enabled) {
-                var form_action = "/definitions" + vhost_part + '?token=' + oauth.access_token;
-            } else {
-                var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
-            };
+            var form_action = "/definitions" + vhost_part;
             var fd = new FormData();
             fd.append('file', file);
             with_req('POST', form_action, fd, function(resp) {
@@ -657,47 +615,42 @@ function postprocess() {
         });
 
     $('#download-definitions').on('click', function() {
-        // https://stackoverflow.com/questions/16086162/handle-file-download-from-ajax-post/23797348
-        // https://gist.github.com/zynick/12bae6dbc76f6aacedf0/
-        var idx = $("select[name='vhost-download'] option:selected").index();
-        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
-        var download_filename = esc($('#download-filename').val());
-        var path = 'api/definitions' + vhost + '?download=' + download_filename;
-        var req = xmlHttpRequest();
-        req.open('GET', path, true);
-        req.setRequestHeader('authorization', auth_header());
-        req.responseType = 'blob';
-        req.onload = function (_event) {
-            if (this.status >= 200 && this.status <= 299) {
-                var type = req.getResponseHeader('Content-Type');
-                var blob = new Blob([this.response], { type: type });
+        var idx = $("select[name='vhost-download'] option:selected").index()
+        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()))
+        var download_filename = esc($('#download-filename').val())
+        var path = '/definitions' + vhost
+        with_req('GET', path, null, function(resp) {
+            if (resp.status >= 200 && resp.status <= 299) {
+                var type = resp.getResponseHeader('Content-Type')
+                var blob = new Blob([resp.response], { type: type })
                 if (typeof window.navigator.msSaveBlob !== 'undefined') {
-                    window.navigator.msSaveBlob(blob, download_filename);
+                    window.navigator.msSaveBlob(blob, download_filename)
                 } else {
-                    var URL = window.URL || window.webkitURL;
-                    var downloadUrl = URL.createObjectURL(blob);
-                    var a = document.createElement("a");
+                    var URL = window.URL || window.webkitURL
+                    var downloadUrl = URL.createObjectURL(blob)
+                    var a = document.createElement("a")
                     if (typeof a.download === 'undefined') {
-                        window.location = downloadUrl;
+                        window.location = downloadUrl
                     } else {
-                        a.href = downloadUrl;
-                        a.download = download_filename;
-                        document.body.appendChild(a);
-                        a.click();
+                        a.href = downloadUrl
+                        a.download = download_filename
+                        document.body.appendChild(a)
+                        a.click()
                     }
                     var cleanup = function () {
-                        URL.revokeObjectURL(downloadUrl);
-                        document.body.removeChild(a);
+                        URL.revokeObjectURL(downloadUrl)
+                        document.body.removeChild(a)
                     };
-                    setTimeout(cleanup, 1000);
+                    setTimeout(cleanup, 1000)
                 }
             } else {
                 // Unsuccessful status
-                show_popup('warn', 'Error downloading definitions');
+                show_popup('warn', 'Error downloading definitions')
             }
-        };
-        req.send();
-    });
+
+          });
+
+      });
 
     $('.update-manual').on('click', function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
@@ -1223,24 +1176,10 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function has_auth_cookie_value() {
-    return get_cookie_value('auth') != null;
-}
 
-function auth_header() {
-    if(has_auth_cookie_value() && oauth.enabled) {
-        return "Bearer " + decodeURIComponent(oauth.access_token);
-    } else {
-        if(has_auth_cookie_value()) {
-            return "Basic " + decodeURIComponent(get_cookie_value('auth'));
-        } else {
-            return null;
-        }
-    }
-}
 
 function with_req(method, path, body, fun) {
-    if(!has_auth_cookie_value()) {
+    if(!has_auth_credentials()) {
         // navigate to the login form
         location.reload();
         return;
@@ -1249,7 +1188,7 @@ function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
-    var header = auth_header();
+    var header = authorization_header();
     if (header !== null) {
         req.setRequestHeader('authorization', header);
     }
@@ -1312,7 +1251,7 @@ function sync_req(type, params0, path_template, options) {
     var req = xmlHttpRequest();
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.setRequestHeader('authorization', auth_header());
+    req.setRequestHeader('authorization', authorization_header());
 
     if (options != undefined || options != null) {
         if (options.headers != undefined || options.headers != null) {
@@ -1348,7 +1287,11 @@ function sync_req(type, params0, path_template, options) {
         return false;
     }
 }
-
+function initiate_logout(error = "") {
+    clear_pref('auth');
+    clear_cookie_value('auth');
+    renderWarningMessageInLoginStatus(error);
+}
 function check_bad_response(req, full_page_404) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
@@ -1367,7 +1310,11 @@ function check_bad_response(req, full_page_404) {
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
         if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
-            show_popup('warn', fmt_escape_html(reason));
+            if ((req.status == 401 || req.status == 403) && oauth.enabled) {
+              initiate_logout(reason);
+            } else {
+              show_popup('warn', fmt_escape_html(reason));
+            }
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
             if (last_page_out_of_range_error > 0)
@@ -1619,18 +1566,6 @@ function xmlHttpRequest() {
     return res;
 }
 
-// Our base64 library takes a string that is really a byte sequence,
-// and will throw if given a string with chars > 255 (and hence not
-// DTRT for chars > 127). So encode a unicode string as a UTF-8
-// sequence of "bytes".
-function b64_encode_utf8(str) {
-    return base64.encode(encode_utf8(str));
-}
-
-// encodeURIComponent handles utf-8, unescape does not. Neat!
-function encode_utf8(str) {
-  return unescape(encodeURIComponent(str));
-}
 
 (function($){
     $.fn.extend({

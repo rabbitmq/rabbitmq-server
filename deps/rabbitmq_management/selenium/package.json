@@ -4,19 +4,25 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --recursive --trace-warnings --timeout 35000"
+    "test": "mocha --recursive --trace-warnings --timeout 35000",
+    "fakeportal": "node fakeportal/app.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chromedriver": "^105.0.0",
+    "chromedriver": "^108.0.0",
+    "ejs": "^3.1.8",
+    "express": "^4.18.2",
     "geckodriver": "^3.0.2",
-    "selenium-webdriver": "^4.4.0"
+    "path": "^0.12.7",
+    "selenium-webdriver": "^4.4.0",
+    "xmlhttprequest": "^1.8.0"
   },
   "devDependencies": {
     "chai": "^4.3.6",
     "mocha": "^10.0.0",
-    "request": "^2.88.2"
+    "request": "^2.88.2",
+    "standard": "^17.0.0"
   }
 }
