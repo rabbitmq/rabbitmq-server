@@ -12,8 +12,7 @@
          process_packet/2, serialise/2,
          terminate/4, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
-         soft_limit_exceeded/1, proto_version_tuple/1,
-         format_status/1]).
+         proto_version_tuple/1, throttle/3, format_status/1]).
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
@@ -64,7 +63,8 @@
          exchange :: option(rabbit_exchange:name()),
          %% Set if client has at least one subscription with QoS 1.
          queue_qos1 :: option(rabbit_amqqueue:name()),
-         has_published = false :: boolean(),
+         %% Did the client ever sent us a PUBLISH packet?
+         published = false :: boolean(),
          ssl_login_name :: none | binary(),
          retainer_pid :: option(pid()),
          auth_state :: option(#auth_state{}),
@@ -75,7 +75,7 @@
          info :: option(#info{}),
          delivery_flow :: flow | noflow,
          %% quorum queues and streams whose soft limit has been exceeded
-         soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
+         queues_soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
          qos0_messages_dropped = 0 :: non_neg_integer()
         }).
 
@@ -1504,10 +1504,10 @@ handle_queue_actions(Actions, #state{} = State0) ->
                             end
                     end, U0, PktIds),
               S#state{unacked_client_pubs = U};
-          ({block, QName}, S = #state{soft_limit_exceeded = SLE}) ->
-              S#state{soft_limit_exceeded = sets:add_element(QName, SLE)};
-          ({unblock, QName}, S = #state{soft_limit_exceeded = SLE}) ->
-              S#state{soft_limit_exceeded = sets:del_element(QName, SLE)};
+          ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
+              S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
+          ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
+              S#state{queues_soft_limit_exceeded = sets:del_element(QName, QSLE)};
           ({queue_down, QName}, S) ->
               handle_queue_down(QName, S)
       end, State0, Actions).
@@ -1737,6 +1737,13 @@ is_socket_busy(Socket) ->
             false
     end.
 
+-spec throttle(boolean(), boolean(), state()) -> boolean().
+throttle(Conserve, Connected, #state{published = Published,
+                                     queues_soft_limit_exceeded = QSLE}) ->
+    Conserve andalso (Published orelse not Connected) orelse
+    not sets:is_empty(QSLE) orelse
+    credit_flow:blocked().
+
 info(host, #state{info = #info{host = Val}}) -> Val;
 info(port, #state{info = #info{port = Val}}) -> Val;
 info(peer_host, #state{info = #info{peer_host = Val}}) -> Val;
@@ -1798,8 +1805,9 @@ format_status(#state{queue_states = QState,
                      register_state = RegisterState,
                      conn_name = ConnName,
                      info = Info,
+                     queues_soft_limit_exceeded = QSLE,
                      qos0_messages_dropped = Qos0MsgsDropped
-                    } = State) ->
+                    }) ->
     #{queue_states => rabbit_queue_type:format_status(QState),
       proto_ver => ProtoVersion,
       unacked_client_pubs => UnackClientPubs,
@@ -1816,12 +1824,8 @@ format_status(#state{queue_states = QState,
       register_state => RegisterState,
       conn_name => ConnName,
       info => Info,
-      soft_limit_exceeded => soft_limit_exceeded(State),
+      queues_soft_limit_exceeded => sets:size(QSLE),
       qos0_messages_dropped => Qos0MsgsDropped}.
-
--spec soft_limit_exceeded(state()) -> boolean().
-soft_limit_exceeded(#state{soft_limit_exceeded = SLE}) ->
-    not sets:is_empty(SLE).
 
 proto_integer_to_atom(3) ->
     ?MQTT_PROTO_V3;
@@ -1834,14 +1838,14 @@ proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V3}) ->
 proto_version_tuple(#state{proto_ver = ?MQTT_PROTO_V4}) ->
     {3, 1, 1}.
 
-maybe_increment_publisher(State = #state{has_published = false,
+maybe_increment_publisher(State = #state{published = false,
                                          proto_ver = ProtoVer}) ->
     rabbit_global_counters:publisher_created(ProtoVer),
-    State#state{has_published = true};
+    State#state{published = true};
 maybe_increment_publisher(State) ->
     State.
 
-maybe_decrement_publisher(#state{has_published = true,
+maybe_decrement_publisher(#state{published = true,
                                  proto_ver = ProtoVer}) ->
     rabbit_global_counters:publisher_deleted(ProtoVer);
 maybe_decrement_publisher(_) ->

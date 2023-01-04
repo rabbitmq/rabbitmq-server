@@ -95,7 +95,7 @@ block_connack_timeout(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Ports0 = rpc(Config, erlang, ports, []),
 
-    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let connection block.
     timer:sleep(100),
 

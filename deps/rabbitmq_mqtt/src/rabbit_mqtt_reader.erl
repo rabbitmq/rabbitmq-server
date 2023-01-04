@@ -408,11 +408,11 @@ run_socket(State = #state{ socket = Sock }) ->
 
 control_throttle(State = #state{connection_state = ConnState,
                                 conserve = Conserve,
-                                keepalive = KState,
-                                proc_state = PState}) ->
-    Throttle = Conserve orelse
-               rabbit_mqtt_processor:soft_limit_exceeded(PState) orelse
-               credit_flow:blocked(),
+                                received_connect_packet = Connected,
+                                proc_state = PState,
+                                keepalive = KState
+                               }) ->
+    Throttle = rabbit_mqtt_processor:throttle(Conserve, Connected, PState),
     case {ConnState, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,

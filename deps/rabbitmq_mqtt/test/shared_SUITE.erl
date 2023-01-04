@@ -62,7 +62,8 @@ subgroups() ->
         ]},
        {tests, [],
         [
-         many_qos1_messages
+         block_only_publisher
+         ,many_qos1_messages
         ] ++ tests()}
       ]},
      {cluster_size_3, [],
@@ -1069,7 +1070,7 @@ block(Config) ->
     {ok, _, _} = emqtt:subscribe(C, Topic),
     {ok, _} = emqtt:publish(C, Topic, <<"Not blocked yet">>, [{qos, 1}]),
 
-    ok = rpc(Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let it block
     timer:sleep(100),
 
@@ -1078,11 +1079,59 @@ block(Config) ->
     puback_timeout = publish_qos1_timeout(C, Topic, <<"Still blocked">>, 1000),
 
     %% Unblock
-    rpc(Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
     ok = expect_publishes(C, Topic, [<<"Not blocked yet">>,
                                      <<"Now blocked">>,
                                      <<"Still blocked">>]),
     ok = emqtt:disconnect(C).
+
+block_only_publisher(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+
+    Opts = [{ack_timeout, 1}],
+    Con = connect(<<"background-connection">>, Config, Opts),
+    Sub = connect(<<"subscriber-connection">>, Config, Opts),
+    Pub = connect(<<"publisher-connection">>, Config, Opts),
+    PubSub = connect(<<"publisher-and-subscriber-connection">>, Config, Opts),
+
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+    {ok, _, [1]} = emqtt:subscribe(PubSub, Topic, qos1),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"from Pub">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(PubSub, Topic, <<"from PubSub">>, [{qos, 1}]),
+    ok = expect_publishes(Sub, Topic, [<<"from Pub">>, <<"from PubSub">>]),
+    ok = expect_publishes(PubSub, Topic, [<<"from Pub">>, <<"from PubSub">>]),
+
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
+    %% Let it block
+    timer:sleep(100),
+
+    %% We expect that the publishing connections are blocked.
+    [?assertEqual({error, ack_timeout}, emqtt:ping(Pid)) || Pid <- [Pub, PubSub]],
+    %% We expect that the non-publishing connections are not blocked.
+    [?assertEqual(pong, emqtt:ping(Pid)) || Pid <- [Con, Sub]],
+
+    %% While the memory alarm is on, let's turn a non-publishing connection
+    %% into a publishing connection.
+    {ok, _} = emqtt:publish(Con, Topic, <<"from Con 1">>, [{qos, 1}]),
+    %% The very first message still goes through.
+    ok = expect_publishes(Sub, Topic, [<<"from Con 1">>]),
+    %% But now the new publisher should be blocked as well.
+    ?assertEqual({error, ack_timeout}, emqtt:ping(Con)),
+    ?assertEqual(puback_timeout, publish_qos1_timeout(Con, Topic, <<"from Con 2">>, 500)),
+    ?assertEqual(pong, emqtt:ping(Sub)),
+
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    %% Let it unblock
+    timer:sleep(100),
+
+    %% All connections are unblocked.
+    [?assertEqual(pong, emqtt:ping(Pid)) || Pid <- [Con, Sub, Pub, PubSub]],
+    %% The publishing connections should be able to publish again.
+    {ok, _} = emqtt:publish(Con, Topic, <<"from Con 3">>, [{qos, 1}]),
+    ok = expect_publishes(Sub, Topic, [<<"from Con 2">>, <<"from Con 3">>]),
+    ok = expect_publishes(PubSub, Topic, [<<"from Con 1">>, <<"from Con 2">>, <<"from Con 3">>]),
+
+    [ok = emqtt:disconnect(Pid) || Pid <- [Con, Sub, Pub, PubSub]].
 
 clean_session_disconnect_client(Config) ->
     C = connect(?FUNCTION_NAME, Config),
