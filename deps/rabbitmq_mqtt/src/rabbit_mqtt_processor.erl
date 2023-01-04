@@ -23,6 +23,7 @@
 -import(rabbit_mqtt_util, [mqtt_to_amqp/1,
                            amqp_to_mqtt/1]).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
@@ -218,7 +219,7 @@ process_request(?SUBSCRIBE,
                    payload = undefined},
                 #state{send_fun = SendFun,
                        retainer_pid = RPid} = State0) ->
-    rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
+    ?LOG_DEBUG("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
     TopicNamesQos0 = topic_names(?QOS_0, State0),
     TopicNamesQos1 = topic_names(?QOS_1, State0),
     HasSubsBefore = TopicNamesQos0 =/= [] orelse TopicNamesQos1 =/= [],
@@ -253,8 +254,8 @@ process_request(?SUBSCRIBE,
                                               {[QoS | L], S2}
                                       end;
                                   {error, Reason, S2} ->
-                                      rabbit_log:error("Failed to bind ~s with topic ~s: ~p",
-                                                       [rabbit_misc:rs(QName), TopicName, Reason]),
+                                      ?LOG_ERROR("Failed to bind ~s with topic ~s: ~p",
+                                                 [rabbit_misc:rs(QName), TopicName, Reason]),
                                       {[?SUBACK_FAILURE | L], S2}
                               end;
                           {error, _} ->
@@ -287,7 +288,7 @@ process_request(?UNSUBSCRIBE,
                                                                topic_table = Topics},
                              payload = undefined},
                 State0 = #state{send_fun = SendFun}) ->
-    rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
+    ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     HasSubsBefore = has_subs(State0),
     State = lists:foldl(
               fun(#mqtt_topic{name = TopicName}, #state{} = S0) ->
@@ -297,8 +298,8 @@ process_request(?UNSUBSCRIBE,
                                   {ok, _, S} ->
                                       S;
                                   {error, Reason, S} ->
-                                      rabbit_log:error("Failed to unbind ~s with topic ~s: ~p",
-                                                       [rabbit_misc:rs(QName), TopicName, Reason]),
+                                      ?LOG_ERROR("Failed to unbind ~s with topic ~s: ~p",
+                                                 [rabbit_misc:rs(QName), TopicName, Reason]),
                                       S
                               end;
                           {not_found, _} ->
@@ -313,16 +314,17 @@ process_request(?UNSUBSCRIBE,
     maybe_decrement_consumer(HasSubsBefore, State),
     {ok, State};
 
-process_request(?PINGREQ, #mqtt_packet{}, State = #state{send_fun = SendFun}) ->
-    rabbit_log_connection:debug("Received a PINGREQ"),
+process_request(?PINGREQ, #mqtt_packet{}, State = #state{send_fun = SendFun,
+                                                         client_id = ClientId}) ->
+    ?LOG_DEBUG("Received a PINGREQ, client ID: ~s", [ClientId]),
     SendFun(
       #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PINGRESP}},
       State),
-    rabbit_log_connection:debug("Sent a PINGRESP"),
+    ?LOG_DEBUG("Sent a PINGRESP, client ID: ~s", [ClientId]),
     {ok, State};
 
 process_request(?DISCONNECT, #mqtt_packet{}, State) ->
-    rabbit_log_connection:debug("Received a DISCONNECT"),
+    ?LOG_DEBUG("Received a DISCONNECT"),
     {stop, disconnect, State}.
 
 process_connect(#mqtt_packet{
@@ -333,9 +335,9 @@ process_connect(#mqtt_packet{
                                  client_id  = ClientId,
                                  keep_alive = Keepalive} = PacketConnect},
                 State0 = #state{send_fun = SendFun}) ->
-    rabbit_log_connection:debug("Received a CONNECT, client ID: ~s, username: ~s, "
-                                "clean session: ~s, protocol version: ~p, keepalive: ~p",
-                                [ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
+    ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, "
+               "clean session: ~s, protocol version: ~p, keepalive: ~p",
+               [ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
     {ReturnCode, SessionPresent, State} =
     case rabbit_misc:pipeline([fun check_protocol_version/1,
                                fun check_client_id/1,
@@ -380,15 +382,15 @@ check_credentials(Packet = #mqtt_packet_connect{username = Username,
     case creds(Username, Password, SslLoginName) of
         nocreds ->
             rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
-            rabbit_log_connection:error("MQTT login failed: no credentials provided"),
+            ?LOG_ERROR("MQTT login failed: no credentials provided"),
             {error, ?CONNACK_BAD_CREDENTIALS};
         {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
             rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
-            rabbit_log_connection:error("MQTT login failed: no username is provided"),
+            ?LOG_ERROR("MQTT login failed: no username is provided"),
             {error, ?CONNACK_BAD_CREDENTIALS};
         {invalid_creds, {User, undefined}} when is_binary(User) ->
             rabbit_core_metrics:auth_attempt_failed(Ip, User, mqtt),
-            rabbit_log_connection:error("MQTT login failed for user '~p': no password provided", [User]),
+            ?LOG_ERROR("MQTT login failed for user '~p': no password provided", [User]),
             {error, ?CONNACK_BAD_CREDENTIALS};
         {UserBin, PassBin} ->
             {ok, {UserBin, PassBin, Packet}, State}
@@ -449,8 +451,8 @@ register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
                     {ok, NewProcState({pending, Corr})};
                 {error, _} = Err ->
                     %% e.g. this node was removed from the MQTT cluster members
-                    rabbit_log_connection:error("MQTT cannot accept a connection: "
-                                                "client ID tracker is unavailable: ~p", [Err]),
+                    ?LOG_ERROR("MQTT cannot accept a connection: client ID tracker is unavailable: ~p",
+                               [Err]),
                     {error, ?CONNACK_SERVER_UNAVAILABLE}
             end;
         false ->
@@ -609,8 +611,8 @@ maybe_unbind(TopicName, TopicNames, QName, State0) ->
                 {ok, _Output, State} ->
                     {ok, State};
                 {error, Reason, _State} = Err ->
-                    rabbit_log:error("Failed to unbind ~s with topic '~s': ~p",
-                                     [rabbit_misc:rs(QName), TopicName, Reason]),
+                    ?LOG_ERROR("Failed to unbind ~s with topic '~s': ~p",
+                               [rabbit_misc:rs(QName), TopicName, Reason]),
                     Err
             end
     end.
@@ -675,9 +677,9 @@ process_login(_UserBin, _PassBin, ClientId,
                                              }} = State)
   when Username =/= undefined, User =/= undefined, VHost =/= underfined ->
     rabbit_core_metrics:auth_attempt_failed(list_to_binary(inet:ntoa(Addr)), Username, mqtt),
-    rabbit_log_connection:error(
-      "MQTT detected duplicate connect attempt for client ID '~ts', user '~ts', vhost '~ts'",
-      [ClientId, Username, VHost]),
+    ?LOG_ERROR(
+       "MQTT detected duplicate connect attempt for client ID '~ts', user '~ts', vhost '~ts'",
+       [ClientId, Username, VHost]),
     {error, ?CONNACK_ID_REJECTED, State};
 process_login(UserBin, PassBin, ClientId,
               #state{socket = Sock,
@@ -686,9 +688,8 @@ process_login(UserBin, PassBin, ClientId,
                      auth_state = undefined} = State0) ->
     {ok, {_PeerHost, _PeerPort, _Host, Port}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, Port),
-    rabbit_log_connection:debug(
-      "MQTT vhost picked using ~s",
-      [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
+    ?LOG_DEBUG("MQTT vhost picked using ~s",
+               [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     RemoteIpAddressBin = list_to_binary(inet:ntoa(Addr)),
     Input = #{vhost => VHost,
               username_bin => UsernameBin,
@@ -718,8 +719,8 @@ check_vhost_exists(#{vhost := VHost,
         true  ->
             ok;
         false ->
-            rabbit_log_connection:error("MQTT login failed for user '~s': virtual host '~s' does not exist",
-                                        [UsernameBin, VHost]),
+            ?LOG_ERROR("MQTT login failed for user '~s': virtual host '~s' does not exist",
+                       [UsernameBin, VHost]),
             {error, ?CONNACK_BAD_CREDENTIALS}
     end.
 
@@ -730,10 +731,10 @@ check_vhost_connection_limit(#{vhost := VHost,
         false ->
             ok;
         {true, Limit} ->
-            rabbit_log_connection:error(
-              "Failed to create MQTT connection because vhost connection limit is reached; "
-              "vhost: '~s'; connection limit: ~p; user: '~s'; client ID '~s'",
-              [VHost, Limit, Username, ClientId]),
+            ?LOG_ERROR(
+               "Failed to create MQTT connection because vhost connection limit is reached; "
+               "vhost: '~s'; connection limit: ~p; user: '~s'; client ID '~s'",
+               [VHost, Limit, Username, ClientId]),
             {error, ?CONNACK_NOT_AUTHORIZED}
     end.
 
@@ -744,7 +745,7 @@ check_vhost_alive(#{vhost := VHost,
         true  ->
             ok;
         false ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
               "Failed to create MQTT connection because vhost is down; "
               "vhost: ~s; user: ~s; client ID: ~s",
               [VHost, UsernameBin, ClientId]),
@@ -776,7 +777,7 @@ check_user_login(#{vhost := VHost,
                       conn_name = undefined},
             {ok, maps:put(user, User, In), State};
         {refused, Username, Msg, Args} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
               "Error on MQTT connection ~p~n"
               "access refused for user '~s' in vhost '~s' "
               ++ Msg,
@@ -798,7 +799,7 @@ check_user_connection_limit(#{user := #user{username = Username},
         false ->
             ok;
         {true, Limit} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
               "Failed to create MQTT connection because user connection limit is reached; "
               "user: '~s'; connection limit: ~p; client ID '~s'",
               [Username, Limit, ClientId]),
@@ -820,7 +821,7 @@ check_vhost_access(#{vhost := VHost,
         ok ->
             {ok, maps:put(authz_ctx, AuthzCtx, In), State}
     catch exit:#amqp_error{name = not_allowed} ->
-              rabbit_log_connection:error(
+              ?LOG_ERROR(
                 "Error on MQTT connection ~p~n"
                 "access refused for user '~s'",
                 [self(), Username]),
@@ -841,7 +842,7 @@ check_user_loopback(#{vhost := VHost,
                                     authz_ctx = AuthzCtx},
             {ok, State#state{auth_state = AuthState}};
         not_allowed ->
-            rabbit_log_connection:warning(
+            ?LOG_WARNING(
               "MQTT login failed: user '~s' can only connect via localhost",
               [UsernameBin]),
             {error, ?CONNACK_NOT_AUTHORIZED}
@@ -984,9 +985,8 @@ ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username 
             {ok, Q};
         {error, {resource_locked, Q}} ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("MQTT deleting exclusive ~s owned by ~p",
-                             [rabbit_misc:rs(QName),
-                              ?amqqueue_v2_field_exclusive_owner(Q)]),
+            ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
+                       [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
             delete_queue(QName, Username),
             create_queue(QoS, State);
         {error, not_found} ->
@@ -1025,14 +1025,14 @@ create_queue(QoS, #state{
                             rabbit_core_metrics:queue_created(QName),
                             {ok, Q};
                         Other ->
-                            rabbit_log:error("Failed to declare ~s: ~p",
-                                             [rabbit_misc:rs(QName), Other]),
+                            ?LOG_ERROR("Failed to declare ~s: ~p",
+                                       [rabbit_misc:rs(QName), Other]),
                             {error, queue_declare}
                     end;
                 {true, Limit} ->
-                    rabbit_log:error("cannot declare ~s because "
-                                     "queue limit ~p in vhost '~s' is reached",
-                                     [rabbit_misc:rs(QName), Limit, VHost]),
+                    ?LOG_ERROR("cannot declare ~s because "
+                               "queue limit ~p in vhost '~s' is reached",
+                               [rabbit_misc:rs(QName), Limit, VHost]),
                     {error, access_refused}
             end;
         {error, access_refused} = E ->
@@ -1110,8 +1110,8 @@ consume(Q, QoS, #state{
                                       State = maybe_set_queue_qos1(QoS, State1),
                                       {ok, State};
                                   {error, Reason} = Err ->
-                                      rabbit_log:error("Failed to consume from ~s: ~p",
-                                                       [rabbit_misc:rs(QName), Reason]),
+                                      ?LOG_ERROR("Failed to consume from ~s: ~p",
+                                                 [rabbit_misc:rs(QName), Reason]),
                                       Err
                               end
                       end)
@@ -1216,7 +1216,7 @@ publish_to_queues(
             QNames = rabbit_exchange:route(Exchange, Delivery),
             deliver_to_queues(Delivery, QNames, State);
         {error, not_found} ->
-            rabbit_log:error("~s not found", [rabbit_misc:rs(ExchangeName)]),
+            ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
             {error, exchange_not_found, State}
     end.
 
@@ -1235,8 +1235,8 @@ deliver_to_queues(Delivery,
             %% contain rejections of publishes.
             {ok, handle_queue_actions(Actions, State)};
         {error, Reason} ->
-            rabbit_log:error("Failed to deliver message with packet_id=~p to queues: ~p",
-                             [Delivery#delivery.msg_seq_no, Reason]),
+            ?LOG_ERROR("Failed to deliver message with packet_id=~p to queues: ~p",
+                       [Delivery#delivery.msg_seq_no, Reason]),
             {error, Reason, State0}
     end.
 
@@ -1292,10 +1292,9 @@ serialise_and_send_to_client(Packet, #state{proto_ver = ProtoVer, socket = Sock}
     Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
     try rabbit_net:port_command(Sock, Data)
     catch error:Error ->
-              rabbit_log_connection:error(
-                "MQTT: a socket write failed: ~p", [Error]),
-              rabbit_log_connection:debug(
-                "Failed to write to socket ~p, error: ~p, packet: ~p", [Sock, Error, Packet])
+              ?LOG_ERROR("MQTT: a socket write failed: ~p", [Error]),
+              ?LOG_DEBUG("Failed to write to socket ~p, error: ~p, packet: ~p",
+                         [Sock, Error, Packet])
     end.
 
 serialise(Packet, #state{proto_ver = ProtoVer}) ->
@@ -1321,8 +1320,8 @@ maybe_send_will(true, ConnStr,
                                                       topic = Topic},
                        retainer_pid = RPid
                       } = State) ->
-    rabbit_log_connection:debug("sending MQTT will message to topic ~s on connection ~s",
-                                [Topic, ConnStr]),
+    ?LOG_DEBUG("sending MQTT will message to topic ~s on connection ~s",
+               [Topic, ConnStr]),
     case check_topic_access(Topic, write, State) of
         ok ->
             publish_to_queues(WillMsg, State),
@@ -1333,7 +1332,7 @@ maybe_send_will(true, ConnStr,
                     hand_off_to_retainer(RPid, Topic, WillMsg)
             end;
         {error, access_refused = Reason}  ->
-            rabbit_log:error("failed to send will message: ~p", [Reason])
+            ?LOG_ERROR("failed to send will message: ~p", [Reason])
     end;
 maybe_send_will(_, _, _) ->
     ok.
@@ -1427,8 +1426,7 @@ handle_ra_event(register_timeout,
 handle_ra_event(register_timeout, State) ->
     State;
 handle_ra_event(Evt, State) ->
-    %% log these?
-    rabbit_log:debug("unhandled ra_event: ~w ", [Evt]),
+    ?LOG_DEBUG("unhandled ra_event: ~w ", [Evt]),
     State.
 
 -spec handle_down(term(), state()) ->
@@ -1528,8 +1526,8 @@ handle_queue_down(QName, State0 = #state{client_id = ClientId}) ->
                         {ok, State} ->
                             State;
                         {error, _Reason} ->
-                            rabbit_log:info("Terminating MQTT connection because consuming ~s is down.",
-                                            [rabbit_misc:rs(QName)]),
+                            ?LOG_INFO("Terminating MQTT connection because consuming ~s is down.",
+                                      [rabbit_misc:rs(QName)]),
                             throw(consuming_queue_down)
                     end
             end;
@@ -1668,7 +1666,7 @@ check_resource_access(User, Resource, Perm, Context) ->
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    rabbit_log:error("MQTT resource access refused: ~s", [Msg]),
+                    ?LOG_ERROR("MQTT resource access refused: ~s", [Msg]),
                     {error, access_refused}
             end
     end.
@@ -1704,7 +1702,7 @@ check_topic_access(TopicName, Access,
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    rabbit_log:error("MQTT topic access refused: ~s", [Msg]),
+                    ?LOG_ERROR("MQTT topic access refused: ~s", [Msg]),
                     {error, access_refused}
             end
     end.

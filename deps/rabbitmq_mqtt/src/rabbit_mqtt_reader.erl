@@ -10,6 +10,9 @@
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2, format_status/1]).
@@ -67,13 +70,14 @@ close_connection(Pid, Reason) ->
 
 init(Ref) ->
     process_flag(trap_exit, true),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [mqtt]}),
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(?APP_NAME, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
-            rabbit_log_connection:debug("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
+            ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
             rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
@@ -91,13 +95,11 @@ init(Ref) ->
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
             gen_server:enter_loop(?MODULE, [], State);
         {error, Reason = enotconn} ->
-            rabbit_log_connection:info(
-              "MQTT could not get connection string: ~s", [Reason]),
+            ?LOG_INFO("MQTT could not get connection string: ~s", [Reason]),
             rabbit_net:fast_close(RealSocket),
             ignore;
         {error, Reason} ->
-            rabbit_log_connection:error(
-              "MQTT could not get connection string: ~p", [Reason]),
+            ?LOG_ERROR("MQTT could not get connection string: ~p", [Reason]),
             rabbit_net:fast_close(RealSocket),
             {stop, Reason}
     end.
@@ -111,22 +113,22 @@ handle_call(Msg, From, State) ->
 handle_cast(duplicate_id,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
-    rabbit_log_connection:warning("MQTT disconnecting client ~tp with duplicate id '~ts'",
+    ?LOG_WARNING("MQTT disconnecting client ~tp with duplicate id '~ts'",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {stop, {shutdown, duplicate_id}, State};
 
 handle_cast(decommission_node,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
-    rabbit_log_connection:warning("MQTT disconnecting client ~tp with client ID '~ts' as its node is about"
-                                  " to be decommissioned",
+    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts' as its node is about"
+                 " to be decommissioned",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {stop, {shutdown, decommission_node}, State};
 
 handle_cast({close_connection, Reason},
             State = #state{conn_name = ConnName, proc_state = PState}) ->
-    rabbit_log_connection:warning("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
-                                  [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
+    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
+                 [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
     {stop, {shutdown, server_initiated_close}, State};
 
 handle_cast(QueueEvent = {queue_event, _, _},
@@ -199,7 +201,7 @@ handle_info({keepalive, Req}, State = #state{keepalive = KState0,
         {ok, KState} ->
             {noreply, State#state{keepalive = KState}, ?HIBERNATE_AFTER};
         {error, timeout} ->
-            rabbit_log_connection:error("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
+            ?LOG_ERROR("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
             {stop, {shutdown, keepalive_timeout}, State};
         {error, Reason} ->
             {stop, Reason, State}
@@ -213,7 +215,7 @@ handle_info(login_timeout, State = #state{conn_name = ConnName}) ->
     %% the connection is blocked because of a resource alarm. However
     %% we don't know what is in the buffer, it can be arbitrary bytes,
     %% and we don't want to skip closing the connection in that case.
-    rabbit_log_connection:error("closing MQTT connection ~tp (login timeout)", [ConnName]),
+    ?LOG_ERROR("closing MQTT connection ~tp (login timeout)", [ConnName]),
     {stop, {shutdown, login_timeout}, State};
 
 handle_info(emit_stats, State) ->
@@ -241,7 +243,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_info({shutdown, Explanation} = Reason, State = #state{conn_name = ConnName}) ->
     %% rabbitmq_management plugin requests to close connection.
-    rabbit_log_connection:info("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
+    ?LOG_INFO("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
     {stop, Reason, State};
 
 handle_info(Msg, State) ->
@@ -258,8 +260,7 @@ terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
     log_terminate(Reason, State).
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnName}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: connection closed",
-                                [ConnName]);
+    ?LOG_ERROR("MQTT detected TLS upgrade error on ~s: connection closed", [ConnName]);
 
 log_terminate({network_error,
                {ssl_upgrade_error,
@@ -278,18 +279,16 @@ log_terminate({network_error,
                 {tls_alert, Alert}}, ConnName}, _State) ->
     log_tls_alert(Alert, ConnName);
 log_terminate({network_error, {ssl_upgrade_error, Reason}, ConnName}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: ~p",
-                                [ConnName, Reason]);
+    ?LOG_ERROR("MQTT detected TLS upgrade error on ~s: ~p", [ConnName, Reason]);
 
 log_terminate({network_error, Reason, ConnName}, _State) ->
-    rabbit_log_connection:error("MQTT detected network error on ~s: ~p",
-                                [ConnName, Reason]);
+    ?LOG_ERROR("MQTT detected network error on ~s: ~p", [ConnName, Reason]);
 
 log_terminate({network_error, Reason}, _State) ->
-    rabbit_log_connection:error("MQTT detected network error: ~p", [Reason]);
+    ?LOG_ERROR("MQTT detected network error: ~p", [Reason]);
 
 log_terminate(normal, #state{conn_name  = ConnName}) ->
-    rabbit_log_connection:info("closing MQTT connection ~p (~s)", [self(), ConnName]),
+    ?LOG_INFO("closing MQTT connection ~p (~s)", [self(), ConnName]),
     ok;
 
 log_terminate(_Reason, _State) ->
@@ -301,20 +300,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 log_tls_alert(handshake_failure, ConnName) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: handshake failure",
-       [ConnName]);
+    ?LOG_ERROR("MQTT detected TLS upgrade error on ~ts: handshake failure", [ConnName]);
 log_tls_alert(unknown_ca, ConnName) ->
-    rabbit_log_connection:error("MQTT detected TLS certificate verification error on ~ts: alert 'unknown CA'",
-       [ConnName]);
+    ?LOG_ERROR("MQTT detected TLS certificate verification error on ~ts: alert 'unknown CA'",
+               [ConnName]);
 log_tls_alert(Alert, ConnName) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~ts: alert ~ts",
-       [ConnName, Alert]).
+    ?LOG_ERROR("MQTT detected TLS upgrade error on ~ts: alert ~ts", [ConnName, Alert]).
 
 process_received_bytes(<<>>, State = #state{received_connect_packet = false,
                                             proc_state = PState,
                                             conn_name = ConnName}) ->
-    rabbit_log_connection:info("Accepted MQTT connection ~p (~s, client id: ~s)",
-                               [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
+    ?LOG_INFO("Accepted MQTT connection ~p (~s, client ID: ~s)",
+              [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {noreply, ensure_stats_timer(State#state{received_connect_packet = true}), ?HIBERNATE_AFTER};
 process_received_bytes(<<>>, State) ->
     {noreply, ensure_stats_timer(State), ?HIBERNATE_AFTER};
@@ -337,38 +334,36 @@ process_received_bytes(Bytes,
                                    proc_state = ProcState1});
                 %% PUBLISH and more
                 {error, unauthorized = Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT connection ~ts is closing due to an authorization failure", [ConnName]),
+                    ?LOG_ERROR("MQTT connection ~ts is closing due to an authorization failure", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT packets only
                 {error, unauthenticated = Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT connection ~ts is closing due to an authentication failure", [ConnName]),
+                    ?LOG_ERROR("MQTT connection ~ts is closing due to an authentication failure", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT packets only
                 {error, invalid_client_id = Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT cannot accept connection ~ts: client uses an invalid ID", [ConnName]),
+                    ?LOG_ERROR("MQTT cannot accept connection ~ts: client uses an invalid ID", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT packets only
                 {error, unsupported_protocol_version = Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT cannot accept connection ~ts: incompatible protocol version", [ConnName]),
+                    ?LOG_ERROR("MQTT cannot accept connection ~ts: incompatible protocol version", [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, unavailable = Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT cannot accept connection ~ts due to an internal error or unavailable component",
-                        [ConnName]),
+                    ?LOG_ERROR("MQTT cannot accept connection ~ts due to an internal error or unavailable component",
+                               [ConnName]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Reason, ProcState1} ->
-                    rabbit_log_connection:error("MQTT protocol error on connection ~ts: ~tp",
-                        [ConnName, Reason]),
+                    ?LOG_ERROR("MQTT protocol error on connection ~ts: ~tp", [ConnName, Reason]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {stop, disconnect, ProcState1} ->
                     {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
-            rabbit_log_connection:error("MQTT cannot parse a packet on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
-                [ConnName, Bytes, Error, Stacktrace]),
+            ?LOG_ERROR("MQTT cannot parse a packet on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
+                       [ConnName, Bytes, Error, Stacktrace]),
             {stop, {shutdown, Error}, State};
         {error, Error} ->
-            rabbit_log_connection:error("MQTT detected a framing error on connection ~ts: ~tp",
-                [ConnName, Error]),
+            ?LOG_ERROR("MQTT detected a framing error on connection ~ts: ~tp", [ConnName, Error]),
             {stop, {shutdown, Error}, State}
     end.
 
@@ -391,15 +386,14 @@ network_error(closed,
     Fmt = "MQTT connection ~p will terminate because peer closed TCP connection",
     Args = [ConnName],
     case Connected of
-        true -> rabbit_log_connection:info(Fmt, Args);
-        false  -> rabbit_log_connection:debug(Fmt, Args)
+        true -> ?LOG_INFO(Fmt, Args);
+        false  -> ?LOG_DEBUG(Fmt, Args)
     end,
     {stop, {shutdown, conn_closed}, State};
 
 network_error(Reason,
               State = #state{conn_name  = ConnName}) ->
-    rabbit_log_connection:info("MQTT detected network error for ~p: ~p",
-                               [ConnName, Reason]),
+    ?LOG_INFO("MQTT detected network error for ~p: ~p", [ConnName, Reason]),
     {stop, {shutdown, conn_closed}, State}.
 
 run_socket(State = #state{ connection_state = blocked }) ->

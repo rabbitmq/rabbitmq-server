@@ -106,7 +106,7 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
         {error, {already_started, _}} ->
             ok;
         {error, ErrTCP} ->
-            rabbit_log_connection:error(
+            rabbit_log:error(
               "Failed to start a WebSocket (HTTP) listener. Error: ~p, listener settings: ~p",
               [ErrTCP, TCPConf]),
             throw(ErrTCP)
@@ -132,7 +132,7 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
         {error, {already_started, _}} ->
             ok;
         {error, ErrTLS} ->
-            rabbit_log_connection:error(
+            rabbit_log:error(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p, listener settings: ~p",
               [ErrTLS, TLSConf]),
             throw(ErrTLS)
