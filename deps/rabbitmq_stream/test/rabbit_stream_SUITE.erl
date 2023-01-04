@@ -49,7 +49,7 @@ groups() ->
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
-     {cluster, [], [test_stream, test_stream_tls, java]}].
+     {cluster, [], [test_stream, test_stream_tls, test_metadata, java]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -182,6 +182,77 @@ test_stream(Config) ->
 test_stream_tls(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
     test_server(ssl, Stream, Config),
+    ok.
+
+test_metadata(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    FirstNode = get_node_name(Config, 0),
+    NodeInMaintenance = get_node_name(Config, 1),
+    {ok, S} =
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    C3 = test_create_stream(Transport, S, Stream, C2),
+    GetStreamNodes =
+        fun() ->
+           MetadataFrame =
+               rabbit_stream_core:frame({request, 1, {metadata, [Stream]}}),
+           ok = Transport:send(S, MetadataFrame),
+           {CmdMetadata, _} = receive_commands(Transport, S, C3),
+           io:format("METADATA ~p~n", [CmdMetadata]),
+           {response, 1,
+            {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
+               CmdMetadata,
+           [Leader | Replicas]
+        end,
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 3
+                                      end),
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 NodeInMaintenance,
+                                 rabbit_maintenance,
+                                 drain,
+                                 []),
+
+    IsBeingDrained =
+        fun() ->
+           rabbit_ct_broker_helpers:rpc(Config,
+                                        FirstNode,
+                                        rabbit_maintenance,
+                                        is_being_drained_consistent_read,
+                                        [NodeInMaintenance])
+        end,
+    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() end),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 2
+                                      end),
+
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 NodeInMaintenance,
+                                 rabbit_maintenance,
+                                 revive,
+                                 []),
+
+    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() =:= false
+                                      end),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 3
+                                      end),
+
+    DeleteStreamFrame =
+        rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    ok = Transport:send(S, DeleteStreamFrame),
+    {CmdDelete, C4} = receive_commands(Transport, S, C3),
+    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
+                 CmdDelete),
+    _C5 = test_close(Transport, S, C4),
+    closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
 test_gc_consumers(Config) ->
