@@ -727,12 +727,12 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
-      {"RABBITMQ_CONFIG_FILE=~s", [ConfigFile]},
+      {"RABBITMQ_CONFIG_FILE=~ts", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~s", [StartArgs1]},
       "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
-      {"TEST_TMPDIR=~s", [PrivDir]}
+      {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
