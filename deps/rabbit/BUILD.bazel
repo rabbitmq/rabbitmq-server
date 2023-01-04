@@ -1064,6 +1064,11 @@ suites = [
             "@proper//:erlang_app",
         ],
     ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unicode_SUITE",
+        size = "small",
+    ),
 ]
 
 assert_suites(
