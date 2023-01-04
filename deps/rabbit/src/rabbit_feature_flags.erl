@@ -1872,7 +1872,59 @@ sync_cluster_v1([], NodeIsVirgin, _) ->
               "current state"),
             ok
     end;
-sync_cluster_v1(Nodes, _, Timeout) ->
+sync_cluster_v1(Nodes, true = _NodeIsVirgin, Timeout) ->
+    [Node | _] = Nodes,
+    rabbit_log_feature_flags:debug(
+      "Feature flags: marking feature flags required remotely as enabled "
+      "locally because this node is virgin; using ~s as the remote node",
+     [Node]),
+    ?assertNotEqual(node(), Node),
+    Ret1 = rpc:call(Node, ?MODULE, list, [enabled], Timeout),
+    case Ret1 of
+        FeatureFlags when is_map(FeatureFlags) ->
+            %% We only consider required feature flags (for which there is no
+            %% migration code on nodes where it is required). Remotely enabled
+            %% feature flags will be handled by the regular sync.
+            RequiredFeatureFlags =
+            maps:filter(
+              fun(_, FeatureProps) ->
+                      required =:= get_stability(FeatureProps)
+              end, FeatureFlags),
+            FeatureNames = lists:sort(maps:keys(RequiredFeatureFlags)),
+            rabbit_log_feature_flags:error(
+              "Feature flags: list of feature flags to automatically mark as "
+              "enabled on this virgin node: ~0p",
+              [FeatureNames]),
+
+            %% We mark them as enabled directly (no migration code is executed)
+            %% because this node is virgin (i.e. no files on disk) and will
+            %% inherit the database from remote nodes.
+            Ret2 =
+            lists:foldl(
+              fun
+                  (FeatureName, ok) ->
+                      case is_supported_locally(FeatureName) of
+                          true  -> mark_as_enabled_locally(FeatureName, true);
+                          false -> ok
+                      end;
+                  (_, Acc) ->
+                      Acc
+              end, ok, FeatureNames),
+
+            %% We continue with the regular sync process. It will handle other
+            %% enabled feature flags and unsupported ones too.
+            case Ret2 of
+                ok -> sync_feature_flags_with_cluster(Nodes, false, Timeout);
+                _  -> Ret2
+            end;
+        {badrpc, _} = Reason ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: failed to query remotely enabled feature flags "
+              "on node ~s: ~p",
+              [Node, Reason]),
+            {error, Reason}
+    end;
+sync_cluster_v1(Nodes, _NodeIsVirgin, Timeout) ->
     case sync_feature_flags_v2_first(Nodes, Timeout) of
         true ->
             ?LOG_DEBUG(

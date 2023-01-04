@@ -25,6 +25,7 @@
          is_registered_process_alive/1,
          cluster_nodes/1,
          node_type/0,
+         is_virgin_node/0,
          dir/0,
          cluster_status_from_mnesia/0,
 
