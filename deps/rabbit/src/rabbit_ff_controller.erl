@@ -577,7 +577,7 @@ enable_with_registry_locked(
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
-            case update_feature_state_and_enable(Inventory, FeatureName) of
+            case check_required_and_enable(Inventory, FeatureName) of
                 {ok, _Inventory} = Ok ->
                     ?LOG_NOTICE(
                        "Feature flags: `~s` enabled",
@@ -591,6 +591,71 @@ enable_with_registry_locked(
                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     Error
             end
+    end.
+
+-spec check_required_and_enable(Inventory, FeatureName) -> Ret when
+      Inventory :: rabbit_feature_flags:cluster_inventory(),
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      Ret :: {ok, Inventory} | {error, Reason},
+      Reason :: term().
+
+check_required_and_enable(
+  #{feature_flags := FeatureFlags,
+    states_per_node := _} = Inventory,
+  FeatureName) ->
+    %% Required feature flags vs. virgin nodes.
+    FeatureProps = maps:get(FeatureName, FeatureFlags),
+    Stability = rabbit_feature_flags:get_stability(FeatureProps),
+    NodesWhereDisabled = list_nodes_where_feature_flag_is_disabled(
+                           Inventory, FeatureName),
+
+    MarkDirectly = case Stability of
+                       required ->
+                           ?LOG_DEBUG(
+                              "Feature flags: `~s`: the feature flag is "
+                              "required on some nodes; list virgin nodes "
+                              "to determine if the feature flag can simply "
+                              "be marked as enabled",
+                              [FeatureName],
+                              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                           VirginNodesWhereDisabled =
+                           lists:filter(
+                             fun(Node) ->
+                                     case is_virgin_node(Node) of
+                                         IsVirgin when is_boolean(IsVirgin) ->
+                                             IsVirgin;
+                                         undefined ->
+                                             false
+                                     end
+                             end, NodesWhereDisabled),
+                           VirginNodesWhereDisabled =:= NodesWhereDisabled;
+                       _ ->
+                           false
+                   end,
+
+    case MarkDirectly of
+        false ->
+            case Stability of
+                required ->
+                    ?LOG_DEBUG(
+                       "Feature flags: `~s`: some nodes where the feature "
+                       "flag is disabled are not virgin, we need to perform "
+                       "a regular sync",
+                       [FeatureName],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS});
+                _ ->
+                    ok
+            end,
+            update_feature_state_and_enable(Inventory, FeatureName);
+        true ->
+            ?LOG_DEBUG(
+               "Feature flags: `~s`: all nodes where the feature flag is "
+               "disabled are virgin, we can directly mark it as enabled "
+               "there",
+               [FeatureName],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            mark_as_enabled_on_nodes(
+              NodesWhereDisabled, Inventory, FeatureName, true)
     end.
 
 -spec update_feature_state_and_enable(Inventory, FeatureName) -> Ret when
@@ -644,6 +709,14 @@ update_feature_state_and_enable(
             _ = mark_as_enabled_on_nodes(
                   Nodes, Inventory, FeatureName, false),
             Error
+    end.
+
+is_virgin_node(Node) ->
+    case rpc_call(Node, rabbit_mnesia, is_virgin_node, [], ?TIMEOUT) of
+        IsVirgin when is_boolean(IsVirgin) ->
+            IsVirgin;
+        {error, _} ->
+            undefined
     end.
 
 -spec do_enable(Inventory, FeatureName, Nodes) -> Ret when
@@ -740,7 +813,7 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
            {ok, #{feature_flags := FeatureFlags,
                   applications_per_node := ScannedAppsPerNode,
                   states_per_node := StatesPerNode} = Inventory}) ->
-            FeatureFlags2 = maps:merge(FeatureFlags, FeatureFlags1),
+            FeatureFlags2 = merge_feature_flags(FeatureFlags, FeatureFlags1),
             ScannedAppsPerNode1 = ScannedAppsPerNode#{Node => ScannedApps},
             StatesPerNode1 = StatesPerNode#{Node => FeatureStates},
             Inventory1 = Inventory#{
@@ -755,6 +828,32 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
           (_Node, _Error, Error) ->
               Error
       end, {ok, Inventory0}, Rets).
+
+merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
+    FeatureFlags = maps:merge(FeatureFlagsA, FeatureFlagsB),
+    maps:map(
+      fun(FeatureName, FeatureProps) ->
+              FeaturePropsA = maps:get(FeatureName, FeatureFlagsA, #{}),
+              FeaturePropsB = maps:get(FeatureName, FeatureFlagsB, #{}),
+
+              %% There is a rank between stability levels. If a feature flag
+              %% is required somewhere, it is required globally. Otherwise if
+              %% it is stable somewhere, it is stable globally.
+              StabilityA = rabbit_feature_flags:get_stability(FeaturePropsA),
+              StabilityB = rabbit_feature_flags:get_stability(FeaturePropsB),
+              Stability = case {StabilityA, StabilityB} of
+                              {required, _} -> required;
+                              {_, required} -> required;
+                              {stable, _}   -> stable;
+                              {_, stable}   -> stable;
+                              _             -> experimental
+                          end,
+
+              FeatureProps1 = FeatureProps#{stability => Stability},
+              FeatureProps2 = maps:remove(migration_fun, FeatureProps1),
+              FeatureProps3 = maps:remove(callbacks, FeatureProps2),
+              FeatureProps3
+      end, FeatureFlags).
 
 -spec list_feature_flags_enabled_somewhere(Inventory, HandleStateChanging) ->
     Ret when
