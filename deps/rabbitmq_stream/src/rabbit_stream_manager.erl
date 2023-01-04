@@ -288,7 +288,12 @@ handle_call({delete_super_stream, VirtualHost, SuperStream, Username},
                 ok ->
                     ok;
                 {error, Error} ->
+<<<<<<< HEAD
                     rabbit_log:warning("Error while deleting super stream exchange ~p, ~p",
+=======
+                    rabbit_log:warning("Error while deleting super stream exchange ~tp, "
+                                       "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                        [SuperStream, Error]),
                     ok
             end,
@@ -444,8 +449,13 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
 handle_call({partition_index, VirtualHost, SuperStream, Stream},
             _From, State) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+<<<<<<< HEAD
     rabbit_log:debug("Looking for partition index of stream ~p in super "
                      "stream ~p (virtual host ~p)",
+=======
+    rabbit_log:debug("Looking for partition index of stream ~tp in "
+                     "super stream ~tp (virtual host ~tp)",
+>>>>>>> 79990e8eae (Format stream plugin code)
                      [Stream, SuperStream, VirtualHost]),
     Res = try
               rabbit_exchange:lookup_or_die(ExchangeName),
@@ -734,7 +744,12 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
             catch
                 exit:ExitError ->
                     % likely to be a problem of inequivalent args on an existing stream
+<<<<<<< HEAD
                     rabbit_log:error("Error while creating ~p super stream exchange: ~p",
+=======
+                    rabbit_log:error("Error while creating ~tp super stream exchange: "
+                                     "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                      [Name, ExitError]),
                     {error, validation_failed}
             end;
