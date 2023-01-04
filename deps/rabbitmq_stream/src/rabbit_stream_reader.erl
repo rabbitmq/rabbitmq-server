@@ -682,13 +682,8 @@ open(info, {resource_alarm, IsThereAlarm},
             {false, EnoughCredits} ->
                 not EnoughCredits
         end,
-<<<<<<< HEAD
-    rabbit_log_connection:debug("Connection ~p had blocked status set to ~p, new "
-                                "blocked status is now ~p",
-=======
     rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, "
                                 "new blocked status is now ~tp",
->>>>>>> 79990e8eae (Format stream plugin code)
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
@@ -770,12 +765,8 @@ open(info,
                   connection = Connection0,
                   connection_state = ConnState0} =
          State) ->
-<<<<<<< HEAD
-    rabbit_log:debug("Subscription ~p instructed to become active: ~p",
-=======
     rabbit_log:debug("Subscription ~tp instructed to become active: "
                      "~tp",
->>>>>>> 79990e8eae (Format stream plugin code)
                      [SubId, Active]),
     #stream_connection_state{consumers = Consumers0} = ConnState0,
     {Connection1, ConnState1} =
@@ -1157,13 +1148,8 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
-<<<<<<< HEAD
-    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
-                                "[~w]",
-=======
     rabbit_log_connection:error("Stream protocol connection socket error: ~tp "
                                 "[~w] [~w]",
->>>>>>> 79990e8eae (Format stream plugin code)
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
@@ -1862,13 +1848,8 @@ handle_frame_post_auth(Transport,
                                                                              1),
                             {Connection, State};
                         false ->
-<<<<<<< HEAD
-                            rabbit_log:debug("Creating subscription ~p to ~p, with offset specificat"
-                                             "ion ~p, properties ~0p",
-=======
                             rabbit_log:debug("Creating subscription ~tp to ~tp, with offset "
                                              "specification ~tp, properties ~0p",
->>>>>>> 79990e8eae (Format stream plugin code)
                                              [SubscriptionId,
                                               Stream,
                                               OffsetSpec,
@@ -1940,13 +1921,8 @@ handle_frame_post_auth(Transport,
 
 =======
                                 {true, false, _} ->
-<<<<<<< HEAD
-                                    rabbit_log:warning("Cannot create subcription ~p, stream single active "
-                                                       "consumer feature flag is not enabled",
-=======
                                     rabbit_log:warning("Cannot create subcription ~tp, stream single "
                                                        "active consumer feature flag is not enabled",
->>>>>>> 79990e8eae (Format stream plugin code)
                                                        [SubscriptionId]),
                                     response(Transport,
                                              Connection,
@@ -2153,12 +2129,8 @@ handle_frame_post_auth(_Transport,
         ok ->
             case lookup_leader(Stream, Connection) of
                 {error, Error} ->
-<<<<<<< HEAD
-                    rabbit_log:warning("Could not find leader to store offset on ~p: ~p",
-=======
                     rabbit_log:warning("Could not find leader to store offset on ~tp: "
                                        "~tp",
->>>>>>> 79990e8eae (Format stream plugin code)
                                        [Stream, Error]),
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
@@ -2599,12 +2571,8 @@ handle_frame_post_auth(Transport,
     end,
     case maps:take(CorrelationId, Requests0) of
         {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
-<<<<<<< HEAD
-            rabbit_log:debug("Received consumer update response for subscription ~p",
-=======
             rabbit_log:debug("Received consumer update response for subscription "
                              "~tp",
->>>>>>> 79990e8eae (Format stream plugin code)
                              [SubscriptionId]),
             Consumers1 =
                 case Consumers of
@@ -2675,13 +2643,8 @@ handle_frame_post_auth(Transport,
                             Consumer2,
                         ConsumerOffset = osiris_log:next_offset(Log2),
 
-<<<<<<< HEAD
-                        rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
-                                         "distributed after subscription",
-=======
                         rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp "
                                          "message(s) distributed after subscription",
->>>>>>> 79990e8eae (Format stream plugin code)
                                          [SubscriptionId, ConsumerOffset,
                                           messages_consumed(ConsumerCounters)]),
 
@@ -2871,12 +2834,8 @@ maybe_dispatch_on_subscription(Transport,
                                SubscriptionProperties,
                                SendFileOct,
                                false = _Sac) ->
-<<<<<<< HEAD
-    rabbit_log:debug("Distributing existing messages to subscription ~p",
-=======
     rabbit_log:debug("Distributing existing messages to subscription "
                      "~tp",
->>>>>>> 79990e8eae (Format stream plugin code)
                      [SubscriptionId]),
     case send_chunks(DeliverVersion,
                      Transport,
@@ -2899,13 +2858,8 @@ maybe_dispatch_on_subscription(Transport,
             ConsumerOffset = osiris_log:next_offset(Log1),
             ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
 
-<<<<<<< HEAD
-            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
-                             "distributed after subscription",
-=======
             rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp "
                              "message(s) distributed after subscription",
->>>>>>> 79990e8eae (Format stream plugin code)
                              [SubscriptionId, ConsumerOffset,
                               messages_consumed(ConsumerCounters1)]),
 
@@ -2930,15 +2884,9 @@ maybe_dispatch_on_subscription(_Transport,
                                SubscriptionProperties,
                                _SendFileOct,
                                true = _Sac) ->
-<<<<<<< HEAD
-    rabbit_log:debug("No initial dispatch for subscription ~p for now, "
-                     "waiting for consumer update response from client "
-                     "(single active consumer)",
-=======
     rabbit_log:debug("No initial dispatch for subscription ~tp for "
                      "now, waiting for consumer update response from "
                      "client (single active consumer)",
->>>>>>> 79990e8eae (Format stream plugin code)
                      [SubscriptionId]),
     #consumer{credit = Credit,
               configuration =
