@@ -264,7 +264,12 @@ handle_call({delete_super_stream, VirtualHost, SuperStream, Username},
                 ok ->
                     ok;
                 {error, Error} ->
+<<<<<<< HEAD
                     rabbit_log:warning("Error while deleting super stream exchange ~p, ~p",
+=======
+                    rabbit_log:warning("Error while deleting super stream exchange ~tp, "
+                                       "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                        [SuperStream, Error]),
                     ok
             end,
@@ -427,6 +432,68 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
 handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
     Res = super_stream_partitions(VirtualHost, SuperStream),
     {reply, Res, State};
+<<<<<<< HEAD
+=======
+handle_call({partition_index, VirtualHost, SuperStream, Stream},
+            _From, State) ->
+    ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+<<<<<<< HEAD
+    rabbit_log:debug("Looking for partition index of stream ~p in super "
+                     "stream ~p (virtual host ~p)",
+=======
+    rabbit_log:debug("Looking for partition index of stream ~tp in "
+                     "super stream ~tp (virtual host ~tp)",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                     [Stream, SuperStream, VirtualHost]),
+    Res = try
+              rabbit_exchange:lookup_or_die(ExchangeName),
+              UnorderedBindings =
+                  [Binding
+                   || Binding = #binding{destination = #resource{name = Q} = D}
+                          <- rabbit_binding:list_for_source(ExchangeName),
+                      is_resource_stream_queue(D), Q == Stream],
+              OrderedBindings =
+                  rabbit_stream_utils:sort_partitions(UnorderedBindings),
+              rabbit_log:debug("Bindings: ~p", [OrderedBindings]),
+              case OrderedBindings of
+                  [] ->
+                      {error, stream_not_found};
+                  Bindings ->
+                      Binding = lists:nth(1, Bindings),
+                      #binding{args = Args} = Binding,
+                      case rabbit_misc:table_lookup(Args,
+                                                    <<"x-stream-partition-order">>)
+                      of
+                          {_, Order} ->
+                              Index = rabbit_data_coercion:to_integer(Order),
+                              {ok, Index};
+                          _ ->
+                              Pattern = <<"-">>,
+                              Size = byte_size(Pattern),
+                              case string:find(Stream, Pattern, trailing) of
+                                  nomatch ->
+                                      {ok, -1};
+                                  <<Pattern:Size/binary, Rest/binary>> ->
+                                      try
+                                          Index = binary_to_integer(Rest),
+                                          {ok, Index}
+                                      catch
+                                          error:_ ->
+                                              {ok, -1}
+                                      end;
+                                  _ ->
+                                      {ok, -1}
+                              end
+                      end
+              end
+          catch
+              exit:Error ->
+                  rabbit_log:error("Error while looking up exchange ~p, ~p",
+                                   [ExchangeName, Error]),
+                  {error, stream_not_found}
+          end,
+    {reply, Res, State};
+>>>>>>> 227df848d2 (Format stream plugin code)
 handle_call(which_children, _From, State) ->
     {reply, [], State}.
 
@@ -666,7 +733,12 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
             catch
                 exit:ExitError ->
                     % likely to be a problem of inequivalent args on an existing stream
+<<<<<<< HEAD
                     rabbit_log:error("Error while creating ~p super stream exchange: ~p",
+=======
+                    rabbit_log:error("Error while creating ~tp super stream exchange: "
+                                     "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                      [Name, ExitError]),
                     {error, validation_failed}
             end;

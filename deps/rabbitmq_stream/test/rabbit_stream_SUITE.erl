@@ -375,12 +375,22 @@ test_server(Transport, Stream, Config) ->
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
     CounterKeys = maps:keys(get_osiris_counters(Config)),
     %% find the counter key for the subscriber
+<<<<<<< HEAD
     {value, _SubKey} = lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
                                            Q == QName andalso
                                            Id == SubscriptionId;
                                        (_) ->
                                            false
                                    end, CounterKeys),
+=======
+    {value, SubKey} =
+        lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
+                             Q == QName andalso Id == SubscriptionId;
+                         (_) ->
+                             false
+                     end,
+                     CounterKeys),
+>>>>>>> 227df848d2 (Format stream plugin code)
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
     C10 = test_delete_stream(Transport, S, Stream, C9),
@@ -498,17 +508,13 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
-test_unsubscribe(Transport,
-                 Socket,
-                 SubscriptionId, C0) ->
-    UnsubCmd = {request, 1,
-                {unsubscribe, SubscriptionId}},
+test_unsubscribe(Transport, Socket, SubscriptionId, C0) ->
+    UnsubCmd = {request, 1, {unsubscribe, SubscriptionId}},
     UnsubscribeFrame = rabbit_stream_core:frame(UnsubCmd),
-    ok = Transport:send(Socket, UnsubscribeFrame ),
+    ok = Transport:send(Socket, UnsubscribeFrame),
     {Cmd, C} = receive_commands(Transport, Socket, C0),
     ?assertMatch({response, 1, {unsubscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
-
 
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
     ct:pal("test_deliver ", []),
@@ -579,6 +585,7 @@ get_osiris_counters(Config) ->
                                  osiris_counters,
                                  overview,
                                  []).
+
 get_global_counters(Config) ->
     maps:get([{protocol, stream}],
              rabbit_ct_broker_helpers:rpc(Config,

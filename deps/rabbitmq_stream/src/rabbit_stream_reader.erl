@@ -682,8 +682,13 @@ open(info, {resource_alarm, IsThereAlarm},
             {false, EnoughCredits} ->
                 not EnoughCredits
         end,
+<<<<<<< HEAD
     rabbit_log_connection:debug("Connection ~p had blocked status set to ~p, new "
                                 "blocked status is now ~p",
+=======
+    rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, "
+                                "new blocked status is now ~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
@@ -757,6 +762,78 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
+<<<<<<< HEAD
+=======
+open(info,
+     {sac, {{subscription_id, SubId}, {active, Active}, {extra, Extra}}},
+     #statem_data{transport = Transport,
+                  connection = Connection0,
+                  connection_state = ConnState0} =
+         State) ->
+<<<<<<< HEAD
+    rabbit_log:debug("Subscription ~p instructed to become active: ~p",
+=======
+    rabbit_log:debug("Subscription ~tp instructed to become active: "
+                     "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                     [SubId, Active]),
+    #stream_connection_state{consumers = Consumers0} = ConnState0,
+    {Connection1, ConnState1} =
+        case Consumers0 of
+            #{SubId :=
+                  #consumer{configuration =
+                                #consumer_configuration{properties =
+                                                            Properties} =
+                                    Conf0,
+                            log = Log0} =
+                      Consumer0} ->
+                case single_active_consumer(Properties) of
+                    true ->
+                        Log1 =
+                            case {Active, Log0} of
+                                {false, undefined} ->
+                                    undefined;
+                                {false, L} ->
+                                    rabbit_log:debug("Closing Osiris segment of subscription ~p for "
+                                                     "now",
+                                                     [SubId]),
+                                    osiris_log:close(L),
+                                    undefined;
+                                _ ->
+                                    Log0
+                            end,
+                        Consumer1 =
+                            Consumer0#consumer{configuration =
+                                                   Conf0#consumer_configuration{active
+                                                                                    =
+                                                                                    Active},
+                                               log = Log1},
+
+                        Conn1 =
+                            maybe_send_consumer_update(Transport,
+                                                       Connection0,
+                                                       SubId,
+                                                       Active,
+                                                       true,
+                                                       Extra),
+                        {Conn1,
+                         ConnState0#stream_connection_state{consumers =
+                                                                Consumers0#{SubId
+                                                                                =>
+                                                                                Consumer1}}};
+                    false ->
+                        rabbit_log:warning("Received SAC event for subscription ~p, which "
+                                           "is not a SAC. Not doing anything.",
+                                           [SubId]),
+                        {Connection0, ConnState0}
+                end;
+            _ ->
+                {Connection0, ConnState0}
+        end,
+    {keep_state,
+     State#statem_data{connection = Connection1,
+                       connection_state = ConnState1}};
+>>>>>>> 227df848d2 (Format stream plugin code)
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     demonitor_all_streams(Connection),
@@ -1080,8 +1157,13 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
+<<<<<<< HEAD
     rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
                                 "[~w]",
+=======
+    rabbit_log_connection:error("Stream protocol connection socket error: ~tp "
+                                "[~w] [~w]",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
@@ -1780,8 +1862,13 @@ handle_frame_post_auth(Transport,
                                                                              1),
                             {Connection, State};
                         false ->
+<<<<<<< HEAD
                             rabbit_log:debug("Creating subscription ~p to ~p, with offset specificat"
                                              "ion ~p, properties ~0p",
+=======
+                            rabbit_log:debug("Creating subscription ~tp to ~tp, with offset "
+                                             "specification ~tp, properties ~0p",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                              [SubscriptionId,
                                               Stream,
                                               OffsetSpec,
@@ -1838,6 +1925,7 @@ handle_frame_post_auth(Transport,
                             case send_chunks(Transport, ConsumerState,
                                              SendFileOct)
                             of
+<<<<<<< HEAD
                                 {error, closed} ->
                                     rabbit_log_connection:info("Stream protocol connection has been closed by "
                                                                "peer",
@@ -1850,6 +1938,107 @@ handle_frame_post_auth(Transport,
                                         Consumers#{SubscriptionId =>
                                                        ConsumerState1},
 
+=======
+                                {true, false, _} ->
+<<<<<<< HEAD
+                                    rabbit_log:warning("Cannot create subcription ~p, stream single active "
+                                                       "consumer feature flag is not enabled",
+=======
+                                    rabbit_log:warning("Cannot create subcription ~tp, stream single "
+                                                       "active consumer feature flag is not enabled",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                                                       [SubscriptionId]),
+                                    response(Transport,
+                                             Connection,
+                                             subscribe,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                     ?PRECONDITION_FAILED,
+                                                                                     1),
+                                    {Connection, State};
+                                {true, _, undefined} ->
+                                    rabbit_log:warning("Cannot create subcription ~p, a single active "
+                                                       "consumer must have a name",
+                                                       [SubscriptionId]),
+                                    response(Transport,
+                                             Connection,
+                                             subscribe,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                     ?PRECONDITION_FAILED,
+                                                                                     1),
+                                    {Connection, State};
+                                _ ->
+                                    Log = case Sac of
+                                              true ->
+                                                  undefined;
+                                              false ->
+                                                  init_reader(ConnTransport,
+                                                              LocalMemberPid,
+                                                              QueueResource,
+                                                              SubscriptionId,
+                                                              Properties,
+                                                              OffsetSpec)
+                                          end,
+
+                                    ConsumerCounters =
+                                        atomics:new(2, [{signed, false}]),
+
+                                    response_ok(Transport,
+                                                Connection,
+                                                subscribe,
+                                                CorrelationId),
+
+                                    Active =
+                                        maybe_register_consumer(VirtualHost,
+                                                                Stream,
+                                                                ConsumerName,
+                                                                ConnName,
+                                                                SubscriptionId,
+                                                                Properties,
+                                                                Sac),
+
+                                    ConsumerConfiguration =
+                                        #consumer_configuration{member_pid =
+                                                                    LocalMemberPid,
+                                                                subscription_id
+                                                                    =
+                                                                    SubscriptionId,
+                                                                socket = Socket,
+                                                                stream = Stream,
+                                                                offset =
+                                                                    OffsetSpec,
+                                                                counters =
+                                                                    ConsumerCounters,
+                                                                properties =
+                                                                    Properties,
+                                                                active =
+                                                                    Active},
+                                    ConsumerState =
+                                        #consumer{configuration =
+                                                      ConsumerConfiguration,
+                                                  log = Log,
+                                                  credit = Credit},
+
+                                    Connection1 =
+                                        maybe_monitor_stream(LocalMemberPid,
+                                                             Stream,
+                                                             Connection),
+
+                                    State1 =
+                                        maybe_dispatch_on_subscription(Transport,
+                                                                       State,
+                                                                       ConsumerState,
+                                                                       Connection1,
+                                                                       Consumers,
+                                                                       Stream,
+                                                                       SubscriptionId,
+                                                                       Properties,
+                                                                       SendFileOct,
+                                                                       Sac),
+>>>>>>> 227df848d2 (Format stream plugin code)
                                     StreamSubscriptions1 =
                                         case StreamSubscriptions of
                                             #{Stream := SubscriptionIds} ->
@@ -1964,7 +2153,12 @@ handle_frame_post_auth(_Transport,
         ok ->
             case lookup_leader(Stream, Connection) of
                 {error, Error} ->
+<<<<<<< HEAD
                     rabbit_log:warning("Could not find leader to store offset on ~p: ~p",
+=======
+                    rabbit_log:warning("Could not find leader to store offset on ~tp: "
+                                       "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
                                        [Stream, Error]),
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
@@ -2365,6 +2559,7 @@ handle_frame_post_auth(Transport,
         end,
 
     Frame =
+<<<<<<< HEAD
         <<?COMMAND_PARTITIONS:16,
           ?VERSION_1:16,
           CorrelationId:32,
@@ -2372,6 +2567,218 @@ handle_frame_post_auth(Transport,
           PartitionsBin/binary>>,
     FrameSize = byte_size(Frame),
     Transport:send(S, <<FrameSize:32, Frame/binary>>),
+=======
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {partitions, ResponseCode, Partitions}}),
+
+    Transport:send(S, Frame),
+    {Connection, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{transport = ConnTransport,
+                                          outstanding_requests = Requests0,
+                                          send_file_oct = SendFileOct,
+                                          virtual_host = VirtualHost,
+                                          deliver_version = DeliverVersion} =
+                           Connection,
+                       #stream_connection_state{consumers = Consumers} = State,
+                       {response, CorrelationId,
+                        {consumer_update, ResponseCode, ResponseOffsetSpec}}) ->
+    case ResponseCode of
+        ?RESPONSE_CODE_OK ->
+            ok;
+        RC ->
+            rabbit_log:info("Unexpected consumer update response code: ~p",
+                            [RC])
+    end,
+    case maps:take(CorrelationId, Requests0) of
+        {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
+<<<<<<< HEAD
+            rabbit_log:debug("Received consumer update response for subscription ~p",
+=======
+            rabbit_log:debug("Received consumer update response for subscription "
+                             "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                             [SubscriptionId]),
+            Consumers1 =
+                case Consumers of
+                    #{SubscriptionId :=
+                          #consumer{configuration =
+                                        #consumer_configuration{active =
+                                                                    true}} =
+                              Consumer} ->
+                        %% active, dispatch messages
+                        #consumer{configuration =
+                                      #consumer_configuration{properties =
+                                                                  Properties,
+                                                              member_pid =
+                                                                  LocalMemberPid,
+                                                              offset =
+                                                                  SubscriptionOffsetSpec,
+                                                              stream =
+                                                                  Stream}} =
+                            Consumer,
+
+                        OffsetSpec =
+                            case ResponseOffsetSpec of
+                                none ->
+                                    SubscriptionOffsetSpec;
+                                ROS ->
+                                    ROS
+                            end,
+
+                        rabbit_log:debug("Initializing reader for active consumer, offset "
+                                         "spec is ~p",
+                                         [OffsetSpec]),
+                        QueueResource =
+                            #resource{name = Stream,
+                                      kind = queue,
+                                      virtual_host = VirtualHost},
+
+                        Segment =
+                            init_reader(ConnTransport,
+                                        LocalMemberPid,
+                                        QueueResource,
+                                        SubscriptionId,
+                                        Properties,
+                                        OffsetSpec),
+                        Consumer1 = Consumer#consumer{log = Segment},
+                        Consumer2 =
+                            case send_chunks(DeliverVersion,
+                                             Transport,
+                                             Consumer1,
+                                             SendFileOct)
+                            of
+                                {error, closed} ->
+                                    rabbit_log_connection:info("Stream protocol connection has been closed by "
+                                                               "peer",
+                                                               []),
+                                    throw({stop, normal});
+                                {error, Reason} ->
+                                    rabbit_log_connection:info("Error while sending chunks: ~p",
+                                                               [Reason]),
+                                    %% likely a connection problem
+                                    Consumer;
+                                {ok, Csmr} ->
+                                    Csmr
+                            end,
+                        #consumer{configuration =
+                                      #consumer_configuration{counters =
+                                                                  ConsumerCounters},
+                                  log = Log2} =
+                            Consumer2,
+                        ConsumerOffset = osiris_log:next_offset(Log2),
+
+<<<<<<< HEAD
+                        rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                                         "distributed after subscription",
+=======
+                        rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp "
+                                         "message(s) distributed after subscription",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                                         [SubscriptionId, ConsumerOffset,
+                                          messages_consumed(ConsumerCounters)]),
+
+                        Consumers#{SubscriptionId => Consumer2};
+                    #{SubscriptionId :=
+                          #consumer{configuration =
+                                        #consumer_configuration{active = false,
+                                                                stream = Stream,
+                                                                properties =
+                                                                    Properties}}} ->
+                        rabbit_log:debug("Not an active consumer"),
+
+                        case Extra of
+                            [{stepping_down, true}] ->
+                                ConsumerName = consumer_name(Properties),
+                                rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
+                                                                                Stream,
+                                                                                ConsumerName);
+                            _ ->
+                                ok
+                        end,
+
+                        Consumers;
+                    _ ->
+                        rabbit_log:debug("No consumer found for subscription ~p",
+                                         [SubscriptionId]),
+                        Consumers
+                end,
+
+            {Connection#stream_connection{outstanding_requests = Rs},
+             State#stream_connection_state{consumers = Consumers1}};
+        {V, _Rs} ->
+            rabbit_log:warning("Unexpected outstanding requests for correlation "
+                               "ID ~p: ~p",
+                               [CorrelationId, V]),
+            {Connection, State};
+        error ->
+            rabbit_log:warning("Could not find outstanding consumer update request "
+                               "with correlation ID ~p. No actions taken for "
+                               "the subscription.",
+                               [CorrelationId]),
+            {Connection, State}
+    end;
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S} = Connection0,
+                       State,
+                       {request, CorrelationId,
+                        {exchange_command_versions, CommandVersions}}) ->
+    Frame =
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {exchange_command_versions, ?RESPONSE_CODE_OK,
+                                   rabbit_stream_utils:command_versions()}}),
+    send(Transport, S, Frame),
+
+    %% adapt connection handlers to client capabilities
+    Connection1 =
+        process_client_command_versions(Connection0, CommandVersions),
+    {Connection1, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection,
+                       State,
+                       {request, CorrelationId, {stream_stats, Stream}}) ->
+    QueueResource =
+        #resource{name = Stream,
+                  kind = queue,
+                  virtual_host = VirtualHost},
+    Response =
+        case rabbit_stream_utils:check_read_permitted(QueueResource, User,
+                                                      #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
+                    {error, not_available} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_NOT_AVAILABLE,
+                                                                         1),
+                        {stream_stats, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE,
+                         #{}};
+                    {error, not_found} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_DOES_NOT_EXIST,
+                                                                         1),
+                        {stream_stats, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
+                         #{}};
+                    {ok, MemberPid} ->
+                        StreamStats =
+                            maps:fold(fun(K, V, Acc) ->
+                                         Acc#{atom_to_binary(K) => V}
+                                      end,
+                                      #{}, osiris:get_stats(MemberPid)),
+                        {stream_stats, ?RESPONSE_CODE_OK, StreamStats}
+                end;
+            error ->
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?ACCESS_REFUSED,
+                                                                 1),
+                {stream_stats, ?RESPONSE_CODE_ACCESS_REFUSED, #{}}
+        end,
+    Frame = rabbit_stream_core:frame({response, CorrelationId, Response}),
+    send(Transport, S, Frame),
+>>>>>>> 227df848d2 (Format stream plugin code)
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
@@ -2406,6 +2813,224 @@ handle_frame_post_auth(Transport,
                                                      ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
+<<<<<<< HEAD
+=======
+process_client_command_versions(C, []) ->
+    C;
+process_client_command_versions(C, [H | T]) ->
+    process_client_command_versions(process_client_command_api(C, H), T).
+
+process_client_command_api(C, {deliver, ?VERSION_1, ?VERSION_2}) ->
+    C#stream_connection{deliver_version = ?VERSION_2};
+process_client_command_api(C, _) ->
+    C.
+
+init_reader(ConnectionTransport,
+            LocalMemberPid,
+            QueueResource,
+            SubscriptionId,
+            Properties,
+            OffsetSpec) ->
+    CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
+    Options =
+        #{transport => ConnectionTransport,
+          chunk_selector => get_chunk_selector(Properties)},
+    {ok, Segment} =
+        osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
+    rabbit_log:debug("Next offset for subscription ~p is ~p",
+                     [SubscriptionId, osiris_log:next_offset(Segment)]),
+    Segment.
+
+single_active_consumer(#{<<"single-active-consumer">> :=
+                             <<"true">>}) ->
+    true;
+single_active_consumer(_Properties) ->
+    false.
+
+consumer_name(#{<<"name">> := Name}) ->
+    Name;
+consumer_name(_Properties) ->
+    undefined.
+
+maybe_dispatch_on_subscription(Transport,
+                               State,
+                               ConsumerState,
+                               #stream_connection{deliver_version =
+                                                      DeliverVersion} =
+                                   Connection,
+                               Consumers,
+                               Stream,
+                               SubscriptionId,
+                               SubscriptionProperties,
+                               SendFileOct,
+                               false = _Sac) ->
+<<<<<<< HEAD
+    rabbit_log:debug("Distributing existing messages to subscription ~p",
+=======
+    rabbit_log:debug("Distributing existing messages to subscription "
+                     "~tp",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                     [SubscriptionId]),
+    case send_chunks(DeliverVersion,
+                     Transport,
+                     ConsumerState,
+                     SendFileOct)
+    of
+        {error, closed} ->
+            rabbit_log_connection:info("Stream protocol connection has been closed by "
+                                       "peer",
+                                       []),
+            throw({stop, normal});
+        {ok, #consumer{log = Log1, credit = Credit1} = ConsumerState1} ->
+            Consumers1 = Consumers#{SubscriptionId => ConsumerState1},
+
+            #consumer{configuration =
+                          #consumer_configuration{counters =
+                                                      ConsumerCounters1}} =
+                ConsumerState1,
+
+            ConsumerOffset = osiris_log:next_offset(Log1),
+            ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
+
+<<<<<<< HEAD
+            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                             "distributed after subscription",
+=======
+            rabbit_log:debug("Subscription ~tp is now at offset ~tp with ~tp "
+                             "message(s) distributed after subscription",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                             [SubscriptionId, ConsumerOffset,
+                              messages_consumed(ConsumerCounters1)]),
+
+            rabbit_stream_metrics:consumer_created(self(),
+                                                   stream_r(Stream, Connection),
+                                                   SubscriptionId,
+                                                   Credit1,
+                                                   messages_consumed(ConsumerCounters1),
+                                                   ConsumerOffset,
+                                                   ConsumerOffsetLag,
+                                                   true,
+                                                   SubscriptionProperties),
+            State#stream_connection_state{consumers = Consumers1}
+    end;
+maybe_dispatch_on_subscription(_Transport,
+                               State,
+                               ConsumerState,
+                               Connection,
+                               Consumers,
+                               Stream,
+                               SubscriptionId,
+                               SubscriptionProperties,
+                               _SendFileOct,
+                               true = _Sac) ->
+<<<<<<< HEAD
+    rabbit_log:debug("No initial dispatch for subscription ~p for now, "
+                     "waiting for consumer update response from client "
+                     "(single active consumer)",
+=======
+    rabbit_log:debug("No initial dispatch for subscription ~tp for "
+                     "now, waiting for consumer update response from "
+                     "client (single active consumer)",
+>>>>>>> 79990e8eae (Format stream plugin code)
+                     [SubscriptionId]),
+    #consumer{credit = Credit,
+              configuration =
+                  #consumer_configuration{offset = Offset, active = Active}} =
+        ConsumerState,
+
+    rabbit_stream_metrics:consumer_created(self(),
+                                           stream_r(Stream, Connection),
+                                           SubscriptionId,
+                                           Credit,
+                                           0, %% messages consumed
+                                           Offset,
+                                           0, %% offset lag
+                                           Active,
+                                           SubscriptionProperties),
+    Consumers1 = Consumers#{SubscriptionId => ConsumerState},
+    State#stream_connection_state{consumers = Consumers1}.
+
+maybe_register_consumer(_, _, _, _, _, _, false = _Sac) ->
+    true;
+maybe_register_consumer(VirtualHost,
+                        Stream,
+                        ConsumerName,
+                        ConnectionName,
+                        SubscriptionId,
+                        Properties,
+                        true) ->
+    PartitionIndex = partition_index(VirtualHost, Stream, Properties),
+    {ok, Active} =
+        rabbit_stream_sac_coordinator:register_consumer(VirtualHost,
+                                                        Stream,
+                                                        PartitionIndex,
+                                                        ConsumerName,
+                                                        self(),
+                                                        ConnectionName,
+                                                        SubscriptionId),
+    Active.
+
+maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
+    Connection;
+maybe_send_consumer_update(Transport,
+                           #stream_connection{socket = S,
+                                              correlation_id_sequence =
+                                                  CorrIdSeq,
+                                              outstanding_requests =
+                                                  OutstandingRequests0} =
+                               Connection,
+                           SubscriptionId,
+                           Active,
+                           true = _Sac,
+                           Extra) ->
+    rabbit_log:debug("SAC subscription ~p, active = ~p",
+                     [SubscriptionId, Active]),
+    Frame =
+        rabbit_stream_core:frame({request, CorrIdSeq,
+                                  {consumer_update, SubscriptionId, Active}}),
+
+    OutstandingRequests1 =
+        maps:put(CorrIdSeq,
+                 {{subscription_id, SubscriptionId}, {extra, Extra}},
+                 OutstandingRequests0),
+    send(Transport, S, Frame),
+    Connection#stream_connection{correlation_id_sequence = CorrIdSeq + 1,
+                                 outstanding_requests = OutstandingRequests1}.
+
+maybe_unregister_consumer(_, _, false = _Sac) ->
+    ok;
+maybe_unregister_consumer(VirtualHost,
+                          #consumer{configuration =
+                                        #consumer_configuration{stream = Stream,
+                                                                properties =
+                                                                    Properties,
+                                                                subscription_id
+                                                                    =
+                                                                    SubscriptionId}},
+                          true = _Sac) ->
+    ConsumerName = consumer_name(Properties),
+    rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
+                                                      Stream,
+                                                      ConsumerName,
+                                                      self(),
+                                                      SubscriptionId).
+
+partition_index(VirtualHost, Stream, Properties) ->
+    case Properties of
+        #{<<"super-stream">> := SuperStream} ->
+            case rabbit_stream_manager:partition_index(VirtualHost, SuperStream,
+                                                       Stream)
+            of
+                {ok, Index} ->
+                    Index;
+                _ ->
+                    -1
+            end;
+        _ ->
+            -1
+    end.
+
+>>>>>>> 227df848d2 (Format stream plugin code)
 notify_connection_closed(#statem_data{connection =
                                           #stream_connection{name = Name,
                                                              publishers =
@@ -3061,6 +3686,7 @@ get_chunk_selector(Properties) ->
     binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
                             <<"user_data">>)).
 
-close_log(undefined) -> ok;
+close_log(undefined) ->
+    ok;
 close_log(Log) ->
     osiris_log:close(Log).
