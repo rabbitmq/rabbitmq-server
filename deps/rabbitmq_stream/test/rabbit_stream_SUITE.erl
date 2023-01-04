@@ -49,7 +49,7 @@ groups() ->
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
-     {cluster, [], [test_stream, test_stream_tls, java]}].
+     {cluster, [], [test_stream, test_stream_tls, test_metadata, java]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -182,6 +182,76 @@ test_stream(Config) ->
 test_stream_tls(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
     test_server(ssl, Stream, Config),
+    ok.
+
+test_metadata(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    FirstNode = get_node_name(Config, 0),
+    NodeInMaintenance = get_node_name(Config, 1),
+    {ok, S} =
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    C3 = test_create_stream(Transport, S, Stream, C2),
+    GetStreamNodes =
+        fun() ->
+           MetadataFrame =
+               rabbit_stream_core:frame({request, 1, {metadata, [Stream]}}),
+           ok = Transport:send(S, MetadataFrame),
+           {CmdMetadata, _} = receive_commands(Transport, S, C3),
+           {response, 1,
+            {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
+               CmdMetadata,
+           [Leader | Replicas]
+        end,
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 3
+                                      end),
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 NodeInMaintenance,
+                                 rabbit_maintenance,
+                                 drain,
+                                 []),
+
+    IsBeingDrained =
+        fun() ->
+           rabbit_ct_broker_helpers:rpc(Config,
+                                        FirstNode,
+                                        rabbit_maintenance,
+                                        is_being_drained_consistent_read,
+                                        [NodeInMaintenance])
+        end,
+    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() end),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 2
+                                      end),
+
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 NodeInMaintenance,
+                                 rabbit_maintenance,
+                                 revive,
+                                 []),
+
+    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() =:= false
+                                      end),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+                                         length(GetStreamNodes()) == 3
+                                      end),
+
+    DeleteStreamFrame =
+        rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    ok = Transport:send(S, DeleteStreamFrame),
+    {CmdDelete, C4} = receive_commands(Transport, S, C3),
+    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
+                 CmdDelete),
+    _C5 = test_close(Transport, S, C4),
+    closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
 test_gc_consumers(Config) ->
@@ -434,12 +504,13 @@ test_server(Transport, Stream, Config) ->
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
     CounterKeys = maps:keys(get_osiris_counters(Config)),
     %% find the counter key for the subscriber
-    {value, SubKey} = lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
-                                           Q == QName andalso
-                                           Id == SubscriptionId;
-                                       (_) ->
-                                           false
-                                   end, CounterKeys),
+    {value, SubKey} =
+        lists:search(fun ({rabbit_stream_reader, Q, Id, _}) ->
+                             Q == QName andalso Id == SubscriptionId;
+                         (_) ->
+                             false
+                     end,
+                     CounterKeys),
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C8b = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
 
@@ -580,17 +651,13 @@ test_subscribe(Transport,
     ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
-test_unsubscribe(Transport,
-                 Socket,
-                 SubscriptionId, C0) ->
-    UnsubCmd = {request, 1,
-                {unsubscribe, SubscriptionId}},
+test_unsubscribe(Transport, Socket, SubscriptionId, C0) ->
+    UnsubCmd = {request, 1, {unsubscribe, SubscriptionId}},
     UnsubscribeFrame = rabbit_stream_core:frame(UnsubCmd),
-    ok = Transport:send(Socket, UnsubscribeFrame ),
+    ok = Transport:send(Socket, UnsubscribeFrame),
     {Cmd, C} = receive_commands(Transport, Socket, C0),
     ?assertMatch({response, 1, {unsubscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
-
 
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
     ct:pal("test_deliver ", []),
@@ -708,6 +775,7 @@ get_osiris_counters(Config) ->
                                  osiris_counters,
                                  overview,
                                  []).
+
 get_global_counters(Config) ->
     maps:get([{protocol, stream}],
              rabbit_ct_broker_helpers:rpc(Config,
