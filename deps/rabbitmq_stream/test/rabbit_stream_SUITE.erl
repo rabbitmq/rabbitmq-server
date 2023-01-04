@@ -203,7 +203,6 @@ test_metadata(Config) ->
                rabbit_stream_core:frame({request, 1, {metadata, [Stream]}}),
            ok = Transport:send(S, MetadataFrame),
            {CmdMetadata, _} = receive_commands(Transport, S, C3),
-           io:format("METADATA ~p~n", [CmdMetadata]),
            {response, 1,
             {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
                CmdMetadata,
