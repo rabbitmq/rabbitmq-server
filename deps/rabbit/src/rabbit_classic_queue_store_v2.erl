@@ -140,14 +140,10 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
     ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = rabbit_classic_queue_index_v2:queue_dir(VHostDir, Name),
-<<<<<<< HEAD
     #qs{
-        dir = Dir,
+        dir = rabbit_file:filename_to_binary(Dir),
         on_sync = OnSyncFun
     }.
-=======
-    #qs{dir = rabbit_file:filename_to_binary(Dir)}.
->>>>>>> 8f0800e578 (Make classic queues v2 memory efficient)
 
 -spec terminate(State) -> State when State::state().
 

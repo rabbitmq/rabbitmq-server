@@ -174,7 +174,6 @@
 %% target_ram_count may contain an interspersed mixture of betas and
 %% gammas in q2 and q3.
 %%
-<<<<<<< HEAD
 %% There is then a ratio that controls how many betas and gammas there
 %% can be. This is based on the target_ram_count and thus expresses
 %% the fact that as the number of permitted alphas in the queue falls,
@@ -185,14 +184,6 @@
 %% delta/(betas+gammas+delta) equals
 %% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
 %% the target_ram_count shrinks to 0, so must betas and gammas.
-=======
-%% When messages must be read from disk, message bodies will
-%% also be read from disk except if the message is stored
-%% in the per-vhost shared rabbit_msg_store. In that case
-%% the message gets read before it needs to be sent to the
-%% consumer. Messages are read from rabbit_msg_store one
-%% at a time currently.
->>>>>>> 8f0800e578 (Make classic queues v2 memory efficient)
 %%
 %% The conversion of betas to deltas is done if there are at least
 %% ?IO_BATCH_SIZE betas in q2 & q3. This value should not be too small,
