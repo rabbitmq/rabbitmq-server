@@ -199,14 +199,14 @@ maybe_sac_execute(Fun) ->
 overview(undefined) ->
     undefined;
 overview(#?MODULE{groups = Groups}) ->
-    GroupsOverview = maps:map(fun (_, #group{consumers = Consumers,
-                                             partition_index = Idx}) ->
-                                      #{num_consumers => length(Consumers),
-                                        partition_index => Idx}
-                              end, Groups),
-    #{num_groups => map_size(Groups),
-      groups => GroupsOverview}.
-
+    GroupsOverview =
+        maps:map(fun(_,
+                     #group{consumers = Consumers, partition_index = Idx}) ->
+                    #{num_consumers => length(Consumers),
+                      partition_index => Idx}
+                 end,
+                 Groups),
+    #{num_groups => map_size(Groups), groups => GroupsOverview}.
 
 -spec init_state() -> state().
 init_state() ->
