@@ -3,3 +3,4 @@
 .erlang.mk
 deps/osiris
 deps/ra
+extra_deps
