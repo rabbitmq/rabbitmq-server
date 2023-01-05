@@ -6,10 +6,6 @@ load(
     "@rules_erlang//:util.bzl",
     "path_join",
 )
-load(
-    "@rules_erlang//private:util.bzl",
-    "additional_file_dest_relative_path",
-)
 
 def _erlang_ls_config(ctx):
     runtime_prefix = path_join(
@@ -46,48 +42,54 @@ erlang_ls_config = rule(
     executable = True,
 )
 
-def _erlang_app_files(ctx, app, directory):
-    app_info = app[ErlangAppInfo]
-    app_path = path_join(directory, app_info.app_name)
-    files = []
-    for f in app_info.srcs + app_info.beam:
-        relative_path = additional_file_dest_relative_path(app.label, f)
-        dest = ctx.actions.declare_file(path_join(app_path, relative_path))
-        ctx.actions.symlink(output = dest, target_file = f)
-        files.append(dest)
-    return files
-
-def _erlang_ls_tree(ctx):
+def _deps_symlinks(ctx):
     apps = ctx.attr.apps
     deps = []
 
     for app in apps:
         app_info = app[ErlangAppInfo]
         for dep in app_info.deps:
-            # this puts non rabbitmq plugins, like amqp10_client into deps,
-            # but maybe those should be in apps? Does it matter?
-            if dep not in deps and dep not in apps:
+            if dep.label.workspace_name != "" and dep not in deps and dep not in apps:
                 deps.append(dep)
 
     files = []
-    for app in apps:
-        files.extend(
-            _erlang_app_files(ctx, app, path_join(ctx.label.name, "apps")),
-        )
-    for dep in deps:
-        files.extend(
-            _erlang_app_files(ctx, dep, path_join(ctx.label.name, "deps")),
-        )
+    output = ctx.actions.declare_file(ctx.label.name + ".sh")
 
-    return [
-        DefaultInfo(files = depset(files)),
+    commands = [
+        "set -euxo pipefail",
+        "",
+        "mkdir -p \"{}\"".format(path_join("$BUILD_WORKSPACE_DIRECTORY", ctx.attr.dest)),
+        "",
     ]
 
-erlang_ls_tree = rule(
-    implementation = _erlang_ls_tree,
+    for dep in deps:
+        app_info = dep[ErlangAppInfo]
+        files.extend(app_info.srcs)
+
+        commands.append("ln -s \"{target}\" \"{source}\"".format(
+            target = path_join("$PWD", "external", dep.label.workspace_name),
+            source = path_join("$BUILD_WORKSPACE_DIRECTORY", ctx.attr.dest, app_info.app_name),
+        ))
+
+    ctx.actions.write(
+        output = output,
+        content = "\n".join(commands),
+    )
+
+    return [DefaultInfo(
+        runfiles = ctx.runfiles(files = files),
+        executable = output,
+    )]
+
+deps_symlinks = rule(
+    implementation = _deps_symlinks,
     attrs = {
         "apps": attr.label_list(
             providers = [ErlangAppInfo],
         ),
+        "dest": attr.string(
+            mandatory = True,
+        ),
     },
+    executable = True,
 )
