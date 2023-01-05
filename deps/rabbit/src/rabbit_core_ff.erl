@@ -7,6 +7,11 @@
 
 -module(rabbit_core_ff).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
@@ -119,4 +124,26 @@
     #{desc          => "Support for stream filtering.",
       stability     => stable,
       depends_on    => [stream_queue]
+     }}).
+
+-rabbit_feature_flag(
+   {khepri_db,
+    #{desc          => "Use the new Khepri Raft-based metadata store",
+      doc_url       => "", %% TODO
+      stability     => experimental,
+      depends_on    => [feature_flags_v2,
+                        direct_exchange_routing_v2,
+                        maintenance_mode_status,
+                        user_limits,
+                        virtual_host_metadata,
+                        tracking_records_in_ets,
+                        listener_records_in_ets,
+
+                        %% Deprecated features.
+                        classic_queue_mirroring,
+                        ram_node_type],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, khepri_db_migration_enable},
+                         post_enable =>
+                         {rabbit_khepri, khepri_db_migration_post_enable}}
      }}).

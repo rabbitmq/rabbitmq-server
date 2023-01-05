@@ -43,6 +43,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
             File.write(Path.join(dir, "force_load"), "")
         end
 
+      {:error, :not_supported} ->
+        {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(),
+         "This command is not supported by node #{node_name}"}
+
       _ ->
         :ok
     end

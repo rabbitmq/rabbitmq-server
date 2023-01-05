@@ -1072,7 +1072,8 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                                     amqqueue:set_pid(Q, LeaderPid), Conf);
                               Ts ->
                                   S = maps:get(name, Ts, undefined),
-                                  rabbit_log:debug("~ts: refusing mnesia update for stale stream id ~ts, current ~ts",
+                                  %% TODO log as side-effect
+                                  rabbit_log:debug("~ts: refusing mnesia update for stale stream id ~s, current ~s",
                                                    [?MODULE, StreamId, S]),
                                   %% if the stream id isn't a match this is a stale
                                   %% update from a previous stream incarnation for the

@@ -306,7 +306,7 @@ is_running(Nodes) when is_list(Nodes) ->
 
 list_running() ->
     Members = list_members(),
-    filter_running(Members).
+    do_filter_running(Members).
 
 -spec list_not_running() -> Nodes when
       Nodes :: [node()].

@@ -8,6 +8,7 @@
 -module(rabbit_db_cluster).
 
 -include_lib("kernel/include/logger.hrl").
+%% -include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -22,6 +23,12 @@
          check_compatibility/1,
          check_consistency/0,
          cli_cluster_status/0]).
+
+%% These two functions are not supported by Khepri and probably
+%% shouldn't be part of this API in the future, but currently
+%% they're needed here so they can fail when invoked using Khepri.
+-export([rename/2,
+         update_cluster_nodes/1]).
 
 -type node_type() :: disc_node_type() | ram_node_type().
 -type disc_node_type() :: disc.
@@ -58,13 +65,19 @@ can_join(RemoteNode) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
         ok ->
-            can_join_using_mnesia(RemoteNode);
+            case rabbit_khepri:is_enabled(RemoteNode) of
+                true  -> can_join_using_khepri(RemoteNode);
+                false -> can_join_using_mnesia(RemoteNode)
+            end;
         Error ->
             Error
     end.
 
 can_join_using_mnesia(RemoteNode) ->
     rabbit_mnesia:can_join_cluster(RemoteNode).
+
+can_join_using_khepri(RemoteNode) ->
+    rabbit_khepri:can_join_cluster(RemoteNode).
 
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),
@@ -83,7 +96,10 @@ join(RemoteNode, NodeType)
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            Ret =  join_using_mnesia(ClusterNodes, NodeType),
+            Ret = case rabbit_khepri:is_enabled(RemoteNode) of
+                      true  -> join_using_khepri(ClusterNodes, NodeType);
+                      false -> join_using_mnesia(ClusterNodes, NodeType)
+                  end,
             case Ret of
                 ok ->
                     rabbit_feature_flags:copy_feature_states_after_reset(
@@ -103,6 +119,11 @@ join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
     ok = rabbit_mnesia:reset_gracefully(),
     rabbit_mnesia:join_cluster(ClusterNodes, NodeType).
 
+join_using_khepri(ClusterNodes, disc) ->
+    rabbit_khepri:add_member(node(), ClusterNodes);
+join_using_khepri(_ClusterNodes, ram = NodeType) ->
+    {error, {node_type_unsupported, khepri, NodeType}}.
+
 -spec forget_member(Node, RemoveWhenOffline) -> ok when
       Node :: node(),
       RemoveWhenOffline :: boolean().
@@ -111,9 +132,16 @@ join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
 forget_member(Node, RemoveWhenOffline) ->
     case rabbit:is_running(Node) of
         false ->
-            rabbit_db:run(
+            ?LOG_DEBUG(
+               "DB: removing cluster member `~ts`", [Node],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            rabbit_khepri:handle_fallback(
               #{mnesia => fun() ->
                                   forget_member_using_mnesia(
+                                    Node, RemoveWhenOffline)
+                          end,
+                khepri => fun() ->
+                                  forget_member_using_khepri(
                                     Node, RemoveWhenOffline)
                           end
                });
@@ -123,6 +151,15 @@ forget_member(Node, RemoveWhenOffline) ->
 
 forget_member_using_mnesia(Node, RemoveWhenOffline) ->
     rabbit_mnesia:forget_cluster_node(Node, RemoveWhenOffline).
+
+forget_member_using_khepri(_Node, true) ->
+    ?LOG_WARNING(
+       "Remove node with --offline flag is not supported by Khepri. "
+       "Skipping...",
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    {error, not_supported};
+forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
+    rabbit_khepri:leave_cluster(Node).
 
 %% -------------------------------------------------------------------
 %% Cluster update.
@@ -135,8 +172,11 @@ forget_member_using_mnesia(Node, RemoveWhenOffline) ->
 %% Node types may not all be valid with all databases.
 
 change_node_type(NodeType) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> change_node_type_using_mnesia(NodeType) end}).
+    rabbit_mnesia:ensure_node_type_is_permitted(NodeType),
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> change_node_type_using_mnesia(NodeType) end,
+        khepri => ok
+       }).
 
 change_node_type_using_mnesia(NodeType) ->
     rabbit_mnesia:change_cluster_node_type(NodeType).
@@ -150,30 +190,37 @@ change_node_type_using_mnesia(NodeType) ->
 %% @doc Indicates if this node is clustered with other nodes or not.
 
 is_clustered() ->
-    rabbit_db:run(
-      #{mnesia => fun is_clustered_using_mnesia/0}).
-
-is_clustered_using_mnesia() ->
-    rabbit_mnesia:is_clustered().
+    Members = members(),
+    Members =/= [] andalso Members =/= [node()].
 
 -spec members() -> Members when
       Members :: [node()].
 %% @doc Returns the list of cluster members.
 
 members() ->
-    rabbit_db:run(
-      #{mnesia => fun members_using_mnesia/0}).
+    case rabbit_khepri:get_feature_state() of
+        enabled -> members_using_khepri();
+        _       -> members_using_mnesia()
+    end.
 
 members_using_mnesia() ->
     rabbit_mnesia:members().
+
+members_using_khepri() ->
+    case rabbit_khepri:locally_known_nodes() of
+        []      -> [node()];
+        Members -> Members
+    end.
 
 -spec disc_members() -> Members when
       Members :: [node()].
 %% @private
 
 disc_members() ->
-    rabbit_db:run(
-      #{mnesia => fun disc_members_using_mnesia/0}).
+    case rabbit_khepri:get_feature_state() of
+        enabled -> members_using_khepri();
+        _       -> disc_members_using_mnesia()
+    end.
 
 disc_members_using_mnesia() ->
     rabbit_mnesia:cluster_nodes(disc).
@@ -185,11 +232,16 @@ disc_members_using_mnesia() ->
 %% Node types may not all be relevant with all databases.
 
 node_type() ->
-    rabbit_db:run(
-      #{mnesia => fun node_type_using_mnesia/0}).
+    case rabbit_khepri:get_feature_state() of
+        enabled -> node_type_using_khepri();
+        _       -> node_type_using_mnesia()
+    end.
 
 node_type_using_mnesia() ->
     rabbit_mnesia:node_type().
+
+node_type_using_khepri() ->
+    disc.
 
 -spec check_compatibility(RemoteNode) -> ok | {error, Reason} when
       RemoteNode :: node(),
@@ -200,9 +252,10 @@ node_type_using_mnesia() ->
 check_compatibility(RemoteNode) ->
     case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
         ok ->
-            rabbit_db:run(
-              #{mnesia =>
-                fun() -> check_compatibility_using_mnesia(RemoteNode) end});
+            case rabbit_khepri:get_feature_state() of
+                enabled -> ok;
+                _       -> check_compatibility_using_mnesia(RemoteNode)
+            end;
         Error ->
             Error
     end.
@@ -214,11 +267,16 @@ check_compatibility_using_mnesia(RemoteNode) ->
 %% @doc Ensures the cluster is consistent.
 
 check_consistency() ->
-    rabbit_db:run(
-      #{mnesia => fun check_consistency_using_mnesia/0}).
+    case rabbit_khepri:get_feature_state() of
+        enabled -> check_consistency_using_khepri();
+        _       -> check_consistency_using_mnesia()
+    end.
 
 check_consistency_using_mnesia() ->
     rabbit_mnesia:check_cluster_consistency().
+
+check_consistency_using_khepri() ->
+    rabbit_khepri:check_cluster_consistency().
 
 -spec cli_cluster_status() -> ClusterStatus when
       ClusterStatus :: [{nodes, [{rabbit_db_cluster:node_type(), [node()]}]} |
@@ -228,8 +286,25 @@ check_consistency_using_mnesia() ->
 %% command.
 
 cli_cluster_status() ->
-    rabbit_db:run(
-      #{mnesia => fun cli_cluster_status_using_mnesia/0}).
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun cli_cluster_status_using_mnesia/0,
+        khepri => fun cli_cluster_status_using_khepri/0
+       }).
 
 cli_cluster_status_using_mnesia() ->
     rabbit_mnesia:status().
+
+cli_cluster_status_using_khepri() ->
+    rabbit_khepri:cli_cluster_status().
+
+rename(Node, NodeMapList) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> rabbit_mnesia_rename:rename(Node, NodeMapList) end,
+        khepri => {error, not_supported}
+       }).
+
+update_cluster_nodes(DiscoveryNode) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> rabbit_mnesia:update_cluster_nodes(DiscoveryNode) end,
+        khepri => {error, not_supported}
+       }).

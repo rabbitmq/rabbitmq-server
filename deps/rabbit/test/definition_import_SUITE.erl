@@ -185,9 +185,9 @@ end_per_testcase(Testcase, Config) ->
 %% Tests
 %%
 
-import_case1(Config) -> import_file_case(Config, "case1").
+import_case1(Config) -> import_invalid_file_case_in_khepri(Config, "case1").
 import_case2(Config) -> import_file_case(Config, "case2").
-import_case3(Config) -> import_file_case(Config, "case3").
+import_case3(Config) -> import_invalid_file_case_in_khepri(Config, "case3").
 import_case4(Config) -> import_file_case(Config, "case4").
 import_case6(Config) -> import_file_case(Config, "case6").
 import_case7(Config) -> import_file_case(Config, "case7").
@@ -389,6 +389,11 @@ import_invalid_file_case(Config, CaseName) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
     ok.
 
+import_invalid_file_case_in_khepri(Config, CaseName) ->
+    CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case_in_khepri, [CasePath]),
+    ok.
+
 import_invalid_file_case_if_unchanged(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case_if_unchanged, [CasePath]),
@@ -470,6 +475,27 @@ run_invalid_import_case_if_unchanged(Path) ->
         {error, _E} -> ok
     end.
 
+run_invalid_import_case_in_khepri(Path) ->
+   case rabbit_khepri:is_enabled() of
+       true ->
+           run_invalid_import_case_in_khepri0(Path);
+       false ->
+           run_import_case(Path)
+   end.
+
+run_invalid_import_case_in_khepri0(Path) ->
+    {ok, Body} = file:read_file(Path),
+    ct:pal("Successfully loaded a definition file at ~tp~n", [Path]),
+    case rabbit_definitions:import_raw(Body) of
+        ok ->
+            ct:pal("Expected import case ~tp to fail~n", [Path]),
+            ct:fail({expected_failure, Path});
+        {error, E} ->
+            case re:run(E, ".*mirrored queues are deprecated.*", [{capture, none}]) of
+                match -> ok;
+                _ -> ct:fail({expected_failure, Path, E})
+            end
+    end.
 
 queue_lookup(Config, VHost, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]).

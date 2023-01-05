@@ -127,9 +127,9 @@ define PROJECT_ENV
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       {dead_letter_worker_consumer_prefetch, 32},
       {dead_letter_worker_publisher_confirm_timeout, 180000},
-
 			%% EOL date for the current release series, if known/announced
-			{release_series_eol_date, none}
+			{release_series_eol_date, none},
+            {khepri_migration_batch, 1000}
 	  ]
 endef
 
@@ -143,7 +143,7 @@ APPS_DIR := $(CURDIR)/apps
 LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat
+DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat khepri khepri_mnesia_migration
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 PLT_APPS += mnesia
@@ -152,6 +152,9 @@ dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.6.2
 dep_systemd = hex 0.6.1
 dep_seshat = hex 0.4.0
+dep_khepri = hex 0.8.0
+dep_khepri_mnesia_migration = hex 0.1.1
+dep_horus = hex 0.2.4
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

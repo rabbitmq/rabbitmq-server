@@ -20,6 +20,7 @@
                   'msg_index'           : ['table',  'Message store index'],
                   'mgmt_db'             : ['table',  'Management database'],
                   'plugins'             : ['proc',   'Plugins'],
+                  'metadata_store'      : ['metadata_store',  'Metadata store'],
                   'other'               : ['system', 'Other binary references']};
    var total_out = [];
 %>
@@ -49,7 +50,8 @@ var key = [[{name: 'Classic Queues', colour: 'classic',
                     ['mgmt_db',             'management database']]}],
 
            [{name: 'Processes', colour: 'proc',
-             keys: [['plugins',             'plugins']]},
+             keys: [['plugins',             'plugins'],
+                    ['metadata_store',      'metadata store']]},
             {name: 'System', colour: 'system',
              keys: [['other',               'other']]}]];
 %>

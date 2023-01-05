@@ -8,7 +8,6 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
--include("rabbit_recent_history.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -70,7 +69,7 @@ validate(#exchange{arguments = Args}) ->
     end.
 
 validate_binding(_X, _B) -> ok.
-create(_Tx, _X) -> ok.
+create(_Serial, _X) -> ok.
 policy_changed(_X1, _X2) -> ok.
 
 delete(none, #exchange{ name = XName }) ->
@@ -104,11 +103,9 @@ add_binding(none, #exchange{ name = XName },
                  end
              end || Msg <- Msgs]
     end,
-    ok;
-add_binding(none, _Exchange, _Binding) ->
     ok.
 
-remove_bindings(_Tx, _X, _Bs) -> ok.
+remove_bindings(_Serial, _X, _Bs) -> ok.
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
@@ -120,8 +117,7 @@ setup_schema() ->
 
 disable_plugin() ->
     rabbit_registry:unregister(exchange, <<"x-recent-history">>),
-    rabbit_db_rh_exchange:delete(),
-    ok.
+    rabbit_db_rh_exchange:delete().
 
 %%----------------------------------------------------------------------------
 %%private

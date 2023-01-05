@@ -359,7 +359,7 @@ ets_tables_memory_test(Config) ->
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)) ++ "/memory/ets",
     Result = http_get(Config, Path, ?OK),
     assert_keys([ets_tables_memory], Result),
-    NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
+    NonMgmtKeys = [tracked_connection, tracked_channel],
     Keys = [queue_stats, vhost_stats_coarse_conn_stats,
         connection_created_stats, channel_process_stats, consumer_stats,
         queue_msg_rates],
@@ -2943,7 +2943,7 @@ policy_permissions_test(Config) ->
     http_put(Config, "/permissions/v/mgmt",   Perms, {group, '2xx'}),
 
     Policy = [{pattern,    <<".*">>},
-              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+              {definition, [{<<"max-length-bytes">>, 3000000}]}],
     Param = [{value, <<"">>}],
 
     http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),

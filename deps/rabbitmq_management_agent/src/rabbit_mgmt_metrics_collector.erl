@@ -447,7 +447,7 @@ aggregate_entry({Id, Metrics, 0}, NextStats, Ops0,
                            Metrics,
                            {fun rabbit_mgmt_format:format_queue_stats/1, false}),
                    insert_op(queue_stats, Id, ?queue_stats(Id, Fmt), O);
-               false ->
+               _ ->
                    Ops1
            end,
     {insert_old_aggr_stats(NextStats, Id, Stats), Ops2, State};

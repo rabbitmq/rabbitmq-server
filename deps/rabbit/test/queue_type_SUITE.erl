@@ -39,7 +39,22 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config),
     ok.
 
+init_per_group(classic, Config0) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config0) of
+        mnesia ->
+            Config = init_per_group0(classic, Config0),
+            rabbit_ct_broker_helpers:set_policy(
+              Config, 0,
+              <<"ha-policy">>, <<".*">>, <<"queues">>,
+              [{<<"ha-mode">>, <<"all">>}]),
+            Config;
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(Group, Config) ->
+    init_per_group0(Group, Config).
+
+init_per_group0(Group, Config) ->
     ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, ClusterSize},
@@ -50,25 +65,26 @@ init_per_group(Group, Config) ->
                                              {net_ticktime, 10}]),
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
-                                          rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_tick_interval, 100]),
-    %% HACK: the larger cluster sizes benefit for a bit more time
-    %% after clustering before running the tests.
-    Config3 = case Group of
-                  cluster_size_5 ->
-                      timer:sleep(5000),
-                      Config2;
-                  _ ->
-                      Config2
-              end,
-
-    rabbit_ct_broker_helpers:set_policy(
-      Config3, 0,
-      <<"ha-policy">>, <<".*">>, <<"queues">>,
-      [{<<"ha-mode">>, <<"all">>}]),
-    Config3.
+                                              rabbit_ct_broker_helpers:setup_steps()),
+    case Config2 of
+        {skip, _Reason} = Skip ->
+            %% To support mixed-version clusters,
+            %% Khepri feature flag is unsupported
+            Skip;
+        _ ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                   Config2, 0, application, set_env,
+                   [rabbit, channel_tick_interval, 100]),
+            %% HACK: the larger cluster sizes benefit for a bit more time
+            %% after clustering before running the tests.
+            case Group of
+                cluster_size_5 ->
+                    timer:sleep(5000),
+                    Config2;
+                _ ->
+                    Config2
+            end
+    end.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(

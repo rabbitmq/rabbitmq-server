@@ -94,13 +94,15 @@ setup_federation_with_upstream_params(Config, ExtraParams) ->
         ]
       ]),
 
-    rabbit_ct_broker_helpers:set_policy(Config, 0,
-      <<"fed">>, <<"^fed\.">>, <<"all">>, [
-        {<<"federation-upstream-set">>, <<"upstream">>}]),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_policy, set,
+      [<<"/">>, <<"fed">>, <<"^fed\.">>, [{<<"federation-upstream-set">>, <<"upstream">>}],
+       0, <<"all">>, <<"acting-user">>]),
 
-    rabbit_ct_broker_helpers:set_policy(Config, 0,
-      <<"fed12">>, <<"^fed12\.">>, <<"all">>, [
-        {<<"federation-upstream-set">>, <<"upstream12">>}]),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_policy, set,
+      [<<"/">>, <<"fed12">>, <<"^fed12\.">>, [{<<"federation-upstream-set">>, <<"upstream12">>}],
+       2, <<"all">>, <<"acting-user">>]),
 
     rabbit_ct_broker_helpers:set_policy(Config, 0,
       <<"one">>, <<"^two$">>, <<"all">>, [

@@ -109,7 +109,8 @@ create(none, #exchange{name = XName}) ->
 
 % Delete an exchange
 delete(none, #exchange{name = XName}) ->
-    delete_state(XName).
+  delete_state(XName),
+  ok.
 
 % Before add binding
 validate_binding(_X, _B) -> ok.
@@ -147,7 +148,6 @@ policy_changed(_X1, _X2) -> ok.
 % Stub for type-specific exchange information
 info(_X) -> [].
 info(_X, _) -> [].
-
 
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
@@ -257,4 +257,3 @@ parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
                             , "cannot parse selector '~tp' binding destination '~ts' to exchange '~ts'"
                             , [S, DestName, XName] ).
 
-%%----------------------------------------------------------------------------

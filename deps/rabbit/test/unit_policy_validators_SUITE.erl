@@ -53,12 +53,19 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group = classic_queue_mirroring_validators, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Group},
-        {rmq_nodes_count, 1}
-      ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps());
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [
+                                 {rmq_nodename_suffix, Group},
+                                 {rmq_nodes_count, 1}
+                                ]),
+            rabbit_ct_helpers:run_steps(
+              Config1,
+              rabbit_ct_broker_helpers:setup_steps());
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(_, Config) ->
     Config.
 

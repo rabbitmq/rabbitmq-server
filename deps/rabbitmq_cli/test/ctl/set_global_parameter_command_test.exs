@@ -79,9 +79,14 @@ defmodule SetGlobalParameterCommandTest do
 
   # Checks each element of the first parameter against the expected context values
   defp assert_parameter_fields(context) do
-    result_param = list_global_parameters() |> List.first()
+    result_params = list_global_parameters()
 
-    assert result_param[:value] == context[:value]
-    assert result_param[:name] == context[:key]
+    exp =
+      MapSet.new(
+        name: context[:key],
+        value: context[:value]
+      )
+
+    assert List.foldl(result_params, false, fn param, acc -> MapSet.new(param) == exp or acc end)
   end
 end

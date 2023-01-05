@@ -252,6 +252,7 @@ def rabbitmq_integration_suite(
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
             "LANG": "C.UTF-8",
+            "RABBITMQ_METADATA_STORE": "khepri",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
@@ -285,6 +286,7 @@ def rabbitmq_integration_suite(
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
             "RABBITMQ_RUN_SECONDARY": "$(location @rabbitmq-server-generic-unix-3.11//:rabbitmq-run)",
             "LANG": "C.UTF-8",
+            "RABBITMQ_METADATA_STORE": "khepri",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",

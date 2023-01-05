@@ -136,7 +136,31 @@ set_default_config() ->
                ]}
               | OsirisConfig
              ],
-    apply_erlang_term_based_config(Config).
+    %% Don't apply any defaults for values already set in the init flags.
+    Config1 = filter_init_args(Config),
+    apply_erlang_term_based_config(Config1).
+
+filter_init_args(Config) ->
+    lists:filtermap(
+      fun({App, Vars}) ->
+          case init:get_argument(App) of
+              {ok, Args} ->
+                  Keys = [rabbit_data_coercion:to_atom(KeyName) ||
+                          [KeyName, _ValueExpr] <- Args],
+                  Vars1 = lists:filter(
+                            fun({Key, _Value}) ->
+                                not lists:member(Key, Keys)
+                            end, Vars),
+                  case Vars1 of
+                      [] ->
+                          false;
+                      _ ->
+                          {true, {App, Vars1}}
+                  end;
+              error ->
+                  true
+          end
+      end, Config).
 
 osiris_log(debug, Fmt, Args) ->
     ?LOG_DEBUG(Fmt, Args,

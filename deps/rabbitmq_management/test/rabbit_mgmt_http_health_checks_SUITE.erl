@@ -24,13 +24,15 @@
 
 all() ->
     [
-     {group, all_tests},
+     {group, cluster_size_3},
+     {group, cluster_size_5},
      {group, single_node}
     ].
 
 groups() ->
     [
-     {all_tests, [], all_tests()},
+     {cluster_size_3, [], all_tests()},
+     {cluster_size_5, [], [is_quorum_critical_test]},
      {single_node, [], [
                         alarms_test,
                         local_alarms_test,
@@ -40,7 +42,6 @@ groups() ->
 
 all_tests() -> [
                 health_checks_test,
-                is_quorum_critical_test,
                 is_mirror_sync_critical_test,
                 virtual_hosts_test,
                 protocol_listener_test,
@@ -58,7 +59,8 @@ init_per_group(Group, Config0) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
     ClusterSize = case Group of
-                      all_tests -> 3;
+                      cluster_size_3 -> 3;
+                      cluster_size_5 -> 5;
                       single_node -> 1
                   end,
     NodeConf = [{rmq_nodename_suffix, Group},
@@ -77,24 +79,30 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
-init_per_testcase(Testcase, Config)
-        when Testcase == is_quorum_critical_test
-            orelse Testcase == is_mirror_sync_critical_test ->
+init_per_testcase(Testcase, Config) when Testcase == is_quorum_critical_test ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "not mixed versions compatible"};
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase)
     end;
+init_per_testcase(Testcase, Config)
+  when Testcase == is_mirror_sync_critical_single_node_test
+       orelse Testcase == is_mirror_sync_critical_test ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+                mnesia ->
+                    rabbit_ct_helpers:testcase_started(Config, Testcase);
+                {khepri, _} ->
+                    {skip, "Classic queue mirroring not supported by Khepri"}
+            end
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(is_quorum_critical_test = Testcase, Config) ->
-    [_, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    _ = rabbit_ct_broker_helpers:start_node(Config, Server2),
-    _ = rabbit_ct_broker_helpers:start_node(Config, Server3),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(is_mirror_sync_critical_test = Testcase, Config) ->
     [_, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     _ = rabbit_ct_broker_helpers:start_node(Config, Server2),
@@ -193,9 +201,10 @@ is_quorum_critical_test(Config) ->
     ?assertEqual(false, maps:is_key(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
-    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
     QName = <<"is_quorum_critical_test">>,
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  amqp_channel:call(Ch, #'queue.declare'{queue     = QName,
@@ -204,6 +213,9 @@ is_quorum_critical_test(Config) ->
                                                         arguments = Args})),
     Check1 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
     ?assertEqual(false, maps:is_key(reason, Check1)),
+
+    RaName = binary_to_atom(<<"%2F_", QName/binary>>, utf8),
+    {ok, [_, {_, Server2}, {_, Server3}], _} = ra:members({RaName, Server}),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),

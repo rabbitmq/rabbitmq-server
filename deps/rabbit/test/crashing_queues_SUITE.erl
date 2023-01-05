@@ -14,16 +14,17 @@
 
 all() ->
     [
-      {group, cluster_size_2}
+     {group, cluster_size_2}
     ].
 
 groups() ->
     [
-      {cluster_size_2, [], [
-          crashing_unmirrored,
-          crashing_mirrored,
-          give_up_after_repeated_crashes
-        ]}
+     {cluster_size_2, [], [
+                           crashing_unmirrored_durable,
+                           crashing_mirrored,
+                           give_up_after_repeated_crashes,
+                           crashing_unmirrored_transient
+                          ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -39,13 +40,30 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 2}
-      ]).
+                                          {rmq_nodes_count, 2}
+                                         ]).
 
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(crashing_mirrored = Testcase, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            init_per_testcase0(Testcase, Config);
+        _ ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
+init_per_testcase(crashing_unmirrored_transient = Testcase, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            init_per_testcase0(Testcase, Config);
+        _ ->
+            {skip, "Transient queues not supported by Khepri"}
+    end;
 init_per_testcase(Testcase, Config) ->
+    init_per_testcase0(Testcase, Config).
+
+init_per_testcase0(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
@@ -58,16 +76,14 @@ init_per_testcase(Testcase, Config) ->
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
 
-crashing_unmirrored(Config) ->
+crashing_unmirrored_durable(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ChA = rabbit_ct_client_helpers:open_channel(Config, A),
     ConnB = rabbit_ct_client_helpers:open_connection(Config, B),
@@ -75,6 +91,14 @@ crashing_unmirrored(Config) ->
     amqp_channel:call(ChA, #'confirm.select'{}),
     test_queue_failure(A, ChA, ConnB, 1, 0,
                        #'queue.declare'{queue = QName, durable = true}),
+    ok.
+
+crashing_unmirrored_transient(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ChA = rabbit_ct_client_helpers:open_channel(Config, A),
+    ConnB = rabbit_ct_client_helpers:open_connection(Config, B),
+    QName = <<"crashing_unmirrored-q">>,
+    amqp_channel:call(ChA, #'confirm.select'{}),
     test_queue_failure(A, ChA, ConnB, 0, 0,
                        #'queue.declare'{queue = QName, durable = false}),
     ok.

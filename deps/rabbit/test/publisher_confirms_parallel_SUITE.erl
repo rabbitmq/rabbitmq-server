@@ -19,7 +19,8 @@
 
 all() ->
     [
-     {group, publisher_confirm_tests}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
@@ -33,15 +34,17 @@ groups() ->
                              confirm_mandatory_unroutable,
                              confirm_unroutable_message],
     [
-     {publisher_confirm_tests, [],
+     {mnesia_store, [],
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {quorum_queue, [],
-        [
-         {parllel_tests, [parallel], PublisherConfirmTests},
-         confirm_minority
-        ]}
+       {quorum_queue, [parallel], PublisherConfirmTests},
+       {quorum_queue, [], [confirm_minority]}
+      ]},
+     {khepri_store, [],
+      [
+       {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
+       {quorum_queue, [parallel], PublisherConfirmTests}
       ]}
     ].
 
@@ -79,7 +82,14 @@ init_per_group(mirrored_queue, Config) ->
                          {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
                          {queue_durable, true}]),
     rabbit_ct_helpers:run_steps(Config1, []);
-init_per_group(Group, Config) ->
+init_per_group(mnesia_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group0(Group, Config);
+init_per_group(khepri_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+    init_per_group0(Group, Config).
+
+init_per_group0(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
             ClusterSize = 3,
@@ -87,9 +97,10 @@ init_per_group(Group, Config) ->
                 {rmq_nodename_suffix, Group},
                 {rmq_nodes_count, ClusterSize}
               ]),
-            rabbit_ct_helpers:run_steps(Config1,
+           Config2 = rabbit_ct_helpers:run_steps(Config1,
               rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps());
+              rabbit_ct_client_helpers:setup_steps()),
+            Config2;
         false ->
             Config
     end.
@@ -265,7 +276,7 @@ confirm_nack1(Config) ->
                         rabbit_channel:do(Ch, #'queue.bind'{
                                                  queue = QName,
                                                  exchange = <<"amq.direct">>,
-                                                 routing_key = "confirms-magic" }),
+                                                 routing_key = <<"confirms-magic">> }),
                         receive #'queue.bind_ok'{} -> ok
                         after ?TIMEOUT -> throw(failed_to_bind_queue)
                         end
@@ -286,7 +297,7 @@ confirm_nack1(Config) ->
     end,
     %% Publish a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
-                                           routing_key = "confirms-magic"
+                                           routing_key = <<"confirms-magic">>
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
