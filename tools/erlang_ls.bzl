@@ -7,41 +7,6 @@ load(
     "path_join",
 )
 
-def _erlang_ls_config(ctx):
-    runtime_prefix = path_join(
-        ctx.bin_dir.path,
-        ctx.label.package,
-        ctx.label.name + ".runfiles",
-        ctx.workspace_name,
-    )
-
-    ctx.actions.write(
-        output = ctx.outputs.executable,
-        content = """#!/usr/bin/env bash
-
-set -euo pipefail
-
-BAZEL_OUT_ABSOLUTE_PATH="${{PWD%/{}}}/bazel-out"
-
-cat << EOF
-apps_dirs:
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*
-deps_dirs:
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*
-include_dirs:
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/apps/*/include
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps
-- ${{BAZEL_OUT_ABSOLUTE_PATH}}/*/bin/tools/erlang_ls_files/deps/*/include
-EOF
-""".format(runtime_prefix),
-    )
-
-erlang_ls_config = rule(
-    implementation = _erlang_ls_config,
-    executable = True,
-)
-
 def _ln_command(target, source):
     return "ln -nsvwf \"{target}\" \"{source}\"".format(
         target = target,
