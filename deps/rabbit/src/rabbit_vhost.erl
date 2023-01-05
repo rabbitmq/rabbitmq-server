@@ -506,9 +506,9 @@ default_name() ->
 
 -spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 lookup(VHostName) ->
-    case rabbit_misc:dirty_read({rabbit_vhost, VHostName}) of
-        {error, not_found} -> {error, {no_such_vhost, VHostName}};
-        {ok, Record}       -> Record
+    case rabbit_db_vhost:get(VHostName) of
+        undefined -> {error, {no_such_vhost, VHostName}};
+        VHost     -> VHost
     end.
 
 -spec assert(vhost:name()) -> 'ok'.
