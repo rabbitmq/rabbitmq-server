@@ -8,7 +8,7 @@ load(
 )
 
 def _ln_command(target, source):
-    return "ln -nsvwf \"{target}\" \"{source}\"".format(
+    return "ln -nsvf \"{target}\" \"{source}\"".format(
         target = target,
         source = source,
     )
