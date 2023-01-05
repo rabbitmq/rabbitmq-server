@@ -39,7 +39,9 @@
          enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2/1,
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv1/1,
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/1,
-         enable_feature_flag_with_post_enable/1
+         enable_feature_flag_with_post_enable/1,
+         have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
+         have_required_feature_flag_in_cluster_and_add_member_without_it/1
         ]).
 
 suite() ->
@@ -70,7 +72,9 @@ groups() ->
        enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2,
        enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv1,
        enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2,
-       enable_feature_flag_with_post_enable
+       enable_feature_flag_with_post_enable,
+       have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
+       have_required_feature_flag_in_cluster_and_add_member_without_it
       ]}
     ],
     [
@@ -145,7 +149,7 @@ start_slave_node(Parent, Config, Testcase, N) ->
 
     TestCodePath = filename:dirname(code:which(?MODULE)),
     true = rpc:call(Node, code, add_path, [TestCodePath]),
-    ok = run_on_node(Node, fun setup_slave_node/1, [Config]),
+    ok = run_on_node(Node, fun setup_slave_node/2, [Config, Testcase]),
     ct:pal("- Slave node `~ts` configured", [Node]),
     Parent ! {node, self(), Node}.
 
@@ -177,24 +181,53 @@ run_on_node(Node, Fun, Args) ->
 %% Slave node configuration.
 %% -------------------------------------------------------------------
 
-setup_slave_node(Config) ->
+setup_slave_node(Config, Testcase) ->
     ok = setup_logger(),
+    ok = setup_data_dir(Config),
     ok = setup_feature_flags_file(Config),
     ok = start_controller(),
-    ok = maybe_enable_feature_flags_v2(Config),
+    case Testcase of
+        have_required_feature_flag_in_cluster_and_add_member_with_it_disabled
+        ->
+            %% This testcase handles the `feature_flags_v2' state itself.
+            ok;
+        have_required_feature_flag_in_cluster_and_add_member_without_it
+        ->
+            %% This testcase handles the `feature_flags_v2' state itself.
+            ok;
+        _ ->
+            ok = maybe_enable_feature_flags_v2(Config)
+    end,
     ok.
 
 setup_logger() ->
     logger:set_primary_config(level, debug),
     ok.
 
+setup_data_dir(Config) ->
+    %% The data directory is set to a specific location in the test log
+    %% directory.
+    PrivDir = ?config(priv_dir, Config),
+    DataDir = filename:join(
+                PrivDir,
+                rabbit_misc:format("data-~ts", [node()])),
+    ?LOG_INFO("Setting `data_dir` to \"~ts\"", [DataDir]),
+    case application:load(rabbit) of
+        ok                           -> ok;
+        {error, {already_loaded, _}} -> ok
+    end,
+    ok = application:set_env(rabbit, data_dir, DataDir),
+    ok = application:set_env(mnesia, dir, DataDir),
+    ok.
+
 setup_feature_flags_file(Config) ->
     %% The `feature_flags_file' is set to a specific location in the test log
     %% directory.
+    PrivDir = ?config(priv_dir, Config),
     FeatureFlagsFile = filename:join(
-                         ?config(priv_dir, Config),
+                         PrivDir,
                          rabbit_misc:format("feature_flags-~ts", [node()])),
-    ?LOG_INFO("Setting `feature_flags_file to \"~ts\"", [FeatureFlagsFile]),
+    ?LOG_INFO("Setting `feature_flags_file` to \"~ts\"", [FeatureFlagsFile]),
     case application:load(rabbit) of
         ok                           -> ok;
         {error, {already_loaded, _}} -> ok
@@ -1529,6 +1562,212 @@ enable_feature_flag_with_post_enable(Config) ->
                    ?assertEqual(
                       1,
                       persistent_term:get(?PT_MIGRATION_FUN_RUNS, 0)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+    ok.
+
+have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
+  Config) ->
+    AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => ?MODULE,
+                       stability => stable}},
+    RequiredFeatureFlags = #{FeatureName =>
+                             #{provided_by => ?MODULE,
+                               stability => required}},
+    inject_on_nodes([NewNode], FeatureFlags),
+    inject_on_nodes(Nodes, RequiredFeatureFlags),
+
+    ct:pal(
+      "Checking the feature flag is supported everywhere but enabled on the "
+      "existing cluster only"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+
+                   ok = maybe_enable_feature_flags_v2(Config),
+                   ok
+           end,
+           []),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+
+                   %% We enable `feature_flags_v2' on the cluster, regardless
+                   %% of the common_test group. The reason is that we want to
+                   %% test that a bug in the sync between a
+                   %% feature_flags_v2-based cluster and a
+                   %% feature_flags_v1-based joining virgin node is fixed.
+                   %%
+                   %% See:
+                   %% https://github.com/rabbitmq/rabbitmq-server/pull/6791
+                   ok = rabbit_feature_flags:enable(feature_flags_v2),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode)),
+                   ok
+           end, []),
+
+    %% Add node to cluster and synchronize feature flags.
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+    ct:pal(
+      "Synchronizing feature flags in the expanded cluster~n"
+      "~n"
+      "NOTE: Error messages about crashed migration functions can be "
+      "ignored for feature~n"
+      "      flags other than `~ts`~n"
+      "      because they assume they run inside RabbitMQ.",
+      [FeatureName]),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:sync_feature_flags_with_cluster(
+                        Nodes, true)),
+                   ok
+           end, []),
+
+    ct:pal("Checking the feature flag is enabled in the expanded cluster"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+    ok.
+
+have_required_feature_flag_in_cluster_and_add_member_without_it(
+  Config) ->
+    AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => ?MODULE,
+                       stability => stable}},
+    RequiredFeatureFlags = #{FeatureName =>
+                             #{provided_by => ?MODULE,
+                               stability => required}},
+    inject_on_nodes([NewNode], FeatureFlags),
+    inject_on_nodes(Nodes, RequiredFeatureFlags),
+
+    ct:pal(
+      "Checking the feature flag is supported and enabled on existing the "
+      "cluster only"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+
+                   ok = maybe_enable_feature_flags_v2(Config),
+
+                   MnesiaDir = rabbit_mnesia:dir(),
+                   ok = filelib:ensure_path(MnesiaDir),
+                   SomeFile = filename:join(MnesiaDir, "some-mnesia-file.db"),
+                   ok = file:write_file(SomeFile, <<>>),
+                   ?assertNot(rabbit_mnesia:is_virgin_node()),
+                   ok
+           end,
+           []),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+
+                   %% We enable `feature_flags_v2' on the cluster, regardless
+                   %% of the common_test group. The reason is that we want to
+                   %% test that a bug in the sync between a
+                   %% feature_flags_v2-based cluster and a
+                   %% feature_flags_v1-based joining virgin node is fixed.
+                   %%
+                   %% See:
+                   %% https://github.com/rabbitmq/rabbitmq-server/pull/6791
+                   ok = rabbit_feature_flags:enable(feature_flags_v2),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode)),
+                   ok
+           end, []),
+
+    %% Add node to cluster and synchronize feature flags.
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+    ct:pal(
+      "Synchronizing feature flags in the expanded cluster~n"
+      "~n"
+      "NOTE: Error messages about crashed migration functions can be "
+      "ignored for feature~n"
+      "      flags other than `~ts`~n"
+      "      because they assume they run inside RabbitMQ.",
+      [FeatureName]),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertMatch(
+                      {error,
+                       {badrpc,
+                        {'EXIT',
+                         {{assertNotEqual,
+                           [{module, rabbit_ff_registry_factory},
+                            {line, _},
+                            {expression, "State"},
+                            {value, state_changing}]},
+                          _}}}},
+                      rabbit_feature_flags:sync_feature_flags_with_cluster(
+                        Nodes, false)),
+                   ok
+           end, []),
+
+    ct:pal("Checking the feature flag state is unchanged"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(
+                      Node =/= NewNode,
+                      rabbit_feature_flags:is_enabled(FeatureName)),
                    ok
            end,
            [])
