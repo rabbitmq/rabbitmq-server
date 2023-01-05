@@ -42,6 +42,12 @@ erlang_ls_config = rule(
     executable = True,
 )
 
+def _ln_command(target, source):
+    return "ln -nsvwf \"{target}\" \"{source}\"".format(
+        target = target,
+        source = source,
+    )
+
 def _deps_symlinks(ctx):
     apps = ctx.attr.apps
     deps = []
@@ -52,24 +58,42 @@ def _deps_symlinks(ctx):
             if dep.label.workspace_name != "" and dep not in deps and dep not in apps:
                 deps.append(dep)
 
-    files = []
     output = ctx.actions.declare_file(ctx.label.name + ".sh")
 
     commands = [
-        "set -euxo pipefail",
+        "set -euo pipefail",
         "",
-        "mkdir -p \"{}\"".format(path_join("$BUILD_WORKSPACE_DIRECTORY", ctx.attr.dest)),
+        "cd $BUILD_WORKSPACE_DIRECTORY",
+        "",
+        "mkdir -p \"{}\"".format(ctx.attr.dest),
+        "",
+        "echo Generating symlinks to external deps for erlang_ls+bazel...",
         "",
     ]
 
+    # symlinks for external deps
     for dep in deps:
         app_info = dep[ErlangAppInfo]
-        files.extend(app_info.srcs)
 
-        commands.append("ln -s \"{target}\" \"{source}\"".format(
-            target = path_join("$PWD", "external", dep.label.workspace_name),
-            source = path_join("$BUILD_WORKSPACE_DIRECTORY", ctx.attr.dest, app_info.app_name),
+        commands.append(_ln_command(
+            target = path_join("..", "bazel-$(basename $PWD)", "external", dep.label.workspace_name),
+            source = path_join(ctx.attr.dest, app_info.app_name),
         ))
+
+    # special case symlinks for generated sources
+    commands.append("")
+    commands.append(_ln_command(
+        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "include", "rabbit_framing.hrl"),
+        source = path_join("deps", "rabbit_common", "include", "rabbit_framing.hrl"),
+    ))
+    commands.append(_ln_command(
+        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "src", "rabbit_framing_amqp_0_8.erl"),
+        source = path_join("deps", "rabbit_common", "src", "rabbit_framing_amqp_0_8.erl"),
+    ))
+    commands.append(_ln_command(
+        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
+        source = path_join("deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
+    ))
 
     ctx.actions.write(
         output = output,
@@ -77,7 +101,6 @@ def _deps_symlinks(ctx):
     )
 
     return [DefaultInfo(
-        runfiles = ctx.runfiles(files = files),
         executable = output,
     )]
 
