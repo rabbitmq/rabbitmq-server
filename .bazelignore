@@ -1,10 +1,6 @@
-<<<<<<< HEAD
-/.erlang.mk/
-=======
 # .bazelignore behaves differently than .gitignore
 # https://github.com/bazelbuild/bazel/issues/7093
 .erlang.mk
 deps/osiris
 deps/ra
 extra_deps
->>>>>>> a8658ae68d (Add "bazel run //tools:symlink_deps_for_erlang_ls")
