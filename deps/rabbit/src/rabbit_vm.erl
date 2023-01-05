@@ -36,6 +36,13 @@ memory() ->
                        error:badarg ->
                            0
                    end,
+    MetadataStoreProc = try
+                            [{_, MS}] = process_info(whereis(metadata_store), [memory]),
+                            MS
+                        catch
+                            error:badarg ->
+                                0
+                        end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
     [{total,     ErlangTotal},
      {processes, Processes},
@@ -56,8 +63,7 @@ memory() ->
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
         - Qs - QsSlave - Qqs - DlxWorkers - Ssqs - Srqs - SCoor - MsgIndexProc - Plugins
-        - MgmtDbProc - MetricsProc,
-
+        - MgmtDbProc - MetricsProc - MetadataStoreProc,
     [
      %% Connections
      {connection_readers,   ConnsReader},
@@ -76,6 +82,7 @@ memory() ->
 
      %% Processes
      {plugins,              Plugins},
+     {metadata_store,       MetadataStoreProc},
      {other_proc,           lists:max([0, OtherProc])}, %% [1]
 
      %% Metrics
@@ -123,6 +130,15 @@ binary() ->
      ConnsChannel, ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
          || Names <- [[other] | distinguished_interesting_sups()]],
+    MetadataStoreProc = try
+                            [{_, B}] = process_info(whereis(metadata_store), [binary]),
+                            lists:foldl(fun({_, Sz, _}, Acc) ->
+                                                Sz + Acc
+                                        end, 0, B)
+                        catch
+                            error:badarg ->
+                                0
+                        end,
     [{connection_readers,  ConnsReader},
      {connection_writers,  ConnsWriter},
      {connection_channels, ConnsChannel},
@@ -134,10 +150,11 @@ binary() ->
      {stream_queue_procs,  Ssqs},
      {stream_queue_replica_reader_procs, Srqs},
      {stream_queue_coordinator_procs, Scoor},
+     {metadata_store,      MetadataStoreProc},
      {plugins,             Plugins},
      {mgmt_db,             MgmtDbProc},
      {msg_index,           MsgIndexProc},
-     {other,               Other}].
+     {other,               Other - MetadataStoreProc}].
 
 %%----------------------------------------------------------------------------
 

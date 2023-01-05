@@ -40,19 +40,20 @@ all() ->
 
 groups() ->
     [
-      {cluster_size_3, [], [
-          declare_args,
-          declare_policy,
-          declare_invalid_policy,
-          declare_policy_nodes,
-          declare_policy_all,
-          declare_policy_exactly,
-          declare_config,
-          calculate_min_master,
-          calculate_min_master_with_bindings,
-          calculate_random,
-          calculate_client_local
-        ]},
+      {cluster_size_3, [], [{non_mirrored, [], [
+                                            declare_args,
+                                            declare_policy,
+                                            declare_config,
+                                            calculate_min_master,
+                                            calculate_min_master_with_bindings,
+                                            calculate_random,
+                                            calculate_client_local
+                                           ]},
+                            {mirrored, [], [declare_invalid_policy,
+                                            declare_policy_nodes,
+                                            declare_policy_all,
+                                            declare_policy_exactly]}]
+      },
 
       {maintenance_mode, [], [
           declare_with_min_masters_and_some_nodes_under_maintenance,
@@ -82,6 +83,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mirrored, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Config;
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
+init_per_group(non_mirrored, Config) ->
+    Config;
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         %% Replaced with a list of node names later

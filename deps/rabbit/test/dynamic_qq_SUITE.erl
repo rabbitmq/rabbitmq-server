@@ -25,12 +25,18 @@ groups() ->
     [
       {clustered, [], [
           {cluster_size_3, [], [
-              recover_follower_after_standalone_restart,
               vhost_deletion,
+              quorum_unaffected_after_vhost_failure
+            ]},
+          {cluster_size_5, [], [
+              %% Khepri does not work on a cluster in minority. Thus, to test these
+              %% specific cases with quorum queues in minority we need a bigger cluster.
+              %% 5-nodes RMQ and 3-nodes quorum queues allows to test the same test
+              %% cases than a 3-nodes mnesia cluster.
+              recover_follower_after_standalone_restart,
               force_delete_if_no_consensus,
               takeover_on_failure,
-              takeover_on_shutdown,
-              quorum_unaffected_after_vhost_failure
+              takeover_on_shutdown
             ]}
         ]}
     ].
@@ -48,8 +54,8 @@ end_per_suite(Config) ->
 
 init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
-init_per_group(cluster_size_2, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
+init_per_group(cluster_size_5, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]);
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
 
@@ -71,7 +77,8 @@ init_per_testcase(Testcase, Config) ->
                                                             {rmq_nodename_suffix, Testcase},
                                                             {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
                                                             {queue_name, Q},
-                                                            {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+                                                            {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                                          {<<"x-quorum-initial-group-size">>, long, 3}]}
                                                            ]),
             rabbit_ct_helpers:run_steps(
               Config1,
@@ -105,15 +112,22 @@ vhost_deletion(Config) ->
     ok.
 
 force_delete_if_no_consensus(Config) ->
-    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QName = ?config(queue_name, Config),
     Args = ?config(queue_args, Config),
-    amqp_channel:call(ACh, #'queue.declare'{queue = QName,
-                                            arguments = Args,
-                                            durable = true
-                                           }),
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                           arguments = Args,
+                                           durable = true
+                                          }),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    
+    RaName = quorum_queue_utils:ra_name(QName),
+    {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
+
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     rabbit_ct_client_helpers:publish(ACh, QName, 10),
+
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
     ok = rabbit_ct_broker_helpers:stop_node(Config, A),
     ok = rabbit_ct_broker_helpers:stop_node(Config, C),
@@ -138,16 +152,19 @@ takeover_on_shutdown(Config) ->
     takeover_on(Config, stop_node).
 
 takeover_on(Config, Fun) ->
-    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
 
-    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = ?config(queue_name, Config),
     Args = ?config(queue_args, Config),
-    amqp_channel:call(ACh, #'queue.declare'{queue = QName,
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                             arguments = Args,
                                             durable = true
                                            }),
-    rabbit_ct_client_helpers:publish(ACh, QName, 10),
+    rabbit_ct_client_helpers:publish(Ch, QName, 10),
+
+    RaName = quorum_queue_utils:ra_name(QName),
+    {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
 
     ok = rabbit_ct_broker_helpers:Fun(Config, C),
@@ -201,8 +218,8 @@ recover_follower_after_standalone_restart(Config) ->
             %% Tests that followers can be brought up standalone after forgetting the
             %% rest of the cluster. Consensus won't be reached as there is only one node in the
             %% new cluster.
-            Servers = [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-            Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+            [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
 
             QName = ?config(queue_name, Config),
             Args = ?config(queue_args, Config),
@@ -210,6 +227,10 @@ recover_follower_after_standalone_restart(Config) ->
                                                    arguments = Args,
                                                    durable = true
                                                   }),
+
+            RaName = quorum_queue_utils:ra_name(QName),
+            {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
+            Servers = [A, B, C],
 
             rabbit_ct_client_helpers:publish(Ch, QName, 15),
             rabbit_ct_client_helpers:close_channel(Ch),

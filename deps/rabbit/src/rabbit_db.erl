@@ -7,6 +7,8 @@
 
 -module(rabbit_db).
 
+-include_lib("khepri/include/khepri.hrl").
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
@@ -21,9 +23,13 @@
          ensure_dir_exists/0]).
 -export([run/1]).
 
+-export([set_migration_flag/1, is_migration_done/1]).
+
 %% Exported to be used by various rabbit_db_* modules
 -export([
-         list_in_mnesia/2
+         list_in_mnesia/2,
+         list_in_khepri/1,
+         list_in_khepri/2
         ]).
 
 %% Default timeout for operations on remote nodes.
@@ -38,6 +44,15 @@
 %% @doc Initializes the DB layer.
 
 init() ->
+    rabbit_db:run(
+      #{mnesia => fun() -> init_in_mnesia() end,
+        khepri => fun() ->
+                          init_in_khepri(),
+                          init_in_mnesia()
+                  end
+       }).
+
+init_in_mnesia() ->
     IsVirgin = is_virgin_node(),
     ?LOG_DEBUG(
        "DB: this node is virgin: ~ts", [IsVirgin],
@@ -81,6 +96,7 @@ init_using_mnesia() ->
     ?LOG_DEBUG(
       "DB: initialize Mnesia",
       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = recover_mnesia_tables(),
     ok = rabbit_mnesia:init(),
     ?assertEqual(rabbit:data_dir(), mnesia_dir()),
     rabbit_sup:start_child(mnesia_sync).
@@ -90,7 +106,13 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    ok = reset_using_mnesia(),
+    ?LOG_INFO(
+       "Resetting Rabbit", [],
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = run(
+           #{mnesia => fun() -> reset_using_mnesia() end,
+             khepri => fun() -> reset_using_khepri() end
+            }),
     ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
@@ -100,20 +122,32 @@ reset_using_mnesia() ->
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:reset().
 
+reset_using_khepri() ->
+    ?LOG_DEBUG(
+      "DB: resetting node",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_khepri:reset().
+
 -spec force_reset() -> Ret when
       Ret :: ok.
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    ok = force_reset_using_mnesia(),
+    ?LOG_DEBUG(
+       "DB: resetting node forcefully",
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = run(
+           #{mnesia => fun() -> force_reset_using_mnesia() end,
+             khepri => fun() -> force_reset_using_khepri() end
+            }),
     ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
 force_reset_using_mnesia() ->
-    ?LOG_DEBUG(
-      "DB: resetting node forcefully",
-      #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_reset().
+
+force_reset_using_khepri() ->
+    rabbit_khepri:force_reset().
 
 -spec force_load_on_next_boot() -> Ret when
       Ret :: ok.
@@ -123,13 +157,43 @@ force_reset_using_mnesia() ->
 %% state, like if critical members are MIA.
 
 force_load_on_next_boot() ->
-    force_load_on_next_boot_using_mnesia().
+    run(
+      #{mnesia => fun() -> force_load_on_next_boot_using_mnesia() end,
+        khepri => fun() ->
+                          %% TODO force load using Khepri might need to be implemented
+                          %% for disaster recovery scenarios where just a minority of
+                          %% nodes are accessible. Potentially, it could also be replaced
+                          %% with a way to export all the data.
+                          force_load_on_next_boot_using_mnesia()
+                  end
+       }).
 
 force_load_on_next_boot_using_mnesia() ->
     ?LOG_DEBUG(
       "DB: resetting node forcefully",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_load_next_boot().
+
+recover_mnesia_tables() ->
+    %% A failed migration can leave tables in read-only mode before enabling
+    %% the feature flag. See rabbit_core_ff:final_sync_from_mnesia_to_khepri/2
+    %% Unlock them here as mnesia is still fully functional.
+    Tables = [Table || {Table, _} <- rabbit_table:definitions()],
+    _ = [mnesia:change_table_access_mode(Table, read_write) || Table <- Tables],
+    ok.
+
+init_in_khepri() ->
+    case rabbit_khepri:members() of
+        [] ->
+            timer:sleep(1000),
+            init_in_khepri();
+        Members ->
+            rabbit_log:warning("Found the following metadata store members: ~p", [Members])
+    end.
+
+%% -------------------------------------------------------------------
+%% is_virgin_node().
+%% -------------------------------------------------------------------
 
 -spec is_virgin_node() -> IsVirgin when
       IsVirgin :: boolean().
@@ -167,6 +231,10 @@ is_virgin_node_with_mnesia(Node) ->
             undefined
     end.
 
+%% -------------------------------------------------------------------
+%% dir().
+%% -------------------------------------------------------------------
+
 -spec dir() -> DBDir when
       DBDir :: file:filename().
 %% @doc Returns the directory where the database stores its data.
@@ -178,6 +246,10 @@ dir() ->
 
 mnesia_dir() ->
     rabbit_mnesia:dir().
+
+%% -------------------------------------------------------------------
+%% ensure_dir_exists().
+%% -------------------------------------------------------------------
 
 -spec ensure_dir_exists() -> ok | no_return().
 %% @doc Ensures the database directory exists.
@@ -198,7 +270,7 @@ ensure_dir_exists() ->
 %% -------------------------------------------------------------------
 
 -spec run(Funs) -> Ret when
-      Funs :: #{mnesia := Fun},
+      Funs :: #{mnesia := Fun, khepri := Fun},
       Fun :: fun(() -> Ret),
       Ret :: any().
 %% @doc Runs the function corresponding to the used database engine.
@@ -206,14 +278,96 @@ ensure_dir_exists() ->
 %% @returns the return value of `Fun'.
 
 run(Funs)
-  when is_map(Funs) andalso is_map_key(mnesia, Funs) ->
-    #{mnesia := MnesiaFun} = Funs,
-    run_with_mnesia(MnesiaFun).
+  when is_map(Funs) andalso is_map_key(mnesia, Funs)
+       andalso is_map_key(khepri, Funs) ->
+    #{mnesia := MnesiaFun,
+      khepri := KhepriFun} = Funs,
+    case rabbit_khepri:use_khepri() of
+        true ->
+            run_with_khepri(KhepriFun);
+        false ->
+            try
+                run_with_mnesia(MnesiaFun)
+            catch
+                _:{Type, {no_exists, Table}}
+                  when Type =:= aborted orelse Type =:= error ->
+                    %% We wait for the feature flag(s) to be enabled
+                    %% or disabled (this is a blocking call) and
+                    %% retry.
+                    ?LOG_DEBUG(
+                       "Mnesia function failed because table ~s "
+                       "is gone or read-only; checking if the new "
+                       "metadata store was enabled in parallel and "
+                       "retry",
+                       [Table]),
+                    _ = rabbit_khepri:is_enabled(),
+                    run(Funs)
+            end
+    end.
 
 run_with_mnesia(Fun) ->
     Fun().
+
+run_with_khepri(Fun) ->
+    Fun().
+
+%% -------------------------------------------------------------------
+%% set_migration_flag().
+%% -------------------------------------------------------------------
+
+-spec set_migration_flag(FeatureName) -> ok when
+      FeatureName :: atom().
+
+set_migration_flag(FeatureName) ->
+    rabbit_khepri:put([?MODULE, migration_done, FeatureName], true).
+
+%% -------------------------------------------------------------------
+%% is_migration_done().
+%% -------------------------------------------------------------------
+
+-spec is_migration_done(FeatureName) -> boolean() when
+      FeatureName :: atom().
+
+is_migration_done(FeatureName) ->
+    case rabbit_khepri:get([?MODULE, migration_done, FeatureName]) of
+        {ok, Flag} ->
+            Flag;
+        _ ->
+            false
+    end.
+
+%% -------------------------------------------------------------------
+%% list_in_mnesia().
+%% -------------------------------------------------------------------
+
+-spec list_in_mnesia(Table, Match) -> Objects when
+      Table :: atom(),
+      Match :: any(),
+      Objects :: [any()].
 
 list_in_mnesia(Table, Match) ->
     %% Not dirty_match_object since that would not be transactional when used in a
     %% tx context
     mnesia:async_dirty(fun () -> mnesia:match_object(Table, Match, read) end).
+
+%% -------------------------------------------------------------------
+%% list_in_khepri().
+%% -------------------------------------------------------------------
+
+-spec list_in_khepri(Path) -> Objects when
+      Path :: khepri_path:pattern(),
+      Objects :: [term()].
+
+list_in_khepri(Path) ->
+    list_in_khepri(Path, #{}).
+
+-spec list_in_khepri(Path, Options) -> Objects when
+      Path :: khepri_path:pattern(),
+      Options :: map(),
+      Objects :: [term()].
+
+list_in_khepri(Path, Options) ->
+    case rabbit_khepri:match(Path, Options) of
+        {ok, Map} -> maps:values(Map);
+        _         -> []
+    end.

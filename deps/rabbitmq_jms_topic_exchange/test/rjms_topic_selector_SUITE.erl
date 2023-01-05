@@ -22,14 +22,16 @@
 
 all() ->
     [
-      {group, parallel_tests}
+     {group, mnesia_store},
+     {group, khepri_store},
+     {group, khepri_migration}
     ].
 
 groups() ->
     [
-      {parallel_tests, [parallel], [
-                                    test_topic_selection
-                                   ]}
+     {mnesia_store, [], [test_topic_selection]},
+     {khepri_store, [], [test_topic_selection]},
+     {khepri_migration, [], [from_mnesia_to_khepri]}
     ].
 
 %% -------------------------------------------------------------------
@@ -38,23 +40,35 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
-      ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
+    rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(mnesia_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group_common(Group, Config);
+init_per_group(khepri_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(
+               Config0,
+               [{metadata_store, {khepri, [rabbit_jms_topic_exchange_raft_based_metadata_store]}}]),
+    init_per_group_common(Group, Config);
+init_per_group(khepri_migration = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group_common(Group, Config).
+
+init_per_group_common(Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, Group}
+                                                   ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      rabbit_ct_broker_helpers:setup_steps() ++
+                                          rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config,
+                                         rabbit_ct_client_helpers:teardown_steps() ++
+                                             rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -84,6 +98,31 @@ test_topic_selection(Config) ->
     close_connection_and_channel(Connection, Channel),
     ok.
 
+from_mnesia_to_khepri(Config) ->
+    {Connection, Channel} = open_connection_and_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", []),
+
+    %% Declare a queue and bind it
+    Q = declare_queue(Channel),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
+
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, raft_based_metadata_store_phase1) of
+        ok ->
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_jms_topic_exchange_raft_based_metadata_store) of
+                ok ->
+                    publish_two_messages(Channel, Exchange, <<"select-key">>),
+                    amqp_channel:wait_for_confirms(Channel, 5),
+                    get_and_check(Channel, Q, 0, <<"true">>),
+                    close_connection_and_channel(Connection, Channel),
+                    ok;
+                Skip ->
+                    Skip
+            end;
+        Skip ->
+            Skip
+    end.
 
 %% -------------------------------------------------------------------
 %% Helpers.

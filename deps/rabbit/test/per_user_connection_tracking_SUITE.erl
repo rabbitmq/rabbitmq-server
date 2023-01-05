@@ -15,10 +15,8 @@
 
 all() ->
     [
-     {group, cluster_size_1_network},
-     {group, cluster_size_2_network},
-     {group, cluster_size_1_direct},
-     {group, cluster_size_2_direct}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
@@ -30,10 +28,18 @@ groups() ->
         cluster_user_deletion_forces_connection_closure
     ],
     [
-      {cluster_size_1_network, [], ClusterSize1Tests},
-      {cluster_size_2_network, [], ClusterSize2Tests},
-      {cluster_size_1_direct, [], ClusterSize1Tests},
-      {cluster_size_2_direct, [], ClusterSize2Tests}
+     {mnesia_store, [], [
+                         {cluster_size_1_network, [], ClusterSize1Tests},
+                         {cluster_size_2_network, [], ClusterSize2Tests},
+                         {cluster_size_1_direct, [], ClusterSize1Tests},
+                         {cluster_size_2_direct, [], ClusterSize2Tests}
+                        ]},
+     {khepri_store, [], [
+                         {cluster_size_1_network, [], ClusterSize1Tests},
+                         {cluster_size_2_network, [], ClusterSize2Tests},
+                         {cluster_size_1_direct, [], ClusterSize1Tests},
+                         {cluster_size_2_direct, [], ClusterSize2Tests}
+                        ]}
     ].
 
 suite() ->
@@ -53,6 +59,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mnesia_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
 init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
@@ -76,6 +86,9 @@ init_per_multinode_group(_Group, Config, NodeCount) ->
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                     rabbit_ct_client_helpers:setup_steps()).
 
+end_per_group(Group, Config) when Group == mnesia_store; Group == khepri_store ->
+    % The broker is managed by {init,end}_per_testcase().
+    Config;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++

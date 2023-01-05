@@ -28,7 +28,7 @@
     random_primary_replica_transfer_candidate_node/2,
     transfer_leadership_of_quorum_queues/1,
     transfer_leadership_of_classic_mirrored_queues/1,
-    boot/0
+    table_definitions/0
 ]).
 
 -define(DEFAULT_STATUS,  regular).
@@ -44,13 +44,8 @@
 %% Boot
 %%
 
--rabbit_boot_step({rabbit_maintenance_mode_state,
-    [{description, "initializes maintenance mode state"},
-        {mfa,         {?MODULE, boot, []}},
-        {requires,    networking}]}).
-
-boot() ->
-    rabbit_db_maintenance:setup_schema().
+table_definitions() ->
+    rabbit_db_maintenance:table_definitions().
 
 %%
 %% API
@@ -84,6 +79,8 @@ drain() ->
         undefined -> ok;
         _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
     end,
+
+    transfer_leadership_of_metadata_store(TransferCandidates),
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
@@ -208,6 +205,24 @@ transfer_leadership_of_quorum_queues(_TransferCandidates) ->
         end
      end || Q <- Queues],
     rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
+
+-spec transfer_leadership_of_metadata_store([node()]) -> ok.
+transfer_leadership_of_metadata_store([]) ->
+    %% TODO If we can't transfer the leadership of the metadata store, should the drain
+    %% operation fail????
+    rabbit_log:warning("Skipping leadership transfer of metadata store: no candidate "
+                       "(online, not under maintenance) nodes to transfer to!");
+transfer_leadership_of_metadata_store(TransferCandidates) ->
+    rabbit_log:info("Will transfer leadership of metadata store with current leader on this node",
+                    []),
+    case rabbit_khepri:transfer_leadership(TransferCandidates) of
+        {ok, Node} when Node == node(); Node == undefined ->
+            rabbit_log:info("Skipping leadership transfer of metadata store: current leader is not on this node");
+        {ok, Node} ->
+            rabbit_log:info("Leadership transfer for metadata store on this node has been done. The new leader is ~p", [Node]);
+        Error ->
+            rabbit_log:warning("Skipping leadership transfer of metadata store: ~p", [Error])
+    end.
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
 %% This function is no longer used by maintanence mode. We retain it in case

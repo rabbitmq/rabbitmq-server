@@ -36,10 +36,10 @@ route(#exchange{name = Name, type = Type}, _) ->
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
-create(_Tx, _X) -> ok.
-delete(_Tx, _X) -> ok.
+create(_Serial, _X) -> ok.
+delete(_Serial, _X) -> ok.
 policy_changed(_X1, _X2) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+add_binding(_Serial, _X, _B) -> ok.
+remove_bindings(_Serial, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).

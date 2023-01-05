@@ -96,9 +96,14 @@ init_per_group(Group, Config, NodesCount) ->
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),
-    ok = rpc(Config2, 0, application, set_env,
-             [rabbit, channel_tick_interval, 100]),
-    Config2.
+    case Config2 of
+        {skip, _Reason} = Skip ->
+            Skip;
+        _ ->
+            ok = rpc(Config2, 0, application, set_env,
+                     [rabbit, channel_tick_interval, 100]),
+            Config2
+    end.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -111,10 +116,16 @@ merge_app_env(Config) ->
       {ra, [{min_wal_roll_over_interval, 30000}]}).
 
 init_per_testcase(Testcase, Config) ->
-    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
-        {single_dlx_worker, true} ->
+    IsKhepriEnabled = lists:any(fun(B) -> B end,
+                                rabbit_ct_broker_helpers:rpc_all(
+                                  Config, rabbit_feature_flags, is_enabled,
+                                  [raft_based_metadata_store_phase1])),
+    case {Testcase, rabbit_ct_helpers:is_mixed_versions(), IsKhepriEnabled} of
+        {single_dlx_worker, true, _} ->
             {skip, "single_dlx_worker is not mixed version compatible because process "
              "rabbit_fifo_dlx_sup does not exist in 3.9"};
+        {many_target_queues, _, true} ->
+            {skip, "Classic queue mirroring not supported by Khepri"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             T = rabbit_data_coercion:to_binary(Testcase),

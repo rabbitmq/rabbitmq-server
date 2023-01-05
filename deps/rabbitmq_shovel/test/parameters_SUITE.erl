@@ -159,7 +159,7 @@ test_parse_amqp091(Params) ->
       reconnect_delay := 1001,
       dest := #{module := rabbit_amqp091_shovel,
                 uris := ["amqp://remotehost:5672"],
-                props_fun := PropsFun
+                props_fun := {M, F, Args}
                },
       source := #{module := rabbit_amqp091_shovel,
                   uris := ["amqp://localhost:5672"],
@@ -170,9 +170,9 @@ test_parse_amqp091(Params) ->
 
     #'P_basic'{headers = ActualHeaders,
                delivery_mode = 2,
-               cluster_id = <<"x">>} = PropsFun("amqp://localhost:5672",
-                                                "amqp://remotehost:5672",
-                                                #'P_basic'{headers = undefined}),
+               cluster_id = <<"x">>} = apply(M, F, Args ++ ["amqp://localhost:5672",
+                                                            "amqp://remotehost:5672",
+                                                            #'P_basic'{headers = undefined}]),
     assert_amqp901_headers(ActualHeaders),
     ok.
 
@@ -185,7 +185,7 @@ test_parse_amqp091_with_blank_proprties(Params) ->
       reconnect_delay := 1001,
       dest := #{module := rabbit_amqp091_shovel,
                 uris := ["amqp://remotehost:5672"],
-                props_fun := PropsFun
+                props_fun := {M, F, Args}
                },
       source := #{module := rabbit_amqp091_shovel,
                   uris := ["amqp://localhost:5672"],
@@ -194,9 +194,9 @@ test_parse_amqp091_with_blank_proprties(Params) ->
                   delete_after := 'queue-length'}
      } = Result,
 
-    #'P_basic'{headers = ActualHeaders} = PropsFun("amqp://localhost:5672",
-                                                   "amqp://remotehost:5672",
-                                                   #'P_basic'{headers = undefined}),
+    #'P_basic'{headers = ActualHeaders} = apply(M, F, Args ++ ["amqp://localhost:5672",
+                                                               "amqp://remotehost:5672",
+                                                               #'P_basic'{headers = undefined}]),
     assert_amqp901_headers(ActualHeaders),
     ok.
 

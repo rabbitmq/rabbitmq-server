@@ -221,7 +221,7 @@ ch_hash_ring_delete_fun(#chx_hash_ring{bucket_map = BM0,
             Chx0#chx_hash_ring{bucket_map = BM1,
                                next_bucket_number = NextN}
     end.
-
+            
 -spec ring_state(vhost:name(), rabbit_misc:resource_name()) ->
     {ok, #chx_hash_ring{}} | {error, not_found}.
 ring_state(VirtualHost, XName) ->

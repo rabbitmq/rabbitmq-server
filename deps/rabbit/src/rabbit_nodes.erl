@@ -303,7 +303,7 @@ is_running(Node) when is_atom(Node) ->
 
 list_running() ->
     Members = list_members(),
-    filter_running(Members).
+    do_filter_running(Members).
 
 -spec list_not_running() -> Nodes when
       Nodes :: [node()].

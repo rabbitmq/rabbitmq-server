@@ -26,8 +26,6 @@ APP_MODULE = "rabbit_federation_app"
 
 all_beam_files(name = "all_beam_files")
 
-all_test_beam_files(name = "all_test_beam_files")
-
 all_srcs(name = "all_srcs")
 
 test_suite_beam_files(name = "test_suite_beam_files")
@@ -48,6 +46,8 @@ rabbitmq_app(
     deps = [
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@khepri//:erlang_app",
+        "@khepri_mnesia_migration//:erlang_app",
     ],
 )
 
@@ -102,3 +102,5 @@ alias(
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
 )
+
+all_test_beam_files(name = "all_test_beam_files")

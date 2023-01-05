@@ -631,7 +631,12 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                            end || N <- Alive];
         error          -> ok
     end,
-    {noreply, handle_dead_node(Node, State)};
+    case rabbit_khepri:is_enabled(non_blocking) of
+        true ->
+            {noreply, State};
+        false ->
+            {noreply, handle_dead_node(Node, State)}
+    end;
 
 handle_info({nodeup, Node, _Info}, State) ->
     rabbit_log:info("node ~tp up", [Node]),

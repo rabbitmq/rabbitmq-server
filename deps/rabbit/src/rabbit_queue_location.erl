@@ -32,6 +32,8 @@ select_leader_and_followers(Q, Size)
     true = lists:member(node(), AllNodes),
     QueueType = amqqueue:get_type(Q),
     GetQueues0 = get_queues_for_type(QueueType),
+    %% TODO do we always need the queue count? it can be expensieve, check if it can be xkipped!
+    %% for example, for randomn
     QueueCount = rabbit_amqqueue:count(),
     QueueCountStartRandom = application:get_env(rabbit, queue_count_start_random_selection,
                                                 ?QUEUE_COUNT_START_RANDOM_SELECTION),
@@ -164,7 +166,7 @@ potential_leaders(Replicas, RunningNodes) ->
 %% Return a function so that queues are fetched lazily (i.e. only when needed,
 %% and at most once when no amqqueue migration is going on).
 get_queues_for_type(QueueType) ->
-    fun () -> rabbit_amqqueue:list_by_type(QueueType) end.
+    fun() -> rabbit_amqqueue:list_by_type(QueueType) end.
 
 shuffle(L0) when is_list(L0) ->
     L1 = lists:map(fun(E) -> {rand:uniform(), E} end, L0),

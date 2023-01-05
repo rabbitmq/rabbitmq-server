@@ -59,10 +59,21 @@ defmodule ChangeClusterNodeTypeCommandTest do
   # end
 
   test "run: request to a node with running RabbitMQ app fails", context do
-    assert match?(
-             {:error, :mnesia_unexpectedly_running},
-             @command.run(["ram"], context[:opts])
-           )
+    node = RabbitMQ.CLI.Core.Helpers.normalise_node(context[:node], :shortnames)
+
+    case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
+      true ->
+        assert match?(
+                 :ok,
+                 @command.run(["ram"], context[:opts])
+               )
+
+      false ->
+        assert match?(
+                 {:error, :mnesia_unexpectedly_running},
+                 @command.run(["ram"], context[:opts])
+               )
+    end
   end
 
   test "run: request to an unreachable node returns a badrpc", _context do

@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_binding).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -25,7 +26,6 @@
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
                                                kind = exchange,
                                                name = <<>>}).
-
 %%----------------------------------------------------------------------------
 
 -export_type([key/0, deletions/0]).
@@ -382,7 +382,11 @@ combine_deletions(Deletions1, Deletions2) ->
 merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
     {anything_but(undefined, X1, X2),
      anything_but(not_deleted, Deleted1, Deleted2),
-     [Bindings1 | Bindings2]}.
+     Bindings1 ++ Bindings2};
+merge_entry({X1, Deleted1, Bindings1, none}, {X2, Deleted2, Bindings2, none}) ->
+    {anything_but(undefined, X1, X2),
+     anything_but(not_deleted, Deleted1, Deleted2),
+     Bindings1 ++ Bindings2, none}.
 
 notify_deletions({error, not_found}, _) ->
     ok;

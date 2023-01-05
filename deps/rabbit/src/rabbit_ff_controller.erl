@@ -1019,17 +1019,20 @@ post_enable(#{states_per_node := _}, FeatureName, Nodes) ->
 
 -ifndef(TEST).
 all_nodes() ->
-    lists:usort([node() | rabbit_nodes:list_members()]).
+    lists:sort(rabbit_nodes:list_members()).
 
 running_nodes() ->
     lists:usort([node() | rabbit_nodes:list_running()]).
 -else.
 all_nodes() ->
-    RemoteNodes = case rabbit_feature_flags:get_overriden_nodes() of
-                      undefined -> rabbit_nodes:list_members();
-                      Nodes     -> Nodes
-                  end,
-    lists:usort([node() | RemoteNodes]).
+    AllNodes = case rabbit_feature_flags:get_overriden_nodes() of
+                   undefined ->
+                       rabbit_nodes:list_members();
+                   Nodes ->
+                       ?assert(lists:member(node(), Nodes)),
+                       Nodes
+               end,
+    lists:sort(AllNodes).
 
 running_nodes() ->
     RemoteNodes = case rabbit_feature_flags:get_overriden_running_nodes() of

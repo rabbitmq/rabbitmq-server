@@ -13,6 +13,10 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
+-import(clustering_utils, [
+                           assert_cluster_status/2
+                          ]).
+
 -export([suite/0,
          all/0,
          groups/0,
@@ -889,7 +893,9 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     %% the `rabbit_ff_controller' process because it was pretty fragile.
     %% That's why the rest of the testcase is commentted out now. We should
     %% revisit this at some point.
-    [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
+    [?assertEqual(ok, rabbit_ct_broker_helpers:async_start_node(Config, N))
+     || N <- lists:reverse(Nodes)],
+    [?assertEqual(ok, rabbit_ct_broker_helpers:wait_for_async_start_node(N))
      || N <- lists:reverse(Nodes)].
 
     % XXX ?assertEqual(
@@ -902,8 +908,8 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
 enable_feature_flag_with_a_network_partition(Config) ->
     FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
-    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
-                        Config, nodename),
+    [A, B, C, D, E] = All = rabbit_ct_broker_helpers:get_node_configs(
+                              Config, nodename),
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
 
@@ -923,7 +929,10 @@ enable_feature_flag_with_a_network_partition(Config) ->
                  {E, C},
                  {E, D}],
     block(NodePairs),
-    timer:sleep(1000),
+
+    %% Wait for the network partition to happen
+    assert_cluster_status({All, [B, E]}, [B, E]),
+    assert_cluster_status({All, [A, C, D]}, [A, C, D]),
 
     %% Enabling the feature flag should fail in the specific case of
     %% `ff_from_testsuite', if the network is broken.
@@ -936,11 +945,11 @@ enable_feature_flag_with_a_network_partition(Config) ->
 
     %% Repair the network and try again to enable the feature flag.
     unblock(NodePairs),
-    timer:sleep(10000),
     [?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, N))
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
      || N <- [A, C, D]],
+    assert_cluster_status({All, All}, All),
     declare_arbitrary_feature_flag(Config),
 
     %% Enabling the feature flag works.
@@ -976,7 +985,8 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
                  {B, D},
                  {B, E}],
     block(NodePairs),
-    timer:sleep(1000),
+    assert_cluster_status({AllNodes, [B]}, [B]),
+    assert_cluster_status({AllNodes, [A, C, D, E]}, [A, C, D, E]),
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to timeout.

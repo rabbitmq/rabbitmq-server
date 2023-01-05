@@ -7,6 +7,7 @@
 
 -module(rabbit_db_rtparams).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([set/2, set/4,
@@ -15,7 +16,16 @@
          get_all/0, get_all/2,
          delete/1, delete/3]).
 
+-export([khepri_vhost_rp_path/3,
+         khepri_global_rp_path/1,
+         khepri_rp_path/0
+        ]).
+
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
+-define(any(Value), case Value of
+                        '_' -> ?KHEPRI_WILDCARD_STAR;
+                        _ -> Value
+                    end).
 
 %% -------------------------------------------------------------------
 %% set().
@@ -34,11 +44,23 @@
 
 set(Key, Term) when is_atom(Key) ->
     rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(Key, Term) end}).
+      #{mnesia => fun() -> set_in_mnesia(Key, Term) end,
+        khepri => fun() -> set_in_khepri(Key, Term) end}).
 
 set_in_mnesia(Key, Term) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun() -> set_in_mnesia_tx(Key, Term) end).
+
+set_in_khepri(Key, Term) ->
+    Path = khepri_rp_path(Key),
+    Record = #runtime_parameters{key   = Key,
+                                 value = Term},
+    case rabbit_khepri:adv_put(Path, Record) of
+        {ok, #{data := Params}} ->
+            {old, Params#runtime_parameters.value};
+        {ok, _} ->
+            new
+    end.
 
 -spec set(VHostName, Comp, Name, Term) -> Ret when
       VHostName :: vhost:name(),
@@ -60,7 +82,8 @@ set(VHostName, Comp, Name, Term)
        (is_binary(Name) orelse is_atom(Name)) ->
     Key = {VHostName, Comp, Name},
     rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(VHostName, Key, Term) end}).
+      #{mnesia => fun() -> set_in_mnesia(VHostName, Key, Term) end,
+        khepri => fun() -> set_in_khepri(VHostName, Key, Term) end}).
 
 set_in_mnesia(VHostName, Key, Term) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -77,6 +100,22 @@ set_in_mnesia_tx(Key, Term) ->
                                  value = Term},
     mnesia:write(?MNESIA_TABLE, Record, write),
     Res.
+
+set_in_khepri(VHostName, Key, Term) ->
+    rabbit_khepri:transaction(
+      rabbit_db_vhost:with_fun_in_khepri_tx(
+        VHostName, fun() -> set_in_khepri_tx(Key, Term) end), rw).
+
+set_in_khepri_tx(Key, Term) ->
+    Path = khepri_rp_path(Key),
+    Record = #runtime_parameters{key   = Key,
+                                 value = Term},
+    case khepri_tx_adv:put(Path, Record) of
+        {ok, #{data := Params}} ->
+            {old, Params#runtime_parameters.value};
+        {ok, _} ->
+            new
+    end.
 
 %% -------------------------------------------------------------------
 %% get().
@@ -97,15 +136,24 @@ get({VHostName, Comp, Name} = Key)
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Key) end});
+      #{mnesia => fun() -> get_in_mnesia(Key) end,
+        khepri => fun() -> get_in_khepri(Key) end});
 get(Key) when is_atom(Key) ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Key) end}).
+      #{mnesia => fun() -> get_in_mnesia(Key) end,
+        khepri => fun() -> get_in_khepri(Key) end}).
 
 get_in_mnesia(Key) ->
     case mnesia:dirty_read(?MNESIA_TABLE, Key) of
         []       -> undefined;
         [Record] -> Record
+    end.
+
+get_in_khepri(Key) ->
+    Path = khepri_rp_path(Key),
+    case rabbit_khepri:get(Path) of
+        {ok, R}                              -> R;
+        {error, {khepri, node_not_found, _}} -> undefined
     end.
 
 %% -------------------------------------------------------------------
@@ -125,10 +173,13 @@ get_or_set({VHostName, Comp, Name} = Key, Default)
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end});
+      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end,
+        khepri => fun() -> get_or_set_in_khepri(Key, Default) end});
 get_or_set(Key, Default) ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end}).
+      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end,
+        khepri => fun() -> get_or_set_in_khepri(Key, Default) end
+       }).
 
 get_or_set_in_mnesia(Key, Default) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -145,6 +196,21 @@ get_or_set_in_mnesia_tx(Key, Default) ->
             Record
     end.
 
+get_or_set_in_khepri(Key, Default) ->
+    Path = khepri_rp_path(Key),
+    rabbit_khepri:transaction(
+      fun () ->
+              case khepri_tx:get(Path) of
+                  {ok, undefined} ->
+                      Record = #runtime_parameters{key   = Key,
+                                                   value = Default},
+                      ok = khepri_tx:put(Path, Record),
+                      Record;
+                  {ok, R} ->
+                      R
+              end
+      end).
+
 %% -------------------------------------------------------------------
 %% get_all().
 %% -------------------------------------------------------------------
@@ -159,10 +225,16 @@ get_or_set_in_mnesia_tx(Key, Default) ->
 
 get_all() ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end}).
+      #{mnesia => fun() -> get_all_in_mnesia() end,
+        khepri => fun() -> get_all_in_khepri() end}).
 
 get_all_in_mnesia() ->
     rabbit_mnesia:dirty_read_all(?MNESIA_TABLE).
+
+get_all_in_khepri() ->
+    Path = khepri_rp_path() ++ [rabbit_khepri:if_has_data_wildcard()],
+    {ok, Map} = rabbit_khepri:match(Path),
+    maps:values(Map).
 
 -spec get_all(VHostName, Comp) -> Ret when
       VHostName :: vhost:name() | '_',
@@ -179,7 +251,8 @@ get_all(VHostName, Comp)
   when (is_binary(VHostName) orelse VHostName =:= '_') andalso
        (is_binary(Comp) orelse Comp =:= '_') ->
     rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(VHostName, Comp) end}).
+      #{mnesia => fun() -> get_all_in_mnesia(VHostName, Comp) end,
+        khepri => fun() -> get_all_in_khepri(VHostName, Comp) end}).
 
 get_all_in_mnesia(VHostName, Comp) ->
     mnesia:async_dirty(
@@ -193,6 +266,34 @@ get_all_in_mnesia(VHostName, Comp) ->
               mnesia:match_object(?MNESIA_TABLE, Match, read)
       end).
 
+get_all_in_khepri('_', Component) ->
+    get_all_in_khepri(?KHEPRI_WILDCARD_STAR, Component);
+get_all_in_khepri(VHost, '_') ->
+    get_all_in_khepri(VHost, ?KHEPRI_WILDCARD_STAR);
+get_all_in_khepri(VHost, Component) ->
+    rabbit_khepri:transaction(
+      fun() ->
+              get_all_in_khepri_tx(VHost, Component)
+      end, ro).    
+
+get_all_in_khepri_tx(VHost, Component) ->
+    Path = khepri_vhost_rp_path(VHost, Component, ?KHEPRI_WILDCARD_STAR),
+    case VHost of
+        ?KHEPRI_WILDCARD_STAR -> ok;
+        %% Inside of a transaction, using `rabbit_vhost:exists` will cause
+        %% a deadlock and timeout on the transaction, as it uses `rabbit_khepri:exists`.
+        %% The `with` function uses the `khepri_tx` API instead
+        _     ->
+            Fun = rabbit_db_vhost:with_fun_in_khepri_tx(VHost, fun() -> ok end),
+            Fun()
+    end,
+    case khepri_tx:get_many(Path) of
+        {ok, Map} ->
+            maps:values(Map);
+        _ ->
+            []
+    end.
+
 %% -------------------------------------------------------------------
 %% delete().
 %% -------------------------------------------------------------------
@@ -205,7 +306,8 @@ get_all_in_mnesia(VHostName, Comp) ->
 
 delete(Key) when is_atom(Key) ->
     rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Key) end}).
+      #{mnesia => fun() -> delete_in_mnesia(Key) end,
+        khepri => fun() -> delete_in_khepri(Key) end}).
 
 -spec delete(VHostName, Comp, Name) -> ok when
       VHostName :: vhost:name() | '_',
@@ -222,12 +324,15 @@ delete(VHostName, Comp, Name)
        (is_binary(Name) orelse (is_atom(Name) andalso Name =/= '_')) ->
     Key = {VHostName, Comp, Name},
     rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Key) end});
+      #{mnesia => fun() -> delete_in_mnesia(Key) end,
+        khepri => fun() -> delete_in_khepri(Key) end});
 delete(VHostName, Comp, Name)
   when VHostName =:= '_' orelse Comp =:= '_' orelse Name =:= '_' ->
     rabbit_db:run(
       #{mnesia =>
-        fun() -> delete_matching_in_mnesia(VHostName, Comp, Name) end}).
+        fun() -> delete_matching_in_mnesia(VHostName, Comp, Name) end,
+        khepri =>
+        fun() -> delete_matching_in_khepri(VHostName, Comp, Name) end}).
 
 delete_in_mnesia(Key) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -247,3 +352,26 @@ delete_matching_in_mnesia_tx(VHostName, Comp, Name) ->
          || #runtime_parameters{key = Key} <-
             mnesia:match_object(?MNESIA_TABLE, Match, write)],
     ok.
+
+delete_in_khepri(Key) ->
+    Path = khepri_rp_path(Key),
+    ok = rabbit_khepri:delete(Path).
+
+delete_matching_in_khepri(VHostName, Comp, Name) ->
+    Key = {?any(VHostName), ?any(Comp), ?any(Name)},
+    delete_in_khepri(Key).
+
+khepri_rp_path() ->
+    [?MODULE].
+
+khepri_rp_path({VHost, Component, Name}) ->
+    khepri_vhost_rp_path(VHost, Component, Name);
+khepri_rp_path(Key) ->
+    khepri_global_rp_path(Key).
+
+khepri_global_rp_path(Key) ->
+    [?MODULE, global, Key].
+
+khepri_vhost_rp_path(VHost, Component, Name) ->
+    [?MODULE, per_vhost, VHost, Component, Name].
+

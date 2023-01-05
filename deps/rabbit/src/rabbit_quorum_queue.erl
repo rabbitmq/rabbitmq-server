@@ -214,7 +214,7 @@ start_cluster(Q) ->
                     %% config cannot be updated
                     ok = rabbit_fifo_client:update_machine_state(LeaderId,
                                                                  ra_machine_config(NewQ)),
-                    notify_decorators(QName, startup),
+                    notify_decorators(NewQ, startup),
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
@@ -1670,6 +1670,10 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
 notify_decorators(QName, Event) ->
     notify_decorators(QName, Event, []).
 
+notify_decorators(Q, F, A) when ?is_amqqueue(Q) ->
+    Ds = amqqueue:get_decorators(Q),
+    [ok = apply(M, F, [Q|A]) || M <- rabbit_queue_decorator:select(Ds)],
+    ok;
 notify_decorators(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
     case rabbit_amqqueue:lookup(QName) of

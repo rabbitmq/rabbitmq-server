@@ -24,10 +24,7 @@ def all_beam_files(name = "all_beam_files"):
         app_name = "rabbitmq_ct_helpers",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-            "@proper//:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app", "@proper//:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -53,10 +50,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbitmq_ct_helpers",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-            "@proper//:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app", "@proper//:erlang_app"],
     )
 
 def all_srcs(name = "all_srcs"):

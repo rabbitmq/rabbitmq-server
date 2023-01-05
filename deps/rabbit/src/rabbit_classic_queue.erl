@@ -169,7 +169,19 @@ find_missing_queues([Q1|Rem1], [Q2|Rem2] = Q2s, Acc) ->
 -spec policy_changed(amqqueue:amqqueue()) -> ok.
 policy_changed(Q) ->
     QPid = amqqueue:get_pid(Q),
-    gen_server2:cast(QPid, policy_changed).
+    case rabbit_khepri:is_enabled() of
+        false ->
+            gen_server2:cast(QPid, policy_changed);
+        true ->
+            %% When using Khepri, projections are guaranteed to be atomic on
+            %% the node that processes them, but there might be a slight delay
+            %% until they're applied on other nodes. Some test suites fail
+            %% intermittently, showing that rabbit_amqqueue_process is reading
+            %% the old policy value. We use the khepri ff to hide this API change,
+            %% and use the up-to-date record to update the policy on the gen_server
+            %% state.
+            gen_server2:cast(QPid, {policy_changed, Q})
+    end.
 
 stat(Q) ->
     delegate:invoke(amqqueue:get_pid(Q),

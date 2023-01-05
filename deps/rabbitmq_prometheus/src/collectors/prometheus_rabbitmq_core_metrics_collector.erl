@@ -627,16 +627,17 @@ get_data(exchange_bindings, _, _, _) ->
                                 (#exchange{name = EName, type = EType}, Acc) ->
                                     maps:put(EName, #{type => atom_to_binary(EType), binding_count => 0}, Acc)
                             end, #{}, rabbit_exchange:list()),
-    WithCount = ets:foldl(
-                  fun (#route{binding = #binding{source = EName}}, Acc) ->
+    WithCount = rabbit_db_binding:fold(
+                  fun (#binding{source = EName}, Acc) ->
                           case maps:is_key(EName, Acc) of
                               false -> Acc;
                               true ->
-                                  maps:update_with(EName, fun (R = #{binding_count := Cnt}) ->
-                                                                  R#{binding_count => Cnt + 1}
-                                                          end, Acc)
+                                  maps:update_with(EName,
+                                                   fun (R = #{binding_count := Cnt}) ->
+                                                           R#{binding_count => Cnt + 1}
+                                                   end, Acc)
                           end
-                  end, Exchanges, rabbit_route),
+                  end, Exchanges),
     maps:fold(fun(#resource{virtual_host = VHost, name = Name}, #{type := Type, binding_count := Bindings}, Acc) ->
                       [{<<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", Type/binary, "\"">>,
                         Bindings}|Acc]

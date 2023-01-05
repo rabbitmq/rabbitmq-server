@@ -34,6 +34,14 @@
          forward/4
         ]).
 
+%% Function references should not be stored on the metadata store.
+%% They are only valid for the version of the module they were created
+%% from and can break with the next upgrade. It should not be used by
+%% another one that the one who created it or survive a node restart.
+%% Thus, function references have been replace by the following MFA.
+-export([decl_fun/3, publish_fun/4, props_fun_timestamp_header/4,
+         props_fun_forward_header/5]).
+
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 parse(_Name, {source, Source}) ->
@@ -77,9 +85,9 @@ init_source(Conf = #{ack_mode := AckMode,
                      source := #{queue := Queue,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
-                                 resource_decl := Decl,
+                                 resource_decl := {M, F, MFArgs},
                                  consumer_args := Args} = Src}) ->
-    Decl(Conn, Chan),
+    apply(M, F, MFArgs ++ [Conn, Chan]),
 
     NoAck = AckMode =:= no_ack,
     case NoAck of
@@ -108,9 +116,9 @@ connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
 
 init_dest(Conf = #{ack_mode := AckMode,
                    dest := #{current := {Conn, Chan, _},
-                             resource_decl := Decl} = Dst}) ->
+                             resource_decl := {M, F, MFArgs}} = Dst}) ->
 
-    Decl(Conn, Chan),
+    apply(M, F, MFArgs ++ [Conn, Chan]),
 
     case AckMode of
         on_confirm ->
@@ -187,16 +195,16 @@ forward(IncomingTag, Props, Payload, State) ->
     end.
 
 do_forward(IncomingTag, Props, Payload,
-           State0 = #{dest := #{props_fun := PropsFun,
+           State0 = #{dest := #{props_fun := {M, F, Args},
                                 current := {_, _, DstUri},
-                                fields_fun := FieldsFun}}) ->
+                                fields_fun := {Mf, Ff, Argsf}}}) ->
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
     Exchange = maps:get(exchange, Props, undefined),
     RoutingKey = maps:get(routing_key, Props, undefined),
     Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
-    Method1 = FieldsFun(SrcUri, DstUri, Method),
-    Msg1 = #amqp_msg{props = PropsFun(SrcUri, DstUri, props_from_map(Props)),
+    Method1 = apply(Mf, Ff, Argsf ++ [SrcUri, DstUri, Method]),
+    Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, props_from_map(Props)]),
                      payload = Payload},
     publish(IncomingTag, Method1, Msg1, State0).
 
@@ -519,11 +527,7 @@ make_publish_fun(Fields, ValidFields) when is_list(Fields) ->
     case SuppliedFields -- ValidFields of
         [] ->
             FieldIndices = make_field_indices(ValidFields, Fields),
-            fun (_SrcUri, _DestUri, Publish) ->
-                    lists:foldl(fun ({Pos1, Value}, Pub) ->
-                                        setelement(Pos1, Pub, Value)
-                                end, Publish, FieldIndices)
-            end;
+            {?MODULE, publish_fun, [FieldIndices]};
         Unexpected ->
             fail({invalid_parameter_value, publish_properties,
                   {unexpected_fields, Unexpected, ValidFields}})
@@ -531,6 +535,11 @@ make_publish_fun(Fields, ValidFields) when is_list(Fields) ->
 make_publish_fun(Fields, _) ->
     fail({invalid_parameter_value, publish_properties,
           {require_list, Fields}}).
+
+publish_fun(FieldIndices, _SrcUri, _DestUri, Publish) ->
+    lists:foldl(fun ({Pos1, Value}, Pub) ->
+                        setelement(Pos1, Pub, Value)
+                end, Publish, FieldIndices).
 
 make_field_indices(Valid, Fields) ->
     make_field_indices(Fields, field_map(Valid, 2), []).
@@ -551,22 +560,24 @@ field_map(Fields, Idx0) ->
 fail(Reason) -> throw({error, Reason}).
 
 add_forward_headers_fun(Name, true, PubProps) ->
-    fun(SrcUri, DestUri, Props) ->
-            rabbit_shovel_util:update_headers(
-              [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
-               {<<"shovel-type">>,  <<"static">>},
-               {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
-              [], SrcUri, DestUri, PubProps(SrcUri, DestUri, Props))
-    end;
+   {?MODULE, props_fun_forward_header, [Name, PubProps]};
 add_forward_headers_fun(_Name, false, PubProps) ->
     PubProps.
 
+props_fun_forward_header(Name, {M, F, Args}, SrcUri, DestUri, Props) ->
+    rabbit_shovel_util:update_headers(
+      [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
+       {<<"shovel-type">>,  <<"static">>},
+       {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
+      [], SrcUri, DestUri, apply(M, F, Args ++ [SrcUri, DestUri, Props])).
+
 add_timestamp_header_fun(true, PubProps) ->
-    fun(SrcUri, DestUri, Props) ->
-        rabbit_shovel_util:add_timestamp_header(
-            PubProps(SrcUri, DestUri, Props))
-    end;
+    {?MODULE, props_fun_timestamp_header, [PubProps]};
 add_timestamp_header_fun(false, PubProps) -> PubProps.
+
+props_fun_timestamp_header({M, F, Args}, SrcUri, DestUri, Props) ->
+    rabbit_shovel_util:add_timestamp_header(
+      apply(M, F, Args ++ [SrcUri, DestUri, Props])).
 
 parse_declaration({[], Acc}) ->
     Acc;
@@ -596,11 +607,12 @@ parse_declaration({[Method | Rest], Acc}) ->
 decl_fun(Endpoint) ->
     Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []),
                               []}),
-    fun (_Conn, Ch) ->
-            [begin
-                 amqp_channel:call(Ch, M)
-             end || M <- lists:reverse(Decl)]
-    end.
+    {?MODULE, decl_fun, [Decl]}.
+
+decl_fun(Decl, _Conn, Ch) ->
+    [begin
+         amqp_channel:call(Ch, M)
+     end || M <- lists:reverse(Decl)].
 
 parse_parameter(Param, Fun, Value) ->
     try

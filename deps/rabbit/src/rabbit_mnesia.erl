@@ -47,7 +47,10 @@
          on_node_down/1,
 
          %% Helpers for diagnostics commands
-         schema_info/1
+         schema_info/1,
+
+         start_mnesia/1,
+         stop_mnesia/0
         ]).
 
 %% Mnesia queries
@@ -62,6 +65,8 @@
 
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
+
+-export([check_reset_gracefully/0]).
 
 -deprecated({on_running_node, 1,
              "Use rabbit_process:on_running_node/1 instead"}).
@@ -195,7 +200,6 @@ join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
 
 reset() ->
     ensure_mnesia_not_running(),
-    rabbit_log:info("Resetting Rabbit", []),
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.
@@ -211,15 +215,17 @@ reset_gracefully() ->
     %% need to check for consistency because we are resetting.
     %% Force=true here so that reset still works when clustered with a
     %% node which is down.
-    _ = init_db_with_mnesia(
-          AllNodes, node_type(), false, false, _Retry = false),
-    case is_only_clustered_disc_node() of
-        true  -> e(resetting_only_disc_node);
-        false -> ok
-    end,
+    init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
+    check_reset_gracefully(),
     leave_cluster(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
     wipe().
+
+check_reset_gracefully() ->
+    case is_only_clustered_disc_node() of
+        true  -> e(resetting_only_disc_node);
+        false -> ok
+    end.
 
 wipe() ->
     %% We need to make sure that we don't end up in a distributed
@@ -482,7 +488,7 @@ dir() -> mnesia:system_info(directory).
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     NodeIsVirgin = is_virgin_node(),
     rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
-    Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
+    Nodes = change_extra_mnesia_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
     %% status will say we are a disc node but the tables won't be
@@ -895,7 +901,7 @@ stop_mnesia() ->
     stopped = mnesia:stop(),
     ensure_mnesia_not_running().
 
-change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
+change_extra_mnesia_nodes(ClusterNodes0, CheckOtherNodes) ->
     ClusterNodes = rabbit_nodes:nodes_excl_me(ClusterNodes0),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
         {{ok, []}, [_|_]} when CheckOtherNodes ->
@@ -992,7 +998,8 @@ is_virgin_node() ->
              rabbit_node_monitor:stream_filename(),
              rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
-             rabbit_feature_flags:enabled_feature_flags_list_file()],
+             rabbit_feature_flags:enabled_feature_flags_list_file(),
+             rabbit_khepri:dir()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
             rabbit_log:debug("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
@@ -1042,6 +1049,6 @@ error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
 
 format_inconsistent_cluster_message(Thinker, Dissident) ->
-    rabbit_misc:format("Node ~tp thinks it's clustered "
+    rabbit_misc:format("Mnesia: node ~tp thinks it's clustered "
                        "with node ~tp, but ~tp disagrees",
                        [Thinker, Dissident, Dissident]).

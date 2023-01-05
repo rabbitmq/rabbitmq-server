@@ -121,7 +121,7 @@ defmodule ListPoliciesCommandTest do
         vhost: @vhost,
         name: "other-policy",
         pattern: "bar",
-        definition: "{\"ha-mode\":\"all\"}",
+        definition: "{\"max-length\":100}",
         "apply-to": "all",
         priority: 0
       }

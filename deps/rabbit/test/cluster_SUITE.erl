@@ -92,6 +92,16 @@ end_per_group(Group, Config) ->
             Config
     end.
 
+init_per_testcase(queue_cleanup = Testcase, Config) ->
+    case lists:any(fun(B) -> B end,
+                   rabbit_ct_broker_helpers:rpc_all(
+                     Config, rabbit_feature_flags, is_enabled,
+                     [raft_based_metadata_store_phase1])) of
+        true ->
+            {skip, "Invalid testcase using Khepri. All queues are durable"};
+        false ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

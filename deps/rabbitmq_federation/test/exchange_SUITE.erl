@@ -29,14 +29,24 @@
 
 all() ->
     [
-      {group, essential},
-      {group, cluster_size_3}
-      %% {group, channel_use_mode_single}
+     {group, essential},
+     {group, cluster_size_3}
     ].
 
 groups() ->
-  [
-    {essential, [], [
+    [
+     {essential, [], essential()},
+     {cluster_size_3, [], [max_hops]},
+     {cycle_protection, [], [
+                             %% TBD: port from v3.10.x in an Erlang 25-compatible way
+                            ]},
+     {channel_use_mod_single, [], [
+                                   %% TBD: port from v3.10.x in an Erlang 25-compatible way
+                                  ]}
+    ].
+
+essential() ->
+    [
       single_upstream,
       multiple_upstreams,
       multiple_upstreams_pattern,
@@ -47,18 +57,10 @@ groups() ->
       unbind_on_client_unbind,
       exchange_federation_link_status,
       lookup_exchange_status
-    ]},
-    {cluster_size_3, [], [
-      max_hops
-    ]},
-    {cycle_protection, [], [
-      %% TBD: port from v3.10.x in an Erlang 25-compatible way
-    ]},
-    {channel_use_mod_single, [], [
-      %% TBD: port from v3.10.x in an Erlang 25-compatible way
-    ]}
-  ].
+    ].
 
+suite() ->
+    [{timetrap, {minutes, 3}}].
 
 %% -------------------------------------------------------------------
 %% Setup/teardown.
@@ -72,7 +74,7 @@ end_per_suite(Config) ->
   rabbit_ct_helpers:run_teardown_steps(Config).
 
 %% Some of the "regular" tests but in the single channel mode.
-init_per_group(channel_use_mode_single, Config) ->
+init_per_group(essential, Config) ->
   SetupFederation = [
       fun(Config1) ->
           rabbit_federation_test_util:setup_federation_with_upstream_params(Config1, [
@@ -83,35 +85,12 @@ init_per_group(channel_use_mode_single, Config) ->
   Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
   Config1 = rabbit_ct_helpers:set_config(Config, [
       {rmq_nodename_suffix, Suffix},
-      {rmq_nodes_clustered, false}
+      {rmq_nodes_count, 1}
     ]),
   rabbit_ct_helpers:run_steps(Config1,
     rabbit_ct_broker_helpers:setup_steps() ++
     rabbit_ct_client_helpers:setup_steps() ++
     SetupFederation);
-init_per_group(cycle_detection, Config) ->
-  Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-  Config1 = rabbit_ct_helpers:set_config(Config, [
-      {rmq_nodename_suffix, Suffix},
-      {rmq_nodes_clustered, false},
-      {rmq_nodes_count, 1}
-    ]),
-  rabbit_ct_helpers:run_steps(Config1,
-    rabbit_ct_broker_helpers:setup_steps() ++
-    rabbit_ct_client_helpers:setup_steps());
-init_per_group(without_plugins, Config) ->
-  rabbit_ct_helpers:set_config(Config,
-    {broker_with_plugins, [true, false]});
-init_per_group(cluster_size_1 = Group, Config) ->
-  Config1 = rabbit_ct_helpers:set_config(Config, [
-      {rmq_nodes_count, 1}
-    ]),
-  init_per_group1(Group, Config1);
-init_per_group(cluster_size_2 = Group, Config) ->
-  Config1 = rabbit_ct_helpers:set_config(Config, [
-      {rmq_nodes_count, 2}
-    ]),
-  init_per_group1(Group, Config1);
 init_per_group(cluster_size_3 = Group, Config) ->
   Config1 = rabbit_ct_helpers:set_config(Config, [
       {rmq_nodes_count, 3}
@@ -131,8 +110,6 @@ init_per_group1(_Group, Config) ->
     rabbit_ct_broker_helpers:setup_steps() ++
     rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(without_plugins, Config) ->
-  Config;
 end_per_group(_, Config) ->
   rabbit_ct_helpers:run_steps(Config,
     rabbit_ct_client_helpers:teardown_steps() ++
@@ -727,15 +704,15 @@ await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer
 await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
   {error, rabbit_misc:format("expected ~b bindings but they did not materialize in time", [ExpectedBindingCount])};
 await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
-  case bound_keys_from(Config, Node, Vhost, X, Key) of
-      Bs when length(Bs) < ExpectedBindingCount ->
-          timer:sleep(100),
-          await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft - 1);
-      Bs when length(Bs) =:= ExpectedBindingCount ->
-          ok;
-      Bs ->
-          {error, rabbit_misc:format("expected ~b bindings, got ~b", [ExpectedBindingCount, length(Bs)])}
-  end.
+    case bound_keys_from(Config, Node, Vhost, X, Key) of
+        Bs when length(Bs) < ExpectedBindingCount ->
+            timer:sleep(1000),
+            await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft - 1);
+        Bs when length(Bs) =:= ExpectedBindingCount ->
+            ok;
+        Bs ->
+            {error, rabbit_misc:format("expected ~b bindings, got ~b", [ExpectedBindingCount, length(Bs)])}
+    end.
 
 await_bindings(Config, Node, X, Keys) ->
   [await_binding(Config, Node, X, Key) || Key <- Keys].

@@ -122,12 +122,10 @@ init_per_group(all_tests_with_prefix = Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     Config2 = finish_init(Group, Config1),
-    Config3 = start_broker(Config2),
-    Config3;
+    start_broker(Config2);
 init_per_group(Group, Config0) ->
     Config1 = finish_init(Group, Config0),
-    Config2 = start_broker(Config1),
-    Config2.
+    start_broker(Config1).
 
 end_per_group(_, Config) ->
     inets:stop(),
@@ -142,6 +140,14 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 
+init_per_testcase(mirrored_queues_test = Testcase, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:init_per_testcase">>),
+            rabbit_ct_helpers:testcase_started(Config, Testcase);
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -401,8 +407,8 @@ queues_test(Config) ->
              ?BAD_REQUEST),
 
     Policy = [{pattern,    <<"baz">>},
-              {definition, [{<<"ha-mode">>, <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
+              {definition, [{<<"max-length">>, 100}]}],
+    http_put(Config, "/policies/%2F/length", Policy, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
     Queues = http_get(Config, "/queues/%2F"),
     Queue = http_get(Config, "/queues/%2F/foo"),
@@ -414,9 +420,7 @@ queues_test(Config) ->
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{},
-                   node        => NodeBin,
-                   slave_nodes => [],
-                   synchronised_slave_nodes => []},
+                   node        => NodeBin},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
@@ -461,8 +465,8 @@ queues_enable_totals_test(Config) ->
     http_put(Config, "/queues/%2F/foo", GoodQQ, {group, '2xx'}),
 
     Policy = [{pattern,    <<"baz">>},
-              {definition, [{<<"ha-mode">>, <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
+              {definition, [{<<"max-length">>, 100}]}],
+    http_put(Config, "/policies/%2F/length", Policy, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
 
     {Conn, Ch} = open_connection_and_channel(Config),
@@ -494,11 +498,9 @@ queues_enable_totals_test(Config) ->
                    exclusive   => false,
                    arguments   => #{},
                    node        => NodeBin,
-                   slave_nodes => [],
                    messages    => 1,
                    messages_ready => 1,
-                   messages_unacknowledged => 0,
-                   synchronised_slave_nodes => []},
+                   messages_unacknowledged => 0},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,

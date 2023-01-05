@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_auth_backend_internal).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_authn_backend).
@@ -30,6 +31,8 @@
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0, all_users/0,
+         user_topic_perms_info_keys/0, vhost_topic_perms_info_keys/0,
+         user_vhost_topic_perms_info_keys/0,
          list_users/0, list_users/2, list_permissions/0,
          list_user_permissions/1, list_user_permissions/3,
          list_topic_permissions/0,
@@ -39,8 +42,12 @@
 
 -export([state_can_expire/0]).
 
-%% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
+
+-ifdef(TEST).
+-export([extract_user_permission_params/2,
+         extract_topic_permission_params/2]).
+-endif.
 
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
 
@@ -56,6 +63,7 @@
 %% (inserted by a version older than 3.6.0) and fall back to MD5, the
 %% now obsolete hashing function.
 hashing_module_for_user(User) ->
+    
     ModOrUndefined = internal_user:get_hashing_algorithm(User),
     rabbit_password:hashing_mod(ModOrUndefined).
 
@@ -307,8 +315,10 @@ delete_user(Username, ActingUser) ->
 
 lookup_user(Username) ->
     case rabbit_db_user:get(Username) of
-        undefined -> {error, not_found};
-        User      -> {ok, User}
+        undefined ->
+            {error, not_found};
+        User ->
+            {ok, User}
     end.
 
 -spec exists(rabbit_types:username()) -> boolean().

@@ -52,10 +52,10 @@ groups() ->
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
-                                            node_removal_is_quorum_critical,
-                                            cleanup_data_dir]
+                                            node_removal_is_quorum_critical]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
+                                            cleanup_data_dir,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
@@ -944,8 +944,11 @@ consume_in_minority(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                    no_ack = false})),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server1),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server2),
     ok.
 
 reject_after_leader_transfer(Config) ->
@@ -1966,11 +1969,14 @@ file_handle_reservations_above_limit(Config) ->
     ok = rpc:call(S3, file_handle_cache, set_limit, [Limit]).
 
 cleanup_data_dir(Config) ->
+    %% With Khepri this test needs to run in a 3-node cluster, otherwise the queue can't
+    %% be deleted in minority
+    %%
     %% This test is slow, but also checks that we handle properly errors when
     %% trying to delete a queue in minority. A case clause there had gone
     %% previously unnoticed.
 
-    [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},

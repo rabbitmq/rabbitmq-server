@@ -39,6 +39,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
         :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :change_node_type, [
           normalized_type
         ])
+
+        case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :change_node_type, [
+               normalized_type
+             ]) do
+          {:badrpc, {:EXIT, {:undef, _}}} ->
+            :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :change_cluster_node_type, [
+              normalized_type
+            ])
+
+          ret0 ->
+            ret0
+        end
     end
   end
 

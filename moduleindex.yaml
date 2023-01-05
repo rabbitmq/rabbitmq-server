@@ -122,6 +122,7 @@ credentials_obfuscation:
 ct_helper:
 - ct_helper
 - ct_helper_error_h
+- erl_make_certs
 cth_styledout:
 - cth_styledout
 cuttlefish:
@@ -208,6 +209,9 @@ erlc:
 - foo_worker
 eunit:
 - foo
+eunit_formatters:
+- binomial_heap
+- eunit_progress
 eunit_surefire:
 - foo
 foo:
@@ -267,6 +271,12 @@ hackney:
 - hackney_trace
 - hackney_url
 - hackney_util
+horus:
+- horus
+- horus_cover
+- horus_utils
+host_triple:
+- host_triple
 idna:
 - idna
 - idna_bidi
@@ -390,6 +400,61 @@ jose:
 - jose_jws_alg_rsa_pkcs1_v1_5
 - jose_jws_alg_rsa_pss
 - jose_jwt
+khepri:
+- khepri
+- khepri_adv
+- khepri_app
+- khepri_cluster
+- khepri_condition
+- khepri_event_handler
+- khepri_evf
+- khepri_export_erlang
+- khepri_import_export
+- khepri_machine
+- khepri_path
+- khepri_pattern_tree
+- khepri_payload
+- khepri_projection
+- khepri_sproc
+- khepri_sup
+- khepri_tree
+- khepri_tx
+- khepri_tx_adv
+- khepri_utils
+khepri_mnesia_migration:
+- khepri_mnesia_migration_app
+- khepri_mnesia_migration_sup
+- kmm_utils
+- m2k_cluster_sync
+- m2k_cluster_sync_sup
+- m2k_export
+- m2k_subscriber
+- m2k_table_copy
+- m2k_table_copy_sup
+- m2k_table_copy_sup_sup
+- mnesia_to_khepri
+- mnesia_to_khepri_converter
+- mnesia_to_khepri_example_converter
+looking_glass:
+- lg
+- lg_callgrind
+- lg_file_reader
+- lg_file_tracer
+- lg_flame
+- lg_messages
+- lg_messages_seqdiag
+- lg_rabbit_hole
+- lg_raw_console_tracer
+- lg_socket_client
+- lg_socket_tracer
+- lg_term
+- lg_tracer
+- lg_tracer_pool
+- looking_glass_app
+- looking_glass_sup
+lz4:
+- lz4_nif
+- lz4f
 meck:
 - meck
 - meck_args_matcher
@@ -618,17 +683,25 @@ rabbit:
 - rabbit_cuttlefish
 - rabbit_db
 - rabbit_db_binding
+- rabbit_db_binding_m2k_converter
 - rabbit_db_cluster
 - rabbit_db_exchange
+- rabbit_db_exchange_m2k_converter
 - rabbit_db_maintenance
+- rabbit_db_maintenance_m2k_converter
 - rabbit_db_msup
+- rabbit_db_msup_m2k_converter
 - rabbit_db_policy
 - rabbit_db_queue
+- rabbit_db_queue_m2k_converter
 - rabbit_db_rtparams
+- rabbit_db_rtparams_m2k_converter
 - rabbit_db_topic_exchange
 - rabbit_db_user
+- rabbit_db_user_m2k_converter
 - rabbit_db_vhost
 - rabbit_db_vhost_defaults
+- rabbit_db_vhost_m2k_converter
 - rabbit_dead_letter
 - rabbit_definitions
 - rabbit_definitions_hashing
@@ -670,6 +743,7 @@ rabbit:
 - rabbit_global_counters
 - rabbit_guid
 - rabbit_health_check
+- rabbit_khepri
 - rabbit_limiter
 - rabbit_log_channel
 - rabbit_log_connection
@@ -896,6 +970,7 @@ rabbitmq_aws:
 rabbitmq_consistent_hash_exchange:
 - Elixir.RabbitMQ.CLI.Diagnostics.Commands.ConsistentHashExchangeRingStateCommand
 - rabbit_db_ch_exchange
+- rabbit_db_ch_exchange_m2k_converter
 - rabbit_exchange_type_consistent_hash
 rabbitmq_ct_client_helpers:
 - rabbit_ct_client_helpers
@@ -937,6 +1012,7 @@ rabbitmq_federation_management:
 - rabbit_federation_mgmt
 rabbitmq_jms_topic_exchange:
 - rabbit_db_jms_exchange
+- rabbit_db_jms_exchange_m2k_converter
 - rabbit_jms_topic_exchange
 - sjx_evaluator
 rabbitmq_management:
@@ -1138,6 +1214,7 @@ rabbitmq_random_exchange:
 - rabbit_exchange_type_random
 rabbitmq_recent_history_exchange:
 - rabbit_db_rh_exchange
+- rabbit_db_rh_exchange_m2k_converter
 - rabbit_exchange_type_recent_history
 rabbitmq_sharding:
 - rabbit_sharding_exchange_decorator

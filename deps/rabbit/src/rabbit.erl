@@ -356,14 +356,19 @@ run_prelaunch_second_phase() ->
     %% 3. Logging.
     ok = rabbit_prelaunch_logging:setup(Context),
 
+    %% The clustering steps requires Khepri to be started to check for consistency
+    ok = rabbit_ra_systems:setup(Context),
+
+    %% Khepri requires the "coordination" Ra system to be started by the
+    %% previous call, but will ensure it runs anyway.
+    ok = rabbit_khepri:setup(Context),
+
     %% 4. Clustering.
     ok = rabbit_prelaunch_cluster:setup(Context),
 
     %% Start Mnesia now that everything is ready.
     ?LOG_DEBUG("Starting Mnesia"),
     ok = mnesia:start(),
-
-    ok = rabbit_ra_systems:setup(Context),
 
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),

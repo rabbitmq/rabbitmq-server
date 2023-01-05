@@ -110,14 +110,20 @@ init_per_group(quorum_queue_in_memory_bytes, Config) ->
        {consumer_args, []},
        {queue_durable, true}]);
 init_per_group(mirrored_queue, Config) ->
-    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-        <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{is_mirrored, true},
-                         {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                         {consumer_args, []},
-                         {queue_durable, true}]),
-    rabbit_ct_helpers:run_steps(Config1, []);
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_broker_helpers:set_ha_policy(
+              Config, 0, <<"^max_length.*queue">>,
+              <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [{is_mirrored, true},
+                                 {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+                                 {consumer_args, []},
+                                 {queue_durable, true}]),
+            rabbit_ct_helpers:run_steps(Config1, []);
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(stream_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,

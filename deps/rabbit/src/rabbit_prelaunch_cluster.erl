@@ -30,5 +30,6 @@ setup(Context) ->
     ?LOG_DEBUG(
        "Checking cluster consistency", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    %% The checks just log, it does not fail here
     rabbit_db_cluster:check_consistency(),
     ok.

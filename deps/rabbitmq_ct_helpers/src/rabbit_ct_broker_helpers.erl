@@ -42,6 +42,8 @@
     rpc_all/4, rpc_all/5,
 
     start_node/2,
+    async_start_node/2,
+    wait_for_async_start_node/1,
     start_broker/2,
     restart_broker/2,
     stop_broker/2,
@@ -169,7 +171,9 @@
 
     test_channel/0,
     test_writer/1,
-    user/1
+    user/1,
+
+    configured_metadata_store/1
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -214,7 +218,8 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
+                fun share_dist_and_proxy_ports_map/1,
+                fun configure_metadata_store/1
             ];
         _ ->
             [
@@ -223,7 +228,8 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
+                fun share_dist_and_proxy_ports_map/1,
+                fun configure_metadata_store/1
             ]
     end.
 
@@ -793,10 +799,12 @@ query_node(Config, NodeConfig) ->
       [rabbit, plugins_dir]),
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
+    LogLocations = rpc(Config, Nodename, rabbit, log_locations, []),
     Vars0 = [{pid_file, PidFile},
              {data_dir, DataDir},
              {plugins_dir, PluginsDir},
-             {enabled_plugins_file, EnabledPluginsFile}],
+             {enabled_plugins_file, EnabledPluginsFile},
+             {log_locations, LogLocations}],
     Vars = try
                EnabledFeatureFlagsFile = rpc(Config, Nodename,
                                              rabbit_feature_flags,
@@ -928,6 +936,48 @@ share_dist_and_proxy_ports_map(Config) ->
       application, set_env, [kernel, dist_and_proxy_ports_map, Map]),
     Config.
 
+configured_metadata_store(Config) ->
+    case ?config(metadata_store, Config) of
+        khepri ->
+            {khepri, []};
+        {khepri, _FFs0} = Khepri ->
+            Khepri;
+        mnesia ->
+            mnesia;
+        _ ->
+            case os:getenv("RABBITMQ_METADATA_STORE") of
+                "khepri" ->
+                    {khepri, []};
+                _ ->
+                    mnesia
+            end
+    end.
+
+configure_metadata_store(Config) ->
+    ct:pal("Configuring metadata store ..."),
+    case configured_metadata_store(Config) of
+        {khepri, FFs0} ->
+            enable_khepri_metadata_store(Config, FFs0);
+        mnesia ->
+            ct:pal("Enabling default (mnesia) metadata store"),
+            Config
+    end.
+
+enable_khepri_metadata_store(Config, FFs0) ->
+    ct:pal("Enabling Khepri metadata store"),
+    FFs = [raft_based_metadata_store_phase1 | FFs0],
+    lists:foldl(fun(_FF, {skip, _Reason} = Skip) ->
+                        Skip;
+                   (FF, C) ->
+                        case enable_feature_flag(C, FF) of
+                            ok ->
+                                C;
+                            Skip ->
+                                ct:pal("Enabling metadata store failed: ~p", [Skip]),
+                                Skip
+                        end
+                end, Config, FFs).
+
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
     I = if
@@ -1008,6 +1058,8 @@ stop_rabbitmq_nodes(Config) ->
           fun(NodeConfig) ->
                   stop_rabbitmq_node(Config, NodeConfig)
           end),
+    IgnoredCrashes = ["** force_vhost_failure"],
+    find_crashes_in_logs(NodeConfigs, IgnoredCrashes),
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
@@ -1028,6 +1080,84 @@ stop_rabbitmq_node(Config, NodeConfig) ->
             rabbit_ct_helpers:exec([RunCmd | Cmd])
     end,
     NodeConfig.
+
+find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
+    ct:pal(
+      "Looking up any crash reports in the nodes' log files. If we find "
+      "some, they will appear below:"),
+    CrashesCount = lists:foldl(
+                     fun(NodeConfig, Total) ->
+                             Count = count_crashes_in_logs(
+                                       NodeConfig, IgnoredCrashes),
+                             Total + Count
+                     end, 0, NodeConfigs),
+    ct:pal("Found ~b crash report(s)", [CrashesCount]),
+    ?assertEqual(0, CrashesCount).
+
+count_crashes_in_logs(NodeConfig, IgnoredCrashes) ->
+    LogLocations = ?config(log_locations, NodeConfig),
+    lists:foldl(
+      fun(LogLocation, Total) ->
+              Count = count_crashes_in_log(LogLocation, IgnoredCrashes),
+              Total + Count
+      end, 0, LogLocations).
+
+count_crashes_in_log(LogLocation, IgnoredCrashes) ->
+    case file:read_file(LogLocation) of
+        {ok, Content} -> count_crashes_in_content(Content, IgnoredCrashes);
+        _             -> 0
+    end.
+
+count_crashes_in_content(Content, IgnoredCrashes) ->
+    ReOpts = [multiline],
+    Lines = re:split(Content, "^", ReOpts),
+    count_gen_server_terminations(Lines, IgnoredCrashes).
+
+count_gen_server_terminations(Lines, IgnoredCrashes) ->
+    count_gen_server_terminations(Lines, 0, IgnoredCrashes).
+
+count_gen_server_terminations([Line | Rest], Count, IgnoredCrashes) ->
+    ReOpts = [{capture, all_but_first, list}],
+    Ret = re:run(
+            Line,
+            "(<[0-9.]+> )[*]{2} Generic server .+ terminating$",
+            ReOpts),
+    case Ret of
+        {match, [Prefix]} ->
+            capture_gen_server_termination(
+              Rest, Prefix, [Line], Count, IgnoredCrashes);
+        nomatch ->
+            count_gen_server_terminations(Rest, Count, IgnoredCrashes)
+    end;
+count_gen_server_terminations([], Count, _IgnoredCrashes) ->
+    Count.
+
+capture_gen_server_termination(
+  [Line | Rest] = Lines, Prefix, Acc, Count, IgnoredCrashes) ->
+    ReOpts = [{capture, all_but_first, list}],
+    Ret = re:run(Line, Prefix ++ "( .*|\\*.*|)$", ReOpts),
+    case Ret of
+        {match, [Suffix]} ->
+            case lists:member(Suffix, IgnoredCrashes) of
+                false ->
+                    capture_gen_server_termination(
+                      Rest, Prefix, [Line | Acc], Count, IgnoredCrashes);
+                true ->
+                    count_gen_server_terminations(
+                      Lines, Count, IgnoredCrashes)
+            end;
+        nomatch ->
+            found_gen_server_termiation(
+              lists:reverse(Acc), Lines, Count, IgnoredCrashes)
+    end;
+capture_gen_server_termination(
+  [] = Rest, _Prefix, Acc, Count, IgnoredCrashes) ->
+    found_gen_server_termiation(
+      lists:reverse(Acc), Rest, Count, IgnoredCrashes).
+
+found_gen_server_termiation(Message, Lines, Count, IgnoredCrashes) ->
+    ct:pal("gen_server termination:~n~n~s", [Message]),
+    count_gen_server_terminations(Lines, Count + 1, IgnoredCrashes).
 
 %% -------------------------------------------------------------------
 %% Helpers for partition simulation
@@ -1276,6 +1406,8 @@ delete_vhost(Config, Node, VHost) ->
 delete_vhost(Config, Node, VHost, Username) ->
     catch rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
+-define(FORCE_VHOST_FAILURE_REASON, force_vhost_failure).
+
 force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
 
 force_vhost_failure(Config, Node, VHost) ->
@@ -1289,7 +1421,8 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
             try
                 MessageStorePid = get_message_store_pid(Config, Node, VHost),
                 rpc(Config, Node,
-                    erlang, exit, [MessageStorePid, force_vhost_failure]),
+                    erlang, exit,
+                    [MessageStorePid, ?FORCE_VHOST_FAILURE_REASON]),
                 %% Give it a time to fail
                 timer:sleep(300),
                 force_vhost_failure(Config, Node, VHost, Attempts - 1)
@@ -1608,6 +1741,22 @@ start_node(Config, Node) ->
         _                 -> ok
     end.
 
+async_start_node(Config, Node) ->
+    Self = self(),
+    spawn(fun() ->
+                  Reply = (catch start_node(Config, Node)),
+                  Self ! {async_start_node, Node, Reply}
+          end),
+    ok.
+
+wait_for_async_start_node(Node) ->
+    receive
+        {async_start_node, N, Reply} when N == Node ->
+            Reply
+    after 600000 ->
+            timeout
+    end.
+
 start_broker(Config, Node) ->
     ok = rpc(Config, Node, rabbit, start, []).
 
@@ -1711,11 +1860,26 @@ enable_feature_flag(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     enable_feature_flag(Config, Nodes, FeatureName).
 
-enable_feature_flag(Config, [Node1 | _] = Nodes, FeatureName) ->
+enable_feature_flag(Config, Nodes, FeatureName) ->
     case is_feature_flag_supported(Config, Nodes, FeatureName) of
         true ->
-            rabbit_ct_broker_helpers:rpc(
-              Config, Node1, rabbit_feature_flags, enable, [FeatureName]);
+            %% Nodes might not be clustered for some test suites, so enabling
+            %% feature flags on the first one of the list is not enough
+            lists:foldl(
+              fun(N, ok) ->
+                      case rabbit_ct_broker_helpers:rpc(
+                             Config, N, rabbit_feature_flags, enable, [FeatureName]) of
+                          {error, unsupported} ->
+                              {skip,
+                               lists:flatten(
+                                 io_lib:format("'~ts' feature flag is unsupported",
+                                               [FeatureName]))};
+                          Any ->
+                              Any
+                      end;
+                 (_, Other) ->
+                      Other
+              end, ok, Nodes);
         false ->
             {skip,
              lists:flatten(

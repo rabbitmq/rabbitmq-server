@@ -81,12 +81,12 @@ defmodule ListGlobalParametersCommandTest do
 
   # Checks each element of the first parameter against the expected context values
   defp assert_parameter_list(params, context) do
-    [param | _] = params
+    exp =
+      MapSet.new(
+        name: context[:key],
+        value: context[:value]
+      )
 
-    assert MapSet.new(param) ==
-             MapSet.new(
-               name: context[:key],
-               value: context[:value]
-             )
+    assert List.foldl(params, false, fn param, acc -> MapSet.new(param) == exp or acc end)
   end
 end

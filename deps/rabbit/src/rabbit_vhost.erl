@@ -9,6 +9,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
 -include("vhost.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
@@ -24,6 +25,7 @@
 -export([vhost_down/1]).
 -export([put_vhost/5,
          put_vhost/6]).
+
 
 %%
 %% API

@@ -29,7 +29,8 @@ groups() ->
           maintenance_mode_status,
           listener_suspension_status,
           client_connection_closure,
-          quorum_queue_leadership_transfer
+          quorum_queue_leadership_transfer,
+          metadata_store_leadership_transfer
       ]}
     ].
 
@@ -62,6 +63,20 @@ init_per_testcase(quorum_queue_leadership_transfer = Testcase, Config) ->
         {rmq_nodes_clustered, true},
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+      ]),
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
+init_per_testcase(metadata_store_leadership_transfer = Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_clustered, true},
+        {rmq_nodename_suffix, Testcase},
+        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+        {metadata_store, khepri}
       ]),
     rabbit_ct_helpers:run_steps(
       Config1,
@@ -262,3 +277,31 @@ quorum_queue_leadership_transfer(Config) ->
     end,
 
     rabbit_ct_broker_helpers:revive_node(Config, A).
+
+metadata_store_leadership_transfer(Config) ->
+    [A | _] = Nodenames = rabbit_ct_broker_helpers:get_node_configs(
+                            Config, nodename),
+
+    {_, LeaderNode} = rabbit_ct_broker_helpers:rpc(Config, A, ra_leaderboard, lookup_leader,
+                                                   [metadata_store]),
+    rabbit_ct_helpers:await_condition(
+      fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, LeaderNode) end,
+      10000),
+    rabbit_ct_broker_helpers:drain_node(Config, LeaderNode),
+    rabbit_ct_helpers:await_condition(
+      fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, LeaderNode) end,
+      10000),
+
+    %% Check it is still functional
+    [N | _] = Nodenames -- [LeaderNode],
+    Conn = rabbit_ct_client_helpers:open_connection(Config, N),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = <<"qq.1">>,
+    amqp_channel:call(Ch,
+                      #'queue.declare'{queue = QName, durable = true,
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+
+    {_, NewLeaderNode} = rabbit_ct_broker_helpers:rpc(Config, N, ra_leaderboard, lookup_leader,
+                                                      [metadata_store]),
+    ?assertNot(LeaderNode == NewLeaderNode),
+    rabbit_ct_broker_helpers:revive_node(Config, LeaderNode).

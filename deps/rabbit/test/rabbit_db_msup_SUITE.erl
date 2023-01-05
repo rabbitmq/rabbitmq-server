@@ -83,8 +83,11 @@ create_or_update1(_Config) ->
     Overall = spawn(fun() -> ok end),
     Spec = #{id => id, start => {m, f, args}},
     ?assertEqual(start,
-                 rabbit_db_msup:create_or_update(group, Overall, undefined, Spec, id)),
+                 rabbit_db_msup:create_or_update(group, Overall, undefined, Spec, id(id))),
     passed.
+
+id(Id) ->
+    {[Id], Id}.
 
 find_mirror(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, find_mirror1, [Config]).
@@ -93,8 +96,8 @@ find_mirror1(_Config) ->
     Overall = spawn(fun() -> ok end),
     Spec = #{id => id, start => {m, f, args}},
     ?assertEqual(start, rabbit_db_msup:create_or_update(group, Overall, undefined,
-                                                        Spec, id)),
-    ?assertEqual({ok, Overall}, rabbit_db_msup:find_mirror(group, id)),
+                                                        Spec, id(id))),
+    ?assertEqual({ok, Overall}, rabbit_db_msup:find_mirror(group, id(id))),
     passed.
 
 delete(Config) ->
@@ -104,9 +107,9 @@ delete1(_Config) ->
     Overall = spawn(fun() -> ok end),
     Spec = #{id => id, start => {m, f, args}},
     ?assertEqual(start, rabbit_db_msup:create_or_update(group, Overall, undefined,
-                                                        Spec, id)),
-    ?assertEqual(ok, rabbit_db_msup:delete(group, id)),
-    ?assertEqual({error, not_found}, rabbit_db_msup:find_mirror(group, id)),
+                                                        Spec, id(id))),
+    ?assertEqual(ok, rabbit_db_msup:delete(group, id(id))),
+    ?assertEqual({error, not_found}, rabbit_db_msup:find_mirror(group, id(id))),
     passed.
 
 delete_all(Config) ->
@@ -116,9 +119,9 @@ delete_all1(_Config) ->
     Overall = spawn(fun() -> ok end),
     Spec = #{id => id, start => {m, f, args}},
     ?assertEqual(start, rabbit_db_msup:create_or_update(group, Overall, undefined,
-                                                        Spec, id)),
+                                                        Spec, id(id))),
     ?assertEqual(ok, rabbit_db_msup:delete_all(group)),
-    ?assertEqual({error, not_found}, rabbit_db_msup:find_mirror(group, id)),
+    ?assertEqual({error, not_found}, rabbit_db_msup:find_mirror(group, id(id))),
     passed.
 
 update_all(Config) ->
@@ -129,8 +132,8 @@ update_all1(_Config) ->
     Overall = spawn(fun() -> ok end),
     Spec = #{id => id, start => {m, f, args}},
     ?assertEqual(start, rabbit_db_msup:create_or_update(group, OldOverall, undefined,
-                                                        Spec, id)),
-    ?assertEqual({ok, OldOverall}, rabbit_db_msup:find_mirror(group, id)),
+                                                        Spec, id(id))),
+    ?assertEqual({ok, OldOverall}, rabbit_db_msup:find_mirror(group, id(id))),
     ?assertEqual([Spec], rabbit_db_msup:update_all(Overall, OldOverall)),
-    ?assertEqual({ok, Overall}, rabbit_db_msup:find_mirror(group, id)),
+    ?assertEqual({ok, Overall}, rabbit_db_msup:find_mirror(group, id(id))),
     passed.
