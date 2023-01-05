@@ -44,7 +44,9 @@
          start_link/0,
          rpc_call/5,
          all_nodes/0,
-         running_nodes/0]).
+         running_nodes/0,
+         collect_inventory_on_nodes/1, collect_inventory_on_nodes/2,
+         mark_as_enabled_on_nodes/4]).
 
 %% gen_statem callbacks.
 -export([callback_mode/0,
