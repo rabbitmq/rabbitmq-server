@@ -16,9 +16,9 @@
 
 all() ->
     [
-     {group, cluster_size_1_network},
-     {group, cluster_size_2_network},
-     {group, cluster_size_2_direct}
+     {group, mnesia_store},
+     {group, khepri_store},
+     {group, khepri_migration}
     ].
 
 groups() ->
@@ -49,9 +49,17 @@ groups() ->
         cluster_multiple_users_zero_limit
     ],
     [
-      {cluster_size_1_network, [], ClusterSize1Tests},
-      {cluster_size_2_network, [], ClusterSize2Tests},
-      {cluster_size_2_direct,  [], ClusterSize2Tests}
+     {mnesia_store, [], [
+                         {cluster_size_1_network, [], ClusterSize1Tests},
+                         {cluster_size_3_network, [], ClusterSize2Tests},
+                         {cluster_size_3_direct,  [], ClusterSize2Tests}
+                        ]},
+     {khepri_store, [], [
+                         {cluster_size_1_network, [], ClusterSize1Tests},
+                         {cluster_size_3_network, [], ClusterSize2Tests},
+                         {cluster_size_3_direct,  [], ClusterSize2Tests}
+                        ]},
+     {khepri_migration, [], [from_mnesia_to_khepri]}
     ].
 
 suite() ->
@@ -71,16 +79,23 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mnesia_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
+init_per_group(khepri_migration, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network},
+                                                    {metadata_store, mnesia}]),
+    init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
-init_per_group(cluster_size_2_network, Config) ->
+init_per_group(cluster_size_3_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
-    init_per_multinode_group(cluster_size_2_network, Config1, 2);
-init_per_group(cluster_size_2_direct, Config) ->
+    init_per_multinode_group(cluster_size_3_network, Config1, 3);
+init_per_group(cluster_size_3_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
-    init_per_multinode_group(cluster_size_2_direct, Config1, 2);
-
+    init_per_multinode_group(cluster_size_3_direct, Config1, 3);
 init_per_group(cluster_rename, Config) ->
     init_per_multinode_group(cluster_rename, Config, 2).
 
@@ -100,7 +115,7 @@ init_per_multinode_group(Group, Config, NodeCount) ->
               rabbit_ct_client_helpers:setup_steps())
     end.
 
-end_per_group(cluster_rename, Config) ->
+end_per_group(Group, Config) when Group == mnesia_store; Group == khepri_store ->
     % The broker is managed by {init,end}_per_testcase().
     Config;
 end_per_group(_Group, Config) ->
@@ -670,7 +685,7 @@ cluster_node_restart_connection_and_channel_count(Config) ->
         end).
 
 cluster_node_list_on_node(Config) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     rabbit_ct_helpers:await_condition(
         fun () ->
@@ -1458,6 +1473,33 @@ cluster_multiple_users_zero_limit(Config) ->
 
     set_user_connection_and_channel_limit(Config, Username1, -1, -1),
     set_user_connection_and_channel_limit(Config, Username2, -1, -1).
+
+from_mnesia_to_khepri(Config) ->
+    Username = proplists:get_value(rmq_username, Config),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 0 andalso
+            count_channels_of_user(Config, Username) =:= 0
+        end),
+
+    [Conn] = open_connections(Config, [0]),
+    [_Chan] = open_channels(Conn, 1),
+
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 1 andalso
+            count_channels_of_user(Config, Username) =:= 1
+        end),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
+        ok ->
+            rabbit_ct_helpers:await_condition(
+              fun () ->
+                      count_connections_of_user(Config, Username) =:= 1 andalso
+                          count_channels_of_user(Config, Username) =:= 1
+              end);
+        Skip ->
+            Skip
+    end.
 
 %% -------------------------------------------------------------------
 %% Helpers

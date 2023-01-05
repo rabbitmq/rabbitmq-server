@@ -30,6 +30,8 @@
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0, all_users/0,
+         user_topic_perms_info_keys/0, vhost_topic_perms_info_keys/0,
+         user_vhost_topic_perms_info_keys/0,
          list_users/0, list_users/2, list_permissions/0,
          list_user_permissions/1, list_user_permissions/3,
          list_topic_permissions/0,
@@ -39,8 +41,12 @@
 
 -export([state_can_expire/0]).
 
-%% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
+
+-ifdef(TEST).
+-export([extract_user_permission_params/2,
+         extract_topic_permission_params/2]).
+-endif.
 
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
 
@@ -292,7 +298,10 @@ delete_user(Username, ActingUser) ->
                                      {user_who_performed_action, ActingUser}]),
                 ok;
             false ->
-                ok
+                ok;
+            Error0 ->
+                rabbit_log:info("Failed to delete user '~ts': ~tp", [Username, Error0]),
+                throw(Error0)
         end
     catch
         Class:Error:Stacktrace ->

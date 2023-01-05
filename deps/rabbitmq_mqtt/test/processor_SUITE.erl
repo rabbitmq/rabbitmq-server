@@ -43,9 +43,17 @@ init_per_testcase(get_vhost, Config) ->
     mnesia:create_table(rabbit_runtime_parameters, [
         {attributes, record_info(fields, runtime_parameters)},
         {record_name, runtime_parameters}]),
+    meck:new(rabbit_feature_flags, [passthrough, no_link]),
+    meck:expect(
+      rabbit_feature_flags, is_enabled,
+      fun
+          (khepri_db, _) -> false;
+          (FeatureNames, _)           -> meck:passthrough([FeatureNames])
+      end),
     Config;
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(get_vhost, Config) ->
+    meck:unload(rabbit_feature_flags),
     mnesia:stop(),
     Config;
 end_per_testcase(_, Config) -> Config.

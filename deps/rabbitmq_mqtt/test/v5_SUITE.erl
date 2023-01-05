@@ -175,12 +175,19 @@ init_per_group(Group, Config0) ->
                Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-    case Group of
-        cluster_size_1 ->
-            ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
-            Config;
-        cluster_size_3 ->
-            util:maybe_skip_v5(Config)
+    %% Mixed-version is skipped as `khepri_db`
+    %% is not supported
+    case Config of
+        {skip, _Reason} = Skip ->
+            Skip;
+        _ ->
+            case Group of
+                cluster_size_1 ->
+                    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
+                    Config;
+                cluster_size_3 ->
+                    util:maybe_skip_v5(Config)
+            end
     end.
 
 end_per_group(G, Config)

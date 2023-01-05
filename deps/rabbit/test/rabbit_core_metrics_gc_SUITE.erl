@@ -45,9 +45,14 @@ merge_app_env(Config) ->
 
 init_per_group(cluster_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
-    Conf = [{rmq_nodename_suffix, cluster_tests}, {rmq_nodes_count, 2}],
-    Config1 = rabbit_ct_helpers:set_config(Config, Conf),
-    rabbit_ct_helpers:run_setup_steps(Config1, setup_steps());
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Conf = [{rmq_nodename_suffix, cluster_tests}, {rmq_nodes_count, 2}],
+            Config1 = rabbit_ct_helpers:set_config(Config, Conf),
+            rabbit_ct_helpers:run_setup_steps(Config1, setup_steps());
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(non_parallel_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
     Conf = [{rmq_nodename_suffix, non_parallel_tests}],

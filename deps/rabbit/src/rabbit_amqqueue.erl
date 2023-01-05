@@ -34,7 +34,7 @@
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
--export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
+-export([update/2, store_queue/1, update_decorators/2, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([has_synchronised_mirrors_online/1, is_match/2, is_in_virtual_host/2]).
@@ -263,6 +263,12 @@ internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
 
 do_internal_declare(Q0, true) ->
+    %% TODO Why do we return the old state instead of the actual one?
+    %% I'm leaving it like it was before the khepri refactor, because
+    %% rabbit_amqqueue_process:init_it2 compares the result of this declare to decide
+    %% if continue or stop. If we return the actual one, it fails and the queue stops
+    %% silently during init.
+    %% Maybe we should review this bit of code at some point.
     Q = amqqueue:set_state(Q0, live),
     ok = store_queue(Q),
     {created, Q0};
@@ -289,10 +295,11 @@ store_queue(Q0) ->
     Q = rabbit_queue_decorator:set(Q0),
     rabbit_db_queue:set(Q).
 
--spec update_decorators(name()) -> 'ok'.
+-spec update_decorators(name(), [Decorator]) -> 'ok' when
+      Decorator :: atom().
 
-update_decorators(Name) ->
-    rabbit_db_queue:update_decorators(Name).
+update_decorators(Name, Decorators) ->
+    rabbit_db_queue:update_decorators(Name, Decorators).
 
 -spec policy_changed(amqqueue:amqqueue(), amqqueue:amqqueue()) ->
           'ok'.
@@ -1791,6 +1798,8 @@ internal_delete(Queue, ActingUser, Reason) ->
 
 -spec forget_all_durable(node()) -> 'ok'.
 
+%% TODO this is used by `rabbit_mnesia:remove_node_if_mnesia_running`
+%% Does it make any sense once mnesia is not used/removed?
 forget_all_durable(Node) ->
     UpdateFun = fun(Q) ->
                         forget_node_for_queue(Node, Q)

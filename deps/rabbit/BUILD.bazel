@@ -217,6 +217,8 @@ rabbitmq_app(
         "//deps/rabbit_common:erlang_app",
         "@cuttlefish//:erlang_app",
         "@gen_batch_server//:erlang_app",
+        "@khepri//:erlang_app",
+        "@khepri_mnesia_migration//:erlang_app",
         "@observer_cli//:erlang_app",
         "@osiris//:erlang_app",
         "@ra//:erlang_app",
@@ -324,7 +326,7 @@ rabbitmq_integration_suite(
     name = "cluster_rename_SUITE",
     size = "large",
     flaky = True,
-    shard_count = 2,
+    shard_count = 3,
 )
 
 rabbitmq_integration_suite(
@@ -346,15 +348,18 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
-    shard_count = 18,
+    shard_count = 48,
     sharding_method = "case",
 )
 
 rabbitmq_integration_suite(
     name = "clustering_recovery_SUITE",
     size = "medium",
-    shard_count = 2,
+    shard_count = 8,
     sharding_method = "case",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -587,11 +592,13 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "per_user_connection_channel_limit_SUITE",
     size = "medium",
+    shard_count = 7,
 )
 
 rabbitmq_integration_suite(
     name = "per_user_connection_channel_tracking_SUITE",
     size = "medium",
+    shard_count = 8,
 )
 
 rabbitmq_integration_suite(
@@ -607,6 +614,10 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "per_vhost_connection_limit_SUITE",
     size = "medium",
+    additional_beam = [
+        ":cluster_rename_SUITE_beam_files",
+    ],
+    shard_count = 10,
 )
 
 rabbitmq_integration_suite(
@@ -660,7 +671,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "queue_master_location_SUITE",
     size = "large",
-    shard_count = 2,
+    shard_count = 3,
 )
 
 rabbitmq_integration_suite(
@@ -1167,6 +1178,26 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "metadata_store_clustering_SUITE",
+    size = "large",
+    shard_count = 18,
+    sharding_method = "case",
+)
+
+rabbitmq_integration_suite(
+    name = "metadata_store_phase1_SUITE",
+    size = "small",
+    deps = [
+        "@khepri//:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "metadata_store_migration_SUITE",
+    size = "small",
+)
+
+rabbitmq_integration_suite(
     name = "routing_SUITE",
     size = "large",
 )
@@ -1177,6 +1208,14 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
+)
+
+rabbitmq_integration_suite(
+    name = "cluster_minority_SUITE",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
+    size = "large",
 )
 
 assert_suites()

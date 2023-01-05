@@ -185,27 +185,35 @@ get(Name, EntityName = #resource{virtual_host = VHost}) ->
          match(EntityName, list(VHost)),
          match(EntityName, list_op(VHost))).
 
+%% It's exported, so give it a default until all khepri transformation is sorted
 match(NameOrQueue, Policies) ->
-    case match_all(NameOrQueue, Policies) of
+    match(NameOrQueue, Policies, is_policy_applicable).
+
+match(NameOrQueue, Policies, Function) ->
+    case match_all(NameOrQueue, Policies, Function) of
         []           -> undefined;
         [Policy | _] -> Policy
     end.
 
+%% It's exported, so give it a default until all khepri transformation is sorted
 match_all(NameOrQueue, Policies) ->
-   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(NameOrQueue, P)]).
+    match_all(NameOrQueue, Policies, is_policy_applicable).
 
-matches(Q, Policy) when ?is_amqqueue(Q) ->
+match_all(NameOrQueue, Policies, Function) ->
+   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(NameOrQueue, P, Function)]).
+
+matches(Q, Policy, Function) when ?is_amqqueue(Q) ->
     #resource{name = Name, virtual_host = VHost} = amqqueue:get_name(Q),
     matches_queue_type(queue, amqqueue:get_type(Q), pget('apply-to', Policy)) andalso
-        is_applicable(Q, pget(definition, Policy)) andalso
+        is_applicable(Q, pget(definition, Policy), Function) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy);
-matches(#resource{kind = queue} = Resource, Policy) ->
+matches(#resource{kind = queue} = Resource, Policy, Function) ->
     {ok, Q} = rabbit_amqqueue:lookup(Resource),
-    matches(Q, Policy);
-matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
+    matches(Q, Policy, Function);
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy, Function) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
-        is_applicable(Resource, pget(definition, Policy)) andalso
+        is_applicable(Resource, pget(definition, Policy), Function) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy).
 
@@ -389,9 +397,6 @@ notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
 
 %%----------------------------------------------------------------------------
 
-%% [1] We need to prevent this from becoming O(n^2) in a similar
-%% manner to rabbit_binding:remove_for_{source,destination}. So see
-%% the comment in rabbit_binding:lock_route_tables/0 for more rationale.
 %% [2] We could be here in a post-tx fun after the vhost has been
 %% deleted; in which case it's fine to do nothing.
 update_matched_objects(VHost, PolicyDef, ActingUser) ->
@@ -492,11 +497,11 @@ matches_queue_type(queue, _, _) -> false.
 
 priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
-is_applicable(Q, Policy) when ?is_amqqueue(Q) ->
-    rabbit_amqqueue:is_policy_applicable(Q, rabbit_data_coercion:to_list(Policy));
-is_applicable(#resource{kind = queue} = Resource, Policy) ->
-    rabbit_amqqueue:is_policy_applicable(Resource, rabbit_data_coercion:to_list(Policy));
-is_applicable(_, _) ->
+is_applicable(Q, Policy, Function) when ?is_amqqueue(Q) ->
+    rabbit_amqqueue:Function(Q, rabbit_data_coercion:to_list(Policy));
+is_applicable(#resource{kind = queue} = Resource, Policy, Function) ->
+    rabbit_amqqueue:Function(Resource, rabbit_data_coercion:to_list(Policy));
+is_applicable(_, _, _) ->
     true.
 
 %%----------------------------------------------------------------------------

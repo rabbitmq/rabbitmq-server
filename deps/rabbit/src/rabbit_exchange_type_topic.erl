@@ -45,7 +45,7 @@ route(#exchange{name = XName}, Msg, Opts) ->
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
-create(_Tx, _X) -> ok.
+create(_Serial, _X) -> ok.
 
 delete(_Serial, #exchange{name = X}) ->
     rabbit_db_topic_exchange:delete_all_for_exchange(X).

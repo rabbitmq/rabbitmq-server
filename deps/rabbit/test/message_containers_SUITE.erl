@@ -58,17 +58,36 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1c,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_tick_interval, 100]),
+    case Config2 of
+        {skip, _} ->
+            Config2;
+        _ ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                   Config2, 0, application, set_env,
+                   [rabbit, channel_tick_interval, 100]),
 
-    AllFFs = rabbit_ct_broker_helpers:rpc(Config2, rabbit_feature_flags, list, [all, stable]),
-    FFs = maps:keys(maps:remove(?FEATURE_FLAG, AllFFs)),
-    ct:pal("FFs ~p", [FFs]),
-    rabbit_ct_broker_helpers:set_policy(Config2, 0,
-                                        <<"ha-policy">>, <<".*">>, <<"queues">>,
-                                        [{<<"ha-mode">>, <<"all">>}]),
-    Config2.
+            AllFFs = rabbit_ct_broker_helpers:rpc(Config2, rabbit_feature_flags, list, [all, stable]),
+            FFs = maps:keys(maps:remove(?FEATURE_FLAG, AllFFs)),
+            ct:pal("FFs ~p", [FFs]),
+            case Group of
+                classic ->
+                    try
+                        rabbit_ct_broker_helpers:set_policy(
+                          Config2, 0,
+                          <<"ha-policy">>, <<".*">>, <<"queues">>,
+                          [{<<"ha-mode">>, <<"all">>}]),
+                        Config2
+                    catch
+                        _:{badmatch, {error_string, Reason}} ->
+                            rabbit_ct_helpers:run_steps(
+                              Config2,
+                              rabbit_ct_broker_helpers:teardown_steps()),
+                            {skip, Reason}
+                    end;
+                _ ->
+                    Config2
+            end
+    end.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(

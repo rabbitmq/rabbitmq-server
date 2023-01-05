@@ -124,8 +124,15 @@ cluster_full_partition_with_autoheal(Config) ->
     ?awaitMatch(All, list_running(Config, B), 60000, 3000),
     ?awaitMatch(All, list_running(Config, C), 60000, 3000),
 
-    %% during autoheal B's connections were dropped
-    ?awaitMatch({4, 10},
+    %% During autoheal B's connections were dropped. Autoheal is not running
+    %% when Khepri is used.
+    KhepriEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                      Config, khepri_db),
+    ExpectedCount = case KhepriEnabled of
+                        true  -> {6, 15};
+                        false -> {4, 10}
+                    end,
+    ?awaitMatch(ExpectedCount,
                 {count_connections_in(Config, Username),
                  count_channels_in(Config, Username)},
                 60000, 3000),

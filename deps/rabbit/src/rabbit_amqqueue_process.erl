@@ -1678,12 +1678,36 @@ handle_cast(policy_changed, State = #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
     %% We depend on the #q.q field being up to date at least WRT
     %% policy (but not mirror pids) in various places, so when it
-    %% changes we go and read it from Mnesia again.
+    %% changes we go and read it from the database again.
     %%
     %% This also has the side effect of waking us up so we emit a
     %% stats event - so event consumers see the changed policy.
     {ok, Q} = rabbit_amqqueue:lookup(Name),
     noreply(process_args_policy(State#q{q = Q}));
+
+handle_cast({policy_changed, Q0}, State) ->
+    Name = amqqueue:get_name(Q0),
+    PolicyVersion0 = amqqueue:get_policy_version(Q0),
+    %% We depend on the #q.q field being up to date at least WRT
+    %% policy (but not mirror pids) in various places, so when it
+    %% changes we go and read it from the database again.
+    %%
+    %% This also has the side effect of waking us up so we emit a
+    %% stats event - so event consumers see the changed policy.
+    {ok, Q} = rabbit_amqqueue:lookup(Name),
+    PolicyVersion = amqqueue:get_policy_version(Q),
+    case PolicyVersion >= PolicyVersion0 of
+        true ->
+            noreply(process_args_policy(State#q{q = Q}));
+        false ->
+            %% Update just the policy, as pids and mirrors could have been
+            %% updated simultaneously. A testcase on the `confirm_rejects_SUITE`
+            %% fails consistently if the internal state is updated directly to `Q0`.
+            Q1 = amqqueue:set_policy(Q, amqqueue:get_policy(Q0)),
+            Q2 = amqqueue:set_operator_policy(Q1, amqqueue:get_operator_policy(Q0)),
+            Q3 = amqqueue:set_policy_version(Q2, PolicyVersion0),
+            noreply(process_args_policy(State#q{q = Q3}))
+    end;
 
 handle_cast({sync_start, _, _}, State = #q{q = Q}) ->
     Name = amqqueue:get_name(Q),

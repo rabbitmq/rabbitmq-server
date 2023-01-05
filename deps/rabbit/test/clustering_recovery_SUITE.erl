@@ -13,9 +13,17 @@
 
 -compile(export_all).
 
+-import(clustering_utils, [
+                           assert_status/2,
+                           assert_cluster_status/2,
+                           assert_clustered/1,
+                           assert_not_clustered/1
+                          ]).
+
 all() ->
     [
-     {group, mnesia_store}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
@@ -26,13 +34,29 @@ groups() ->
                                                  force_shrink_all_quorum_queues
                                                 ]}
                           ]}
+                        ]},
+     {khepri_store, [], [
+                         {clustered_3_nodes, [],
+                          [{cluster_size_3, [], [
+                                                 force_standalone_boot,
+                                                 force_standalone_boot_and_restart,
+                                                 force_standalone_boot_and_restart_with_quorum_queues
+                                                ]}
+                          ]},
+                         {clustered_5_nodes, [],
+                          [{cluster_size_5, [], [
+                                                 rolling_restart,
+                                                 rolling_kill_restart,
+                                                 forget_down_node
+                                                ]}]
+                         }
                         ]}
     ].
 
 suite() ->
     [
       %% If a testcase hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 5}}
+      {timetrap, {minutes, 10}}
     ].
 
 %% -------------------------------------------------------------------
@@ -46,12 +70,18 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
 init_per_group(mnesia_store, Config) ->
-    Config;
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
 init_per_group(clustered_3_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
+init_per_group(clustered_5_nodes, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]);
+init_per_group(cluster_size_5, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -82,9 +112,9 @@ end_per_testcase(Testcase, Config) ->
 force_shrink_all_quorum_queues(Config) ->
     [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     
-    QName1 = quorum_test_queue(1),
-    QName2 = quorum_test_queue(2),
-    QName3 = quorum_test_queue(3),
+    QName1 = quorum_queue_name(1),
+    QName2 = quorum_queue_name(2),
+    QName3 = quorum_queue_name(3),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
     declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
     declare_and_publish_to_queue(Config, Rabbit, QName2, Args),
@@ -111,7 +141,7 @@ force_shrink_all_quorum_queues(Config) ->
 force_shrink_quorum_queue(Config) ->
     [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     
-    QName1 = quorum_test_queue(1),
+    QName1 = quorum_queue_name(1),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
     declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
 
@@ -127,7 +157,150 @@ force_shrink_quorum_queue(Config) ->
     
     ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_shrink_member_to_current_member, [<<"/">>, QName1]),
 
-    ok = consume_from_queue(Config, Rabbit, QName1),
+    ok = consume_from_queue(Config, Rabbit, QName1).
+
+force_standalone_boot(Config) ->
+    %% Test for disaster recovery procedure command
+    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    assert_cluster_status({[Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny]},
+                          [Rabbit, Hare, Bunny]),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
+    ok = force_standalone_khepri_boot(Rabbit),
+
+    assert_cluster_status({[Rabbit], [Rabbit], [Rabbit], [Rabbit], [Rabbit]},
+                          [Rabbit]),
+
+    ok.
+
+force_standalone_boot_and_restart(Config) ->
+    %% Test for disaster recovery procedure
+    %%
+    %% 3-node cluster. Declare and publish to a classic queue on node 1.
+    %% Stop the two remaining nodes. Force standalone boot on the node
+    %% left. Restart it. Consume all the messages.
+    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    assert_cluster_status({[Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny]},
+                          [Rabbit, Hare, Bunny]),
+
+    QName = classic_queue_name(Rabbit),
+    Args = [{<<"x-queue-type">>, longstr, <<"classic">>}],
+    declare_and_publish_to_queue(Config, Rabbit, QName, Args),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
+    ok = force_standalone_khepri_boot(Rabbit),
+
+    assert_cluster_status({[Rabbit], [Rabbit], [Rabbit], [Rabbit], [Rabbit]},
+                          [Rabbit]),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
+
+    consume_from_queue(Config, Rabbit, QName),
+
+    ok.
+
+force_standalone_boot_and_restart_with_quorum_queues(Config) ->
+    %% Test for disaster recovery procedure
+    %%
+    %% 3-node cluster. Declare and publish to a classic queue on node 1.
+    %% Stop the two remaining nodes. Force standalone boot on the node
+    %% left. Restart it. Consume all the messages.
+    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    assert_cluster_status({[Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny]},
+                          [Rabbit, Hare, Bunny]),
+
+    QName1 = quorum_queue_name(1),
+    QName2 = quorum_queue_name(2),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
+    declare_and_publish_to_queue(Config, Rabbit, QName2, Args),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
+
+    ok = force_standalone_khepri_boot(Rabbit),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_all_queues_shrink_member_to_current_member, []),
+
+    assert_cluster_status({[Rabbit], [Rabbit], [Rabbit], [Rabbit], [Rabbit]},
+                          [Rabbit]),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
+
+    consume_from_queue(Config, Rabbit, QName1),
+    consume_from_queue(Config, Rabbit, QName2),
+
+    ok.
+
+rolling_restart(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Args = [{<<"x-queue-type">>, longstr, <<"classic">>}],
+    [begin
+         QName = classic_queue_name(N),
+         declare_and_publish_to_queue(Config, N, QName, Args)
+     end || N <- Nodes],
+
+    [begin
+         ok = rabbit_ct_broker_helpers:stop_node(Config, N),
+         ok = rabbit_ct_broker_helpers:start_node(Config, N)
+     end || N <- Nodes],
+
+    assert_cluster_status({Nodes, Nodes, Nodes}, Nodes),
+    [begin
+         QName = classic_queue_name(N),
+         consume_from_queue(Config, N, QName)
+     end || N <- Nodes],
+
+    ok.
+
+rolling_kill_restart(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Args = [{<<"x-queue-type">>, longstr, <<"classic">>}],
+    [begin
+         QName = classic_queue_name(N),
+         declare_and_publish_to_queue(Config, N, QName, Args)
+     end || N <- Nodes],
+
+    Ret0 =
+        [begin
+             ok = rabbit_ct_broker_helpers:kill_node(Config, N),
+             {N, rabbit_ct_broker_helpers:start_node(Config, N)}
+         end || N <- Nodes],
+    Failed = [Pair || {_, V} = Pair <- Ret0, V =/= ok],
+
+    ?assert(length(Failed) =< 1),
+
+    case Failed of
+        [] ->
+            assert_cluster_status({Nodes, Nodes, Nodes}, Nodes),
+            [begin
+                 QName = classic_queue_name(N),
+                 consume_from_queue(Config, N, QName)
+             end || N <- Nodes];
+        [{FailedNode, {error, _}}] ->
+            [Node0 | _] = RemainingNodes = Nodes -- [FailedNode],
+            ok = forget_cluster_node(Node0, FailedNode),
+            assert_cluster_status({RemainingNodes, RemainingNodes, RemainingNodes}, RemainingNodes)
+    end,
+    ok.
+
+forget_down_node(Config) ->
+    [Rabbit, Hare | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
+    ok = forget_cluster_node(Hare, Rabbit),
+
+    NNodes = lists:nthtail(1, Nodes),
+
+    assert_cluster_status({NNodes, NNodes, NNodes}, NNodes),
 
     ok.
 
@@ -140,22 +313,28 @@ declare_and_publish_to_queue(Config, Node, QName, Args) ->
     publish_many(Ch, QName, 10),
     rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
-quorum_test_queue(Number) ->
+quorum_queue_name(Number) ->
     list_to_binary(io_lib:format("quorum_queue_~p", [Number])).
 
+classic_queue_name(Node) ->
+    list_to_binary(io_lib:format("classic_queue_~p", [Node])).
+
 declare(Ch, Name, Args) ->
-    Res = amqp_channel:call(Ch, #'queue.declare'{durable = true,
-                                                 queue   = Name,
-                                                 arguments = Args}),
-    amqp_channel:call(Ch, #'queue.bind'{queue    = Name,
-                                        exchange = <<"amq.fanout">>}),
-    Res.
+    amqp_channel:call(Ch, #'queue.declare'{durable = true,
+                                           queue   = Name,
+                                           arguments = Args}).
 
 consume_from_queue(Config, Node, QName) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
     subscribe(Ch, QName),
     consume(10),
     rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+force_standalone_khepri_boot(Node) ->
+    rabbit_control_helper:command(force_standalone_khepri_boot, Node, []).
+
+forget_cluster_node(Node, Removee) ->
+    rabbit_control_helper:command(forget_cluster_node, Node, [atom_to_list(Removee)], []).
 
 publish_many(Ch, QName, N) ->
     amqp_channel:call(Ch, #'confirm.select'{}),

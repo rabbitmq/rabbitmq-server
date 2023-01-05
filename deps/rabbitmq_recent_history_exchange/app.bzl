@@ -10,6 +10,7 @@ def all_beam_files(name = "all_beam_files"):
         name = "other_beam",
         srcs = [
             "src/rabbit_db_rh_exchange.erl",
+            "src/rabbit_db_rh_exchange_m2k_converter.erl",
             "src/rabbit_exchange_type_recent_history.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -19,6 +20,8 @@ def all_beam_files(name = "all_beam_files"):
         deps = [
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
+            "@khepri//:erlang_app",
+            "@khepri_mnesia_migration//:erlang_app",
         ],
     )
 
@@ -33,6 +36,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         testonly = True,
         srcs = [
             "src/rabbit_db_rh_exchange.erl",
+            "src/rabbit_db_rh_exchange_m2k_converter.erl",
             "src/rabbit_exchange_type_recent_history.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -42,6 +46,8 @@ def all_test_beam_files(name = "all_test_beam_files"):
         deps = [
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
+            "@khepri//:erlang_app",
+            "@khepri_mnesia_migration//:erlang_app",
         ],
     )
 
@@ -63,6 +69,7 @@ def all_srcs(name = "all_srcs"):
         name = "srcs",
         srcs = [
             "src/rabbit_db_rh_exchange.erl",
+            "src/rabbit_db_rh_exchange_m2k_converter.erl",
             "src/rabbit_exchange_type_recent_history.erl",
         ],
     )

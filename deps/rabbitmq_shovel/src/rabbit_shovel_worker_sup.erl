@@ -18,7 +18,7 @@ start_link(ShovelName, ShovelConfig) ->
                                    ?MODULE, [ShovelName, ShovelConfig]).
 
 init([Name, Config]) ->
-    ChildSpecs = [{Name,
+    ChildSpecs = [{id(Name),
                    {rabbit_shovel_worker, start_link, [static, Name, Config]},
                    case Config of
                        #{reconnect_delay := N}
@@ -29,3 +29,6 @@ init([Name, Config]) ->
                    worker,
                    [rabbit_shovel_worker]}],
     {ok, {{one_for_one, 1, ?MAX_WAIT}, ChildSpecs}}.
+
+id(Name) ->
+    {[Name], Name}.

@@ -40,27 +40,27 @@ suite() ->
 
 all() ->
     [
-     {group, global_qos},
-     {group, ram_node_type},
-     {group, classic_queue_mirroring},
-     {group, transient_nonexcl_queues}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
-    [
-     {global_qos, [],
-      [when_global_qos_is_permitted_by_default,
-       when_global_qos_is_not_permitted_from_conf]},
-     {ram_node_type, [],
-      [join_when_ram_node_type_is_permitted_by_default,
-       join_when_ram_node_type_is_not_permitted_from_conf]},
-     {classic_queue_mirroring, [],
-      [set_policy_when_cmq_is_permitted_by_default,
-       set_policy_when_cmq_is_not_permitted_from_conf]},
-     {transient_nonexcl_queues, [],
-      [when_transient_nonexcl_is_permitted_by_default,
-       when_transient_nonexcl_is_not_permitted_from_conf]}
-    ].
+    Groups = [
+              {global_qos, [],
+               [when_global_qos_is_permitted_by_default,
+                when_global_qos_is_not_permitted_from_conf]},
+              {ram_node_type, [],
+               [join_when_ram_node_type_is_permitted_by_default,
+                join_when_ram_node_type_is_not_permitted_from_conf]},
+              {classic_queue_mirroring, [],
+               [set_policy_when_cmq_is_permitted_by_default,
+                set_policy_when_cmq_is_not_permitted_from_conf]},
+              {transient_nonexcl_queues, [],
+               [when_transient_nonexcl_is_permitted_by_default,
+                when_transient_nonexcl_is_not_permitted_from_conf]}
+             ],
+    [{mnesia_store, [], Groups},
+     {khepri_store, [], Groups}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -76,6 +76,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+init_per_group(mnesia_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
 init_per_group(global_qos, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(ram_node_type, Config) ->
@@ -208,6 +212,14 @@ is_prefetch_limited(ServerCh) ->
 %% -------------------------------------------------------------------
 
 join_when_ram_node_type_is_permitted_by_default(Config) ->
+    case ?config(metadata_store, Config) of
+        mnesia ->
+            join_when_ram_node_type_is_permitted_by_default_mnesia(Config);
+        khepri ->
+            join_when_ram_node_type_is_permitted_by_default_khepri(Config)
+    end.
+
+join_when_ram_node_type_is_permitted_by_default_mnesia(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
@@ -226,7 +238,8 @@ join_when_ram_node_type_is_permitted_by_default(Config) ->
     ?assert(
        log_file_contains_message(
          Config, NodeA,
-         ["Deprecated features: `ram_node_type`: Feature `ram_node_type` is deprecated",
+         ["Deprecated features: `ram_node_type`: Feature `ram_node_type` is "
+          "deprecated",
           "By default, this feature can still be used for now."])),
 
     %% Change the advanced configuration file to turn off RAM node type.
@@ -265,7 +278,33 @@ join_when_ram_node_type_is_permitted_by_default(Config) ->
             end
     end.
 
+join_when_ram_node_type_is_permitted_by_default_khepri(Config) ->
+    [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
+                       Config, nodename),
+
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    ?assertMatch(
+       {error, 70,
+        <<"Error:\nError: `ram` node type is unsupported", _/binary>>},
+       rabbit_control_helper:command_with_output(
+         join_cluster, NodeA,
+         [atom_to_list(NodeB)], [{"--ram", true}])),
+    ok = rabbit_control_helper:command(start_app, NodeA),
+
+    ?assertEqual([NodeA], get_all_nodes(Config, NodeA)),
+    ?assertEqual([NodeB], get_all_nodes(Config, NodeB)),
+    ?assertEqual([NodeA], get_disc_nodes(Config, NodeA)),
+    ?assertEqual([NodeB], get_disc_nodes(Config, NodeB)).
+
 join_when_ram_node_type_is_not_permitted_from_conf(Config) ->
+    case ?config(metadata_store, Config) of
+        mnesia ->
+            join_when_ram_node_type_is_not_permitted_from_conf_mnesia(Config);
+        khepri ->
+            join_when_ram_node_type_is_not_permitted_from_conf_khepri(Config)
+    end.
+
+join_when_ram_node_type_is_not_permitted_from_conf_mnesia(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
@@ -300,6 +339,24 @@ join_when_ram_node_type_is_not_permitted_from_conf(Config) ->
             end
     end.
 
+join_when_ram_node_type_is_not_permitted_from_conf_khepri(Config) ->
+    [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
+                       Config, nodename),
+
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    ?assertMatch(
+       {error, 70,
+        <<"Error:\nError: `ram` node type is unsupported", _/binary>>},
+       rabbit_control_helper:command_with_output(
+         join_cluster, NodeA,
+         [atom_to_list(NodeB)], [{"--ram", true}])),
+    ok = rabbit_control_helper:command(start_app, NodeA),
+
+    ?assertEqual([NodeA], get_all_nodes(Config, NodeA)),
+    ?assertEqual([NodeB], get_all_nodes(Config, NodeB)),
+    ?assertEqual([NodeA], get_disc_nodes(Config, NodeA)),
+    ?assertEqual([NodeB], get_disc_nodes(Config, NodeB)).
+
 get_all_nodes(Config, Node) ->
     lists:sort(
       rabbit_ct_broker_helpers:rpc(
@@ -315,6 +372,14 @@ get_disc_nodes(Config, Node) ->
 %% -------------------------------------------------------------------
 
 set_policy_when_cmq_is_permitted_by_default(Config) ->
+    case ?config(metadata_store, Config) of
+        mnesia ->
+            set_policy_when_cmq_is_permitted_by_default_mnesia(Config);
+        khepri ->
+            set_policy_when_cmq_is_permitted_by_default_khepri(Config)
+    end.
+
+set_policy_when_cmq_is_permitted_by_default_mnesia(Config) ->
     ?assertEqual(
        ok,
        rabbit_ct_broker_helpers:set_ha_policy(
@@ -325,7 +390,8 @@ set_policy_when_cmq_is_permitted_by_default(Config) ->
     ?assert(
        log_file_contains_message(
          Config, NodeA,
-         ["Deprecated features: `classic_queue_mirroring`: Classic mirrored queues are deprecated.",
+         ["Deprecated features: `classic_queue_mirroring`: Classic mirrored "
+          "queues are deprecated.",
           "By default, they can still be used for now."])),
 
     %% Change the advanced configuration file to turn off classic queue
@@ -353,6 +419,14 @@ set_policy_when_cmq_is_permitted_by_default(Config) ->
             "\\[:classic_queue_mirroring\\]",
             [{capture, none}]),
     ?assertEqual(match, Ret).
+
+set_policy_when_cmq_is_permitted_by_default_khepri(Config) ->
+    ?assertError(
+       {badmatch,
+        {error_string,
+         "Validation failed\n\nClassic mirrored queues are deprecated." ++ _}},
+       rabbit_ct_broker_helpers:set_ha_policy(
+         Config, 0, <<".*">>, <<"all">>)).
 
 set_policy_when_cmq_is_not_permitted_from_conf(Config) ->
     ?assertError(

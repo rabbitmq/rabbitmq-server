@@ -38,10 +38,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     node_pairs = make_node_pairs(nodes)
 
     try do
-      :rabbit_mnesia_rename.rename(node_name, node_pairs)
+      :rabbit_db_cluster.rename(node_name, node_pairs)
     catch
-      _, reason ->
-        {:rename_failed, reason}
+      :error, :undef ->
+        try do
+          :rabbit_mnesia_rename.rename(node_name, node_pairs)
+        catch
+          _, reason ->
+            {:rename_failed, reason}
+        end
     end
   end
 

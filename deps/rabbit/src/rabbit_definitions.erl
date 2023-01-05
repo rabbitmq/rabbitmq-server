@@ -457,8 +457,8 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
 
         SuccessFun(),
         ok
-    catch {error, E} -> {error, E};
-          exit:E     -> {error, E}
+    catch {error, E} -> {error, format(E)};
+          exit:E     -> {error, format(E)}
     after
         rabbit_runtime:gc_all_processes()
     end.
@@ -627,6 +627,10 @@ format({no_such_vhost, VHost}) ->
                          [VHost]));
 format({vhost_limit_exceeded, ErrMsg}) ->
     rabbit_data_coercion:to_binary(ErrMsg);
+format({shutdown, _} = Error) ->
+    rabbit_log:debug("Metadata store is unavailable: ~p", [Error]),
+    rabbit_data_coercion:to_binary(
+      rabbit_misc:format("Metadata store is unavailable. Please try again.", []));
 format(E) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~tp", [E])).
 

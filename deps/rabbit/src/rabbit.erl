@@ -356,14 +356,40 @@ run_prelaunch_second_phase() ->
     %% 3. Logging.
     ok = rabbit_prelaunch_logging:setup(Context),
 
-    %% 4. Clustering.
+    %% The clustering steps requires Khepri to be started to check for
+    %% consistency. This is the opposite compared to Mnesia which must be
+    %% stopped. That's why we setup Khepri and the coordination Ra system it
+    %% depends on before, but only handle Mnesia after.
+    %%
+    %% We also always set it up, even when using Mnesia, to ensure it is ready
+    %% if/when the migration begins.
+    %%
+    %% Note that this is only the Khepri store which is started here. We
+    %% perform additional initialization steps in `rabbit_db:init()' which is
+    %% triggered from a boot step. This boot step handles both Mnesia and
+    %% Khepri and synchronizes the feature flags.
+    %%
+    %% To sum up:
+    %% 1. We start the Khepri store (always)
+    %% 2. We verify the cluster, including the feature flags compatibility
+    %% 3. We start Mnesia (if Khepri is unused)
+    %% 4. We synchronize feature flags in `rabbit_db:init()'
+    %% 4. We finish to initialize either Mnesia or Khepri in `rabbit_db:init()'
+    ok = rabbit_ra_systems:setup(Context),
+    ok = rabbit_khepri:setup(Context),
+
+    %% 4. Clustering checks. This covers the compatibility between nodes,
+    %% feature-flags-wise.
     ok = rabbit_prelaunch_cluster:setup(Context),
 
-    %% Start Mnesia now that everything is ready.
-    ?LOG_DEBUG("Starting Mnesia"),
-    ok = mnesia:start(),
-
-    ok = rabbit_ra_systems:setup(Context),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            %% Start Mnesia now that everything is ready.
+            ?LOG_DEBUG("Starting Mnesia"),
+            ok = mnesia:start()
+    end,
 
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),
@@ -1015,7 +1041,13 @@ do_run_postlaunch_phase(Plugins) ->
         ok = log_broker_started(StrictlyPlugins),
 
         ?LOG_DEBUG("Marking ~ts as running", [product_name()]),
-        rabbit_boot_state:set(ready)
+        rabbit_boot_state:set(ready),
+
+        %% Now that everything is ready, trigger the garbage collector. With
+        %% Khepri enabled, it seems to be more important than before; see #5515
+        %% for context.
+        _ = rabbit_runtime:gc_all_processes(),
+        ok
     catch
         throw:{error, _} = Error ->
             rabbit_prelaunch_errors:log_error(Error),

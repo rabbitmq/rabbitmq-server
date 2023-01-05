@@ -32,6 +32,8 @@ select_leader_and_followers(Q, Size)
     true = lists:member(node(), AllNodes),
     QueueType = amqqueue:get_type(Q),
     GetQueues0 = get_queues_for_type(QueueType),
+    %% TODO do we always need the queue count? it can be expensive, check if it can be skipped!
+    %% for example, for random
     QueueCount = rabbit_amqqueue:count(),
     QueueCountStartRandom = application:get_env(rabbit, queue_count_start_random_selection,
                                                 ?QUEUE_COUNT_START_RANDOM_SELECTION),

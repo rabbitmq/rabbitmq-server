@@ -19,8 +19,8 @@
 -export([
   add_binding/3, 
   assert_args_equivalence/2,
-  create/2, 
-  delete/2, 
+  create/2,
+  delete/2,
   policy_changed/2,
   description/0, 
   recover/2, 

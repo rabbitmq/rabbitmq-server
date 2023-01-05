@@ -427,6 +427,10 @@ end}.
 {mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
     [{datatype, {enum, [true, false]}}]}.
 
+
+{mapping, "metadata_store.khepri.default_timeout", "rabbit.khepri_default_timeout",
+    [{datatype, integer}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.

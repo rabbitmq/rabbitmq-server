@@ -43,7 +43,7 @@ start_child({VHost, ShovelName} = Name, Def) ->
     rabbit_log_shovel:debug("Starting a mirrored supervisor named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
     Result = case mirrored_supervisor:start_child(
            ?SUPERVISOR,
-           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, obfuscated_uris_parameters(Def)]},
+           {id(Name), {rabbit_shovel_dyn_worker_sup, start_link, [Name, obfuscated_uris_parameters(Def)]},
             transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
@@ -58,7 +58,7 @@ obfuscated_uris_parameters(Def) when is_list(Def) ->
     rabbit_shovel_parameters:obfuscate_uris_in_definition(Def).
 
 child_exists(Name) ->
-    lists:any(fun ({N, _, _, _}) -> N =:= Name end,
+    lists:any(fun ({{_, N}, _, _, _}) -> N =:= Name end,
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child({VHost, ShovelName} = Name) ->
@@ -67,8 +67,8 @@ stop_child({VHost, ShovelName} = Name) ->
     case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
         _ ->
-            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
-            ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
+            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)),
+            ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
             rabbit_shovel_status:remove(Name)
     end,
     rabbit_shovel_locks:unlock(LockId),
@@ -83,10 +83,10 @@ stop_child({VHost, ShovelName} = Name) ->
 %% See rabbit_shovel_worker:terminate/2
 
 cleanup_specs() ->
-    SpecsSet = sets:from_list([element(1, S) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
+    SpecsSet = sets:from_list([element(2, element(1, S)) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
     ParamsSet = sets:from_list(rabbit_runtime_parameters:list_component(<<"shovel">>)),
-    F = fun(Spec, ok) ->
-            _ = mirrored_supervisor:delete_child(?SUPERVISOR, Spec),
+    F = fun(Name, ok) ->
+            _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
             ok
         end,
     ok = sets:fold(F, ok, sets:subtract(SpecsSet, ParamsSet)).
@@ -95,3 +95,6 @@ cleanup_specs() ->
 
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
+
+id({V, S} = Name) ->
+    {[V, S], Name}.

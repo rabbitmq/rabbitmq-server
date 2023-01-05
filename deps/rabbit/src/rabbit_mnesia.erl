@@ -23,6 +23,8 @@
          force_load_next_boot/0,
 
          %% Various queries to get the status of the db
+         %% %% FIXME: Comment below not true anymore.
+         %%
          status/0,
          is_running/0,
          is_clustered/0,
@@ -41,6 +43,8 @@
          check_mnesia_consistency/1,
          check_cluster_consistency/0,
          ensure_mnesia_dir/0,
+         ensure_mnesia_running/0,
+         ensure_node_type_is_permitted/1,
 
          %% Hooks used in `rabbit_node_monitor'
          on_node_up/1,
@@ -49,7 +53,12 @@
          %% Helpers for diagnostics commands
          schema_info/1,
 
-         reset_gracefully/0
+         start_mnesia/1,
+         stop_mnesia/0,
+
+         reset_gracefully/0,
+
+         e/1
         ]).
 
 %% Mnesia queries
@@ -67,6 +76,8 @@
 
 %% Used internally in `rabbit_db_cluster'.
 -export([members/0]).
+
+-export([check_reset_gracefully/0]).
 
 -deprecated({on_running_node, 1,
              "Use rabbit_process:on_running_node/1 instead"}).
@@ -230,7 +241,6 @@ join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
 
 reset() ->
     ensure_mnesia_not_running(),
-    rabbit_log:info("Resetting Rabbit", []),
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.
@@ -247,13 +257,16 @@ reset_gracefully() ->
     %% Force=true here so that reset still works when clustered with a
     %% node which is down.
     init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
-    case is_only_clustered_disc_node() of
-        true  -> e(resetting_only_disc_node);
-        false -> ok
-    end,
+    check_reset_gracefully(),
     leave_cluster(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
     wipe().
+
+check_reset_gracefully() ->
+    case is_only_clustered_disc_node() of
+        true  -> e(resetting_only_disc_node);
+        false -> ok
+    end.
 
 wipe() ->
     %% We need to make sure that we don't end up in a distributed
@@ -893,6 +906,9 @@ discover_cluster0(Node) ->
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
 create_schema() ->
+    %% Assert we are not supposed to use Khepri.
+    false = rabbit_khepri:is_enabled(),
+
     stop_mnesia(),
     rabbit_log:debug("Will bootstrap a schema database..."),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
@@ -1059,7 +1075,8 @@ is_virgin_node() ->
              rabbit_node_monitor:stream_filename(),
              rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
-             rabbit_feature_flags:enabled_feature_flags_list_file()],
+             rabbit_feature_flags:enabled_feature_flags_list_file(),
+             rabbit_khepri:dir()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
             rabbit_log:debug("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
@@ -1109,6 +1126,6 @@ error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
 
 format_inconsistent_cluster_message(Thinker, Dissident) ->
-    rabbit_misc:format("Node ~tp thinks it's clustered "
+    rabbit_misc:format("Mnesia: node ~tp thinks it's clustered "
                        "with node ~tp, but ~tp disagrees",
                        [Thinker, Dissident, Dissident]).

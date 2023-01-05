@@ -1119,6 +1119,7 @@ resend_all(#stream_client{leader = LeaderPid,
     State.
 
 set_leader_pid(Pid, QName) ->
+    %% TODO this should probably be a single khepri transaction for better performance.
     Fun = fun (Q) ->
                   amqqueue:set_pid(Q, Pid)
           end,

@@ -225,9 +225,6 @@ count() ->
 list_names() ->
     rabbit_db_exchange:list().
 
-%% Not dirty_match_object since that would not be transactional when used in a
-%% tx context
-
 -spec list(rabbit_types:vhost()) -> [rabbit_types:exchange()].
 
 list(VHostPath) ->

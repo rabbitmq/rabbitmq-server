@@ -24,7 +24,6 @@ groups() ->
 
 all_tests() ->
     [
-     setup_schema,
      set_and_get,
      set_and_get_consistent
     ].
@@ -63,14 +62,6 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 %% Test Cases
 %% ---------------------------------------------------------------------------
-
-setup_schema(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(
-               Config, 0, ?MODULE, setup_schema1, [Config]).
-
-setup_schema1(_Config) ->
-    ?assertEqual(ok, rabbit_db_maintenance:setup_schema()),
-    passed.
 
 set_and_get(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(

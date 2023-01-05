@@ -1348,7 +1348,12 @@ is_over_vhost_connection_limit(VHostPath, User) ->
                             [VHostPath, User#user.username, Limit])
     catch
         throw:{error, {no_such_vhost, VHostPath}} ->
-            rabbit_misc:protocol_error(not_allowed, "vhost ~ts not found", [VHostPath])
+            rabbit_misc:protocol_error(not_allowed, "vhost ~ts not found", [VHostPath]);
+        throw:{error, {cannot_get_limit, VHostPath, timeout}} ->
+            rabbit_misc:protocol_error(not_allowed,
+                                       "access to vhost '~ts' refused for user '~ts': "
+                                       "connection limit cannot be queried, timeout",
+                                       [VHostPath, User#user.username])
     end.
 
 is_over_user_connection_limit(#user{username = Username}) ->

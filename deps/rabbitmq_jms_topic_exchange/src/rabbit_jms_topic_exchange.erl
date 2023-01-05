@@ -109,7 +109,8 @@ create(_Tx, #exchange{name = XName}) ->
 
 % Delete an exchange
 delete(_Tx, #exchange{name = XName}) ->
-    delete_state(XName).
+    delete_state(XName),
+    ok.
 
 % Before add binding
 validate_binding(_X, _B) -> ok.

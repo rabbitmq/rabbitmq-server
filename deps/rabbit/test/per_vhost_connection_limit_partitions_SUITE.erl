@@ -113,8 +113,15 @@ cluster_full_partition_with_autoheal(Config) ->
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
-    %% during autoheal B's connections were dropped
-    ?awaitMatch(Connections when length(Connections) == 4,
+    %% During autoheal B's connections were dropped. Autoheal is not running
+    %% when Khepri is used.
+    KhepriEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                      Config, khepri_db),
+    ExpectedCount = case KhepriEnabled of
+                        true  -> 6;
+                        false -> 4
+                    end,
+    ?awaitMatch(Connections when length(Connections) == ExpectedCount,
                                  connections_in(Config, VHost),
                                  60000, 3000),
 
