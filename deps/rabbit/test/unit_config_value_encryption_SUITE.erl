@@ -33,12 +33,14 @@ groups() ->
         ]}
     ].
 
-init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
-                                   TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined;
-                                   TC =:= decrypt_start_app_wrong_passphrase ->
+init_per_suite(Config) ->
     application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
-    Config;
+    {ok, _Pid} = rabbit_ff_controller:start(),
+    Config.
+
+end_per_suite(_Config) ->
+    ok.
+
 init_per_testcase(_Testcase, Config) ->
     Config.
 

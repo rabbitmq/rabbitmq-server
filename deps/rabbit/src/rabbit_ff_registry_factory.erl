@@ -94,9 +94,8 @@ initialize_registry(NewSupportedFeatureFlags) ->
 
     AlreadyEnabledFeatureNames =
     rabbit_feature_flags:read_enabled_feature_flags_list(),
-    FeatureStates0 =
-    rabbit_feature_flags:enabled_feature_flags_to_feature_states(
-      AlreadyEnabledFeatureNames),
+    FeatureStates0 = enabled_feature_flags_to_feature_states(
+                       AlreadyEnabledFeatureNames),
 
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
     FeatureStates = case RegistryInitialized of
@@ -122,6 +121,14 @@ initialize_registry(NewSupportedFeatureFlags) ->
     initialize_registry(NewSupportedFeatureFlags,
                         FeatureStates,
                         WrittenToDisk).
+
+-spec enabled_feature_flags_to_feature_states(FeatureNames) ->
+    FeatureStates when
+      FeatureNames :: [rabbit_feature_flags:feature_name()],
+      FeatureStates :: rabbit_feature_flags:feature_states().
+
+enabled_feature_flags_to_feature_states(FeatureNames) ->
+    maps:from_list([{FeatureName, true} || FeatureName <- FeatureNames]).
 
 -spec initialize_registry(rabbit_feature_flags:feature_flags(),
                           rabbit_feature_flags:feature_states(),

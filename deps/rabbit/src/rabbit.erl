@@ -521,7 +521,7 @@ start_apps(Apps, RestartTypes) ->
     %% We need to load all applications involved in order to be able to
     %% find new feature flags.
     app_utils:load_applications(Apps),
-    ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(Apps),
+    ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(),
     rabbit_prelaunch_conf:decrypt_config(Apps),
     lists:foreach(
       fun(App) ->
@@ -908,8 +908,7 @@ start(normal, []) ->
         %% once, because it does not involve running code from the
         %% plugins.
         ok = app_utils:load_applications(Plugins),
-        ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
-               Plugins),
+        ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(),
 
         persist_static_configuration(),
 

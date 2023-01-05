@@ -709,8 +709,8 @@ enable_feature_flag_with_a_network_partition(Config) ->
 mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
     FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
-    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
-                        Config, nodename),
+    AllNodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, C, D, E] = AllNodes,
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
 
@@ -722,6 +722,9 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
        False,
        is_feature_flag_enabled(Config, FeatureName)),
 
+    {ok, Inventory} = rabbit_ff_controller:collect_inventory_on_nodes(
+                        AllNodes),
+
     %% Isolate node B from the rest of the cluster.
     NodePairs = [{B, A},
                  {B, C},
@@ -732,38 +735,26 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to timeout.
-    RemoteNodes = [A, C, D, E],
     ?assertEqual(
-       {failed_to_mark_feature_flag_as_enabled_on_remote_nodes,
-        FeatureName,
-        true,
-        RemoteNodes},
-       catch rabbit_ct_broker_helpers:rpc(
-               Config, B,
-               rabbit_feature_flags, mark_as_enabled_remotely,
-               [RemoteNodes, FeatureName, true, 20000])),
+       {error, {badrpc, nodedown}},
+       rabbit_ct_broker_helpers:rpc(
+         Config, B,
+         rabbit_ff_controller, mark_as_enabled_on_nodes,
+         [AllNodes, Inventory, FeatureName, true])),
 
-    RepairFun = fun() ->
-                        %% Wait a few seconds before we repair the network.
-                        timer:sleep(5000),
-
-                        %% Repair the network and try again to enable
-                        %% the feature flag.
-                        unblock(NodePairs),
-                        timer:sleep(1000)
-                end,
-    spawn(RepairFun),
+    %% Repair the network and try again to enable the feature flag.
+    unblock(NodePairs),
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to work this time.
     ct:pal(?LOW_IMPORTANCE,
            "Marking the feature flag as enabled on remote nodes...", []),
-    ?assertEqual(
-       ok,
+    ?assertMatch(
+       {ok, _},
        rabbit_ct_broker_helpers:rpc(
          Config, B,
-         rabbit_feature_flags, mark_as_enabled_remotely,
-         [RemoteNodes, FeatureName, true, 120000])).
+         rabbit_ff_controller, mark_as_enabled_on_nodes,
+         [AllNodes, Inventory, FeatureName, true])).
 
 %% FIXME: Finish the testcase above ^
 
@@ -1262,12 +1253,6 @@ inject_ff_on_nodes(Config, Nodes, FeatureFlags)
                 inject_test_feature_flags,
                 [FeatureFlags])
       end, Nodes).
-
-%% Convert to the format expected on RabbitMQ up-to 3.10.x.
-feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
-    [{?MODULE, % Application
-      ?MODULE, % Module
-      maps:to_list(FeatureFlags)}].
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].
