@@ -31,7 +31,7 @@
          enable_feature_flag_with_a_network_partition/1,
          mark_feature_flag_as_enabled_with_a_network_partition/1,
          required_feature_flag_enabled_by_default/1,
-         plugin_ff_still_enabled_after_node_restart/1,
+         plugin_stable_ff_enabled_on_initial_node_start/1,
 
          clustering_ok_with_ff_disabled_everywhere/1,
          clustering_ok_with_ff_enabled_on_some_nodes/1,
@@ -62,7 +62,7 @@ groups() ->
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
        required_feature_flag_enabled_by_default,
-       plugin_ff_still_enabled_after_node_restart
+       plugin_stable_ff_enabled_on_initial_node_start
       ]},
      {enabling_in_cluster, [],
       [
@@ -1020,9 +1020,9 @@ required_feature_flag_enabled_by_default(Config) ->
        True,
        is_feature_flag_enabled(Config, RequiredFName)).
 
-plugin_ff_still_enabled_after_node_restart(Config) ->
+plugin_stable_ff_enabled_on_initial_node_start(Config) ->
     ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
-    ?assertEqual([false], is_feature_flag_enabled(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
 
     ?assertEqual(ok, enable_feature_flag_on(Config, 0, plugin_ff)),
 
