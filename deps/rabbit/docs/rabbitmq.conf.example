@@ -265,7 +265,23 @@
 # ssl_handshake_timeout = 5000
 
 
+##
+## Loading Definitions
+## ====================
+##
+## Relevant documentation: https://www.rabbitmq.com/definitions.html#import-on-boot
+##
+## To import definitions from a local file on node boot, set the
+## load_definitions config key to a path of a previously exported
+## JSON file with definitions. Does not require management plugin
+## to be enabled.
+##
+# load_definitions = /path/to/definitions/file.json
+
+
+##
 ## Cluster name
+## ====================
 ##
 # cluster_name = dev3.eng.megacorp.local
 
