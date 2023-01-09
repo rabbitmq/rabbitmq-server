@@ -320,8 +320,6 @@
               inventory/0,
               cluster_inventory/0]).
 
--on_load(on_load/0).
-
 -spec list() -> feature_flags().
 %% @doc
 %% Lists all supported feature flags.
@@ -1154,63 +1152,3 @@ sync_feature_flags_with_cluster(_Nodes, _NodeIsVirgin) ->
 
 refresh_feature_flags_after_app_load() ->
     rabbit_ff_controller:refresh_after_app_load().
-
-on_load() ->
-    %% The goal of this `on_load()` code server hook is to prevent this
-    %% module from being loaded in an already running RabbitMQ node if
-    %% the running version does not have the feature flags subsystem.
-    %%
-    %% This situation happens when an upgrade overwrites RabbitMQ files
-    %% with the node still running. This is the case with many packages:
-    %% files are updated on disk, then a post-install step takes care of
-    %% restarting the service.
-    %%
-    %% The problem is that if many nodes in a cluster are updated at the
-    %% same time, one node running the newer version might query feature
-    %% flags on an old node where this module is already available
-    %% (because files were already overwritten). This causes the query
-    %% to report an unexpected answer and the newer node to refuse to
-    %% start.
-    %%
-    %% However, when the module is executed outside of RabbitMQ (for
-    %% debugging purpose or in the context of EUnit for instance), we
-    %% want to allow the load. That's why we first check if RabbitMQ is
-    %% actually running.
-    case rabbit:is_running() of
-        true ->
-            %% RabbitMQ is running.
-            %%
-            %% Now we want to differentiate a pre-feature-flags node
-            %% from one having the subsystem.
-            %%
-            %% To do that, we verify if the `feature_flags_file`
-            %% application environment variable is defined. With a
-            %% feature-flags-enabled node, this application environment
-            %% variable is defined by rabbitmq-server(8).
-            case application:get_env(rabbit, feature_flags_file) of
-                {ok, _} ->
-                    %% This is a feature-flags-enabled version. Loading
-                    %% the module is permitted.
-                    ok;
-                _ ->
-                    %% This is a pre-feature-flags version. We deny the
-                    %% load and report why, possibly specifying the
-                    %% version of RabbitMQ.
-                    Vsn = case application:get_key(rabbit, vsn) of
-                              {ok, V}   -> V;
-                              undefined -> "unknown version"
-                          end,
-                    "Refusing to load '" ?MODULE_STRING "' on this "
-                    "node. It appears to be running a pre-feature-flags "
-                    "version of RabbitMQ (" ++ Vsn ++ "). This is fine: "
-                    "a newer version of RabbitMQ was deployed on this "
-                    "node, but it was not restarted yet. This warning "
-                    "is probably caused by a remote node querying this "
-                    "node for its feature flags."
-            end;
-        false ->
-            %% RabbitMQ is not running. Loading the module is permitted
-            %% because this Erlang node will never be queried for its
-            %% feature flags.
-            ok
-    end.
