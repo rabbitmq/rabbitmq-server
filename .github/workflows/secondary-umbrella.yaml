@@ -62,7 +62,7 @@ jobs:
         git diff
 
     - name: Mount Bazel Cache
-      uses: actions/cache@v3.2.2
+      uses: actions/cache@v3.2.3
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache-secondary-umbrella
