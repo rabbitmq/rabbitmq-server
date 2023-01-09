@@ -1087,15 +1087,6 @@ does_node_support(Node, FeatureNames, Timeout) ->
                     Node, is_supported_locally, [FeatureNames], Timeout)
           end,
     case Ret of
-        {error, pre_feature_flags_rabbitmq} ->
-            %% See run_feature_flags_mod_on_remote_node/4 for
-            %% an explanation why we consider this node a 3.7.x
-            %% pre-feature-flags node.
-            rabbit_log_feature_flags:debug(
-              "Feature flags: no feature flags support on node `~ts`, "
-              "consider the feature flags unsupported: ~tp",
-              [Node, FeatureNames]),
-            false;
         {error, Reason} ->
             rabbit_log_feature_flags:error(
               "Feature flags: error while querying `~tp` support on "
