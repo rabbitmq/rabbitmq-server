@@ -1093,6 +1093,12 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
+rabbitmq_integration_suite(
+    name = "exchanges_SUITE",
+    size = "small",
+)
+
+
 assert_suites()
 
 filegroup(
