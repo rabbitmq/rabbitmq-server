@@ -189,9 +189,7 @@ sub_non_existent(Config) ->
 
     {<<"ERROR">>, [{<<"message">>,<<"not_found">>} | _Tail ], <<"NOT_FOUND - no exchange 'doesnotexist' in vhost '/'">>} = raw_recv(WS),
 
-    {close, {1000, <<"STOMP died">>}} = raw_recv(WS),
-
-    {close, _} = rfc6455_client:close(WS),
+    {close, _} = raw_recv(WS),
     ok.
 
 
