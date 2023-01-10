@@ -20,6 +20,10 @@
 
 -module(rabbit_ff_registry).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([get/1,
          list/1,
          states/0,
@@ -165,9 +169,11 @@ is_registry_written_to_disk() ->
 -spec inventory() -> rabbit_feature_flags:inventory().
 
 inventory() ->
-    #{applications => [],
-      feature_flags => #{},
-      states => #{}}.
+    rabbit_ff_registry_factory:initialize_registry(),
+    Inventory = #{applications => [],
+                  feature_flags => #{},
+                  states => #{}},
+    ?convince_dialyzer(?MODULE:inventory(), Inventory, Inventory).
 
 always_return_true() ->
     %% This function is here to trick Dialyzer. We want some functions
@@ -192,9 +198,10 @@ always_return_false() ->
 
 -ifdef(TEST).
 on_load() ->
-     _ = (catch rabbit_log_feature_flags:debug(
+     _ = (catch ?LOG_DEBUG(
                   "Feature flags: Loading initial (uninitialized) registry "
                   "module (~tp)",
-                  [self()])),
+                  [self()],
+                  #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})),
     ok.
 -endif.

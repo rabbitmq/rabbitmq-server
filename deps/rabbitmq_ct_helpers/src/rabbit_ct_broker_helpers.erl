@@ -1680,11 +1680,11 @@ is_feature_flag_supported(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     is_feature_flag_supported(Config, Nodes, FeatureName).
 
-is_feature_flag_supported(Config, [Node1 | _] = Nodes, FeatureName) ->
+is_feature_flag_supported(Config, [Node1 | _] = _Nodes, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
       Config, Node1,
-      rabbit_feature_flags, is_supported_remotely,
-      [Nodes, [FeatureName], 60000]).
+      rabbit_feature_flags, is_supported,
+      [[FeatureName], 60000]).
 
 enable_feature_flag(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

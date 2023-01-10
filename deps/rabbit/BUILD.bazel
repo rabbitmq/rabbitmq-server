@@ -429,7 +429,7 @@ suites = [
         name = "feature_flags_SUITE",
         size = "large",
         flaky = True,
-        shard_count = 9,
+        shard_count = 5,
         runtime_deps = [
             "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:erlang_app",
         ],

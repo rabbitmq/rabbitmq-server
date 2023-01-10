@@ -7,6 +7,10 @@
 
 -module(rabbit_core_ff).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([direct_exchange_routing_v2_enable/1,
          listener_records_in_ets_enable/1,
          listener_records_in_ets_post_enable/1,
@@ -70,7 +74,7 @@
 -rabbit_feature_flag(
     {feature_flags_v2,
      #{desc          => "Feature flags subsystem V2",
-       stability     => stable
+       stability     => required
      }}).
 
 -rabbit_feature_flag(
@@ -136,16 +140,18 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
             ok ->
                 ok = rabbit_binding:populate_index_route_table();
             {error, Err} = Error ->
-                rabbit_log_feature_flags:error(
+                ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to add copy of table ~ts to "
                   "node ~tp: ~tp",
-                  [FeatureName, TableName, node(), Err]),
+                  [FeatureName, TableName, node(), Err],
+                  #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                 Error
         end
     catch throw:{error, Reason} ->
-              rabbit_log_feature_flags:error(
+              ?LOG_ERROR(
                 "Feature flags: `~ts`: enable callback failure: ~tp",
-                [FeatureName, Reason]),
+                [FeatureName, Reason],
+                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
               {error, Reason}
     end.
 
@@ -169,9 +175,10 @@ listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
         throw:{error, {no_exists, rabbit_listener}} ->
             ok;
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: `~ts`: failed to migrate Mnesia table: ~tp",
-              [FeatureName, Reason]),
+              [FeatureName, Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, Reason}
     end.
 
@@ -183,16 +190,18 @@ listener_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
             {aborted, {no_exists, _}} ->
                 ok;
             {aborted, Err} ->
-                rabbit_log_feature_flags:error(
+                ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
-                  [FeatureName, Err]),
+                  [FeatureName, Err],
+                  #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                 ok
         end
     catch
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: `~ts`: failed to delete Mnesia table: ~tp",
-              [FeatureName, Reason]),
+              [FeatureName, Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok
     end.
 
@@ -204,8 +213,10 @@ tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
         throw:{error, {no_exists, _}} ->
             ok;
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
-                                           [FeatureName, Reason]),
+            ?LOG_ERROR(
+               "Enabling feature flag ~ts failed: ~tp",
+               [FeatureName, Reason],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, Reason}
     end.
 
@@ -217,8 +228,10 @@ tracking_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
             Tab <- rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(node())]
     catch
         throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed: ~tp",
-                                           [FeatureName, Reason]),
+            ?LOG_ERROR(
+               "Enabling feature flag ~ts failed: ~tp",
+               [FeatureName, Reason],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             %% adheres to the callback interface
             ok
     end.
@@ -230,8 +243,10 @@ delete_table(FeatureName, Tab) ->
         {aborted, {no_exists, _}} ->
             ok;
         {aborted, Err} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~ts failed to delete mnesia table ~tp: ~tp",
-                                           [FeatureName, Tab, Err]),
+            ?LOG_ERROR(
+               "Enabling feature flag ~ts failed to delete mnesia table ~tp: ~tp",
+               [FeatureName, Tab, Err],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             %% adheres to the callback interface
             ok
     end.

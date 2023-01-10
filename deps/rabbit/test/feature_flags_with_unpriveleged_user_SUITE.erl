@@ -53,10 +53,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     feature_flags_SUITE:end_per_suite(Config).
 
-init_per_group(enabling_in_cluster, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 3}]);
 init_per_group(Group, Config) ->
     feature_flags_SUITE:init_per_group(Group, Config).
 

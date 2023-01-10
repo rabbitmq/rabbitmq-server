@@ -991,9 +991,8 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
                           end,
 
               FeatureProps1 = FeatureProps#{stability => Stability},
-              FeatureProps2 = maps:remove(migration_fun, FeatureProps1),
-              FeatureProps3 = maps:remove(callbacks, FeatureProps2),
-              FeatureProps3
+              FeatureProps2 = maps:remove(callbacks, FeatureProps1),
+              FeatureProps2
       end, FeatureFlags).
 
 -spec list_feature_flags_enabled_somewhere(Inventory, HandleStateChanging) ->
@@ -1084,25 +1083,6 @@ this_node_first(Nodes) ->
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
     case rpc:call(Node, Module, Function, Args, Timeout) of
-        {badrpc, {'EXIT',
-                  {undef,
-                   [{rabbit_feature_flags, Function, Args, []}
-                    | _]}}} ->
-            %% If rabbit_feature_flags:Function() is undefined
-            %% on the remote node, we consider it to be a 3.7.x
-            %% pre-feature-flags node.
-            %%
-            %% Theoretically, it could be an older version (3.6.x and
-            %% older). But the RabbitMQ version consistency check
-            %% (rabbit_misc:version_minor_equivalent/2) called from
-            %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
-            %% this situation from happening before we reach this point.
-            ?LOG_DEBUG(
-               "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
-               "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
-               [Module, Function, Args, Node],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, pre_feature_flags_rabbitmq};
         {badrpc, Reason} = Error ->
             ?LOG_ERROR(
                "Feature flags: error while running:~n"
@@ -1328,23 +1308,11 @@ run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
             #{node() =>
               {error, {invalid_callback, FeatureName, Command, Invalid}}};
         _ ->
-            %% The migration fun API v1 is of the form:
-            %%   MigrationMod:MigrationFun(
-            %%     FeatureName, FeatureProps, Command).
-            %%
-            %% Also, the function is executed once on the calling node only.
-            %%
-            %% Only `enable' is supported by the v1 migration function.
+            %% No callbacks defined for this feature flag. Consider it a
+            %% success!
             Ret = case Command of
-                      enable ->
-                          Ret0 = rabbit_feature_flags:run_migration_fun(
-                                   FeatureName, FeatureProps, Command),
-                          case Ret0 of
-                              {error, no_migration_fun} -> ok;
-                              _                         -> Ret0
-                          end;
-                      _ ->
-                          ok
+                      enable      -> ok;
+                      post_enable -> ok
                   end,
             #{node() => Ret}
     end.
