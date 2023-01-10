@@ -257,9 +257,7 @@
 -type callback_name() :: enable | post_enable.
 %% Name of the callback.
 
--type enable_callback() :: fun((feature_name(),
-                                feature_props_extended(),
-                                enable_callback_args())
+-type enable_callback() :: fun((enable_callback_args())
                                -> enable_callback_ret()).
 %% The callback called while enabling a feature flag.
 %%
@@ -304,9 +302,7 @@
 -type enable_callback_ret() :: ok | {error, term()}.
 %% Return value of the `enable' callback.
 
--type post_enable_callback() :: fun((feature_name(),
-                                     feature_props_extended(),
-                                     post_enable_callback_args())
+-type post_enable_callback() :: fun((post_enable_callback_args())
                                     -> post_enable_callback_ret()).
 %% The callback called after enabling a feature flag.
 %%
