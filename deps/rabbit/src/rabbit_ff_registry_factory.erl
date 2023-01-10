@@ -10,6 +10,8 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([initialize_registry/0,
          initialize_registry/1,
          initialize_registry/3,
@@ -27,20 +29,23 @@
 
 -spec acquire_state_change_lock() -> boolean().
 acquire_state_change_lock() ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: acquiring lock ~tp",
-      [?FF_STATE_CHANGE_LOCK]),
+      [?FF_STATE_CHANGE_LOCK],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Ret = global:set_lock(?FF_STATE_CHANGE_LOCK),
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: acquired lock ~tp",
-      [?FF_STATE_CHANGE_LOCK]),
+      [?FF_STATE_CHANGE_LOCK],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Ret.
 
 -spec release_state_change_lock() -> true.
 release_state_change_lock() ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: releasing lock ~tp",
-      [?FF_STATE_CHANGE_LOCK]),
+      [?FF_STATE_CHANGE_LOCK],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:del_lock(?FF_STATE_CHANGE_LOCK).
 
 -spec initialize_registry() -> ok | {error, any()} | no_return().
@@ -266,12 +271,13 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                       %% downgraded to enable the feature
                                       %% flag.
                                       ?assertNotEqual(state_changing, State),
-                                      rabbit_log_feature_flags:error(
+                                      ?LOG_ERROR(
                                         "Feature flags: `~ts`: required "
                                         "feature flag not enabled! It must "
                                         "be enabled before upgrading "
                                         "RabbitMQ.",
-                                        [FeatureName]),
+                                        [FeatureName],
+                                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                                       throw({error,
                                              {disabled_required_feature_flag,
                                               FeatureName}});
@@ -295,9 +301,10 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
 
     case Proceed of
         true ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: (re)initialize registry (~tp)",
-              [self()]),
+              [self()],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             T0 = erlang:timestamp(),
             Ret = do_initialize_registry(RegistryVsn,
                                          AllFeatureFlags,
@@ -305,13 +312,15 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                          Inventory,
                                          WrittenToDisk),
             T1 = erlang:timestamp(),
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: time to regen registry: ~tp us",
-              [timer:now_diff(T1, T0)]),
+              [timer:now_diff(T1, T0)],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             Ret;
         false ->
-            rabbit_log_feature_flags:debug(
-              "Feature flags: registry already up-to-date, skipping init"),
+            ?LOG_DEBUG(
+              "Feature flags: registry already up-to-date, skipping init",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok
     end.
 
@@ -335,29 +344,34 @@ does_registry_need_refresh(AllFeatureFlags,
 
             if
                 AllFeatureFlags =/= CurrentAllFeatureFlags ->
-                    rabbit_log_feature_flags:debug(
+                    ?LOG_DEBUG(
                       "Feature flags: registry refresh needed: "
-                      "yes, list of feature flags differs"),
+                      "yes, list of feature flags differs",
+                      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     true;
                 FeatureStates =/= CurrentFeatureStates ->
-                    rabbit_log_feature_flags:debug(
+                    ?LOG_DEBUG(
                       "Feature flags: registry refresh needed: "
-                      "yes, feature flag states differ"),
+                      "yes, feature flag states differ",
+                      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     true;
                 WrittenToDisk =/= CurrentWrittenToDisk ->
-                    rabbit_log_feature_flags:debug(
+                    ?LOG_DEBUG(
                       "Feature flags: registry refresh needed: "
-                      "yes, \"written to disk\" state changed"),
+                      "yes, \"written to disk\" state changed",
+                      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     true;
                 true ->
-                    rabbit_log_feature_flags:debug(
-                      "Feature flags: registry refresh needed: no"),
+                    ?LOG_DEBUG(
+                      "Feature flags: registry refresh needed: no",
+                      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     false
             end;
         false ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: registry refresh needed: "
-              "yes, first-time initialization"),
+              "yes, first-time initialization",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             true
     end.
 
@@ -375,7 +389,7 @@ do_initialize_registry(RegistryVsn,
                        #{applications := ScannedApps} = Inventory,
                        WrittenToDisk) ->
     %% We log the state of those feature flags.
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: list of feature flags found:~n" ++
       lists:flatten(
         [rabbit_misc:format(
@@ -394,7 +408,8 @@ do_initialize_registry(RegistryVsn,
             case WrittenToDisk of
                 true  -> "yes";
                 false -> "no"
-            end])])
+            end])]),
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}
      ),
 
     %% We request the registry to be regenerated and reloaded with the
@@ -610,27 +625,30 @@ regen_registry_mod(RegistryVsn,
         {ok, Mod, Bin, _} ->
             load_registry_mod(RegistryVsn, Mod, Bin);
         {error, Errors, Warnings} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: registry compilation failure:~n"
               "Errors: ~tp~n"
               "Warnings: ~tp",
-              [Errors, Warnings]),
+              [Errors, Warnings],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, {compilation_failure, Errors, Warnings}};
         error ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: registry compilation failure",
-              []),
+              [],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, {compilation_failure, [], []}}
     end.
 
 maybe_log_registry_source_code(Forms) ->
     case rabbit_prelaunch:get_context() of
         #{log_feature_flags_registry := true} ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "== FEATURE FLAGS REGISTRY ==~n"
               "~ts~n"
               "== END ==~n",
-              [erl_prettypr:format(erl_syntax:form_list(Forms))]),
+              [erl_prettypr:format(erl_syntax:form_list(Forms))],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
         _ ->
             ok
@@ -645,16 +663,18 @@ registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
 %% @private
 
 load_registry_mod(RegistryVsn, Mod, Bin) ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: registry module ready, loading it (~tp)...",
-      [self()]),
+      [self()],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: acquired lock before reloading registry module (~tp)",
-     [self()]),
+     [self()],
+     #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     %% We want to make sure that the old registry (not the one being
     %% currently in use) is purged by the code server. It means no
     %% process lingers on that old code.
@@ -673,27 +693,31 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               RegistryVsn -> code:load_binary(Mod, FakeFilename, Bin);
               OtherVsn    -> {error, {restart, RegistryVsn, OtherVsn}}
           end,
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: releasing lock after reloading registry module (~tp)",
-     [self()]),
+     [self()],
+     #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: registry module loaded (vsn: ~tp -> ~tp)",
-              [RegistryVsn, registry_vsn()]),
+              [RegistryVsn, registry_vsn()],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
         {error, {restart, Expected, Current}} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: another registry module was loaded in the "
               "meantime (expected old vsn: ~tp, current vsn: ~tp); "
               "restarting the regen",
-              [Expected, Current]),
+              [Expected, Current],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             restart;
         {error, Reason} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: failed to load registry module: ~tp",
-              [Reason]),
+              [Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             throw({feature_flag_registry_reload_failure, Reason})
     end.
 

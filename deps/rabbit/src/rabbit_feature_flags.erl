@@ -756,10 +756,11 @@ inject_test_feature_flags(FeatureFlags) ->
                                           Origin, % Module
                                           maps:to_list(FFlags)} | Acc]
                                 end, [], FeatureFlagsPerApp1),
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: injecting feature flags from testsuite: ~tp~n"
       "Feature flags: all injected feature flags: ~tp",
-      [FeatureFlags, AttributesFromTestsuite]),
+      [FeatureFlags, AttributesFromTestsuite],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     ok = persistent_term:put(?PT_TESTSUITE_ATTRS, AttributesFromTestsuite),
     rabbit_ff_registry_factory:initialize_registry().
 
@@ -772,8 +773,9 @@ module_attributes_from_testsuite() ->
 %% @private
 
 query_supported_feature_flags() ->
-    rabbit_log_feature_flags:debug(
-      "Feature flags: query feature flags in loaded applications"),
+    ?LOG_DEBUG(
+      "Feature flags: query feature flags in loaded applications",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     T0 = erlang:timestamp(),
     %% We need to know the list of applications we scanned for feature flags.
     %% We can't derive that list of the returned feature flags because an
@@ -785,18 +787,20 @@ query_supported_feature_flags() ->
     AttributesFromTestsuite = module_attributes_from_testsuite(),
     TestsuiteProviders = [App || {App, _, _} <- AttributesFromTestsuite],
     T1 = erlang:timestamp(),
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: time to find supported feature flags: ~tp us",
-      [timer:now_diff(T1, T0)]),
+      [timer:now_diff(T1, T0)],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,
     AllApps = lists:usort(ScannedApps ++ TestsuiteProviders),
     {AllApps, prepare_queried_feature_flags(AllAttributes, #{})}.
 
 prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
                               AllFeatureFlags) ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: application `~ts` has ~b feature flags",
-      [App, length(Attributes)]),
+      [App, length(Attributes)],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     AllFeatureFlags1 = lists:foldl(
                          fun({FeatureName, FeatureProps}, AllFF) ->
                                  assert_feature_flag_is_valid(
@@ -839,13 +843,14 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: `~ts`: invalid properties:~n"
               "Feature flags: `~ts`:   Properties: ~tp~n"
               "Feature flags: `~ts`:   Error: ~tp",
               [FeatureName,
                FeatureName, FeatureProps,
-               FeatureName, Reason]),
+               FeatureName, Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             erlang:raise(Class, Reason, Stacktrace)
     end.
 
@@ -923,10 +928,11 @@ try_to_read_enabled_feature_flags_list() ->
             %% feature flags to be empty.
             [];
         {error, Reason} = Error ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: failed to read the `feature_flags` "
               "file at `~ts`: ~ts",
-              [File, file:format_error(Reason)]),
+              [File, file:format_error(Reason)],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             Error
     end.
 
@@ -975,10 +981,11 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
         ok ->
             ok;
         {error, Reason} = Error ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: failed to write the `feature_flags` "
               "file at `~ts`: ~ts",
-              [File, file:format_error(Reason)]),
+              [File, file:format_error(Reason)],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             Error
     end.
 
@@ -1003,9 +1010,10 @@ enabled_feature_flags_list_file() ->
 %% @private
 
 mark_as_enabled_locally(FeatureName, IsEnabled) ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: `~ts`: mark as enabled=~tp",
-      [FeatureName, IsEnabled]),
+      [FeatureName, IsEnabled],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     EnabledFeatureNames = maps:keys(list(enabled)),
     NewEnabledFeatureNames = case IsEnabled of
                                  true ->
@@ -1076,9 +1084,10 @@ get_overriden_running_nodes() ->
 %% @private
 
 does_node_support(Node, FeatureNames, Timeout) ->
-    rabbit_log_feature_flags:debug(
+    ?LOG_DEBUG(
       "Feature flags: querying `~tp` support on node ~ts...",
-      [FeatureNames, Node]),
+      [FeatureNames, Node],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Ret = case node() of
               Node ->
                   is_supported_locally(FeatureNames);
@@ -1088,21 +1097,24 @@ does_node_support(Node, FeatureNames, Timeout) ->
           end,
     case Ret of
         {error, Reason} ->
-            rabbit_log_feature_flags:error(
+            ?LOG_ERROR(
               "Feature flags: error while querying `~tp` support on "
               "node ~ts: ~tp",
-              [FeatureNames, Node, Reason]),
+              [FeatureNames, Node, Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             false;
         true ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: node `~ts` supports `~tp`",
-              [Node, FeatureNames]),
+              [Node, FeatureNames],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             true;
         false ->
-            rabbit_log_feature_flags:debug(
+            ?LOG_DEBUG(
               "Feature flags: node `~ts` does not support `~tp`; "
               "stopping query here",
-              [Node, FeatureNames]),
+              [Node, FeatureNames],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             false
     end.
 

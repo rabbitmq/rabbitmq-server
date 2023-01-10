@@ -20,6 +20,10 @@
 
 -module(rabbit_ff_registry).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([get/1,
          list/1,
          states/0,
@@ -194,9 +198,10 @@ always_return_false() ->
 
 -ifdef(TEST).
 on_load() ->
-     _ = (catch rabbit_log_feature_flags:debug(
+     _ = (catch ?LOG_DEBUG(
                   "Feature flags: Loading initial (uninitialized) registry "
                   "module (~tp)",
-                  [self()])),
+                  [self()],
+                  #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})),
     ok.
 -endif.

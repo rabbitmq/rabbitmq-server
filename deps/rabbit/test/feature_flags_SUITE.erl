@@ -7,8 +7,11 @@
 
 -module(feature_flags_SUITE).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([suite/0,
          all/0,
@@ -472,16 +475,18 @@ registry_concurrent_reloads(_Config) ->
                     maps:keys(FeatureFlags) ++
                     [MakeName(I) || I <- ProcIs]),
     Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
-    rabbit_log_feature_flags:info(
+    ?LOG_INFO(
       ?MODULE_STRING ": Started registry spammer (~tp)",
-      [self()]),
+      [self()],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
     %% We acquire the lock from the main process to synchronize the test
     %% processes we are about to spawn.
     Lock = rabbit_ff_registry_factory:registry_loading_lock(),
     ThisNode = [node()],
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Acquiring registry load lock"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Acquiring registry load lock",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:set_lock(Lock, ThisNode),
 
     Pids = [begin
@@ -496,12 +501,14 @@ registry_concurrent_reloads(_Config) ->
     %% we don't have a way to verify this fact, but it must be enough,
     %% right?
     timer:sleep(1000),
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Releasing registry load lock"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Releasing registry load lock",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:del_lock(Lock, ThisNode),
 
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Wait for test processes to finish"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Wait for test processes to finish",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     lists:foreach(
       fun(Pid) ->
               receive {'DOWN', _, process, Pid, normal} -> ok end
@@ -521,9 +528,10 @@ registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
         CurrentFeatureNames ->
             registry_spammer(CurrentFeatureNames, FinalFeatureNames);
         FinalFeatureNames ->
-            rabbit_log_feature_flags:info(
+            ?LOG_INFO(
               ?MODULE_STRING ": Registry spammer: all feature flags "
-              "appeared"),
+              "appeared",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             registry_spammer1(FinalFeatureNames);
         NewFeatureNames
           when length(NewFeatureNames) > length(CurrentFeatureNames) ->
