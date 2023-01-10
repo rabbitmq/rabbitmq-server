@@ -105,14 +105,11 @@ rabbitmqctl(
     home = ":broker-home",
 )
 
-<<<<<<< HEAD
-=======
 rabbitmqctl(
     name = "rabbitmq-queues",
     home = ":broker-home",
 )
 
->>>>>>> a76f5633b9 (format with buildifier)
 shell(
     name = "repl",
     deps = PLUGINS,
