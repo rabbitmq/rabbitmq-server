@@ -581,7 +581,13 @@ has_subs(State) ->
     topic_names(?QOS_1, State) =/= [].
 
 topic_names(QoS, #state{exchange = Exchange} = State) ->
-    Bindings = rabbit_binding:list_for_source_and_destination(Exchange, queue_name(QoS, State)),
+    Bindings = rabbit_binding:list_for_source_and_destination(
+                 Exchange,
+                 queue_name(QoS, State),
+                 %% Querying table rabbit_reverse_route instead of rabbit_route provides
+                 %% **much** better CPU performance because the source exchange is always the
+                 %% same in the MQTT plugin while the destination queue will be different.
+                 _Reverse = true),
     lists:map(fun(B) -> amqp_to_mqtt(B#binding.key) end, Bindings).
 
 %% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
