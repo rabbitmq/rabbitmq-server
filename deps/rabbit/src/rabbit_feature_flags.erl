@@ -279,10 +279,6 @@
 %% (concurrently). The callback is responsible for its own locking and
 %% synchronization.
 %%
-%% It is then called with the command `post_enable' after a feature flag has
-%% been marked as enabled. The return value or enay exceptions are ignored and
-%% the feature flag will remain enabled even if there is a failure.
-%%
 %% When a node is joining a cluster where one side has a feature flag enabled,
 %% that feature flag will be enabled on the other side. It means the callback
 %% will run on the nodes where it is disabled. Therefore the callback can run
