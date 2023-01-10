@@ -758,32 +758,48 @@ delete_create_queue(Config) ->
     ok = emqtt:disconnect(C).
 
 non_clean_sess_disconnect(Config) ->
-    C1 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
-    Topic = <<"test-topic1">>,
-    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    Pub = connect(<<"publisher">>, Config),
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     ProtoVer = v4,
+
+    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config, ProtoVer)),
+
+    ok = emqtt:publish(Pub, Topic, <<"msg-1-qos0">>, qos0),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"msg-2-qos1">>, qos1),
 
     ok = emqtt:disconnect(C1),
     ?assertMatch(#{consumers := 0},
                  get_global_counters(Config, ProtoVer)),
 
-    C2 = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    timer:sleep(50),
+    ok = emqtt:publish(Pub, Topic, <<"msg-3-qos0">>, qos0),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"msg-4-qos1">>, qos1),
+
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config, ProtoVer)),
+
+    ok = emqtt:publish(Pub, Topic, <<"msg-5-qos0">>, qos0),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"msg-6-qos1">>, qos1),
 
     %% shouldn't receive message after unsubscribe
     {ok, _, _} = emqtt:unsubscribe(C2, Topic),
     ?assertMatch(#{consumers := 0},
                  get_global_counters(Config, ProtoVer)),
-    Msg = <<"msg">>,
-    {ok, _} = emqtt:publish(C2, Topic, Msg, qos1),
-    {publish_not_received, Msg} = expect_publishes(C2, Topic, [Msg]),
-    ok = emqtt:disconnect(C2),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"msg-7-qos0">>, qos1),
 
+    ok = expect_publishes(C1, Topic, [<<"msg-1-qos0">>, <<"msg-2-qos1">>]),
+    ok = expect_publishes(C2, Topic, [<<"msg-3-qos0">>, <<"msg-4-qos1">>,
+                                      <<"msg-5-qos0">>, <<"msg-6-qos1">>]),
+    {publish_not_received, <<"msg-7-qos0">>} = expect_publishes(C2, Topic, [<<"msg-7-qos0">>]),
+
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(C2),
     %% connect with clean sess true to clean up
-    C3 = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 
 subscribe_same_topic_same_qos(Config) ->
