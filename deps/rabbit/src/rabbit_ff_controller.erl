@@ -991,9 +991,8 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
                           end,
 
               FeatureProps1 = FeatureProps#{stability => Stability},
-              FeatureProps2 = maps:remove(migration_fun, FeatureProps1),
-              FeatureProps3 = maps:remove(callbacks, FeatureProps2),
-              FeatureProps3
+              FeatureProps2 = maps:remove(callbacks, FeatureProps1),
+              FeatureProps2
       end, FeatureFlags).
 
 -spec list_feature_flags_enabled_somewhere(Inventory, HandleStateChanging) ->
@@ -1328,23 +1327,11 @@ run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
             #{node() =>
               {error, {invalid_callback, FeatureName, Command, Invalid}}};
         _ ->
-            %% The migration fun API v1 is of the form:
-            %%   MigrationMod:MigrationFun(
-            %%     FeatureName, FeatureProps, Command).
-            %%
-            %% Also, the function is executed once on the calling node only.
-            %%
-            %% Only `enable' is supported by the v1 migration function.
+            %% No callbacks defined for this feature flag. Consider it a
+            %% success!
             Ret = case Command of
-                      enable ->
-                          Ret0 = rabbit_feature_flags:run_migration_fun(
-                                   FeatureName, FeatureProps, Command),
-                          case Ret0 of
-                              {error, no_migration_fun} -> ok;
-                              _                         -> Ret0
-                          end;
-                      _ ->
-                          ok
+                      enable      -> ok;
+                      post_enable -> ok
                   end,
             #{node() => Ret}
     end.
