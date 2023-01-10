@@ -89,6 +89,7 @@ callgrand*
 
 /user.bazelrc
 /bazel-*
+/extra_deps/
 
 .vscode
 .idea
