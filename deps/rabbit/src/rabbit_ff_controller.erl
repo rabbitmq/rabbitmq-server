@@ -837,18 +837,19 @@ update_feature_state_and_enable(
                               Inventory2, FeatureName, NodesWhereDisabled),
                             Ret2;
                         Error ->
-                            _ = mark_as_enabled_on_nodes(
-                                  Nodes, Inventory, FeatureName, false),
+                            restore_feature_flag_state(
+                              Nodes, NodesWhereDisabled, Inventory,
+                              FeatureName),
                             Error
                     end;
                 Error ->
-                    _ = mark_as_enabled_on_nodes(
-                          Nodes, Inventory, FeatureName, false),
+                    restore_feature_flag_state(
+                      Nodes, NodesWhereDisabled, Inventory, FeatureName),
                     Error
             end;
         Error ->
-            _ = mark_as_enabled_on_nodes(
-                  Nodes, Inventory, FeatureName, false),
+            restore_feature_flag_state(
+              Nodes, NodesWhereDisabled, Inventory, FeatureName),
             Error
     end.
 
@@ -859,6 +860,21 @@ is_virgin_node(Node) ->
         {error, _} ->
             undefined
     end.
+
+restore_feature_flag_state(
+  Nodes, NodesWhereDisabled, Inventory, FeatureName) ->
+    NodesWhereEnabled = Nodes -- NodesWhereDisabled,
+    ?LOG_DEBUG(
+       "Feature flags: `~ts`: restore initial state after failing to enable "
+       "it:~n"
+       "  enabled on:  ~0p~n"
+       "  disabled on: ~0p",
+       [FeatureName, NodesWhereEnabled, NodesWhereDisabled]),
+    _ = mark_as_enabled_on_nodes(
+          NodesWhereEnabled, Inventory, FeatureName, true),
+    _ = mark_as_enabled_on_nodes(
+          NodesWhereDisabled, Inventory, FeatureName, false),
+    ok.
 
 -spec do_enable(Inventory, FeatureName, Nodes) -> Ret when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
@@ -1054,15 +1070,15 @@ list_nodes_where_feature_flag_is_disabled(
                 maps:filter(
                   fun(_Node, FeatureStates) ->
                           case FeatureStates of
-                              %% The feature flag is known on this node, run
-                              %% the migration function only if it is
-                              %% disabled.
-                              #{FeatureName := Enabled} -> not Enabled;
-
-
-                              %% The feature flags is unknown on this node,
-                              %% don't run the migration function.
-                              _ -> false
+                              #{FeatureName := Enabled} ->
+                                  %% The feature flag is known on this node,
+                                  %% run the migration function only if it is
+                                  %% disabled.
+                                  not Enabled;
+                              _ ->
+                                  %% The feature flags is unknown on this
+                                  %% node, don't run the migration function.
+                                  false
                           end
                   end, StatesPerNode))),
     this_node_first(Nodes).
@@ -1083,11 +1099,11 @@ this_node_first(Nodes) ->
       Ret :: term() | {error, term()}.
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
-    case rpc:call(Node, Module, Function, Args, Timeout) of
-        {badrpc, {'EXIT',
-                  {undef,
-                   [{rabbit_feature_flags, Function, Args, []}
-                    | _]}}} ->
+    try
+        erpc:call(Node, Module, Function, Args, Timeout)
+    catch
+        exit:{exception,
+              {undef, [{rabbit_feature_flags, Function, Args, []} | _]}} ->
             %% If rabbit_feature_flags:Function() is undefined
             %% on the remote node, we consider it to be a 3.7.x
             %% pre-feature-flags node.
@@ -1098,22 +1114,25 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
             %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
             %% this situation from happening before we reach this point.
             ?LOG_DEBUG(
-               "Feature flags: ~s:~s~p unavailable on node `~s`: "
+               "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
                "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
                [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, pre_feature_flags_rabbitmq};
-        {badrpc, Reason} = Error ->
+        Class:Reason:Stacktrace ->
+            Message0 = erl_error:format_exception(Class, Reason, Stacktrace),
+            Message1 = lists:flatten(Message0),
+            Message2 = ["Feature flags:   " ++ Line ++ "~n"
+                        || Line <- string:lexemes(Message1, [$\n])],
+            Message3 = lists:flatten(Message2),
             ?LOG_ERROR(
                "Feature flags: error while running:~n"
-               "Feature flags:   ~s:~s~p~n"
-               "Feature flags: on node `~s`:~n"
-               "Feature flags:   ~p",
-               [Module, Function, Args, Node, Reason],
+               "Feature flags:   ~ts:~ts~tp~n"
+               "Feature flags: on node `~ts`:~n" ++
+               Message3,
+               [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, Error};
-        Ret ->
-            Ret
+            {error, Reason}
     end.
 
 -spec rpc_calls(Nodes, Module, Function, Args, Timeout) -> Rets when
