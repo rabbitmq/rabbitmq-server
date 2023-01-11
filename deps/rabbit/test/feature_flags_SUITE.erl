@@ -744,7 +744,7 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to timeout.
     ?assertEqual(
-       {error, {badrpc, nodedown}},
+       {error, {erpc, noconnection}},
        rabbit_ct_broker_helpers:rpc(
          Config, B,
          rabbit_ff_controller, mark_as_enabled_on_nodes,

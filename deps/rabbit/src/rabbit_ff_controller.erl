@@ -1098,18 +1098,23 @@ this_node_first(Nodes) ->
       Ret :: term() | {error, term()}.
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
-    case rpc:call(Node, Module, Function, Args, Timeout) of
-        {badrpc, Reason} = Error ->
+    try
+        erpc:call(Node, Module, Function, Args, Timeout)
+    catch
+        Class:Reason:Stacktrace ->
+            Message0 = erl_error:format_exception(Class, Reason, Stacktrace),
+            Message1 = lists:flatten(Message0),
+            Message2 = ["Feature flags:   " ++ Line ++ "~n"
+                        || Line <- string:lexemes(Message1, [$\n])],
+            Message3 = lists:flatten(Message2),
             ?LOG_ERROR(
                "Feature flags: error while running:~n"
                "Feature flags:   ~ts:~ts~tp~n"
-               "Feature flags: on node `~ts`:~n"
-               "Feature flags:   ~tp",
-               [Module, Function, Args, Node, Reason],
+               "Feature flags: on node `~ts`:~n" ++
+               Message3,
+               [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, Error};
-        Ret ->
-            Ret
+            {error, Reason}
     end.
 
 -spec rpc_calls(Nodes, Module, Function, Args, Timeout) -> Rets when
