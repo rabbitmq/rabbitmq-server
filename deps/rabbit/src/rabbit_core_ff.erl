@@ -132,7 +132,7 @@
       Ret :: rabbit_feature_flags:enable_callback_ret().
 direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
     TableName = rabbit_index_route,
-    ok = rabbit_table:wait([rabbit_route], _Retry = true),
+    ok = rabbit_table:wait([rabbit_route, rabbit_exchange], _Retry = true),
     try
         ok = rabbit_table:create(
                TableName, rabbit_table:rabbit_index_route_definition()),
