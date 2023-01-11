@@ -26,6 +26,7 @@
          mf_count_runs/1,
          mf_wait_and_count_runs_v2_enable/1,
          mf_wait_and_count_runs_v2_post_enable/1,
+         mf_crash_on_joining_node/1,
 
          enable_unknown_feature_flag_on_a_single_node/1,
          enable_supported_feature_flag_on_a_single_node/1,
@@ -38,7 +39,8 @@
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/1,
          enable_feature_flag_with_post_enable/1,
          have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
-         have_required_feature_flag_in_cluster_and_add_member_without_it/1
+         have_required_feature_flag_in_cluster_and_add_member_without_it/1,
+         error_during_migration_after_initial_success/1
         ]).
 
 suite() ->
@@ -68,7 +70,8 @@ groups() ->
        enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2,
        enable_feature_flag_with_post_enable,
        have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
-       have_required_feature_flag_in_cluster_and_add_member_without_it
+       have_required_feature_flag_in_cluster_and_add_member_without_it,
+       error_during_migration_after_initial_success
       ]}
     ],
     [
@@ -300,6 +303,12 @@ mf_wait_and_count_runs_v2_post_enable(_Args) ->
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
     ok.
+
+mf_crash_on_joining_node(_Args) ->
+    case rabbit_feature_flags:get_overriden_nodes() of
+        [_, _, _] -> throw(crash_on_joining_node);
+        _         -> ok
+    end.
 
 -define(PT_PEER_PROC, {?MODULE, peer_proc}).
 
@@ -1334,4 +1343,97 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
            end,
            [])
          || Node <- AllNodes],
+    ok.
+
+error_during_migration_after_initial_success(Config) ->
+    AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => ?MODULE,
+                       stability => stable,
+                       callbacks =>
+                       #{enable => {?MODULE, mf_crash_on_joining_node}}}},
+    inject_on_nodes(AllNodes, FeatureFlags),
+
+    ct:pal(
+      "Checking the feature flag is supported but disabled on all nodes"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% The first call enables the feature flag, the following calls are
+    %% idempotent and do nothing.
+    ct:pal("Enabling the feature flag on the cluster"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(ok, rabbit_feature_flags:enable(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode)),
+                   ok
+           end, []),
+
+    %% Add node to cluster and synchronize feature flags.
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+    ct:pal(
+      "Synchronizing feature flags in the expanded cluster~n"
+      "~n"
+      "NOTE: Error messages about crashed migration functions can be "
+      "ignored for feature~n"
+      "      flags other than `~ts`~n"
+      "      because they assume they run inside RabbitMQ.",
+      [FeatureName]),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      crash_on_joining_node,
+                      rabbit_feature_flags:sync_feature_flags_with_cluster(
+                        Nodes, true)),
+                   ok
+           end, []),
+
+    ct:pal(
+      "Checking the feature flag is enabled in the initial cluster, but not "
+      "the joining node"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           []),
     ok.

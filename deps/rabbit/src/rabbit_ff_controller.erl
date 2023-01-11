@@ -837,18 +837,19 @@ update_feature_state_and_enable(
                               Inventory2, FeatureName, NodesWhereDisabled),
                             Ret2;
                         Error ->
-                            _ = mark_as_enabled_on_nodes(
-                                  Nodes, Inventory, FeatureName, false),
+                            restore_feature_flag_state(
+                              Nodes, NodesWhereDisabled, Inventory,
+                              FeatureName),
                             Error
                     end;
                 Error ->
-                    _ = mark_as_enabled_on_nodes(
-                          Nodes, Inventory, FeatureName, false),
+                    restore_feature_flag_state(
+                      Nodes, NodesWhereDisabled, Inventory, FeatureName),
                     Error
             end;
         Error ->
-            _ = mark_as_enabled_on_nodes(
-                  Nodes, Inventory, FeatureName, false),
+            restore_feature_flag_state(
+              Nodes, NodesWhereDisabled, Inventory, FeatureName),
             Error
     end.
 
@@ -859,6 +860,21 @@ is_virgin_node(Node) ->
         {error, _} ->
             undefined
     end.
+
+restore_feature_flag_state(
+  Nodes, NodesWhereDisabled, Inventory, FeatureName) ->
+    NodesWhereEnabled = Nodes -- NodesWhereDisabled,
+    ?LOG_DEBUG(
+       "Feature flags: `~ts`: restore initial state after failing to enable "
+       "it:~n"
+       "  enabled on:  ~0p~n"
+       "  disabled on: ~0p",
+       [FeatureName, NodesWhereEnabled, NodesWhereDisabled]),
+    _ = mark_as_enabled_on_nodes(
+          NodesWhereEnabled, Inventory, FeatureName, true),
+    _ = mark_as_enabled_on_nodes(
+          NodesWhereDisabled, Inventory, FeatureName, false),
+    ok.
 
 -spec do_enable(Inventory, FeatureName, Nodes) -> Ret when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
@@ -1053,15 +1069,15 @@ list_nodes_where_feature_flag_is_disabled(
                 maps:filter(
                   fun(_Node, FeatureStates) ->
                           case FeatureStates of
-                              %% The feature flag is known on this node, run
-                              %% the migration function only if it is
-                              %% disabled.
-                              #{FeatureName := Enabled} -> not Enabled;
-
-
-                              %% The feature flags is unknown on this node,
-                              %% don't run the migration function.
-                              _ -> false
+                              #{FeatureName := Enabled} ->
+                                  %% The feature flag is known on this node,
+                                  %% run the migration function only if it is
+                                  %% disabled.
+                                  not Enabled;
+                              _ ->
+                                  %% The feature flags is unknown on this
+                                  %% node, don't run the migration function.
+                                  false
                           end
                   end, StatesPerNode))),
     this_node_first(Nodes).
