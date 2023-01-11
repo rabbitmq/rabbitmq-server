@@ -1099,11 +1099,11 @@ this_node_first(Nodes) ->
       Ret :: term() | {error, term()}.
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
-    case rpc:call(Node, Module, Function, Args, Timeout) of
-        {badrpc, {'EXIT',
-                  {undef,
-                   [{rabbit_feature_flags, Function, Args, []}
-                    | _]}}} ->
+    try
+        erpc:call(Node, Module, Function, Args, Timeout)
+    catch
+        exit:{exception,
+              {undef, [{rabbit_feature_flags, Function, Args, []} | _]}} ->
             %% If rabbit_feature_flags:Function() is undefined
             %% on the remote node, we consider it to be a 3.7.x
             %% pre-feature-flags node.
@@ -1114,22 +1114,25 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
             %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
             %% this situation from happening before we reach this point.
             ?LOG_DEBUG(
-               "Feature flags: ~s:~s~p unavailable on node `~s`: "
+               "Feature flags: ~ts:~ts~tp unavailable on node `~ts`: "
                "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
                [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, pre_feature_flags_rabbitmq};
-        {badrpc, Reason} = Error ->
+        Class:Reason:Stacktrace ->
+            Message0 = erl_error:format_exception(Class, Reason, Stacktrace),
+            Message1 = lists:flatten(Message0),
+            Message2 = ["Feature flags:   " ++ Line ++ "~n"
+                        || Line <- string:lexemes(Message1, [$\n])],
+            Message3 = lists:flatten(Message2),
             ?LOG_ERROR(
                "Feature flags: error while running:~n"
-               "Feature flags:   ~s:~s~p~n"
-               "Feature flags: on node `~s`:~n"
-               "Feature flags:   ~p",
-               [Module, Function, Args, Node, Reason],
+               "Feature flags:   ~ts:~ts~tp~n"
+               "Feature flags: on node `~ts`:~n" ++
+               Message3,
+               [Module, Function, Args, Node],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, Error};
-        Ret ->
-            Ret
+            {error, Reason}
     end.
 
 -spec rpc_calls(Nodes, Module, Function, Args, Timeout) -> Rets when

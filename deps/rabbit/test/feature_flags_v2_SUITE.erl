@@ -1175,7 +1175,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv1(Config) ->
     UsingFFv1 = not ?config(enable_feature_flags_v2, Config),
     ExpectedRet = case UsingFFv1 of
                       true  -> ok;
-                      false -> {error, {badrpc, nodedown}}
+                      false -> {error, {erpc, noconnection}}
                   end,
     ct:pal(
       "Enabling the feature flag in the cluster (in a separate process)"),
@@ -1306,7 +1306,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
                           FirstNode,
                           fun() ->
                                   ?assertEqual(
-                                     {error, {badrpc, nodedown}},
+                                     {error, {erpc, noconnection}},
                                      rabbit_feature_flags:enable(
                                        FeatureName)),
                                   ok
@@ -1756,14 +1756,13 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
            fun() ->
                    ?assertMatch(
                       {error,
-                       {badrpc,
-                        {'EXIT',
-                         {{assertNotEqual,
-                           [{module, rabbit_ff_registry_factory},
-                            {line, _},
-                            {expression, "State"},
-                            {value, state_changing}]},
-                          _}}}},
+                       {exception,
+                        {assertNotEqual,
+                         [{module, rabbit_ff_registry_factory},
+                          {line, _},
+                          {expression, "State"},
+                          {value, state_changing}]},
+                        _}},
                       rabbit_feature_flags:sync_feature_flags_with_cluster(
                         Nodes, false)),
                    ok
@@ -1849,7 +1848,7 @@ error_during_migration_after_initial_success(Config) ->
            NewNode,
            fun() ->
                    ?assertEqual(
-                      crash_on_joining_node,
+                      {error, crash_on_joining_node},
                       rabbit_feature_flags:sync_feature_flags_with_cluster(
                         Nodes, true)),
                    ok
