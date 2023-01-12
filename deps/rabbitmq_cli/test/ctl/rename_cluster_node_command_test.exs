@@ -20,7 +20,7 @@ defmodule RenameClusterNodeCommandTest do
       :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :plugins_dir])
 
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
-    data_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
+    data_dir = :rabbit_misc.rpc_call(node, :rabbit, :data_dir, [])
 
     on_exit([], fn ->
       start_rabbitmq_app()
@@ -67,26 +67,26 @@ defmodule RenameClusterNodeCommandTest do
            )
   end
 
-  test "validate_execution_environment: not providing node mnesia dir fails validation",
+  test "validate_execution_environment: not providing node data dir fails validation",
        context do
-    opts_without_mnesia = Map.delete(context[:opts], :data_dir)
-    Application.put_env(:mnesia, :dir, "/tmp")
-    on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
+    opts_without_data_dir = Map.delete(context[:opts], :data_dir)
+    Application.put_env(:rabbit, :data_dir, "/tmp")
+    on_exit(fn -> Application.delete_env(:rabbit, :data_dir) end)
 
     assert :ok ==
              @command.validate(
                ["some_node@localhost", "other_node@localhost"],
-               opts_without_mnesia
+               opts_without_data_dir
              )
 
-    Application.delete_env(:mnesia, :dir)
+    Application.delete_env(:rabbit, :data_dir)
     System.put_env("RABBITMQ_MNESIA_DIR", "/tmp")
     on_exit(fn -> System.delete_env("RABBITMQ_MNESIA_DIR") end)
 
     assert :ok ==
              @command.validate(
                ["some_node@localhost", "other_node@localhost"],
-               opts_without_mnesia
+               opts_without_data_dir
              )
 
     System.delete_env("RABBITMQ_MNESIA_DIR")
