@@ -74,8 +74,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
       |> Enum.sort()
       |> Enum.join(", ")
 
-    {:ok, "Successfully connected to ports #{ports} on node #{node_name} (using node hostname resolution)"}
+    {:ok,
+     "Successfully connected to ports #{ports} on node #{node_name} (using node hostname resolution)"}
   end
+
   def output({true, listeners}, %{node: node_name, address: target_ip}) do
     ports =
       listeners
@@ -84,7 +86,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
       |> Enum.sort()
       |> Enum.join(", ")
 
-    {:ok, "Successfully connected to ports #{ports} on node #{node_name} (using #{target_ip} for target IP address)"}
+    {:ok,
+     "Successfully connected to ports #{ports} on node #{node_name} (using #{target_ip} for target IP address)"}
   end
 
   def output({false, failures}, %{formatter: "json", node: node_name}) do
@@ -110,6 +113,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   def banner([], %{node: node_name, address: nil}) do
     "Testing TCP connections to all active listeners on node #{node_name} using hostname resolution ..."
   end
+
   def banner([], %{node: node_name, address: target_ip}) do
     "Testing TCP connections to all active listeners on node #{node_name} using #{target_ip} for node IP address ..."
   end
