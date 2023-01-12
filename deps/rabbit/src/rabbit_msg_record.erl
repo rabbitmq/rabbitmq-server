@@ -221,7 +221,15 @@ map_add(KeyType, Key, Type, Value, Acc) ->
 to_amqp091(#?MODULE{msg = #msg{properties = P,
                                application_properties = APR,
                                message_annotations = MAR,
-                               data = #'v1_0.data'{content = Payload}}}) ->
+                               data = Data}}) ->
+
+  Payload =  case Data of
+               undefined ->
+                 <<>>;
+               #'v1_0.data'{content = C} ->
+                 C
+             end,
+
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId,
                        reply_to = ReplyTo0,
