@@ -727,7 +727,8 @@ status() ->
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
                       {connection_count,
-                       length(rabbit_networking:connections_local())},
+                       length(rabbit_networking:connections_local()) +
+                       length(rabbit_networking:local_non_amqp_connections())},
                       {queue_count, total_queue_count()}];
                  false ->
                      []

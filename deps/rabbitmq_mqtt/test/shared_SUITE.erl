@@ -108,6 +108,7 @@ tests() ->
      ,block
      ,clean_session_disconnect_client
      ,clean_session_kill_node
+     ,rabbit_status_connection_count
     ].
 
 suite() ->
@@ -1207,6 +1208,15 @@ clean_session_kill_node(Config) ->
     %% After terminating a clean session by a node crash, we expect any session
     %% state to be cleaned up on the server once the server comes back up.
     ?assertEqual(0, rpc(Config, ets, info, [rabbit_durable_queue, size])).
+
+rabbit_status_connection_count(Config) ->
+    _ = rabbit_ct_client_helpers:open_connection(Config, 0),
+    C = connect(?FUNCTION_NAME, Config),
+
+    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["status"]),
+    ?assertNotEqual(nomatch, string:find(String, "Connection count: 2")),
+
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% Internal helpers
