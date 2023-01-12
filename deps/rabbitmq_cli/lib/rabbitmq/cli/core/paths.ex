@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Core.Paths do
                 {:error, :data_dir_not_found}
 
               val ->
-                Application.put_env(:rabbit_, :data_dir, to_charlist(val))
+                Application.put_env(:rabbit, :data_dir, to_charlist(val))
                 Application.put_env(:mnesia, :dir, to_charlist(val))
             end
 
