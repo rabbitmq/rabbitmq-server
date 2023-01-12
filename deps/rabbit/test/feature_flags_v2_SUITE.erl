@@ -1272,11 +1272,11 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
                    ?assert(rabbit_feature_flags:is_supported(FeatureName)),
                    ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
 
-                   MnesiaDir = rabbit_mnesia:dir(),
-                   ok = filelib:ensure_path(MnesiaDir),
-                   SomeFile = filename:join(MnesiaDir, "some-mnesia-file.db"),
+                   DBDir = rabbit_db:dir(),
+                   ok = filelib:ensure_path(DBDir),
+                   SomeFile = filename:join(DBDir, "some-file.db"),
                    ok = file:write_file(SomeFile, <<>>),
-                   ?assertNot(rabbit_mnesia:is_virgin_node()),
+                   ?assertNot(rabbit_db:is_virgin_node()),
                    ok
            end,
            []),

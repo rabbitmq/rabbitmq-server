@@ -62,12 +62,12 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 -spec running_nodes_filename() -> string().
 
 running_nodes_filename() ->
-    filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
+    filename:join(rabbit:data_dir(), "nodes_running_at_shutdown").
 
 -spec cluster_status_filename() -> string().
 
 cluster_status_filename() ->
-    filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
+    filename:join(rabbit:data_dir(), "cluster_nodes.config").
 
 coordination_filename() ->
     filename:join(rabbit:data_dir(), "coordination").
@@ -81,7 +81,7 @@ default_quorum_filename() ->
 -spec prepare_cluster_status_files() -> 'ok' | no_return().
 
 prepare_cluster_status_files() ->
-    rabbit_mnesia:ensure_mnesia_dir(),
+    rabbit_db:ensure_dir_exists(),
     RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
                         {ok, Other}                       -> corrupt_cluster_status_files(Other);

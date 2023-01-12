@@ -762,7 +762,7 @@ check_required_and_enable(
                            VirginNodesWhereDisabled =
                            lists:filter(
                              fun(Node) ->
-                                     case is_virgin_node(Node) of
+                                     case rabbit_db:is_virgin_node(Node) of
                                          IsVirgin when is_boolean(IsVirgin) ->
                                              IsVirgin;
                                          undefined ->
@@ -851,14 +851,6 @@ update_feature_state_and_enable(
             restore_feature_flag_state(
               Nodes, NodesWhereDisabled, Inventory, FeatureName),
             Error
-    end.
-
-is_virgin_node(Node) ->
-    case rpc_call(Node, rabbit_mnesia, is_virgin_node, [], ?TIMEOUT) of
-        IsVirgin when is_boolean(IsVirgin) ->
-            IsVirgin;
-        {error, _} ->
-            undefined
     end.
 
 restore_feature_flag_state(

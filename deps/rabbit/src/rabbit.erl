@@ -64,14 +64,8 @@
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
-                   [{mfa,         {rabbit_mnesia, init, []}},
+                   [{mfa,         {rabbit_db, init, []}},
                     {requires,    file_handle_cache},
-                    {enables,     external_infrastructure}]}).
-
--rabbit_boot_step({database_sync,
-                   [{description, "database sync"},
-                    {mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
-                    {requires,    database},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({networking_metadata_store,
@@ -1113,7 +1107,6 @@ get_default_data_param(Param) ->
 
 data_dir() ->
     {ok, DataDir} = application:get_env(rabbit, data_dir),
-    ?assertEqual(DataDir, rabbit_mnesia:dir()),
     DataDir.
 
 %%---------------------------------------------------------------------------
