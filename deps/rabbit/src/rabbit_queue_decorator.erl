@@ -11,6 +11,7 @@
 -include("amqqueue.hrl").
 
 -export([select/1, set/1, register/2, unregister/1]).
+-export([active/1, list/0]).
 
 -behaviour(rabbit_registry_class).
 
@@ -42,6 +43,9 @@ select(Modules) ->
 set(Q) when ?is_amqqueue(Q) ->
     Decorators = [D || D <- list(), D:active_for(Q)],
     amqqueue:set_decorators(Q, Decorators).
+
+active(Q) when ?is_amqqueue(Q) ->
+    [D || D <- list(), D:active_for(Q)].
 
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(queue_decorator)].
 

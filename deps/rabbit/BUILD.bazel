@@ -1098,6 +1098,10 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
+rabbitmq_integration_suite(
+    name = "bindings_SUITE",
+    size = "small",
+)
 
 assert_suites()
 

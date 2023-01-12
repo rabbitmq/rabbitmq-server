@@ -133,17 +133,11 @@
       Args :: rabbit_feature_flags:enable_callback_args(),
       Ret :: rabbit_feature_flags:enable_callback_ret().
 direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
-    DependantTables = [rabbit_route, rabbit_exchange],
-    ok = rabbit_table:wait(DependantTables, _Retry = true),
-    [ok = rabbit_table:create_local_copy(Tab, ram_copies) || Tab <- DependantTables],
-
-    NewTable = rabbit_index_route,
+    TableName = rabbit_index_route,
     try
-        ok = rabbit_table:create(
-               NewTable, rabbit_table:rabbit_index_route_definition()),
-        case rabbit_table:ensure_table_copy(NewTable, node(), ram_copies) of
+        case rabbit_db_binding:create_index_route_table() of
             ok ->
-                ok = rabbit_binding:populate_index_route_table();
+                ok;
             {error, Err} = Error ->
                 ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to add copy of table ~ts to "

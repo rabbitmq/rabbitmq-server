@@ -163,12 +163,7 @@ potential_leaders(Replicas, RunningNodes) ->
 %% Return a function so that queues are fetched lazily (i.e. only when needed,
 %% and at most once when no amqqueue migration is going on).
 get_queues_for_type(QueueType) ->
-    fun() -> rabbit_amqqueue:list_with_possible_retry(
-               fun() ->
-                       mnesia:dirty_match_object(rabbit_queue,
-                                                 amqqueue:pattern_match_on_type(QueueType))
-               end)
-    end.
+    fun () -> rabbit_amqqueue:list_by_type(QueueType) end.
 
 shuffle(L0) when is_list(L0) ->
     L1 = lists:map(fun(E) -> {rand:uniform(), E} end, L0),

@@ -18,6 +18,11 @@
          ensure_dir_exists/0]).
 -export([run/1]).
 
+%% Exported to be used by various rabbit_db_* modules
+-export([
+         list_in_mnesia/2
+        ]).
+
 %% Default timeout for operations on remote nodes.
 -define(TIMEOUT, 60000).
 
@@ -137,3 +142,8 @@ run(Funs)
 
 run_with_mnesia(Fun) ->
     Fun().
+
+list_in_mnesia(Table, Match) ->
+    %% Not dirty_match_object since that would not be transactional when used in a
+    %% tx context
+    mnesia:async_dirty(fun () -> mnesia:match_object(Table, Match, read) end).

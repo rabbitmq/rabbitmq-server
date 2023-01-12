@@ -1080,10 +1080,7 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                                   Q
                           end
                   end,
-            try rabbit_misc:execute_mnesia_transaction(
-                  fun() ->
-                          rabbit_amqqueue:update(QName, Fun)
-                  end) of
+            try rabbit_amqqueue:update(QName, Fun) of
                 not_found ->
                     rabbit_log:debug("~ts: resource for stream id ~ts not found, "
                                      "recovering from rabbit_durable_queue",
@@ -1091,7 +1088,7 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                     %% This can happen during recovery
                     %% we need to re-initialise the queue record
                     %% if the stream id is a match
-                    case mnesia:dirty_read(rabbit_durable_queue, QName) of
+                    case rabbit_amqqueue:lookup_durable_queue(QName) of
                         [] ->
                             %% queue not found at all, it must have been deleted
                             ok;

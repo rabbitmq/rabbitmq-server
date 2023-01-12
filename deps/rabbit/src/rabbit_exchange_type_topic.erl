@@ -13,7 +13,7 @@
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2,
-         create/2, delete/3, policy_changed/2, add_binding/3,
+         create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -export([info/1, info/2]).
 
@@ -43,22 +43,16 @@ validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 
-delete(transaction, #exchange{name = X}, _Bs) ->
-    rabbit_db_topic_exchange:delete_all_for_exchange(X);
-delete(none, _Exchange, _Bs) ->
-    ok.
+delete(_Serial, #exchange{name = X}) ->
+    rabbit_db_topic_exchange:delete_all_for_exchange(X).
 
 policy_changed(_X1, _X2) -> ok.
 
-add_binding(transaction, _Exchange, Binding) ->
-    rabbit_db_topic_exchange:insert(Binding);
-add_binding(none, _Exchange, _Binding) ->
-    ok.
+add_binding(_Serial, _Exchange, Binding) ->
+    rabbit_db_topic_exchange:insert(Binding).
 
-remove_bindings(transaction, _X, Bs) ->
-    rabbit_db_topic_exchange:delete(Bs);
-remove_bindings(none, _X, _Bs) ->
-    ok.
+remove_bindings(_Serial, _X, Bs) ->
+    rabbit_db_topic_exchange:delete(Bs).
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
