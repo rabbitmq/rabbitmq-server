@@ -16,8 +16,8 @@
 
 %%----------------------------------------------------------------------------
 
-init({overall, _Group, _TxFun, ignore}) -> ignore;
-init({overall,  Group,  TxFun, {ok, {Restart, ChildSpecs}}}) ->
+init({overall, _Group, ignore}) -> ignore;
+init({overall,  Group, {ok, {Restart, ChildSpecs}}}) ->
     %% Important: Delegate MUST start before Mirroring so that when we
     %% shut down from above it shuts down last, so Mirroring does not
     %% see it die.
@@ -26,7 +26,7 @@ init({overall,  Group,  TxFun, {ok, {Restart, ChildSpecs}}}) ->
     {ok, {{one_for_all, 0, 1},
           [{delegate, {?SUPERVISOR, start_link, [?MODULE, {delegate, Restart}]},
             temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-           {mirroring, {?GS_MODULE, start_internal, [Group, TxFun, ChildSpecs]},
+           {mirroring, {?GS_MODULE, start_internal, [Group, ChildSpecs]},
             permanent, 16#ffffffff, worker, [?MODULE]}]}};
 
 
