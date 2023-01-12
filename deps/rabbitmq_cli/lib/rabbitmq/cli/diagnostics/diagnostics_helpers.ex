@@ -7,6 +7,7 @@
 defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   def test_connection(hostname_or_ip, port, timeout) do
     hostname_as_list = :rabbit_data_coercion.to_list(hostname_or_ip)
+
     case :gen_tcp.connect(hostname_as_list, port, [], timeout) do
       {:error, _} -> :gen_tcp.connect(hostname_as_list, port, [:inet6], timeout)
       r -> r
@@ -17,16 +18,17 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     check_port_connectivity(port, node_name, nil, timeout)
   end
 
-
   def check_port_connectivity(port, node_name, nil, timeout) do
     regex = Regex.recompile!(~r/^(.+)@/)
     hostname = Regex.replace(regex, to_string(node_name), "") |> to_charlist
 
     check_port_connectivity(port, node_name, hostname, timeout)
   end
+
   def check_port_connectivity(port, node_name, hostname_or_ip, timeout) do
     try do
       IO.puts("Will connect to #{hostname_or_ip}:#{port}")
+
       case test_connection(hostname_or_ip, port, timeout) do
         {:error, err} ->
           IO.puts("Error connecting to #{hostname_or_ip}:#{port}: #{err}")
