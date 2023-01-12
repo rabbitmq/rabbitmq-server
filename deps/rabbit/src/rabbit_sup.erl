@@ -28,15 +28,18 @@
 
 start_link() -> supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
--spec start_child(atom()) -> 'ok'.
+-spec start_child(atom()) ->
+    ok | {error, supervisor:startchild_err()}.
 
 start_child(Mod) -> start_child(Mod, []).
 
--spec start_child(atom(), [any()]) -> 'ok'.
+-spec start_child(atom(), [any()]) ->
+    ok | {error, supervisor:startchild_err()}.
 
 start_child(Mod, Args) -> start_child(Mod, Mod, Args).
 
--spec start_child(atom(), atom(), [any()]) -> 'ok'.
+-spec start_child(atom(), atom(), [any()]) ->
+    ok | {error, supervisor:startchild_err()}.
 
 start_child(ChildId, Mod, Args) ->
     child_reply(supervisor:start_child(
@@ -44,7 +47,8 @@ start_child(ChildId, Mod, Args) ->
                   {ChildId, {Mod, start_link, Args},
                    transient, ?WORKER_WAIT, worker, [Mod]})).
 
--spec start_child(atom(), atom(), atom(), [any()]) -> 'ok'.
+-spec start_child(atom(), atom(), atom(), [any()]) ->
+    ok | {error, supervisor:startchild_err()}.
 
 start_child(ChildId, Mod, Fun, Args) ->
     child_reply(supervisor:start_child(
@@ -104,6 +108,10 @@ init([]) -> {ok, {{one_for_all, 0, 1}, []}}.
 
 
 %%----------------------------------------------------------------------------
+
+-spec child_reply(SupRet) -> Ret when
+      SupRet :: supervisor:startchild_ret(),
+      Ret :: ok | {error, supervisor:startchild_err()}.
 
 child_reply({ok, _, _}) -> ok;
 child_reply({ok, _})    -> ok;
