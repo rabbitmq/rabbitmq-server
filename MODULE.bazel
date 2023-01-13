@@ -262,8 +262,8 @@ erlang_app(
     ],
 )
 """,
-    sha256 = "d75e80d7b2c1be6bf296e211e806e939ae3d9e0428f45b4caad1817f028213d3",
-    version = "4.9.1",
+    sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
+    version = "4.10.0",
 )
 
 erlang_package.git_package(
