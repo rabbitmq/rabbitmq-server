@@ -14,7 +14,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_reset, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit_db, :force_reset, [])
   end
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do

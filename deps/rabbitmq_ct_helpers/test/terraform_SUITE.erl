@@ -159,7 +159,7 @@ run_four_rabbitmq_nodes(Config) ->
 
     ?assertEqual([true, true, true, true],
                  rabbit_ct_broker_helpers:rpc_all(
-                   Config, rabbit_mnesia, is_clustered, [])),
+                   Config, rabbit_db_cluster, is_clustered, [])),
     ClusteredNodes = lists:sort(
                        rabbit_ct_broker_helpers:rpc(
                          Config, 0, rabbit_nodes, list_running, [])),

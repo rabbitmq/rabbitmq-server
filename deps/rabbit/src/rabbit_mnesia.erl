@@ -70,9 +70,8 @@
 
 %%----------------------------------------------------------------------------
 
--export_type([node_type/0, cluster_status/0]).
+-export_type([cluster_status/0]).
 
--type node_type() :: disc | ram.
 -type cluster_status() :: {[node()], [node()], [node()]}.
 
 %%----------------------------------------------------------------------------
@@ -137,12 +136,12 @@ init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
             init_with_lock(Retries - 1, Timeout, RunPeerDiscovery)
     end.
 
--spec run_peer_discovery() -> ok | {[node()], node_type()}.
+-spec run_peer_discovery() -> ok | {[node()], rabbit_db_cluster:node_type()}.
 run_peer_discovery() ->
     {RetriesLeft, DelayInterval} = rabbit_peer_discovery:discovery_retries(),
     run_peer_discovery_with_retries(RetriesLeft, DelayInterval).
 
--spec run_peer_discovery_with_retries(non_neg_integer(), non_neg_integer()) -> ok | {[node()], node_type()}.
+-spec run_peer_discovery_with_retries(non_neg_integer(), non_neg_integer()) -> ok | {[node()], rabbit_db_cluster:node_type()}.
 run_peer_discovery_with_retries(0, _DelayInterval) ->
     ok;
 run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
@@ -228,7 +227,7 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
 %% all in the same cluster, we simply pick the first online node and
 %% we cluster to its cluster.
 
--spec join_cluster(node(), node_type())
+-spec join_cluster(node(), rabbit_db_cluster:node_type())
                         -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 
 join_cluster(DiscoveryNode, NodeType) ->
@@ -317,7 +316,7 @@ wipe() ->
     ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
--spec change_cluster_node_type(node_type()) -> 'ok'.
+-spec change_cluster_node_type(rabbit_db_cluster:node_type()) -> 'ok'.
 
 change_cluster_node_type(Type) ->
     ensure_mnesia_not_running(),
@@ -421,7 +420,7 @@ remove_node_offline_node(Node) ->
 %% Queries
 %%----------------------------------------------------------------------------
 
--spec status() -> [{'nodes', [{node_type(), [node()]}]} |
+-spec status() -> [{'nodes', [{rabbit_db_cluster:node_type(), [node()]}]} |
                          {'running_nodes', [node()]} |
                          {'partitions', [{node(), [node()]}]}].
 
@@ -539,7 +538,7 @@ node_info() ->
      mnesia:system_info(protocol_version),
      cluster_status_from_mnesia()}.
 
--spec node_type() -> node_type().
+-spec node_type() -> rabbit_db_cluster:node_type().
 
 node_type() ->
     {_AllNodes, DiscNodes, _RunningNodes} =
@@ -607,7 +606,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     rabbit_node_monitor:update_cluster_status(),
     ok.
 
--spec init_db_unchecked([node()], node_type()) -> 'ok'.
+-spec init_db_unchecked([node()], rabbit_db_cluster:node_type()) -> 'ok'.
 
 init_db_unchecked(ClusterNodes, NodeType) ->
     init_db(ClusterNodes, NodeType, false).

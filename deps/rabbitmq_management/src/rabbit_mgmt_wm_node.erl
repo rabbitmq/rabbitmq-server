@@ -59,7 +59,7 @@ augment(Key, ReqData, Node, Data) ->
     end.
 
 node_data(Node, ReqData) ->
-    S = rabbit_mnesia:status(),
+    S = rabbit_db_cluster:cli_cluster_status(),
     Nodes = proplists:get_value(nodes, S),
     Running = proplists:get_value(running_nodes, S),
     Type = find_type(Node, Nodes),
