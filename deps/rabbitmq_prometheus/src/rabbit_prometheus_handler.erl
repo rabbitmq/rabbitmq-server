@@ -94,11 +94,7 @@ reply(Registry, Request) ->
         {true, RealRegistry} ->
             format_metrics(Request, RealRegistry);
         {registry_conflict, _ReqR, _ConfR} ->
-            {409, [], <<>>};
-        {registry_not_found, _ReqR} ->
-            {404, [], <<>>};
-        false ->
-            false
+            {409, [], <<>>}
     end.
 
 format_metrics(Request, Registry) ->
