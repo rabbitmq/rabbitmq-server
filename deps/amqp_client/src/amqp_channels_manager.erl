@@ -190,7 +190,7 @@ check_all_channels_terminated(State = #state{closing = true,
 
 handle_connection_closing(ChannelCloseType, Reason,
                           State = #state{connection = Connection}) ->
-    case internal_is_empty(State) of
+    _ = case internal_is_empty(State) of
         true  -> amqp_gen_connection:channels_terminated(Connection);
         false -> signal_channels_connection_closing(ChannelCloseType, Reason,
                                                     State)

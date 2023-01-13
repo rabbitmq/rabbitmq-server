@@ -22,7 +22,7 @@ start() ->
     %%
     %%  * https://github.com/rabbitmq/rabbitmq-erlang-client/issues/72
     %%  * https://github.com/rabbitmq/rabbitmq-common/pull/149
-    application:ensure_all_started(rabbit_common),
+    {ok, _} = application:ensure_all_started(rabbit_common),
     {ok, _} = application:ensure_all_started(amqp_client),
     ok.
 

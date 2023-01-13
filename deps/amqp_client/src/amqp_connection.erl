@@ -196,7 +196,8 @@ set_connection_name(ConnName,
 %% application which is making this call.
 ensure_started() ->
     [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
-                                    rabbit_common, amqp_client, credentials_obfuscation]].
+                                    rabbit_common, amqp_client, credentials_obfuscation]],
+    ok.
 
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
