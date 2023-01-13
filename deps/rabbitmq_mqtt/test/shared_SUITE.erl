@@ -64,6 +64,7 @@ subgroups() ->
         [
          block_only_publisher
          ,many_qos1_messages
+         ,subscription_ttl
         ] ++ tests()}
       ]},
      {cluster_size_3, [],
@@ -95,7 +96,9 @@ tests() ->
      ,publish_to_all_queue_types_qos1
      ,events
      ,internal_event_handler
-     ,non_clean_sess_disconnect
+     ,non_clean_sess_reconnect_qos1
+     ,non_clean_sess_reconnect_qos0
+     ,non_clean_sess_reconnect_qos0_and_qos1
      ,subscribe_same_topic_same_qos
      ,subscribe_same_topic_different_qos
      ,subscribe_multiple
@@ -758,13 +761,37 @@ delete_create_queue(Config) ->
     delete_queue(Ch, [CQ1, CQ2, QQ]),
     ok = emqtt:disconnect(C).
 
-non_clean_sess_disconnect(Config) ->
+subscription_ttl(Config) ->
+    TTL = 1000,
+    App = rabbitmq_mqtt,
+    Par = ClientId = ?FUNCTION_NAME,
+    {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
+    ok = rpc(Config, application, set_env, [App, Par, TTL]),
+
+    C = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [0, 1]} = emqtt:subscribe(C, [{<<"topic0">>, qos0},
+                                          {<<"topic1">>, qos1}]),
+    ok = emqtt:disconnect(C),
+
+    ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
+    timer:sleep(TTL + 100),
+    ?assertEqual(0,  rpc(Config, rabbit_amqqueue, count, [])),
+
+    ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
+
+non_clean_sess_reconnect_qos1(Config) ->
+    non_clean_sess_reconnect(Config, qos1).
+
+non_clean_sess_reconnect_qos0(Config) ->
+    non_clean_sess_reconnect(Config, qos0).
+
+non_clean_sess_reconnect(Config, SubscriptionQoS) ->
     Pub = connect(<<"publisher">>, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     ProtoVer = v4,
 
     C1 = connect(ClientId, Config, [{clean_start, false}]),
-    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    {ok, _, _} = emqtt:subscribe(C1, Topic, SubscriptionQoS),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config, ProtoVer)),
 
@@ -793,6 +820,11 @@ non_clean_sess_disconnect(Config) ->
     {ok, _} = emqtt:publish(Pub, Topic, <<"msg-7-qos0">>, qos1),
 
     ok = expect_publishes(C1, Topic, [<<"msg-1-qos0">>, <<"msg-2-qos1">>]),
+    %% "After the disconnection of a Session that had CleanSession set to 0, the Server MUST store
+    %% further QoS 1 and QoS 2 messages that match any subscriptions that the client had at the
+    %% time of disconnection as part of the Session state [MQTT-3.1.2-5].
+    %% It MAY also store QoS 0 messages that meet the same criteria."
+    %% Starting with RabbitMQ v3.12 we store QoS 0 messages as well.
     ok = expect_publishes(C2, Topic, [<<"msg-3-qos0">>, <<"msg-4-qos1">>,
                                       <<"msg-5-qos0">>, <<"msg-6-qos1">>]),
     {publish_not_received, <<"msg-7-qos0">>} = expect_publishes(C2, Topic, [<<"msg-7-qos0">>]),
@@ -800,6 +832,37 @@ non_clean_sess_disconnect(Config) ->
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(C2),
     %% connect with clean sess true to clean up
+    C3 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C3).
+
+non_clean_sess_reconnect_qos0_and_qos1(Config) ->
+    Pub = connect(<<"publisher">>, Config),
+    ProtoVer = v4,
+    Topic0 = <<"t/0">>,
+    Topic1 = <<"t/1">>,
+    ClientId = ?FUNCTION_NAME,
+
+    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [1, 0]} = emqtt:subscribe(C1, [{Topic1, qos1}, {Topic0, qos0}]),
+    ?assertMatch(#{consumers := 1},
+                 get_global_counters(Config, ProtoVer)),
+
+    ok = emqtt:disconnect(C1),
+    ?assertMatch(#{consumers := 0},
+                 get_global_counters(Config, ProtoVer)),
+
+    {ok, _} = emqtt:publish(Pub, Topic0, <<"msg-0">>, qos1),
+    {ok, _} = emqtt:publish(Pub, Topic1, <<"msg-1">>, qos1),
+
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    ?assertMatch(#{consumers := 1},
+                 get_global_counters(Config, ProtoVer)),
+
+    ok = expect_publishes(C2, Topic0, [<<"msg-0">>]),
+    ok = expect_publishes(C2, Topic1, [<<"msg-1">>]),
+
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(C2),
     C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 

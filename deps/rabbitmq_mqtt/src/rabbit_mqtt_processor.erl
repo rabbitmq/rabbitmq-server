@@ -338,7 +338,7 @@ process_connect(#mqtt_packet{
     ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, "
                "clean session: ~s, protocol version: ~p, keepalive: ~p",
                [ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
-    {ReturnCode, SessionPresent, State} =
+    {ReturnCode, SessPresent, State} =
     case rabbit_misc:pipeline([fun check_protocol_version/1,
                                fun check_client_id/1,
                                fun check_credentials/2,
@@ -346,16 +346,17 @@ process_connect(#mqtt_packet{
                                fun register_client/2,
                                fun start_keepalive/2,
                                fun notify_connection_created/1,
-                               fun handle_clean_session/2],
+                               fun handle_clean_sess_qos0/2,
+                               fun handle_clean_sess_qos1/2],
                               PacketConnect, State0) of
-        {ok, SessionPresent0, State1} ->
-            {?CONNACK_ACCEPT, SessionPresent0, State1};
+        {ok, SessPresent0, State1} ->
+            {?CONNACK_ACCEPT, SessPresent0, State1};
         {error, ConnectionRefusedReturnCode, State1} ->
             {ConnectionRefusedReturnCode, false, State1}
     end,
     Response = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNACK},
                             variable = #mqtt_packet_connack{
-                                          session_present = SessionPresent,
+                                          session_present = SessPresent,
                                           return_code = ReturnCode}},
     SendFun(Response, State),
     return_connack(ReturnCode, State).
@@ -492,40 +493,57 @@ start_keepalive(#mqtt_packet_connect{keep_alive = Seconds},
                 #state{socket = Socket}) ->
     ok = rabbit_mqtt_keepalive:start(Seconds, Socket).
 
-handle_clean_session(_, State0 = #state{clean_sess = false,
-                                        proto_ver = ProtoVer}) ->
-    case get_queue(?QOS_1, State0) of
+handle_clean_sess_qos0(#mqtt_packet_connect{}, State) ->
+    handle_clean_sess(false, ?QOS_0, State).
+
+handle_clean_sess_qos1(QoS0SessPresent, State) ->
+    handle_clean_sess(QoS0SessPresent, ?QOS_1, State).
+
+handle_clean_sess(_, QoS,
+                  State = #state{clean_sess = true,
+                                 auth_state = #auth_state{user = User,
+                                                          username = Username,
+                                                          authz_ctx = AuthzCtx}}) ->
+    %% "If the Server accepts a connection with CleanSession set to 1, the Server
+    %% MUST set Session Present to 0 in the CONNACK packet [MQTT-3.2.2-1].
+    SessPresent = false,
+    case get_queue(QoS, State) of
         {error, _} ->
-            %% Queue will be created later when client subscribes.
-            {ok, _SessionPresent = false, State0};
-        {ok, Q} ->
-            case consume(Q, ?QOS_1, State0) of
-                {ok, State} ->
-                    rabbit_global_counters:consumer_created(ProtoVer),
-                    {ok, _SessionPresent = true, State};
-                {error, access_refused} ->
-                    {error, ?CONNACK_NOT_AUTHORIZED};
-                {error, _Reason} ->
-                    %% Let's use most generic error return code.
-                    {error, ?CONNACK_SERVER_UNAVAILABLE}
-            end
-    end;
-handle_clean_session(_, State = #state{clean_sess = true,
-                                       auth_state = #auth_state{user = User,
-                                                                username = Username,
-                                                                authz_ctx = AuthzCtx}}) ->
-    case get_queue(?QOS_1, State) of
-        {error, _} ->
-            {ok, _SessionPresent = false, State};
+            {ok, SessPresent, State};
         {ok, Q0} ->
             QName = amqqueue:get_name(Q0),
             %% configure access to queue required for queue.delete
             case check_resource_access(User, QName, configure, AuthzCtx) of
                 ok ->
                     delete_queue(QName, Username),
-                    {ok, _SessionPresent = false, State};
+                    {ok, SessPresent, State};
                 {error, access_refused} ->
                     {error, ?CONNACK_NOT_AUTHORIZED}
+            end
+    end;
+handle_clean_sess(SessPresent, QoS,
+                  State0 = #state{clean_sess = false,
+                                  proto_ver = ProtoVer}) ->
+    case get_queue(QoS, State0) of
+        {error, _} ->
+            %% Queue will be created later when client subscribes.
+            {ok, SessPresent, State0};
+        {ok, Q} ->
+            case consume(Q, QoS, State0) of
+                {ok, State} ->
+                    case SessPresent of
+                        false ->
+                            rabbit_global_counters:consumer_created(ProtoVer);
+                        true ->
+                            %% We already incremented the consumer counter for QoS 0.
+                            ok
+                    end,
+                    {ok, _SessionPresent = true, State};
+                {error, access_refused} ->
+                    {error, ?CONNACK_NOT_AUTHORIZED};
+                {error, _Reason} ->
+                    %% Let's use most generic error return code.
+                    {error, ?CONNACK_SERVER_UNAVAILABLE}
             end
     end.
 
@@ -1020,7 +1038,7 @@ create_queue(QoS, #state{
                                       self(),
                                       _Durable = true,
                                       _AutoDelete = false,
-                                      queue_owner(QoS, CleanSess),
+                                      queue_owner(CleanSess),
                                       QArgs,
                                       VHost,
                                       #{user => Username},
@@ -1045,30 +1063,30 @@ create_queue(QoS, #state{
             E
     end.
 
-queue_owner(QoS, CleanSess)
-  when QoS =:= ?QOS_0 orelse CleanSess ->
+-spec queue_owner(CleanSession :: boolean()) ->
+    pid() | none.
+queue_owner(true) ->
     %% Exclusive queues are auto-deleted after node restart while auto-delete queues are not.
     %% Therefore make durable queue exclusive.
     self();
-queue_owner(_, _) ->
+queue_owner(false) ->
     none.
 
-queue_args(QoS, CleanSess)
-  when QoS =:= ?QOS_0 orelse CleanSess ->
-    [];
-queue_args(_, _) ->
+queue_args(QoS, false) ->
     Args = case rabbit_mqtt_util:env(subscription_ttl) of
                Ms when is_integer(Ms) ->
                    [{<<"x-expires">>, long, Ms}];
                _ ->
                    []
            end,
-    case rabbit_mqtt_util:env(durable_queue_type) of
-        quorum ->
+    case {QoS, rabbit_mqtt_util:env(durable_queue_type)} of
+        {?QOS_1, quorum} ->
             [{<<"x-queue-type">>, longstr, <<"quorum">>} | Args];
         _ ->
             Args
-    end.
+    end;
+queue_args(_, _) ->
+    [].
 
 queue_type(?QOS_0, true, QArgs) ->
     case rabbit_feature_flags:is_enabled(?QUEUE_TYPE_QOS_0) of

@@ -16,7 +16,7 @@
 -export([emit_connection_info_all/4,
          emit_connection_info_local/3,
          close_local_client_connections/1,
-         %% exported for tests
+         %% Exported for tests, but could also be used for debugging.
          local_connection_pids/0]).
 
 start(normal, []) ->
