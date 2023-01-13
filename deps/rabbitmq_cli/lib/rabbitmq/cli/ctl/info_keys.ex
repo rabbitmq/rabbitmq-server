@@ -9,7 +9,17 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   alias RabbitMQ.CLI.Core.DataCoercion
 
   def validate_info_keys(args, valid_keys) do
+<<<<<<< HEAD
     info_keys = prepare_info_keys(args)
+=======
+    validate_info_keys(args, valid_keys, [])
+  end
+
+  @spec validate_info_keys([charlist], [charlist | atom], aliases) ::
+          {:ok, info_keys} | {:validation_failure, any}
+  def validate_info_keys(args, valid_keys, aliases) do
+    info_keys = prepare_info_keys(args, aliases)
+>>>>>>> f0715000e9 (Fix all dialyzer warnings in `rabbitmq_stomp`)
 
     case invalid_info_keys(info_keys, Enum.map(valid_keys, &DataCoercion.to_atom/1)) do
       [_ | _] = bad_info_keys ->
