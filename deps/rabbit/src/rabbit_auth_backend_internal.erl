@@ -300,7 +300,10 @@ delete_user(Username, ActingUser) ->
             rabbit_types:error('not_found').
 
 lookup_user(Username) ->
-    rabbit_misc:dirty_read({rabbit_user, Username}).
+    case rabbit_db_user:get(Username) of
+        undefined -> {error, not_found};
+        User      -> {ok, User}
+    end.
 
 -spec exists(rabbit_types:username()) -> boolean().
 

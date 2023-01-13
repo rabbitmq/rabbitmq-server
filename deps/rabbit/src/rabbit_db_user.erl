@@ -13,6 +13,7 @@
 
 -export([create/1,
          update/2,
+         get/1,
          get_all/0,
          with_fun_in_mnesia_tx/2,
          get_user_permissions/2,
@@ -87,6 +88,30 @@ update_in_mnesia_tx(Username, UpdateFun) ->
             ok = mnesia:write(?MNESIA_TABLE, User1, write);
         [] ->
             mnesia:abort({no_such_user, Username})
+    end.
+
+%% -------------------------------------------------------------------
+%% get().
+%% -------------------------------------------------------------------
+
+-spec get(Username) -> User | undefined when
+      Username :: vhost:name(),
+      User :: vhost:vhost().
+%% @doc Returns the record of the internal user named `Username'.
+%%
+%% @returns the internal user record or `undefined' if no internal user is named
+%% `Username'.
+%%
+%% @private
+
+get(Username) when is_binary(Username) ->
+    rabbit_db:run(
+      #{mnesia => fun() -> get_in_mnesia(Username) end}).
+
+get_in_mnesia(Username) ->
+    case ets:lookup(?MNESIA_TABLE, Username) of
+        [User] -> User;
+        []     -> undefined
     end.
 
 %% -------------------------------------------------------------------
