@@ -47,7 +47,8 @@ start_configured_listener() ->
                           get_tls_listener()]
                  end,
     Listeners1 = maybe_disable_sendfile(Listeners0),
-    [start_listener(Listener) || Listener <- Listeners1].
+    [start_listener(Listener) || Listener <- Listeners1],
+    ok.
 
 maybe_disable_sendfile(Listeners) ->
     DisableSendfile = #{sendfile => false},
