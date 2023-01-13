@@ -18,6 +18,7 @@ all() ->
     [
         {group, default_config},
         {group, config_path},
+        {group, global_labels},
         {group, aggregated_metrics},
         {group, per_object_metrics},
         {group, per_object_endpoint_metrics},
@@ -29,6 +30,7 @@ groups() ->
     [
         {default_config, [], generic_tests()},
         {config_path, [], generic_tests()},
+        {global_labels, [], generic_tests()},
         {aggregated_metrics, [], [
             aggregated_metrics_test,
             specific_erlang_metrics_present_test,
@@ -80,6 +82,10 @@ init_per_group(config_path, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{path, "/bunnieshop"}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_path, Config1, [{prometheus_path, "/bunnieshop"}]);
+init_per_group(global_labels, Config0) ->
+    GlobalLabelsConfig = {prometheus, [{global_labels, [{"foo", "bar"}]}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, GlobalLabelsConfig),
+    init_per_group(aggregated_metrics, Config1);
 init_per_group(per_object_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
