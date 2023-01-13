@@ -28,7 +28,6 @@ start_link() ->
     %% The scope is stopped in stop/1.
     _ = rabbit_federation_pg:start_scope(),
     mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
-                                   fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, []).
 
 %% Note that the next supervisor down, rabbit_federation_link_sup, is common

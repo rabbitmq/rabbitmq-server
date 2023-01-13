@@ -20,7 +20,7 @@
 start_link() ->
     Pid = case mirrored_supervisor:start_link(
                   {local, ?SUPERVISOR}, ?SUPERVISOR,
-                  fun rabbit_misc:execute_mnesia_transaction/1, ?MODULE, []) of
+                  ?MODULE, []) of
             {ok, Pid0}                       -> Pid0;
             {error, {already_started, Pid0}} -> Pid0
           end,
