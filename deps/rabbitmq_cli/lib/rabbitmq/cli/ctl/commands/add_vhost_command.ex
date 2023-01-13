@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
       vhost,
       desc,
-      tags,
+      parse_tags(tags),
       Helpers.cli_acting_user()
     ])
   end
