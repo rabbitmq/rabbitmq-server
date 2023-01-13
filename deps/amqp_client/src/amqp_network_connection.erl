@@ -259,7 +259,7 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                          _ -> lists:min([FrameMax, ?TCP_MAX_PACKET_SIZE])
                      end,
     NewState = State#state{heartbeat = Heartbeat, frame_max = CappedFrameMax},
-    start_heartbeat(NewState),
+    _ = start_heartbeat(NewState),
     {#'connection.tune_ok'{channel_max = ChannelMax,
                            frame_max   = CappedFrameMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
