@@ -20,7 +20,7 @@ defmodule ForgetClusterNodeCommandTest do
       :rabbit_misc.rpc_call(node, :application, :get_env, [:rabbit, :plugins_dir])
 
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
-    data_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
+    data_dir = :rabbit_misc.rpc_call(node, :rabbit, :data_dir, [])
 
     feature_flags_file =
       :rabbit_misc.rpc_call(node, :rabbit_feature_flags, :enabled_feature_flags_list_file, [])
@@ -63,26 +63,26 @@ defmodule ForgetClusterNodeCommandTest do
            )
   end
 
-  test "validate_execution_environment: offline forget without mnesia dir fails", context do
+  test "validate_execution_environment: offline forget without data dir fails", context do
     offline_opts =
       Map.merge(
         context[:opts],
         %{offline: true, node: :non_exist@localhost}
       )
 
-    opts_without_mnesia = Map.delete(offline_opts, :data_dir)
-    Application.put_env(:mnesia, :dir, "/tmp")
-    on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
+    opts_without_data_dir = Map.delete(offline_opts, :data_dir)
+    Application.put_env(:rabbit, :data_dir, "/tmp")
+    on_exit(fn -> Application.delete_env(:rabbit, :data_dir) end)
 
     assert match?(
              :ok,
              @command.validate_execution_environment(
                ["other_node@localhost"],
-               opts_without_mnesia
+               opts_without_data_dir
              )
            )
 
-    Application.delete_env(:mnesia, :dir)
+    Application.delete_env(:rabbit, :data_dir)
     System.put_env("RABBITMQ_MNESIA_DIR", "/tmp")
     on_exit(fn -> System.delete_env("RABBITMQ_MNESIA_DIR") end)
 
@@ -90,7 +90,7 @@ defmodule ForgetClusterNodeCommandTest do
              :ok,
              @command.validate_execution_environment(
                ["other_node@localhost"],
-               opts_without_mnesia
+               opts_without_data_dir
              )
            )
 
@@ -102,15 +102,15 @@ defmodule ForgetClusterNodeCommandTest do
            )
   end
 
-  test "validate_execution_environment: online mode does not fail is mnesia is not loaded",
+  test "validate_execution_environment: online mode does not fail if database is not loaded",
        context do
-    opts_without_mnesia = Map.delete(context[:opts], :data_dir)
+    opts_without_data_dir = Map.delete(context[:opts], :data_dir)
 
     assert match?(
              :ok,
              @command.validate_execution_environment(
                ["other_node@localhost"],
-               opts_without_mnesia
+               opts_without_data_dir
              )
            )
   end

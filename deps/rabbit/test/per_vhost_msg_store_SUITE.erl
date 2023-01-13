@@ -193,7 +193,7 @@ folder_size(Dir) ->
                        fun(F,Acc) -> filelib:file_size(F) + Acc end, 0).
 
 get_global_folder_size(Config) ->
-    BaseDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mnesia, dir, []),
+    BaseDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit, data_dir, []),
     folder_size(BaseDir).
 
 vhost_dir(Vhost, Config) ->
