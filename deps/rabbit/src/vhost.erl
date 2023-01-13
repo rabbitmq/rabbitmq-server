@@ -139,7 +139,7 @@ get_description(#vhost{} = VHost) ->
 
 -spec get_tags(vhost()) -> [tag()].
 get_tags(#vhost{} = VHost) ->
-    maps:get(tags, get_metadata(VHost), undefined).
+    maps:get(tags, get_metadata(VHost), []).
 
 -spec get_default_queue_type(vhost()) -> binary() | undefined.
 get_default_queue_type(#vhost{} = VHost) ->
