@@ -25,22 +25,15 @@ deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
     ProcessInfo = get_process_info(),
-    [mf(Callback, Metric, ProcessInfo) || Metric <- ?METRICS],
+    _ = [mf(Callback, Metric, ProcessInfo) || Metric <- ?METRICS],
     ok.
 
-collect_metrics(_, {Fun, Proplist}) ->
-    Fun(Proplist).
+collect_metrics(_, Val) ->
+    Val.
 
-mf(Callback, Metric, Proplist) ->
-    {Name, Type, Help, Fun} = case Metric of
-                                  {Key, Type1, Help1} ->
-                                      {Key, Type1, Help1, fun (Proplist1) ->
-                                                                  metric(Type1, [], proplists:get_value(Key, Proplist1))
-                                                          end};
-                                  {Key, Type1, Help1, Fun1} ->
-                                      {Key, Type1, Help1, Fun1}
-                              end,
-    Callback(create_mf(Name, Help, Type, ?MODULE, {Fun, Proplist})).
+mf(Callback, {Key, Type, Help}, ProcessInfo) ->
+    Val = metric(Type, [], proplists:get_value(Key, ProcessInfo)),
+    Callback(create_mf(Key, Help, Type, ?MODULE, Val)).
 
 %%====================================================================
 %% Private Parts

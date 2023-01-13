@@ -262,13 +262,14 @@ collect_mf(_Registry, Callback) ->
     ok.
 
 collect(PerObjectMetrics, Prefix, VHostsFilter, QueuesFilter, IncludedMFs, Callback) ->
-    [begin
+    _ = [begin
          Data = get_data(Table, PerObjectMetrics, VHostsFilter, QueuesFilter),
          mf(Callback, Prefix, Contents, Data)
-     end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)].
+     end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)],
+    ok.
 
 totals(Callback) ->
-    [begin
+    _ = [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
      end || {Table, Name, Type, Help} <- ?TOTALS],
@@ -345,7 +346,7 @@ add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     Callback(create_mf(MN, Help, Type, Metrics)).
 
 mf(Callback, Prefix, Contents, Data) ->
-    [begin
+    _ = [begin
          Fun = case Conversion of
                    undefined ->
                        fun(D) -> element(Index, D) end;
