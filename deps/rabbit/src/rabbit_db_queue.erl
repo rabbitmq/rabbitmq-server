@@ -195,7 +195,7 @@ get(Name) ->
        }).
 
 get_in_mnesia(Name) ->
-    rabbit_misc:dirty_read({rabbit_queue, Name}).
+    rabbit_mnesia:dirty_read({rabbit_queue, Name}).
 
 get_durable(Names) when is_list(Names) ->
     rabbit_db:run(
@@ -207,7 +207,7 @@ get_durable(Name) ->
        }).
 
 get_durable_in_mnesia(Name) ->
-    rabbit_misc:dirty_read({rabbit_durable_queue, Name}).
+    rabbit_mnesia:dirty_read({rabbit_durable_queue, Name}).
 
 delete_transient(Queues) ->
     rabbit_db:run(
@@ -215,7 +215,7 @@ delete_transient(Queues) ->
        }).
 
 delete_transient_in_mnesia(Queues) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               [{QName, delete_transient_in_mnesia_tx(QName)}
                || QName <- Queues]
@@ -227,7 +227,7 @@ on_node_up(Node, Fun) ->
        }).
 
 on_node_up_in_mnesia(Node, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Qs = mnesia:match_object(rabbit_queue,
                                        amqqueue:pattern_match_all(), write),
@@ -241,7 +241,7 @@ on_node_down(Node, Fun) ->
        }).
 
 on_node_down_in_mnesia(Node, Fun) ->
-    Qs = rabbit_misc:execute_mnesia_transaction(
+    Qs = rabbit_mnesia:execute_mnesia_transaction(
            fun () ->
                    qlc:e(qlc:q([amqqueue:get_name(Q) || Q <- mnesia:table(rabbit_queue),
                                                         Fun(Node, Q)
@@ -274,7 +274,7 @@ update(QName, Fun) ->
        }).
 
 update_in_mnesia(QName, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               update_in_mnesia_tx(QName, Fun)
       end).
@@ -327,7 +327,7 @@ create_or_get(DurableQ, Q) ->
 
 create_or_get_in_mnesia(DurableQ, Q) ->
     QueueName = amqqueue:get_name(Q),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   [] ->
@@ -349,7 +349,7 @@ insert(DurableQ, Q) ->
        }).
 
 insert_in_mnesia(DurableQ, Q) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               insert_in_mnesia_tx(DurableQ, Q)
       end).
@@ -360,7 +360,7 @@ insert(Qs) ->
        }).
 
 insert_many_in_mnesia(Qs) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               [ok = mnesia:write(rabbit_durable_queue, Q, write) || Q <- Qs]
       end).
@@ -420,7 +420,7 @@ get_many_in_mnesia(Table, [Name]) ->
     ets:lookup(Table, Name);
 get_many_in_mnesia(Table, Names) when is_list(Names) ->
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
-    %% expensive for reasons explained in rabbit_misc:dirty_read/1.
+    %% expensive for reasons explained in rabbit_mnesia:dirty_read/1.
     lists:append([ets:lookup(Table, Name) || Name <- Names]).
 
 delete_transient_in_mnesia_tx(QName) ->
@@ -438,7 +438,7 @@ not_found_or_absent_queue_dirty_in_mnesia(Name) ->
     %% We should read from both tables inside a tx, to get a
     %% consistent view. But the chances of an inconsistency are small,
     %% and only affect the error kind.
-    case rabbit_misc:dirty_read({rabbit_durable_queue, Name}) of
+    case rabbit_mnesia:dirty_read({rabbit_durable_queue, Name}) of
         {error, not_found} -> not_found;
         {ok, Q}            -> {absent, Q, nodedown}
     end.
@@ -476,7 +476,7 @@ list_with_possible_retry_in_mnesia(Fun) ->
     end.
 
 delete_in_mnesia(QueueName, Reason) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               case {mnesia:wread({rabbit_queue, QueueName}),
                     mnesia:wread({rabbit_durable_queue, QueueName})} of
@@ -521,7 +521,7 @@ list_for_count_in_mnesia(VHost) ->
       end).
 
 update_decorators_in_mnesia(Name) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               case mnesia:wread({rabbit_queue, Name}) of
                   [Q] -> ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q),

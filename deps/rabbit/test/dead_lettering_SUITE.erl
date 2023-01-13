@@ -1359,13 +1359,10 @@ dead_letter_extra_bcc(Config) ->
     ok.
 
 set_queue_options(QName, Options) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
-                                     fun(Q) ->
-                                             amqqueue:set_options(Q, Options)
-                                     end)
-      end).
+    rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
+                           fun(Q) ->
+                                   amqqueue:set_options(Q, Options)
+                           end).
 
 metric_maxlen(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),

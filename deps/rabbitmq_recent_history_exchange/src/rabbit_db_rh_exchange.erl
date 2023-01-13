@@ -46,7 +46,7 @@ get(XName) ->
        }).
 
 get_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> get_in_mnesia_tx(XName) end).
 
 get_in_mnesia_tx(XName) ->
@@ -67,7 +67,7 @@ insert(XName, Message, Length) ->
        }).
 
 insert_in_mnesia(XName, Message, Length) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Cached = get_in_mnesia_tx(XName),
               insert_in_mnesia(XName, Cached, Message, Length)
@@ -109,7 +109,7 @@ delete(XName) ->
        }).
 
 delete_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               mnesia:delete(?RH_TABLE, XName, write)
       end).

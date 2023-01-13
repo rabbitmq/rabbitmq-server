@@ -257,7 +257,7 @@ listener_of_protocol(Protocol) ->
     end.
 
 listener_of_protocol_mnesia(Protocol) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         fun() ->
             MatchSpec = #listener{
                 node = node(),

@@ -467,7 +467,7 @@ close_channels(_TrackedChannels = []) -> ok.
 
 migrate_tracking_records() ->
     Node = node(),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Table = tracked_channel_table_name_for(Node),
               _ = mnesia:lock({table, Table}, read),
@@ -477,7 +477,7 @@ migrate_tracking_records() ->
                         ets:insert(tracked_channel, Channel)
                 end, Channels)
       end),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Table = tracked_channel_per_user_table_name_for(Node),
               _ = mnesia:lock({table, Table}, read),

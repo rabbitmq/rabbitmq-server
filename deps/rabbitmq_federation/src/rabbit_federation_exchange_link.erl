@@ -439,7 +439,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                           _            -> unknown
                       end,
               {Serial, Bindings} =
-                  rabbit_misc:execute_mnesia_transaction(
+                  rabbit_mnesia:execute_mnesia_transaction(
                     fun () ->
                             {rabbit_exchange:peek_serial(DownXName),
                              rabbit_binding:list_for_source(DownXName)}

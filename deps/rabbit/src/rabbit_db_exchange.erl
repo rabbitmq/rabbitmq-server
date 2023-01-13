@@ -132,7 +132,7 @@ get(Name) ->
        }).
  
 get_in_mnesia(Name) ->
-    rabbit_misc:dirty_read({rabbit_exchange, Name}).
+    rabbit_mnesia:dirty_read({rabbit_exchange, Name}).
 
 %% -------------------------------------------------------------------
 %% get_many().
@@ -192,7 +192,7 @@ update(XName, Fun) ->
        }).
 
 update_in_mnesia(XName, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               update_in_mnesia_tx(XName, Fun)
       end).
@@ -218,7 +218,7 @@ create_or_get(X) ->
        }).
 
 create_or_get_in_mnesia(#exchange{name = XName} = X) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               case mnesia:wread({rabbit_exchange, XName}) of
                   [] ->
@@ -246,7 +246,7 @@ insert(Xs) ->
        }).
 
 insert_in_mnesia(Xs) when is_list(Xs) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs]
       end),
@@ -271,7 +271,7 @@ peek_serial(XName) ->
        }).
 
 peek_serial_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               peek_serial_in_mnesia_tx(XName, read)
       end).
@@ -295,7 +295,7 @@ next_serial(X) ->
        }).
 
 next_serial_in_mnesia(X) ->
-    rabbit_misc:execute_mnesia_transaction(fun() ->
+    rabbit_mnesia:execute_mnesia_transaction(fun() ->
                                                    next_serial_in_mnesia_tx(X)
                                            end).
 
@@ -332,7 +332,7 @@ delete_in_mnesia(XName, IfUnused) ->
                       true  -> fun conditional_delete_in_mnesia/2;
                       false -> fun unconditional_delete_in_mnesia/2
                   end,
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               case mnesia:wread({rabbit_exchange, XName}) of
                   [X] -> DeletionFun(X, false);
@@ -358,7 +358,7 @@ delete_serial(XName) ->
        }).
 
 delete_serial_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               mnesia:delete({rabbit_exchange_serial, XName})
       end).
@@ -458,7 +458,7 @@ delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSour
 get_many_in_mnesia(Table, [Name]) -> ets:lookup(Table, Name);
 get_many_in_mnesia(Table, Names) when is_list(Names) ->
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
-    %% expensive for reasons explained in rabbit_misc:dirty_read/1.
+    %% expensive for reasons explained in rabbit_mnesia:dirty_read/1.
     lists:append([ets:lookup(Table, Name) || Name <- Names]).
 
 conditional_delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable) ->
@@ -500,7 +500,7 @@ insert_ram_in_mnesia_tx(X) ->
     X1.
 
 recover_in_mnesia(VHost) ->
-    rabbit_misc:table_filter(
+    rabbit_mnesia:table_filter(
       fun (#exchange{name = XName}) ->
               XName#resource.virtual_host =:= VHost andalso
                   mnesia:read({rabbit_exchange, XName}) =:= []
@@ -508,7 +508,7 @@ recover_in_mnesia(VHost) ->
       fun (X, true) ->
               X;
           (X, false) ->
-              X1 = rabbit_misc:execute_mnesia_transaction(
+              X1 = rabbit_mnesia:execute_mnesia_transaction(
                      fun() -> insert_in_mnesia_tx(X) end),
               Serial = rabbit_exchange:serial(X1),
               rabbit_exchange:callback(X1, create, Serial, [X1])

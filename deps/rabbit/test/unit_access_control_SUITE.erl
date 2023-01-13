@@ -422,7 +422,7 @@ topic_matching1(_Config) ->
     passed.
 
 exchange_op_callback(X, Fun, Args) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () -> rabbit_exchange:callback(X, Fun, transaction, [X] ++ Args) end),
     rabbit_exchange:callback(X, Fun, none, [X] ++ Args).
 

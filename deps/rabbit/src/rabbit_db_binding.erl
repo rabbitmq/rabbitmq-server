@@ -254,7 +254,7 @@ recover_in_mnesia(RecoverFun) ->
     [RecoverFun(Route, Src, Dst, fun recover_semi_durable_route/2) ||
         #route{binding = #binding{destination = Dst,
                                   source = Src}} = Route <-
-            rabbit_misc:dirty_read_all(rabbit_semi_durable_route)].
+            rabbit_mnesia:dirty_read_all(rabbit_semi_durable_route)].
 
 create_index_route_table() ->
     rabbit_db:run(
@@ -333,7 +333,7 @@ binding_action_in_mnesia(#binding{source      = SrcName,
                                   destination = DstName}, Fun, ErrFun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    rabbit_misc:execute_mnesia_tx_with_tail(
+    rabbit_mnesia:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:read({SrcTable, SrcName}),
                     mnesia:read({DstTable, DstName})} of
@@ -371,11 +371,11 @@ create_in_mnesia(Binding, ChecksFun) ->
       end, fun not_found_or_absent_errs_in_mnesia/1).
 
 populate_index_route_table_in_mnesia() ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               _ = mnesia:lock({table, rabbit_route}, read),
               _ = mnesia:lock({table, rabbit_index_route}, write),
-              Routes = rabbit_misc:dirty_read_all(rabbit_route),
+              Routes = rabbit_mnesia:dirty_read_all(rabbit_route),
               lists:foreach(fun(#route{binding = #binding{source = Exchange}} = Route) ->
                                     case rabbit_db_exchange:get(Exchange) of
                                         {ok, X} ->
@@ -542,11 +542,11 @@ not_found_or_absent_in_mnesia(#resource{kind = queue}    = Name) ->
     end.
 
 recover_in_mnesia() ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               _ = mnesia:lock({table, rabbit_durable_route}, read),
               _ = mnesia:lock({table, rabbit_semi_durable_route}, write),
-              Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
+              Routes = rabbit_mnesia:dirty_read_all(rabbit_durable_route),
               Fun = fun(Route) ->
                             mnesia:dirty_write(rabbit_semi_durable_route, Route)
                     end,
@@ -556,7 +556,7 @@ recover_in_mnesia() ->
 
 recover_semi_durable_route(#route{binding = B} = Route, X) ->
     MaybeSerial = rabbit_exchange:serialise_events(X),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               case mnesia:read(rabbit_semi_durable_route, B, read) of
                   [] -> no_recover;

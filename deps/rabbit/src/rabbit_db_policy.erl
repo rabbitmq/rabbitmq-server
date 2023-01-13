@@ -31,7 +31,7 @@ update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
 update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
     Tabs = [rabbit_queue,    rabbit_durable_queue,
             rabbit_exchange, rabbit_durable_exchange],
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
               Exchanges0 = rabbit_db_exchange:get_all(VHost),

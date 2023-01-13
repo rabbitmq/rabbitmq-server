@@ -51,7 +51,7 @@ create(User) ->
       #{mnesia => fun() -> create_in_mnesia(Username, User) end}).
 
 create_in_mnesia(Username, User) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> create_in_mnesia_tx(Username, User) end).
 
 create_in_mnesia_tx(Username, User) ->
@@ -78,7 +78,7 @@ update(Username, UpdateFun)
       #{mnesia => fun() -> update_in_mnesia(Username, UpdateFun) end}).
 
 update_in_mnesia(Username, UpdateFun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> update_in_mnesia_tx(Username, UpdateFun) end).
 
 update_in_mnesia_tx(Username, UpdateFun) ->
@@ -218,26 +218,26 @@ check_and_match_user_permissions(Username, VHostName)
         fun() -> match_user_permissions_in_mnesia(Username, VHostName) end}).
 
 match_user_permissions_in_mnesia('_' = Username, '_' = VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               match_user_permissions_in_mnesia_tx(Username, VHostName)
       end);
 match_user_permissions_in_mnesia('_' = Username, VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         rabbit_db_vhost:with_fun_in_mnesia_tx(
           VHostName,
           fun() ->
                   match_user_permissions_in_mnesia_tx(Username, VHostName)
           end));
 match_user_permissions_in_mnesia(Username, '_' = VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         with_fun_in_mnesia_tx(
           Username,
           fun() ->
                   match_user_permissions_in_mnesia_tx(Username, VHostName)
           end));
 match_user_permissions_in_mnesia(Username, VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         with_fun_in_mnesia_tx(
           Username,
           rabbit_db_vhost:with_fun_in_mnesia_tx(
@@ -278,7 +278,7 @@ set_user_permissions(
         end}).
 
 set_user_permissions_in_mnesia(Username, VHostName, UserPermission) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       with_fun_in_mnesia_tx(
         Username,
         rabbit_db_vhost:with_fun_in_mnesia_tx(
@@ -307,7 +307,7 @@ clear_user_permissions(Username, VHostName)
         fun() -> clear_user_permissions_in_mnesia(Username, VHostName) end}).
 
 clear_user_permissions_in_mnesia(Username, VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> clear_user_permissions_in_mnesia_tx(Username, VHostName) end).
 
 clear_user_permissions_in_mnesia_tx(Username, VHostName) ->
@@ -340,7 +340,7 @@ clear_matching_user_permissions(Username, VHostName)
        }).
 
 clear_matching_user_permissions_in_mnesia(Username, VHostName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               clear_matching_user_permissions_in_mnesia_tx( Username, VHostName)
       end).
@@ -422,14 +422,14 @@ check_and_match_topic_permissions(Username, VHostName, ExchangeName)
 
 match_topic_permissions_in_mnesia(
   '_' = Username, '_' = VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               match_topic_permissions_in_mnesia_tx(
                 Username, VHostName, ExchangeName)
       end);
 match_topic_permissions_in_mnesia(
   '_' = Username, VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         rabbit_db_vhost:with_fun_in_mnesia_tx(
           VHostName,
           fun() ->
@@ -438,7 +438,7 @@ match_topic_permissions_in_mnesia(
           end));
 match_topic_permissions_in_mnesia(
   Username, '_' = VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         with_fun_in_mnesia_tx(
           Username,
           fun() ->
@@ -447,7 +447,7 @@ match_topic_permissions_in_mnesia(
           end));
 match_topic_permissions_in_mnesia(
   Username, VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
         with_fun_in_mnesia_tx(
           Username,
           rabbit_db_vhost:with_fun_in_mnesia_tx(
@@ -495,7 +495,7 @@ set_topic_permissions(
         end}).
 
 set_topic_permissions_in_mnesia(Username, VHostName, TopicPermission) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       with_fun_in_mnesia_tx(
         Username,
         rabbit_db_vhost:with_fun_in_mnesia_tx(
@@ -531,7 +531,7 @@ clear_topic_permissions(Username, VHostName, ExchangeName)
         end}).
 
 clear_topic_permissions_in_mnesia(Username, VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               clear_topic_permissions_in_mnesia_tx(
                 Username, VHostName, ExchangeName)
@@ -569,7 +569,7 @@ clear_matching_topic_permissions(Username, VHostName, ExchangeName)
 
 clear_matching_topic_permissions_in_mnesia(
   Username, VHostName, ExchangeName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               clear_matching_topic_permissions_in_mnesia_tx(
                 Username, VHostName, ExchangeName)
@@ -604,7 +604,7 @@ delete(Username) when is_binary(Username) ->
       #{mnesia => fun() -> delete_in_mnesia(Username) end}).
 
 delete_in_mnesia(Username) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> delete_in_mnesia_tx(Username) end).
 
 delete_in_mnesia_tx(Username) ->

@@ -106,7 +106,7 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
                   %% need to handle migration.
                   ok = rabbit_amqqueue:store_queue(Q3)
               end,
-        ok = rabbit_misc:execute_mnesia_transaction(Fun),
+        ok = rabbit_mnesia:execute_mnesia_transaction(Fun),
         {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
         %% We need synchronous add here (i.e. do not return until the
         %% mirror is running) so that when queue declaration is finished

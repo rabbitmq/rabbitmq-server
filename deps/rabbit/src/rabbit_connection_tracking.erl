@@ -731,7 +731,7 @@ close_connection(#tracked_connection{pid = Pid}, Message) ->
 
 migrate_tracking_records() ->
     Node = node(),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_table_name_for(Node),
               _ = mnesia:lock({table, Table}, read),
@@ -741,7 +741,7 @@ migrate_tracking_records() ->
                         ets:insert(tracked_connection, Connection)
                 end, Connections)
       end),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_per_user_table_name_for(Node),
               _ = mnesia:lock({table, Table}, read),
@@ -752,7 +752,7 @@ migrate_tracking_records() ->
                         ets:update_counter(tracked_connection_per_user, Username, C, {Username, 0})
                 end, Connections)
       end),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_per_vhost_table_name_for(Node),
               _ = mnesia:lock({table, Table}, read),

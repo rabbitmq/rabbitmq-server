@@ -61,7 +61,7 @@ delete(Group, Id) ->
        }).
 
 delete_in_mnesia(Group, Id) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> delete_in_mnesia_tx(Group, Id) end).
 
 -spec find_mirror(Group, Id) -> Ret when
@@ -115,7 +115,7 @@ create_tables_in_mnesia([{Table, Attributes} | Ts]) ->
     end.
 
 create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               ReadResult = mnesia:wread({?TABLE, {Group, Id}}),
               rabbit_log:debug("Mirrored supervisor: check_start table ~ts read for key ~tp returned ~tp",
@@ -145,7 +145,7 @@ create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id) ->
       end).
 
 update_all_in_mnesia(Overall, OldOverall) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               MatchHead = #mirrored_sup_childspec{mirroring_pid = OldOverall,
                                                   key           = '$1',
@@ -156,7 +156,7 @@ update_all_in_mnesia(Overall, OldOverall) ->
       end).
 
 delete_all_in_mnesia(Group) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               MatchHead = #mirrored_sup_childspec{key       = {Group, '$1'},
                                                   _         = '_'},

@@ -38,7 +38,7 @@ create(X) ->
        }).
 
 create_in_mnesia(X) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> create_in_mnesia_tx(X) end).
 
 create_in_mnesia_tx(X) ->
@@ -59,7 +59,7 @@ create_binding(Src, Dst, Weight, UpdateFun) ->
        }).
 
 create_binding_in_mnesia(Src, Dst, Weight, UpdateFun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               create_binding_in_mnesia_tx(Src, Dst, Weight, UpdateFun)
       end).
@@ -98,7 +98,7 @@ delete(XName) ->
        }).
 
 delete_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
               mnesia:delete({?HASH_RING_STATE_TABLE, XName})
@@ -110,7 +110,7 @@ delete_bindings(Bindings, DeleteFun) ->
        }).
 
 delete_bindings_in_mnesia(Bindings, DeleteFun) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               [delete_binding_in_mnesia(Binding, DeleteFun) || Binding <- Bindings]
       end).

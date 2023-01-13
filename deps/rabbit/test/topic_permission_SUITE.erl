@@ -145,7 +145,7 @@ topic_permission_checks(Config) ->
 
 topic_permission_checks1(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
-    rabbit_misc:execute_mnesia_transaction(fun() ->
+    rabbit_mnesia:execute_mnesia_transaction(fun() ->
         ok = mnesia:write(rabbit_vhost,
             vhost:new(<<"/">>, []),
             write),

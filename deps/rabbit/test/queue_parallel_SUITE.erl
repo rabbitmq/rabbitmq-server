@@ -838,9 +838,7 @@ set_queue_options(Config, QName, Options) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options1, [QName, Options]).
 
 set_queue_options1(QName, Options) ->
-    rabbit_misc:execute_mnesia_transaction(fun() ->
-        rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
-            fun(Q) ->
-                amqqueue:set_options(Q, Options)
-            end)
-    end).
+    rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
+                           fun(Q) ->
+                                   amqqueue:set_options(Q, Options)
+                           end).

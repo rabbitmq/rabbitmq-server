@@ -160,7 +160,7 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
 
 listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
     try
-        rabbit_misc:execute_mnesia_transaction(
+        rabbit_mnesia:execute_mnesia_transaction(
           fun () ->
                   _ = mnesia:lock({table, rabbit_listener}, read),
                   Listeners = mnesia:select(

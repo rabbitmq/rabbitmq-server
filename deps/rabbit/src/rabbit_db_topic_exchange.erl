@@ -85,7 +85,7 @@ split_topic_key(Key) ->
     split_topic_key(Key, [], []).
 
 insert_in_mnesia(XName, RoutingKey, Destination, Args) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               FinalNode = follow_down_create(XName, split_topic_key(RoutingKey)),
               trie_add_binding(XName, FinalNode, Destination, Args),
@@ -93,7 +93,7 @@ insert_in_mnesia(XName, RoutingKey, Destination, Args) ->
       end).
 
 delete_all_for_exchange_in_mnesia(XName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               trie_remove_all_nodes(XName),
               trie_remove_all_edges(XName),
@@ -149,7 +149,7 @@ delete_in_mnesia_tx(Bs) ->
     ok.
 
 delete_in_mnesia(Bs) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> delete_in_mnesia_tx(Bs) end).
 
 split_topic_key(<<>>, [], []) ->

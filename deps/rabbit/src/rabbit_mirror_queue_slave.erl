@@ -106,7 +106,7 @@ handle_go(Q0) when ?is_amqqueue(Q0) ->
     %%
     process_flag(trap_exit, true), %% amqqueue_process traps exits too.
     {ok, GM} = gm:start_link(QName, ?MODULE, [self()],
-                             fun rabbit_misc:execute_mnesia_transaction/1),
+                             fun rabbit_mnesia:execute_mnesia_transaction/1),
     MRef = erlang:monitor(process, GM),
     %% We ignore the DOWN message because we are also linked and
     %% trapping exits, we just want to not get stuck and we will exit
@@ -118,7 +118,7 @@ handle_go(Q0) when ?is_amqqueue(Q0) ->
     end,
     Self = self(),
     Node = node(),
-    case rabbit_misc:execute_mnesia_transaction(
+    case rabbit_mnesia:execute_mnesia_transaction(
            fun() -> init_it(Self, GM, Node, QName) end) of
         {new, QPid, GMPids} ->
             ok = file_handle_cache:register_callback(
@@ -1088,7 +1088,7 @@ record_synchronised(Q0) when ?is_amqqueue(Q0) ->
                     {ok, Q2}
             end
         end,
-    case rabbit_misc:execute_mnesia_transaction(F) of
+    case rabbit_mnesia:execute_mnesia_transaction(F) of
         ok -> ok;
         {ok, Q2} -> rabbit_mirror_queue_misc:maybe_drop_master_after_sync(Q2)
     end.
