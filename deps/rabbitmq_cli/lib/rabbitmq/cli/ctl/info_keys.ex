@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
     validate_info_keys(args, valid_keys, [])
   end
 
-  @spec validate_info_keys([charlist], [charlist], aliases) ::
+  @spec validate_info_keys([charlist], [charlist | atom], aliases) ::
           {:ok, info_keys} | {:validation_failure, any}
   def validate_info_keys(args, valid_keys, aliases) do
     info_keys = prepare_info_keys(args, aliases)
