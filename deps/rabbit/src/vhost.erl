@@ -171,9 +171,13 @@ get_description(VHost) ->
 
 -spec get_tags(vhost()) -> [atom()].
 get_tags(#vhost{} = VHost) ->
+<<<<<<< HEAD
     maps:get(tags, get_metadata(VHost), undefined);
 get_tags(VHost) ->
     vhost_v1:get_tags(VHost).
+=======
+    maps:get(tags, get_metadata(VHost), []).
+>>>>>>> 395156949a (Correct the default for vhost:get_tags/1 to match the spec)
 
 -spec get_default_queue_type(vhost()) -> binary() | undefined.
 get_default_queue_type(#vhost{} = VHost) ->
