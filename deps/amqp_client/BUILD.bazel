@@ -8,6 +8,7 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
+    "RABBITMQ_DIALYZER_OPTS",
 )
 
 APP_ENV = """[
@@ -38,6 +39,8 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
 
 EXTRA_APPS = [
     "xmerl",
+    "ssl",
+    "public_key",
 ]
 
 DEPS = [
@@ -68,7 +71,7 @@ plt(
 
 dialyze(
     plt = ":base_plt",
-    warnings_as_errors = False,
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
 )
 
 rabbitmq_home(
