@@ -61,6 +61,7 @@
          clean_sess :: option(boolean()),
          will_msg :: option(mqtt_msg()),
          exchange :: option(rabbit_exchange:name()),
+         subscriptions = #{} :: #{Topic :: binary() => QoS :: ?QOS_0..?QOS_1},
          %% Set if client has at least one subscription with QoS 1.
          queue_qos1 :: option(rabbit_amqqueue:name()),
          %% Did the client ever sent us a PUBLISH packet?
@@ -218,12 +219,9 @@ process_request(?SUBSCRIBE,
                                  topic_table = Topics},
                    payload = undefined},
                 #state{send_fun = SendFun,
-                       retainer_pid = RPid} = State0) ->
+                       retainer_pid = RPid
+                      } = State0) ->
     ?LOG_DEBUG("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
-    TopicNamesQos0 = topic_names(?QOS_0, State0),
-    TopicNamesQos1 = topic_names(?QOS_1, State0),
-    HasSubsBefore = TopicNamesQos0 =/= [] orelse TopicNamesQos1 =/= [],
-
     {QosResponse, State1} =
     lists:foldl(
       fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
@@ -232,26 +230,28 @@ process_request(?SUBSCRIBE,
               %% to close the client connection anyway.
               {[?SUBACK_FAILURE | L], S};
          (#mqtt_topic{name = TopicName,
-                      qos = Qos0} = Topic,
+                      qos = TopicQos},
           {L, S0}) ->
-              QoS = supported_sub_qos(Qos0),
-              case maybe_replace_old_sub(Topic, TopicNamesQos0, TopicNamesQos1, S0) of
+              QoS = supported_sub_qos(TopicQos),
+              case maybe_replace_old_sub(TopicName, QoS, S0) of
                   {ok, S1} ->
                       case ensure_queue(QoS, S1) of
                           {ok, Q} ->
                               QName = amqqueue:get_name(Q),
                               case bind(QName, TopicName, S1) of
-                                  {ok, _Output, S2} ->
+                                  {ok, _Output, S2 = #state{subscriptions = Subs}} ->
+                                      S3 = S2#state{subscriptions = maps:put(TopicName, QoS, Subs)},
+                                      maybe_increment_consumer(S2, S3),
                                       case self_consumes(Q) of
                                           false ->
-                                              case consume(Q, QoS, S2) of
-                                                  {ok, S3} ->
-                                                      {[QoS | L], S3};
+                                              case consume(Q, QoS, S3) of
+                                                  {ok, S4} ->
+                                                      {[QoS | L], S4};
                                                   {error, _Reason} ->
-                                                      {[?SUBACK_FAILURE | L], S2}
+                                                      {[?SUBACK_FAILURE | L], S3}
                                               end;
                                           true ->
-                                              {[QoS | L], S2}
+                                              {[QoS | L], S3}
                                       end;
                                   {error, Reason, S2} ->
                                       ?LOG_ERROR("Failed to bind ~s with topic ~s: ~p",
@@ -266,13 +266,13 @@ process_request(?SUBSCRIBE,
               end
       end, {[], State0}, Topics),
 
-    maybe_increment_consumer(HasSubsBefore, State1),
     SendFun(
       #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
                    variable = #mqtt_packet_suback{
                                  packet_id = SubscribePktId,
                                  qos_table  = QosResponse}},
       State1),
+
     case QosResponse of
         [?SUBACK_FAILURE | _] ->
             {error, subscribe_error, State1};
@@ -289,29 +289,30 @@ process_request(?UNSUBSCRIBE,
                              payload = undefined},
                 State0 = #state{send_fun = SendFun}) ->
     ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
-    HasSubsBefore = has_subs(State0),
     State = lists:foldl(
-              fun(#mqtt_topic{name = TopicName}, #state{} = S0) ->
-                      case find_queue_name(TopicName, S0) of
-                          {ok, QName} ->
+              fun(#mqtt_topic{name = TopicName}, #state{subscriptions = Subs0} = S0) ->
+                      case maps:take(TopicName, Subs0) of
+                          {QoS, Subs} ->
+                              QName = queue_name(QoS, S0),
                               case unbind(QName, TopicName, S0) of
-                                  {ok, _, S} ->
+                                  {ok, _, S1} ->
+                                      S = S1#state{subscriptions = Subs},
+                                      maybe_decrement_consumer(S1, S),
                                       S;
                                   {error, Reason, S} ->
                                       ?LOG_ERROR("Failed to unbind ~s with topic ~s: ~p",
                                                  [rabbit_misc:rs(QName), TopicName, Reason]),
                                       S
                               end;
-                          {not_found, _} ->
+                          error ->
                               S0
                       end
               end, State0, Topics),
     SendFun(
-      #mqtt_packet{fixed    = #mqtt_packet_fixed {type       = ?UNSUBACK},
+      #mqtt_packet{fixed    = #mqtt_packet_fixed {type      = ?UNSUBACK},
                    variable = #mqtt_packet_suback{packet_id = PacketId}},
       State),
 
-    maybe_decrement_consumer(HasSubsBefore, State),
     {ok, State};
 
 process_request(?PINGREQ, #mqtt_packet{}, State = #state{send_fun = SendFun,
@@ -347,7 +348,8 @@ process_connect(#mqtt_packet{
                                fun start_keepalive/2,
                                fun notify_connection_created/1,
                                fun handle_clean_sess_qos0/2,
-                               fun handle_clean_sess_qos1/2],
+                               fun handle_clean_sess_qos1/2,
+                               fun cache_subscriptions/2],
                               PacketConnect, State0) of
         {ok, SessPresent0, State1} ->
             {?CONNACK_ACCEPT, SessPresent0, State1};
@@ -567,78 +569,60 @@ get_queue(QoS, State) ->
             Err
     end.
 
+queue_name(?QOS_1, #state{queue_qos1 = #resource{kind = queue} = Name}) ->
+    Name;
 queue_name(QoS, #state{client_id = ClientId,
                        auth_state = #auth_state{vhost = VHost}}) ->
     QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
 
-find_queue_name(TopicName, #state{exchange = Exchange} = State) ->
-    RoutingKey = mqtt_to_amqp(TopicName),
-    QNameQoS0 = queue_name(?QOS_0, State),
-    case lookup_binding(Exchange, QNameQoS0, RoutingKey) of
-        true ->
-            {ok, QNameQoS0};
-        false ->
-            QNameQoS1 = queue_name(?QOS_1, State),
-            case lookup_binding(Exchange, QNameQoS1, RoutingKey) of
-                true ->
-                    {ok, QNameQoS1};
-                false ->
-                    {not_found, []}
-            end
-    end.
-
-lookup_binding(Exchange, QueueName, RoutingKey) ->
-    B = #binding{source = Exchange,
-                 destination = QueueName,
-                 key = RoutingKey},
-    lists:member(B, rabbit_binding:list_for_source_and_destination(Exchange, QueueName)).
-
-has_subs(State) ->
-    topic_names(?QOS_0, State) =/= [] orelse
-    topic_names(?QOS_1, State) =/= [].
+%% Query subscriptions from the database and hold them in process state
+%% to avoid future mnesia:match_object/3 queries.
+cache_subscriptions(_SessionPresent = _SubscriptionsPresent = true, State) ->
+    SubsQos0 = topic_names(?QOS_0, State),
+    SubsQos1 = topic_names(?QOS_1, State),
+    Subs = maps:merge(maps:from_keys(SubsQos0, ?QOS_0),
+                      maps:from_keys(SubsQos1, ?QOS_1)),
+    {ok, State#state{subscriptions = Subs}};
+cache_subscriptions(_, _) ->
+    ok.
 
 topic_names(QoS, #state{exchange = Exchange} = State) ->
-    Bindings = rabbit_binding:list_for_source_and_destination(
-                 Exchange,
-                 queue_name(QoS, State),
-                 %% Querying table rabbit_reverse_route instead of rabbit_route provides
-                 %% **much** better CPU performance because the source exchange is always the
-                 %% same in the MQTT plugin while the destination queue will be different.
-                 _Reverse = true),
+    Bindings =
+    rabbit_binding:list_for_source_and_destination(
+      Exchange,
+      queue_name(QoS, State),
+      %% Querying table rabbit_route is catastrophic for CPU usage.
+      %% Querying table rabbit_reverse_route is acceptable because
+      %% the source exchange is always the same in the MQTT plugin whereas
+      %% the destination queue is different for each MQTT client and
+      %% rabbit_reverse_route is sorted by destination queue.
+      _Reverse = true),
     lists:map(fun(B) -> amqp_to_mqtt(B#binding.key) end, Bindings).
 
 %% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
 %% to an existing Subscription’s Topic Filter then it MUST completely replace that
 %% existing Subscription with a new Subscription. The Topic Filter in the new Subscription
 %% will be identical to that in the previous Subscription, although its maximum QoS value
-%% could be different. [...]" [MQTT-3.8.4-3].
-%%
-%% Therefore, if we receive a QoS 0 subscription for a topic that already has QoS 1,
-%% we unbind QoS 1 (and vice versa).
-maybe_replace_old_sub(#mqtt_topic{name = TopicName, qos = ?QOS_0},
-                      _, OldTopicNamesQos1, State) ->
-    QName = queue_name(?QOS_1, State),
-    maybe_unbind(TopicName, OldTopicNamesQos1, QName, State);
-maybe_replace_old_sub(#mqtt_topic{name = TopicName, qos = QoS},
-                      OldTopicNamesQos0, _, State)
-  when QoS =:= ?QOS_1 orelse QoS =:= ?QOS_2 ->
-    QName = queue_name(?QOS_0, State),
-    maybe_unbind(TopicName, OldTopicNamesQos0, QName, State).
+%% could be different." [MQTT-3.8.4-3].
+maybe_replace_old_sub(TopicName, QoS, State = #state{subscriptions = Subs}) ->
+    case Subs of
+        #{TopicName := OldQoS}
+          when OldQoS =/= QoS ->
+            replace_old_sub(OldQoS, TopicName, State);
+        _ ->
+            {ok, State}
+    end.
 
-maybe_unbind(TopicName, TopicNames, QName, State0) ->
-    case lists:member(TopicName, TopicNames) of
-        false ->
-            {ok, State0};
-        true ->
-            case unbind(QName, TopicName, State0) of
-                {ok, _Output, State} ->
-                    {ok, State};
-                {error, Reason, _State} = Err ->
-                    ?LOG_ERROR("Failed to unbind ~s with topic '~s': ~p",
-                               [rabbit_misc:rs(QName), TopicName, Reason]),
-                    Err
-            end
+replace_old_sub(QoS, TopicName, State0)->
+    QName = queue_name(QoS, State0),
+    case unbind(QName, TopicName, State0) of
+        {ok, _Output, State} ->
+            {ok, State};
+        {error, Reason, _State} = Err ->
+            ?LOG_ERROR("Failed to unbind ~s with topic '~s': ~p",
+                       [rabbit_misc:rs(QName), TopicName, Reason]),
+            Err
     end.
 
 -spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
@@ -1875,38 +1859,30 @@ maybe_decrement_publisher(#state{published = true,
 maybe_decrement_publisher(_) ->
     ok.
 
-%% multiple subscriptions from the same connection count as one consumer
-maybe_increment_consumer(_WasConsumer = false,
-                         #state{proto_ver = ProtoVer} = State) ->
-    case has_subs(State) of
-        true ->
-            rabbit_global_counters:consumer_created(ProtoVer);
-        false ->
-            ok
-    end;
+%% Multiple subscriptions from the same connection count as one consumer.
+maybe_increment_consumer(#state{subscriptions = OldSubs},
+                         #state{subscriptions = NewSubs,
+                                proto_ver = ProtoVer})
+  when map_size(OldSubs) =:= 0 andalso
+       map_size(NewSubs) > 0 ->
+    rabbit_global_counters:consumer_created(ProtoVer);
 maybe_increment_consumer(_, _) ->
     ok.
 
-maybe_decrement_consumer(_WasConsumer = true,
-                         #state{proto_ver = ProtoVer} = State) ->
-    case has_subs(State) of
-        false ->
-            rabbit_global_counters:consumer_deleted(ProtoVer);
-        true ->
-            ok
-    end;
-maybe_decrement_consumer(_, _) ->
+maybe_decrement_consumer(#state{subscriptions = Subs,
+                                proto_ver = ProtoVer})
+  when map_size(Subs) > 0 ->
+    rabbit_global_counters:consumer_deleted(ProtoVer);
+maybe_decrement_consumer(_) ->
     ok.
 
-maybe_decrement_consumer(#state{proto_ver = ProtoVer,
-                                auth_state = #auth_state{}} = State) ->
-    case has_subs(State) of
-        true ->
-            rabbit_global_counters:consumer_deleted(ProtoVer);
-        false ->
-            ok
-    end;
-maybe_decrement_consumer(_) ->
+maybe_decrement_consumer(#state{subscriptions = OldSubs},
+                         #state{subscriptions = NewSubs,
+                                proto_ver = ProtoVer})
+  when map_size(OldSubs) > 0 andalso
+       map_size(NewSubs) =:= 0 ->
+    rabbit_global_counters:consumer_deleted(ProtoVer);
+maybe_decrement_consumer(_, _) ->
     ok.
 
 message_acknowledged(QName, #state{proto_ver = ProtoVer,
