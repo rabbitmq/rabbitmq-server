@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - 24_0
+        - 24_3
         - 25_0
         - 25_2
     timeout-minutes: 120
