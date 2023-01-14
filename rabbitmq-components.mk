@@ -113,14 +113,9 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
-<<<<<<< HEAD
 dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
-dep_prometheus = hex 4.9.1
-=======
-dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git master
 dep_prometheus = hex 4.10.0
->>>>>>> 95e2e02da0 (Update prometheus.erl to 4.10.0)
 dep_ra = hex 2.4.6
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
