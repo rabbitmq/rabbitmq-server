@@ -95,8 +95,9 @@ update_in_mnesia_tx(Username, UpdateFun) ->
 %% -------------------------------------------------------------------
 
 -spec get(Username) -> User | undefined when
-      Username :: vhost:name(),
-      User :: vhost:vhost().
+      Username :: internal_user:username(),
+      User :: internal_user:internal_user().
+
 %% @doc Returns the record of the internal user named `Username'.
 %%
 %% @returns the internal user record or `undefined' if no internal user is named
