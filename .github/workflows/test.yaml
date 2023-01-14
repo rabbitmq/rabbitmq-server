@@ -31,7 +31,6 @@ jobs:
       matrix:
         erlang_major:
         - "24"
-        - "25"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
