@@ -403,7 +403,7 @@ run_socket(State = #state{ deferred_recv = Data }) when Data =/= undefined ->
 run_socket(State = #state{ await_recv = true }) ->
     State;
 run_socket(State = #state{ socket = Sock }) ->
-    rabbit_net:setopts(Sock, [{active, once}]),
+    ok = rabbit_net:setopts(Sock, [{active, once}]),
     State#state{ await_recv = true }.
 
 control_throttle(State = #state{connection_state = ConnState,
@@ -506,8 +506,11 @@ i(protocol, #state{proc_state = ProcState}) ->
 i(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).
 
--spec format_status(gen_server:format_status()) ->
-    gen_server:format_status().
+-spec format_status(Status) -> Status when
+      Status :: #{state => term(),
+                  message => term(),
+                  reason => term(),
+                  log => [sys:system_event()]}.
 format_status(Status) ->
     maps:map(
       fun(state, State) ->
