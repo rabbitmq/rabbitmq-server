@@ -2,150 +2,28 @@
 name: OCI
 on:
   push:
+    paths-ignore:
+      - '.github/workflows/secondary-umbrella.yaml'
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
   RABBITMQ_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
   VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
 
   # This job will build one docker image per supported Erlang major version.
   # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
   #
-  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '24',
+  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '26',
   # the following tags will be pushed to Dockerhub:
   #
-  # * 111aaa-otp-min (image OTP 24)
-  # * main-otp-min (image OTP 24)
-  # * 111aaa-otp-max (image OTP 25)
-  # * main-otp-max (image OTP 25)
-
-  build-publish-dev:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-          # Build image for every supported Erlang major version.
-          # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
-          include:
-          - image_tag_suffix: otp-min
-            otp_major: 24
-          - image_tag_suffix: otp-max
-            otp_major: 25
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.11
-        with:
-          path: "/home/runner/repo-cache/"
-          key: repo-cache
-
-      - name: Configure Bazel
-        run: |
-          if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
-          cat << EOF >> user.bazelrc
-            build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-          EOF
-          fi
-          cat << EOF >> user.bazelrc
-            build:buildbuddy --build_metadata=ROLE=CI
-            build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --repository_cache=/home/runner/repo-cache/
-            build:buildbuddy --color=yes
-            build:buildbuddy --disk_cache=
-
-            build:buildbuddy --remote_download_toplevel
-          EOF
-
-      - name: Load version info
-        id: load-info
-        run: |
-          bazelisk build :otp_version --config=rbe-${{ matrix.otp_major }}
-          echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
-
-      - name: Build generic unix package
-        run: |
-          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
-          bazelisk build :package-generic-unix \
-            --config=rbe-${{ matrix.otp_major }}
-
-      - name: Resolve generic unix package path
-        run: |
-          echo "::set-output name=ARTIFACT_PATH::$(readlink -f ${GENERIC_UNIX_ARCHIVE})"
-        id: resolve-artifact-path
-
-      - name: Save the package as a workflow artifact
-        uses: actions/upload-artifact@v3
-        continue-on-error: true
-        with:
-          name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
-          path: ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Cache Docker layers
-        uses: actions/cache@v3.0.11
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.event.pull_request.head.sha || github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-
-
-      - name: Check for Push Credentials
-        id: authorized
-        run: |
-          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "::set-output name=PUSH::true"
-          else
-            echo "::set-output name=PUSH::false"
-          fi
-
-      - name: Login to DockerHub
-        if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      - name: Expand generic-unix-package
-        working-directory: packaging/docker-image
-        run: |
-          xzcat ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }} | tar xvf -
-
-      - name: Compute image tags
-        id: compute-tags
-        run: |
-          echo "::set-output name=TAG_1::${{ github.event.pull_request.head.sha || github.sha }}-${{ matrix.image_tag_suffix }}"
-          echo "::set-output name=TAG_2::${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
-
-      - name: Build and push
-        uses: docker/build-push-action@v3
-        with:
-          context: packaging/docker-image
-          pull: true
-          push: ${{ steps.authorized.outputs.PUSH }}
-          tags: |
-            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
-            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_2 }}
-          build-args: |
-            SKIP_PGP_VERIFY=true
-            PGP_KEYSERVER=pgpkeys.eu
-            OTP_VERSION=${{ steps.load-info.outputs.otp }}
-            SKIP_OTP_VERIFY=true
-            RABBITMQ_BUILD=rabbitmq_server-${{ github.event.pull_request.head.sha || github.sha }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
-
-      # Temp fix
-      # https://github.com/docker/build-push-action/issues/252
-      # https://github.com/moby/buildkit/issues/1896
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+  # * 111aaa-otp-min (image OTP 25)
+  # * main-otp-min (image OTP 25)
+  # * 111aaa-otp-max (image OTP 26)
+  # * main-otp-max (image OTP 26)
 
   build-publish-dev-bazel:
     runs-on: ubuntu-20.04
@@ -154,7 +32,7 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_version_id: 24
+            otp_version_id: 25_0
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 25_2
     steps:
@@ -166,7 +44,7 @@ jobs:
           sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
 
       - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.11
+        uses: actions/cache@v3.2.3
         with:
           path: "/home/runner/repo-cache/"
           key: repo-cache
@@ -239,7 +117,7 @@ jobs:
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}

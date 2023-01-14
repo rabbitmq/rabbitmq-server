@@ -2,7 +2,7 @@ name: Test
 on:
   push:
     branches:
-      - master
+      - main
       - v3.10.x
       - v3.9.x
       - v3.8.x
@@ -22,6 +22,9 @@ on:
       - '*.bazel'
       - .github/workflows/test.yaml
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     name: Test
@@ -29,21 +32,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-<<<<<<< HEAD
-        erlang_major:
-        - "24"
-        #! - "25"
-=======
         otp_version_id:
+        - 24_0
         - 25_0
         - 25_2
->>>>>>> cb8ee9c4bd (Adopt OTP 25.2)
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.0.11
+      uses: actions/cache@v3.2.3
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -70,7 +68,7 @@ jobs:
         sudo sysctl -w net.ipv4.tcp_keepalive_time=60
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
-          --config=rbe-${{ matrix.erlang_major }} \
+          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=-exclusive,-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures
@@ -81,17 +79,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-<<<<<<< HEAD
-        - erlang_version: "24"
-          elixir_version: 1.13.4
-        #! - erlang_version: "25"
-        #!   elixir_version: 1.13.4
-=======
+        - erlang_version: "24.3"
+          elixir_version: 1.14.0
         - erlang_version: "25.0"
           elixir_version: 1.14.0
         - erlang_version: "25.2"
           elixir_version: 1.14.0
->>>>>>> cb8ee9c4bd (Adopt OTP 25.2)
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
@@ -102,7 +95,7 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.0.11
+      uses: actions/cache@v3.2.3
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache

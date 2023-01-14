@@ -14,8 +14,10 @@ jobs:
       matrix:
         erlang_version:
         - "24"
+        - "25"
+        - "25.1"
         include:
-        - erlang_version: "24"
+        - erlang_version: "25"
           cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
@@ -37,7 +39,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v2-preview
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: execution-log-binary-A
         path: /tmp/exec.log
@@ -49,8 +51,9 @@ jobs:
       matrix:
         erlang_version:
         - "24"
+        - "25"
         include:
-        - erlang_version: "24"
+        - erlang_version: "25"
           cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
@@ -72,7 +75,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v2-preview
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: execution-log-binary-B
         path: /tmp/exec.log
@@ -87,7 +90,7 @@ jobs:
         repository: bazelbuild/bazel
         path: bazel
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.0.11
+      uses: actions/cache@v3.2.3
       with:
         path: "/home/runner/.cache/bazel"
         key: bazel
@@ -105,7 +108,7 @@ jobs:
           --output_path=/tmp/execution-log-binary-A.log.txt \
           --output_path=/tmp/execution-log-binary-B.log.txt
     - name: SAVE PARSED LOGS
-      uses: actions/upload-artifact@v2-preview
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: parsed-logs
         path: /tmp/execution-log-binary-*.log.txt
