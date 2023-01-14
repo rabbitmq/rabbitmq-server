@@ -122,7 +122,6 @@ jobs:
       matrix:
         erlang_major:
         - "24"
-        - "25"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -165,8 +164,6 @@ jobs:
       matrix:
         include:
         - erlang_version: "24"
-          elixir_version: 1.13.4
-        - erlang_version: "25"
           elixir_version: 1.13.4
     timeout-minutes: 60
     steps:
