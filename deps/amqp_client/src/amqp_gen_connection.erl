@@ -16,7 +16,6 @@
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/3, server_close/2, info/2, info_keys/0, info_keys/1,
          register_blocked_handler/2, update_secret/2]).
--export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -37,6 +36,36 @@
 -record(closing, {reason,
                   close,
                   from = none}).
+
+-type connect_params() :: {ServerProperties :: term(),
+                           ChannelMax :: term(),
+                           ChMgr :: term(),
+                           NewState :: term()}.
+-callback init() -> {ok, InitialState :: term()}.
+-callback terminate(Reason :: term(), FinalState :: term()) -> Ignored :: term().
+-callback connect(AmqpParams :: #amqp_params_network{} | #amqp_params_direct{},
+                  SIF :: term(),
+                  TypeSup :: term(),
+                  State :: term()) ->
+    {ok, connect_params() } |
+    {closing, connect_params(), AmqpError :: term(), Reply :: term()} |
+    {error, Error :: term()}.
+
+-callback do(Method :: term(), State :: term()) -> Ignored :: term().
+-callback open_channel_args(State :: term()) -> OpenChannelArgs :: term().
+-callback i(InfoItem :: atom(), State :: term()) -> Info :: term().
+-callback info_keys() -> [InfoItem :: atom()].
+
+-callback handle_message(Message :: term(), State :: term()) ->
+    {ok, NewState :: term() } |
+    {stop, Reason :: term(), FinalState :: term()}.
+-callback closing(flush|abrupt, Reason :: term(), State :: term()) ->
+    {ok, NewState :: term() } |
+    {stop, Reason :: term(), FinalState :: term()}.
+-callback channels_terminated(State :: term()) ->
+    {ok, NewState :: term() } |
+    {stop, Reason :: term(), FinalState :: term()}.
+
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -92,47 +121,6 @@ info_keys(Pid) ->
 %%---------------------------------------------------------------------------
 %% Behaviour
 %%---------------------------------------------------------------------------
-
-behaviour_info(callbacks) ->
-    [
-     %% init() -> {ok, InitialState}
-     {init, 0},
-
-     %% terminate(Reason, FinalState) -> Ignored
-     {terminate, 2},
-
-     %% connect(AmqpParams, SIF, TypeSup, State) ->
-     %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
-     %%         {error, Error}
-     %% where
-     %%     ConnectParams = {ServerProperties, ChannelMax, ChMgr, NewState}
-     {connect, 4},
-
-     %% do(Method, State) -> Ignored
-     {do, 2},
-
-     %% open_channel_args(State) -> OpenChannelArgs
-     {open_channel_args, 1},
-
-      %% i(InfoItem, State) -> Info
-     {i, 2},
-
-     %% info_keys() -> [InfoItem]
-     {info_keys, 0},
-
-     %% CallbackReply = {ok, NewState} | {stop, Reason, FinalState}
-
-     %% handle_message(Message, State) -> CallbackReply
-     {handle_message, 2},
-
-     %% closing(flush|abrupt, Reason, State) -> CallbackReply
-     {closing, 3},
-
-     %% channels_terminated(State) -> CallbackReply
-     {channels_terminated, 1}
-    ];
-behaviour_info(_Other) ->
-    undefined.
 
 callback(Function, Params, State = #state{module = Mod,
                                           module_state = MState}) ->
@@ -287,12 +275,12 @@ handle_method(#'connection.close_ok'{}, State = #state{closing = Closing}) ->
     end,
     {stop, {shutdown, closing_to_reason(Closing)}, State};
 handle_method(#'connection.blocked'{} = Blocked, State = #state{block_handler = BlockHandler}) ->
-    case BlockHandler of none        -> ok;
+    _ = case BlockHandler of none        -> ok;
                          {Pid, _Ref} -> Pid ! Blocked
     end,
     {noreply, State};
 handle_method(#'connection.unblocked'{} = Unblocked, State = #state{block_handler = BlockHandler}) ->
-    case BlockHandler of none        -> ok;
+    _ = case BlockHandler of none        -> ok;
                          {Pid, _Ref} -> Pid ! Unblocked
     end,
     {noreply, State};
@@ -310,7 +298,7 @@ handle_method(Other, State) ->
 %%---------------------------------------------------------------------------
 
 app_initiated_close(Close, From, Timeout, State) ->
-    case Timeout of
+    _ = case Timeout of
         infinity -> ok;
         _        -> erlang:send_after(Timeout, self(), closing_timeout)
     end,
