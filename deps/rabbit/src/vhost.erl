@@ -171,7 +171,7 @@ get_description(VHost) ->
 
 -spec get_tags(vhost()) -> [atom()].
 get_tags(#vhost{} = VHost) ->
-    maps:get(tags, get_metadata(VHost), undefined);
+    maps:get(tags, get_metadata(VHost), []);
 get_tags(VHost) ->
     vhost_v1:get_tags(VHost).
 
