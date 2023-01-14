@@ -24,7 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
       vhost,
       desc,
       parse_tags(tags),
-<<<<<<< HEAD
       Helpers.cli_acting_user()
     ])
   end
@@ -34,8 +33,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
       vhost,
       "",
       parse_tags(tags),
-=======
->>>>>>> dfdabdb4ca (Conform vhost tags to a list when set with the cli in all cases)
       Helpers.cli_acting_user()
     ])
   end
