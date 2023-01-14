@@ -32,7 +32,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, <<"mqtt">>).
 
--record(auth_state, {username :: binary(),
+-record(auth_state, {username :: rabbit_types:username(),
                      user :: #user{},
                      vhost :: rabbit_types:vhost(),
                      authz_ctx :: #{binary() := binary()}

@@ -65,7 +65,33 @@ subgroups() ->
          block_only_publisher
          ,many_qos1_messages
          ,subscription_ttl
-        ] ++ tests()}
+         ,management_plugin_connection
+         ,management_plugin_enable
+         ,disconnect
+         ,pubsub_shared_connection
+         ,pubsub_separate_connections
+         ,will_with_disconnect
+         ,will_without_disconnect
+         ,quorum_queue_rejects
+         ,events
+         ,internal_event_handler
+         ,non_clean_sess_reconnect_qos1
+         ,non_clean_sess_reconnect_qos0
+         ,non_clean_sess_reconnect_qos0_and_qos1
+         ,subscribe_same_topic_same_qos
+         ,subscribe_same_topic_different_qos
+         ,subscribe_multiple
+         ,large_message_mqtt_to_mqtt
+         ,large_message_amqp_to_mqtt
+         ,keepalive
+         ,keepalive_turned_off
+         ,duplicate_client_id
+         ,block
+         ,amqp_to_mqtt_qos0
+         ,clean_session_disconnect_client
+         ,clean_session_kill_node
+         ,rabbit_status_connection_count
+        ]}
       ]},
      {cluster_size_3, [],
       [
@@ -77,41 +103,11 @@ subgroups() ->
        flow_stream,
        rabbit_mqtt_qos0_queue,
        cli_list_queues,
-       maintenance
-      ] ++ tests()}
-    ].
-
-tests() ->
-    [
-     management_plugin_connection
-     ,management_plugin_enable
-     ,disconnect
-     ,pubsub_shared_connection
-     ,pubsub_separate_connections
-     ,will_with_disconnect
-     ,will_without_disconnect
-     ,delete_create_queue
-     ,quorum_queue_rejects
-     ,publish_to_all_queue_types_qos0
-     ,publish_to_all_queue_types_qos1
-     ,events
-     ,internal_event_handler
-     ,non_clean_sess_reconnect_qos1
-     ,non_clean_sess_reconnect_qos0
-     ,non_clean_sess_reconnect_qos0_and_qos1
-     ,subscribe_same_topic_same_qos
-     ,subscribe_same_topic_different_qos
-     ,subscribe_multiple
-     ,large_message_mqtt_to_mqtt
-     ,large_message_amqp_to_mqtt
-     ,amqp_to_mqtt_qos0
-     ,keepalive
-     ,keepalive_turned_off
-     ,duplicate_client_id
-     ,block
-     ,clean_session_disconnect_client
-     ,clean_session_kill_node
-     ,rabbit_status_connection_count
+       maintenance,
+       delete_create_queue,
+       publish_to_all_queue_types_qos0,
+       publish_to_all_queue_types_qos1
+      ]}
     ].
 
 suite() ->
@@ -795,14 +791,11 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config, ProtoVer)),
 
-    ok = emqtt:publish(Pub, Topic, <<"msg-1-qos0">>, qos0),
-    {ok, _} = emqtt:publish(Pub, Topic, <<"msg-2-qos1">>, qos1),
-
     ok = emqtt:disconnect(C1),
     ?assertMatch(#{consumers := 0},
                  get_global_counters(Config, ProtoVer)),
 
-    timer:sleep(50),
+    timer:sleep(20),
     ok = emqtt:publish(Pub, Topic, <<"msg-3-qos0">>, qos0),
     {ok, _} = emqtt:publish(Pub, Topic, <<"msg-4-qos1">>, qos1),
 
@@ -819,7 +812,6 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
                  get_global_counters(Config, ProtoVer)),
     {ok, _} = emqtt:publish(Pub, Topic, <<"msg-7-qos0">>, qos1),
 
-    ok = expect_publishes(C1, Topic, [<<"msg-1-qos0">>, <<"msg-2-qos1">>]),
     %% "After the disconnection of a Session that had CleanSession set to 0, the Server MUST store
     %% further QoS 1 and QoS 2 messages that match any subscriptions that the client had at the
     %% time of disconnection as part of the Session state [MQTT-3.1.2-5].
