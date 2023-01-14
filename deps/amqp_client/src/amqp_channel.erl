@@ -774,13 +774,8 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler = ReturnHandler}) ->
-<<<<<<< HEAD
-    case ReturnHandler of
-        none        -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is "
-=======
     _ = case ReturnHandler of
         none        -> ?LOG_WARN("Channel (~tp): received {~tp, ~tp} but there is "
->>>>>>> 60093b0689 (Fix all dialyzer warnings in `amqp_client`)
                                  "no return handler registered",
                                  [self(), BasicReturn, AmqpMsg]);
         {Pid, _Ref} -> Pid ! {BasicReturn, AmqpMsg}
