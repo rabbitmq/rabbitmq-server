@@ -31,6 +31,7 @@ RUNTIME_DEPS = [
     "//deps/rabbitmq_management_agent:erlang_app",
     "//deps/rabbitmq_web_dispatch:erlang_app",
     "@accept//:erlang_app",
+    "@cowboy//:erlang_app",
 ]
 
 rabbitmq_app(
@@ -45,13 +46,12 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = BUILD_DEPS + DEPS,
+    deps = BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
