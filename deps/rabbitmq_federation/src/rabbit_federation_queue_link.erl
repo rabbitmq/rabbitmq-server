@@ -31,7 +31,7 @@ start_link(Args) ->
 run(QName)   -> cast(QName, run).
 pause(QName) -> cast(QName, pause).
 go()         ->
-    rabbit_federation_pg:start_scope(),
+    _ = rabbit_federation_pg:start_scope(),
     cast(go).
 
 %%----------------------------------------------------------------------------
@@ -46,12 +46,7 @@ all() ->
     pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    case pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName})) of
-        {error, {no_such_group, _}} ->
-            [];
-        Members ->
-            Members
-    end.
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName})).
 
 %%----------------------------------------------------------------------------
 
@@ -77,7 +72,7 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     end.
 
 handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
+    {stop, {unexpected_call, Msg}, {unexpected_call, Msg}, State}.
 
 handle_cast(maybe_go, State) ->
     go(State);
