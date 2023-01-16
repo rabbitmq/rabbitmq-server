@@ -794,13 +794,8 @@ open(info, {Closed, Socket}, #statem_data{connection = Connection})
 open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
-<<<<<<< HEAD
-    demonitor_all_streams(Connection),
-    rabbit_log_connection:error("Socket error ~p [~w] [~w]",
-=======
     _ = demonitor_all_streams(Connection),
     rabbit_log_connection:error("Socket error ~tp [~w] [~w]",
->>>>>>> 2c4e4fb691 (Fix all dialyzer warnings in rabbitmq_stream)
                                 [Reason, Socket, self()]),
     stop;
 open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
