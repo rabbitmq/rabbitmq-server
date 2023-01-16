@@ -29,7 +29,7 @@ publish(Msg, Reason, X, RK, SourceQName) ->
     {QNames, Cycles} = detect_cycles(Reason, DLMsg,
                                      rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    Qs0 = rabbit_amqqueue:lookup(QNames),
+    Qs0 = rabbit_amqqueue:lookup_many(QNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     _ = rabbit_queue_type:deliver(Qs, Delivery, stateless),
     ok.

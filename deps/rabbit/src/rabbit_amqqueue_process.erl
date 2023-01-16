@@ -283,7 +283,7 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(
     fun (BQS) ->
-        update_state(stopped, Q0),
+        _ = update_state(stopped, Q0),
         BQ:terminate(R, BQS)
     end, State);
 terminate({shutdown, missing_owner} = Reason, State) ->

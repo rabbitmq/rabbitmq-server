@@ -130,11 +130,21 @@ is_being_drained_consistent_read(Node) ->
 
 -spec status_local_read(node()) -> maintenance_status().
 status_local_read(Node) ->
-    rabbit_db_maintenance:get(Node).
+    case rabbit_db_maintenance:get(Node) of
+        undefined ->
+            ?DEFAULT_STATUS;
+        Status ->
+            Status
+    end.
 
 -spec status_consistent_read(node()) -> maintenance_status().
 status_consistent_read(Node) ->
-    rabbit_db_maintenance:get_consistent(Node).
+    case rabbit_db_maintenance:get_consistent(Node) of
+        undefined ->
+            ?DEFAULT_STATUS;
+        Status ->
+            Status
+    end.
 
  -spec filter_out_drained_nodes_local_read([node()]) -> [node()].
 filter_out_drained_nodes_local_read(Nodes) ->

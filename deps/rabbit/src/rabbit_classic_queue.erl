@@ -127,7 +127,7 @@ is_recoverable(Q) when ?is_amqqueue(Q) ->
     %% record if it is a mirrored queue (such info is now obtained from
     %% the policy). Thus, we must check if the local pid is alive
     %% - if the record is present - in order to restart.
-    (rabbit_amqqueue:exists(Q)
+    (not rabbit_db_queue:consistent_exists(amqqueue:get_name(Q))
      orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q))).
 
 recover(VHost, Queues) ->

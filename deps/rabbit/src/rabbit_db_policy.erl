@@ -12,12 +12,18 @@
 
 -export([update/3]).
 
+%% -------------------------------------------------------------------
+%% update().
+%% -------------------------------------------------------------------
+
 -spec update(VHostName, UpdateXFun, UpdateQFun) -> Ret when
       VHostName :: vhost:name(),
       Exchange :: rabbit_types:exchange(),
       Queue :: amqqueue:amqqueue(),
-      UpdateXFun :: fun((Exchange) -> Exchange),
-      UpdateQFun :: fun((Queue) -> Queue),
+      UpdateXFun :: fun((Exchange) -> #{exchange => Exchange,
+                                        update_function => fun((Exchange) -> Exchange)}),
+      UpdateQFun :: fun((Queue) -> #{queue => Queue,
+                                     update_function => fun((Queue) -> Queue)}),
       Ret :: {[{Exchange, Exchange}], [{Queue, Queue}]}.
 
 update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
@@ -33,7 +39,7 @@ update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
             rabbit_exchange, rabbit_durable_exchange],
     rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
-              [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
+              _ = [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
               Exchanges0 = rabbit_db_exchange:get_all(VHost),
               Queues0 = rabbit_db_queue:get_all(VHost),
               Exchanges = [GetUpdatedExchangeFun(X) || X <- Exchanges0],

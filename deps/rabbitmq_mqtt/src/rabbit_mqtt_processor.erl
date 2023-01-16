@@ -1253,7 +1253,7 @@ deliver_to_queues(Delivery,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
-    Qs0 = rabbit_amqqueue:lookup(RoutedToQNames),
+    Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
         {ok, QStates, Actions} ->

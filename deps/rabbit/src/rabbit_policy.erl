@@ -269,7 +269,7 @@ recover0() ->
                        operator_policy = match(Name, OpPolicies)})
           || X = #exchange{name = Name} <- Xs0],
     Qs = rabbit_amqqueue:list_durable(),
-    _ = rabbit_db_exchange:insert(Xs),
+    _ = rabbit_db_exchange:set(Xs),
     Qs0 = [begin
                QName = amqqueue:get_name(Q0),
                Policy1 = match(QName, Policies),
@@ -278,7 +278,9 @@ recover0() ->
                Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
                rabbit_queue_decorator:set(Q2)
            end || Q0 <- Qs],
-    _ = rabbit_db_queue:insert(Qs0),
+    %% This function is just used to recover policies, thus no transient entities
+    %% are considered for this process as there is none to recover on boot.
+    _ = rabbit_db_queue:set_many(Qs0),
     ok.
 
 invalid_file() ->
@@ -493,8 +495,6 @@ update_queue(Policy, OpPolicy, Decorators) ->
             amqqueue:set_decorators(Queue3, Decorators)
     end.
 
-maybe_notify_of_policy_change(no_change, _PolicyDef, _ActingUser)->
-    ok;
 maybe_notify_of_policy_change({X1 = #exchange{}, X2 = #exchange{}}, _PolicyDef, _ActingUser) ->
     rabbit_exchange:policy_changed(X1, X2);
 %% policy has been cleared

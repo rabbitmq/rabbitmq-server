@@ -84,13 +84,6 @@ insert0_in_mnesia(Key, Cached, Message, Length) ->
                          content = [Message|lists:sublist(Cached, Length-1)]},
                  write).
 
-add_to_cache(Cached, Message, undefined) ->
-    add_to_cache(Cached, Message, ?KEEP_NB);
-add_to_cache(Cached, Message, {_Type, Length}) ->
-    add_to_cache(Cached, Message, Length);
-add_to_cache(Cached, Message, Length) ->
-    [Message|lists:sublist(Cached, Length-1)].
-
 %% -------------------------------------------------------------------
 %% delete().
 %% -------------------------------------------------------------------

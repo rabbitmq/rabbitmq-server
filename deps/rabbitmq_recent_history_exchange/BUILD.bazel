@@ -14,6 +14,10 @@ APP_NAME = "rabbitmq_recent_history_exchange"
 
 APP_DESCRIPTION = "RabbitMQ Recent History Exchange"
 
+BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
 DEPS = [
     "//deps/rabbit_common:erlang_app",
 ]
@@ -26,6 +30,7 @@ rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

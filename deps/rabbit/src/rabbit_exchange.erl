@@ -17,13 +17,11 @@
          route/2, delete/3, validate_binding/2, count/0]).
 -export([list_names/0]).
 -export([serialise_events/1]).
-%% these must be run inside a mnesia tx
 -export([serial/1, peek_serial/1]).
 
 %%----------------------------------------------------------------------------
 
 -export_type([name/0, type/0]).
-
 -type name() :: rabbit_types:r('exchange').
 -type type() :: atom().
 -type fun_name() :: atom().
@@ -79,13 +77,12 @@ serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
               rabbit_exchange_decorator:select(all, Decorators))
         orelse (type_to_module(Type)):serialise_events().
 
--spec serial(rabbit_types:exchange()) ->
-                       fun((boolean()) -> 'none' | pos_integer()).
+-spec serial(rabbit_types:exchange()) -> 'none' | pos_integer().
 
 serial(X) ->
     case serialise_events(X) of
         false -> 'none';
-        true -> rabbit_db_exchange:next_serial(X)
+        true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
 -spec declare
@@ -215,7 +212,7 @@ list() ->
 -spec count() -> non_neg_integer().
 
 count() ->
-    rabbit_db_exchange:get_all().
+    rabbit_db_exchange:count().
 
 -spec list_names() -> [rabbit_exchange:name()].
 
@@ -254,8 +251,7 @@ update_scratch(Name, App, Fun) ->
                      {ok, X} -> rabbit_exchange_decorator:active(X);
                      {error, not_found} -> []
                  end,
-    rabbit_db_exchange:update(Name, update_scratch_fun(App, Fun, Decorators)),
-    ok.
+    ok = rabbit_db_exchange:update(Name, update_scratch_fun(App, Fun, Decorators)).
 
 update_scratch_fun(App, Fun, Decorators) ->
     fun(X = #exchange{scratches = Scratches0}) ->
@@ -272,11 +268,11 @@ update_scratch_fun(App, Fun, Decorators) ->
                        decorators = Decorators}
     end.
 
--spec update_decorators(name(), [atom()] | none | undefined) -> 'ok'.
-
+-spec update_decorators(name(), {[Decorator], [Decorator]}) -> 'ok' when
+      Decorator :: atom().
 update_decorators(Name, Decorators) ->
     Fun = fun(X) -> X#exchange{decorators = Decorators} end,
-    rabbit_db_exchange:update(Name, Fun).
+    ok = rabbit_db_exchange:update(Name, Fun).
 
 -spec immutable(rabbit_types:exchange()) -> rabbit_types:exchange().
 
@@ -444,9 +440,7 @@ process_deletions({error, _} = E) ->
 process_deletions({deleted, #exchange{name = XName} = X, Bs, Deletions}) ->
     rabbit_binding:process_deletions(
       rabbit_binding:add_deletion(
-        XName, {X, deleted, Bs}, Deletions));
-process_deletions(Deletions) ->
-    rabbit_binding:process_deletions(Deletions).
+        XName, {X, deleted, Bs}, Deletions)).
 
 -spec validate_binding
         (rabbit_types:exchange(), rabbit_types:binding())

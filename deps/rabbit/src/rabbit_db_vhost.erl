@@ -24,6 +24,8 @@
          with_fun_in_mnesia_tx/2,
          delete/1]).
 
+-export([clear/0]).
+
 -define(MNESIA_TABLE, rabbit_vhost).
 
 %% -------------------------------------------------------------------
@@ -319,3 +321,20 @@ delete_in_mnesia_tx(VHostName) ->
     Existed = mnesia:wread({?MNESIA_TABLE, VHostName}) =/= [],
     mnesia:delete({?MNESIA_TABLE, VHostName}),
     Existed.
+
+%% -------------------------------------------------------------------
+%% clear().
+%% -------------------------------------------------------------------
+
+-spec clear() -> ok.
+%% @doc Deletes all vhosts.
+%%
+%% @private
+
+clear() ->
+    rabbit_db:run(
+      #{mnesia => fun() -> clear_in_mnesia() end}).
+
+clear_in_mnesia() ->
+    {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),
+    ok.

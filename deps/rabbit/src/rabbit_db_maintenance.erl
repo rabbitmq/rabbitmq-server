@@ -64,8 +64,9 @@ status_table_definition() ->
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(Status) -> ok when
-      Status :: rabbit_maintenance:maintenance_status().
+-spec set(Status) -> Ret when
+      Status :: rabbit_maintenance:maintenance_status(),
+      Ret :: boolean().
 %% @doc Sets the maintenance status for the local node
 %%
 %% @private
@@ -104,7 +105,7 @@ set_in_mnesia(Status) ->
 
 -spec get(Node) -> Status when
       Node :: node(),
-      Status :: rabbit_maintenance:maintenance_status().
+      Status :: undefined | rabbit_maintenance:maintenance_status().
 %% @doc Returns the status for the given node using a local query.
 %%
 %% @returns the status if any, or `undefined'.
@@ -130,7 +131,7 @@ get_in_mnesia(Node) ->
 
 -spec get_consistent(Node) -> Status when
       Node :: node(),
-      Status :: rabbit_maintenance:maintenance_status().
+      Status :: undefined | rabbit_maintenance:maintenance_status().
 %% @doc Returns the status for the given node using a consistent query.
 %%
 %% @returns the status if any, or `undefined'.

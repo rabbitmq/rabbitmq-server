@@ -134,6 +134,7 @@
       Ret :: rabbit_feature_flags:enable_callback_ret().
 direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
     TableName = rabbit_index_route,
+    ok = rabbit_table:wait([rabbit_route, rabbit_exchange], _Retry = true),
     try
         case rabbit_db_binding:create_index_route_table() of
             ok ->
@@ -142,7 +143,7 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
                 ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to add copy of table ~ts to "
                   "node ~tp: ~tp",
-                  [FeatureName, NewTable, node(), Err],
+                   [FeatureName, TableName, node(), Err],
                   #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                 Error
         end

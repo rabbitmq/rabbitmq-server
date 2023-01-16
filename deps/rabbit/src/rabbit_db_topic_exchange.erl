@@ -9,21 +9,28 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([insert/1, delete_all_for_exchange/1, delete/1, match/2]).
+-export([set/1, delete_all_for_exchange/1, delete/1, match/2]).
+
+%% For testing
+-export([clear/0]).
+
+-define(MNESIA_NODE_TABLE, rabbit_topic_trie_node).
+-define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
+-define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
 
 %% -------------------------------------------------------------------
-%% insert().
+%% set().
 %% -------------------------------------------------------------------
 
--spec insert(Binding) -> ok when
+-spec set(Binding) -> ok when
       Binding :: rabbit_types:binding().
-%% @doc Inserts a topic binding.
+%% @doc Sets a topic binding.
 %%
 %% @private
 
-insert(#binding{source = XName, key = RoutingKey, destination = Destination, args = Args}) ->
+set(#binding{source = XName, key = RoutingKey, destination = Destination, args = Args}) ->
     rabbit_db:run(
-      #{mnesia => fun() -> insert_in_mnesia(XName, RoutingKey, Destination, Args) end
+      #{mnesia => fun() -> set_in_mnesia(XName, RoutingKey, Destination, Args) end
        }).
 
 %% -------------------------------------------------------------------
@@ -31,7 +38,7 @@ insert(#binding{source = XName, key = RoutingKey, destination = Destination, arg
 %% -------------------------------------------------------------------
 
 -spec delete_all_for_exchange(ExchangeName) -> ok when
-      ExchangeName :: rabbit_types:r('exchange').
+      ExchangeName :: rabbit_exchange:name().
 %% @doc Deletes all topic bindings for the exchange named `ExchangeName'
 %%
 %% @private
@@ -61,7 +68,7 @@ delete(Bs) when is_list(Bs) ->
 %% -------------------------------------------------------------------
 
 -spec match(ExchangeName, RoutingKey) -> ok when
-      ExchangeName :: rabbit_types:r('exchange'),
+      ExchangeName :: rabbit_exchange:name(),
       RoutingKey :: binary().
 %% @doc Finds the topic binding matching the given exchange and routing key and returns
 %% the destination of the binding
@@ -78,13 +85,33 @@ match(XName, RoutingKey) ->
             end
        }).
 
+%% -------------------------------------------------------------------
+%% clear().
+%% -------------------------------------------------------------------
+
+-spec clear() -> ok.
+%% @doc Deletes all topic bindings
+%%
+%% @private
+
+clear() ->
+    rabbit_db:run(
+      #{mnesia => fun() -> clear_in_mnesia() end
+       }).
+
+clear_in_mnesia() ->
+    {atomic, ok} = mnesia:clear_table(?MNESIA_NODE_TABLE),
+    {atomic, ok} = mnesia:clear_table(?MNESIA_EDGE_TABLE),
+    {atomic, ok} = mnesia:clear_table(?MNESIA_BINDING_TABLE),
+    ok.
+
 %% Internal
 %% --------------------------------------------------------------
 
 split_topic_key(Key) ->
     split_topic_key(Key, [], []).
 
-insert_in_mnesia(XName, RoutingKey, Destination, Args) ->
+set_in_mnesia(XName, RoutingKey, Destination, Args) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               FinalNode = follow_down_create(XName, split_topic_key(RoutingKey)),
@@ -106,19 +133,19 @@ match_in_mnesia(XName, RoutingKey) ->
     mnesia:async_dirty(fun trie_match/2, [XName, Words]).
 
 trie_remove_all_nodes(X) ->
-    remove_all(rabbit_topic_trie_node,
+    remove_all(?MNESIA_NODE_TABLE,
                #topic_trie_node{trie_node = #trie_node{exchange_name = X,
                                                        _             = '_'},
                                 _         = '_'}).
 
 trie_remove_all_edges(X) ->
-    remove_all(rabbit_topic_trie_edge,
+    remove_all(?MNESIA_EDGE_TABLE,
                #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
                                                        _             = '_'},
                                 _         = '_'}).
 
 trie_remove_all_bindings(X) ->
-    remove_all(rabbit_topic_trie_binding,
+    remove_all(?MNESIA_BINDING_TABLE,
                #topic_trie_binding{
                  trie_binding = #trie_binding{exchange_name = X, _ = '_'},
                  _            = '_'}).
@@ -131,12 +158,12 @@ delete_in_mnesia_tx(Bs) ->
     %% See rabbit_binding:lock_route_tables for the rationale for
     %% taking table locks.
     _ = case Bs of
-            [_] -> ok;
-            _   -> [mnesia:lock({table, T}, write) ||
-                       T <- [rabbit_topic_trie_node,
-                             rabbit_topic_trie_edge,
-                             rabbit_topic_trie_binding]]
-        end,
+        [_] -> ok;
+        _   -> [mnesia:lock({table, T}, write) ||
+                   T <- [?MNESIA_NODE_TABLE,
+                         ?MNESIA_EDGE_TABLE,
+                         ?MNESIA_BINDING_TABLE]]
+    end,
     [case follow_down_get_path(X, split_topic_key(K)) of
          {ok, Path = [{FinalNode, _} | _]} ->
              trie_remove_binding(X, FinalNode, D, Args),
@@ -222,7 +249,7 @@ follow_down(X, CurNode, AccFun, Acc, Words = [W | RestW]) ->
 remove_path_if_empty(_, [{root, none}]) ->
     ok;
 remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
-    case mnesia:read(rabbit_topic_trie_node,
+    case mnesia:read(?MNESIA_NODE_TABLE,
                      #trie_node{exchange_name = X, node_id = Node}, write) of
         [] -> trie_remove_edge(X, Parent, Node, W),
               remove_path_if_empty(X, RestPath);
@@ -230,7 +257,7 @@ remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
     end.
 
 trie_child(X, Node, Word) ->
-    case mnesia:read({rabbit_topic_trie_edge,
+    case mnesia:read({?MNESIA_EDGE_TABLE,
                       #trie_edge{exchange_name = X,
                                  node_id       = Node,
                                  word          = Word}}) of
@@ -244,10 +271,10 @@ trie_bindings(X, Node) ->
                                    node_id       = Node,
                                    destination   = '$1',
                                    arguments     = '_'}},
-    mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
+    mnesia:select(?MNESIA_BINDING_TABLE, [{MatchHead, [], ['$1']}]).
 
 trie_update_node_counts(X, Node, Field, Delta) ->
-    E = case mnesia:read(rabbit_topic_trie_node,
+    E = case mnesia:read(?MNESIA_NODE_TABLE,
                          #trie_node{exchange_name = X,
                                     node_id       = Node}, write) of
             []   -> #topic_trie_node{trie_node = #trie_node{
@@ -259,9 +286,9 @@ trie_update_node_counts(X, Node, Field, Delta) ->
         end,
     case setelement(Field, E, element(Field, E) + Delta) of
         #topic_trie_node{edge_count = 0, binding_count = 0} ->
-            ok = mnesia:delete_object(rabbit_topic_trie_node, E, write);
+            ok = mnesia:delete_object(?MNESIA_NODE_TABLE, E, write);
         EN ->
-            ok = mnesia:write(rabbit_topic_trie_node, EN, write)
+            ok = mnesia:write(?MNESIA_NODE_TABLE, EN, write)
     end.
 
 trie_add_edge(X, FromNode, ToNode, W) ->
@@ -273,7 +300,7 @@ trie_remove_edge(X, FromNode, ToNode, W) ->
     trie_edge_op(X, FromNode, ToNode, W, fun mnesia:delete_object/3).
 
 trie_edge_op(X, FromNode, ToNode, W, Op) ->
-    ok = Op(rabbit_topic_trie_edge,
+    ok = Op(?MNESIA_EDGE_TABLE,
             #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
                                                     node_id       = FromNode,
                                                     word          = W},
@@ -289,7 +316,7 @@ trie_remove_binding(X, Node, D, Args) ->
     trie_binding_op(X, Node, D, Args, fun mnesia:delete_object/3).
 
 trie_binding_op(X, Node, D, Args, Op) ->
-    ok = Op(rabbit_topic_trie_binding,
+    ok = Op(?MNESIA_BINDING_TABLE,
             #topic_trie_binding{
               trie_binding = #trie_binding{exchange_name = X,
                                            node_id       = Node,

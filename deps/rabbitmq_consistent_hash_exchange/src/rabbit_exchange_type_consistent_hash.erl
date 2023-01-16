@@ -32,7 +32,7 @@
                     [exchange, <<"x-consistent-hash">>]}}]}).
 
 -rabbit_boot_step(
-   {rabbit_exchange_type_consistent_hash_mnesia,
+   {rabbit_exchange_type_consistent_hash_metadata_store,
     [{description, "exchange type x-consistent-hash: shared state"},
      {mfa,         {?MODULE, init, []}},
      {requires,    database},
@@ -48,7 +48,7 @@
 
 init() ->
     rabbit_db_ch_exchange:setup_schema(),
-    recover(),
+    _ = recover(),
     ok.
 
 info(_X) -> [].

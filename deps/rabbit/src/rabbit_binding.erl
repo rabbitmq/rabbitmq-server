@@ -9,7 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([recover/0, recover/2, exists/1, add/2, add/3, remove/3]).
+-export([recover/0, recover/2, exists/1, add/2, add/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2, list_for_source_and_destination/3,
          list_explicit/0]).
@@ -150,24 +150,27 @@ binding_type0(false, true) ->
 binding_type0(_, _) ->
     transient.
 
+-spec remove(rabbit_types:binding(), rabbit_types:username()) -> bind_res().
+remove(Binding, ActingUser) -> remove(Binding, fun (_Src, _Dst) -> ok end, ActingUser).
+
 -spec remove(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
 remove(Binding0, InnerFun, ActingUser) ->
     Binding = sort_args(Binding0),
     case
         rabbit_db_binding:delete(Binding, InnerFun)
     of
-        ok ->
-            ok;
         {error, _} = Err ->
             Err;
-        Deletions ->
+        ok ->
+            ok;
+        {ok, Deletions} ->
             notify_deletions(Deletions, ActingUser)
     end.
 
 -spec list_explicit() -> bindings().
 
 list_explicit() ->
-    rabbit_db_binding:get_all_explicit().
+    rabbit_db_binding:get_all().
 
 -spec list(rabbit_types:vhost()) -> bindings().
 
@@ -295,6 +298,15 @@ group_bindings_fold(Fun, Acc, [B = #binding{source = SrcName} | Bs],
                     OnlyDurable) ->
     group_bindings_fold(Fun, SrcName, Acc, Bs, [B], OnlyDurable).
 
+-spec group_bindings_fold(Fun, Name, Deletions, [Binding], [Binding], OnlyDurable)
+                         -> Ret when
+      Fun :: fun((Name, [Binding], Deletions, OnlyDurable) ->
+                        Deletions),
+      Name :: rabbit_exchange:name(),
+      Deletions :: rabbit_binding:deletions(),
+      Binding :: rabbit_types:binding(),
+      OnlyDurable :: boolean(),
+      Ret :: Deletions.
 group_bindings_fold(
   Fun, SrcName, Acc, [B = #binding{source = SrcName} | Bs], Bindings,
   OnlyDurable) ->
@@ -399,7 +411,7 @@ notify_bindings_deletion(Bs, ActingUser) ->
      || B <- Bs],
     ok.
 
--spec process_deletions(deletions()) -> rabbit_misc:thunk('ok').
+-spec process_deletions(deletions()) -> deletions().
 process_deletions(Deletions) ->
     dict:map(fun (_XName, {X, deleted, Bindings}) ->
                      Bs = lists:flatten(Bindings),

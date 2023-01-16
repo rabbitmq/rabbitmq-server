@@ -49,7 +49,7 @@ delete(_Serial, #exchange{name = X}) ->
 policy_changed(_X1, _X2) -> ok.
 
 add_binding(_Serial, _Exchange, Binding) ->
-    rabbit_db_topic_exchange:insert(Binding).
+    rabbit_db_topic_exchange:set(Binding).
 
 remove_bindings(_Serial, _X, Bs) ->
     rabbit_db_topic_exchange:delete(Bs).

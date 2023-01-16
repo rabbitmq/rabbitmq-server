@@ -124,10 +124,8 @@ add_binding( none
   case BindGen of
     {ok, BindFun} ->
       add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
-    {none, error} ->
-      parsing_error(XName, Selector, Dest);
-    _ ->
-      ok
+    error ->
+      parsing_error(XName, Selector, Dest)
   end,
   ok.
 

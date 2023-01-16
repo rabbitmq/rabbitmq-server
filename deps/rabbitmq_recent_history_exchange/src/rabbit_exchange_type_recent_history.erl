@@ -28,8 +28,8 @@
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
 
--rabbit_boot_step({rabbit_exchange_type_recent_history_mnesia,
-                   [{description, "recent history exchange type: mnesia"},
+-rabbit_boot_step({rabbit_exchange_type_recent_history_metadata_store,
+                   [{description, "recent history exchange type: metadata store"},
                     {mfa, {?MODULE, setup_schema, []}},
                     {requires, database},
                     {enables, external_infrastructure}]}).
@@ -96,7 +96,7 @@ add_binding(none, #exchange{ name = XName },
             [begin
                  Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
                  Qs = rabbit_exchange:route(X, Delivery),
-                 case rabbit_amqqueue:lookup(Qs) of
+                 case rabbit_amqqueue:lookup_many(Qs) of
                      [] ->
                          destination_not_found_error(Qs);
                      QPids ->

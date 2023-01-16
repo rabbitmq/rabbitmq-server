@@ -153,7 +153,7 @@ restart_stream(QRes) ->
     {timeout, term()}.
 restart_stream(QRes, Options)
   when element(1, QRes) == resource ->
-    restart_stream(hd(rabbit_amqqueue:lookup([QRes])), Options);
+    restart_stream(hd(rabbit_amqqueue:lookup_many([QRes])), Options);
 restart_stream(Q, Options)
   when ?is_amqqueue(Q) andalso
        ?amqqueue_is_stream(Q) ->
@@ -1089,10 +1089,10 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                     %% we need to re-initialise the queue record
                     %% if the stream id is a match
                     case rabbit_amqqueue:lookup_durable_queue(QName) of
-                        [] ->
+                        {error, not_found} ->
                             %% queue not found at all, it must have been deleted
                             ok;
-                        [Q] ->
+                        {ok, Q} ->
                             case amqqueue:get_type_state(Q) of
                                 #{name := S} when S == StreamId ->
                                     rabbit_log:debug("~ts: initializing queue record for stream id  ~ts",

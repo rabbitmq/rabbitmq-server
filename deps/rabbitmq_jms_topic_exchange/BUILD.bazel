@@ -16,6 +16,10 @@ APP_DESCRIPTION = "RabbitMQ JMS topic selector exchange plugin"
 
 APP_MODULE = "rabbit_federation_app"
 
+BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
 DEPS = [
     "//deps/rabbit_common:erlang_app",
 ]
@@ -33,6 +37,7 @@ rabbitmq_app(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     runtime_deps = RUNTIME_DEPS,
+    build_deps = BUILD_DEPS,
     deps = DEPS,
     extra_apps = EXTRA_APPS,
 )

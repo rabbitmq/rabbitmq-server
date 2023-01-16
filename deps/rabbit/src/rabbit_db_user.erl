@@ -28,6 +28,8 @@
          clear_matching_topic_permissions/3,
          delete/1]).
 
+-export([clear/0]).
+
 -define(MNESIA_TABLE, rabbit_user).
 -define(PERM_MNESIA_TABLE, rabbit_user_permission).
 -define(TOPIC_PERM_MNESIA_TABLE, rabbit_topic_permission).
@@ -644,3 +646,22 @@ topic_permission_pattern(Username, VHostName, ExchangeName) ->
                                 virtual_host = VHostName},
                 exchange = ExchangeName},
              permission = '_'}.
+
+%% -------------------------------------------------------------------
+%% clear().
+%% -------------------------------------------------------------------
+
+-spec clear() -> ok.
+%% @doc Deletes all users and permissions.
+%%
+%% @private
+
+clear() ->
+    rabbit_db:run(
+      #{mnesia => fun() -> clear_in_mnesia() end}).
+
+clear_in_mnesia() ->
+    {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),
+    {atomic, ok} = mnesia:clear_table(?PERM_MNESIA_TABLE),
+    {atomic, ok} = mnesia:clear_table(?TOPIC_PERM_MNESIA_TABLE),
+    ok.

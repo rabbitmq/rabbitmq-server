@@ -106,7 +106,7 @@ mutate_name_bin(P, NameBin) ->
     <<NameBin/binary, 0, P:8>>.
 
 expand_queues(QNames) ->
-    Qs = rabbit_db_queue:get_durable(QNames),
+    Qs = rabbit_db_queue:get_many_durable(QNames),
     lists:unzip(lists:append([expand_queue(Q) || Q <- Qs])).
 
 expand_queue(Q) ->
