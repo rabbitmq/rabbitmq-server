@@ -20,7 +20,7 @@
 -behaviour(rabbit_exchange_decorator).
 
 -export([description/0, serialise_events/1]).
--export([create/2, delete/3, policy_changed/2,
+-export([create/2, delete/2, policy_changed/2,
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 -import(rabbit_sharding_util, [shard/1]).
@@ -32,14 +32,12 @@ description() ->
 
 serialise_events(_X) -> false.
 
-create(transaction, _X) ->
-    ok;
 create(none, X) ->
     _ = maybe_start_sharding(X),
     ok.
 
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+add_binding(_Serial, _X, _B) -> ok.
+remove_bindings(_Serial, _X, _Bs) -> ok.
 
 route(_, _) -> [].
 
@@ -50,8 +48,7 @@ active_for(X) ->
     end.
 
 %% we have to remove the policy from ?SHARDING_TABLE
-delete(transaction, _X, _Bs) -> ok;
-delete(none, X, _Bs) ->
+delete(none, X) ->
     _ = maybe_stop_sharding(X),
     ok.
 
