@@ -31,6 +31,8 @@ cp -r "{elixir_home}"/lib/elixir/ebin/* {ebin}
             include = [],
             beam = [ebin],
             priv = [],
+            license_files = [],
+            srcs = [],
             deps = [],
         ),
     ]
