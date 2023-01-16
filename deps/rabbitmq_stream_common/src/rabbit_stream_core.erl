@@ -30,7 +30,7 @@
 -define(STRING(Str), (byte_size(Str)):16, Str / binary).
 -define(DATASTR(Str), (byte_size(Str)):32, Str / binary).
 
--export_type([state/0]).
+-export_type([state/0, command_version/0]).
 
 -type command_version() :: 0..65535.
 -type correlation_id() :: non_neg_integer().
