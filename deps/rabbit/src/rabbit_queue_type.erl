@@ -503,18 +503,24 @@ deliver(Qs, Delivery, State) ->
     end.
 
 deliver0(Qs, Delivery, stateless) ->
-    lists:foreach(fun(Q) ->
-                          Mod = amqqueue:get_type(Q),
-                          _ = Mod:deliver([{Q, stateless}], Delivery)
-                  end, Qs),
+    ByType = lists:foldl(fun(Q, Acc) ->
+                                 Mod = amqqueue:get_type(Q),
+                                 maps:update_with(
+                                   Mod, fun(A) ->
+                                                [{Q, stateless} | A]
+                                        end, [{Q, stateless}], Acc)
+                         end, #{}, Qs),
+    maps:foreach(fun(Mod, QSs) ->
+                         _ = Mod:deliver(QSs, Delivery)
+                 end, ByType),
     {ok, stateless, []};
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
     ByType = lists:foldl(
                fun (Q, Acc) ->
-                       T = amqqueue:get_type(Q),
-                       QState = case T:is_stateful() of
+                       Mod = amqqueue:get_type(Q),
+                       QState = case Mod:is_stateful() of
                                     true ->
                                         #ctx{state = S} = get_ctx(Q, State0),
                                         S;
@@ -522,9 +528,9 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
                                         stateless
                                 end,
                        maps:update_with(
-                         T, fun (A) ->
-                                    [{Q, QState} | A]
-                            end, [{Q, QState}], Acc)
+                         Mod, fun (A) ->
+                                      [{Q, QState} | A]
+                              end, [{Q, QState}], Acc)
                end, #{}, Qs),
     %%% dispatch each group to queue type interface?
     {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->

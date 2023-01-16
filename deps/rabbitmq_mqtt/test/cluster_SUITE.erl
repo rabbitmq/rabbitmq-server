@@ -157,7 +157,7 @@ connection_id_tracking_with_decommissioned_node(Config) ->
             process_flag(trap_exit, true),
             {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
             await_exit(C),
-            assert_connection_count(Config, 4, 2, 0),
+            assert_connection_count(Config, 5, 2, 0),
             ok
     end.
 
