@@ -37,8 +37,7 @@ web_ui() ->
                                   "and re-enable the rabbitmq_stream_management "
                                   "plugin. ",
                                "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more",
-                               []),
+                               "to learn more"),
             []
     end.
 

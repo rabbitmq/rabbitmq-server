@@ -86,7 +86,7 @@
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
          transport :: tcp | ssl,
-         proxy_socket :: undefined | ranch_proxy:proxy_socket(),
+         proxy_socket :: undefined | ranch_transport:socket(),
          correlation_id_sequence :: integer(),
          outstanding_requests :: #{integer() => term()},
          deliver_version :: rabbit_stream_core:command_version()}).
@@ -196,6 +196,9 @@ start_link(KeepaliveSup, Transport, Ref, Opts) ->
      proc_lib:spawn_link(?MODULE, init,
                          [[KeepaliveSup, Transport, Ref, Opts]])}.
 
+%% Because of gen_statem:enter_loop/4 usage inside init/1
+-dialyzer({no_behaviours, init/1}).
+
 init([KeepaliveSup,
       Transport,
       Ref,
@@ -253,7 +256,7 @@ init([KeepaliveSup,
                                          data =
                                              rabbit_stream_core:init(undefined)},
             Transport:setopts(RealSocket, [{active, once}]),
-            rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
+            _ = rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
                 application:get_env(rabbitmq_stream,
                                     connection_negotiation_step_timeout,
@@ -654,7 +657,7 @@ close(Transport,
       #stream_connection{socket = S, virtual_host = VirtualHost},
       #stream_connection_state{consumers = Consumers}) ->
     [begin
-         maybe_unregister_consumer(VirtualHost, Consumer,
+         _ = maybe_unregister_consumer(VirtualHost, Consumer,
                                    single_active_consumer(Properties)),
          case Log of
              undefined ->
@@ -847,14 +850,14 @@ open(info,
                        connection_state = ConnState1}};
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
-    demonitor_all_streams(Connection),
+    _ = demonitor_all_streams(Connection),
     rabbit_log_connection:warning("Socket ~w closed [~w]",
                                   [Socket, self()]),
     stop;
 open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
-    demonitor_all_streams(Connection),
+    _ = demonitor_all_streams(Connection),
     rabbit_log_connection:error("Socket error ~tp [~w] [~w]",
                                 [Reason, Socket, self()]),
     stop;
@@ -945,7 +948,7 @@ open({call, From}, {shutdown, Explanation},
     % likely closing call from the management plugin
     rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
                                [self(), Explanation]),
-    demonitor_all_streams(Connection),
+    _ = demonitor_all_streams(Connection),
     {stop_and_reply, normal, {reply, From, ok}};
 open(cast,
      {queue_event, _, {osiris_written, _, undefined, CorrelationList}},
@@ -2584,9 +2587,10 @@ handle_frame_post_auth(Transport,
                         case Extra of
                             [{stepping_down, true}] ->
                                 ConsumerName = consumer_name(Properties),
-                                rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
-                                                                                Stream,
-                                                                                ConsumerName);
+                                _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
+                                                                                    Stream,
+                                                                                    ConsumerName),
+                                ok;
                             _ ->
                                 ok
                         end,
@@ -2846,8 +2850,12 @@ maybe_register_consumer(VirtualHost,
                                                         SubscriptionId),
     Active.
 
-maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
-    Connection;
+%% NOTE: Never called with SAC = false, but adding an explicit type
+%% still doesn't convince dialyzer. Keeping this clause commented out
+%% instead of disabling some dialyzer checks for this function:
+%%
+%% maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
+%%     Connection;
 maybe_send_consumer_update(Transport,
                            #stream_connection{socket = S,
                                               correlation_id_sequence =
@@ -2977,7 +2985,7 @@ clean_state_after_stream_deletion_or_failure(Stream,
         case stream_has_subscriptions(Stream, C0) of
             true ->
                 #{Stream := SubscriptionIds} = StreamSubscriptions,
-                [begin
+                _ = [begin
                      rabbit_stream_metrics:consumer_cancelled(self(),
                                                               stream_r(Stream,
                                                                        C0),
@@ -3095,8 +3103,8 @@ remove_subscription(SubscriptionId,
     rabbit_stream_metrics:consumer_cancelled(self(),
                                              stream_r(Stream, Connection2),
                                              SubscriptionId),
-    maybe_unregister_consumer(VirtualHost, Consumer,
-                              single_active_consumer(Consumer#consumer.configuration#consumer_configuration.properties)),
+    _ = maybe_unregister_consumer(VirtualHost, Consumer,
+                                  single_active_consumer(Consumer#consumer.configuration#consumer_configuration.properties)),
     {Connection2, State#stream_connection_state{consumers = Consumers1}}.
 
 maybe_clean_connection_from_stream(Stream,
@@ -3222,11 +3230,7 @@ send_file_callback(?VERSION_2,
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
-       CommittedChunkId =
-           case osiris_log:committed_offset(Log) of
-               undefined -> 0;
-               R -> R
-           end,
+       CommittedChunkId = osiris_log:committed_offset(Log),
        FrameBeginning =
            <<FrameSize:32,
              ?REQUEST:1,
