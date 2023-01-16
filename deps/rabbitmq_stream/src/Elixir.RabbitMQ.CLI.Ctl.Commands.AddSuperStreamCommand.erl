@@ -215,6 +215,8 @@ run([SuperStream],
 stream_arguments(Opts) ->
     stream_arguments(#{}, Opts).
 
+%% Something strange, dialyzer infers that map_size/1 returns positive_integer()
+-dialyzer({no_match, stream_arguments/2}).
 stream_arguments(Acc, Arguments) when map_size(Arguments) =:= 0 ->
     Acc;
 stream_arguments(Acc, #{max_length_bytes := Value} = Arguments) ->

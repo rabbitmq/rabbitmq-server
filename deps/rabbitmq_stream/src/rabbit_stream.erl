@@ -53,8 +53,7 @@ start(_Type, _Args) ->
                                ++ "Enable stream_queue feature flag then disable "
                                   "and re-enable the rabbitmq_stream plugin. ",
                                "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more",
-                               []),
+                               "to learn more"),
             {ok, self()}
     end.
 

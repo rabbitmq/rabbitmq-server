@@ -393,7 +393,11 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery())
+%% rabbit_types:delivery() is more strict than #delivery{}, some
+%% fields can't be undefined. But there are places where
+%% rabbit_exchange:route/2 is called with the absolutely bare delivery
+%% like #delivery{message = #basic_message{routing_keys = [...]}}
+-spec route(rabbit_types:exchange(), #delivery{})
                  -> [rabbit_amqqueue:name()].
 
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
