@@ -511,23 +511,21 @@ deliver0(Qs, Delivery, stateless) ->
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
-    {ByType, Actions0} =
-        lists:foldl(
-          fun (Q, {M, L}) ->
-                  T = amqqueue:get_type(Q),
-                  case T:is_stateful() of
-                      true ->
-                          Ctx = get_ctx(Q, State0),
-                          {maps:update_with(
-                             T, fun (A) ->
-                                        [{Q, Ctx#ctx.state} | A]
-                                end, [{Q, Ctx#ctx.state}], M),
-                           L};
-                      false ->
-                          {[], DeliverActions} = T:deliver([{Q, stateless}], Delivery),
-                          {M, DeliverActions ++ L}
-                  end
-          end, {#{}, []}, Qs),
+    ByType = lists:foldl(
+               fun (Q, Acc) ->
+                       T = amqqueue:get_type(Q),
+                       QState = case T:is_stateful() of
+                                    true ->
+                                        #ctx{state = S} = get_ctx(Q, State0),
+                                        S;
+                                    false ->
+                                        stateless
+                                end,
+                       maps:update_with(
+                         T, fun (A) ->
+                                    [{Q, QState} | A]
+                            end, [{Q, QState}], Acc)
+               end, #{}, Qs),
     %%% dispatch each group to queue type interface?
     {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->
                                       {X, A} = Mod:deliver(QSs, Delivery),
@@ -538,7 +536,7 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
                       Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
-    {ok, State, Actions0 ++ Actions}.
+    {ok, State, Actions}.
 
 -spec settle(queue_name(), settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->

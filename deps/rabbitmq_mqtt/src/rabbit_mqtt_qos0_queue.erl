@@ -84,32 +84,37 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
 
 -spec deliver([{amqqueue:amqqueue(), stateless}], Delivery :: term()) ->
     {[], rabbit_queue_type:actions()}.
-deliver([{Q, stateless}], Delivery = #delivery{message = BasicMessage}) ->
-    Pid = amqqueue:get_pid(Q),
+deliver(Qs, #delivery{message = BasicMessage,
+                      confirm = Confirm,
+                      msg_seq_no = SeqNo}) ->
     Msg = {queue_event, ?MODULE,
-           {?MODULE, Pid, _QMsgId = none, _Redelivered = false, BasicMessage}},
-    gen_server:cast(Pid, Msg),
-    Actions = confirm(Delivery, Q),
+           {?MODULE, _QPid = none, _QMsgId = none, _Redelivered = false, BasicMessage}},
+    {Pids, Actions} =
+    case Confirm of
+        false ->
+            Pids0 = lists:map(fun({Q, stateless}) -> amqqueue:get_pid(Q) end, Qs),
+            {Pids0, []};
+        true ->
+            %% We confirm the message directly here in the queue client.
+            %% Alternatively, we could have the target MQTT connection process confirm the message.
+            %% However, given that this message might be lost anyway between target MQTT connection
+            %% process and MQTT subscriber, and we know that the MQTT subscriber wants to receive
+            %% this message at most once, we confirm here directly.
+            %% Benefits:
+            %% 1. We do not block sending the confirmation back to the publishing client just because a single
+            %% (at-most-once) target queue out of potentially many (e.g. million) queues might be unavailable.
+            %% 2. Memory usage in this (publishing) process is kept lower because the target queue name can be
+            %% directly removed from rabbit_mqtt_confirms and rabbit_confirms.
+            %% 3. Reduced network traffic across RabbitMQ nodes.
+            %% 4. Lower latency of sending publisher confirmation back to the publishing client.
+            SeqNos = [SeqNo],
+            lists:mapfoldl(fun({Q, stateless}, Actions) ->
+                                   {amqqueue:get_pid(Q),
+                                    [{settled, amqqueue:get_name(Q), SeqNos} | Actions]}
+                           end, [], Qs)
+    end,
+    delegate:invoke_no_result(Pids, {gen_server, cast, [Msg]}),
     {[], Actions}.
-
-confirm(#delivery{confirm = false}, _) ->
-    [];
-confirm(#delivery{confirm = true,
-                  msg_seq_no = SeqNo}, Q) ->
-    %% We confirm the message directly here in the queue client.
-    %% Alternatively, we could have the target MQTT connection process confirm the message.
-    %% However, given that this message might be lost anyway between target MQTT connection
-    %% process and MQTT subscriber, and we know that the MQTT subscriber wants to receive
-    %% this message at most once, we confirm here directly.
-    %% Benefits:
-    %% 1. We do not block sending the confirmation back to the publishing client just because a single
-    %% (at-most-once) target queue out of potentially many (e.g. million) queues might be unavailable.
-    %% 2. Memory usage in this (publishing) process is kept lower because the target queue name can be
-    %% directly removed from rabbit_mqtt_confirms and rabbit_confirms.
-    %% 3. Reduced network traffic across RabbitMQ nodes.
-    %% 4. Lower latency of sending publisher confirmation back to the publishing client.
-    QName = amqqueue:get_name(Q),
-    [{settled, QName, [SeqNo]}].
 
 -spec is_enabled() ->
     boolean().
