@@ -50,7 +50,7 @@ add_binding(transaction, _X, _B) ->
     ok;
 add_binding(Serial, X = #exchange{name = XName}, B) ->
     case federate(X) of
-        true  -> rabbit_federation_exchange_link:add_binding(Serial, XName, B),
+        true  -> _ = rabbit_federation_exchange_link:add_binding(Serial, XName, B),
                  ok;
         false -> ok
     end.
@@ -59,7 +59,7 @@ remove_bindings(transaction, _X, _Bs) ->
     ok;
 remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
     case federate(X) of
-        true  -> rabbit_federation_exchange_link:remove_bindings(Serial, XName, Bs),
+        true  -> _ = rabbit_federation_exchange_link:remove_bindings(Serial, XName, Bs),
                  ok;
         false -> ok
     end.
