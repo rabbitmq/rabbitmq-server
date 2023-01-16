@@ -82,16 +82,8 @@ start_conn_ch(Fun, OUpstream, OUParams,
     end.
 
 get_connection_name(#upstream{name = UpstreamName},
-    #upstream_params{x_or_q = Resource}) when is_record(Resource, exchange)->
-    Policy = Resource#exchange.policy,
-    PolicyName = proplists:get_value(name, Policy),
-    connection_name(UpstreamName, PolicyName);
-
-get_connection_name(#upstream{name = UpstreamName},
-    #upstream_params{x_or_q = Resource}) when ?is_amqqueue(Resource) ->
-    Policy = amqqueue:get_policy(Resource),
-    PolicyName = proplists:get_value(name, Policy),
-    connection_name(UpstreamName, PolicyName);
+    #upstream_params{x_or_q = Resource}) when is_record(Resource, exchange) orelse ?is_amqqueue(Resource) ->
+    connection_name(UpstreamName, rabbit_policy:name(Resource));
 
 get_connection_name(_, _) ->
     connection_name(undefined, undefined).
