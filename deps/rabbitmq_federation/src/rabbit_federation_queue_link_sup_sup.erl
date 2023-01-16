@@ -26,7 +26,7 @@ start_link() ->
     %% This scope is used by concurrently starting exchange and queue links,
     %% and other places, so we have to start it very early outside of the supervision tree.
     %% The scope is stopped in stop/1.
-    rabbit_federation_pg:start_scope(),
+    _ = rabbit_federation_pg:start_scope(),
     mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
                                    fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, []).
@@ -51,13 +51,13 @@ start_child(Q) ->
 
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
-    [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
-        {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
-        ?amqqueue_vhost_equals(Q, VHost)],
+    _ = [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            ?amqqueue_vhost_equals(Q, VHost)],
     ok;
 adjust(Reason) ->
-    [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
-        {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    _ = [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(Q) ->
