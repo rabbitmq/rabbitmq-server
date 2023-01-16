@@ -30,8 +30,8 @@
 -define(CTAG_PREFIX, <<"stream.subid-">>).
 
 init() ->
-    rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
-    rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
+    _ = rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
+    _ = rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
     ok.
 
 consumer_created(Connection,

@@ -136,7 +136,8 @@
 -callback declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
+    {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term() }.
 
 -callback delete(amqqueue:amqqueue(),
                  boolean(),
@@ -253,7 +254,8 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term() }.
 declare(Q0, Node) ->
     Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),

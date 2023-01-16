@@ -243,11 +243,11 @@ handle_call({create_super_stream,
                                 ok ->
                                     {reply, ok, State};
                                 Error ->
-                                    [Fun() || Fun <- RollbackOps],
+                                    _ = [Fun() || Fun <- RollbackOps],
                                     {reply, Error, State}
                             end;
                         {{error, Reason}, RollbackOps} ->
-                            [Fun() || Fun <- RollbackOps],
+                            _ = [Fun() || Fun <- RollbackOps],
                             {reply, {error, Reason}, State}
                     end;
                 {error, Msg} ->
@@ -392,12 +392,18 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                           {error, stream_not_found}
                   end;
               {error, not_found} ->
+<<<<<<< HEAD
                   case rabbit_amqqueue:not_found_or_absent_dirty(Name) of
                       not_found ->
                           {error, stream_not_found};
                       _ ->
                           {error, stream_not_available}
                   end
+=======
+                  {error, stream_not_found};
+              {error, not_available} ->
+                  {error, stream_not_available}
+>>>>>>> f4e4db1d12 (Fix all dialyzer warnings in rabbitmq_stream)
           end,
     {reply, Res, State};
 handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
@@ -427,6 +433,63 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
 handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
     Res = super_stream_partitions(VirtualHost, SuperStream),
     {reply, Res, State};
+<<<<<<< HEAD
+=======
+handle_call({partition_index, VirtualHost, SuperStream, Stream},
+            _From, State) ->
+    ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+    rabbit_log:debug("Looking for partition index of stream ~tp in "
+                     "super stream ~tp (virtual host ~tp)",
+                     [Stream, SuperStream, VirtualHost]),
+    Res = try
+              _ = rabbit_exchange:lookup_or_die(ExchangeName),
+              UnorderedBindings =
+                  _ = [Binding
+                   || Binding = #binding{destination = #resource{name = Q} = D}
+                          <- rabbit_binding:list_for_source(ExchangeName),
+                      is_resource_stream_queue(D), Q == Stream],
+              OrderedBindings =
+                  rabbit_stream_utils:sort_partitions(UnorderedBindings),
+              rabbit_log:debug("Bindings: ~p", [OrderedBindings]),
+              case OrderedBindings of
+                  [] ->
+                      {error, stream_not_found};
+                  Bindings ->
+                      Binding = lists:nth(1, Bindings),
+                      #binding{args = Args} = Binding,
+                      case rabbit_misc:table_lookup(Args,
+                                                    <<"x-stream-partition-order">>)
+                      of
+                          {_, Order} ->
+                              Index = rabbit_data_coercion:to_integer(Order),
+                              {ok, Index};
+                          _ ->
+                              Pattern = <<"-">>,
+                              Size = byte_size(Pattern),
+                              case string:find(Stream, Pattern, trailing) of
+                                  nomatch ->
+                                      {ok, -1};
+                                  <<Pattern:Size/binary, Rest/binary>> ->
+                                      try
+                                          Index = binary_to_integer(Rest),
+                                          {ok, Index}
+                                      catch
+                                          error:_ ->
+                                              {ok, -1}
+                                      end;
+                                  _ ->
+                                      {ok, -1}
+                              end
+                      end
+              end
+          catch
+              exit:Error ->
+                  rabbit_log:error("Error while looking up exchange ~p, ~p",
+                                   [ExchangeName, Error]),
+                  {error, stream_not_found}
+          end,
+    {reply, Res, State};
+>>>>>>> f4e4db1d12 (Fix all dialyzer warnings in rabbitmq_stream)
 handle_call(which_children, _From, State) ->
     {reply, [], State}.
 
@@ -551,7 +614,7 @@ delete_stream(VirtualHost, Reference, Username) ->
 super_stream_partitions(VirtualHost, SuperStream) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     try
-        rabbit_exchange:lookup_or_die(ExchangeName),
+        _ = rabbit_exchange:lookup_or_die(ExchangeName),
         UnorderedBindings =
             [Binding
              || Binding = #binding{destination = D}
@@ -747,6 +810,7 @@ add_super_stream_binding(VirtualHost,
         {error, {resources_missing, [{absent, Q, _Reason} | _]}} ->
             {error,
              {stream_not_found,
+<<<<<<< HEAD
               rabbit_misc:format("stream ~s does not exists (absent)", [Q])}};
         {error, binding_not_found} ->
             {error,
@@ -754,6 +818,9 @@ add_super_stream_binding(VirtualHost,
               rabbit_misc:format("no binding ~s between ~s and ~s",
                                  [RoutingKey, rabbit_misc:rs(ExchangeName),
                                   rabbit_misc:rs(QueueName)])}};
+=======
+              rabbit_misc:format("stream ~ts does not exists (absent)", [Q])}};
+>>>>>>> 2c4e4fb691 (Fix all dialyzer warnings in rabbitmq_stream)
         {error, {binding_invalid, Fmt, Args}} ->
             {error, {binding_invalid, rabbit_misc:format(Fmt, Args)}};
         {error, #amqp_error{} = Error} ->
