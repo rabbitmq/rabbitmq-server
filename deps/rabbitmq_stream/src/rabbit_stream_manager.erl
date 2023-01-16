@@ -810,17 +810,7 @@ add_super_stream_binding(VirtualHost,
         {error, {resources_missing, [{absent, Q, _Reason} | _]}} ->
             {error,
              {stream_not_found,
-<<<<<<< HEAD
-              rabbit_misc:format("stream ~s does not exists (absent)", [Q])}};
-        {error, binding_not_found} ->
-            {error,
-             {not_found,
-              rabbit_misc:format("no binding ~s between ~s and ~s",
-                                 [RoutingKey, rabbit_misc:rs(ExchangeName),
-                                  rabbit_misc:rs(QueueName)])}};
-=======
               rabbit_misc:format("stream ~ts does not exists (absent)", [Q])}};
->>>>>>> 2c4e4fb691 (Fix all dialyzer warnings in rabbitmq_stream)
         {error, {binding_invalid, Fmt, Args}} ->
             {error, {binding_invalid, rabbit_misc:format(Fmt, Args)}};
         {error, #amqp_error{} = Error} ->
