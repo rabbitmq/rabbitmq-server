@@ -49,7 +49,7 @@
 %% and the Erlang client is not running. This then gets invoked when
 %% the federation app is started.
 go() ->
-    rabbit_federation_pg:start_scope(),
+    _ = rabbit_federation_pg:start_scope(),
     cast(go).
 
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
@@ -198,7 +198,7 @@ terminate(Reason, #state{downstream_connection = DConn,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
     rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~p", [Upstream#upstream.resource_cleanup_mode]),
@@ -222,7 +222,7 @@ terminate(Reason, #state{downstream_connection = DConn,
                          upstream_params       = UParams,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
 
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
@@ -495,8 +495,8 @@ open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXNam
             {ok, CCh};
         E ->
             rabbit_federation_link_util:ensure_connection_closed(Conn),
-            rabbit_federation_link_util:connection_error(command_channel, E,
-                                                         Upstream, UParams, DownXName, S0),
+            _ = rabbit_federation_link_util:connection_error(command_channel, E,
+                                                             Upstream, UParams, DownXName, S0),
             E
     end.
 
