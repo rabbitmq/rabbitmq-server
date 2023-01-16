@@ -1934,11 +1934,6 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             rabbit_amqqueue:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
             rabbit_amqqueue:absent(Q, Reason);
-        {error, binding_not_found} ->
-            rabbit_misc:protocol_error(
-              not_found, "no binding ~s between ~s and ~s",
-              [RoutingKey, rabbit_misc:rs(ExchangeName),
-               rabbit_misc:rs(DestinationName)]);
         {error, {binding_invalid, Fmt, Args}} ->
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->

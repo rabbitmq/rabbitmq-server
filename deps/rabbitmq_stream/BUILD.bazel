@@ -35,12 +35,13 @@ APP_ENV = """[
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
     "//deps/rabbitmq_cli:rabbitmqctl",
-    "@ranch//:erlang_app",
 ]
 
 DEPS = [
     "//deps/rabbitmq_stream_common:erlang_app",
     "//deps/rabbit:erlang_app",
+    "@ranch//:erlang_app",
+    "@osiris//:erlang_app",
 ]
 
 rabbitmq_app(
@@ -64,12 +65,12 @@ plt(
         "//deps/rabbitmq_cli:rabbitmqctl",
         BUILD_DEPS + DEPS,
     ),
+    apps = ["erts", "kernel", "stdlib", "ssl"],
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
