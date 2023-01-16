@@ -77,8 +77,12 @@ xref()
 
 plt(
     name = "base_plt",
+    apps = [
+        "erts",
+        "kernel",
+        "stdlib",
+    ] + EXTRA_APPS,
     deps = DEPS + RUNTIME_DEPS,
-    apps = ["erts", "kernel", "stdlib"] + EXTRA_APPS,
 )
 
 dialyze(

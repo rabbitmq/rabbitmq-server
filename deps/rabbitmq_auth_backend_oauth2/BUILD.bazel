@@ -23,7 +23,7 @@ EXTRA_APPS = [
 
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
@@ -40,29 +40,27 @@ rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
+    extra_apps = EXTRA_APPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
-    extra_apps = EXTRA_APPS,
 )
 
 xref(
     additional_libs = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
+        "//deps/rabbitmq_cli:erlang_app",
     ],
 )
 
 plt(
     name = "base_plt",
     apps = EXTRA_APPS,
+    libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
-    deps = without(
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        BUILD_DEPS + DEPS + RUNTIME_DEPS,
-    ),
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
 )
 

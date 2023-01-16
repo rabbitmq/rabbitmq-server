@@ -23,7 +23,7 @@ APP_NAME = "rabbitmq_amqp1_0"
 APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
@@ -58,17 +58,13 @@ plt(
         "stdlib",
         "ssl",
     ],
-    # this ought to include BUILD_DEPS, but not sure how to
-    # get dialyze of elixir code working yet
-    deps = without(
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        BUILD_DEPS + DEPS + RUNTIME_DEPS,
-    ),
+    libs = ["//deps/rabbitmq_cli:elixir"],
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     size = "medium",
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
 )
 
