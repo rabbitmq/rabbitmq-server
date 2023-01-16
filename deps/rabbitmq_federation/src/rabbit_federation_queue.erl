@@ -99,7 +99,7 @@ active_for(Q) ->
 
 consumer_state_changed(Q, MaxActivePriority, IsEmpty) ->
     QName = amqqueue:get_name(Q),
-    case IsEmpty andalso active_unfederated(MaxActivePriority) of
+    _ = case IsEmpty andalso active_unfederated(MaxActivePriority) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
     end,
