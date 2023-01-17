@@ -416,9 +416,7 @@ run_buffer1(WriterPid, BCh, Session, Buffer) ->
                     rabbit_amqp1_0_writer:send_command(
                       WriterPid,
                       rabbit_amqp1_0_session:flow_fields(Flow, Session1)),
-                    run_buffer1(WriterPid, BCh, Session1, Buffer);
-                {none, Session1} ->
-                    {Session1, Buffer}
+                    run_buffer1(WriterPid, BCh, Session1, Buffer)
             end;
         _ ->
             {Session, Buffer}

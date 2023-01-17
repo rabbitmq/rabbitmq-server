@@ -74,6 +74,7 @@ shutdown(Pid, Explanation) ->
 system_continue(Parent, Deb, State) ->
     ?MODULE:mainloop(Deb, State#v1{parent = Parent}).
 
+-spec system_terminate(term(), term(), term(), term()) -> no_return().
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
 
@@ -147,8 +148,8 @@ handle_other({conserve_resources, Source, Conserve},
     Throttle1 = Throttle#throttle{alarmed_by = CR1},
     control_throttle(State#v1{throttle = Throttle1});
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
-    terminate(io_lib:format("broker forced connection closure "
-                            "with reason '~w'", [Reason]), State),
+    _ = terminate(io_lib:format("broker forced connection closure "
+                                "with reason '~w'", [Reason]), State),
     %% this is what we are expected to do according to
     %% http://www.erlang.org/doc/man/sys.html
     %%
@@ -203,8 +204,8 @@ switch_callback(State, Callback, Length) ->
 
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
-                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Connection forced: ~p", [Reason]})};
+                              error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                          "Connection forced: ~tp", [Reason]))};
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -246,8 +247,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
-            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                 "Session error: ~p~n~p", [RealReason, Trace]},
+            R = error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Session error: ~tp~n~tp", [RealReason, Trace]),
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
@@ -262,8 +262,8 @@ maybe_close(State = #v1{connection_state = closing,
     % process it's internal message buffer before the supervision tree
     % shuts everything down and in flight messages such as dispositions
     % could be lost
-    [ _ = rabbit_amqp1_0_session:get_info(SessionPid)
-      || {{channel, _}, {ch_fr_pid, SessionPid}} <- get()],
+    _ = [ _ = rabbit_amqp1_0_session:get_info(SessionPid)
+          || {{channel, _}, {ch_fr_pid, SessionPid}} <- get()],
     NewState;
 maybe_close(State) ->
     State.
