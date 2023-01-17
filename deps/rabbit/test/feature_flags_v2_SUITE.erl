@@ -216,6 +216,9 @@ setup_feature_flags_file(Config) ->
 
 start_controller() ->
     ?LOG_INFO("Starting feature flags controller"),
+    ThisNode = node(),
+    ok = rabbit_feature_flags:override_nodes([ThisNode]),
+    ok = rabbit_feature_flags:override_running_nodes([ThisNode]),
     {ok, Pid} = rabbit_ff_controller:start(),
     ?LOG_INFO("Feature flags controller: ~tp", [Pid]),
     ok.

@@ -14,7 +14,7 @@
 %%
 
 lock(Name) ->
-    Nodes   = rabbit_nodes:all_running(),
+    Nodes   = rabbit_nodes:list_running(),
     Retries = rabbit_nodes:lock_retries(),
     %% try to acquire a lock to avoid duplicate starts
     LockId = case global:set_lock({dynamic_shovel, Name}, Nodes, Retries) of
@@ -24,7 +24,7 @@ lock(Name) ->
     LockId.
 
 unlock(LockId) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     case LockId of
         undefined -> ok;
         Value     -> global:del_lock({dynamic_shovel, Value}, Nodes)

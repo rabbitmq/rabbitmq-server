@@ -426,7 +426,7 @@ ensure_coordinator_started() ->
     end.
 
 start_coordinator_cluster() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:list_running(),
     rabbit_log:debug("Starting stream coordinator on nodes: ~w", [Nodes]),
     case ra:start_cluster(?RA_SYSTEM, [make_ra_conf(Node, Nodes) || Node <-  Nodes]) of
         {ok, Started, _} ->
@@ -439,7 +439,7 @@ start_coordinator_cluster() ->
     end.
 
 all_coord_members() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    Nodes = rabbit_nodes:list_running() -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
 version() -> 4.
@@ -684,8 +684,8 @@ maybe_resize_coordinator_cluster() ->
                   case ra:members({?MODULE, node()}) of
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
-                          Running = rabbit_mnesia:cluster_nodes(running),
-                          All = rabbit_nodes:all(),
+                          Running = rabbit_nodes:list_running(),
+                          All = rabbit_nodes:list_members(),
                           case Running -- MemberNodes of
                               [] ->
                                   ok;

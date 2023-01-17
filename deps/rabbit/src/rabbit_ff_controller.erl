@@ -914,21 +914,21 @@ post_enable(#{states_per_node := _}, FeatureName, Nodes) ->
 
 -ifndef(TEST).
 all_nodes() ->
-    lists:usort([node() | mnesia:system_info(db_nodes)]).
+    lists:usort([node() | rabbit_nodes:list_members()]).
 
 running_nodes() ->
-    lists:usort([node() | mnesia:system_info(running_db_nodes)]).
+    lists:usort([node() | rabbit_nodes:list_running()]).
 -else.
 all_nodes() ->
     RemoteNodes = case rabbit_feature_flags:get_overriden_nodes() of
-                      undefined -> mnesia:system_info(db_nodes);
+                      undefined -> rabbit_nodes:list_members();
                       Nodes     -> Nodes
                   end,
     lists:usort([node() | RemoteNodes]).
 
 running_nodes() ->
     RemoteNodes = case rabbit_feature_flags:get_overriden_running_nodes() of
-                      undefined -> mnesia:system_info(running_db_nodes);
+                      undefined -> rabbit_nodes:list_running();
                       Nodes     -> Nodes
                   end,
     lists:usort([node() | RemoteNodes]).

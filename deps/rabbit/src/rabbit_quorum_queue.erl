@@ -367,7 +367,7 @@ filter_quorum_critical(Queues) ->
     %%        '%2F_qq.1590' => leader,'%2F_qq.1363' => leader,
     %%        '%2F_qq.882' => leader,'%2F_qq.1161' => leader,...}}
     ReplicaStates = maps:from_list(
-                        rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
+                        rabbit_misc:append_rpc_all_nodes(rabbit_nodes:list_running(),
                             ?MODULE, all_replica_states, [])),
     filter_quorum_critical(Queues, ReplicaStates).
 
@@ -475,7 +475,7 @@ handle_tick(QName,
                                | infos(QName, Keys)],
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       ok = repair_leader_record(QName, Self),
-                      ExpectedNodes = rabbit_nodes:all(),
+                      ExpectedNodes = rabbit_nodes:list_members(),
                       case Nodes -- ExpectedNodes of
                           [] ->
                               ok;
@@ -1059,7 +1059,7 @@ add_member(VHost, Name, Node, Timeout) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             QNodes = get_nodes(Q),
-            case lists:member(Node, rabbit_nodes:all_running()) of
+            case lists:member(Node, rabbit_nodes:list_running()) of
                 false ->
                     {error, node_not_running};
                 true ->
@@ -1199,7 +1199,7 @@ shrink_all(Node) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
-    Running = rabbit_nodes:all_running(),
+    Running = rabbit_nodes:list_running(),
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),

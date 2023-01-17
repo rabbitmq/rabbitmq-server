@@ -25,7 +25,7 @@ server_id(Node) ->
     {?ID_NAME, Node}.
 
 all_node_ids() ->
-    [server_id(N) || N <- rabbit_nodes:all(),
+    [server_id(N) || N <- rabbit_nodes:list_members(),
                    can_participate_in_clientid_tracking(N)].
 
 start() ->

@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
         err
 
       status ->
-        case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :cluster_nodes, [:running]) do
+        case :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :list_running, []) do
           {:badrpc, _} = err ->
             err
 

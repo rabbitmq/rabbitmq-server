@@ -694,7 +694,7 @@ publish_coordinator_unavailable(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     rabbit_ct_helpers:await_condition(
       fun () ->
-              N = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mnesia, cluster_nodes, [running]),
+              N = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_nodes, list_running, []),
               length(N) == 1
       end),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),

@@ -52,7 +52,7 @@ init([]) ->
                  end}
         end,
 
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     OsirisConf = #{nodes => Nodes},
 
     ServerConfiguration =

@@ -30,7 +30,7 @@ reset() ->
 
 reset_all() ->
     _ = [rpc:call(Node, rabbit_mgmt_storage, reset, [])
-         || Node <- rabbit_nodes:all_running()],
+         || Node <- rabbit_nodes:list_running()],
     ok.
 
 init(_) ->
