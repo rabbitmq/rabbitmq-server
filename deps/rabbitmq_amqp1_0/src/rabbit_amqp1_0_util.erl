@@ -23,6 +23,7 @@
 -spec serial_diff(serial_number(), serial_number()) ->
              integer().
 
+-spec protocol_error(term(), io:format(), [term()]) -> no_return().
 protocol_error(Condition, Msg, Args) ->
     exit(#'v1_0.error'{
         condition   = Condition,

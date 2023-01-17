@@ -20,11 +20,12 @@
 -export_type([start_link_args/0]).
 
 -type start_link_args() ::
-        {rabbit_types:protocol(), rabbit_net:socket(),
-         rabbit_channel:channel_number(), non_neg_integer(), pid(),
-         rabbit_access_control:username(), rabbit_types:vhost(), pid()}.
+        {'amqp10_framing', rabbit_net:socket(),
+         rabbit_channel:channel_number(), non_neg_integer() | 'unlimited', pid(),
+         #user{}, rabbit_types:vhost(), pid(),
+         {'rabbit_proxy_socket', rabbit_net:socket(), term()} | 'undefined'}.
 
--spec start_link(start_link_args()) -> {'ok', pid(), pid()}.
+-spec start_link(start_link_args()) -> {'ok', pid(), pid()} | {'error', term()}.
 
 %%----------------------------------------------------------------------------
 start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,

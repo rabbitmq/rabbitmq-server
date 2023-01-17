@@ -216,7 +216,7 @@ conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
--spec server_properties(rabbit_types:protocol()) ->
+-spec server_properties(rabbit_types:protocol() | 'amqp_1_0') ->
           rabbit_framing:amqp_table().
 
 server_properties(Protocol) ->
