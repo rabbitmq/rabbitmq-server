@@ -264,7 +264,7 @@ list() ->
     lists:foldl(
       fun (Node, Acc) ->
               Acc ++ list_on_node(Node)
-      end, [], rabbit_nodes:all_running()).
+      end, [], rabbit_nodes:list_running()).
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_channel()].
 
@@ -309,7 +309,7 @@ list_on_node_mnesia(Node) ->
           #tracked_channel{_ = '_'})
     catch exit:{aborted, {no_exists, _}} ->
             %% The table might not exist yet (or is already gone)
-            %% between the time rabbit_nodes:all_running() runs and
+            %% between the time rabbit_nodes:list_running() runs and
             %% returns a specific node, and
             %% mnesia:dirty_match_object() is called for that node's
             %% table.

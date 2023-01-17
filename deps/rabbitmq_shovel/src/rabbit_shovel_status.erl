@@ -72,12 +72,12 @@ status() ->
 
 -spec cluster_status() -> [status_tuple()].
 cluster_status() ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     lists:usort(rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, status, [])).
 
 -spec cluster_status_with_nodes() -> [status_tuple()].
 cluster_status_with_nodes() ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     lists:foldl(
         fun(Node, Acc) ->
             case rabbit_misc:rpc_call(Node, ?MODULE, status, []) of

@@ -154,7 +154,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
 slaves_to_start_on_failure(Q, DeadGMPids) ->
     %% In case Mnesia has not caught up yet, filter out nodes we know
     %% to be dead..
-    ClusterNodes = rabbit_nodes:all_running() --
+    ClusterNodes = rabbit_nodes:list_running() --
         [node(P) || P <- DeadGMPids],
     {_, OldNodes, _} = actual_queue_nodes(Q),
     {_, NewNodes} = suggested_queue_nodes(Q, ClusterNodes),
@@ -321,7 +321,7 @@ store_updated_slaves(Q0) when ?is_amqqueue(Q0) ->
 %% a long time without being removed.
 update_recoverable(SPids, RS) ->
     SNodes = [node(SPid) || SPid <- SPids],
-    RunningNodes = rabbit_nodes:all_running(),
+    RunningNodes = rabbit_nodes:list_running(),
     AddNodes = SNodes -- RS,
     DelNodes = RunningNodes -- SNodes, %% i.e. running with no slave
     (RS -- DelNodes) ++ AddNodes.
@@ -375,17 +375,17 @@ promote_slave([SPid | SPids]) ->
 -spec initial_queue_node(amqqueue:amqqueue(), node()) -> node().
 
 initial_queue_node(Q, DefNode) ->
-    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, rabbit_nodes:all_running()),
+    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, rabbit_nodes:list_running()),
     MNode.
 
 -spec suggested_queue_nodes(amqqueue:amqqueue()) ->
           {node(), [node()]}.
 
-suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:all_running()).
+suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:list_running()).
 suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
 
 %% The third argument exists so we can pull a call to
-%% rabbit_nodes:all_running() out of a loop or transaction
+%% rabbit_nodes:list_running() out of a loop or transaction
 %% or both.
 suggested_queue_nodes(Q, DefNode, All) when ?is_amqqueue(Q) ->
     Owner = amqqueue:get_exclusive_owner(Q),

@@ -44,7 +44,7 @@ list_local() ->
 -spec list() -> [pid()].
 
 list() ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_direct, list_local, [], ?RPC_TIMEOUT).
 
 %%----------------------------------------------------------------------------

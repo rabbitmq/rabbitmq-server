@@ -100,7 +100,7 @@ prepare(Node, NodeMapList) ->
 
     %% Check that we are in the cluster, all old nodes are in the
     %% cluster, and no new nodes are.
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
           lists:member(Node, Nodes ++ ToNodes)} of
         {[], [], true}  -> ok;
@@ -130,7 +130,7 @@ restore_backup(Backup) ->
 -spec maybe_finish() -> ok.
 
 maybe_finish() ->
-    AllNodes = rabbit_nodes:all(),
+    AllNodes = rabbit_nodes:list_members(),
     maybe_finish(AllNodes).
 
 -spec maybe_finish([node()]) -> 'ok'.
@@ -144,7 +144,7 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
-            case rabbit_nodes:filter_nodes_running_rabbitmq(AllNodes) of
+            case rabbit_nodes:filter_running(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
             end;
@@ -257,8 +257,8 @@ update_term(_NodeMap, Term) ->
     Term.
 
 rename_in_running_mnesia(FromNode, ToNode) ->
-    All = rabbit_nodes:all(),
-    Running = rabbit_nodes:all_running(),
+    All = rabbit_nodes:list_members(),
+    Running = rabbit_nodes:list_running(),
     case {lists:member(FromNode, Running), lists:member(ToNode, All)} of
         {false, true}  -> ok;
         {true,  _}     -> exit({old_node_running,        FromNode});

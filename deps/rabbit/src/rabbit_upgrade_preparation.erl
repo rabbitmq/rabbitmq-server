@@ -34,12 +34,12 @@ await_online_synchronised_mirrors(Timeout) ->
 
 online_members(Component) ->
     lists:filter(fun erlang:is_pid/1,
-                 rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
+                 rabbit_misc:append_rpc_all_nodes(rabbit_nodes:list_running(),
                                                   erlang, whereis, [Component])).
 
 endangered_critical_components() ->
     CriticalComponents = [rabbit_stream_coordinator],
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     lists:filter(fun (Component) ->
                          NumAlive = length(online_members(Component)),
                          ServerIds = lists:zip(lists:duplicate(length(Nodes), Component), Nodes),

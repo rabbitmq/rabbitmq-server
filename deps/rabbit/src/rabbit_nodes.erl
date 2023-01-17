@@ -7,11 +7,22 @@
 
 -module(rabbit_nodes).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([names/1, diagnostics/1, make/1, make/2, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
-         all_running/0, all_running_mnesia/0,
-         all_running_rabbitmq/0, filter_nodes_running_rabbitmq/1,
+         all_running/0,
+         list_members/0,
+         list_reachable/0, list_unreachable/0,
+         list_running/0, list_not_running/0,
+         list_serving/0, list_not_serving/0,
+         filter_members/1,
+         filter_reachable/1, filter_unreachable/1,
+         filter_running/1, filter_not_running/1,
+         filter_serving/1, filter_not_serving/1,
          name_type/0, running_count/0, total_count/0,
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
@@ -143,28 +154,345 @@ ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
 -spec all() -> [node()].
-all() -> rabbit_mnesia:cluster_nodes(all).
+all() -> list_members().
 
 -spec all_running() -> [node()].
-all_running() -> all_running_mnesia().
+all_running() -> list_running().
 
--spec all_running_mnesia() -> [node()].
-all_running_mnesia() -> rabbit_mnesia:cluster_nodes(running).
+-spec list_members() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster.
+%%
+%% @see filter_members/1.
 
--spec all_running_rabbitmq() -> [node()].
-all_running_rabbitmq() ->
-    AllNodes = all(),
-    filter_nodes_running_rabbitmq(AllNodes).
+list_members() ->
+    rabbit_mnesia:cluster_nodes(all).
 
--spec filter_nodes_running_rabbitmq([node()]) -> [node()].
-filter_nodes_running_rabbitmq(Nodes) ->
-    [N || N <- Nodes, rabbit:is_running(N)].
+-spec list_reachable() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster we can reach.
+%%
+%% A reachable node is one we can connect to using Erlang distribution.
+%%
+%% @see filter_reachable/1.
+
+list_reachable() ->
+    Members = list_members(),
+    filter_reachable(Members).
+
+-spec list_unreachable() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster we can't reach.
+%%
+%% A reachable node is one we can connect to using Erlang distribution.
+%%
+%% @see filter_unreachable/1.
+
+list_unreachable() ->
+    Members = list_members(),
+    filter_unreachable(Members).
+
+-spec list_running() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster where RabbitMQ is running.
+%%
+%% Note that even if RabbitMQ is running, the node could reject clients if it
+%% is under maintenance.
+%%
+%% @see filter_running/1.
+%% @see rabbit:is_running/0.
+
+list_running() ->
+    Members = list_members(),
+    filter_running(Members).
+
+-spec list_not_running() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster where RabbitMQ is not running
+%% or we can't reach.
+%%
+%% @see filter_not_running/1.
+%% @see rabbit:is_running/0.
+
+list_not_running() ->
+    Members = list_members(),
+    filter_not_running(Members).
+
+-spec list_serving() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster who accept clients.
+%%
+%% @see filter_serving/1.
+%% @see rabbit:is_serving/0.
+
+list_serving() ->
+    Members = list_members(),
+    filter_serving(Members).
+
+-spec list_not_serving() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster who reject clients, don't
+%% run RabbitMQ or we can't reach.
+%%
+%% @see filter_serving/1.
+%% @see rabbit:is_serving/0.
+
+list_not_serving() ->
+    Members = list_members(),
+    filter_not_serving(Members).
+
+-spec filter_members(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+
+filter_members(Nodes) ->
+    %% Before calling {@link filter_members/2}, we filter out any node which
+    %% is not part of the same cluster as the node running this function.
+    Members = list_members(),
+    [Node || Node <- Nodes, lists:member(Node, Members)].
+
+-spec filter_reachable(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and we can reach.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% A reachable node is one we can connect to using Erlang distribution.
+
+filter_reachable(Nodes) ->
+    Members = filter_members(Nodes),
+    do_filter_reachable(Members).
+
+-spec filter_unreachable(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster but we can't reach.
+%%
+%% @see filter_reachable/1.
+
+filter_unreachable(Nodes) ->
+    Members = filter_members(Nodes),
+    Reachable = do_filter_reachable(Members),
+    Members -- Reachable.
+
+-spec filter_running(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and where RabbitMQ is running.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% Note that even if RabbitMQ is running, the node could reject clients if it
+%% is under maintenance.
+%%
+%% @see rabbit:is_running/0.
+
+filter_running(Nodes) ->
+    Members = filter_members(Nodes),
+    do_filter_running(Members).
+
+-spec filter_not_running(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and where RabbitMQ is not running or we can't reach.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% @see filter_running/1.
+
+filter_not_running(Nodes) ->
+    Members = filter_members(Nodes),
+    Running = do_filter_running(Members),
+    Members -- Running.
+
+-spec filter_serving(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and who accept clients.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% @see rabbit:is_serving/0.
+
+filter_serving(Nodes) ->
+    Members = filter_members(Nodes),
+    do_filter_serving(Members).
+
+-spec filter_not_serving(Nodes) -> Nodes when
+      Nodes :: [node()].
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and where RabbitMQ is rejecting clients, is not running or we can't
+%% reach.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% @see filter_serving/1.
+
+filter_not_serving(Nodes) ->
+    Members = filter_members(Nodes),
+    Serving = do_filter_reachable(Members),
+    Members -- Serving.
+
+-define(FILTER_RPC_TIMEOUT, 10000).
+
+-spec do_filter_reachable(Members) -> Members when
+      Members :: [node()].
+%% @doc Filters the given list of cluster members to only select those we can
+%% reach.
+%%
+%% The given list of nodes must have been verified to only contain cluster
+%% members.
+%%
+%% @private
+
+do_filter_reachable(Members) ->
+    %% All clustered members we can reach, regardless of the state of RabbitMQ
+    %% on those nodes.
+    Rets = erpc:multicall(
+             Members, rabbit, is_running, [], ?FILTER_RPC_TIMEOUT),
+    RetPerMember = lists:zip(Members, Rets),
+    lists:filtermap(
+      fun
+          ({Member, {ok, _}}) ->
+              {true, Member};
+          ({_, {error, {erpc, Reason}}})
+            when Reason =:= noconnection orelse Reason =:= timeout ->
+              false;
+          ({Member, Error}) ->
+              ?LOG_ERROR(
+                 "~s:~s: Failed to query node ~ts: ~p",
+                 [?MODULE, ?FUNCTION_NAME, Member, Error],
+                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              false
+      end, RetPerMember).
+
+-spec do_filter_running(Members) -> Members when
+      Members :: [node()].
+%% @doc Filters the given list of cluster members to only select those who
+%% run `rabbit'.
+%%
+%% Those nodes could run `rabbit' without accepting clients.
+%%
+%% The given list of nodes must have been verified to only contain cluster
+%% members.
+%%
+%% @private
+
+do_filter_running(Members) ->
+    %% All clustered members where `rabbit' is running, regardless if they are
+    %% under maintenance or not.
+    Rets = erpc:multicall(
+             Members, rabbit, is_running, [], ?FILTER_RPC_TIMEOUT),
+    RetPerMember = lists:zip(Members, Rets),
+    lists:filtermap(
+      fun
+          ({Member, {ok, true}}) ->
+              {true, Member};
+          ({_, {ok, false}}) ->
+              false;
+          ({_, {error, {erpc, Reason}}})
+            when Reason =:= noconnection orelse Reason =:= timeout ->
+              false;
+          ({Member, Error}) ->
+              ?LOG_ERROR(
+                 "~s:~s: Failed to query node ~ts: ~p",
+                 [?MODULE, ?FUNCTION_NAME, Member, Error],
+                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              false
+      end, RetPerMember).
+
+-spec do_filter_serving(Members) -> Members when
+      Members :: [node()].
+%% @doc Filters the given list of cluster members to only select those who
+%% accept clients.
+%%
+%% The given list of nodes must have been verified to only contain cluster
+%% members.
+%%
+%% @private
+
+do_filter_serving(Members) ->
+    %% All clustered members serving clients. This implies that `rabbit' is
+    %% running.
+    Rets = erpc:multicall(
+             Members, rabbit, is_serving, [], ?FILTER_RPC_TIMEOUT),
+    RetPerMember0 = lists:zip(Members, Rets),
+    RetPerMember1 = handle_is_serving_undefined(RetPerMember0, []),
+    lists:filtermap(
+      fun
+          ({Member, {ok, true}}) ->
+              {true, Member};
+          ({_, {ok, false}}) ->
+              false;
+          ({_, {error, {erpc, Reason}}})
+            when Reason =:= noconnection orelse Reason =:= timeout ->
+              false;
+          ({Member, Error}) ->
+              ?LOG_ERROR(
+                 "~s:~s: Failed to query node ~ts: ~p",
+                 [?MODULE, ?FUNCTION_NAME, Member, Error],
+                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              false
+      end, RetPerMember1).
+
+handle_is_serving_undefined(
+  [{Member, {error, {exception, undef, [{rabbit, is_serving, [], _} | _]}}}
+   | Rest],
+  Result) ->
+    %% The remote node must be RabbitMQ 3.11.x without the
+    %% `rabbit:is_serving()' function. That's ok, we can perform two calls
+    %% instead.
+    %%
+    %% This function can go away once we require a RabbitMQ version which has
+    %% `rabbit:is_serving()'.
+    ?LOG_NOTICE(
+       "~s:~s: rabbit:is_serving() unavailable on node ~ts, falling back to "
+       "two RPC calls",
+       [?MODULE, ?FUNCTION_NAME, Member],
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    try
+        IsRunning = erpc:call(
+                      Member, rabbit, is_running, [], ?FILTER_RPC_TIMEOUT),
+        case IsRunning of
+            true ->
+                InMaintenance = erpc:call(
+                                  Member,
+                                  rabbit_maintenance,
+                                  is_being_drained_local_read, [Member],
+                                  ?FILTER_RPC_TIMEOUT),
+                Result1 = [{Member, {ok, not InMaintenance}} | Result],
+                handle_is_serving_undefined(Rest, Result1);
+            false ->
+                Result1 = [{Member, {ok, false}} | Result],
+                handle_is_serving_undefined(Rest, Result1)
+        end
+    catch
+        Class:Reason ->
+            Result2 = [{Member, {Class, Reason}} | Result],
+            handle_is_serving_undefined(Rest, Result2)
+    end;
+handle_is_serving_undefined(
+  [Ret | Rest], Result) ->
+    handle_is_serving_undefined(Rest, [Ret | Result]);
+handle_is_serving_undefined(
+  [], Result) ->
+    lists:reverse(Result).
 
 -spec running_count() -> integer().
-running_count() -> length(all_running()).
+running_count() -> length(list_running()).
 
 -spec total_count() -> integer().
-total_count() -> length(rabbit_nodes:all()).
+total_count() -> length(list_members()).
 
 -spec is_single_node_cluster() -> boolean().
 is_single_node_cluster() ->
@@ -188,7 +516,7 @@ await_running_count_with_retries(TargetCount, Retries) ->
 
 -spec all_running_with_hashes() -> #{non_neg_integer() => node()}.
 all_running_with_hashes() ->
-    maps:from_list([{erlang:phash2(Node), Node} || Node <- all_running()]).
+    maps:from_list([{erlang:phash2(Node), Node} || Node <- list_running()]).
 
 -spec target_cluster_size_hint() -> non_neg_integer().
 target_cluster_size_hint() ->

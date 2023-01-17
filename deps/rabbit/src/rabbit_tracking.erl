@@ -42,7 +42,7 @@ id(Node, Name) -> {Node, Name}.
 -spec count_on_all_nodes(module(), atom(), [term()], iodata()) ->
     non_neg_integer().
 count_on_all_nodes(Mod, Fun, Args, ContextMsg) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     ResL = erpc:multicall(Nodes, Mod, Fun, Args),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, 0).
 
@@ -83,7 +83,7 @@ count_tracked_items_mnesia(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                                   [ContextMsg, Key, Node, Err]),
                                 Acc
                         end
-                end, 0, rabbit_nodes:all_running()).
+                end, 0, rabbit_nodes:list_running()).
 
 -spec match_tracked_items_ets(atom(), tuple()) -> term().
 match_tracked_items_ets(Tab, MatchSpec) ->
@@ -98,7 +98,7 @@ match_tracked_items_ets(Tab, MatchSpec) ->
                   _ ->
                       Acc
               end
-      end, [], rabbit_nodes:all_running()).
+      end, [], rabbit_nodes:list_running()).
 
 match_tracked_items_local(Tab, MatchSpec) ->
     ets:match_object(Tab, MatchSpec).
@@ -110,7 +110,7 @@ match_tracked_items_mnesia(TableNameFun, MatchSpec) ->
                 Acc ++ mnesia:dirty_match_object(
                          Tab,
                          MatchSpec)
-        end, [], rabbit_nodes:all_running()).
+        end, [], rabbit_nodes:list_running()).
 
 -spec clear_tracking_table(atom()) -> ok.
 clear_tracking_table(TableName) ->
@@ -133,7 +133,7 @@ delete_tracking_table(TableName, Node, ContextMsg) ->
 
 -spec delete_tracked_entry({atom(), atom(), list()}, atom(), function(), term()) -> ok.
 delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableName, TableNameFun, Key) ->
-    ClusterNodes = rabbit_nodes:all_running(),
+    ClusterNodes = rabbit_nodes:list_running(),
     ExistsInCluster =
         lists:any(fun(Node) -> rpc:call(Node, M, F, A) end, ClusterNodes),
     case ExistsInCluster of

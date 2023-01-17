@@ -463,7 +463,7 @@ maybe_get_epmd_port(Name, Host) ->
 -spec active_listeners() -> [rabbit_types:listener()].
 
 active_listeners() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:list_running(),
     lists:append([node_listeners(Node) || Node <- Nodes]).
 
 -spec node_listeners(node()) -> [rabbit_types:listener()].
@@ -529,7 +529,7 @@ unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 -spec connections() -> [rabbit_types:connection()].
 
 connections() ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
 
 -spec local_connections() -> [rabbit_types:connection()].
@@ -552,7 +552,7 @@ unregister_non_amqp_connection(Pid) -> pg_local:leave(rabbit_non_amqp_connection
 -spec non_amqp_connections() -> [rabbit_types:connection()].
 
 non_amqp_connections() ->
-  Nodes = rabbit_nodes:all_running(),
+  Nodes = rabbit_nodes:list_running(),
   rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, local_non_amqp_connections, [], ?RPC_TIMEOUT).
 
 -spec local_non_amqp_connections() -> [rabbit_types:connection()].

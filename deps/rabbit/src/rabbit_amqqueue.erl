@@ -441,7 +441,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
                     [Type, VhostSpec, QueueSpec]),
-    Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
+    Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:list_running()),
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
                         filter_per_type(Type, Q),
@@ -1121,7 +1121,7 @@ list() ->
 
 do_list() ->
     All = mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()),
-    NodesRunning = rabbit_nodes:all_running(),
+    NodesRunning = rabbit_nodes:list_running(),
     lists:filter(fun (Q) ->
                          Pid = amqqueue:get_pid(Q),
                          St = amqqueue:get_state(Q),
@@ -1307,7 +1307,7 @@ is_in_virtual_host(Q, VHostName) ->
 -spec list(vhost:name()) -> [amqqueue:amqqueue()].
 list(VHostPath) ->
     All = list(VHostPath, rabbit_queue),
-    NodesRunning = rabbit_nodes:all_running(),
+    NodesRunning = rabbit_nodes:list_running(),
     lists:filter(fun (Q) ->
                          Pid = amqqueue:get_pid(Q),
                          St = amqqueue:get_state(Q),
@@ -1368,7 +1368,7 @@ list_down(VHostPath) ->
         true  ->
             Alive = sets:from_list([amqqueue:get_name(Q) || Q <- list(VHostPath)]),
             Durable = list(VHostPath, rabbit_durable_queue),
-            NodesRunning = rabbit_nodes:all_running(),
+            NodesRunning = rabbit_nodes:list_running(),
             lists:filter(fun (Q) ->
                                  N = amqqueue:get_name(Q),
                                  Pid = amqqueue:get_pid(Q),
@@ -1488,7 +1488,7 @@ emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:await_emitters_termination(Pids).
 
 collect_info_all(VHostPath, Items) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     Ref = make_ref(),
     Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, self()]) || Node <- Nodes ],
     rabbit_control_misc:await_emitters_termination(Pids),
@@ -1904,10 +1904,8 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
 node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
-        _    -> All = rabbit_nodes:all(),
-                Running = rabbit_nodes:all_running(),
-                lists:member(Node, All) andalso
-                    not lists:member(Node, Running) %% [2]
+        _    -> NotRunning = rabbit_nodes:list_not_running(),
+                lists:member(Node, NotRunning) %% [2]
     end.
 %% [1] In this case if we are a real running node (i.e. rabbitmqctl
 %% has RPCed into us) then we cannot allow promotion. If on the other

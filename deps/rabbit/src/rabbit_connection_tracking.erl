@@ -435,7 +435,7 @@ get_all_tracked_connection_table_names_for_node(Node) ->
 -spec lookup(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
 
 lookup(Name) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     lookup(Name, Nodes).
 
 lookup(_, []) ->
@@ -470,7 +470,7 @@ list() ->
     lists:foldl(
       fun (Node, Acc) ->
               Acc ++ list_on_node(Node)
-      end, [], rabbit_nodes:all_running()).
+      end, [], rabbit_nodes:list_running()).
 
 -spec count() -> non_neg_integer().
 
@@ -478,7 +478,7 @@ count() ->
     lists:foldl(
       fun (Node, Acc) ->
               count_on_node(Node) + Acc
-      end, 0, rabbit_nodes:all_running()).
+      end, 0, rabbit_nodes:list_running()).
 
 count_on_node(Node) ->
     case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
@@ -551,7 +551,7 @@ list_on_node_mnesia(Node) ->
           #tracked_connection{_ = '_'})
     catch exit:{aborted, {no_exists, _}} ->
             %% The table might not exist yet (or is already gone)
-            %% between the time rabbit_nodes:all_running() runs and
+            %% between the time rabbit_nodes:list_running() runs and
             %% returns a specific node, and
             %% mnesia:dirty_match_object() is called for that node's
             %% table.

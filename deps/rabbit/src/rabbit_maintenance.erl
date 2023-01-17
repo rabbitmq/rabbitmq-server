@@ -341,7 +341,7 @@ stop_local_quorum_queue_followers() ->
 
 -spec primary_replica_transfer_candidate_nodes() -> [node()].
 primary_replica_transfer_candidate_nodes() ->
-    filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running() -- [node()]).
+    filter_out_drained_nodes_consistent_read(rabbit_nodes:list_running() -- [node()]).
 
 -spec random_primary_replica_transfer_candidate_node([node()], [node()]) -> {ok, node()} | undefined.
 random_primary_replica_transfer_candidate_node([], _Preferred) ->

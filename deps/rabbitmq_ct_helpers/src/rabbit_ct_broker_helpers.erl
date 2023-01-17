@@ -1660,7 +1660,13 @@ kill_node_after(Config, Node, Sleep) ->
     kill_node(Config, Node).
 
 cluster_members_online(Config, Node) ->
-    rpc(Config, Node, rabbit_nodes, all_running, []).
+    try
+        rpc(Config, Node, rabbit_nodes, list_running, [])
+    catch
+        error:{exception, undef, [{rabbit_nodes, list_running, [], _} | _]} ->
+            Nodes = rpc(Config, Node, rabbit_nodes, all_running, []),
+            lists:filter(fun rabbit:is_running/1, Nodes)
+    end.
 
 await_os_pid_death(Pid) ->
     case rabbit_misc:is_os_process_alive(Pid) of

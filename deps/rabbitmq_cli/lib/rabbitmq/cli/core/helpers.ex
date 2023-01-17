@@ -62,9 +62,18 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def with_nodes_in_cluster(node, fun, timeout \\ :infinity) do
-    case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
-      {:badrpc, _} = err -> err
-      value -> fun.(value)
+    case :rpc.call(node, :rabbit_nodes, :list_running, [], timeout) do
+      {:badrpc, {:EXIT, {:undef, [{:rabbit_nodes, :list_running, [], []} | _]}}} ->
+        case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
+          {:badrpc, _} = err -> err
+          value -> fun.(value)
+        end
+
+      {:badrpc, _} = err ->
+        err
+
+      value ->
+        fun.(value)
     end
   end
 

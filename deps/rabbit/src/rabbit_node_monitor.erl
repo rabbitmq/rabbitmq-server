@@ -163,7 +163,7 @@ notify_node_up() ->
 
 notify_joined_cluster() ->
     NewMember = node(),
-    Nodes = rabbit_nodes:all_running() -- [NewMember],
+    Nodes = rabbit_nodes:list_running() -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_mnesia:node_type()}),
 
@@ -172,7 +172,7 @@ notify_joined_cluster() ->
 -spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
@@ -409,7 +409,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(notify_node_up, State = #state{guid = GUID}) ->
-    Nodes = rabbit_nodes:all_running() -- [node()],
+    Nodes = rabbit_nodes:list_running() -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
                       {node_up, node(), rabbit_mnesia:node_type(), GUID}),
     %% register other active rabbits with this rabbit
@@ -466,7 +466,7 @@ handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
 handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
-    case lists:member(Node, rabbit_nodes:all_running()) andalso
+    case lists:member(Node, rabbit_nodes:list_members()) andalso
         maps:find(Node, GUIDs) =:= {ok, NodeGUID} of
         true  -> spawn_link( %%[1]
                    fun () ->
@@ -619,7 +619,7 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
     _ = case maps:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = rabbit_nodes:all_running()
+        {ok, DownGUID} -> Alive = rabbit_nodes:list_members()
                               -- [node(), Node],
                           [case maps:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
@@ -818,7 +818,7 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
     Down = Partitions -- alive_rabbit_nodes(),
-    NoLongerPartitioned = rabbit_nodes:all_running(),
+    NoLongerPartitioned = rabbit_nodes:list_running(),
     Partitions1 = case Partitions -- Down -- NoLongerPartitioned of
                       [] -> [];
                       _  -> Partitions
@@ -899,8 +899,7 @@ disconnect(Node) ->
 
 %%--------------------------------------------------------------------
 
-%% mnesia:system_info(db_nodes) (and hence
-%% rabbit_nodes:all_running()) does not return all nodes
+%% mnesia:system_info(db_nodes) does not return all nodes
 %% when partitioned, just those that we are sharing Mnesia state
 %% with. So we have a small set of replacement functions
 %% here. "rabbit" in a function's name implies we test if the rabbit
@@ -915,7 +914,7 @@ majority() ->
     majority([]).
 
 majority(NodesDown) ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     AliveNodes = alive_nodes(Nodes) -- NodesDown,
     length(AliveNodes) / length(Nodes) > 0.5.
 
@@ -928,44 +927,44 @@ in_preferred_partition(PreferredNodes) ->
     in_preferred_partition(PreferredNodes, []).
 
 in_preferred_partition(PreferredNodes, NodesDown) ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
     AliveNodes = alive_nodes(RealPreferredNodes) -- NodesDown,
     RealPreferredNodes =:= [] orelse AliveNodes =/= [].
 
 all_nodes_up() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     length(alive_nodes(Nodes)) =:= length(Nodes).
 
 -spec all_rabbit_nodes_up() -> boolean().
 
 all_rabbit_nodes_up() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
-alive_nodes() -> alive_nodes(rabbit_nodes:all()).
+alive_nodes() -> rabbit_nodes:list_reachable().
 
 -spec alive_nodes([node()]) -> [node()].
 
-alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
+alive_nodes(Nodes) -> rabbit_nodes:filter_reachable(Nodes).
 
-alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_nodes:all()).
+alive_rabbit_nodes() -> rabbit_nodes:list_running().
 
 -spec alive_rabbit_nodes([node()]) -> [node()].
 
 alive_rabbit_nodes(Nodes) ->
-    [N || N <- alive_nodes(Nodes), rabbit:is_running(N)].
+    rabbit_nodes:filter_running(Nodes).
 
 %% This one is allowed to connect!
 
 -spec ping_all() -> 'ok'.
 
 ping_all() ->
-    [net_adm:ping(N) || N <- rabbit_nodes:all()],
+    [net_adm:ping(N) || N <- rabbit_nodes:list_members()],
     ok.
 
 possibly_partitioned_nodes() ->
-    alive_rabbit_nodes() -- rabbit_nodes:all_running().
+    rabbit_nodes:list_unreachable().
 
 startup_log([]) ->
     rabbit_log:info("Starting rabbit_node_monitor", []);
