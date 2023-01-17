@@ -204,13 +204,8 @@ switch_callback(State, Callback, Length) ->
 
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
-<<<<<<< HEAD
-                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Connection forced: ~p", [Reason]})};
-=======
                               error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                           "Connection forced: ~tp", [Reason]))};
->>>>>>> 458cf33c4e (Fix all dialyzer warnings in rabbitmq_amqp1_0)
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -252,12 +247,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
-<<<<<<< HEAD
-            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                 "Session error: ~p~n~p", [RealReason, Trace]},
-=======
             R = error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Session error: ~tp~n~tp", [RealReason, Trace]),
->>>>>>> 458cf33c4e (Fix all dialyzer warnings in rabbitmq_amqp1_0)
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
