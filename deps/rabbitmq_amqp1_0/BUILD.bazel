@@ -9,6 +9,7 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
+    "without",
 )
 
 APP_ENV = """[
@@ -53,14 +54,17 @@ plt(
     name = "base_plt",
     # this ought to include BUILD_DEPS, but not sure how to
     # get dialyze of elixir code working yet
-    deps = DEPS,
+    deps = without(
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        BUILD_DEPS + DEPS + RUNTIME_DEPS,
+    ),
+    apps = ["erts", "kernel", "stdlib", "ssl"]
 )
 
 dialyze(
     size = "medium",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
