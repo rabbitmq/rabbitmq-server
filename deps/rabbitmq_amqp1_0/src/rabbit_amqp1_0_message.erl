@@ -33,13 +33,15 @@ assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
 assemble(header, {R, P, C}, Else, Uneaten) ->
     assemble(message_annotations, {R, P, C}, Else, Uneaten);
 
-assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
-         Uneaten) ->
-    %% ignore delivery annotations for now
-    %% TODO: handle "rejected" error
-    assemble(message_annotations, RPC, Rest, Uneaten);
-assemble(delivery_annotations, RPC, Else, Uneaten) ->
-    assemble(message_annotations, RPC, Else, Uneaten);
+%% This clause doesn't get called, and is commented out as not to confuse dialyzer.
+%%
+%% assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
+%%          Uneaten) ->
+%%     %% ignore delivery annotations for now
+%%     %% TODO: handle "rejected" error
+%%     assemble(message_annotations, RPC, Rest, Uneaten);
+%% assemble(delivery_annotations, RPC, Else, Uneaten) ->
+%%     assemble(message_annotations, RPC, Else, Uneaten);
 
 assemble(message_annotations, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.message_annotations'{}, Rest}, Uneaten) ->
@@ -114,10 +116,11 @@ assemble(footer, {R, P = #'P_basic'{headers = Headers}, C},
 assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
 assemble(footer, _, Else, _) ->
-    exit({unexpected_trailing_sections, Else});
+    exit({unexpected_trailing_sections, Else}).
 
-assemble(Expected, _, Actual, _) ->
-    exit({expected_section, Expected, Actual}).
+%% Catch-all clause, not needed according to dialyzer
+%% assemble(Expected, _, Actual, _) ->
+%%     exit({expected_section, Expected, Actual}).
 
 decode_section(<<>>) ->
     none;
@@ -179,8 +182,6 @@ to_expiration(undefined) ->
 to_expiration({uint, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
-from_expiration(undefined) ->
-    undefined;
 from_expiration(PBasic) ->
     case rabbit_basic:parse_expiration(PBasic) of
         {ok, undefined} -> undefined;
@@ -302,8 +303,6 @@ wrap(Type, Val) ->
 table_lookup(undefined, _)    -> undefined;
 table_lookup(Headers, Header) -> rabbit_misc:table_lookup(Headers, Header).
 
-map_add(_T, _Key, _Type, undefined, Acc) ->
-    Acc;
 map_add(KeyType, Key, Type, Value, Acc) ->
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
 
