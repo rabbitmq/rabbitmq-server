@@ -1301,8 +1301,9 @@ serialise_and_send_to_client(Packet, #state{proto_ver = ProtoVer, socket = Sock}
     try rabbit_net:port_command(Sock, Data)
     catch error:Error ->
               ?LOG_ERROR("MQTT: a socket write failed: ~p", [Error]),
-              ?LOG_DEBUG("Failed to write to socket ~p, error: ~p, packet: ~p",
-                         [Sock, Error, Packet])
+              ?LOG_DEBUG("MQTT failed to write to socket ~p, error: ~p, "
+                         "fixed packet header: ~p, variable packet header: ~p",
+                         [Sock, Error, Packet#mqtt_packet.fixed, Packet#mqtt_packet.variable])
     end.
 
 serialise(Packet, #state{proto_ver = ProtoVer}) ->
