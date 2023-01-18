@@ -64,9 +64,9 @@ http_file(
 
 http_file(
     name = "otp_src_24",
-    downloaded_file_path = "OTP-24.3.4.7.tar.gz",
-    sha256 = "80c08cf1c181a124dd805bb1d91ff5c1996bd8a27b3f4d008b1ababf48d9947e",
-    urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.7.tar.gz"],
+    downloaded_file_path = "OTP-24.3.4.8.tar.gz",
+    sha256 = "72efa2bb1556a3eaa6afa874ec2dffb5e63d5c9c0c75090deb1d5acef928dc9e",
+    urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.8.tar.gz"],
 )
 
 http_file(
@@ -127,8 +127,8 @@ erlang_config(
     internal_erlang_configs = [
         internal_erlang_from_github_release(
             name = "24",
-            sha256 = "0cb1092f6aff83e8026acffa020dfcffb91073e559311ee1681fdec2d0e15e2e",
-            version = "24.3.4.7",
+            sha256 = "3d8ca72146cc08f1084e4e0fcaec31621108fd88ad1368f01dae3b8fb628e859",
+            version = "24.3.4.8",
         ),
         internal_erlang_from_github_release(
             name = "25_0",
