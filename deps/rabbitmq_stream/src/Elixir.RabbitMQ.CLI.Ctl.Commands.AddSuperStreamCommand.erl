@@ -138,31 +138,24 @@ usage() ->
       "s <partitions>] [--routing-keys <routing-keys>]">>.
 
 usage_additional() ->
-    [["<name>", "The name of the super stream."],
-     ["--vhost <vhost>", "The virtual host the super stream is added to."],
-     ["--partitions <partitions>",
-      "The number of partitions, default is 3. Mutually "
-      "exclusive with --routing-keys."],
-     ["--routing-keys <routing-keys>",
-      "Comma-separated list of routing keys. Mutually "
-      "exclusive with --partitions."],
-     ["--max-length-bytes <max-length-bytes>",
-      "The maximum size of partition streams, example "
-      "values: 20gb, 500mb."],
-     ["--max-age <max-age>",
-      "The maximum age of partition stream segments, "
-      "using the ISO 8601 duration format, e.g. PT10M30S "
-      "for 10 minutes 30 seconds, P5DT8H for 5 days "
-      "8 hours."],
-     ["--stream-max-segment-size-bytes <stream-max-segment-si"
-      "ze-bytes>",
-      "The maximum size of partition stream segments, "
-      "example values: 500mb, 1gb."],
-     ["--leader-locator <leader-locator>",
-      "Leader locator strategy for partition streams, "
-      "possible values are client-local, balanced."],
-     ["--initial-cluster-size <initial-cluster-size>",
-      "The initial cluster size of partition streams."]].
+    [[<<"<name>">>,
+      <<"The name of the super stream.">>],
+     [<<"--vhost <vhost>">>,
+      <<"The virtual host the super stream is added to.">>],
+     [<<"--partitions <partitions>">>,
+      <<"The number of partitions, default is 3. Mutually exclusive with --routing-keys.">>],
+     [<<"--routing-keys <routing-keys>">>,
+      <<"Comma-separated list of routing keys. Mutually exclusive with --partitions.">>],
+     [<<"--max-length-bytes <max-length-bytes>">>,
+      <<"The maximum size of partition streams, example values: 20gb, 500mb.">>],
+     [<<"--max-age <max-age>">>,
+      <<"The maximum age of partition stream segments, using the ISO 8601 duration format, e.g. PT10M30S for 10 minutes 30 seconds, P5DT8H for 5 days 8 hours.">>],
+     [<<"--stream-max-segment-size-bytes <stream-max-segment-size-bytes>">>,
+      <<"The maximum size of partition stream segments, example values: 500mb, 1gb.">>],
+     [<<"--leader-locator <leader-locator>">>,
+      <<"Leader locator strategy for partition streams, possible values are client-local, balanced.">>],
+     [<<"--initial-cluster-size <initial-cluster-size>">>,
+      <<"The initial cluster size of partition streams.">>]].
 
 usage_doc_guides() ->
     [?STREAM_GUIDE_URL].
