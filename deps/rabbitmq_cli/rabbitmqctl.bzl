@@ -19,7 +19,7 @@ load(
 )
 
 ElixirAppInfo = provider(
-    doc = "Compiled Erlang Application",
+    doc = "Compiled Elixir Application",
     fields = {
         "app_name": "Name of the erlang application",
         "extra_apps": "Extra applications in the applications key of the .app file",
