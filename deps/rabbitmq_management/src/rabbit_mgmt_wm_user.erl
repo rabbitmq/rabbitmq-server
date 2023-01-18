@@ -49,7 +49,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun(_, User, ReqData) ->
-              put_user(User#{name => Username}, ActingUser),
+              _ = put_user(User#{name => Username}, ActingUser),
               {true, ReqData, Context}
       end).
 
