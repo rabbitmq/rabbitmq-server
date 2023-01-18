@@ -7,6 +7,8 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
+load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@rules_erlang//gazelle:def.bzl", "GAZELLE_ERLANG_RUNTIME_DEPS")
 load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
@@ -19,6 +21,26 @@ exports_files([
     "scripts/bazel/rabbitmq-run.bat",
     "release-notes",
 ])
+
+# gazelle:prefix github.com/rabbitmq/rabbitmq-server
+
+gazelle(
+    name = "gazelle",
+    data = GAZELLE_ERLANG_RUNTIME_DEPS,
+    gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
+)
+
+# gazelle(
+#     name = "gazelle-update-repos",
+#     extra_args = [
+#         "--verbose",
+#         "--build_files_dir=bazel",
+#         "--to_macro=workspace_helpers.bzl%rabbitmq_external_deps",
+#     ],
+#     command = "update-repos",
+#     data = GAZELLE_ERLANG_RUNTIME_DEPS,
+#     gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
+# )
 
 bool_flag(
     name = "enable_test_build",
