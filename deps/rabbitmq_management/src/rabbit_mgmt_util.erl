@@ -846,8 +846,6 @@ decode(Body) ->
         case rabbit_json:decode(Body) of
             Val when is_map(Val) ->
                 {ok, Val};
-            Val when is_atom(Val) ->
-                {ok, #{}};
             %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839
             Bin when is_binary(Bin) ->
                 {error, "invalid payload: the request body JSON-decoded to a string. "
@@ -1218,7 +1216,7 @@ int(Name, ReqData) ->
 def(undefined, Def) -> Def;
 def(V, _) -> V.
 
--spec qs_val(binary(), cowboy:req()) -> any() | undefined.
+-spec qs_val(binary(), cowboy_req:req()) -> any() | undefined.
 qs_val(Name, ReqData) ->
     Qs = cowboy_req:parse_qs(ReqData),
     proplists:get_value(Name, Qs, undefined).
