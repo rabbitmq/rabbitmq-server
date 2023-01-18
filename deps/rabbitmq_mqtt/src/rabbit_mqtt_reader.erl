@@ -358,10 +358,11 @@ process_received_bytes(Bytes,
                 {stop, disconnect, ProcState1} ->
                     {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
             end;
-        {error, {cannot_parse, Error, Stacktrace}} ->
-            ?LOG_ERROR("MQTT cannot parse a packet on connection '~ts', unparseable payload: ~tp, error: {~tp, ~tp} ",
-                       [ConnName, Bytes, Error, Stacktrace]),
-            {stop, {shutdown, Error}, State};
+        {error, {cannot_parse, Reason, Stacktrace}} ->
+            ?LOG_ERROR("MQTT cannot parse a packet on connection '~ts', reason: ~tp, "
+                       "stacktrace: ~tp, payload (first 100 bytes): ~tp",
+                       [ConnName, Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Bytes, 100)]),
+            {stop, {shutdown, Reason}, State};
         {error, Error} ->
             ?LOG_ERROR("MQTT detected a framing error on connection ~ts: ~tp", [ConnName, Error]),
             {stop, {shutdown, Error}, State}

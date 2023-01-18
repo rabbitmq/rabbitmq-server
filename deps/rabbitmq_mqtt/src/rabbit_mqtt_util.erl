@@ -22,11 +22,11 @@
          remove_duplicate_clientid_connections/2,
          init_sparkplug/0,
          mqtt_to_amqp/1,
-         amqp_to_mqtt/1
+         amqp_to_mqtt/1,
+         truncate_binary/2
         ]).
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
-
 -define(SPARKPLUG_MP_MQTT_TO_AMQP, sparkplug_mp_mqtt_to_amqp).
 -define(SPARKPLUG_MP_AMQP_TO_MQTT, sparkplug_mp_amqp_to_mqtt).
 
@@ -197,3 +197,11 @@ remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->
               %% MQTT supervision tree on this node not fully started
               ok
     end.
+
+-spec truncate_binary(binary(), non_neg_integer()) -> binary().
+truncate_binary(Bin, Size)
+  when is_binary(Bin) andalso byte_size(Bin) =< Size ->
+    Bin;
+truncate_binary(Bin, Size)
+  when is_binary(Bin) ->
+    binary:part(Bin, 0, Size).

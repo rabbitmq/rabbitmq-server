@@ -45,7 +45,8 @@ parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value) ->
     parse_packet(Rest, Fixed, Value + Len * Multiplier).
 
 parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
-                                      qos  = Qos } = Fixed, Length) ->
+                                      qos  = Qos } = Fixed, Length)
+  when Length =< ?MAX_LEN ->
     case {Type, Bin} of
         {?CONNECT, <<PacketBin:Length/binary, Rest/binary>>} ->
             {ProtoName, Rest1} = parse_utf(PacketBin),
@@ -106,12 +107,13 @@ parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
           when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
             Length = 0,
             wrap(Fixed, Rest);
-        {_, TooShortBin} ->
+        {_, TooShortBin}
+          when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
                            parse_packet(<<TooShortBin/binary, BinMore/binary>>,
                                         Fixed, Length)
                    end}
-     end.
+    end.
 
 parse_topics(_, <<>>, Topics) ->
     Topics;
