@@ -66,8 +66,6 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_auth_backend_http"
-
 rabbitmq_suite(
     name = "auth_SUITE",
     size = "small",
@@ -83,7 +81,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
 )
 

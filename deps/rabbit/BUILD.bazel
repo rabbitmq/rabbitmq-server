@@ -279,21 +279,17 @@ rabbitmq_test_helper(
     ],
 )
 
-PACKAGE = "deps/rabbit"
-
 rabbitmq_suite(
     name = "amqqueue_backward_compatibility_SUITE",
     size = "small",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "backing_queue_SUITE",
     size = "large",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "channel_interceptor_SUITE",
     size = "medium",
     additional_srcs = [
@@ -303,7 +299,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "channel_operation_timeout_SUITE",
     size = "medium",
     additional_srcs = [
@@ -312,7 +307,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "classic_queue_prop_SUITE",
     size = "large",
     shard_count = 3,
@@ -323,7 +317,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "cluster_rename_SUITE",
     size = "large",
     flaky = True,
@@ -331,13 +324,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "cluster_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "clustering_management_SUITE",
     size = "large",
     flaky = True,
@@ -346,7 +337,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
     size = "medium",
     data = [
@@ -355,13 +345,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "confirms_rejects_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "consumer_timeout_SUITE",
     size = "medium",
     additional_beam = [
@@ -370,13 +358,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "crashing_queues_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "dead_lettering_SUITE",
     size = "large",
     additional_beam = [
@@ -387,25 +373,21 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "definition_import_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "disconnect_detected_during_alarm_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "disk_monitor_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "dynamic_ha_SUITE",
     size = "large",
     flaky = True,
@@ -417,7 +399,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "dynamic_qq_SUITE",
     size = "large",
     additional_beam = [
@@ -430,7 +411,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "eager_sync_SUITE",
     size = "large",
     additional_beam = [
@@ -443,7 +423,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "feature_flags_SUITE",
     size = "large",
     flaky = True,
@@ -454,13 +433,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "feature_flags_v2_SUITE",
     size = "large",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "feature_flags_with_unpriveleged_user_SUITE",
     size = "large",
     additional_beam = [
@@ -477,25 +454,21 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "lazy_queue_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "list_consumers_sanity_check_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "list_queues_online_and_offline_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "logging_SUITE",
     runtime_deps = [
         "@syslog//:erlang_app",
@@ -511,7 +484,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
@@ -520,7 +492,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "many_node_ha_SUITE",
     size = "medium",
     additional_beam = [
@@ -530,13 +501,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "message_size_limit_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "metrics_SUITE",
     size = "medium",
     deps = [
@@ -564,99 +533,83 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "peer_discovery_classic_config_SUITE",
     size = "medium",
     flaky = True,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "peer_discovery_dns_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_user_connection_channel_limit_partitions_SUITE",
     size = "large",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_user_connection_channel_limit_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_user_connection_channel_tracking_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_user_connection_tracking_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_vhost_connection_limit_partitions_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_vhost_connection_limit_SUITE",
     size = "medium",
     flaky = True,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_vhost_msg_store_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "per_vhost_queue_limit_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "policy_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "priority_queue_recovery_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "priority_queue_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "product_info_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "proxy_protocol_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "publisher_confirms_parallel_SUITE",
     size = "medium",
     additional_beam = [
@@ -665,20 +618,17 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "queue_length_limits_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "queue_master_location_SUITE",
     size = "large",
     shard_count = 2,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
@@ -689,13 +639,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "queue_type_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
@@ -714,7 +662,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_core_metrics_gc_SUITE",
     size = "medium",
 )
@@ -768,7 +715,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_fifo_dlx_integration_SUITE",
     size = "medium",
     additional_beam = [
@@ -853,7 +799,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
@@ -867,32 +812,27 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbitmq_queues_cli_integration_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbitmqctl_integration_SUITE",
     size = "medium",
     flaky = True,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbitmqctl_shutdown_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "signal_handling_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "simple_ha_SUITE",
     size = "large",
     additional_beam = [
@@ -903,7 +843,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "single_active_consumer_SUITE",
     size = "medium",
     additional_beam = [
@@ -912,13 +851,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "sync_detection_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "term_to_binary_compat_prop_SUITE",
     deps = [
         "@proper//:erlang_app",
@@ -926,13 +863,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "topic_permission_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_access_control_authn_authz_context_propagation_SUITE",
     size = "medium",
     additional_srcs = [
@@ -942,7 +877,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_access_control_credential_validation_SUITE",
     size = "medium",
     deps = [
@@ -951,7 +885,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_access_control_SUITE",
     size = "medium",
     additional_srcs = [
@@ -968,13 +901,11 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_amqp091_server_properties_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_app_management_SUITE",
     size = "medium",
 )
@@ -1006,31 +937,26 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_connection_tracking_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_credit_flow_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_disk_monitor_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_file_handle_cache_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_gen_server2_SUITE",
     size = "medium",
 )
@@ -1045,7 +971,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_log_management_SUITE",
     size = "medium",
 )
@@ -1072,13 +997,11 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_plugin_versioning_SUITE",
     size = "small",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_policy_validators_SUITE",
     size = "small",
 )
@@ -1094,7 +1017,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_stats_and_metrics_SUITE",
     size = "medium",
     additional_srcs = [
@@ -1111,19 +1033,16 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unit_vm_memory_monitor_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "upgrade_preparation_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "vhost_SUITE",
     size = "medium",
     flaky = True,
@@ -1154,7 +1073,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "direct_exchange_routing_v2_SUITE",
     size = "medium",
     additional_beam = [
@@ -1163,7 +1081,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_direct_reply_to_prop_SUITE",
     size = "small",
     deps = [
@@ -1172,7 +1089,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "unicode_SUITE",
     size = "small",
 )
