@@ -66,8 +66,6 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_web_mqtt"
-
 rabbitmq_test_helper(
     name = "test_utils",
     srcs = glob(["test/src/*.erl"]),
@@ -75,12 +73,10 @@ rabbitmq_test_helper(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "proxy_protocol_SUITE",
     additional_beam = [":test_utils"],
     additional_hdrs = glob(["test/src/*.hrl"]),
@@ -91,7 +87,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "system_SUITE",
     additional_beam = [":test_utils"],
     additional_hdrs = glob(["test/src/*.hrl"]),

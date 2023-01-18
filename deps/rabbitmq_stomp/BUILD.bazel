@@ -82,8 +82,6 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_stomp"
-
 rabbitmq_test_helper(
     name = "rabbit_stomp_client",
     srcs = [
@@ -99,7 +97,6 @@ rabbitmq_test_helper(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "command_SUITE",
     size = "medium",
     additional_beam = [
@@ -108,13 +105,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "connections_SUITE",
     size = "medium",
     additional_beam = [
@@ -132,20 +127,17 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "proxy_protocol_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "python_SUITE",
     flaky = True,
     shard_count = 3,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "system_SUITE",
     size = "medium",
     additional_beam = [
@@ -154,7 +146,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "topic_SUITE",
     size = "medium",
     additional_beam = [

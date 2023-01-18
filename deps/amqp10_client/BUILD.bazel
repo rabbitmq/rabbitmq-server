@@ -76,15 +76,12 @@ broker_for_integration_suites(
     extra_plugins = ["//deps/rabbitmq_amqp1_0:erlang_app"],
 )
 
-PACKAGE = "deps/amqp10_client"
-
 rabbitmq_suite(
     name = "msg_SUITE",
     deps = DEPS,
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "system_SUITE",
     size = "medium",
     additional_hdrs = [

@@ -66,10 +66,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_shovel_management"
-
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "http_SUITE",
 )
 

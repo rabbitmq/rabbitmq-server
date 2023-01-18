@@ -70,15 +70,12 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_web_stomp"
-
 rabbitmq_test_helper(
     name = "test_util",
     srcs = glob(["test/src/*.erl"]),
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "amqp_stomp_SUITE",
     additional_beam = [
         ":test_util",
@@ -86,12 +83,10 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "cowboy_websocket_SUITE",
     additional_beam = [
         ":test_util",
@@ -99,7 +94,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "proxy_protocol_SUITE",
     additional_beam = [
         ":test_util",
@@ -107,7 +101,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "raw_websocket_SUITE",
     additional_beam = [
         ":test_util",

@@ -87,7 +87,6 @@ rabbitmq_run(
 )
 
 rabbitmq_integration_suite(
-    "deps/amqp_client",
     name = "system_SUITE",
     size = "large",
     runtime_deps = [

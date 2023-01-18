@@ -94,10 +94,7 @@ rabbitmq_test_helper(
     ],
 )
 
-PACKAGE = "deps/rabbitmq_shovel"
-
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "amqp10_dynamic_SUITE",
     additional_beam = [
         ":shovel_test_utils",
@@ -117,7 +114,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "amqp10_SUITE",
 )
 
@@ -127,12 +123,10 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "configuration_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "delete_shovel_command_SUITE",
     additional_beam = [
         ":shovel_test_utils",
@@ -140,7 +134,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "dynamic_SUITE",
     additional_beam = [
         ":shovel_test_utils",
@@ -157,7 +150,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "shovel_status_command_SUITE",
     additional_beam = [
         ":shovel_test_utils",

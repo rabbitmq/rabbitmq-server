@@ -99,8 +99,6 @@ rabbitmq_test_helper(
     ],
 )
 
-PACKAGE = "deps/rabbitmq_management"
-
 rabbitmq_suite(
     name = "cache_SUITE",
     size = "small",
@@ -113,7 +111,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "clustering_prop_SUITE",
     size = "large",
     deps = [
@@ -123,7 +120,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "clustering_SUITE",
     flaky = True,
     deps = [
@@ -132,7 +128,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
     size = "medium",
 )
@@ -143,12 +138,10 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_mgmt_http_health_checks_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_mgmt_http_SUITE",
     size = "large",
     additional_beam = [
@@ -158,12 +151,10 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_mgmt_only_http_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_mgmt_rabbitmqadmin_SUITE",
     additional_beam = [
         ":rabbit_mgmt_runtime_parameters_util",
@@ -186,7 +177,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "rabbit_mgmt_test_db_SUITE",
     deps = [
         "//deps/rabbitmq_management_agent:erlang_app",

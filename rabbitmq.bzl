@@ -203,7 +203,6 @@ def rabbitmq_test_helper(
     )
 
 def rabbitmq_integration_suite(
-        package,
         name = None,
         tags = [],
         data = [],
@@ -215,6 +214,8 @@ def rabbitmq_integration_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+    package = native.package_name()
+
     extra_deps = [
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_ct_helpers:erlang_app",

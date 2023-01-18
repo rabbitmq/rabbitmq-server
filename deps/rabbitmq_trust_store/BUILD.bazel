@@ -74,15 +74,11 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_trust_store"
-
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "config_schema_SUITE",
 )
 
 rabbitmq_integration_suite(
-    PACKAGE,
     name = "system_SUITE",
     flaky = True,
     runtime_deps = [
