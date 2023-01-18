@@ -41,6 +41,7 @@
                  alarmed_nodes :: dict:dict(node(), [resource_alarm_source()]),
                  alarms :: [alarm()]}).
 
+-export_type([alarm/0]).
 -type local_alarm() :: 'file_descriptor_limit'.
 -type resource_alarm_source() :: 'disk' | 'memory'.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
@@ -100,13 +101,13 @@ get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
 -spec get_alarms(timeout()) -> [{alarm(), []}].
 get_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_alarms, Timeout).
 
--spec get_local_alarms() -> [alarm()].
+-spec get_local_alarms() -> [{alarm(), []}].
 get_local_alarms() -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, infinity).
 
--spec get_local_alarms(timeout()) -> [alarm()].
+-spec get_local_alarms(timeout()) -> [{alarm(), []}].
 get_local_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, Timeout).
 
--spec filter_local_alarms([alarm()]) -> [alarm()].
+-spec filter_local_alarms([{alarm(), any()}]) -> [{alarm(), any()}].
 filter_local_alarms(Alarms) ->
     lists:filter(fun is_local/1, Alarms).
 

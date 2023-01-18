@@ -68,7 +68,7 @@ drop_drop_unroutable_metric(Slide) ->
               Value
       end, Slide).
 
-fill_consumer_active_fields(ConsumersStats) ->
+fill_consumer_active_fields(ConsumersStatsList) ->
     [case proplists:get_value(active, ConsumerStats) of
          undefined ->
              [{active, true},
@@ -77,4 +77,4 @@ fill_consumer_active_fields(ConsumersStats) ->
          _ ->
              ConsumerStats
      end
-     || ConsumerStats <- ConsumersStats].
+     || ConsumerStats <- ConsumersStatsList].

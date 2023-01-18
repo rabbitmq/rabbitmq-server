@@ -33,8 +33,6 @@
 
 -import(rabbit_misc, [pget/3]).
 
--type maybe_slide() :: exometer_slide:slide() | not_found.
--type slide_data() :: #{atom() => {maybe_slide(), maybe_slide()}}.
 -type maybe_range() :: rabbit_mgmt_stats:maybe_range().
 -type ranges() :: {maybe_range(), maybe_range(), maybe_range(), maybe_range()}.
 -type mfargs() :: {module(), atom(), [any()]}.
@@ -273,10 +271,7 @@ pget(Key, List) -> pget(Key, List, unknown).
 %% passed a queue proplist that will already have been formatted -
 %% i.e. it will have name and vhost keys.
 id_name(node_stats)       -> name;
-id_name(node_node_stats)  -> route;
 id_name(vhost_stats)      -> name;
-id_name(queue_stats)      -> name;
-id_name(exchange_stats)   -> name;
 id_name(channel_stats)    -> pid;
 id_name(connection_stats) -> pid.
 
@@ -443,8 +438,11 @@ channel_stats(ChannelData, Ranges, Interval) ->
    format_range(ChannelData, channel_process_stats,
                 pick_range(process_stats, Ranges), Interval).
 
--spec format_range(slide_data(), lookup_key(), maybe_range(), non_neg_integer()) ->
-    proplists:proplist().
+-type maybe_slide() :: 'not_found' | exometer_slide:slide() | ['not_found' | exometer_slide:slide() ].
+-type slide_data() :: #{lookup_key() => {maybe_slide(), maybe_slide()}}.
+
+%% The map in the spec should be also slide_data(), but dialyzer doesn't agree
+-spec format_range(#{lookup_key() => any()}, lookup_key(), maybe_range(), non_neg_integer()) -> proplists:proplist().
 format_range(Data, Key, Range0, Interval) ->
    Table = case Key of
                {T, _} -> T;
@@ -457,6 +455,7 @@ format_range(Data, Key, Range0, Interval) ->
                                   SamplesFun).
 
 %% basic.get-empty metric
+-spec fetch_slides(non_neg_integer(), lookup_key(), slide_data()) -> [rabbit_mgmt_stats:maybe_slide()].
 fetch_slides(Ele, Key, Data)
   when Key =:= channel_queue_stats_deliver_stats orelse
        Key =:= channel_stats_deliver_stats orelse
@@ -561,6 +560,7 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
      Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
+-spec connection_stats(term(), term(), term()) -> [term()].
 connection_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(connection_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_connection_data, [Ids, Ranges]}),
@@ -587,6 +587,7 @@ list_channel_stats(Ranges, Objs, Interval) ->
          end || Obj <- Objs],
     ChannelStats.
 
+-spec detail_channel_stats(ranges(), [term()], term()) -> [term()].
 detail_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_channel_data,
@@ -718,7 +719,7 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory | proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
--spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
+-spec created_stats_delegated(Key :: binary(), Type :: atom()) -> [{atom(), term()}] | 'not_found'.
 created_stats_delegated(Key, Type) ->
     Data = delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Key, Type]}),
     case [X || X <- Data, X =/= not_found] of
@@ -726,6 +727,7 @@ created_stats_delegated(Key, Type) ->
         [X] -> X
     end.
 
+-spec created_stats_delegated(Type :: atom()) -> [[{atom(), term()}]].
 created_stats_delegated(Type) ->
     lists:append(
       delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Type]})).
