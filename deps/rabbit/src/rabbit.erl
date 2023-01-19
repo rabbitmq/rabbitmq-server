@@ -326,13 +326,6 @@ run_prelaunch_second_phase() ->
     %% RabbitMQ core. That's why we need to run it now, from the
     %% `rabbit` application start function.
 
-    %% We assert Mnesia is stopped before we run the prelaunch
-    %% phases. See `rabbit_prelaunch` for an explanation.
-    %%
-    %% This is the second assertion, just in case Mnesia is started
-    %% between the two prelaunch phases.
-    rabbit_prelaunch:assert_mnesia_is_stopped(),
-
     %% Get the context created by `rabbitmq_prelaunch` then proceed
     %% with all steps in this phase.
     #{initial_pass := IsInitialPass} =
@@ -342,7 +335,14 @@ run_prelaunch_second_phase() ->
         true ->
             ?LOG_DEBUG(""),
             ?LOG_DEBUG(
-              "== Prelaunch phase [2/2] (initial pass) ==");
+              "== Prelaunch phase [2/2] (initial pass) =="),
+
+            %% We assert Mnesia is stopped before we run the prelaunch phases.
+            %% See `rabbit_prelaunch` for an explanation.
+            %%
+            %% This is the second assertion, just in case Mnesia is started
+            %% between the two prelaunch phases.
+            rabbit_prelaunch:assert_mnesia_is_stopped();
         false ->
             ?LOG_DEBUG(""),
             ?LOG_DEBUG("== Prelaunch phase [2/2] =="),
