@@ -1,4 +1,5 @@
 load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+load("@rules_erlang//:ct.bzl", "assert_suites2")
 
 erlang_app(
     app_description = "Trust store HTTP server",
@@ -13,3 +14,11 @@ erlang_app(
         "@jsx//:erlang_app",
     ],
 )
+
+alias(
+    name = "trust_store_http",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites2()

@@ -66,26 +66,25 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_shovel_management"
+rabbitmq_integration_suite(
+    name = "http_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "http_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "rabbit_shovel_mgmt_SUITE",
-        runtime_deps = [
-            "@meck//:erlang_app",
-        ],
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_management_agent:erlang_app",
-        ],
-    ),
-]
+rabbitmq_suite(
+    name = "rabbit_shovel_mgmt_SUITE",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_shovel_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

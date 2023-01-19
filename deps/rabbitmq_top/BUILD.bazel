@@ -4,6 +4,7 @@ load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
 )
 
@@ -48,3 +49,11 @@ dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
 )
+
+alias(
+    name = "rabbitmq_top",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()

@@ -3,6 +3,7 @@ load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
 )
 
@@ -37,3 +38,11 @@ dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = "//:base_plt",
 )
+
+alias(
+    name = "rabbitmq_web_mqtt_examples",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()
