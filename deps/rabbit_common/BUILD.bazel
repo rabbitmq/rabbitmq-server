@@ -126,43 +126,48 @@ dialyze(
     plt = ":base_plt",
 )
 
-suites = [
-    rabbitmq_suite(
-        name = "rabbit_env_SUITE",
-        size = "small",
-        deps = [
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "supervisor2_SUITE",
-        size = "small",
-        additional_srcs = [
-            "test/test_event_handler.erl",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "unit_priority_queue_SUITE",
-        size = "small",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "medium",
-        additional_srcs = [
-            "test/gen_server2_test_server.erl",
-        ],
-        deps = [
-            "@credentials_obfuscation//:erlang_app",
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "worker_pool_SUITE",
-        size = "small",
-    ),
-]
+rabbitmq_suite(
+    name = "rabbit_env_SUITE",
+    size = "small",
+    deps = [
+        "@proper//:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "supervisor2_SUITE",
+    size = "small",
+    additional_srcs = [
+        "test/test_event_handler.erl",
+    ],
+)
+
+rabbitmq_suite(
+    name = "unit_priority_queue_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "medium",
+    additional_srcs = [
+        "test/gen_server2_test_server.erl",
+    ],
+    deps = [
+        "@credentials_obfuscation//:erlang_app",
+        "@proper//:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "worker_pool_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbit_common",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

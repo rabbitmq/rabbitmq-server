@@ -76,39 +76,38 @@ broker_for_integration_suites(
     extra_plugins = ["//deps/rabbitmq_amqp1_0:erlang_app"],
 )
 
-PACKAGE = "deps/amqp10_client"
+rabbitmq_suite(
+    name = "msg_SUITE",
+    deps = DEPS,
+)
 
-suites = [
-    rabbitmq_suite(
-        name = "msg_SUITE",
-        deps = DEPS,
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-        size = "medium",
-        additional_hdrs = [
-            "src/amqp10_client.hrl",
-        ],
-        additional_srcs = [
-            "test/activemq_ct_helpers.erl",
-            "test/mock_server.erl",
-        ],
-        data = [
-            "@activemq//:exec_dir",
-        ],
-        erlc_opts = [
-            "-I",
-            "deps/amqp10_client",
-        ],
-        test_env = {
-            "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
-        },
-        deps = DEPS,
-    ),
-]
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    size = "medium",
+    additional_hdrs = [
+        "src/amqp10_client.hrl",
+    ],
+    additional_srcs = [
+        "test/activemq_ct_helpers.erl",
+        "test/mock_server.erl",
+    ],
+    data = [
+        "@activemq//:exec_dir",
+    ],
+    erlc_opts = [
+        "-I",
+        "deps/amqp10_client",
+    ],
+    test_env = {
+        "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
+    },
+    deps = DEPS,
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "amqp10_client",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

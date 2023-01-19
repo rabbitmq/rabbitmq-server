@@ -60,6 +60,12 @@ xref(
 
 plt(
     name = "base_plt",
+    apps = [
+        "erts",
+        "kernel",
+        "stdlib",
+        "ssl",
+    ],
     deps = without(
         "//deps/rabbitmq_cli:rabbitmqctl",
         BUILD_DEPS + DEPS,
@@ -74,41 +80,39 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_stream"
+rabbitmq_integration_suite(
+    name = "commands_SUITE",
+    additional_beam = [
+        ":rabbit_stream_SUITE_beam_files",
+    ],
+    data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
+    flaky = True,
+    deps = [
+        "//deps/rabbitmq_stream_common:erlang_app",
+    ],
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "commands_SUITE",
-        additional_beam = [
-            ":rabbit_stream_SUITE_beam_files",
-        ],
-        data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
-        flaky = True,
-        deps = [
-            "//deps/rabbitmq_stream_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_stream_utils_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_stream_SUITE",
-        shard_count = 3,
-        deps = [
-            "//deps/rabbit:erlang_app",
-            "//deps/rabbitmq_stream_common:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    name = "rabbit_stream_utils_SUITE",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_stream_SUITE",
+    shard_count = 3,
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_stream_common:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_stream",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
