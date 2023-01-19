@@ -69,27 +69,6 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-<<<<<<< HEAD
-PACKAGE = "deps/rabbitmq_web_dispatch"
-
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_web_dispatch_SUITE",
-        data = [
-            "test/priv/www/index.html",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "rabbit_web_dispatch_unit_SUITE",
-        size = "small",
-    ),
-]
-
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
-=======
 rabbitmq_integration_suite(
     name = "rabbit_web_dispatch_SUITE",
     data = [
@@ -108,5 +87,4 @@ alias(
     name = "rabbitmq_web_dispatch",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
->>>>>>> 9e3f7d576e (Simplify BUILD files by using new macros from rules_erlang 3.9.0 (backport #6928) (backport #6934) (#6936))
 )
