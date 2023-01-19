@@ -135,11 +135,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     git_repository(
         name = "osiris",
-<<<<<<< HEAD
-        tag = "v1.4.0",
-=======
         tag = "v1.4.3",
->>>>>>> 83880154de (Streams: Move nopush to reader to try to combine small chunks into larger IP packets.)
         remote = "https://github.com/rabbitmq/osiris.git",
         patch_cmds = [
             """VERSION=$(git rev-parse HEAD)
