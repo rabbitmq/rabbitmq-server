@@ -166,7 +166,7 @@ decode(Body) ->
 accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     %% At this point the request was fully received.
     %% There is no point in the idle_timeout anymore.
-    disable_idle_timeout(ReqData),
+    _ = disable_idle_timeout(ReqData),
     case decode(Body) of
       {error, E} ->
         rabbit_log:error("Encountered an error when parsing definitions: ~p", [E]),

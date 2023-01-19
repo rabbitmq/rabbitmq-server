@@ -30,6 +30,7 @@ content_types_accepted(ReqData, Context) ->
 allowed_methods(ReqData, Context) ->
     {[<<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
+-dialyzer({no_return, accept_content/2}).
 accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
     case rabbit_mgmt_util:vhost(ReqData0) of
         not_found ->
