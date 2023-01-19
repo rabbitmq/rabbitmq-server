@@ -104,7 +104,8 @@ handle_call({fetch, FetchFun, FunArgs}, _From,
     garbage_collect(),
     case Ref of
         R when is_reference(R) ->
-            _ = erlang:cancel_timer(R);
+            _ = erlang:cancel_timer(R),
+            ok;
         _ -> ok
     end,
 

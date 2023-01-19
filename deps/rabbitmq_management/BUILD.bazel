@@ -21,7 +21,6 @@ APP_MODULE = "rabbit_mgmt_app"
 
 EXTRA_APPS = [
     "mnesia",
-    "ranch",
     "ssl",
     "crypto",
     "public_key",
@@ -78,13 +77,13 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    deps = DEPS + RUNTIME_DEPS,
+    apps = ["erts", "kernel", "stdlib"] + EXTRA_APPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
