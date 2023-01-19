@@ -50,7 +50,7 @@ ensure1(FileJustChanged0) ->
                                                             {disabled, Stop}]),
             %% The app_utils module stops the apps in reverse order, so we should
             %% pass them here in dependency order.
-            rabbit:stop_apps(lists:reverse(Stop)),
+            rabbit:stop_apps(Stop),
             _ = clean_plugins(Stop),
             case {Start, Stop} of
                 {[], []} ->

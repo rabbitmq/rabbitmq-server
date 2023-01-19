@@ -276,8 +276,6 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
-
 -define(DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD, 10).
 
 %% 1 minute
@@ -459,10 +457,7 @@ stop() ->
     end.
 
 do_stop() ->
-    Apps0 = ?APPS ++ rabbit_plugins:active(),
-    %% We ensure that Mnesia is stopped last (or more exactly, after rabbit).
-    Apps1 = app_utils:app_dependency_order(Apps0, true) -- [mnesia],
-    Apps = [mnesia | Apps1],
+    Apps = [rabbit | rabbit_plugins:active()],
     %% this will also perform unregistration with the peer discovery backend
     %% as needed
     stop_apps(Apps).
@@ -533,14 +528,15 @@ start_apps(Apps, RestartTypes) ->
 stop_apps([]) ->
     ok;
 stop_apps(Apps) ->
+    Apps1 = app_utils:app_dependency_order(Apps, true),
     ?LOG_INFO(
         lists:flatten(
           ["Stopping ~ts applications and their dependencies in the following order:~n",
-           ["    ~tp~n" || _ <- Apps]]),
-        [product_name() | lists:reverse(Apps)],
+           ["    ~tp~n" || _ <- Apps1]]),
+        [product_name() | lists:reverse(Apps1)],
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = app_utils:stop_applications(
-           Apps, handle_app_error(error_during_shutdown)),
+           Apps1, handle_app_error(error_during_shutdown)),
     case lists:member(rabbit, Apps) of
         %% plugin deactivation
         false -> rabbit_boot_steps:run_cleanup_steps(Apps);
