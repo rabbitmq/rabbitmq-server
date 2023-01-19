@@ -116,93 +116,94 @@ git_repository(
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 
-# local_repository(
-#     name = "rules_erlang",
-#     path = "../rules_erlang",
-# )
+git_repository(
+    name = "rules_erlang",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
+    tag = "3.9.0",
+)
 
-# load(
-#     "@rules_erlang//:rules_erlang.bzl",
-#     "erlang_config",
-#     "internal_erlang_from_github_release",
-#     "internal_erlang_from_http_archive",
-#     "rules_erlang_dependencies",
-# )
+load(
+    "@rules_erlang//:rules_erlang.bzl",
+    "erlang_config",
+    "internal_erlang_from_github_release",
+    "internal_erlang_from_http_archive",
+    "rules_erlang_dependencies",
+)
 
-# erlang_config(
-#     internal_erlang_configs = [
-#         internal_erlang_from_github_release(
-#             name = "24",
-#             sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
-#             version = "24.3.4.6",
-#         ),
-#         internal_erlang_from_github_release(
-#             name = "25_0",
-#             sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
-#             version = "25.0.4",
-#         ),
-#         internal_erlang_from_github_release(
-#             name = "25_1",
-#             sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
-#             version = "25.1.2.1",
-#         ),
-#         internal_erlang_from_github_release(
-#             name = "25_2",
-#             sha256 = "d67312017464529603f60a36f4bfb891b6cf7637a375abb27c92ee79ecd14cd4",
-#             version = "25.2.1",
-#         ),
-#         internal_erlang_from_http_archive(
-#             name = "git_master",
-#             strip_prefix = "otp-master",
-#             url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-#             version = "26",
-#         ),
-#     ],
-# )
+erlang_config(
+    internal_erlang_configs = [
+        internal_erlang_from_github_release(
+            name = "24",
+            sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
+            version = "24.3.4.6",
+        ),
+        internal_erlang_from_github_release(
+            name = "25_0",
+            sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
+            version = "25.0.4",
+        ),
+        internal_erlang_from_github_release(
+            name = "25_1",
+            sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
+            version = "25.1.2.1",
+        ),
+        internal_erlang_from_github_release(
+            name = "25_2",
+            sha256 = "d67312017464529603f60a36f4bfb891b6cf7637a375abb27c92ee79ecd14cd4",
+            version = "25.2.1",
+        ),
+        internal_erlang_from_http_archive(
+            name = "git_master",
+            strip_prefix = "otp-master",
+            url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
+            version = "26",
+        ),
+    ],
+)
 
-# rules_erlang_dependencies()
+rules_erlang_dependencies()
 
-# load("@erlang_config//:defaults.bzl", "register_defaults")
+load("@erlang_config//:defaults.bzl", "register_defaults")
 
-# register_defaults()
+register_defaults()
 
-# load(
-#     "//bazel/elixir:elixir.bzl",
-#     "elixir_config",
-#     "internal_elixir_from_github_release",
-# )
+load(
+    "//bazel/elixir:elixir.bzl",
+    "elixir_config",
+    "internal_elixir_from_github_release",
+)
 
-# elixir_config(
-#     internal_elixir_configs = [
-#         internal_elixir_from_github_release(
-#             name = "1_13",
-#             sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
-#             version = "1.13.4",
-#         ),
-#         internal_elixir_from_github_release(
-#             name = "1_14",
-#             sha256 = "8ad537eb84471c24c3e6984c37884f06a7834ff2efd72c436c222baee8df9a11",
-#             version = "1.14.1",
-#         ),
-#     ],
-#     rabbitmq_server_workspace = "@",
-# )
+elixir_config(
+    internal_elixir_configs = [
+        internal_elixir_from_github_release(
+            name = "1_13",
+            sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
+            version = "1.13.4",
+        ),
+        internal_elixir_from_github_release(
+            name = "1_14",
+            sha256 = "8ad537eb84471c24c3e6984c37884f06a7834ff2efd72c436c222baee8df9a11",
+            version = "1.14.1",
+        ),
+    ],
+    rabbitmq_server_workspace = "@",
+)
 
-# load(
-#     "@elixir_config//:defaults.bzl",
-#     register_elixir_defaults = "register_defaults",
-# )
+load(
+    "@elixir_config//:defaults.bzl",
+    register_elixir_defaults = "register_defaults",
+)
 
-# register_elixir_defaults()
+register_elixir_defaults()
 
-# load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
+load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
-# rabbitmq_external_deps(rabbitmq_workspace = "@")
+rabbitmq_external_deps(rabbitmq_workspace = "@")
 
-# load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
+load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
-# activemq_archive()
+activemq_archive()
 
-# load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
+load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
-# secondary_umbrella()
+secondary_umbrella()

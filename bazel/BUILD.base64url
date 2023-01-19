@@ -1,0 +1,94 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_format",
+            "+warn_export_vars",
+            "+warn_obsolete_guard",
+            "+warn_bif_clash",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+warn_format",
+            "+warn_export_vars",
+            "+warn_obsolete_guard",
+            "+warn_bif_clash",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_base64url_beam",
+    srcs = ["src/base64url.erl"],
+    outs = ["ebin/base64url.beam"],
+    app_name = "base64url",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = ["ebin/base64url.beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/base64url.app.src",
+        "src/base64url.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE.txt"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "base64url",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "base64url",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

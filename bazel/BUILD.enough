@@ -1,0 +1,87 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_enough_beam",
+    srcs = ["src/enough.erl"],
+    outs = ["ebin/enough.beam"],
+    hdrs = ["src/enough.hrl"],
+    app_name = "enough",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = ["ebin/enough.beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/enough.app.src",
+        "src/enough.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = ["src/enough.hrl"],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "enough",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "enough",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
