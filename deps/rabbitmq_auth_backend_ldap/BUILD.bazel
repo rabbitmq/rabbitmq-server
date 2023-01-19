@@ -43,6 +43,7 @@ APP_MODULE = "rabbit_auth_backend_ldap_app"
 
 EXTRA_APPS = [
     "eldap",
+    "public_key",
 ]
 
 DEPS = [
@@ -70,13 +71,12 @@ plt(
     name = "base_plt",
     apps = EXTRA_APPS,
     plt = "//:base_plt",
-    deps = DEPS,
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
