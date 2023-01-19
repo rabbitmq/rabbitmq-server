@@ -68,63 +68,63 @@ rabbitmq_test_helper(
     ],
 )
 
-PACKAGE = "deps/rabbitmq_auth_backend_oauth2"
+rabbitmq_integration_suite(
+    name = "add_uaa_key_command_SUITE",
+    size = "small",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "add_uaa_key_command_SUITE",
-        size = "small",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "jwks_SUITE",
-        additional_beam = [
-            ":rabbit_auth_backend_oauth2_test_util",
-        ],
-        additional_srcs = [
-            "test/jwks_http_app.erl",
-            "test/jwks_http_handler.erl",
-            "test/jwks_http_sup.erl",
-        ],
-        runtime_deps = [
-            "@cowboy//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "scope_SUITE",
-        size = "medium",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-        size = "medium",
-        additional_beam = [
-            ":rabbit_auth_backend_oauth2_test_util",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "unit_SUITE",
-        size = "medium",
-        additional_beam = [
-            ":rabbit_auth_backend_oauth2_test_util",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "wildcard_match_SUITE",
-        size = "small",
-    ),
-]
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    name = "jwks_SUITE",
+    additional_beam = [
+        ":rabbit_auth_backend_oauth2_test_util",
+    ],
+    additional_srcs = [
+        "test/jwks_http_app.erl",
+        "test/jwks_http_handler.erl",
+        "test/jwks_http_sup.erl",
+    ],
+    runtime_deps = [
+        "@cowboy//:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "scope_SUITE",
+    size = "medium",
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":rabbit_auth_backend_oauth2_test_util",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "unit_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":rabbit_auth_backend_oauth2_test_util",
+    ],
+)
+
+rabbitmq_suite(
+    name = "wildcard_match_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_auth_backend_oauth2",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

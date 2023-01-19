@@ -45,16 +45,14 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_recent_history_exchange"
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-    ),
-]
+assert_suites()
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+alias(
+    name = "rabbitmq_recent_history_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

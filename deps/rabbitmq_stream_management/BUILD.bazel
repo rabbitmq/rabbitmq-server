@@ -62,16 +62,14 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_stream_management"
+rabbitmq_integration_suite(
+    name = "http_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "http_SUITE",
-    ),
-]
+assert_suites()
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+alias(
+    name = "rabbitmq_stream_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

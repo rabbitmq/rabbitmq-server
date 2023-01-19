@@ -4,11 +4,11 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "RABBITMQ_DIALYZER_OPTS",
 )
 
 APP_ENV = """[
@@ -70,8 +70,8 @@ plt(
 )
 
 dialyze(
-    plt = ":base_plt",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
 )
 
 rabbitmq_home(
@@ -86,28 +86,29 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-suites = [
-    rabbitmq_integration_suite(
-        "deps/amqp_client",
-        name = "system_SUITE",
-        size = "large",
-        runtime_deps = [
-            "@meck//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-        runtime_deps = [
-            "//deps/rabbit:erlang_app",
-        ],
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    size = "large",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+    runtime_deps = [
+        "//deps/rabbit:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "amqp_client",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
