@@ -214,7 +214,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               rabbit_framing:amqp_table(),
               rabbit_types:maybe(pid()),
               rabbit_types:username(),
-              node()) ->
+              node() | {'ignore_location', node()}) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
