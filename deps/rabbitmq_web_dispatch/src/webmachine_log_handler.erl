@@ -44,7 +44,7 @@
 
 %% @private
 init([BaseDir]) ->
-    webmachine_log:defer_refresh(?MODULE),
+    _ = webmachine_log:defer_refresh(?MODULE),
     FileName = filename:join(BaseDir, ?FILENAME),
     {Handle, DateHour} = webmachine_log:log_open(FileName),
     {ok, #state{filename=FileName, handle=Handle, hourstamp=DateHour}}.
@@ -61,7 +61,7 @@ handle_call(_Request, State) ->
 handle_event({log_access, LogData}, State) ->
     NewState = webmachine_log:maybe_rotate(?MODULE, os:timestamp(), State),
     Msg = format_req(LogData),
-    webmachine_log:log_write(NewState#state.handle, Msg),
+    _ = webmachine_log:log_write(NewState#state.handle, Msg),
     {ok, NewState};
 handle_event(_Event, State) ->
     {ok, State}.
@@ -97,10 +97,7 @@ format_req({Status0, Body, Req}) ->
     Length = integer_to_list(Length1),
     Method = cowboy_req:method(Req),
     Path = cowboy_req:path(Req),
-    Peer = case cowboy_req:peer(Req) of
-                       {Peer0, _Port} -> Peer0;
-                       Other -> Other
-                   end,
+    {Peer, _Port} = cowboy_req:peer(Req),
     Version = cowboy_req:version(Req),
     Referer = cowboy_req:header(<<"referer">>, Req, <<>>),
     UserAgent = cowboy_req:header(<<"user-agent">>, Req, <<>>),
