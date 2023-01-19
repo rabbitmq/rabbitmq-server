@@ -166,5 +166,6 @@ consumer_count(QName) ->
               rabbit_amqqueue:info(Q, [consumers])
       end).
 
-precondition_failed(Format, QName) ->
-    protocol_error(precondition_failed, Format, QName).
+-spec precondition_failed(io:format(), [any()]) -> no_return().
+precondition_failed(Format, Args) ->
+    protocol_error(precondition_failed, Format, Args).
