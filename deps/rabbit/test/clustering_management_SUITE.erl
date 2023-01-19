@@ -810,7 +810,9 @@ assert_failure(Fun) ->
     end.
 
 stop_app(Node) ->
-    rabbit_control_helper:command(stop_app, Node).
+    ok = rabbit_control_helper:command(stop_app, Node),
+    stopped = erpc:call(Node, mnesia, stop, []),
+    ok.
 
 start_app(Node) ->
     rabbit_control_helper:command(start_app, Node).
