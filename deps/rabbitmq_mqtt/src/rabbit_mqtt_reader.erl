@@ -24,19 +24,21 @@
 
 -include("rabbit_mqtt.hrl").
 
+-type option(T) :: undefined | T.
+
 -define(HIBERNATE_AFTER, 1000).
 -define(PROTO_FAMILY, 'MQTT').
 
 -record(state,
-        {socket,
-         proxy_socket :: undefined | {rabbit_proxy_soket, any(), any()},
+        {socket :: rabbit_net:socket(),
+         proxy_socket :: option({rabbit_proxy_socket, any(), any()}),
          await_recv :: boolean(),
-         deferred_recv :: undefined | binary(),
-         parse_state,
+         deferred_recv :: option(binary()),
+         parse_state :: atom(),
          proc_state :: rabbit_mqtt_processor:state(),
          connection_state :: running | blocked,
          conserve :: boolean(),
-         stats_timer,
+         stats_timer :: option(reference()),
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
          conn_name :: binary(),
          received_connect_packet :: boolean()
@@ -388,7 +390,7 @@ network_error(closed,
     Args = [ConnName],
     case Connected of
         true -> ?LOG_INFO(Fmt, Args);
-        false  -> ?LOG_DEBUG(Fmt, Args)
+        false -> ?LOG_DEBUG(Fmt, Args)
     end,
     {stop, {shutdown, conn_closed}, State};
 

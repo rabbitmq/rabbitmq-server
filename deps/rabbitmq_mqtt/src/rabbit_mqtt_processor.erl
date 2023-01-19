@@ -46,7 +46,7 @@
                connected_at :: pos_integer()}).
 
 -record(state,
-        {socket,
+        {socket :: rabbit_net:socket(),
          proto_ver :: option(mqtt310 | mqtt311),
          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
          %% Packet IDs published to queues but not yet confirmed.
@@ -71,7 +71,7 @@
          auth_state :: option(#auth_state{}),
          peer_addr :: inet:ip_address(),
          send_fun :: fun((Packet :: tuple(), state()) -> term()),
-         register_state,
+         register_state :: option(registered | {pending, reference()}),
          conn_name :: option(binary()),
          info :: option(#info{}),
          delivery_flow :: flow | noflow,
