@@ -16,6 +16,11 @@ APP_NAME = "rabbitmq_auth_backend_oauth2"
 
 APP_DESCRIPTION = "OAuth 2 and JWT-based AuthN and AuthZ backend"
 
+EXTRA_APPS = [
+    "inets",
+    "public_key",
+]
+
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
     "//deps/rabbitmq_cli:rabbitmqctl",
@@ -37,6 +42,7 @@ rabbitmq_app(
     build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+    extra_apps = EXTRA_APPS,
 )
 
 xref(
@@ -47,16 +53,17 @@ xref(
 
 plt(
     name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
     deps = without(
         "//deps/rabbitmq_cli:rabbitmqctl",
-        BUILD_DEPS + DEPS,
+        BUILD_DEPS + DEPS + RUNTIME_DEPS,
     ),
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()

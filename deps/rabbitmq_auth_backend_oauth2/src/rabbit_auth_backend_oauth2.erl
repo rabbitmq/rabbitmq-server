@@ -101,8 +101,6 @@ state_can_expire() -> true.
 
 update_state(AuthUser, NewToken) ->
   case check_token(NewToken) of
-      %% avoid logging the token
-      {error, _} = E  -> E;
       {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
         {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
       {refused, Err} ->
@@ -120,8 +118,6 @@ authenticate(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
-        %% avoid logging the token
-        {error, _} = E  -> E;
         {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
           {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
         {refused, Err} ->
@@ -159,7 +155,13 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary()) -> {ok, map()} | {error, term()}.
+-spec check_token(binary()) ->
+          {'ok', map()} |
+          {'refused',
+           'signature_invalid' |
+           {'error', term()} |
+           {'invalid_aud', term()}}.
+
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
     case uaa_jwt:decode_and_verify(Token) of
