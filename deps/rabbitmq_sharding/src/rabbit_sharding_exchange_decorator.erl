@@ -35,7 +35,7 @@ serialise_events(_X) -> false.
 create(transaction, _X) ->
     ok;
 create(none, X) ->
-    maybe_start_sharding(X),
+    _ = maybe_start_sharding(X),
     ok.
 
 add_binding(_Tx, _X, _B) -> ok.
@@ -52,13 +52,13 @@ active_for(X) ->
 %% we have to remove the policy from ?SHARDING_TABLE
 delete(transaction, _X, _Bs) -> ok;
 delete(none, X, _Bs) ->
-    maybe_stop_sharding(X),
+    _ = maybe_stop_sharding(X),
     ok.
 
 %% we have to remove the old policy from ?SHARDING_TABLE
 %% and then add the new one.
 policy_changed(OldX, NewX) ->
-    maybe_update_sharding(OldX, NewX),
+    _ = maybe_update_sharding(OldX, NewX),
     ok.
 
 %%----------------------------------------------------------------------------
