@@ -42,7 +42,7 @@
          zeropad/2,
          zone/0]).
 
--record(state, {hourstamp :: non_neg_integer(),
+-record(state, {hourstamp :: datehour(),
                 filename :: string(),
                 handle :: file:io_device()}).
 
@@ -65,9 +65,13 @@ call(Mod, Msg) ->
 call(Mod, Msg, Timeout) ->
     gen_event:call(?EVENT_LOGGER, Mod, Msg, Timeout).
 
+%% Should be
+%%   -type datehour() :: {calendar:year(), calendar:month(), calendar:day(), calendar:hour()}.
+%% but calendar types are not exported
+-type datehour() :: {non_neg_integer(), 1..12, 1..31, 0..23}.
+
 %% @doc Return a four-tuple containing year, month, day, and hour
 %% of the current time.
--type datehour() :: {calendar:year(), calendar:month(), calendar:day(), calendar:hour()}.
 -spec datehour() -> datehour().
 datehour() ->
     datehour(os:timestamp()).
@@ -117,7 +121,7 @@ fmt_ip(HostName) ->
     HostName.
 
 %% @doc Format the current time into a string
--spec fmtnow() -> string().
+-spec fmtnow() -> io_lib:chars().
 fmtnow() ->
     {{Year, Month, Date}, {Hour, Min, Sec}} = calendar:local_time(),
     io_lib:format("[~2..0w/~ts/~4..0w:~2..0w:~2..0w:~2..0w ~ts]",
@@ -135,21 +139,21 @@ log_close(Mod, Name, FD) ->
     file:close(FD).
 
 %% @doc Open a new log file for writing
--spec log_open(string()) -> {file:io_device(), non_neg_integer()}.
+-spec log_open(string()) -> {file:io_device(), datehour()}.
 log_open(FileName) ->
     DateHour = datehour(),
     {log_open(FileName, DateHour), DateHour}.
 
 %% @doc Open a new log file for writing
--spec log_open(string(), non_neg_integer()) -> file:io_device().
+-spec log_open(string(), datehour()) -> file:io_device().
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
     logger:info("opening log file: ~tp", [LogName]),
-    filelib:ensure_dir(LogName),
+    _ = filelib:ensure_dir(LogName),
     {ok, FD} = file:open(LogName, [read, write, raw]),
     {ok, Location} = file:position(FD, eof),
     fix_log(FD, Location),
-    file:truncate(FD),
+    _ = file:truncate(FD),
     FD.
 
 -spec log_write(file:io_device(), iolist()) -> ok | {error, term()}.
@@ -164,8 +168,8 @@ maybe_rotate(Mod, Time, State) ->
     if ThisHour == State#state.hourstamp ->
             State;
        true ->
-            defer_refresh(Mod),
-            log_close(Mod, State#state.filename, State#state.handle),
+            _ = defer_refresh(Mod),
+            _ = log_close(Mod, State#state.filename, State#state.handle),
             Handle = log_open(State#state.filename, ThisHour),
             State#state{hourstamp=ThisHour, handle=Handle}
     end.
@@ -232,7 +236,7 @@ zone() ->
 
 %% Ugly reformatting code to get times like +0000 and -1300
 
--spec zone(integer()) -> string().
+-spec zone(float() | integer()) -> string().
 zone(Val) when Val < 0 ->
     io_lib:format("-~4..0w", [trunc(abs(Val))]);
 zone(Val) when Val >= 0 ->
