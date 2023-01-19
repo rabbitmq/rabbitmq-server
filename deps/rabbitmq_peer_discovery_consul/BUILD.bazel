@@ -48,6 +48,7 @@ dialyze(
 
 broker_for_integration_suites()
 
+<<<<<<< HEAD
 PACKAGE = "deps/rabbitmq_peer_discovery_consul"
 
 suites = [
@@ -67,4 +68,24 @@ suites = [
 assert_suites(
     suites,
     glob(["test/**/*_SUITE.erl"]),
+=======
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
+
+rabbitmq_suite(
+    name = "rabbitmq_peer_discovery_consul_SUITE",
+    size = "medium",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_peer_discovery_consul",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+>>>>>>> 9e3f7d576e (Simplify BUILD files by using new macros from rules_erlang 3.9.0 (backport #6928) (backport #6934) (#6936))
 )
