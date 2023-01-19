@@ -66,9 +66,9 @@ rabbitmqctl_check_formatted_test(
     }),
 )
 
-alias(
+test_suite(
     name = "rabbitmqctl_check_formatted",
-    actual = ":check_formatted",
+    tests = ["check_formatted"],
 )
 
 rabbitmqctl_test(
@@ -93,7 +93,7 @@ rabbitmqctl_test(
     ],
 )
 
-alias(
+test_suite(
     name = "rabbitmqctl_tests",
-    actual = ":tests",
+    tests = ["tests"],
 )
