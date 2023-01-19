@@ -16,11 +16,15 @@
 
 all() ->
     [
+      {group, cluster_size_1},
       {group, cluster_size_3}
     ].
 
 groups() ->
     [
+      {cluster_size_1, [], [
+          is_serving_works
+      ]},
       {cluster_size_3, [], [
           maintenance_mode_status,
           listener_suspension_status,
@@ -40,7 +44,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_Group, Config) ->
+init_per_group(cluster_size_1, Config) ->
+    rabbit_ct_helpers:set_config(Config,
+                                 [{rmq_nodes_count, 1}]);
+init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config,
                                  [{rmq_nodes_count, 3}]).
 
@@ -84,6 +91,38 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Test Cases
 %% -------------------------------------------------------------------
+
+is_serving_works(Config) ->
+    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ?assert(rabbit:is_running(Node)),
+    ?assert(rabbit:is_serving(Node)),
+
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, Node),
+    rabbit_ct_helpers:await_condition(
+        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node) end,
+        10000),
+
+    ?assert(rabbit:is_running(Node)),
+    ?assertNot(rabbit:is_serving(Node)),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Node),
+    rabbit_ct_helpers:await_condition(
+        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node) end,
+        10000),
+
+    ?assert(rabbit:is_running(Node)),
+    ?assert(rabbit:is_serving(Node)),
+
+    rabbit_ct_broker_helpers:stop_broker(Config, Node),
+
+    ?assertNot(rabbit:is_running(Node)),
+    ?assertNot(rabbit:is_serving(Node)),
+
+    rabbit_ct_broker_helpers:start_broker(Config, Node),
+
+    ?assert(rabbit:is_running(Node)),
+    ?assert(rabbit:is_serving(Node)).
 
 maintenance_mode_status(Config) ->
     Nodes = [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

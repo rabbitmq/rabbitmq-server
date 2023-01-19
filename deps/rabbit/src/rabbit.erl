@@ -15,8 +15,9 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
-         status/0, is_running/0, alarms/0,
-         is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
+         status/0, is_running/0, is_serving/0, alarms/0,
+         is_running/1, is_serving/1, environment/0, rotate_logs/0,
+         force_event_refresh/1,
          start_fhc/0]).
 
 -export([start/2, stop/1, prep_stop/1]).
@@ -780,7 +781,42 @@ total_queue_count() ->
                 end,
                 0, rabbit_vhost:list_names()).
 
--spec is_running() -> boolean().
+-spec is_serving() -> IsServing when
+      IsServing :: boolean().
+%% @doc Indicates if this RabbitMQ node is ready to serve clients or not.
+%%
+%% It differs from {@link is_running/0} in the sense that a running RabbitMQ
+%% node could be under maintenance. A serving node is one where RabbitMQ is
+%% running and is not under maintenance currently, thus accepting clients.
+
+is_serving() ->
+    ThisNode = node(),
+    is_running() andalso
+    not rabbit_maintenance:is_being_drained_local_read(ThisNode).
+
+-spec is_serving(Node) -> IsServing when
+      Node :: node(),
+      IsServing :: boolean().
+%% @doc Indicates if the given node is ready to serve client or not.
+
+is_serving(Node) when Node =:= node() ->
+    is_serving();
+is_serving(Node) ->
+    case rpc:call(Node, rabbit, is_serving, []) of
+        true -> true;
+        _    -> false
+    end.
+
+-spec is_running() -> IsRunning when
+      IsRunning :: boolean().
+%% @doc Indicates if the `rabbit' application is running on this RabbitMQ node
+%% or not.
+%%
+%% A RabbitMQ node is considered to run as soon as the `rabbit' application is
+%% running. It means this node participates to the cluster. However, it could
+%% accept or reject clients if it is under maintenance. See {@link
+%% is_serving/0} to check if this node is running and is ready to serve
+%% clients.
 
 is_running() -> is_running(node()).
 
