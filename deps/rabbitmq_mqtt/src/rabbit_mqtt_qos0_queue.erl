@@ -22,7 +22,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 
-%% rabbit_queue_type callbacks
+%% Stateless rabbit_queue_type callbacks.
 -export([
          is_stateful/0,
          declare/2,
@@ -39,6 +39,24 @@
          capabilities/0,
          notify_decorators/1
         ]).
+
+%% Stateful rabbit_queue_type callbacks are unsupported by this queue type.
+-define(STATEFUL_CALLBACKS,
+        [
+         init/1,
+         close/1,
+         update/2,
+         consume/3,
+         cancel/5,
+         handle_event/2,
+         settle/4,
+         credit/4,
+         dequeue/4,
+         state_info/1
+        ]).
+-export(?STATEFUL_CALLBACKS).
+-dialyzer({nowarn_function, ?STATEFUL_CALLBACKS}).
+-define(UNSUPPORTED(Args), erlang:error(unsupported, Args)).
 
 -define(INFO_KEYS, [type, name, durable, auto_delete, arguments,
                     pid, owner_pid, state, messages]).
@@ -224,3 +242,33 @@ i(messages, Q) ->
     end;
 i(_, _) ->
     ''.
+
+init(A1) ->
+    ?UNSUPPORTED([A1]).
+
+close(A1) ->
+    ?UNSUPPORTED([A1]).
+
+update(A1,A2) ->
+    ?UNSUPPORTED([A1,A2]).
+
+consume(A1,A2,A3) ->
+    ?UNSUPPORTED([A1,A2,A3]).
+
+cancel(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
+
+handle_event(A1,A2) ->
+    ?UNSUPPORTED([A1,A2]).
+
+settle(A1,A2,A3,A4) ->
+    ?UNSUPPORTED([A1,A2,A3,A4]).
+
+credit(A1,A2,A3,A4) ->
+    ?UNSUPPORTED([A1,A2,A3,A4]).
+
+dequeue(A1,A2,A3,A4) ->
+    ?UNSUPPORTED([A1,A2,A3,A4]).
+
+state_info(A1) ->
+    ?UNSUPPORTED([A1]).

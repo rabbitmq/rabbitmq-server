@@ -152,18 +152,6 @@
 
 -callback is_stateful() -> boolean().
 
-%% stateful callbacks are optional
--optional_callbacks([init/1,
-                     close/1,
-                     update/2,
-                     consume/3,
-                     cancel/5,
-                     handle_event/2,
-                     settle/4,
-                     credit/4,
-                     dequeue/4,
-                     state_info/1]).
-
 %% intitialise and return a queue type specific session context
 -callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
 
