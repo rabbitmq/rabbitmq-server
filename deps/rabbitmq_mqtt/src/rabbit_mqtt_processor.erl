@@ -398,6 +398,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
         end
     end.
 
+-spec amqp_callback(#'basic.ack'{} | {#'basic.deliver'{}, #amqp_msg{}, {pid(), pid(), pid()}}, #proc_state{}) -> {'ok', #proc_state{}} | {'error', term(), term()}.
 amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag,
                                  routing_key  = RoutingKey },
