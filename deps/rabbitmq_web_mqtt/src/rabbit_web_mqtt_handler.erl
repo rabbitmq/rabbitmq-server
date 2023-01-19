@@ -251,13 +251,8 @@ stop_rabbit_mqtt_processor(State = #state{state = running,
                                           proc_state = ProcState,
                                           conn_name = ConnName}) ->
     maybe_emit_stats(State),
-<<<<<<< HEAD
-    rabbit_log_connection:info("closing Web MQTT connection ~p (~s)", [self(), ConnName]),
-    rabbit_mqtt_processor:send_will(ProcState),
-=======
     rabbit_log_connection:info("closing Web MQTT connection ~tp (~ts)", [self(), ConnName]),
     _ = rabbit_mqtt_processor:send_will(ProcState),
->>>>>>> b6cd708a08 (Fix all dialyzer warnings in rabbitmq_web_mqtt)
     rabbit_mqtt_processor:close_connection(ProcState).
 
 handle_credits(State0) ->
