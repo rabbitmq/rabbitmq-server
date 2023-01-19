@@ -609,6 +609,7 @@ get_difference(Id, Stats, #state{old_aggr_stats = OldStats}) ->
             difference(OldStat, Stats)
     end.
 
+-dialyzer({no_match, sum_entry/2}).
 sum_entry({A0}, {B0}) ->
     {B0 + A0};
 sum_entry({A0, A1}, {B0, B1}) ->
@@ -626,6 +627,7 @@ sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
 sum_entry({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7}.
 
+-dialyzer({no_match, difference/2}).
 difference({A0}, {B0}) ->
     {B0 - A0};
 difference({A0, A1}, {B0, B1}) ->
