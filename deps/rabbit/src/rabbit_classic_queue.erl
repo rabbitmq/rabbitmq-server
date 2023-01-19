@@ -13,8 +13,6 @@
 -record(?STATE, {
            %% the current master pid
            pid :: undefined | pid(),
-           %% undefined if feature flag no_queue_name_in_classic_queue_client enabled
-           qref :: term(),
            unconfirmed = #{} :: #{non_neg_integer() => #msg_status{}},
            monitored = #{} :: #{pid() => ok}
           }).
@@ -39,11 +37,11 @@
          update/2,
          consume/3,
          cancel/5,
-         handle_event/2,
+         handle_event/3,
          deliver/2,
-         settle/4,
-         credit/4,
-         dequeue/4,
+         settle/5,
+         credit/5,
+         dequeue/5,
          info/2,
          state_info/1,
          capabilities/0,
@@ -163,14 +161,7 @@ stat(Q) ->
 
 -spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->
-    QRef = case rabbit_feature_flags:is_enabled(no_queue_name_in_classic_queue_client) of
-               true ->
-                   undefined;
-               false ->
-                   amqqueue:get_name(Q)
-           end,
-    {ok, #?STATE{pid = amqqueue:get_pid(Q),
-                 qref = QRef}}.
+    {ok, #?STATE{pid = amqqueue:get_pid(Q)}}.
 
 -spec close(state()) -> ok.
 close(_State) ->
@@ -223,61 +214,55 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
         Err -> Err
     end.
 
--spec settle(rabbit_queue_type:settle_op(), rabbit_types:ctag(),
-             [non_neg_integer()], state()) ->
+-spec settle(rabbit_amqqueue:name(), rarabbit_queue_type:settle_op(),
+             rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(complete, _CTag, MsgIds, State) ->
+settle(_QName, complete, _CTag, MsgIds, State) ->
     Pid = State#?STATE.pid,
     delegate:invoke_no_result(Pid,
                               {gen_server2, cast, [{ack, MsgIds, self()}]}),
     {State, []};
-settle(Op, _CTag, MsgIds, State) ->
+settle(_QName, Op, _CTag, MsgIds, State) ->
     ChPid = self(),
     ok = delegate:invoke_no_result(State#?STATE.pid,
                                    {gen_server2, cast,
                                     [{reject, Op == requeue, MsgIds, ChPid}]}),
     {State, []}.
 
-credit(CTag, Credit, Drain, State) ->
+credit(_QName, CTag, Credit, Drain, State) ->
     ChPid = self(),
     delegate:invoke_no_result(State#?STATE.pid,
                               {gen_server2, cast,
                                [{credit, ChPid, CTag, Credit, Drain}]}),
     {State, []}.
 
-handle_event({confirm, MsgSeqNos, Pid}, #?STATE{qref = QRef} = State) ->
-    %% backwards compatibility when feature flag no_queue_name_in_classic_queue_client disabled
-    handle_event({confirm, MsgSeqNos, Pid, QRef}, State);
-handle_event({confirm, MsgSeqNos, Pid, QRef}, #?STATE{unconfirmed = U0} = State) ->
+handle_event(QName, {confirm, MsgSeqNos, Pid}, #?STATE{unconfirmed = U0} = State) ->
     %% confirms should never result in rejections
     {Unconfirmed, ConfirmedSeqNos, []} =
         settle_seq_nos(MsgSeqNos, Pid, U0, confirm),
-    Actions = [{settled, QRef, ConfirmedSeqNos}],
+    Actions = [{settled, QName, ConfirmedSeqNos}],
     %% handle confirm event from queues
     %% in this case the classic queue should track each individual publish and
     %% the processes involved and only emit a settle action once they have all
     %% been received (or DOWN has been received).
     %% Hence this part of the confirm logic is queue specific.
     {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
-handle_event({deliver, _, _, _} = Delivery, #?STATE{} = State) ->
+handle_event(_QName, {deliver, _, _, _} = Delivery, #?STATE{} = State) ->
     {ok, State, [Delivery]};
-handle_event({reject_publish, SeqNo, QPid}, #?STATE{qref = QRef} = State) ->
-    %% backwards compatibility when feature flag no_queue_name_in_classic_queue_client disabled
-    handle_event({reject_publish, SeqNo, QPid, QRef}, State);
-handle_event({reject_publish, SeqNo, _QPid, QRef},
+handle_event(QName, {reject_publish, SeqNo, _QPid},
              #?STATE{unconfirmed = U0} = State) ->
     %% It does not matter which queue rejected the message,
     %% if any queue did, it should not be confirmed.
     {U, Rejected} = reject_seq_no(SeqNo, U0),
-    Actions = [{rejected, QRef, Rejected}],
+    Actions = [{rejected, QName, Rejected}],
     {ok, State#?STATE{unconfirmed = U}, Actions};
-handle_event({down, Pid, QRef, Info}, #?STATE{monitored = Monitored,
-                                              pid = MasterPid,
-                                              unconfirmed = U0} = State0) ->
+handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
+                                               pid = MasterPid,
+                                               unconfirmed = U0} = State0) ->
     State = State0#?STATE{monitored = maps:remove(Pid, Monitored)},
     Actions0 = case Pid =:= MasterPid of
                    true ->
-                       [{queue_down, QRef}];
+                       [{queue_down, QName}];
                    false ->
                        []
               end,
@@ -294,8 +279,8 @@ handle_event({down, Pid, QRef, Info}, #?STATE{monitored = Monitored,
             {Unconfirmed, Settled, Rejected} =
                 settle_seq_nos(MsgSeqNos, Pid, U0, down),
             Actions = settlement_action(
-                        settled, QRef, Settled,
-                        settlement_action(rejected, QRef, Rejected, Actions0)),
+                        settled, QName, Settled,
+                        settlement_action(rejected, QName, Rejected, Actions0)),
             {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
@@ -312,11 +297,11 @@ handle_event({down, Pid, QRef, Info}, #?STATE{monitored = Monitored,
                           end, [], U0),
             U = maps:without(MsgIds, U0),
             {ok, State#?STATE{unconfirmed = U},
-             [{rejected, QRef, MsgIds} | Actions0]}
+             [{rejected, QName, MsgIds} | Actions0]}
     end;
-handle_event({send_drained, _} = Action, State) ->
+handle_event(_QName, {send_drained, _} = Action, State) ->
     {ok, State, [Action]};
-handle_event({send_credit_reply, _} = Action, State) ->
+handle_event(_QName, {send_credit_reply, _} = Action, State) ->
     {ok, State, [Action]}.
 
 settlement_action(_Type, _QRef, [], Acc) ->
@@ -354,11 +339,11 @@ deliver(Qs0, #delivery{flow = Flow,
     {Qs, []}.
 
 
--spec dequeue(NoAck :: boolean(), LimiterPid :: pid(),
-              rabbit_types:ctag(), state()) ->
+-spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(),
+              LimiterPid :: pid(), rabbit_types:ctag(), state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
     {empty, state()}.
-dequeue(NoAck, LimiterPid, _CTag, State) ->
+dequeue(_QName, NoAck, LimiterPid, _CTag, State) ->
     QPid = State#?STATE.pid,
     case delegate:invoke(QPid, {gen_server2, call,
                                 [{basic_get, self(), NoAck, LimiterPid}, infinity]}) of
@@ -554,21 +539,11 @@ ensure_monitor(Pid, QName, State = #?STATE{monitored = Monitored}) ->
 
 %% part of channel <-> queue api
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
-    Msg = case rabbit_feature_flags:is_enabled(no_queue_name_in_classic_queue_client) of
-              true ->
-                  {confirm, MsgSeqNos, self(), QName};
-              false ->
-                  {confirm, MsgSeqNos, self()}
-          end,
+    Msg = {confirm, MsgSeqNos, self()},
     gen_server:cast(Pid, {queue_event, QName, Msg}).
 
 send_rejection(Pid, QName, MsgSeqNo) ->
-    Msg = case rabbit_feature_flags:is_enabled(no_queue_name_in_classic_queue_client) of
-              true ->
-                  {reject_publish, MsgSeqNo, self(), QName};
-              false ->
-                  {reject_publish, MsgSeqNo, self()}
-          end,
+    Msg = {reject_publish, MsgSeqNo, self()},
     gen_server:cast(Pid, {queue_event, QName, Msg}).
 
 deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->

@@ -49,7 +49,7 @@
          notify_decorators/1
          ]).
 
--type queue_name() :: rabbit_types:r(queue).
+-type queue_name() :: rabbit_amqqueue:name().
 -type queue_state() :: term().
 -type msg_tag() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
@@ -174,7 +174,8 @@
 
 %% any async events returned from the queue system should be processed through
 %% this
--callback handle_event(Event :: event(),
+-callback handle_event(queue_name(),
+                       Event :: event(),
                        queue_state()) ->
     {ok, queue_state(), actions()} | {error, term()} | {eol, actions()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
@@ -183,15 +184,16 @@
                   Delivery :: term()) ->
     {[{amqqueue:amqqueue(), queue_state()}], actions()}.
 
--callback settle(settle_op(), rabbit_types:ctag(), [non_neg_integer()], queue_state()) ->
+-callback settle(queue_name(), settle_op(), rabbit_types:ctag(),
+                 [non_neg_integer()], queue_state()) ->
     {queue_state(), actions()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
--callback credit(rabbit_types:ctag(),
+-callback credit(queue_name(), rabbit_types:ctag(),
                  non_neg_integer(), Drain :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
--callback dequeue(NoAck :: boolean(), LimiterPid :: pid(),
+-callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
                   rabbit_types:ctag(), queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
@@ -369,12 +371,11 @@ init() ->
 
 -spec close(state()) -> ok.
 close(#?STATE{ctxs = Contexts}) ->
-    _ = maps:map(
-          fun (_, #ctx{module = Mod,
-                       state = S}) ->
-                  ok = Mod:close(S)
-          end, Contexts),
-    ok.
+    maps:foreach(
+      fun (_, #ctx{module = Mod,
+                   state = S}) ->
+              ok = Mod:close(S)
+      end, Contexts).
 
 -spec new(amqqueue:amqqueue(), state()) -> state().
 new(Q, State) when ?is_amqqueue(Q) ->
@@ -438,7 +439,7 @@ recover(VHost, Qs) ->
 -spec handle_down(pid(), queue_name(), term(), state()) ->
     {ok, state(), actions()} | {eol, state(), queue_name()} | {error, term()}.
 handle_down(Pid, QName, Info, State0) ->
-    case handle_event(QName, {down, Pid, QName, Info}, State0) of
+    case handle_event(QName, {down, Pid, Info}, State0) of
         {ok, State, Actions} ->
             {ok, State, Actions};
         {eol, []} ->
@@ -457,7 +458,7 @@ handle_event(QRef, Evt, Ctxs) ->
     case get_ctx(QRef, Ctxs, undefined) of
         #ctx{module = Mod,
              state = State0} = Ctx  ->
-            case Mod:handle_event(Evt, State0) of
+            case Mod:handle_event(QRef, Evt, State0) of
                 {ok, State, Actions} ->
                     {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
                 Other ->
@@ -544,7 +545,7 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             {ok, Ctxs, []};
         #ctx{state = State0,
              module = Mod} = Ctx ->
-            case Mod:settle(Op, CTag, MsgIds, State0) of
+            case Mod:settle(QRef, Op, CTag, MsgIds, State0) of
                 {State, Actions} ->
                     {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
                 Err ->
@@ -558,7 +559,8 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
 credit(Q, CTag, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(Q, Ctxs),
-    {State, Actions} = Mod:credit(CTag, Credit, Drain, State0),
+    QName = amqqueue:get_name(Q),
+    {State, Actions} = Mod:credit(QName, CTag, Credit, Drain, State0),
     {ok, set_ctx(Q, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
@@ -569,7 +571,8 @@ credit(Q, CTag, Credit, Drain, Ctxs) ->
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    case Mod:dequeue(NoAck, LimiterPid, CTag, State0) of
+    QName = amqqueue:get_name(Q),
+    case Mod:dequeue(QName, NoAck, LimiterPid, CTag, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->

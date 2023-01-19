@@ -1619,10 +1619,6 @@ wait_for_confirms(Unconfirmed) ->
                 {'$gen_cast', {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
                       sets:subtract(
-                        Unconfirmed, sets:from_list(Confirmed)));
-                {'$gen_cast', {queue_event, QName, {confirm, Confirmed, _, QName}}} ->
-                    wait_for_confirms(
-                      sets:subtract(
                         Unconfirmed, sets:from_list(Confirmed)))
             after ?TIMEOUT ->
                       flush(),

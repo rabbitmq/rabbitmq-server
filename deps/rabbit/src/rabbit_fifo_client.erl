@@ -12,21 +12,20 @@
 -module(rabbit_fifo_client).
 
 -export([
+         init/1,
          init/2,
-         init/3,
          checkout/5,
          cancel_checkout/2,
-         enqueue/2,
          enqueue/3,
-         dequeue/3,
+         enqueue/4,
+         dequeue/4,
          settle/3,
          return/3,
          discard/3,
          credit/4,
-         handle_ra_event/3,
+         handle_ra_event/4,
          untracked_enqueue/2,
          purge/1,
-         queue_name/1,
          update_machine_state/2,
          pending_size/1,
          stat/1,
@@ -47,17 +46,14 @@
                   rabbit_queue_type:action().
 -type actions() :: [action()].
 
--type queue_name() :: rabbit_types:r(queue).
-
 -record(consumer, {last_msg_id :: seq() | -1,
                    ack = false :: boolean(),
                    delivery_count = 0 :: non_neg_integer()}).
 
--record(cfg, {queue_name :: queue_name(),
-              servers = [] :: [ra:server_id()],
+-record(cfg, {servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
-              timeout :: non_neg_integer(),
-              version = 0 :: non_neg_integer()}).
+              timeout :: non_neg_integer()
+             }).
 
 -record(state, {cfg :: #cfg{},
                 leader :: undefined | ra:server_id(),
@@ -85,28 +81,26 @@
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param QueueName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(queue_name(), [ra:server_id()]) -> state().
-init(QueueName, Servers) ->
-    init(QueueName, Servers, ?SOFT_LIMIT).
+-spec init([ra:server_id()]) -> state().
+init(Servers) ->
+    init(Servers, ?SOFT_LIMIT).
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param QueueName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(queue_name(), [ra:server_id()], non_neg_integer()) -> state().
-init(QueueName = #resource{}, Servers, SoftLimit) ->
+-spec init([ra:server_id()], non_neg_integer()) -> state().
+init(Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
-    #state{cfg = #cfg{queue_name = QueueName,
-                      servers = Servers,
+    #state{cfg = #cfg{servers = Servers,
                       soft_limit = SoftLimit,
                       timeout = Timeout * 1000}}.
 
 %% @doc Enqueues a message.
+%% @param QueueName Name of the queue.
 %% @param Correlation an arbitrary erlang term used to correlate this
 %% command when it has been applied.
 %% @param Msg an arbitrary erlang term representing the message.
@@ -116,9 +110,10 @@ init(QueueName = #resource{}, Servers, SoftLimit) ->
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
--spec enqueue(Correlation :: term(), Msg :: term(), State :: state()) ->
+-spec enqueue(rabbit_amqqueue:name(), Correlation :: term(),
+              Msg :: term(), State :: state()) ->
     {ok, state(), actions()} | {reject_publish, state()}.
-enqueue(Correlation, Msg,
+enqueue(QName, Correlation, Msg,
         #state{queue_status = undefined,
                next_enqueue_seq = 1,
                cfg = #cfg{servers = Servers,
@@ -128,7 +123,7 @@ enqueue(Correlation, Msg,
     case rpc:call(Node, ra_machine, version, [{machine, rabbit_fifo, #{}}]) of
         0 ->
             %% the leader is running the old version
-            enqueue(Correlation, Msg, State0#state{queue_status = go});
+            enqueue(QName, Correlation, Msg, State0#state{queue_status = go});
         N when is_integer(N) ->
             %% were running the new version on the leader do sync initialisation
             %% of enqueuer session
@@ -138,8 +133,8 @@ enqueue(Correlation, Msg,
                     {reject_publish, State0#state{leader = Leader,
                                                   queue_status = reject_publish}};
                 {ok, ok, Leader} ->
-                    enqueue(Correlation, Msg, State0#state{leader = Leader,
-                                                           queue_status = go});
+                    enqueue(QName, Correlation, Msg, State0#state{leader = Leader,
+                                                                  queue_status = go});
                 {error, {no_more_servers_to_try, _Errs}} ->
                     %% if we are not able to process the register command
                     %% it is safe to reject the message as we never attempted
@@ -155,11 +150,11 @@ enqueue(Correlation, Msg,
         {badrpc, nodedown} ->
             {reject_publish, State0}
     end;
-enqueue(_Correlation, _Msg,
+enqueue(_QName, _Correlation, _Msg,
         #state{queue_status = reject_publish,
                cfg = #cfg{}} = State) ->
     {reject_publish, State};
-enqueue(Correlation, Msg,
+enqueue(QName, Correlation, Msg,
         #state{slow = Slow,
                pending = Pending,
                queue_status = go,
@@ -180,12 +175,13 @@ enqueue(Correlation, Msg,
                          slow = Tag == slow},
     case Tag of
         slow when not Slow ->
-            {ok, set_timer(State), [{block, cluster_name(State)}]};
+            {ok, set_timer(QName, State), [{block, cluster_name(State)}]};
         _ ->
             {ok, State, []}
     end.
 
 %% @doc Enqueues a message.
+%% @param QueueName Name of the queue.
 %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
 %% @returns
@@ -194,29 +190,29 @@ enqueue(Correlation, Msg,
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 %%
--spec enqueue(Msg :: term(), State :: state()) ->
+-spec enqueue(rabbit_amqqueue:name(), Msg :: term(), State :: state()) ->
     {ok, state(), actions()} | {reject_publish, state()}.
-enqueue(Msg, State) ->
-    enqueue(undefined, Msg, State).
+enqueue(QName, Msg, State) ->
+    enqueue(QName, undefined, Msg, State).
 
 %% @doc Dequeue a message from the queue.
 %%
 %% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
+%% @param QueueName Name of the queue.
 %% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param Settlement either `settled' or `unsettled'. When `settled' no
 %% further settlement needs to be done.
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
--spec dequeue(rabbit_fifo:consumer_tag(),
+-spec dequeue(rabbit_amqqueue:name(), rabbit_fifo:consumer_tag(),
               Settlement :: settled | unsettled, state()) ->
     {ok, non_neg_integer(), term(), non_neg_integer()}
      | {empty, state()} | {error | timeout, term()}.
-dequeue(ConsumerTag, Settlement,
-        #state{cfg = #cfg{timeout = Timeout,
-                          queue_name = QName}} = State0) ->
+dequeue(QueueName, ConsumerTag, Settlement,
+        #state{cfg = #cfg{timeout = Timeout}} = State0) ->
     Node = pick_server(State0),
     ConsumerId = consumer_id(ConsumerTag),
     case ra:process_command(Node,
@@ -234,7 +230,7 @@ dequeue(ConsumerTag, Settlement,
             IsDelivered = Count > 0,
             Msg = add_delivery_count_header(Msg0, Count),
             {ok, MsgsReady,
-             {QName, qref(Leader), MsgId, IsDelivered, Msg},
+             {QueueName, qref(Leader), MsgId, IsDelivered, Msg},
              State0#state{leader = Leader}};
         {ok, {error, _} = Err, _Leader} ->
             Err;
@@ -470,11 +466,6 @@ stat(Leader, Timeout) ->
       {timeout, _} = Error -> Error
     end.
 
-%% @doc returns the cluster name
--spec queue_name(state()) -> queue_name().
-queue_name(#state{cfg = #cfg{queue_name = QueueName}}) ->
-    QueueName.
-
 update_machine_state(Server, Conf) ->
     case ra:process_command(Server, rabbit_fifo:make_update_config(Conf), ?COMMAND_TIMEOUT) of
         {ok, ok, _} ->
@@ -505,6 +496,7 @@ update_machine_state(Server, Conf) ->
 %%  end
 %% '''
 %%
+%% @param QName Name of the queue.
 %% @param From the {@link ra:server_id().} of the sending process.
 %% @param Event the body of the `ra_event'.
 %% @param State the current {@module} state.
@@ -526,13 +518,12 @@ update_machine_state(Server, Conf) ->
 %% <li>`MsgId' is a consumer scoped monotonically incrementing id that can be
 %% used to {@link settle/3.} (roughly: AMQP 0.9.1 ack) message once finished
 %% with them.</li>
--spec handle_ra_event(ra:server_id(), ra_server_proc:ra_event_body(), state()) ->
+-spec handle_ra_event(rabbit_amqqueue:name(), ra:server_id(),
+                      ra_server_proc:ra_event_body(), state()) ->
     {internal, Correlators :: [term()], actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | {eol, actions()}.
-handle_ra_event(From, {applied, Seqs},
-                #state{cfg = #cfg{queue_name = QRef,
-                                  soft_limit = SftLmt
-                                 }} = State0) ->
+handle_ra_event(QName, From, {applied, Seqs},
+                #state{cfg = #cfg{soft_limit = SftLmt}} = State0) ->
 
     {Corrs, Actions0, State1} = lists:foldl(fun seq_applied/2,
                                            {[], [], State0#state{leader = From}},
@@ -546,7 +537,7 @@ handle_ra_event(From, {applied, Seqs},
                       %% The wrong order does not matter much because the channel sorts the
                       %% sequence numbers before confirming to the client. But rabbit_fifo_client
                       %% is sequence numer agnostic: it handles any correlation terms.
-                      [{settled, QRef, Corrs}
+                      [{settled, QName, Corrs}
                        | lists:reverse(Actions0)]
               end,
     case maps:size(State1#state.pending) < SftLmt of
@@ -578,13 +569,13 @@ handle_ra_event(From, {applied, Seqs},
         _ ->
             {ok, State1, Actions}
     end;
-handle_ra_event(From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
-    handle_delivery(From, Del, State0);
-handle_ra_event(_, {machine, {queue_status, Status}},
+handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
+    handle_delivery(QName, From, Del, State0);
+handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status
     {ok, State#state{queue_status = Status}, []};
-handle_ra_event(Leader, {machine, leader_change},
+handle_ra_event(_QName, Leader, {machine, leader_change},
                 #state{leader = OldLeader} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
@@ -592,28 +583,28 @@ handle_ra_event(Leader, {machine, leader_change},
                      [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, State, []};
-handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = Leader} = State) ->
     {ok, State, []};
-handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = OldLeader} = State0) ->
     rabbit_log:debug("~ts: Detected QQ leader change (rejection) from ~w to ~w",
                      [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
-handle_ra_event(_From, {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
+handle_ra_event(_QName, _From, {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
-handle_ra_event(_, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
+handle_ra_event(QName, _, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
     case find_leader(Servers) of
         undefined ->
             %% still no leader, set the timer again
-            {ok, set_timer(State0), []};
+            {ok, set_timer(QName, State0), []};
         Leader ->
             State = resend_all_pending(State0#state{leader = Leader}),
             {ok, State, []}
     end;
-handle_ra_event(_Leader, {machine, eol}, State) ->
+handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
     {eol, [{unblock, cluster_name(State)}]}.
 
 %% @doc Attempts to enqueue a message using cast semantics. This provides no
@@ -710,9 +701,8 @@ maybe_auto_ack(false, {deliver, Tag, _Ack, Msgs} = Deliver, State0) ->
     {State, Actions} = settle(Tag, MsgIds, State0),
     {ok, State, [Deliver] ++ Actions}.
 
-handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
-                #state{cfg = #cfg{queue_name = QName},
-                       consumer_deliveries = CDels0} = State0)
+handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
+                #state{consumer_deliveries = CDels0} = State0)
   when is_map_key(Tag, CDels0) ->
     QRef = qref(Leader),
     {LastId, _} = lists:last(IdMsgs),
@@ -755,7 +745,7 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                 [] ->
                     {ok, State0, []};
                 IdMsgs2 ->
-                    handle_delivery(Leader, {delivery, Tag, IdMsgs2}, State0)
+                    handle_delivery(QName, Leader, {delivery, Tag, IdMsgs2}, State0)
             end;
         C when FstId =:= 0 ->
             % the very first delivery
@@ -766,7 +756,7 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                                                         C#consumer{last_msg_id = LastId},
                                                         CDels0)})
     end;
-handle_delivery(_Leader, {delivery, Tag, [_ | _] = IdMsgs},
+handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
                 #state{consumer_deliveries = CDels0} = State0)
   when not is_map_key(Tag, CDels0) ->
     %% Note:
@@ -876,9 +866,8 @@ add_command(Cid, return, MsgIds, Acc) ->
 add_command(Cid, discard, MsgIds, Acc) ->
     [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
-set_timer(#state{leader = Leader0,
-                 cfg = #cfg{servers = [Server | _],
-                            queue_name = QName}} = State) ->
+set_timer(QName, #state{leader = Leader0,
+                        cfg = #cfg{servers = [Server | _]}} = State) ->
     Leader = case Leader0 of
                  undefined -> Server;
                  _ ->

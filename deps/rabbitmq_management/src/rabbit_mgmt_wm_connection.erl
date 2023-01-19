@@ -98,6 +98,6 @@ force_close_connection(ReqData, Conn, Pid) ->
         _ ->
             %% Best effort will work for following plugins:
             %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
-            Pid ! {shutdown, Reason}
-    end,
-    ok.
+            _ = Pid ! {shutdown, Reason},
+            ok
+    end.

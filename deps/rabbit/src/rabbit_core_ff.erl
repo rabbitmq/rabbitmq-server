@@ -125,13 +125,6 @@
       depends_on    => [stream_queue]
      }}).
 
--rabbit_feature_flag(
-   {no_queue_name_in_classic_queue_client,
-    #{desc          => "Remove queue name from classic queue type client to save memory",
-      stability     => stable,
-      depends_on    => [classic_queue_type_delivery_support]
-     }}).
-
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------

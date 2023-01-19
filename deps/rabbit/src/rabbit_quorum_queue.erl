@@ -12,7 +12,7 @@
 -export([init/1,
          close/1,
          update/2,
-         handle_event/2]).
+         handle_event/3]).
 -export([is_recoverable/1,
          recover/2,
          stop/1,
@@ -22,12 +22,11 @@
          delete/4,
          delete_immediately/2]).
 -export([state_info/1, info/2, stat/1, infos/1]).
--export([settle/4, dequeue/4, consume/3, cancel/5]).
--export([credit/4]).
+-export([settle/5, dequeue/5, consume/3, cancel/5]).
+-export([credit/5]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/2]).
 -export([dead_letter_publish/5]).
--export([queue_name/1]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
@@ -133,11 +132,10 @@ init(Q) when ?is_amqqueue(Q) ->
     %% know what to do if the queue has `disappeared`. Let it crash.
     {Name, _LeaderNode} = Leader = amqqueue:get_pid(Q),
     Nodes = get_nodes(Q),
-    QName = amqqueue:get_name(Q),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(QName, Servers, SoftLimit)}.
+    {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(_State) ->
@@ -149,13 +147,14 @@ update(Q, State) when ?amqqueue_is_quorum(Q) ->
     %% QQ state maintains it's own updates
     State.
 
--spec handle_event({amqqueue:ra_server_id(), any()},
+-spec handle_event(rabbit_amqquue:name(),
+                   {amqqueue:ra_server_id(), any()},
                    rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
     {eol, rabbit_queue_type:actions()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-handle_event({From, Evt}, QState) ->
-    rabbit_fifo_client:handle_ra_event(From, Evt, QState).
+handle_event(QName, {From, Evt}, QState) ->
+    rabbit_fifo_client:handle_ra_event(QName, From, Evt, QState).
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {new | existing, amqqueue:amqqueue()} |
@@ -720,22 +719,22 @@ delete_immediately(Resource, {_Name, _} = QPid) ->
     rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
-settle(complete, CTag, MsgIds, QState) ->
+settle(_QName, complete, CTag, MsgIds, QState) ->
     rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState);
-settle(requeue, CTag, MsgIds, QState) ->
+settle(_QName, requeue, CTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
-settle(discard, CTag, MsgIds, QState) ->
+settle(_QName, discard, CTag, MsgIds, QState) ->
     rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
 
-credit(CTag, Credit, Drain, QState) ->
+credit(_QName, CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
 
--spec dequeue(NoAck :: boolean(), pid(),
+-spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(), pid(),
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->
     {empty, rabbit_fifo_client:state()} |
     {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, term()}.
-dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
+dequeue(QName, NoAck, _LimiterPid, CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->
@@ -743,7 +742,7 @@ dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
                      false ->
                          unsettled
                  end,
-    rabbit_fifo_client:dequeue(CTag, Settlement, QState0).
+    rabbit_fifo_client:dequeue(QName, CTag, Settlement, QState0).
 
 -spec consume(amqqueue:amqqueue(),
               rabbit_queue_type:consume_spec(),
@@ -862,19 +861,20 @@ stateless_deliver(ServerId, Delivery) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId],
                                               Delivery#delivery.message).
 
--spec deliver(Confirm :: boolean(), rabbit_types:delivery(),
-              rabbit_fifo_client:state()) ->
+-spec deliver(rabbit_amqqueue:name(), Confirm :: boolean(),
+              rabbit_types:delivery(), rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
     {reject_publish, rabbit_fifo_client:state()}.
-deliver(false, Delivery, QState0) ->
-    case rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0) of
+deliver(QName, false, Delivery, QState0) ->
+    case rabbit_fifo_client:enqueue(QName, Delivery#delivery.message, QState0) of
         {ok, _State, _Actions} = Res ->
             Res;
         {reject_publish, State} ->
             {ok, State, []}
     end;
-deliver(true, Delivery, QState0) ->
-    rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+deliver(QName, true, Delivery, QState0) ->
+    rabbit_fifo_client:enqueue(QName,
+                               Delivery#delivery.msg_seq_no,
                                Delivery#delivery.message, QState0).
 
 deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
@@ -889,10 +889,10 @@ deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
                      [QRef], Delivery#delivery.message),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
-              case deliver(Confirm, Delivery, S0) of
+              QName = amqqueue:get_name(Q),
+              case deliver(QName, Confirm, Delivery, S0) of
                   {reject_publish, S} ->
                       Seq = Delivery#delivery.msg_seq_no,
-                      QName = rabbit_fifo_client:queue_name(S),
                       {[{Q, S} | Qs], [{rejected, QName, [Seq]} | Actions]};
                   {ok, S, As} ->
                       {[{Q, S} | Qs], As ++ Actions}
@@ -1580,9 +1580,6 @@ quorum_ctag(Other) ->
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
-
-queue_name(RaFifoState) ->
-    rabbit_fifo_client:queue_name(RaFifoState).
 
 get_default_quorum_initial_group_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of

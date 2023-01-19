@@ -48,10 +48,10 @@
          update/2,
          consume/3,
          cancel/5,
-         handle_event/2,
-         settle/4,
-         credit/4,
-         dequeue/4,
+         handle_event/3,
+         settle/5,
+         credit/5,
+         dequeue/5,
          state_info/1
         ]).
 -export(?STATEFUL_CALLBACKS).
@@ -258,17 +258,17 @@ consume(A1,A2,A3) ->
 cancel(A1,A2,A3,A4,A5) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-handle_event(A1,A2) ->
-    ?UNSUPPORTED([A1,A2]).
+handle_event(A1,A2,A3) ->
+    ?UNSUPPORTED([A1,A2,A3]).
 
-settle(A1,A2,A3,A4) ->
-    ?UNSUPPORTED([A1,A2,A3,A4]).
+settle(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-credit(A1,A2,A3,A4) ->
-    ?UNSUPPORTED([A1,A2,A3,A4]).
+credit(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-dequeue(A1,A2,A3,A4) ->
-    ?UNSUPPORTED([A1,A2,A3,A4]).
+dequeue(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
 state_info(A1) ->
     ?UNSUPPORTED([A1]).
