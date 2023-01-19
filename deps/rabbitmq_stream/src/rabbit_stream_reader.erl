@@ -44,6 +44,7 @@
 -record(consumer,
         {configuration :: #consumer_configuration{},
          credit :: non_neg_integer(),
+         send_limit :: non_neg_integer(),
          log :: undefined | osiris_log:state(),
          last_listener_offset = undefined :: undefined | osiris:offset()}).
 -record(stream_connection_state,
@@ -488,7 +489,7 @@ handle_info(Msg,
                                              Connection,
                                              State,
                                              Data),
-            Transport:setopts(S, [{active, once}]),
+            setopts(Transport, S, [{active, once}]),
             #stream_connection{connection_step = NewConnectionStep} =
                 Connection1,
             rabbit_log_connection:debug("Transitioned from ~s to ~s",
@@ -713,7 +714,7 @@ open(info, {resource_alarm, IsThereAlarm},
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
-            Transport:setopts(S, [{active, once}]),
+            setopts(Transport, S, [{active, once}]),
             ok = rabbit_heartbeat:resume_monitor(Heartbeater),
             rabbit_log_connection:debug("Unblocking connection ~p",
                                         [ConnectionName]);
@@ -751,7 +752,7 @@ open(info, {OK, S, Data},
             stop;
         close_sent ->
             rabbit_log_connection:debug("Transitioned to close_sent"),
-            Transport:setopts(S, [{active, once}]),
+            setopts(Transport, S, [{active, once}]),
             {next_state, close_sent,
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State1}};
@@ -761,7 +762,7 @@ open(info, {OK, S, Data},
                     true ->
                         case should_unblock(Connection, Configuration) of
                             true ->
-                                Transport:setopts(S, [{active, once}]),
+                                setopts(Transport, S, [{active, once}]),
                                 ok =
                                     rabbit_heartbeat:resume_monitor(Heartbeater),
                                 State1#stream_connection_state{blocked = false};
@@ -771,7 +772,7 @@ open(info, {OK, S, Data},
                     false ->
                         case has_credits(Credits) of
                             true ->
-                                Transport:setopts(S, [{active, once}]),
+                                setopts(Transport, S, [{active, once}]),
                                 State1;
                             false ->
                                 ok =
@@ -992,7 +993,7 @@ open(cast,
             true ->
                 case should_unblock(Connection, Configuration) of
                     true ->
-                        Transport:setopts(S, [{active, once}]),
+                        setopts(Transport, S, [{active, once}]),
                         ok = rabbit_heartbeat:resume_monitor(Heartbeater),
                         State#stream_connection_state{blocked = false};
                     false ->
@@ -1039,7 +1040,7 @@ open(cast,
             true ->
                 case should_unblock(Connection, Configuration) of
                     true ->
-                        Transport:setopts(S, [{active, once}]),
+                        setopts(Transport, S, [{active, once}]),
                         ok = rabbit_heartbeat:resume_monitor(Heartbeater),
                         State#stream_connection_state{blocked = false};
                     false ->
@@ -1166,7 +1167,7 @@ close_sent(info, {tcp, S, Data},
         closing_done ->
             stop;
         _ ->
-            Transport:setopts(S, [{active, once}]),
+            setopts(Transport, S, [{active, once}]),
             {keep_state,
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State1}}
@@ -1959,10 +1960,12 @@ handle_frame_post_auth(Transport,
                                                                     Properties,
                                                                 active =
                                                                     Active},
+                                    SendLimit = Credit div 2,
                                     ConsumerState =
                                         #consumer{configuration =
                                                       ConsumerConfiguration,
                                                   log = Log,
+                                                  send_limit = SendLimit,
                                                   credit = Credit},
 
                                     Connection1 =
@@ -3258,18 +3261,24 @@ send_chunks(DeliverVersion,
 
 send_chunks(_DeliverVersion,
             _Transport,
-            Consumer,
-            0,
+            #consumer{send_limit = SendLimit} = Consumer,
+            Credit,
             LastLstOffset,
-            _Counter) ->
+            _Counter) when Credit =< SendLimit ->
+    %% there are fewer credits than the credit limit so we won't enter
+    %% the send_chunks loop until we have more than the limit available.
+    %% Once we have that we are able to consume all credits all the way down
+    %% to zero
     {ok,
-     Consumer#consumer{credit = 0, last_listener_offset = LastLstOffset}};
+     Consumer#consumer{credit = Credit, last_listener_offset = LastLstOffset}};
 send_chunks(DeliverVersion,
             Transport,
-            #consumer{log = Log} = Consumer,
+            #consumer{configuration = #consumer_configuration{socket = Socket},
+                      log = Log} = Consumer,
             Credit,
             LastLstOffset,
             Counter) ->
+    setopts(Transport, Socket, [{nopush, true}]),
     send_chunks(DeliverVersion,
                 Transport,
                 Consumer,
@@ -3280,27 +3289,31 @@ send_chunks(DeliverVersion,
                 Counter).
 
 send_chunks(_DeliverVersion,
-            _Transport,
-            Consumer,
+            Transport,
+            #consumer{
+                      configuration = #consumer_configuration{socket = Socket}} =
+                Consumer,
             Log,
-            0 = _Credit,
+            0,
             LastLstOffset,
             _Retry,
             _Counter) ->
+    %% we have finished sending so need to uncork
+    setopts(Transport, Socket, [{nopush, false}]),
     {ok,
      Consumer#consumer{log = Log,
                        credit = 0,
                        last_listener_offset = LastLstOffset}};
 send_chunks(DeliverVersion,
             Transport,
-            #consumer{configuration = #consumer_configuration{socket = S}} =
+            #consumer{configuration = #consumer_configuration{socket = Socket}} =
                 Consumer,
             Log,
             Credit,
             LastLstOffset,
             Retry,
             Counter) ->
-    case osiris_log:send_file(S, Log,
+    case osiris_log:send_file(Socket, Log,
                               send_file_callback(DeliverVersion,
                                                  Transport,
                                                  Log,
@@ -3323,6 +3336,7 @@ send_chunks(DeliverVersion,
         {error, Reason} ->
             {error, Reason};
         {end_of_stream, Log1} ->
+            setopts(Transport, Socket, [{nopush, false}]),
             case Retry of
                 true ->
                     timer:sleep(1),
@@ -3643,3 +3657,7 @@ close_log(undefined) ->
     ok;
 close_log(Log) ->
     osiris_log:close(Log).
+
+setopts(Transport, Sock, Opts) ->
+    ok = Transport:setopts(Sock, Opts).
+
