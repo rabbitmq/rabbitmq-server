@@ -11,9 +11,9 @@ load(
 )
 load(
     "@rules_erlang//:ct.bzl",
+    "assert_suites2",
     "ct_suite",
     "ct_suite_variant",
-    _assert_suites = "assert_suites",
 )
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -203,7 +203,6 @@ def rabbitmq_test_helper(
     )
 
 def rabbitmq_integration_suite(
-        package,
         name = None,
         tags = [],
         data = [],
@@ -215,6 +214,8 @@ def rabbitmq_integration_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+    package = native.package_name()
+
     extra_deps = [
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_ct_helpers:erlang_app",
@@ -295,5 +296,5 @@ def rabbitmq_integration_suite(
 
     return name
 
-def assert_suites(suite_names, suite_files):
-    _assert_suites(suite_names, suite_files)
+def assert_suites(**kwargs):
+    assert_suites2(**kwargs)
