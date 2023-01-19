@@ -148,13 +148,8 @@ log_open(FileName) ->
 -spec log_open(string(), datehour()) -> file:io_device().
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
-<<<<<<< HEAD
-    logger:info("opening log file: ~p", [LogName]),
-    filelib:ensure_dir(LogName),
-=======
     logger:info("opening log file: ~tp", [LogName]),
     _ = filelib:ensure_dir(LogName),
->>>>>>> 5941c86071 (Fix all dialyzer warnings in rabbitmq_web_dispatch)
     {ok, FD} = file:open(LogName, [read, write, raw]),
     {ok, Location} = file:position(FD, eof),
     fix_log(FD, Location),
