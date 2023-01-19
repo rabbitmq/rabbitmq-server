@@ -24,13 +24,14 @@ dialyze(
     plt = "//:base_plt",
 )
 
-suites = [
-    rabbitmq_suite(
-        name = "rabbit_stream_core_SUITE",
-    ),
-]
+rabbitmq_suite(
+    name = "rabbit_stream_core_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_stream_common",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

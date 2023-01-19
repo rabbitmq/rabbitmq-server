@@ -66,6 +66,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
+<<<<<<< HEAD
 PACKAGE = "deps/rabbitmq_shovel_management"
 
 suites = [
@@ -88,4 +89,38 @@ suites = [
 assert_suites(
     suites,
     glob(["test/**/*_SUITE.erl"]),
+=======
+rabbitmq_integration_suite(
+    name = "http_SUITE",
+)
+
+rabbitmq_suite(
+    name = "rabbit_shovel_mgmt_SUITE",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "rabbit_shovel_mgmt_util_SUITE",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_shovel:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_shovel_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+>>>>>>> 7671052038 (Simplify BUILD files by using new macros from rules_erlang 3.9.0 (backport #6928) (#6934))
 )

@@ -57,26 +57,25 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_auth_backend_cache"
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_auth_backend_cache_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "rabbit_auth_cache_SUITE",
-        runtime_deps = [
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    name = "rabbit_auth_backend_cache_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "rabbit_auth_cache_SUITE",
+    runtime_deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_auth_backend_cache",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
