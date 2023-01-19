@@ -215,7 +215,7 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
                         -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 
 join_cluster(DiscoveryNode, NodeType) ->
-    ensure_mnesia_not_running(),
+    stop_mnesia(),
     ensure_mnesia_dir(),
     case is_only_clustered_disc_node() of
         true  -> e(clustering_only_disc_node);
@@ -264,14 +264,14 @@ join_cluster(DiscoveryNode, NodeType) ->
 -spec reset() -> 'ok'.
 
 reset() ->
-    ensure_mnesia_not_running(),
+    stop_mnesia(),
     rabbit_log:info("Resetting Rabbit", []),
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.
 
 force_reset() ->
-    ensure_mnesia_not_running(),
+    stop_mnesia(),
     rabbit_ra_systems:stop_all(),
     rabbit_log:info("Resetting Rabbit forcefully", []),
     wipe().
@@ -306,7 +306,7 @@ wipe() ->
 -spec change_cluster_node_type(node_type()) -> 'ok'.
 
 change_cluster_node_type(Type) ->
-    ensure_mnesia_not_running(),
+    stop_mnesia(),
     ensure_mnesia_dir(),
     case is_clustered() of
         false -> e(not_clustered);
@@ -325,7 +325,7 @@ change_cluster_node_type(Type) ->
 -spec update_cluster_nodes(node()) -> 'ok'.
 
 update_cluster_nodes(DiscoveryNode) ->
-    ensure_mnesia_not_running(),
+    stop_mnesia(),
     ensure_mnesia_dir(),
     Status = {AllNodes, _, _} = discover_cluster([DiscoveryNode]),
     case me_in_nodes(AllNodes) of
@@ -673,7 +673,7 @@ ensure_schema_integrity() ->
 -spec copy_db(file:filename()) ->  rabbit_types:ok_or_error(any()).
 
 copy_db(Destination) ->
-    ok = ensure_mnesia_not_running(),
+    stop_mnesia(),
     rabbit_file:recursive_copy(dir(), Destination).
 
 force_load_filename() ->
