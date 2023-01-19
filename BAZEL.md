@@ -68,7 +68,7 @@ Note: This takes quite some time on a single machine.
 
 ## Add/update an external dependency from github
 
-`bazel run gazelle -- update-repos --verbose --build_files_dir=bazel -to_macro=workspace_helpers.bzl%rabbitmq_external_deps github.com/extend/ct_helper`
+`bazel run gazelle -- update-repos --verbose --build_files_dir=bazel github.com/extend/ct_helper`
 
 ## Additional Useful Commands
 

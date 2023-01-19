@@ -35,7 +35,6 @@ gazelle(
 #     extra_args = [
 #         "--verbose",
 #         "--build_files_dir=bazel",
-#         "--to_macro=workspace_helpers.bzl%rabbitmq_external_deps",
 #     ],
 #     command = "update-repos",
 #     data = GAZELLE_ERLANG_RUNTIME_DEPS,
