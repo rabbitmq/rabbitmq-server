@@ -226,10 +226,10 @@ def _elixir_app_to_erlang_app(ctx):
             command = """\
 set -euo pipefail
 
-cp {elixir_ebin}/* {ebin}
+cp "{elixir_ebin}"/* "{ebin}"
 
-for beam in {app_consolidated}/*; do
-    find {ebin} -name "$(basename $beam)" -exec cp -f $beam {ebin} \\;
+for beam in "{app_consolidated}"/*; do
+    find "{ebin}" -name "$(basename $beam)" -exec cp -f "$beam" "{ebin}" \\;
 done
 """.format(
                 elixir_ebin = elixir_ebin,
@@ -256,11 +256,11 @@ done
             command = """\
 set -euo pipefail
 
-cp {app_ebin}/* {ebin}
-cp -f {app_consolidated}/* {ebin}
+cp "{app_ebin}"/* "{ebin}"
+cp -f "{app_consolidated}"/* "{ebin}"
 
-for beam in {elixir_ebin}/*; do
-    find {ebin} -name "$(basename $beam)" -delete
+for beam in "{elixir_ebin}"/*; do
+    find "{ebin}" -name "$(basename $beam)" -delete
 done
 """.format(
                 elixir_ebin = elixir_ebin,
