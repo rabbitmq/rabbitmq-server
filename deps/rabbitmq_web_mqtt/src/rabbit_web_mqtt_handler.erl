@@ -124,6 +124,17 @@ websocket_handle(Frame, State) ->
                     [Frame]),
     {ok, State, hibernate}.
 
+%% `rabbit_mqtt_processor:amqp_callback/2` doesn't actually return
+%% {'error', _, _}, so this small function is a place to silence
+%% unmatched warning. This allows to keep currently-unused
+%% error-handling code.
+-spec callback_reply(#state{}, {'ok', any()} | {'error', any(), any()}) -> {'ok', #state{}, 'hibernate'}.
+-dialyzer({no_match, callback_reply/2}).
+callback_reply(State, {ok, ProcState}) ->
+    {ok, State #state { proc_state = ProcState }, hibernate};
+callback_reply(State, {error, _Reason, _ProcState}) ->
+    stop(State).
+
 websocket_info({conserve_resources, Conserve}, State) ->
     NewState = State#state{conserve_resources = Conserve},
     handle_credits(control_throttle(NewState));
@@ -132,19 +143,9 @@ websocket_info({bump_credit, Msg}, State) ->
     handle_credits(control_throttle(State));
 websocket_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             State = #state{ proc_state = ProcState0 }) ->
-    case rabbit_mqtt_processor:amqp_callback(Delivery, ProcState0) of
-        {ok, ProcState} ->
-            {ok, State #state { proc_state = ProcState }, hibernate};
-        {error, _, _} ->
-            stop(State)
-    end;
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery, ProcState0));
 websocket_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState0 }) ->
-    case rabbit_mqtt_processor:amqp_callback(Ack, ProcState0) of
-        {ok, ProcState} ->
-            {ok, State #state { proc_state = ProcState }, hibernate};
-        {error, _, _} ->
-            stop(State)
-    end;
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState0));
 websocket_info(#'basic.consume_ok'{}, State) ->
     {ok, State, hibernate};
 websocket_info(#'basic.cancel'{}, State) ->
@@ -187,7 +188,7 @@ websocket_info(Msg, State) ->
 terminate(_, _, #state{ proc_state = undefined }) ->
     ok;
 terminate(_, _, State) ->
-    stop_rabbit_mqtt_processor(State),
+    _ = stop_rabbit_mqtt_processor(State),
     ok.
 
 %% Internal.
@@ -224,8 +225,6 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                     rabbit_log_connection:info("MQTT protocol error ~p for connection ~p",
                         [Reason, ConnStr]),
                     stop(State, 1002, Reason);
-                {error, Error} ->
-                    stop_with_framing_error(State, Error, ConnStr);
                 {stop, _} ->
                     stop(State)
             end;
@@ -238,7 +237,7 @@ stop(State) ->
 
 stop(State, CloseCode, Error0) ->
     ok = file_handle_cache:release(),
-    stop_rabbit_mqtt_processor(State),
+    _ = stop_rabbit_mqtt_processor(State),
     Error1 = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error1}], State}.
 
@@ -252,8 +251,8 @@ stop_rabbit_mqtt_processor(State = #state{state = running,
                                           proc_state = ProcState,
                                           conn_name = ConnName}) ->
     maybe_emit_stats(State),
-    rabbit_log_connection:info("closing Web MQTT connection ~p (~s)", [self(), ConnName]),
-    rabbit_mqtt_processor:send_will(ProcState),
+    rabbit_log_connection:info("closing Web MQTT connection ~tp (~ts)", [self(), ConnName]),
+    _ = rabbit_mqtt_processor:send_will(ProcState),
     rabbit_mqtt_processor:close_connection(ProcState).
 
 handle_credits(State0) ->
