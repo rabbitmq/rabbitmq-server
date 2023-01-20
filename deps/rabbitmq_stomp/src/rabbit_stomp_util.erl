@@ -323,7 +323,7 @@ default_params({queue, _}) ->
     [{durable, true}];
 
 default_params({exchange, _}) ->
-    [{exclusive, false}, {auto_delete, true}];
+    [{exclusive, true}, {auto_delete, true}];
 
 default_params({topic, _}) ->
     [{exclusive, false}, {auto_delete, true}];
