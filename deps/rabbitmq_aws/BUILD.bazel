@@ -1,7 +1,11 @@
 load("@rules_erlang//:eunit.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_app")
+load("//:rabbitmq.bzl",
+     "RABBITMQ_DIALYZER_OPTS",
+     "RABBITMQ_TEST_ERLC_OPTS",
+     "rabbitmq_app",
+)
 
 APP_NAME = "rabbitmq_aws"
 
@@ -16,6 +20,7 @@ APP_REGISTERED = [
 EXTRA_APPS = [
     "crypto",
     "inets",
+    "public_key",
     "ssl",
     "xmerl",
 ]
@@ -41,13 +46,14 @@ xref(
 
 plt(
     name = "base_plt",
-    apps = EXTRA_APPS,
     plt = "//:base_plt",
+    apps = EXTRA_APPS,
+    deps = BUILD_DEPS,
 )
 
 dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 eunit(
