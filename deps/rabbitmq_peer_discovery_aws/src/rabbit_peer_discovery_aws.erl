@@ -183,13 +183,6 @@ maybe_set_region(Value) ->
     rabbit_log:debug("Setting AWS region to ~p", [Value]),
     rabbitmq_aws:set_region(Value).
 
-<<<<<<< HEAD
-get_autoscaling_group_node_list(error, _) ->
-    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
-    {ok, {[], disc}};
-=======
->>>>>>> 50ed7ad6f7 (Fix all dialyzer warnings in AWS-related plugins)
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
