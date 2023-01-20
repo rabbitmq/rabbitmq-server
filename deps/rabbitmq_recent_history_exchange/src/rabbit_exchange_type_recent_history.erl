@@ -84,7 +84,7 @@ delete(none, _Exchange, _Bs) ->
 
 add_binding(transaction, #exchange{ name = XName },
             #binding{ destination = #resource{kind = queue} = QName }) ->
-    case rabbit_amqqueue:lookup(QName) of
+    _ = case rabbit_amqqueue:lookup(QName) of
         {error, not_found} ->
             destination_not_found_error(QName);
         {ok, Q} ->
@@ -94,7 +94,7 @@ add_binding(transaction, #exchange{ name = XName },
     ok;
 add_binding(transaction, #exchange{ name = XName },
             #binding{ destination = #resource{kind = exchange} = DestName }) ->
-    case rabbit_exchange:lookup(DestName) of
+    _ = case rabbit_exchange:lookup(DestName) of
         {error, not_found} ->
             destination_not_found_error(DestName);
         {ok, X} ->
@@ -122,17 +122,17 @@ assert_args_equivalence(X, Args) ->
 %%----------------------------------------------------------------------------
 
 setup_schema() ->
-    mnesia:create_table(?RH_TABLE,
+    _ = mnesia:create_table(?RH_TABLE,
                              [{attributes, record_info(fields, cached)},
                               {record_name, cached},
                               {type, set}]),
-    mnesia:add_table_copy(?RH_TABLE, node(), ram_copies),
+    _ = mnesia:add_table_copy(?RH_TABLE, node(), ram_copies),
     rabbit_table:wait([?RH_TABLE]),
     ok.
 
 disable_plugin() ->
     rabbit_registry:unregister(exchange, <<"x-recent-history">>),
-    mnesia:delete_table(?RH_TABLE),
+    _ = mnesia:delete_table(?RH_TABLE),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -192,6 +192,7 @@ deliver_messages(Qs, Msgs) ->
               rabbit_amqqueue:deliver(Qs, Delivery)
       end, lists:reverse(Msgs)).
 
+-spec destination_not_found_error(string()) -> no_return().
 destination_not_found_error(DestName) ->
     rabbit_misc:protocol_error(
       internal_error,
