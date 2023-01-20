@@ -34,13 +34,14 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    plt = "//:base_plt",
+    apps = [ "mnesia" ],
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()
