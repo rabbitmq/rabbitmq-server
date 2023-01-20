@@ -285,17 +285,6 @@ read_file_test_() ->
   [
     {"file does not exist", fun() ->
       ?assertEqual({error, enoent}, rabbitmq_aws_config:read_file(filename:join([filename:absname("."), "bad_path"])))
-<<<<<<< HEAD
-     end},
-    {"file handle is closed", fun() ->
-      {MegaSecs, Secs, MicroSecs} = erlang:timestamp(),
-      Name = lists:flatten(io_lib:format("~p-~p-~p.tmp", [MegaSecs, Secs, MicroSecs])),
-      {ok, Handle} = file:open(Name, [write]),
-      file:close(Handle),
-      ?assertEqual({error,terminated}, rabbitmq_aws_config:read_file(Handle, [])),
-      file:delete(Name)
-=======
->>>>>>> 50ed7ad6f7 (Fix all dialyzer warnings in AWS-related plugins)
      end}
   ].
 
