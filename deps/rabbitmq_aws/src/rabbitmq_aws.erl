@@ -158,7 +158,7 @@ set_imdsv2_token(Imdsv2Token) ->
   gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
 
 
--spec get_imdsv2_token() -> imdsv2token().
+-spec get_imdsv2_token() -> imdsv2token() | 'undefined'.
 %% @doc return the current Imdsv2Token used to perform instance metadata service requests.
 %% @end
 get_imdsv2_token() ->
@@ -493,7 +493,7 @@ sign_headers(#state{access_key = AccessKey,
                                   headers = Headers,
                                   body = Body}).
 
--spec expired_imdsv2_token(imdsv2token()) -> boolean().
+-spec expired_imdsv2_token('undefined' | imdsv2token()) -> boolean().
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
@@ -509,7 +509,7 @@ expired_imdsv2_token({_, _, Expiration}) ->
   HasExpired.
 
 
--spec ensure_imdsv2_token_valid() -> imdsv2token().
+-spec ensure_imdsv2_token_valid() -> security_token().
 ensure_imdsv2_token_valid() ->
   Imdsv2Token = get_imdsv2_token(),
   case expired_imdsv2_token(Imdsv2Token) of
@@ -538,7 +538,7 @@ ensure_credentials_valid() ->
   end.
 
 
--spec api_get_request(string(), path()) -> result().
+-spec api_get_request(string(), path()) -> {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
@@ -546,7 +546,7 @@ api_get_request(Service, Path) ->
   api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
 
 
--spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
+-spec api_get_request_with_retries(string(), path(), integer(), integer()) -> {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service with retries.
 %% @end
 api_get_request_with_retries(_, _, 0, _) ->

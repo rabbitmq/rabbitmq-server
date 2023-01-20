@@ -71,13 +71,12 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
                       {error, Reason :: string()}.
-
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
@@ -178,17 +177,12 @@ maybe_set_credentials(AccessKey, SecretKey) ->
 %%
 maybe_set_region("undefined") ->
     case rabbitmq_aws_config:region() of
-        {ok, Region} -> maybe_set_region(Region);
-        _            -> ok
+        {ok, Region} -> maybe_set_region(Region)
     end;
 maybe_set_region(Value) ->
     rabbit_log:debug("Setting AWS region to ~tp", [Value]),
     rabbitmq_aws:set_region(Value).
 
-get_autoscaling_group_node_list(error, _) ->
-    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~ts", [rabbitmq_aws_config:instance_id_url()]),
-    {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
@@ -265,7 +259,7 @@ get_next_token(Value) ->
     NextToken.
 
 -spec find_autoscaling_group(Instances :: list(), Instance :: string())
-                            -> string() | error.
+                            -> {'ok', string()} | error.
 %% @private
 %% @doc Attempt to find the Auto Scaling Group ID by finding the current
 %%      instance in the list of instances returned by the autoscaling API
@@ -312,7 +306,7 @@ maybe_add_tag_filters(Tags, QArgs, Num) ->
     Filters.
 
 -spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
-get_node_list_from_tags([]) ->
+get_node_list_from_tags(M) when map_size(M) =:= 0 ->
     rabbit_log:warning("Cannot discover any nodes because AWS tags are not configured!", []),
     {ok, {[], disc}};
 get_node_list_from_tags(Tags) ->
