@@ -10,11 +10,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         build_file = rabbitmq_workspace + "//:BUILD.bats",
     )
 
-    github_erlang_app(
-        name = "ct_helper",
-        org = "extend",
-    )
-
     http_archive(
         name = "inet_tcp_proxy_dist",
         build_file = rabbitmq_workspace + "//:BUILD.inet_tcp_proxy",

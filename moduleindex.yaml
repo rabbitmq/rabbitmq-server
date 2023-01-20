@@ -66,6 +66,10 @@ credentials_obfuscation:
 - credentials_obfuscation_pbe
 - credentials_obfuscation_sup
 - credentials_obfuscation_svc
+ct_helper:
+- ct_helper
+- ct_helper_error_h
+- erl_make_certs
 cuttlefish:
 - conf_parse
 - cuttlefish

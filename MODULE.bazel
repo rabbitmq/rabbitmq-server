@@ -163,6 +163,7 @@ erlang_package.hex_package(
 erlang_package.git_package(
     branch = "master",
     repository = "extend/ct_helper",
+    build_file = "@//:bazel/BUILD.ct_helper",
 )
 
 erlang_package.hex_package(
