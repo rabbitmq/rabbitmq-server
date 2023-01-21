@@ -18,7 +18,7 @@ jobs:
       uses: lewagon/wait-on-check-action@v1.2.0
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }})
+        check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
@@ -46,7 +46,7 @@ jobs:
 
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe-${{ matrix.erlang_version }} \
+          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
