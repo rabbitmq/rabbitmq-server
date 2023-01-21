@@ -33,8 +33,7 @@ build(URI) ->
   UriMap1 = case UserInfo of
     undefined         -> UriMap;
     {User, undefined} -> maps:put(userinfo, User, UriMap);
-    {User, Password}  -> maps:put(userinfo, User ++ ":" ++ Password, UriMap);
-    Value             -> maps:put(userinfo, Value, UriMap)
+    {User, Password}  -> maps:put(userinfo, User ++ ":" ++ Password, UriMap)
   end,
   UriMap2 = case Port of
     undefined -> UriMap1;
