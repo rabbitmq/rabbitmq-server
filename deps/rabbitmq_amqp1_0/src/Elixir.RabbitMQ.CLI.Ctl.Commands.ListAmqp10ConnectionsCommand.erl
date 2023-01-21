@@ -29,8 +29,9 @@ switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
 validate(Args, _) ->
+    ValidKeys = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
+                                                               ValidKeys) of
         {ok, _} -> ok;
         Error   -> Error
     end.

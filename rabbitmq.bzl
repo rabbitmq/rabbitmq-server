@@ -247,8 +247,8 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
-            "//bazel/elixir:erlang_app",
-            "//deps/rabbitmq_cli:rabbitmqctl",
+            "//deps/rabbitmq_cli:elixir",
+            "//deps/rabbitmq_cli:erlang_app",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
         deps = extra_deps + deps,
@@ -288,8 +288,8 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.11//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
-            "//bazel/elixir:erlang_app",
-            "//deps/rabbitmq_cli:rabbitmqctl",
+            "//deps/rabbitmq_cli:elixir",
+            "//deps/rabbitmq_cli:erlang_app",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
         deps = extra_deps + deps,
