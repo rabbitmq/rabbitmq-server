@@ -34,7 +34,7 @@ APP_ENV = """[
 
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
@@ -55,7 +55,7 @@ rabbitmq_app(
 
 xref(
     additional_libs = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
+        "//deps/rabbitmq_cli:erlang_app",
     ],
 )
 
@@ -67,14 +67,12 @@ plt(
         "stdlib",
         "ssl",
     ],
-    deps = without(
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        BUILD_DEPS + DEPS,
-    ),
+    libs = ["//deps/rabbitmq_cli:elixir"],
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
 )
 

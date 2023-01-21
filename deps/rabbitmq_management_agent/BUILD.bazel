@@ -36,7 +36,7 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
@@ -66,12 +66,13 @@ plt_apps.remove("ranch")
 plt(
     name = "base_plt",
     apps = plt_apps,
+    libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
-    deps = DEPS,
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
     warnings_as_errors = False,
 )
