@@ -18,16 +18,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     github_erlang_app(
-        name = "jose",
-        repo = "erlang-jose",
-        org = "potatosalad",
-        ref = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-        version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-        sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
-        build_file = rabbitmq_workspace + "//:BUILD.jose",
-    )
-
-    github_erlang_app(
         name = "meck",
         org = "eproxus",
     )

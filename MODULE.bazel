@@ -235,6 +235,7 @@ erlang_package.git_package(
     name = "jose",
     commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
     repository = "michaelklishin/erlang-jose",
+    build_file = "@//bazel:BUILD.jose",
 )
 
 erlang_package.hex_package(
