@@ -34,12 +34,7 @@ APP_ENV = """[
 
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
-<<<<<<< HEAD
-    "//deps/rabbitmq_cli:rabbitmqctl",
-    "@ranch//:erlang_app",
-=======
     "//deps/rabbitmq_cli:erlang_app",
->>>>>>> 766bf1ce9e (Rework plt/dialyze for rabbitmqctl and plugins that depend on it)
 ]
 
 DEPS = [
