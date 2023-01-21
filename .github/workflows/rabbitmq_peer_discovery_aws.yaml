@@ -8,13 +8,8 @@ jobs:
     strategy:
       matrix:
         include:
-<<<<<<< HEAD
         - image_tag_suffix: otp-max
           erlang_version: "24"
-=======
-          - image_tag_suffix: otp-max-bazel
-            otp_version_id: 25_2
->>>>>>> 1aee6fbd17 (Update rabbitmq_peer_discovery_aws.yaml)
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -23,11 +18,7 @@ jobs:
       uses: lewagon/wait-on-check-action@v1.2.0
       with:
         ref: ${{ github.ref }}
-<<<<<<< HEAD
-        check-name: build-publish-dev (${{ matrix.image_tag_suffix }})
-=======
         check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
->>>>>>> 1aee6fbd17 (Update rabbitmq_peer_discovery_aws.yaml)
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
