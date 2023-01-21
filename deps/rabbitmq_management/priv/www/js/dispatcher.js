@@ -194,9 +194,9 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/users', {'users': {path:    '/users',
-                               options: {sort:true}},
-                     'permissions': '/permissions'}, 'users');
+    sammy.get('#/users', function() {
+        renderUsers();
+    });
     sammy.get('#/users/:id', function() {
         var vhosts = JSON.parse(sync_get('/vhosts'));
         const current_vhost = get_pref('vhost');
