@@ -26,14 +26,13 @@ case "$(uname -s)" in
         ;;
 esac
 
-etcd_data_dir=${1:-"$tmpdir/etcd/data"}
-pidfile="$etcd_data_dir/etcd.pid"
-tcp_port=${2:-2379}
+readonly etcd_data_dir="${1:-"$tmpdir/etcd/data"}"
+readonly pidfile="$etcd_data_dir/etcd.pid"
+readonly tcp_port="${2:-2379}"
 
-ETCD_VER=v3.4.6
-
-GITHUB_URL=https://github.com/etcd-io/etcd/releases/download
-DOWNLOAD_URL=${GITHUB_URL}
+readonly ETCD_VER='v3.5.7'
+readonly GITHUB_URL=https://github.com/etcd-io/etcd/releases/download
+readonly DOWNLOAD_URL=${GITHUB_URL}
 
 rm -rf "${tmpdir}/etcd-${ETCD_VER}"
 
@@ -60,7 +59,7 @@ rm -rf "$etcd_data_dir"
 mkdir -p "$etcd_data_dir"
 
 # daemonize(1) is installed under this path on Debian
-PATH=$PATH:/usr/sbin
+PATH="$PATH:/usr/sbin"
 
 daemonize -p "$pidfile" -l "${etcd_data_dir}/daemonize_lock" -- "$tmpdir/etcd-${ETCD_VER}/etcd" \
             --data-dir "$etcd_data_dir" --name peer-discovery-0 --initial-advertise-peer-urls http://127.0.0.1:2380 \
@@ -71,11 +70,18 @@ daemonize -p "$pidfile" -l "${etcd_data_dir}/daemonize_lock" -- "$tmpdir/etcd-${
             --initial-cluster peer-discovery-0=http://127.0.0.1:2380 \
             --initial-cluster-state new
 
-
-for seconds in {1..30}; do
-  "$tmpdir/etcd-${ETCD_VER}/etcdctl" put rabbitmq-ct rabbitmq-ct --dial-timeout=1s && break
-  sleep 1
+i=0
+while [ "$i" -lt 30 ]
+do
+    "$tmpdir/etcd-${ETCD_VER}/etcdctl" --endpoints="127.0.0.1:${tcp_port}" put rabbitmq-ct rabbitmq-ct --dial-timeout=1s && break
+    sleep 1
+    i="$((i+1))"
 done
 
-echo ETCD_PID=$(cat "$pidfile")
-
+if [ "$i" -ge 30 ]
+then
+    echo '[ERROR] etcd did not start successfully!' 1>&2
+    exit 1
+else
+    echo ETCD_PID="$(cat "$pidfile")"
+fi
