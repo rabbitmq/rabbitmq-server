@@ -879,7 +879,7 @@ wait_for_lock_release_with_session_without_token_test(_Config) ->
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
                         ?assertEqual("v1/kv/rabbitmq/default/startup_lock", Path),
-                        ?assertEqual([{index, 42}, {wait, "300s"}], Args),
+                        ?assertEqual([{"index", 42}, {"wait", "300s"}], Args),
                         ?assertEqual([], Headers),
                         ?assertEqual([], HttpOpts),
                         {ok, []}
@@ -894,7 +894,7 @@ wait_for_lock_release_with_session_with_token_test(_Config) ->
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
                         ?assertEqual("v1/kv/rabbitmq/default/startup_lock", Path),
-                        ?assertEqual([{index, 42}, {wait, "300s"}], Args),
+                        ?assertEqual([{"index", 42}, {"wait", "300s"}], Args),
                         ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
                         ?assertEqual([], HttpOpts),
                         {ok, []}

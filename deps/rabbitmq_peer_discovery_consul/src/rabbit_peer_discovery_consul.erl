@@ -45,7 +45,7 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -181,7 +181,7 @@ lock(Node) ->
 -spec unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
 
 unlock({SessionId, TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ?LOG_DEBUG(
        "Stopped session renewal",
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
@@ -235,7 +235,7 @@ http_options(HttpOpts0, M) ->
   HttpOpts1 = [TLSOpts | HttpOpts0],
   HttpOpts1.
 
--spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
+-spec filter_nodes(ConsulResult :: [#{term() => term()}], AllowWarning :: boolean()) -> [#{term() => term()}].
 filter_nodes(Nodes, Warn) ->
   case Warn of
     true ->
@@ -251,10 +251,10 @@ filter_nodes(Nodes, Warn) ->
     false -> Nodes
   end.
 
--spec extract_nodes(ConsulResult :: list()) -> list().
+-spec extract_nodes(ConsulResult :: [#{binary() => term()}]) -> list().
 extract_nodes(Data) -> extract_nodes(Data, []).
 
--spec extract_nodes(ConsulResult :: list(), Nodes :: list())
+-spec extract_nodes(ConsulResult :: [#{binary() => term()}], Nodes :: list())
     -> list().
 extract_nodes([], Nodes)    -> Nodes;
 extract_nodes([H | T], Nodes) ->
@@ -570,8 +570,6 @@ maybe_re_register({error, Reason}) ->
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
 maybe_re_register({ok, {Members, _NodeType}}) ->
     maybe_re_register(Members);
-maybe_re_register({ok, Members}) ->
-    maybe_re_register(Members);
 maybe_re_register(Members) ->
     case lists:member(node(), Members) of
         true ->
@@ -589,13 +587,14 @@ maybe_re_register(Members) ->
 wait_for_list_nodes() ->
     wait_for_list_nodes(60).
 
+-spec wait_for_list_nodes(non_neg_integer()) -> {'ok', term()} | {'error', term()}.
+wait_for_list_nodes(0) ->
+    list_nodes();
 wait_for_list_nodes(N) ->
-    case {list_nodes(), N} of
-        {Reply, 0} ->
+    case list_nodes() of
+        {ok, _} = Reply ->
             Reply;
-        {{ok, _} = Reply, _} ->
-            Reply;
-        {{error, _}, _} ->
+        _ ->
             timer:sleep(1000),
             wait_for_list_nodes(N - 1)
     end.
@@ -606,7 +605,7 @@ wait_for_list_nodes(N) ->
 %% Create a session to be acquired for a common key
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(string(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
+-spec create_session(atom(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
 create_session(Name, TTL) ->
     case consul_session_create([], maybe_add_acl([]),
                                [{'Name', Name},
@@ -623,10 +622,10 @@ create_session(Name, TTL) ->
 %% Create session
 %% @end
 %%--------------------------------------------------------------------
--spec consul_session_create(Query, Headers, Body) -> {ok, string()} | {error, any()} when
+-spec consul_session_create(Query, Headers, Body) -> {ok, term()} | {error, any()} when
       Query :: list(),
       Headers :: [{string(), string()}],
-      Body :: term().
+      Body :: thoas:input_term().
 consul_session_create(Query, Headers, Body) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case serialize_json_body(Body) of
@@ -652,7 +651,7 @@ consul_session_create(Query, Headers, Body) ->
 %% the JSON serialization library.
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_json_body(term()) -> {ok, Payload :: binary()} | {error, atom()}.
+-spec serialize_json_body(thoas:input_term()) -> {ok, Payload :: binary()} | {error, atom()}.
 serialize_json_body([]) -> {ok, []};
 serialize_json_body(Payload) ->
     case rabbit_json:try_encode(Payload) of
@@ -666,7 +665,7 @@ serialize_json_body(Payload) ->
 %% Extract session ID from Consul response
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_id(term()) -> string().
+-spec get_session_id(#{binary() => term()}) -> string().
 get_session_id(#{<<"ID">> := ID}) -> binary:bin_to_list(ID).
 
 %%--------------------------------------------------------------------
@@ -675,7 +674,7 @@ get_session_id(#{<<"ID">> := ID}) -> binary:bin_to_list(ID).
 %% Start periodically renewing an existing session ttl
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_ttl_updater(string()) -> ok.
+-spec start_session_ttl_updater(string()) -> timer:tref().
 start_session_ttl_updater(SessionId) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     Interval = get_config_key(consul_svc_ttl, M),
@@ -693,7 +692,7 @@ start_session_ttl_updater(SessionId) ->
 %% @end
 -spec lock(timer:tref(), string(), pos_integer(), pos_integer()) -> {ok, string()} | {error, string()}.
 lock(TRef, _, Now, EndTime) when EndTime < Now ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     {error, "Acquiring lock taking too long, bailing out"};
 lock(TRef, SessionId, _, EndTime) ->
     case acquire_lock(SessionId) of
@@ -707,15 +706,15 @@ lock(TRef, SessionId, _, EndTime) ->
                         ok ->
                             lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
                         {error, Reason} ->
-                            timer:cancel(TRef),
+                            _ = timer:cancel(TRef),
                             {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
                     end;
                 {error, Reason} ->
-                    timer:cancel(TRef),
+                    _ = timer:cancel(TRef),
                     {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~ts", [Reason]))}
             end;
         {error, Reason} ->
-            timer:cancel(TRef),
+            _ = timer:cancel(TRef),
             {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~ts", [Reason]))}
     end.
 
@@ -747,7 +746,7 @@ release_lock(SessionId) ->
 %%--------------------------------------------------------------------
 -spec consul_kv_write(Path, Query, Headers, Body) -> {ok, any()} | {error, string()} when
       Path :: string(),
-      Query :: [{string(), string()}],
+      Query :: [{string() | atom(), string()}],
       Headers :: [{string(), string()}],
       Body :: term().
 consul_kv_write(Path, Query, Headers, Body) ->
@@ -839,7 +838,7 @@ base_path() ->
 wait_for_lock_release(false, _, _) -> ok;
 wait_for_lock_release(_, Index, Wait) ->
     case consul_kv_read(startup_lock_path(),
-                        [{index, Index}, {wait, service_ttl(Wait)}],
+                        [{"index", Index}, {"wait", service_ttl(Wait)}],
                         maybe_add_acl([])) of
         {ok, _}          -> ok;
         {error, _} = Err -> Err
