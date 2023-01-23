@@ -26,15 +26,15 @@
 init() ->
     %% We cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
-    application:load(rabbitmq_peer_discovery_etcd),
+    _ = application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_etcd),
 
     %% Here we start the client very early on, before plugins have initialized.
     %% We need to do it conditionally, however.
     NoOp = fun() -> ok end,
     Run  = fun(_) ->
             rabbit_log:debug("Peer discovery etcd: initialising..."),
-            application:ensure_all_started(eetcd),
+            _ = application:ensure_all_started(eetcd),
             Formation = application:get_env(rabbit, cluster_formation, []),
             Opts = maps:from_list(proplists:get_value(peer_discovery_etcd, Formation, [])),
             {ok, Pid} = rabbitmq_peer_discovery_etcd_v3_client:start_link(Opts),
