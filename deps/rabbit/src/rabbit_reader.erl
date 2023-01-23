@@ -503,8 +503,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             Fmt = "accepting AMQP connection ~tp (~ts)",
             Args = [self(), ConnName],
             case Recv of
-                closed -> rabbit_log_connection:debug(Fmt, Args);
-                _      -> rabbit_log_connection:info(Fmt, Args)
+                closed -> _ = rabbit_log_connection:debug(Fmt, Args);
+                _      -> _ = rabbit_log_connection:info(Fmt, Args)
             end;
         _ ->
             ok
@@ -568,7 +568,7 @@ handle_other({'EXIT', Parent, normal}, State = #v1{parent = Parent}) ->
     stop(closed, State);
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     Msg = io_lib:format("broker forced connection closure with reason '~w'", [Reason]),
-    terminate(Msg, State),
+    _ = terminate(Msg, State),
     %% this is what we are expected to do according to
     %% https://www.erlang.org/doc/man/sys.html
     %%
@@ -858,7 +858,7 @@ handle_exception(State, Channel, Reason) ->
 %% more input
 -spec fatal_frame_error(_, _, _, _, _) -> no_return().
 fatal_frame_error(Error, Type, Channel, Payload, State) ->
-    frame_error(Error, Type, Channel, Payload, State),
+    _ = frame_error(Error, Type, Channel, Payload, State),
     %% grace period to allow transmission of error
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
     throw(fatal_frame_error).
@@ -1192,9 +1192,11 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                     ok ->
                         ok;
                     {error, Reason} ->
-                        Parent ! {heartbeat_send_error, Reason};
+                        Parent ! {heartbeat_send_error, Reason},
+                        ok;
                     Unexpected ->
-                        Parent ! {heartbeat_send_error, Unexpected}
+                        Parent ! {heartbeat_send_error, Unexpected},
+                        ok
                 end,
                 ok
         end,

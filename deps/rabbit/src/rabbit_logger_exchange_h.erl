@@ -174,7 +174,7 @@ unconfigure_exchange(
                                       virtual_host = VHost} = Exchange,
                 setup_proc := Pid}}) ->
     Pid ! stop,
-    rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
+    _ = rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
     ?LOG_INFO(
        "Logging to exchange '~ts' in vhost '~ts' disabled",
        [Name, VHost],

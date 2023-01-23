@@ -74,7 +74,7 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
                 PreviousHash -> PreviousHash;
                 Other        ->
                     rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
-                    import_raw(Body),
+                    _ = import_raw(Body),
                     Other
             end;
         {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->
@@ -106,7 +106,7 @@ load_from_url(URL, HTTPOptions0) ->
     end.
 
 httpc_get(URL, HTTPOptions0) ->
-    inets:start(),
+    _ = inets:start(),
     Options = [
         {body_format, binary}
     ],

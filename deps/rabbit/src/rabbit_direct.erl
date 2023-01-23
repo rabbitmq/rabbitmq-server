@@ -33,7 +33,7 @@ boot() -> rabbit_sup:start_supervisor_child(
 -spec force_event_refresh(reference()) -> 'ok'.
 
 force_event_refresh(Ref) ->
-    [Pid ! {force_event_refresh, Ref} || Pid <- list()],
+    _ = [Pid ! {force_event_refresh, Ref} || Pid <- list()],
     ok.
 
 -spec list_local() -> [pid()].

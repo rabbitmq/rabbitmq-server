@@ -2317,7 +2317,8 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
 %% from.
 remove_vhost_msgs_by_id(MsgIdsByStore, MSCState) ->
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
+     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)],
+    ok.
 
 remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
     case maps:find(false, MsgIdsByStore) of

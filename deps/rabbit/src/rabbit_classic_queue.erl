@@ -325,8 +325,9 @@ deliver(Qs0, #delivery{flow = Flow,
         %% process. We are accessing the rabbit_channel process
         %% dictionary.
         flow ->
-            [credit_flow:send(QPid) || QPid <- MPids],
-            [credit_flow:send(QPid) || QPid <- SPids];
+            _ = [credit_flow:send(QPid) || QPid <- MPids],
+            _ = [credit_flow:send(QPid) || QPid <- SPids],
+            ok;
         noflow -> ok
     end,
     MMsg = {deliver, Delivery, false},

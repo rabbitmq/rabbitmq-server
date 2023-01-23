@@ -32,7 +32,8 @@ start(VHost) ->
                         {?MODULE,
                          {?MODULE, start_link, [VHost]},
                          transient, ?WORKER_WAIT, worker,
-                         [?MODULE]});
+                         [?MODULE]}),
+            ok;
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
@@ -75,7 +76,8 @@ read(VHost, DirBaseName) ->
 
 clear(VHost) ->
     try
-        dets:delete_all_objects(VHost)
+        _ = dets:delete_all_objects(VHost),
+        ok
     %% see start/1
     catch _:badarg ->
             rabbit_log:error("Failed to clear recovery terms for vhost ~ts: table no longer exists!",
@@ -91,7 +93,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    open_table(VHost),
+    _ = open_table(VHost),
     {ok, VHost}.
 
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.

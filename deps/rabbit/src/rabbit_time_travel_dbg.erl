@@ -58,7 +58,7 @@ init() ->
 loop(Q) ->
     receive
         dump ->
-            file:write_file("time_travel.dbg",
+            _ = file:write_file("time_travel.dbg",
                 [io_lib:format("~0p~n", [E]) || E <- queue:to_list(Q)]),
             loop(Q);
         print ->
@@ -69,7 +69,8 @@ loop(Q) ->
         Msg ->
             case queue:len(Q) of
                 1000 ->
-                    loop(queue:in(Msg, queue:out(Q)));
+                    {_, Q1} = queue:out(Q),
+                    loop(queue:in(Msg, Q1));
                 _ ->
                     loop(queue:in(Msg, Q))
             end

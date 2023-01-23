@@ -252,7 +252,7 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
                             [Name, Policy])
     end,
-    [begin
+    _ = [begin
          Resource = rabbit_misc:r(Name, exchange, ExchangeName),
          rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
          _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
@@ -308,8 +308,8 @@ delete(VHost, ActingUser) ->
     %% modules, like `rabbit_amqqueue:delete_all_for_vhost(VHost)'. These new
     %% calls would be responsible for the atomicity, not this code.
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
-    rabbit_auth_backend_internal:clear_permissions_for_vhost(VHost, ActingUser),
-    rabbit_auth_backend_internal:clear_topic_permissions_for_vhost(VHost, ActingUser),
+    _ = rabbit_auth_backend_internal:clear_permissions_for_vhost(VHost, ActingUser),
+    _ = rabbit_auth_backend_internal:clear_topic_permissions_for_vhost(VHost, ActingUser),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),

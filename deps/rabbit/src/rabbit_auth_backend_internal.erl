@@ -453,7 +453,7 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
     rabbit_log:debug("Asked to set permissions for "
                      "'~ts' in virtual host '~ts' to '~ts', '~ts', '~ts'",
                      [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
-    lists:map(
+    _ = lists:map(
       fun (RegexpBin) ->
               Regexp = binary_to_list(RegexpBin),
               case re:compile(Regexp) of
@@ -538,7 +538,7 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                      [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
     WritePermRegex = rabbit_data_coercion:to_binary(WritePerm),
     ReadPermRegex = rabbit_data_coercion:to_binary(ReadPerm),
-    lists:map(
+    _ = lists:map(
         fun (RegexpBin) ->
             case re:compile(RegexpBin) of
                 {ok, _}         -> ok;
@@ -720,9 +720,9 @@ update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) -
       Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
 create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, undefined, Limits, ActingUser) ->
-    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags);
+    ok = rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags);
 create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, PreconfiguredPermissions, Limits, ActingUser) ->
-    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags),
+    ok = rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags),
     preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser);
 create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _, _, _) ->
     %% we don't log here because
@@ -741,7 +741,7 @@ create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, Prec
 preconfigure_permissions(_Username, undefined, _ActingUser) ->
     ok;
 preconfigure_permissions(Username, Map, ActingUser) when is_map(Map) ->
-    maps:map(fun(VHost, M) ->
+    _ = maps:map(fun(VHost, M) ->
                      rabbit_auth_backend_internal:set_permissions(Username, VHost,
                                                   maps:get(<<"configure">>, M),
                                                   maps:get(<<"write">>,     M),

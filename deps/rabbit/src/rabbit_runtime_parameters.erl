@@ -55,7 +55,7 @@
 
 -type ok_or_error_string() :: 'ok' | {'error_string', string()}.
 -type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
-
+-export_type([ok_or_error_string/0]).
 %%---------------------------------------------------------------------------
 
 -import(rabbit_misc, [pget/2]).
@@ -105,7 +105,7 @@ parse_set_global(Name, String, ActingUser) ->
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
-    rabbit_db_rtparams:set(NameAsAtom, Term),
+    _ = rabbit_db_rtparams:set(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
                                                {user_who_performed_action, ActingUser}]),

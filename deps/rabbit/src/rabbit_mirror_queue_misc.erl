@@ -108,7 +108,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               Q1 = amqqueue:set_pid(Q0, QPid1),
                               Q2 = amqqueue:set_slave_pids(Q1, SPids1),
                               Q3 = amqqueue:set_gm_pids(Q2, AliveGM),
-                              store_updated_slaves(Q3),
+                              _ = store_updated_slaves(Q3),
                               %% If we add and remove nodes at the
                               %% same time we might tell the old
                               %% master we need to sync and then
@@ -121,7 +121,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               %% [1].
                               Q1 = amqqueue:set_slave_pids(Q0, Alive),
                               Q2 = amqqueue:set_gm_pids(Q1, AliveGM),
-                              store_updated_slaves(Q2),
+                              _ = store_updated_slaves(Q2),
                               {ok, QPid1, DeadPids, []}
                       end
               end
@@ -192,11 +192,11 @@ on_vhost_up(VHost) ->
                             QNames0
                     end, [], rabbit_queue)
           end),
-    [add_mirror(QName, node(), async) || QName <- QNames],
+    _ = [add_mirror(QName, node(), async) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
-    [drop_mirror(QName, Node)  || Node <- Nodes],
+    _ = [drop_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 drop_mirror(QName, MirrorNode) ->
@@ -225,7 +225,7 @@ drop_mirror(QName, MirrorNode) ->
           'ok'.
 
 add_mirrors(QName, Nodes, SyncMode) ->
-    [add_mirror(QName, Node, SyncMode)  || Node <- Nodes],
+    _ = [add_mirror(QName, Node, SyncMode)  || Node <- Nodes],
     ok.
 
 add_mirror(QName, MirrorNode, SyncMode) ->
@@ -704,7 +704,8 @@ maybe_drop_master_after_sync(Q) when ?is_amqqueue(Q) ->
     case node(MPid) of
         DesiredMNode -> ok;
         OldMNode     -> false = lists:member(OldMNode, DesiredSNodes), %% [0]
-                        drop_mirror(QName, OldMNode)
+                        _ = drop_mirror(QName, OldMNode),
+                        ok
     end,
     ok.
 %% [0] ASSERTION - if the policy wants the master to change, it has
