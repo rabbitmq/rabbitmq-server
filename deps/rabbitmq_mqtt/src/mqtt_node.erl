@@ -34,7 +34,7 @@ start() ->
     start(300, Repetitions).
 
 start(_Delay, AttemptsLeft) when AttemptsLeft =< 0 ->
-    start_server(),
+    ok = start_server(),
     trigger_election();
 start(Delay, AttemptsLeft) ->
     NodeId = server_id(),
@@ -60,16 +60,15 @@ start(Delay, AttemptsLeft) ->
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
                       rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
-                      start_server(),
-                      join_peers(NodeId, Peers),
+                      ok = start_server(),
+                      _ = join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
               end;
           _ ->
-              join_peers(NodeId, Nodes),
-              ra:restart_server(?RA_SYSTEM, NodeId),
+              _ = join_peers(NodeId, Nodes),
+              ok = ra:restart_server(?RA_SYSTEM, NodeId),
               ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
-    end,
-    ok.
+    end.
 
 compatible_peer_servers() ->
     all_node_ids() -- [(node_id())].

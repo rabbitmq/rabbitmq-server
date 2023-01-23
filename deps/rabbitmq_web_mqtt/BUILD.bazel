@@ -2,6 +2,7 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
@@ -59,9 +60,8 @@ plt(
 )
 
 dialyze(
-    dialyzer_opts = ["-Werror_handling"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = True,
 )
 
 broker_for_integration_suites(

@@ -101,7 +101,7 @@ websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
-            rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             PState = rabbit_mqtt_processor:initial_state(
                        rabbit_net:unwrap_socket(Sock),
                        ConnName,
@@ -231,7 +231,7 @@ terminate(_Reason, _Request,
                             keepalive = KState} = State}) ->
     ?LOG_INFO("Web MQTT closing connection ~ts", [ConnName]),
     maybe_emit_stats(State),
-    rabbit_mqtt_keepalive:cancel_timer(KState),
+    _ = rabbit_mqtt_keepalive:cancel_timer(KState),
     ok = file_handle_cache:release(),
     rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState).
 

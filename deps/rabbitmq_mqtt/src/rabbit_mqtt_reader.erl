@@ -80,7 +80,7 @@ init(Ref) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
-            rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             ProcessorState = rabbit_mqtt_processor:initial_state(RealSocket, ConnName),
@@ -258,7 +258,7 @@ terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
                                             proc_state = PState}}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
-    rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState),
+    _ = rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState),
     log_terminate(Reason, State).
 
 log_terminate({network_error, {ssl_upgrade_error, closed}, ConnName}, _State) ->

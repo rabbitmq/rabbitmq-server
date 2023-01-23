@@ -116,7 +116,7 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
                     [IpStr, Port]).
 
 start_tls_listener(TLSConf0, CowboyOpts) ->
-    rabbit_networking:ensure_ssl(),
+    _ = rabbit_networking:ensure_ssl(),
     {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
     RanchRef = rabbit_networking:ranch_ref(TLSConf),
     RanchTransportOpts =

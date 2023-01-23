@@ -36,8 +36,9 @@ help_section() ->
     {plugin, mqtt}.
 
 validate(Args, _) ->
+    InfoItems = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
+                                                               InfoItems) of
         {ok, _} -> ok;
         Error   -> Error
     end.

@@ -71,8 +71,8 @@ init([{Listeners, SslListeners0}]) ->
       ]}}.
 
 stop_listeners() ->
-    rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
-    rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
+    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
+    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
     ok.
 
 %%

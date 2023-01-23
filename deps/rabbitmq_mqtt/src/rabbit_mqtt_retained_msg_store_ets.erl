@@ -23,14 +23,14 @@
 new(Dir, VHost) ->
   Path = rabbit_mqtt_util:path_for(Dir, VHost),
   TableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-  file:delete(Path),
+  _ = file:delete(Path),
   Tid = ets:new(TableName, [set, public, {keypos, #retained_message.topic}]),
   #store_state{table = Tid, filename = Path}.
 
 recover(Dir, VHost) ->
   Path = rabbit_mqtt_util:path_for(Dir, VHost),
   case ets:file2tab(Path) of
-    {ok, Tid}  -> file:delete(Path),
+    {ok, Tid}  -> _ = file:delete(Path),
                   {ok, #store_state{table = Tid, filename = Path}};
     {error, _} -> {error, uninitialized}
   end.

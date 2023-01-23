@@ -1333,7 +1333,7 @@ maybe_send_will(true, ConnStr,
                [Topic, ConnStr]),
     case check_topic_access(Topic, write, State) of
         ok ->
-            publish_to_queues(WillMsg, State),
+            _ = publish_to_queues(WillMsg, State),
             case Retain of
                 false ->
                     ok;
