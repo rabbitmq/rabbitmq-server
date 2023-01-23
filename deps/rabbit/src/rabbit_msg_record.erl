@@ -190,7 +190,7 @@ from_amqp091(#'P_basic'{message_id = MsgId,
                            content_encoding = wrap(symbol, ContentEncoding),
                            creation_time = wrap(timestamp, ConvertedTs)},
 
-    APC0 = [{wrap(utf8, K), from_091(T, V)} || {K, T, V}
+    APC0 = [from_amqp091_header(Type, K, T, V) || {K, T, V}
                                                <- case Headers of
                                                       undefined -> [];
                                                       _ -> Headers
@@ -211,6 +211,11 @@ from_amqp091(#'P_basic'{message_id = MsgId,
                         application_properties = AP,
                         message_annotations = MA,
                         data = #'v1_0.data'{content = Data}}}.
+
+from_amqp091_header(<<"amqp-1.0">>, <<"x-amqp-1.0-properties">> = K, longstr, V) ->
+    {wrap(utf8, K), from_091(binary, V)};
+from_amqp091_header(_MessageType, K, T, V) ->
+    {wrap(utf8, K), from_091(T, V)}.
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
