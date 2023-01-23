@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:14.15.4 as base
+FROM node:16.19.0 as base
 
 WORKDIR /code
 
