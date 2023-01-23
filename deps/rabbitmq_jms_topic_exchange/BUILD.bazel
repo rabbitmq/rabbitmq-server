@@ -24,25 +24,31 @@ RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
 ]
 
+EXTRA_APPS = [
+    "mnesia",
+]
+
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+    extra_apps = EXTRA_APPS,
 )
 
 xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    plt = "//:base_plt",
+    apps = EXTRA_APPS,
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()

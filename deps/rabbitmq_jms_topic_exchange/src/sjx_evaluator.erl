@@ -34,8 +34,9 @@
 
 -type expression() :: any().
 
--spec evaluate(expression(), table()) -> true | false | error.
-
+-spec evaluate(expression(), table()) ->
+          'true' | 'false' | 'error' | 'undefined' | number() |
+          [ 'true' | 'false' | 'error' | 'undefined' | number() ].
 
 evaluate( true,                           _Headers ) -> true;
 evaluate( false,                          _Headers ) -> false;
