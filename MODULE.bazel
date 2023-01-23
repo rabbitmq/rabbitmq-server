@@ -227,8 +227,8 @@ erlang_package.git_package(
 
 erlang_package.hex_package(
     name = "thoas",
-    sha256 = "442296847aca11db8d25180693d7ca3073d6d7179f66952f07b16415306513b6",
-    version = "0.4.0",
+    sha256 = "4918d50026c073c4ab1388437132c77a6f6f7c8ac43c60c13758cc0adce2134e",
+    version = "0.4.1",
 )
 
 erlang_package.git_package(

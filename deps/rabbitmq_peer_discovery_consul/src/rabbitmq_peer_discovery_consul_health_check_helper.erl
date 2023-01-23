@@ -55,7 +55,7 @@ terminate(_Arg, #state{timer_ref = undefined}) ->
     ok;
 
 terminate(_Arg, #state{timer_ref = TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
