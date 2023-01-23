@@ -71,6 +71,7 @@ all_tests() -> [
     users_legacy_administrator_test,
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
+    adding_a_user_with_generated_password_hash_test,
     adding_a_user_with_permissions_in_single_operation_test,
     adding_a_user_without_tags_fails_test,
     adding_a_user_without_password_or_hash_test,
@@ -629,6 +630,17 @@ adding_a_user_with_password_hash_test(Config) ->
                                        {password_hash, <<"2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b">>}],
              [?CREATED, ?NO_CONTENT]),
     http_delete(Config, "/users/user11", ?NO_CONTENT).
+
+adding_a_user_with_generated_password_hash_test(Config) ->
+    #{ok := HashedPassword} = http_get(Config, "/auth/hash_password/some_password"),
+
+    http_put(Config, "/users/user12", [{tags, <<"administrator">>},
+                                       {password_hash, HashedPassword}],
+             [?CREATED, ?NO_CONTENT]),
+    % If the get succeeded, the hashed password generation is correct
+    User = http_get(Config, "/users/user12", "user12", "some_password", ?OK),
+    ?assertEqual(maps:get(password_hash, User), HashedPassword),
+    http_delete(Config, "/users/user12", ?NO_CONTENT).
 
 adding_a_user_with_permissions_in_single_operation_test(Config) ->
     QArgs = #{},
