@@ -3,7 +3,6 @@ load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlc_opts(
     name = "erlc_opts",
-    # keep
     values = select({
         "@rules_erlang//:debug_build": [
             "+debug_info",

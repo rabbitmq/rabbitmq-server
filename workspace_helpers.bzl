@@ -32,22 +32,3 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "proper",
         org = "manopapad",
     )
-
-    github_erlang_app(
-        name = "emqtt",
-        org = "emqx",
-        repo = "emqtt",
-        version = "1.7.0-rc.2",
-        ref = "1.7.0-rc.2",
-        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "emqtt",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-        "-DBUILD_WITHOUT_QUIC",
-    ],
-)
-""",
-    )
