@@ -86,6 +86,7 @@
                                                   },
           consul_svc_meta                    => #peer_discovery_config_entry_meta{
                                                    type          = list,
+                                                   env_variable  = "CONSUL_SVC_META",
                                                    default_value = []
                                                   },
           consul_deregister_after            => #peer_discovery_config_entry_meta{

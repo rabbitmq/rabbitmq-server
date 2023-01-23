@@ -226,9 +226,15 @@ erlang_package.git_package(
 )
 
 erlang_package.hex_package(
+<<<<<<< HEAD
     name = "jsx",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
     version = "3.1.0",
+=======
+    name = "thoas",
+    sha256 = "4918d50026c073c4ab1388437132c77a6f6f7c8ac43c60c13758cc0adce2134e",
+    version = "0.4.1",
+>>>>>>> 39a6eed6e0 (Fix all dialyzer warnings in peer discovery plugins)
 )
 
 erlang_package.git_package(

@@ -251,7 +251,7 @@ put(Scheme, Host, Port, Path, Args, Headers, Body) ->
 %% @doc Perform a HTTP PUT request
 %% @end
 %%
--spec put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) -> {ok, string()} | {error, any()} when
+-spec put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) -> {ok, term()} | {error, any()} when
   Scheme :: atom() | string(),
   Host :: string() | binary(),
   Port :: integer(),
@@ -425,7 +425,7 @@ decode_body(?CONTENT_JSON, Body) ->
 %% @doc Decode the response body and return a list
 %% @end
 %%
--spec parse_response({ok, integer(), string()} | {error, any()}) -> {ok, string()} | {error, any()}.
+-spec parse_response({ok, integer(), string()} | {error, any()}) -> {ok, term()} | {error, any()}.
 
 parse_response({error, Reason}) ->
   ?LOG_DEBUG("HTTP error ~tp", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),

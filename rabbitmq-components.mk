@@ -120,6 +120,10 @@ dep_ra = hex 2.4.6
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
 dep_redbug = hex 2.0.7
+<<<<<<< HEAD
+=======
+dep_thoas = hex 0.4.1
+>>>>>>> 39a6eed6e0 (Fix all dialyzer warnings in peer discovery plugins)
 dep_observer_cli = hex 1.7.3
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
