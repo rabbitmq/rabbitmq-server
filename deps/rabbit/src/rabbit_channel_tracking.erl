@@ -135,7 +135,8 @@ register_tracked(TrackedCh =
     case mnesia:dirty_read(TableName, ChId) of
       []    ->
           mnesia:dirty_write(TableName, TrackedCh),
-          mnesia:dirty_update_counter(PerUserChTableName, Username, 1);
+          mnesia:dirty_update_counter(PerUserChTableName, Username, 1),
+            ok;
       [#tracked_channel{}] ->
           ok
     end,

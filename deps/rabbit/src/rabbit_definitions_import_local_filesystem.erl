@@ -95,8 +95,8 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
             case rabbit_definitions_hashing:hash(Algo, Defs) of
                 PreviousHash -> PreviousHash;
                 Other        ->
-                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
-                    load_from_local_path(IsDir, Path),
+                    rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+                    _ = load_from_local_path(IsDir, Path),
                     Other
             end
     end.

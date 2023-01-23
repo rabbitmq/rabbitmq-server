@@ -114,7 +114,7 @@
 
 %%--------------------------------------------------------------------------
 
--export_type([sup_flags/0, child_spec/0, startchild_ret/0, strategy/0]).
+-export_type([sup_flags/0, child_spec/0, startchild_ret/0, strategy/0, sup_name/0]).
 
 %%--------------------------------------------------------------------------
 

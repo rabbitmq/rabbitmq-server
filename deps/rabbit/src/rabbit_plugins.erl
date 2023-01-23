@@ -51,7 +51,7 @@ ensure1(FileJustChanged0) ->
             %% The app_utils module stops the apps in reverse order, so we should
             %% pass them here in dependency order.
             rabbit:stop_apps(lists:reverse(Stop)),
-            clean_plugins(Stop),
+            _ = clean_plugins(Stop),
             case {Start, Stop} of
                 {[], []} ->
                     ok;
@@ -240,7 +240,7 @@ ensure_dependencies(Plugins) ->
 is_loadable(App) ->
     case application:load(App) of
         {error, {already_loaded, _}} -> true;
-        ok                           -> application:unload(App),
+        ok                           -> _ = application:unload(App),
                                         true;
         _                            -> false
     end.
@@ -311,7 +311,7 @@ format_required_versions(Versions) ->
               end, Versions).
 
 validate_plugins(Plugins) ->
-    application:load(rabbit),
+    _ = application:load(rabbit),
     RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
                                         undefined -> "0.0.0";
                                         {ok, Val} -> Val
@@ -407,7 +407,7 @@ clean_plugins(Plugins) ->
 
 clean_plugin(Plugin, ExpandDir) ->
     {ok, Mods} = application:get_key(Plugin, modules),
-    application:unload(Plugin),
+    _ = application:unload(Plugin),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),
@@ -418,7 +418,7 @@ clean_plugin(Plugin, ExpandDir) ->
 prepare_dir_plugin(PluginAppDescPath) ->
     PluginEbinDir = filename:dirname(PluginAppDescPath),
     Plugin = filename:basename(PluginAppDescPath, ".app"),
-    code:add_patha(PluginEbinDir),
+    _ = code:add_patha(PluginEbinDir),
     case filelib:wildcard(PluginEbinDir++ "/*.beam") of
         [] ->
             ok;
@@ -630,7 +630,7 @@ list_all_deps(Applications) ->
 list_all_deps([Application | Applications], Deps) ->
     %% We load the application to be sure we can get the "applications" key.
     %% This is required for rabbitmq-plugins for instance.
-    application:load(Application),
+    _ = application:load(Application),
     NewDeps = [Application | Deps],
     case application:get_key(Application, applications) of
         {ok, ApplicationDeps} ->

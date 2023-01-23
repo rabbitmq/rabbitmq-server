@@ -143,7 +143,7 @@ retry_timeout() ->
 
 -spec force_load() -> 'ok'.
 
-force_load() -> [mnesia:force_load_table(T) || T <- names()], ok.
+force_load() -> _ = [mnesia:force_load_table(T) || T <- names()], ok.
 
 -spec is_present() -> boolean().
 

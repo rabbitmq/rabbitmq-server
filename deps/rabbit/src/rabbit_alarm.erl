@@ -313,7 +313,7 @@ alert(Alertees, Source, Alert, NodeComparator) ->
 internal_register(Pid, {M, F, A} = AlertMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
-    case dict:find(node(), State#alarms.alarmed_nodes) of
+    _ = case dict:find(node(), State#alarms.alarmed_nodes) of
         {ok, Sources} -> [apply(M, F, A ++ [Pid, R, {true, true, node()}]) || R <- Sources];
         error          -> ok
     end,

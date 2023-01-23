@@ -125,8 +125,9 @@ boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
             case poodle_check('AMQP') of
-                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
-                           || L <- SslListeners];
+                ok     -> _ = [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
+                           || L <- SslListeners],
+                          ok;
                 danger -> ok
             end,
             ok

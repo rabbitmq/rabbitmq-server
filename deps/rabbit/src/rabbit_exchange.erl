@@ -300,7 +300,7 @@ lookup_scratch(Name, App) ->
 update_scratch(Name, App, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() ->
-              update(Name,
+              _ = update(Name,
                      fun(X = #exchange{scratches = Scratches0}) ->
                              Scratches1 = case Scratches0 of
                                               undefined -> orddict:new();
@@ -323,7 +323,7 @@ update_decorators(Name) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() ->
               case mnesia:wread({rabbit_exchange, Name}) of
-                  [X] -> store_ram(X),
+                  [X] -> _ = store_ram(X),
                          ok;
                   []  -> ok
               end
@@ -499,7 +499,7 @@ delete(XName, IfUnused, Username) ->
         %% a race condition between it and an exchange.delete.
         %%
         %% see rabbitmq/rabbitmq-federation#7
-        rabbit_runtime_parameters:set(XName#resource.virtual_host,
+        _ = rabbit_runtime_parameters:set(XName#resource.virtual_host,
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
         call_with_exchange(

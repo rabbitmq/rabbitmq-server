@@ -136,9 +136,7 @@ init([Limit]) ->
                {unix, _} ->
                    start_portprogram();
                {win32, _OSname} ->
-                   not_used;
-               _ ->
-                   exit({unsupported_os, OS})
+                   not_used
            end,
     State3 = State2#state{port=Port, os=OS},
 
@@ -164,12 +162,12 @@ handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
     {reply, ok, set_max_check_interval(MaxInterval, State)};
 
 handle_call({set_enabled, _Enabled = true}, _From, State) ->
-    start_timer(set_disk_limits(State, State#state.limit)),
+    _ = start_timer(set_disk_limits(State, State#state.limit)),
     rabbit_log:info("Free disk space monitor was enabled"),
     {reply, ok, State#state{enabled = true}};
 
 handle_call({set_enabled, _Enabled = false}, _From, State) ->
-    erlang:cancel_timer(State#state.timer),
+    _ = erlang:cancel_timer(State#state.timer),
     rabbit_log:info("Free disk space monitor was manually disabled"),
     {reply, ok, State#state{enabled = false}};
 
@@ -328,8 +326,6 @@ get_disk_free(Dir, {win32, _}, not_used) ->
             list_to_integer(FreeBytesAvailableToCallerStr)
     end.
 
-parse_free_unix({error, Error}) ->
-    exit({unparseable, Error});
 parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
         [_, S | _] -> case string:tokens(S, " \t") of

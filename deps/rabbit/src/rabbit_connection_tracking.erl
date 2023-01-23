@@ -177,7 +177,8 @@ register_tracked(#tracked_connection{username = Username, vhost = VHost, id = Co
         []    ->
             mnesia:dirty_write(TableName, Conn),
             mnesia:dirty_update_counter(PerVhostTableName, VHost, 1),
-            mnesia:dirty_update_counter(PerUserConnTableName, Username, 1);
+            mnesia:dirty_update_counter(PerUserConnTableName, Username, 1),
+            ok;
         [#tracked_connection{}] ->
             ok
     end,

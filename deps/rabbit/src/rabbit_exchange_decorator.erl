@@ -100,6 +100,6 @@ maybe_recover(X = #exchange{name       = Name,
     case New of
         Old -> ok;
         _   -> %% TODO create a tx here for non-federation decorators
-               [M:create(none, X) || M <- New -- Old],
+               _ = [M:create(none, X) || M <- New -- Old],
                rabbit_exchange:update_decorators(Name)
     end.

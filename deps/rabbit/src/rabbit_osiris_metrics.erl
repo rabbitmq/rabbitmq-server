@@ -55,7 +55,7 @@ handle_cast(_Request, State) ->
 
 handle_info(tick, #state{timeout = Timeout} = State) ->
     Data = osiris_counters:overview(),
-    maps:map(
+    _ = maps:map(
       fun ({osiris_writer, QName}, #{offset := Offs,
                                      first_offset := FstOffs}) ->
               COffs = Offs + 1 - FstOffs,

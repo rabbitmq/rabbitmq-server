@@ -555,8 +555,9 @@ remove_for_destination(DstName, OnlyDurable, Fun) ->
 lock_resource(Name) -> lock_resource(Name, write).
 
 lock_resource(Name, LockKind) ->
-    mnesia:lock({global, Name, mnesia:table_info(rabbit_route, where_to_write)},
-                LockKind).
+    _ = mnesia:lock({global, Name, mnesia:table_info(rabbit_route, where_to_write)},
+                LockKind),
+    ok.
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
@@ -683,7 +684,8 @@ process_deletions(Deletions, ActingUser) ->
 del_notify(Bs, ActingUser) -> [rabbit_event:notify(
                                binding_deleted,
                                info(B) ++ [{user_who_performed_action, ActingUser}])
-                             || B <- Bs].
+                             || B <- Bs],
+                              ok.
 
 x_callback(Serial, X, F, Bs) ->
     ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).

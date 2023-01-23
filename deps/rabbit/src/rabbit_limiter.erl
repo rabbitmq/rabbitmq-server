@@ -441,7 +441,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
             {L1, L2} = lists:split(rand:uniform(L), QList),
-            [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
+            _ = [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
              || L3 <- [L2, L1]],
             ok
     end,

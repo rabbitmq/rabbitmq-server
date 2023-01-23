@@ -231,7 +231,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
-                    rabbit_stream_coordinator:register_local_member_listener(Q),
+                    _ = rabbit_stream_coordinator:register_local_member_listener(Q),
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
                                                          ConsumerPrefetchCount, false,

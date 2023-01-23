@@ -534,14 +534,14 @@ maybe_cancel_timer(#state{timer = TRef,
                           pendings = Pendings} = State)
   when is_reference(TRef),
        map_size(Pendings) =:= 0 ->
-    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    _ = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
     State#state{timer = undefined};
 maybe_cancel_timer(State) ->
     State.
 
 cancel_timer(#state{timer = TRef} = State)
   when is_reference(TRef) ->
-    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    _ = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
     State#state{timer = undefined};
 cancel_timer(State) ->
     State.

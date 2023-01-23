@@ -64,7 +64,7 @@ add_binding(none, _Exchange, _Binding) ->
 remove_bindings(transaction, _X, Bs) ->
     %% See rabbit_binding:lock_route_tables for the rationale for
     %% taking table locks.
-    case Bs of
+    _ = case Bs of
         [_] -> ok;
         _   -> [mnesia:lock({table, T}, write) ||
                    T <- [rabbit_topic_trie_node,

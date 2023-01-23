@@ -54,7 +54,7 @@
 
 -type ok_or_error_string() :: 'ok' | {'error_string', string()}.
 -type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
-
+-export_type([ok_or_error_string/0]).
 %%---------------------------------------------------------------------------
 
 -import(rabbit_misc, [pget/2]).
