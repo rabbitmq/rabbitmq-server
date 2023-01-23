@@ -602,7 +602,7 @@ await_startup(Node, PrintProgressReports) ->
         false ->
             case is_running(Node) of
                 true  -> ok;
-                false -> wait_for_boot_to_start(Node),
+                false -> _ = _ = wait_for_boot_to_start(Node),
                          wait_for_boot_to_finish(Node, PrintProgressReports)
             end
     end.
@@ -615,7 +615,7 @@ await_startup(Node, PrintProgressReports, Timeout) ->
         false ->
             case is_running(Node) of
                 true  -> ok;
-                false -> wait_for_boot_to_start(Node, Timeout),
+                false -> _ = wait_for_boot_to_start(Node, Timeout),
                          wait_for_boot_to_finish(Node, PrintProgressReports, Timeout)
             end
     end.
@@ -694,10 +694,7 @@ maybe_print_boot_progress(true, IterationsLeft) ->
 
 status() ->
     Version = base_product_version(),
-    CryptoLibInfo = case crypto:info_lib() of
-        [Tuple] when is_tuple(Tuple) -> Tuple;
-        Tuple   when is_tuple(Tuple) -> Tuple
-    end,
+    [CryptoLibInfo] = crypto:info_lib(),
     SeriesSupportStatus = rabbit_release_series:readable_support_status(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
@@ -963,13 +960,13 @@ start(normal, []) ->
         {ok, SupPid}
     catch
         throw:{error, _} = Error ->
-            mnesia:stop(),
+            _ = mnesia:stop(),
             rabbit_prelaunch_errors:log_error(Error),
             rabbit_prelaunch:set_stop_reason(Error),
             rabbit_boot_state:set(stopped),
             Error;
         Class:Exception:Stacktrace ->
-            mnesia:stop(),
+            _ = mnesia:stop(),
             rabbit_prelaunch_errors:log_exception(
               Class, Exception, Stacktrace),
             Error = {error, Exception},

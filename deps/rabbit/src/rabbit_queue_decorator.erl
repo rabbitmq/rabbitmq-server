@@ -67,6 +67,6 @@ maybe_recover(Q0) when ?is_amqqueue(Q0) ->
             ok;
         _   ->
             %% TODO LRB JSP 160169569 should startup be passed Q1 here?
-            [M:startup(Q0) || M <- New -- Old],
+            _ = [M:startup(Q0) || M <- New -- Old],
             rabbit_amqqueue:update_decorators(Name)
     end.

@@ -256,7 +256,7 @@ await_slaves(Ref, SPids) ->
 %% down.
 
 syncer_check_resources(Ref, MPid, SPids) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     %% Before we ask the master node to send the first batch of messages
     %% over here, we check if one node is already short on memory. If
     %% that's the case, we wait for the alarm to be cleared before
@@ -295,7 +295,7 @@ syncer_loop(Ref, MPid, SPids) ->
                     % Die silently because there are no mirrors left.
                     ok;
                 _  ->
-                    broadcast(SPids1, {sync_msgs, Ref, Msgs}),
+                    _ = broadcast(SPids1, {sync_msgs, Ref, Msgs}),
                     MPid ! {next, Ref},
                     syncer_loop(Ref, MPid, SPids1)
             end;

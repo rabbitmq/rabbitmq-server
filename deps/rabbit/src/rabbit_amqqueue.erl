@@ -1591,7 +1591,7 @@ stat(Q) ->
     rabbit_queue_type:stat(Q).
 
 -spec pid_of(amqqueue:amqqueue()) ->
-          pid().
+          pid() | 'none'.
 
 pid_of(Q) -> amqqueue:get_pid(Q).
 
@@ -1844,7 +1844,7 @@ forget_all_durable(Node) ->
           fun () ->
                   Qs = mnesia:match_object(rabbit_durable_queue,
                                            amqqueue:pattern_match_all(), write),
-                  [forget_node_for_queue(Node, Q) ||
+                  _ = [forget_node_for_queue(Node, Q) ||
                       Q <- Qs,
                       is_local_to_node(amqqueue:get_pid(Q), Node)],
                   ok
