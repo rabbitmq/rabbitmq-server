@@ -1663,8 +1663,8 @@ read_global_recovery_terms(DurableQueueNames) ->
     {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 cleanup_global_recovery_terms() ->
-    rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
-    rabbit_recovery_terms:delete_global_table(),
+    _ = rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
+    _ = rabbit_recovery_terms:delete_global_table(),
     ok.
 
 

@@ -217,7 +217,7 @@ clear_component(Component, ActingUser) ->
         [] ->
             ok;
         Xs ->
-            [clear(pget(vhost, X),
+            _ = [clear(pget(vhost, X),
                    pget(component, X),
                    pget(name, X),
                    ActingUser) || X <- Xs],

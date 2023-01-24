@@ -606,7 +606,8 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
     %% about the cluster
     case NodeType of
         ram  -> start_mnesia(),
-                change_extra_db_nodes(ClusterNodes, false);
+                _ = change_extra_db_nodes(ClusterNodes, false),
+                ok;
         disc -> ok
     end,
     %% ...and all nodes will need to wait for tables

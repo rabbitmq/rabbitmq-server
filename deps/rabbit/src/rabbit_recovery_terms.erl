@@ -107,13 +107,13 @@ upgrade_recovery_terms() ->
                    {ok, Entries} -> Entries;
                    {error, _}    -> []
                end,
-        [begin
+        _ = [begin
              File = filename:join([QueuesDir, Dir, "clean.dot"]),
              case rabbit_file:read_term_file(File) of
                  {ok, Terms} -> ok  = store_global_table(Dir, Terms);
                  {error, _}  -> ok
              end,
-             file:delete(File)
+             _ = file:delete(File)
          end || Dir <- Dirs],
         ok
     after
@@ -127,7 +127,7 @@ dets_upgrade(Fun)->
     open_global_table(),
     try
         ok = dets:foldl(fun ({DirBaseName, Terms}, Acc) ->
-                                store_global_table(DirBaseName, Fun(Terms)),
+                                _ = store_global_table(DirBaseName, Fun(Terms)),
                                 Acc
                         end, ok, ?MODULE),
         ok
@@ -144,7 +144,7 @@ open_global_table() ->
 
 close_global_table() ->
     try
-        dets:sync(?MODULE),
+        _ = dets:sync(?MODULE),
         dets:close(?MODULE)
     %% see clear/1
     catch _:badarg ->

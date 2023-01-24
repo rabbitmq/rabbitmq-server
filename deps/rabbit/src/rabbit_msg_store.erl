@@ -2238,10 +2238,10 @@ transform_dir(BaseDir, Store, TransformFun) ->
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
         false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
-                 foreach_file(Dir, TmpDir, TransformFile,     FileList),
-                 foreach_file(Dir,         fun file:delete/1, FileList),
-                 foreach_file(TmpDir, Dir, CopyFile,          FileList),
-                 foreach_file(TmpDir,      fun file:delete/1, FileList),
+                 _ = foreach_file(Dir, TmpDir, TransformFile,     FileList),
+                 _ = foreach_file(Dir,         fun file:delete/1, FileList),
+                 _ = foreach_file(TmpDir, Dir, CopyFile,          FileList),
+                 _ = foreach_file(TmpDir,      fun file:delete/1, FileList),
                  ok = file:del_dir(TmpDir)
     end.
 
