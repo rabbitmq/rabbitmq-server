@@ -202,6 +202,7 @@ jose:
 - jose_json_poison
 - jose_json_poison_compat_encoder
 - jose_json_poison_lexical_encoder
+- jose_json_thoas
 - jose_json_unsupported
 - jose_jwa
 - jose_jwa_aes

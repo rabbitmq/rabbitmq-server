@@ -10,8 +10,8 @@ erlc_opts(
         ],
         "//conditions:default": [
             "+debug_info",
-            "+warnings_as_errors",
             "+deterministic",
+            "+warnings_as_errors",
         ],
     }),
     visibility = [":__subpackages__"],
@@ -349,6 +349,15 @@ erlang_bytecode(
     name = "ebin_json_jose_json_poison_lexical_encoder_beam",
     srcs = ["src/json/jose_json_poison_lexical_encoder.erl"],
     outs = ["ebin/json/jose_json_poison_lexical_encoder.beam"],
+    app_name = "jose",
+    beam = ["ebin/json/jose_json.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_json_jose_json_thoas_beam",
+    srcs = ["src/json/jose_json_thoas.erl"],
+    outs = ["ebin/json/jose_json_thoas.beam"],
     app_name = "jose",
     beam = ["ebin/json/jose_json.beam"],
     erlc_opts = "//:erlc_opts",
@@ -1109,6 +1118,7 @@ filegroup(
         "ebin/json/jose_json_poison.beam",
         "ebin/json/jose_json_poison_compat_encoder.beam",
         "ebin/json/jose_json_poison_lexical_encoder.beam",
+        "ebin/json/jose_json_thoas.beam",
         "ebin/json/jose_json_unsupported.beam",
         "ebin/jwa/jose_jwa.beam",
         "ebin/jwa/jose_jwa_aes.beam",
@@ -1222,6 +1232,7 @@ filegroup(
         "src/json/jose_json_poison.erl",
         "src/json/jose_json_poison_compat_encoder.erl",
         "src/json/jose_json_poison_lexical_encoder.erl",
+        "src/json/jose_json_thoas.erl",
         "src/json/jose_json_unsupported.erl",
         "src/jwa/jose_jwa.erl",
         "src/jwa/jose_jwa_aes.erl",
@@ -1349,6 +1360,7 @@ erlang_app(
         "crypto",
         "public_key",
     ],
+    deps = ["@thoas//:erlang_app"],
 )
 
 alias(
