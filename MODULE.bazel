@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.0",
+    version = "3.9.1",
 )
 
 erlang_config = use_extension(
