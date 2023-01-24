@@ -78,7 +78,16 @@ xref()
 
 plt(
     name = "base_plt",
+<<<<<<< HEAD
     deps = DEPS,
+=======
+    apps = [
+        "erts",
+        "kernel",
+        "stdlib",
+    ] + EXTRA_APPS,
+    deps = DEPS + RUNTIME_DEPS,
+>>>>>>> 3a3fc55c3a (Rework elixir dialyze (backport #6919) (backport #6991) (#6992))
 )
 
 dialyze(

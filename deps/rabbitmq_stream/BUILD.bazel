@@ -7,7 +7,6 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "without",
 )
 
 APP_NAME = "rabbitmq_stream"
@@ -34,13 +33,13 @@ APP_ENV = """[
 
 BUILD_DEPS = [
     "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_cli:rabbitmqctl",
-    "@ranch//:erlang_app",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
     "//deps/rabbitmq_stream_common:erlang_app",
     "//deps/rabbit:erlang_app",
+    "@ranch//:erlang_app",
 ]
 
 rabbitmq_app(
@@ -54,7 +53,7 @@ rabbitmq_app(
 
 xref(
     additional_libs = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
+        "//deps/rabbitmq_cli:erlang_app",
     ],
 )
 
@@ -66,14 +65,12 @@ plt(
         "stdlib",
         "ssl",
     ],
-    deps = without(
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        BUILD_DEPS + DEPS,
-    ),
+    libs = ["//deps/rabbitmq_cli:elixir"],
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
     warnings_as_errors = False,
 )
