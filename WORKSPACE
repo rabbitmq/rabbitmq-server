@@ -1,5 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 git_repository(
     name = "rules_erlang",
@@ -161,9 +161,12 @@ load(
 
 register_elixir_defaults()
 
-load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
-
-rabbitmq_external_deps(rabbitmq_workspace = "@")
+new_git_repository(
+    name = "bats",
+    remote = "https://github.com/sstephenson/bats",
+    tag = "v0.4.0",
+    build_file = "@//:BUILD.bats",
+)
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
