@@ -17,11 +17,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         urls = ["https://github.com/rabbitmq/inet_tcp_proxy/archive/master.zip"],
     )
 
-    github_erlang_app(
-        name = "meck",
-        org = "eproxus",
-    )
-
     git_repository(
         name = "osiris",
         tag = "v1.4.3",

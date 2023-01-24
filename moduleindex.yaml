@@ -264,6 +264,18 @@ jose:
 - jose_jws_alg_rsa_pkcs1_v1_5
 - jose_jws_alg_rsa_pss
 - jose_jwt
+meck:
+- meck
+- meck_args_matcher
+- meck_code
+- meck_code_gen
+- meck_cover
+- meck_expect
+- meck_history
+- meck_matcher
+- meck_proc
+- meck_ret_spec
+- meck_util
 observer_cli:
 - observer_cli
 - observer_cli_application

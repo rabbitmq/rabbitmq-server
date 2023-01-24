@@ -238,6 +238,7 @@ erlang_package.hex_package(
 erlang_package.git_package(
     branch = "master",
     repository = "eproxus/meck",
+    build_file = "@//bazel:BUILD.meck",
 )
 
 erlang_package.hex_package(
