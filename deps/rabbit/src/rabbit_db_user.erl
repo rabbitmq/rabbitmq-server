@@ -358,7 +358,7 @@ clear_matching_user_permissions_in_mnesia_tx(Username, VHostName) ->
 %% -------------------------------------------------------------------
 
 -spec get_topic_permissions(Username, VHostName, ExchangeName) -> Ret when
-      Username :: internal_topic:topicname(),
+      Username :: rabbit_types:username(),
       VHostName :: vhost:name(),
       ExchangeName :: binary(),
       Ret :: TopicPermission | undefined,
@@ -546,7 +546,7 @@ clear_topic_permissions_in_mnesia_tx(Username, VHostName, ExchangeName) ->
 
 -spec clear_matching_topic_permissions(Username, VHostName, ExchangeName) ->
     Ret when
-      Username :: internal_topic:topicname() | '_',
+      Username :: rabbit_types:username() | '_',
       VHostName :: vhost:name() | '_',
       ExchangeName :: binary() | '_',
       Ret :: [#topic_permission{}].

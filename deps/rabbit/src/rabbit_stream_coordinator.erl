@@ -1820,7 +1820,7 @@ eval_replica(_Meta, Node, #member{} = Replica, _LeaderState, _Stream,
     {Replicas#{Node => Replica}, Actions}.
 
 fail_active_actions(Streams, Exclude) ->
-    maps:map(
+    _ = maps:map(
       fun (_,  #stream{id = Id,
                        members = Members,
                        mnesia = Mnesia})

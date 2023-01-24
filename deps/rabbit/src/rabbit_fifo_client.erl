@@ -919,7 +919,7 @@ set_timer(#state{leader = Leader0,
 cancel_timer(#state{timer_state = undefined} = State) ->
     State;
 cancel_timer(#state{timer_state = Ref} = State) ->
-    erlang:cancel_timer(Ref, [{async, true}, {info, false}]),
+    _ = erlang:cancel_timer(Ref, [{async, true}, {info, false}]),
     State#state{timer_state = undefined}.
 
 find_local_or_leader(#state{leader = Leader,

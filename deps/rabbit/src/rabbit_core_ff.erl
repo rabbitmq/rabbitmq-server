@@ -163,7 +163,7 @@ listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
     try
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  mnesia:lock({table, rabbit_listener}, read),
+                  _ = mnesia:lock({table, rabbit_listener}, read),
                   Listeners = mnesia:select(
                                 rabbit_listener, [{'$1',[],['$1']}]),
                   lists:foreach(

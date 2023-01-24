@@ -176,8 +176,8 @@ init_it(Self, GM, Node, QName) ->
             GMPids = amqqueue:get_gm_pids(Q),
             PSPids = amqqueue:get_slave_pids_pending_shutdown(Q),
             case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
-                []     -> stop_pending_slaves(QName, PSPids),
-                          add_slave(Q, Self, GM),
+                []     -> _ = stop_pending_slaves(QName, PSPids),
+                          _ = add_slave(Q, Self, GM),
                           {new, QPid, GMPids};
                 [QPid] -> case rabbit_mnesia:is_process_alive(QPid) of
                               true  -> duplicate_live_master;
@@ -189,7 +189,7 @@ init_it(Self, GM, Node, QName) ->
                                        SPids1 = SPids -- [SPid],
                                        Q1 = amqqueue:set_slave_pids(Q, SPids1),
                                        Q2 = amqqueue:set_gm_pids(Q1, GMPids1),
-                                       add_slave(Q2, Self, GM),
+                                       _ = add_slave(Q2, Self, GM),
                                        {new, QPid, GMPids1}
                           end
             end;
@@ -442,7 +442,8 @@ terminate_shutdown(Reason, State = #state{backing_queue       = BQ,
 
 terminate_common(State) ->
     ok = rabbit_memory_monitor:deregister(self()),
-    stop_rate_timer(stop_sync_timer(State)).
+    _ = stop_rate_timer(stop_sync_timer(State)),
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1083,7 +1084,7 @@ record_synchronised(Q0) when ?is_amqqueue(Q0) ->
                     SSPids = amqqueue:get_sync_slave_pids(Q1),
                     SSPids1 = [Self | SSPids],
                     Q2 = amqqueue:set_sync_slave_pids(Q1, SSPids1),
-                    rabbit_mirror_queue_misc:store_updated_slaves(Q2),
+                    _ = rabbit_mirror_queue_misc:store_updated_slaves(Q2),
                     {ok, Q2}
             end
         end,

@@ -263,7 +263,7 @@ set_log_level(Level) ->
     ?LOG_DEBUG(
        "Logging: changing primary log level to ~ts", [Level],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    logger:set_primary_config(level, Level),
+    _ = logger:set_primary_config(level, Level),
 
     %% Per-module log level.
     lists:foreach(
@@ -318,9 +318,9 @@ set_log_level(Level) ->
               %% If the log level is set to `debug', we turn off burst limit to
               %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
-              logger:set_handler_config(Id, filters, Filters1),
-              logger:set_handler_config(Id, config, Config1),
-              logger:set_handler_config(Id, level, Level),
+              _ = logger:set_handler_config(Id, filters, Filters1),
+              _ = logger:set_handler_config(Id, config, Config1),
+              _ = logger:set_handler_config(Id, level, Level),
               ok;
           (#{id := Id, config := Config}) ->
               ?LOG_DEBUG(
@@ -330,8 +330,8 @@ set_log_level(Level) ->
               %% If the log level is set to `debug', we turn off burst limit to
               %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
-              logger:set_handler_config(Id, config, Config1),
-              logger:set_handler_config(Id, level, Level),
+              _ = logger:set_handler_config(Id, config, Config1),
+              _ = logger:set_handler_config(Id, level, Level),
               ok
       end, logger:get_handler_config()),
     ok.

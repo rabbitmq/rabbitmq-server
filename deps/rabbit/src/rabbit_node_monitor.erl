@@ -379,7 +379,7 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
-    net_kernel:monitor_nodes(true, [nodedown_reason]),
+    _ = net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
     %% If the node has been restarted, Mnesia can trigger a system notification
     %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
@@ -483,7 +483,8 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                                    rabbit_log:warning("Node ~tp was restarted", [Node]),
                                    ok
                            end
-                   end);
+                   end),
+                 ok;
         false -> ok
     end,
     {noreply, State};
@@ -600,7 +601,7 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     rabbit_log:info("rabbit on node ~tp down", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
-    [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
+    _ = [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
     {noreply, handle_dead_rabbit(
                 Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
@@ -617,7 +618,7 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                     cast(N, {check_partial_partition,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
-    case maps:find(Node, GUIDs) of
+    _ = case maps:find(Node, GUIDs) of
         {ok, DownGUID} -> Alive = rabbit_nodes:all_running()
                               -- [node(), Node],
                           [case maps:find(N, GUIDs) of
@@ -688,7 +689,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
-    rabbit_misc:stop_timer(State, #state.down_ping_timer),
+    _ = rabbit_misc:stop_timer(State, #state.down_ping_timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

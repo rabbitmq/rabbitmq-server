@@ -59,7 +59,7 @@ tail_n_lines(Filename, N) ->
             {ok, Eof} = file:position(File, eof),
             %% Eof may move. Only read up to the current one.
             Result = reverse_read_n_lines(N, N, File, Eof, Eof),
-            file:close(File),
+            _ = file:close(File),
             Result;
         {error, _} = Error -> Error
     end.

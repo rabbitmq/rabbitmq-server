@@ -467,13 +467,14 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
 
 sequential_for_all(Category, ActingUser, Definitions, Fun) ->
     try
-        sequential_for_all0(Category, ActingUser, Definitions, Fun)
+        sequential_for_all0(Category, ActingUser, Definitions, Fun),
+        ok
     after
         rabbit_runtime:gc_all_processes()
     end.
 
 sequential_for_all0(Category, ActingUser, Definitions, Fun) ->
-    case maps:get(rabbit_data_coercion:to_atom(Category), Definitions, undefined) of
+    _ = case maps:get(rabbit_data_coercion:to_atom(Category), Definitions, undefined) of
         undefined -> ok;
         List      ->
             case length(List) of
@@ -484,20 +485,23 @@ sequential_for_all0(Category, ActingUser, Definitions, Fun) ->
                  %% keys are expected to be atoms
                  Fun(atomize_keys(M), ActingUser)
              end || M <- List, is_map(M)]
-    end.
+    end,
+    ok.
 
 sequential_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
     try
-        sequential_for_all0(Name, ActingUser, Definitions, VHost, Fun)
+        sequential_for_all0(Name, ActingUser, Definitions, VHost, Fun),
+        ok
     after
         rabbit_runtime:gc_all_processes()
     end.
 
 sequential_for_all0(Name, ActingUser, Definitions, VHost, Fun) ->
-    case maps:get(rabbit_data_coercion:to_atom(Name), Definitions, undefined) of
+    _ = case maps:get(rabbit_data_coercion:to_atom(Name), Definitions, undefined) of
         undefined -> ok;
-        List      -> [Fun(VHost, atomize_keys(M), ActingUser) || M <- List, is_map(M)]
-    end.
+        List      -> _ = [Fun(VHost, atomize_keys(M), ActingUser) || M <- List, is_map(M)]
+    end,
+    ok.
 
 concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
     try
@@ -517,7 +521,8 @@ concurrent_for_all0(Category, ActingUser, Definitions, Fun) ->
             WorkPoolFun = fun(M) ->
                                   Fun(atomize_keys(M), ActingUser)
                           end,
-            do_concurrent_for_all(List, WorkPoolFun)
+            do_concurrent_for_all(List, WorkPoolFun),
+            ok
     end.
 
 concurrent_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
@@ -545,7 +550,7 @@ do_concurrent_for_all(List, WorkPoolFun) ->
          worker_pool:submit_async(
            ?IMPORT_WORK_POOL,
            fun() ->
-                   try
+                   _ = try
                        WorkPoolFun(M)
                    catch {error, E} -> gatherer:in(Gatherer, {error, E});
                          _:E        -> gatherer:in(Gatherer, {error, E})

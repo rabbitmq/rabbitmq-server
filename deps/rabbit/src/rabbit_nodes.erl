@@ -40,7 +40,7 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
-  seed_internal_cluster_id(),
+  _ = seed_internal_cluster_id(),
   seed_user_provided_cluster_name().
 
 name_type() ->
@@ -99,7 +99,7 @@ cluster_name_default() ->
 persistent_cluster_id() ->
     case rabbit_runtime_parameters:lookup_global(?INTERNAL_CLUSTER_ID_PARAM_NAME) of
         not_found ->
-            seed_internal_cluster_id(),
+            _ = seed_internal_cluster_id(),
             persistent_cluster_id();
         Param ->
             #{value := Val, name := ?INTERNAL_CLUSTER_ID_PARAM_NAME} = maps:from_list(Param),

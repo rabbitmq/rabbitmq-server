@@ -217,7 +217,7 @@ reset_state(State = #qi{ queue_name     = Name,
                          on_sync        = OnSyncFun,
                          on_sync_msg    = OnSyncMsgFun }) ->
     ?DEBUG("~0p", [State]),
-    delete_and_terminate(State),
+    _ = delete_and_terminate(State),
     init1(Name, rabbit_file:binary_to_filename(Dir), OnSyncFun, OnSyncMsgFun).
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
@@ -542,7 +542,7 @@ terminate(VHost, Terms, State0 = #qi { dir = Dir,
     end, OpenFds),
     file_handle_cache:release_reservation(),
     %% Write recovery terms for faster recovery.
-    rabbit_recovery_terms:store(VHost,
+    _ = rabbit_recovery_terms:store(VHost,
                                 filename:basename(rabbit_file:binary_to_filename(Dir)),
                                 [{v2_index_state, {?VERSION, Segments}} | Terms]),
     State#qi{ segments = #{},

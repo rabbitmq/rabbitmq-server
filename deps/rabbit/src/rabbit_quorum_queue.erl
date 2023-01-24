@@ -512,7 +512,8 @@ repair_leader_record(QName, Self) ->
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
-            become_leader(QName, Name)
+            become_leader(QName, Name),
+            ok
     end,
     ok.
 

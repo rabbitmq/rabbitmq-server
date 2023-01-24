@@ -163,7 +163,7 @@ terminate(_Reason, _S) ->
 %%%    Pid is a member of group Name.
 
 member_died(Ref, Pid) ->
-    case ets:lookup(?TABLE, {ref, Ref}) of
+    _ = case ets:lookup(?TABLE, {ref, Ref}) of
         [{{ref, Ref}, Pid}] ->
             leave_all_groups(Pid);
         %% in case the key has already been removed
@@ -181,7 +181,7 @@ leave_all_groups(Pid) ->
 
 join_group(Name, Pid) ->
     Ref_Pid = {ref, Pid},
-    try _ = ets:update_counter(?TABLE, Ref_Pid, {3, +1})
+    _ = try ets:update_counter(?TABLE, Ref_Pid, {3, +1})
     catch _:_ ->
             Ref = erlang:monitor(process, Pid),
             true = ets:insert(?TABLE, {Ref_Pid, Ref, 1}),

@@ -55,7 +55,7 @@ sheet_body(State) ->
     Body = [begin
         #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q),
         case rabbit_amqqueue:pid_of(Q) of
-            {error, not_found} ->
+            none ->
                 ["dead", Vhost, unicode:characters_to_binary([Name, " (dead)"]),
                     0,0,0,0,0,0,0,0,0,0];
             Pid ->

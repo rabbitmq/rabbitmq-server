@@ -48,7 +48,7 @@ check_no_overlap(Mods) ->
 
 %% Check no non-empty pairwise intersection in a list of sets
 check_no_overlap1(Sets) ->
-    lists:foldl(fun(Set, Union) ->
+    _ = lists:foldl(fun(Set, Union) ->
                     Is = sets:intersection(Set, Union),
                     case sets:size(Is) of
                         0 -> ok;
