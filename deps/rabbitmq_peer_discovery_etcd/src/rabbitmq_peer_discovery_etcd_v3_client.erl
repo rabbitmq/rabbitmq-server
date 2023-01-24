@@ -231,25 +231,6 @@ connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) 
     {ok, #{kvs := Result}} = eetcd_kv:get(C2),
     rabbit_log:debug("etcd peer discovery returned keys: ~p", [Result]),
     Values = [maps:get(value, M) || M <- Result],
-<<<<<<< HEAD
-    case Values of
-        Xs when is_list(Xs) ->
-            rabbit_log:debug("etcd peer discovery: listing node keys returned ~b results", [length(Xs)]),
-            ParsedNodes = lists:map(fun extract_node/1, Xs),
-            {Successes, Failures} = lists:partition(fun filter_node/1, ParsedNodes),
-            JoinedString = lists:join(",", [rabbit_data_coercion:to_list(Node) || Node <- lists:usort(Successes)]),
-            rabbit_log:error("etcd peer discovery: successfully extracted nodes: ~s", [JoinedString]),
-            lists:foreach(fun(Val) ->
-                rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~p", [Val])
-            end, Failures),
-            gen_statem:reply(From, lists:usort(Successes)),
-            keep_state_and_data;
-        Other ->
-            rabbit_log:debug("etcd peer discovery: listing node keys returned ~p", [Other]),
-            gen_statem:reply(From, []),
-            keep_state_and_data
-    end.
-=======
     rabbit_log:debug("etcd peer discovery: listing node keys returned ~b results", [length(Values)]),
     ParsedNodes = lists:map(fun extract_node/1, Values),
     {Successes, Failures} = lists:partition(fun filter_node/1, ParsedNodes),
@@ -260,8 +241,6 @@ connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) 
     end, Failures),
     gen_statem:reply(From, lists:usort(Successes)),
     keep_state_and_data.
-
->>>>>>> 183a260290 (Fix all dialyzer warnings in peer discovery plugins)
 
 disconnected(enter, _PrevState, _Data) ->
     rabbit_log:info("etcd peer discovery: successfully disconnected from etcd"),
