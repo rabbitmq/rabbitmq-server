@@ -257,7 +257,7 @@ do_add(Name, Metadata, ActingUser) ->
                         rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
                                         [Name, Policy])
                   end,
-                  [begin
+                  _ = [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
                     rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
                     _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)

@@ -362,7 +362,7 @@ policy_apply_to() ->
               {runtime_parameters, Key, Value}
       end,
       [key, value]),
-    rabbit_policy:invalidate(),
+    _ = rabbit_policy:invalidate(),
     ok.
 
 apply_to(Def) ->

@@ -331,7 +331,7 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
                 eof ->
                     %% Something is wrong with the file. Close it
                     %% and let the caller decide what to do with it.
-                    file:close(Fd),
+                    _ = file:close(Fd),
                     {{error, bad_header}, State#qs{ read_segment = undefined,
                                                     read_fd = undefined }}
             end;

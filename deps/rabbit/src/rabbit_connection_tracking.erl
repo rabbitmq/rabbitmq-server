@@ -174,7 +174,7 @@ register_tracked(#tracked_connection{node = Node} = Conn) when Node =:= node() -
     end.
 
 register_tracked_ets(#tracked_connection{username = Username, vhost = VHost, id = ConnId} = Conn) ->
-    case ets:lookup(?TRACKED_CONNECTION_TABLE, ConnId) of
+    _ = case ets:lookup(?TRACKED_CONNECTION_TABLE, ConnId) of
         []    ->
             ets:insert(?TRACKED_CONNECTION_TABLE, Conn),
             ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, 1, {VHost, 0}),
@@ -193,7 +193,8 @@ register_tracked_mnesia(#tracked_connection{username = Username, vhost = VHost, 
         []    ->
             mnesia:dirty_write(TableName, Conn),
             mnesia:dirty_update_counter(PerVhostTableName, VHost, 1),
-            mnesia:dirty_update_counter(PerUserConnTableName, Username, 1);
+            mnesia:dirty_update_counter(PerUserConnTableName, Username, 1),
+            ok;
         [#tracked_connection{}] ->
             ok
     end,
@@ -279,7 +280,7 @@ shutdown_tracked_items(TrackedItems, Message) ->
 
 ensure_tracked_tables_for_this_node() ->
     ensure_tracked_connections_table_for_this_node_ets(),
-    ensure_per_vhost_tracked_connections_table_for_this_node_ets(),
+    _ = ensure_per_vhost_tracked_connections_table_for_this_node_ets(),
     ensure_per_user_tracked_connections_table_for_this_node_ets().
 
 -spec ensure_tracked_connections_table_for_this_node() -> ok.
@@ -293,7 +294,7 @@ ensure_tracked_connections_table_for_this_node() ->
     end.
 
 ensure_tracked_connections_table_for_this_node_ets() ->
-    ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
+    _ = ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
                                         {keypos, #tracked_connection.id}]),
     rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
                     [?TRACKED_CONNECTION_TABLE]).
@@ -359,8 +360,8 @@ ensure_per_user_tracked_connections_table_for_this_node() ->
     end.
 
 ensure_per_user_tracked_connections_table_for_this_node_ets() ->
-    ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
-    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
+    _ = ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
+    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
 ensure_per_user_tracked_connections_table_for_this_node_mnesia() ->
@@ -733,7 +734,7 @@ migrate_tracking_records() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_table_name_for(Node),
-              mnesia:lock({table, Table}, read),
+              _ = mnesia:lock({table, Table}, read),
               Connections = mnesia:select(Table, [{'$1',[],['$1']}]),
               lists:foreach(
                 fun(Connection) ->
@@ -743,7 +744,7 @@ migrate_tracking_records() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_per_user_table_name_for(Node),
-              mnesia:lock({table, Table}, read),
+              _ = mnesia:lock({table, Table}, read),
               Connections = mnesia:select(Table, [{'$1',[],['$1']}]),
               lists:foreach(
                 fun(#tracked_connection_per_user{connection_count = C,
@@ -754,7 +755,7 @@ migrate_tracking_records() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Table = tracked_connection_per_vhost_table_name_for(Node),
-              mnesia:lock({table, Table}, read),
+              _ = mnesia:lock({table, Table}, read),
               Connections = mnesia:select(Table, [{'$1',[],['$1']}]),
               lists:foreach(
                 fun(#tracked_connection_per_vhost{connection_count = C,

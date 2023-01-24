@@ -84,7 +84,7 @@ log_configured_backend() ->
 
 maybe_init() ->
     Backend = backend(),
-    code:ensure_loaded(Backend),
+    _ = code:ensure_loaded(Backend),
     case erlang:function_exported(Backend, init, 0) of
         true  ->
             rabbit_log:debug("Peer discovery backend supports initialisation"),

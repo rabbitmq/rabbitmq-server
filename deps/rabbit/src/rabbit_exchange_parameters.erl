@@ -24,7 +24,7 @@ register() ->
     rabbit_registry:register(runtime_parameter,
                              ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE),
     %% ensure there are no leftovers from before node restart/crash
-    rabbit_runtime_parameters:clear_component(
+    _ = rabbit_runtime_parameters:clear_component(
       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
       ?INTERNAL_USER),
     ok.

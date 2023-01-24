@@ -485,13 +485,13 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom
 -spec client_terminate(client_msstate()) -> 'ok'.
 
 client_terminate(CState = #client_msstate { client_ref = Ref }) ->
-    close_all_handles(CState),
+    _ = close_all_handles(CState),
     ok = server_call(CState, {client_terminate, Ref}).
 
 -spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
-    close_all_handles(CState),
+    _ = close_all_handles(CState),
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}).
 
@@ -2194,14 +2194,14 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                        _ ->
                            %% found a gap, so actually do the work for
                            %% the previous block
-                           Copy(Block),
+                           _ = Copy(Block),
                            {Offset, Offset + TotalSize}
                    end}
           end, {InitOffset, {undefined, undefined}}, WorkList) of
         {FinalOffset, Block} ->
             case WorkList of
                 [] -> ok;
-                _  -> Copy(Block), %% do the last remaining block
+                _  -> _ = Copy(Block), %% do the last remaining block
                       ok = file_handle_cache:sync(DestinationHdl)
             end;
         {FinalOffsetZ, _Block} ->
@@ -2238,10 +2238,10 @@ transform_dir(BaseDir, Store, TransformFun) ->
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
         false -> FileList = list_sorted_filenames(Dir, ?FILE_EXTENSION),
-                 foreach_file(Dir, TmpDir, TransformFile,     FileList),
-                 foreach_file(Dir,         fun file:delete/1, FileList),
-                 foreach_file(TmpDir, Dir, CopyFile,          FileList),
-                 foreach_file(TmpDir,      fun file:delete/1, FileList),
+                 _ = foreach_file(Dir, TmpDir, TransformFile,     FileList),
+                 _ = foreach_file(Dir,         fun file:delete/1, FileList),
+                 _ = foreach_file(TmpDir, Dir, CopyFile,          FileList),
+                 _ = foreach_file(TmpDir,      fun file:delete/1, FileList),
                  ok = file:del_dir(TmpDir)
     end.
 

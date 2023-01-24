@@ -70,7 +70,7 @@
 %% @returns the properties of the specified feature flag.
 
 get(FeatureName) ->
-    rabbit_ff_registry_factory:initialize_registry(),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ?convince_dialyzer(?MODULE:get(FeatureName), undefined, #{}).
 
 -spec list(all | enabled | disabled) -> rabbit_feature_flags:feature_flags().
@@ -85,7 +85,7 @@ get(FeatureName) ->
 %% @returns A map of selected feature flags.
 
 list(Which) ->
-    rabbit_ff_registry_factory:initialize_registry(),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ?convince_dialyzer(?MODULE:list(Which), #{}, #{}).
 
 -spec states() -> rabbit_feature_flags:feature_states().
@@ -98,7 +98,7 @@ list(Which) ->
 %% @returns A map of feature flag states.
 
 states() ->
-    rabbit_ff_registry_factory:initialize_registry(),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ?convince_dialyzer(?MODULE:states(), #{}, #{}).
 
 -spec is_supported(rabbit_feature_flags:feature_name()) -> boolean().
@@ -113,7 +113,7 @@ states() ->
 %%   otherwise.
 
 is_supported(FeatureName) ->
-    rabbit_ff_registry_factory:initialize_registry(),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ?convince_dialyzer(?MODULE:is_supported(FeatureName), false, true).
 
 -spec is_enabled(rabbit_feature_flags:feature_name()) -> boolean() | state_changing.
@@ -128,7 +128,7 @@ is_supported(FeatureName) ->
 %%   its state is transient, or `false' otherwise.
 
 is_enabled(FeatureName) ->
-    rabbit_ff_registry_factory:initialize_registry(),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ?convince_dialyzer(?MODULE:is_enabled(FeatureName), false, true).
 
 -spec is_registry_initialized() -> boolean().

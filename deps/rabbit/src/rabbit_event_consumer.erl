@@ -31,7 +31,7 @@ register(Pid, Ref, Duration, Pattern) ->
 
 init([Pid, Ref, Duration, Pattern]) ->
     MRef = erlang:monitor(process, Pid),
-    case Duration of
+    _ = case Duration of
         infinity -> infinity;
         _        -> erlang:send_after(Duration * 1000, self(), rabbit_event_consumer_timeout)
     end,
@@ -45,7 +45,7 @@ handle_event(#event{type      = Type,
                     reference = none}, #state{pid = Pid,
                                               ref = Ref,
                                               pattern = Pattern} = State) ->
-    case key(Type) of
+    _ = case key(Type) of
         ignore -> ok;
         Key    -> case re:run(Key, Pattern, [{capture, none}]) of
                       match ->

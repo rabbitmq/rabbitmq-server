@@ -144,7 +144,8 @@ register_tracked_ets(TrackedCh = #tracked_channel{pid = ChPid, username = Userna
     case ets:lookup(?TRACKED_CHANNEL_TABLE, ChPid) of
         []    ->
             ets:insert(?TRACKED_CHANNEL_TABLE, TrackedCh),
-            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, 1, {Username, 0});
+            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, 1, {Username, 0}),
+            ok;
         [#tracked_channel{}] ->
             ok
     end,
@@ -158,7 +159,8 @@ register_tracked_mnesia(TrackedCh =
     case mnesia:dirty_read(TableName, ChId) of
       []    ->
           mnesia:dirty_write(TableName, TrackedCh),
-          mnesia:dirty_update_counter(PerUserChTableName, Username, 1);
+          mnesia:dirty_update_counter(PerUserChTableName, Username, 1),
+            ok;
       [#tracked_channel{}] ->
           ok
     end,
@@ -326,8 +328,9 @@ tracked_channel_per_user_table_name_for(Node) ->
         "tracked_channel_table_per_user_on_node_~s", [Node])).
 
 ensure_tracked_tables_for_this_node() ->
-    ensure_tracked_channels_table_for_this_node_ets(),
-    ensure_per_user_tracked_channels_table_for_this_node_ets().
+    _ = ensure_tracked_channels_table_for_this_node_ets(),
+    _ = ensure_per_user_tracked_channels_table_for_this_node_ets(),
+    ok.
 
 %% internal
 ensure_tracked_channels_table_for_this_node() ->
@@ -467,7 +470,7 @@ migrate_tracking_records() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Table = tracked_channel_table_name_for(Node),
-              mnesia:lock({table, Table}, read),
+              _ = mnesia:lock({table, Table}, read),
               Channels = mnesia:select(Table, [{'$1',[],['$1']}]),
               lists:foreach(
                 fun(Channel) ->
@@ -477,7 +480,7 @@ migrate_tracking_records() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Table = tracked_channel_per_user_table_name_for(Node),
-              mnesia:lock({table, Table}, read),
+              _ = mnesia:lock({table, Table}, read),
               Channels = mnesia:select(Table, [{'$1',[],['$1']}]),
               lists:foreach(
                 fun(#tracked_channel_per_user{channel_count = C,
