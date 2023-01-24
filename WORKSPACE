@@ -163,9 +163,9 @@ register_elixir_defaults()
 
 new_git_repository(
     name = "bats",
+    build_file = "@//:BUILD.bats",
     remote = "https://github.com/sstephenson/bats",
     tag = "v0.4.0",
-    build_file = "@//:BUILD.bats",
 )
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
