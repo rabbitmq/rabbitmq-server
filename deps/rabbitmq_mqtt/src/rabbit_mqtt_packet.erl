@@ -7,19 +7,23 @@
 
 -module(rabbit_mqtt_packet).
 
--export([parse/2, initial_state/0]).
--export([serialise/2]).
-
 -include("rabbit_mqtt_packet.hrl").
 -include("rabbit_mqtt.hrl").
+
+-export([parse/2, initial_state/0, serialise/2]).
+-export_type([state/0]).
+
+-opaque state() :: 'none' | {more, any()}.
 
 -define(RESERVED, 0).
 -define(MAX_LEN, 16#fffffff).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
 
+-spec initial_state() -> state().
 initial_state() -> none.
 
+-spec parse(binary(), state()) -> {more, state()} | {ok, any(), any()} | {error, any()}.
 parse(<<>>, none) ->
     {more, fun(Bin) -> parse(Bin, none) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->

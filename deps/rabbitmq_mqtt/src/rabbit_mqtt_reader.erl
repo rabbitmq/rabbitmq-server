@@ -34,11 +34,11 @@
          proxy_socket :: option({rabbit_proxy_socket, any(), any()}),
          await_recv :: boolean(),
          deferred_recv :: option(binary()),
-         parse_state :: atom(),
+         parse_state :: rabbit_mqtt_packet:state(),
          proc_state :: rabbit_mqtt_processor:state(),
          connection_state :: running | blocked,
          conserve :: boolean(),
-         stats_timer :: option(reference()),
+         stats_timer :: option(rabbit_event:state()),
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
          conn_name :: binary(),
          received_connect_packet :: boolean()
