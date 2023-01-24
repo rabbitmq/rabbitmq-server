@@ -73,6 +73,13 @@ defmodule TestHelper do
     ])
   end
 
+  def add_user_hashed_password(name, hash_password) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :put_user, [
+      %{:name => name, :password_hash => hash_password, :tags => "administrator"},
+      "acting-user"
+    ])
+  end
+
   def delete_user(name) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :delete_user, [
       name,
