@@ -21,7 +21,6 @@ APP_MODULE = "rabbit_mgmt_app"
 
 EXTRA_APPS = [
     "mnesia",
-    "ranch",
     "ssl",
     "crypto",
     "public_key",
