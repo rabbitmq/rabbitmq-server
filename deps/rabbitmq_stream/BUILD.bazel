@@ -7,7 +7,6 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "without",
 )
 
 APP_NAME = "rabbitmq_stream"
@@ -40,6 +39,7 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/rabbitmq_stream_common:erlang_app",
     "//deps/rabbit:erlang_app",
+    "@ranch//:erlang_app",
 ]
 
 rabbitmq_app(
