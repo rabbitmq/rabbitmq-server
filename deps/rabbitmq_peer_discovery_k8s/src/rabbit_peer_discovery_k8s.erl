@@ -31,7 +31,7 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -46,7 +46,7 @@ list_nodes() ->
     {error, Reason} ->
       Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
       rabbit_log:error(Details),
-      send_event("Warning", "Failed", Details),
+      _ = send_event("Warning", "Failed", Details),
       {error, Reason}
   end.
 
@@ -144,8 +144,7 @@ node_name(Address) ->
 %% Discover peers as quickly as possible not waiting for their readiness check to succeed.
 %% @end
 %%
--spec address([map()]) -> list().
-
+-spec address(map()) -> list().
 address(Subset) ->
   maps:get(<<"notReadyAddresses">>, Subset, []) ++
   maps:get(<<"addresses">>, Subset, []).

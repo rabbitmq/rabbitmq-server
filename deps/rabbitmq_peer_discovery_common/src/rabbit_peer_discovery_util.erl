@@ -163,8 +163,8 @@ nic_ipv4(Device) ->
 %% IPv4 address if found.
 %% @end
 %%--------------------------------------------------------------------
--spec nic_ipv4(Device :: string(), Interfaces :: list())
-    -> {ok, string()} | {error, not_found}.
+-spec nic_ipv4(Device :: string(), Interfaces :: [{string(), [ifopt()]}])
+    -> {'ok', string()} | {'error', 'not_found'}.
 nic_ipv4(_, []) -> {error, not_found};
 nic_ipv4(Device, [{Interface, Opts}|_]) when Interface =:= Device ->
   {ok, nic_ipv4_address(Opts)};
@@ -178,7 +178,7 @@ nic_ipv4(Device, [_|T]) ->
 %% for the interface.
 %% @end
 %%--------------------------------------------------------------------
--spec nic_ipv4_address([ifopt()]) -> {ok, string()} | {error, not_found}.
+-spec nic_ipv4_address([ifopt()]) -> string() | {'error', 'not_found'}.
 nic_ipv4_address([]) -> {error, not_found};
 nic_ipv4_address([{addr, {A,B,C,D}}|_]) ->
   inet_parse:ntoa({A,B,C,D});
@@ -373,9 +373,9 @@ stringify_error({error, Term}) ->
     {error, lists:flatten(io_lib:format("~p", [Term]))}.
 
 -spec maybe_backend_configured(BackendConfigKey :: atom(),
-                               ClusterFormationUndefinedFun :: fun(() -> {ok, term()} | ok),
-                               BackendUndefinedFun :: fun(() -> {ok, term()} | ok),
-                               ConfiguredFun :: fun((list()) -> {ok, term()})) -> {ok, term()}.
+                               ClusterFormationUndefinedFun :: fun(() -> term()),
+                               BackendUndefinedFun :: fun(() -> term()),
+                               ConfiguredFun :: fun((list()) -> term())) -> term().
 maybe_backend_configured(BackendConfigKey,
                          ClusterFormationUndefinedFun,
                          BackendUndefinedFun,
