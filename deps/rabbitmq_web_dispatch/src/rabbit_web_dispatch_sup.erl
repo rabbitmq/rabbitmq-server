@@ -116,11 +116,11 @@ protocol_config(Options) ->
 
 stream_handlers_config(Options) ->
     case lists:keyfind(compress, 1, Options) of
-        {compress, false} -> [rabbit_cowboy_stream_h, cowboy_stream_h];
+        {compress, false} -> [cowboy_telemetry_h, rabbit_cowboy_stream_h, cowboy_stream_h];
         %% Compress by default. Since 2.0 the compress option in cowboys
         %% has been replaced by the cowboy_compress_h handler
         %% Compress is not applied if data < 300 bytes
-        _ -> [rabbit_cowboy_stream_h, cowboy_compress_h, cowboy_stream_h]
+        _ -> [cowboy_telemetry_h, rabbit_cowboy_stream_h, cowboy_compress_h, cowboy_stream_h]
     end.
 
 check_error(Listener, Error) ->

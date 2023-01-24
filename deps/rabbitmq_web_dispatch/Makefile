@@ -7,8 +7,10 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = inets
-DEPS = rabbit_common rabbit cowboy
+DEPS = rabbit_common rabbit cowboy opentelemetry_cowboy
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+
+BUILD_DEPS += ranch grpcbox opentelemetry opentelemetry_api
 
 dep_cowboy = hex 2.0.0
 

@@ -20,13 +20,13 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent
+DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent opentelemetry_exporter
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
 LOCAL_DEPS += mnesia ranch ssl crypto public_key
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
 # See rabbitmq-components.mk.
-BUILD_DEPS += ranch
+BUILD_DEPS += ranch grpcbox opentelemetry opentelemetry_api
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

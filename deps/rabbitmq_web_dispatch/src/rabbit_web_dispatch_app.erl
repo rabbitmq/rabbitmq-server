@@ -13,6 +13,7 @@
 %% @spec start(_Type, _StartArgs) -> ServerRet
 %% @doc application start callback for rabbit_web_dispatch.
 start(_Type, _StartArgs) ->
+    opentelemetry_cowboy:setup(),
     rabbit_web_dispatch_sup:start_link().
 
 %% @spec stop(_State) -> ServerRet
