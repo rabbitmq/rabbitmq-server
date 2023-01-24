@@ -30,18 +30,8 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   end
 
   def with_valid_info_keys(args, valid_keys, fun) do
-<<<<<<< HEAD
     case validate_info_keys(args, valid_keys) do
       {:ok, info_keys} -> fun.(info_keys)
-=======
-    with_valid_info_keys(args, valid_keys, [], fun)
-  end
-
-  @spec with_valid_info_keys([charlist], [charlist], aliases, ([atom] -> any)) :: any
-  def with_valid_info_keys(args, valid_keys, aliases, fun) do
-    case validate_info_keys(args, valid_keys, aliases) do
-      {:ok, info_keys} -> fun.(:proplists.get_keys(info_keys))
->>>>>>> 3a3fc55c3a (Rework elixir dialyze (backport #6919) (backport #6991) (#6992))
       err -> err
     end
   end
