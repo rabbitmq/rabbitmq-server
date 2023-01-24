@@ -269,7 +269,7 @@ recover0() ->
            end),
     Policies = list(),
     OpPolicies = list_op(),
-    [rabbit_misc:execute_mnesia_transaction(
+    _ = [rabbit_misc:execute_mnesia_transaction(
        fun () ->
                mnesia:write(
                  rabbit_durable_exchange,
@@ -278,7 +278,7 @@ recover0() ->
                               operator_policy = match(Name, OpPolicies)}),
                  write)
        end) || X = #exchange{name = Name} <- Xs],
-    [begin
+    _ = [begin
          QName = amqqueue:get_name(Q0),
          Policy1 = match(QName, Policies),
          Q1 = amqqueue:set_policy(Q0, Policy1),
@@ -453,7 +453,7 @@ update_matched_objects(VHost, PolicyDef, ActingUser) ->
             rabbit_exchange, rabbit_durable_exchange],
     {XUpdateResults, QUpdateResults} = rabbit_misc:execute_mnesia_transaction(
         fun() ->
-            [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
+            _ = [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
             case catch {list(VHost), list_op(VHost)} of
                 {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
                     {[], []}; %% [2]
@@ -466,8 +466,8 @@ update_matched_objects(VHost, PolicyDef, ActingUser) ->
                         Q <- rabbit_amqqueue:list(VHost)]}
                 end
         end),
-    [catch maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser) || XRes <- XUpdateResults],
-    [catch maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser) || QRes <- QUpdateResults],
+    _ = [catch maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser) || XRes <- XUpdateResults],
+    _ = [catch maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser) || QRes <- QUpdateResults],
     ok.
 
 update_exchange(X = #exchange{name = XName,

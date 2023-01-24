@@ -120,7 +120,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
 
--spec add(amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
+-spec add(rabbit_amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
           non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
           rabbit_types:username(), state())
          -> state().
@@ -192,7 +192,7 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
 
--spec send_drained(amqqueue:name()) -> 'ok'.
+-spec send_drained(rabbit_amqqueue:name()) -> 'ok'.
 
 send_drained(QName) -> [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
                   ok.
@@ -395,7 +395,7 @@ deactivate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
     end.
 
--spec credit(amqqueue:name(), boolean(), integer(), boolean(), ch(),
+-spec credit(rabbit_amqqueue:name(), boolean(), integer(), boolean(), ch(),
              rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 
@@ -505,7 +505,7 @@ update_ch_record(C = #cr{consumer_count       = ConsumerCount,
         {true, 0, 0} -> ok = erase_ch_record(C);
         _            -> ok = store_ch_record(C)
     end,
-    C.
+    ok.
 
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C),

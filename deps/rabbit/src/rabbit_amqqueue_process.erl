@@ -261,7 +261,7 @@ recovery_barrier(BarrierPid) ->
 init_with_backing_queue_state(Q, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->
     Owner = amqqueue:get_exclusive_owner(Q),
-    case Owner of
+    _ = case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
     end,
@@ -387,14 +387,17 @@ code_change(_OldVsn, State, _Extra) ->
 maybe_notify_decorators(false, State) -> State;
 maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
 
-notify_decorators(Event, State) -> decorator_callback(qname(State), Event, []).
+notify_decorators(Event, State) ->
+    _ = decorator_callback(qname(State), Event, []),
+    ok.
 
 notify_decorators(State = #q{consumers           = Consumers,
                              backing_queue       = BQ,
                              backing_queue_state = BQS}) ->
     P = rabbit_queue_consumers:max_active_priority(Consumers),
-    decorator_callback(qname(State), consumer_state_changed,
-                       [P, BQ:is_empty(BQS)]).
+    _ = decorator_callback(qname(State), consumer_state_changed,
+                       [P, BQ:is_empty(BQS)]),
+    ok.
 
 decorator_callback(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
@@ -724,7 +727,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
             send_reject_publish(Delivery, Delivered, State);
         {true, 'reject-publish-dlx'} ->
             %% Publish to DLX
-            with_dlx(
+            _ = with_dlx(
               DLX,
               fun (X) ->
                       rabbit_global_counters:messages_dead_lettered(maxlen, rabbit_classic_queue,

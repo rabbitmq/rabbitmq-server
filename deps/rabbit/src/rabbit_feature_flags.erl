@@ -1515,7 +1515,7 @@ do_enable(FeatureName) ->
               Error ->
                   Error
           end,
-    case Ret of
+    _ = case Ret of
         ok -> ok;
         _  -> mark_as_enabled(FeatureName, false)
     end,
@@ -1830,7 +1830,7 @@ check_node_compatibility(Node, Timeout) ->
     %% communication between nodes because the code (which would
     %% break) is missing on those nodes. Therefore they should not be
     %% considered when determining compatibility.
-    exchange_feature_flags_from_unknown_apps(Node, Timeout),
+    _ = exchange_feature_flags_from_unknown_apps(Node, Timeout),
 
     %% FIXME:
     %% When we try to cluster two nodes, we get:
@@ -2032,7 +2032,7 @@ exchange_feature_flags_from_unknown_apps(Node, Timeout) ->
     %% The first step is to fetch feature flags from Erlang applications
     %% we don't know locally (they are loaded remotely, but not
     %% locally).
-    fetch_remote_feature_flags_from_apps_unknown_locally(Node, Timeout),
+    _ = fetch_remote_feature_flags_from_apps_unknown_locally(Node, Timeout),
 
     %% The next step is to do the opposite: push feature flags to remote
     %% nodes so they can register those from applications they don't
@@ -2079,7 +2079,7 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin) ->
 %% @private
 
 sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
-    verify_which_feature_flags_are_actually_enabled(),
+    _ = verify_which_feature_flags_are_actually_enabled(),
     case NodeIsVirgin of
         true ->
             FeatureNames = get_forced_feature_flag_names(),
@@ -2121,7 +2121,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
             ok
     end;
 sync_feature_flags_with_cluster(Nodes, _, Timeout) ->
-    verify_which_feature_flags_are_actually_enabled(),
+    _ = verify_which_feature_flags_are_actually_enabled(),
     RemoteNodes = Nodes -- [node()],
     sync_feature_flags_with_cluster1(RemoteNodes, Timeout).
 

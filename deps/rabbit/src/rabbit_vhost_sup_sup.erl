@@ -44,7 +44,7 @@ init([]) ->
     %% This assumes that a single vhost termination should not shut down nodes
     %% unless the operator opts in.
     RestartStrategy = vhost_restart_strategy(),
-    ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
+    _ = ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
     {ok, {{simple_one_for_one, 0, 5},
           [{rabbit_vhost, {rabbit_vhost_sup_wrapper, start_link, []},
             RestartStrategy, ?SUPERVISOR_WAIT, supervisor,
@@ -67,7 +67,7 @@ start_on_all_nodes(VHost) ->
     end.
 
 delete_on_all_nodes(VHost) ->
-    [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
+    _ = [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
     ok.
 
 stop_and_delete_vhost(VHost) ->

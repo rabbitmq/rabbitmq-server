@@ -440,7 +440,7 @@ emit_info(PidList, InfoItems, Ref, AggregatorPid) ->
 -spec refresh_config_local() -> 'ok'.
 
 refresh_config_local() ->
-    rabbit_misc:upmap(
+    _ = rabbit_misc:upmap(
       fun (C) ->
         try
           gen_server2:call(C, refresh_config, infinity)
@@ -454,7 +454,7 @@ refresh_config_local() ->
     ok.
 
 refresh_interceptors() ->
-    rabbit_misc:upmap(
+    _ = rabbit_misc:upmap(
       fun (C) ->
         try
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
@@ -779,7 +779,7 @@ handle_cast({queue_event, QRef, Evt},
             %% Do not nack the "rejected" messages.
             State2 = record_confirms(ConfirmMXs,
                                      State1#ch{unconfirmed = UC1}),
-            erase_queue_stats(QRef),
+            _ = erase_queue_stats(QRef),
             noreply_coalesce(
               State2#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
         {protocol_error, Type, Reason, ReasonArgs} ->
@@ -830,7 +830,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
             %% Do not nack the "rejected" messages.
             State2 = record_confirms(ConfirmMXs,
                                      State1#ch{unconfirmed = UC1}),
-            erase_queue_stats(QRef),
+            _ = erase_queue_stats(QRef),
             noreply_coalesce(
               State2#ch{queue_states = rabbit_queue_type:remove(QRef, State2#ch.queue_states)})
     end;
@@ -2236,7 +2236,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
             State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
-            case rabbit_event:stats_level(State, #ch.stats_timer) of
+            _ = case rabbit_event:stats_level(State, #ch.stats_timer) of
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
                     [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish)
@@ -2720,7 +2720,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
-                check_name('exchange', strip_cr_lf(ExchangeNameBin)),
+                _ = check_name('exchange', strip_cr_lf(ExchangeNameBin)),
                 AeKey = <<"alternate-exchange">>,
                 case rabbit_misc:r_arg(VHostPath, exchange, Args, AeKey) of
                     undefined -> ok;
@@ -2779,7 +2779,7 @@ handle_deliver0(ConsumerTag, AckRequired,
         _ ->
             ok = rabbit_writer:send_command(WriterPid, Deliver, Content)
     end,
-    case GCThreshold of
+    _ = case GCThreshold of
         undefined -> ok;
         _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
     end,

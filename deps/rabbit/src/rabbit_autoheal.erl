@@ -118,8 +118,9 @@ init() ->
     case State of
         {leader_waiting, Winner, _} ->
             rabbit_log:info(
-              "Autoheal: in progress, requesting report from ~p", [Winner]),
-            send(Winner, report_autoheal_status);
+              "Autoheal: in progress, requesting report from ~tp", [Winner]),
+            _ = send(Winner, report_autoheal_status),
+            ok;
         _ ->
             ok
     end,
@@ -128,8 +129,8 @@ init() ->
 maybe_start(not_healing) ->
     case enabled() of
         true  -> Leader = leader(),
-                 send(Leader, {request_start, node()}),
-                 rabbit_log:info("Autoheal request sent to ~p", [Leader]),
+                 _ = send(Leader, {request_start, node()}),
+                 rabbit_log:info("Autoheal request sent to ~tp", [Leader]),
                  not_healing;
         false -> not_healing
     end;
@@ -216,7 +217,7 @@ handle_msg({request_start, Node},
             case node() =:= Winner of
                 true  -> handle_msg({become_winner, Losers},
                                     not_healing, Partitions);
-                false -> send(Winner, {become_winner, Losers}),
+                false -> _ = send(Winner, {become_winner, Losers}),
                          {leader_waiting, Winner, Losers}
             end
     end;
@@ -272,7 +273,7 @@ handle_msg(report_autoheal_status, not_healing, _Partitions) ->
     %% winner). This happens when the leader is a loser and it just
     %% restarted. We are in the "not_healing" state, so the previous
     %% autoheal process ended: let's tell this to the leader.
-    send(leader(), {autoheal_finished, node()}),
+    _ = send(leader(), {autoheal_finished, node()}),
     not_healing;
 
 handle_msg(report_autoheal_status, State, _Partitions) ->
@@ -329,7 +330,7 @@ winner_finish(Notify) ->
     %% losing nodes before sending the "autoheal_safe_to_start" signal.
     wait_for_mnesia_shutdown(Notify),
     [{rabbit_outside_app_process, N} ! autoheal_safe_to_start || N <- Notify],
-    send(leader(), {autoheal_finished, node()}),
+    _ = send(leader(), {autoheal_finished, node()}),
     not_healing.
 
 %% This improves the previous implementation, but could still potentially enter an infinity
@@ -355,7 +356,7 @@ wait_for_supervisors(Monitors) ->
 		    AliveLosers = [Node || {_, Node} <- pmon:monitored(Monitors)],
 		    rabbit_log:info("Autoheal: mnesia in nodes ~p is still up, sending "
 				    "winner notification again to these ", [AliveLosers]),
-		    [send(L, {winner_is, node()}) || L <- AliveLosers],
+		    _ = [send(L, {winner_is, node()}) || L <- AliveLosers],
 		    wait_for_mnesia_shutdown(AliveLosers)
 	    end
     end.
@@ -449,7 +450,7 @@ stop_partition(Losers) ->
     %% give up.
     Down = Losers -- rabbit_node_monitor:alive_rabbit_nodes(Losers),
     case Down of
-        [] -> [send(L, {winner_is, node()}) || L <- Losers],
+        [] -> _ = [send(L, {winner_is, node()}) || L <- Losers],
               {winner_waiting, Losers, Losers};
         _  -> abort(Down, Losers)
     end.

@@ -331,7 +331,7 @@ update_cluster_nodes(DiscoveryNode) ->
             %% As in `check_consistency/0', we can safely delete the
             %% schema here, since it'll be replicated from the other
             %% nodes
-            mnesia:delete_schema([node()]),
+            _ = mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
             rabbit_log:info("Updating cluster nodes from ~p",
                             [DiscoveryNode]),
@@ -563,11 +563,11 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = create_schema();
         {[], true, disc} ->
             %% First disc node up
-            maybe_force_load(),
+            _ = maybe_force_load(),
             ok;
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
-            maybe_force_load(),
+            _ = maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:ensure_local_copies(NodeType)
     end,
@@ -590,7 +590,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
          end,
     %% `maybe_upgrade_local' restarts mnesia, so ram nodes will forget
     %% about the cluster
-    case NodeType of
+    _ = case NodeType of
         ram  -> start_mnesia(),
                 change_extra_db_nodes(ClusterNodes, false);
         disc -> ok
@@ -707,7 +707,8 @@ check_cluster_consistency() ->
                     %% disbanded, we're left with a node with no
                     %% mnesia data that will try to connect to offline
                     %% nodes.
-                    mnesia:delete_schema([node()])
+                    _ = mnesia:delete_schema([node()]),
+                    ok
             end,
             rabbit_node_monitor:write_cluster_status(Status);
         {error, not_found} ->
@@ -985,9 +986,9 @@ with_running_or_clean_mnesia(Fun) ->
             application:unset_env(mnesia, dir),
             SchemaLoc = application:get_env(mnesia, schema_location, opt_disc),
             application:set_env(mnesia, schema_location, ram),
-            mnesia:start(),
+            _ = mnesia:start(),
             Result = Fun(),
-            application:stop(mnesia),
+            _ = application:stop(mnesia),
             application:set_env(mnesia, dir, SavedMnesiaDir),
             application:set_env(mnesia, schema_location, SchemaLoc),
             Result

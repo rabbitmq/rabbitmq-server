@@ -199,6 +199,7 @@ xref()
 
 plt_apps = [
     "mnesia",
+    "runtime_tools",
 ] + EXTRA_APPS
 
 plt_apps.remove("rabbitmq_prelaunch")
@@ -207,13 +208,12 @@ plt(
     name = "base_plt",
     apps = plt_apps,
     plt = "//:base_plt",
-    deps = DEPS,
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 bats(

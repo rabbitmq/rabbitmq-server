@@ -201,7 +201,7 @@ die(Msg, Args) ->
     Str = rabbit_misc:format(
             "~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
     io:format(Str),
-    error_logger:logfile(close),
+    _ = error_logger:logfile(close),
     case application:get_env(rabbit, halt_on_upgrade_failure) of
         {ok, false} -> throw({upgrade_error, Str});
         _           -> halt(1) %% i.e. true or undefined
@@ -250,7 +250,7 @@ maybe_upgrade_local() ->
         {error, _} = Err               -> throw(Err);
         {ok, []}                       -> ensure_backup_removed(),
                                           ok;
-        {ok, Upgrades}                 -> mnesia:stop(),
+        {ok, Upgrades}                 -> _ = mnesia:stop(),
                                           ok = apply_upgrades(local, Upgrades,
                                                               fun () -> ok end),
                                           ok
@@ -282,7 +282,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
     ok = rabbit_file:lock_file(lock_filename()),
     info("~s upgrades: ~w to apply", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    Fun(),
+    _ = Fun(),
     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
     info("~s upgrades: All upgrades applied successfully", [Scope]),
     ok = rabbit_version:record_desired_for_scope(Scope),

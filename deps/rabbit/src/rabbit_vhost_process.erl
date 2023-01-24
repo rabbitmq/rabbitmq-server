@@ -43,7 +43,7 @@ init([VHost]) ->
         ok = rabbit_vhost:recover(VHost),
         rabbit_vhost_sup_sup:save_vhost_process(VHost, self()),
         Interval = interval(),
-        timer:send_interval(Interval, check_vhost),
+        _ = timer:send_interval(Interval, check_vhost),
         true = erlang:garbage_collect(),
         {ok, VHost}
     catch _:Reason:Stacktrace ->

@@ -199,7 +199,7 @@ do_add(Name, Metadata, ActingUser) ->
           fun (VHost1, true) ->
                   VHost1;
               (VHost1, false) ->
-                  [begin
+                  _ = [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
                     rabbit_log:debug("Will declare an exchange ~p", [Resource]),
                     _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)

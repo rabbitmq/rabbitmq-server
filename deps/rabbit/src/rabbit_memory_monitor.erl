@@ -163,7 +163,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state { timer = TRef }) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
