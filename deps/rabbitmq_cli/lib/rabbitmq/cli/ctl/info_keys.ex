@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
     with_valid_info_keys(args, valid_keys, [], fun)
   end
 
-  @spec with_valid_info_keys([charlist], [charlist], aliases, fun([atom])) :: any
+  @spec with_valid_info_keys([charlist], [charlist], aliases, ([atom] -> any)) :: any
   def with_valid_info_keys(args, valid_keys, aliases, fun) do
     case validate_info_keys(args, valid_keys, aliases) do
       {:ok, info_keys} -> fun.(:proplists.get_keys(info_keys))
