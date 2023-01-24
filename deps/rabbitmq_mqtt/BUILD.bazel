@@ -42,7 +42,7 @@ APP_ENV = """[
 	  ]"""
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//deps/rabbitmq_cli:erlang_app",
 ]
 
 DEPS = [
@@ -73,11 +73,12 @@ xref(
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    libs = ["//deps/rabbitmq_cli:elixir"],
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
     warnings_as_errors = False,
 )

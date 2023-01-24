@@ -309,7 +309,7 @@ def source_archive(
     source_tree(
         name = "source-tree",
         deps = plugins + [
-            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:rabbitmqctl"),
+            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:erlang_app"),
         ],
     )
 
