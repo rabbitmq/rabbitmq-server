@@ -34,21 +34,12 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({nodeup, Node}, State) ->
-<<<<<<< HEAD
-    Details = io_lib:format("Node ~s is up ", [Node]),
-    rabbit_peer_discovery_k8s:send_event("Normal", "NodeUp", Details),
-    {noreply, State};
-handle_info({nodedown, Node}, State) ->
-    Details = io_lib:format("Node ~s is down or disconnected ", [Node]),
-    rabbit_peer_discovery_k8s:send_event("Warning", "NodeDown", Details),
-=======
     Details = io_lib:format("Node ~ts is up ", [Node]),
     _ = rabbit_peer_discovery_k8s:send_event("Normal", "NodeUp", Details),
     {noreply, State};
 handle_info({nodedown, Node}, State) ->
     Details = io_lib:format("Node ~ts is down or disconnected ", [Node]),
     _ = rabbit_peer_discovery_k8s:send_event("Warning", "NodeDown", Details),
->>>>>>> 183a260290 (Fix all dialyzer warnings in peer discovery plugins)
     {noreply, State}.
 
 terminate(_Arg, _State) ->

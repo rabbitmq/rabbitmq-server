@@ -706,18 +706,6 @@ lock(TRef, SessionId, _, EndTime) ->
                         ok ->
                             lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
                         {error, Reason} ->
-<<<<<<< HEAD
-                            timer:cancel(TRef),
-                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~s",[Reason]))}
-                    end;
-                {error, Reason} ->
-                    timer:cancel(TRef),
-                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~s", [Reason]))}
-            end;
-        {error, Reason} ->
-            timer:cancel(TRef),
-            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~s", [Reason]))}
-=======
                             _ = timer:cancel(TRef),
                             {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
                     end;
@@ -728,7 +716,6 @@ lock(TRef, SessionId, _, EndTime) ->
         {error, Reason} ->
             _ = timer:cancel(TRef),
             {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~ts", [Reason]))}
->>>>>>> 183a260290 (Fix all dialyzer warnings in peer discovery plugins)
     end.
 
 %%--------------------------------------------------------------------
