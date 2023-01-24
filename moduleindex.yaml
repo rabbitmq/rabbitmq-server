@@ -321,6 +321,33 @@ prometheus:
 - prometheus_registry
 - prometheus_sup
 - prometheus_time
+proper:
+- proper
+- proper_arith
+- proper_array
+- proper_dict
+- proper_erlang_abstract_code
+- proper_fsm
+- proper_gb_sets
+- proper_gb_trees
+- proper_gen
+- proper_gen_next
+- proper_orddict
+- proper_ordsets
+- proper_prop_remover
+- proper_queue
+- proper_sa
+- proper_sets
+- proper_shrink
+- proper_statem
+- proper_symb
+- proper_target
+- proper_transformer
+- proper_types
+- proper_typeserver
+- proper_unicode
+- proper_unused_imports_remover
+- vararg
 quantile_estimator:
 - quantile
 - quantile_estimator

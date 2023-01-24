@@ -1,0 +1,432 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+report_warnings",
+            "+{warn_format,1}",
+            "+warn_export_vars",
+            "+warn_unused_vars",
+            "+warn_obsolete_guard",
+            "+warn_unused_import",
+            "+warn_missing_spec",
+            "+warn_untyped_record",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+report_warnings",
+            "+{warn_format,1}",
+            "+warn_export_vars",
+            "+warn_unused_vars",
+            "+warn_obsolete_guard",
+            "+warn_unused_import",
+            "+warn_missing_spec",
+            "+warn_untyped_record",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_proper_beam",
+    srcs = ["src/proper.erl"],
+    outs = ["ebin/proper.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_arith_beam",
+    srcs = ["src/proper_arith.erl"],
+    outs = ["ebin/proper_arith.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_array_beam",
+    srcs = ["src/proper_array.erl"],
+    outs = ["ebin/proper_array.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_dict_beam",
+    srcs = ["src/proper_dict.erl"],
+    outs = ["ebin/proper_dict.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_erlang_abstract_code_beam",
+    srcs = ["src/proper_erlang_abstract_code.erl"],
+    outs = ["ebin/proper_erlang_abstract_code.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_fsm_beam",
+    srcs = ["src/proper_fsm.erl"],
+    outs = ["ebin/proper_fsm.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_gb_sets_beam",
+    srcs = ["src/proper_gb_sets.erl"],
+    outs = ["ebin/proper_gb_sets.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_gb_trees_beam",
+    srcs = ["src/proper_gb_trees.erl"],
+    outs = ["ebin/proper_gb_trees.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_gen_beam",
+    srcs = ["src/proper_gen.erl"],
+    outs = ["ebin/proper_gen.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    beam = ["ebin/vararg.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_gen_next_beam",
+    srcs = ["src/proper_gen_next.erl"],
+    outs = ["ebin/proper_gen_next.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_orddict_beam",
+    srcs = ["src/proper_orddict.erl"],
+    outs = ["ebin/proper_orddict.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_ordsets_beam",
+    srcs = ["src/proper_ordsets.erl"],
+    outs = ["ebin/proper_ordsets.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_prop_remover_beam",
+    srcs = ["src/proper_prop_remover.erl"],
+    outs = ["ebin/proper_prop_remover.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_queue_beam",
+    srcs = ["src/proper_queue.erl"],
+    outs = ["ebin/proper_queue.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_sa_beam",
+    srcs = ["src/proper_sa.erl"],
+    outs = ["ebin/proper_sa.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    beam = ["ebin/proper_target.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_sets_beam",
+    srcs = ["src/proper_sets.erl"],
+    outs = ["ebin/proper_sets.beam"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_shrink_beam",
+    srcs = ["src/proper_shrink.erl"],
+    outs = ["ebin/proper_shrink.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_statem_beam",
+    srcs = ["src/proper_statem.erl"],
+    outs = ["ebin/proper_statem.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_symb_beam",
+    srcs = ["src/proper_symb.erl"],
+    outs = ["ebin/proper_symb.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_target_beam",
+    srcs = ["src/proper_target.erl"],
+    outs = ["ebin/proper_target.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_transformer_beam",
+    srcs = ["src/proper_transformer.erl"],
+    outs = ["ebin/proper_transformer.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_types_beam",
+    srcs = ["src/proper_types.erl"],
+    outs = ["ebin/proper_types.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_typeserver_beam",
+    srcs = ["src/proper_typeserver.erl"],
+    outs = ["ebin/proper_typeserver.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_unicode_beam",
+    srcs = ["src/proper_unicode.erl"],
+    outs = ["ebin/proper_unicode.beam"],
+    hdrs = ["include/proper_common.hrl"],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_proper_unused_imports_remover_beam",
+    srcs = ["src/proper_unused_imports_remover.erl"],
+    outs = ["ebin/proper_unused_imports_remover.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_vararg_beam",
+    srcs = ["src/vararg.erl"],
+    outs = ["ebin/vararg.beam"],
+    hdrs = [
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+    ],
+    app_name = "proper",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/proper.beam",
+        "ebin/proper_arith.beam",
+        "ebin/proper_array.beam",
+        "ebin/proper_dict.beam",
+        "ebin/proper_erlang_abstract_code.beam",
+        "ebin/proper_fsm.beam",
+        "ebin/proper_gb_sets.beam",
+        "ebin/proper_gb_trees.beam",
+        "ebin/proper_gen.beam",
+        "ebin/proper_gen_next.beam",
+        "ebin/proper_orddict.beam",
+        "ebin/proper_ordsets.beam",
+        "ebin/proper_prop_remover.beam",
+        "ebin/proper_queue.beam",
+        "ebin/proper_sa.beam",
+        "ebin/proper_sets.beam",
+        "ebin/proper_shrink.beam",
+        "ebin/proper_statem.beam",
+        "ebin/proper_symb.beam",
+        "ebin/proper_target.beam",
+        "ebin/proper_transformer.beam",
+        "ebin/proper_types.beam",
+        "ebin/proper_typeserver.beam",
+        "ebin/proper_unicode.beam",
+        "ebin/proper_unused_imports_remover.beam",
+        "ebin/vararg.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/proper.app.src",
+        "src/proper.erl",
+        "src/proper_arith.erl",
+        "src/proper_array.erl",
+        "src/proper_dict.erl",
+        "src/proper_erlang_abstract_code.erl",
+        "src/proper_fsm.erl",
+        "src/proper_gb_sets.erl",
+        "src/proper_gb_trees.erl",
+        "src/proper_gen.erl",
+        "src/proper_gen_next.erl",
+        "src/proper_orddict.erl",
+        "src/proper_ordsets.erl",
+        "src/proper_prop_remover.erl",
+        "src/proper_queue.erl",
+        "src/proper_sa.erl",
+        "src/proper_sets.erl",
+        "src/proper_shrink.erl",
+        "src/proper_statem.erl",
+        "src/proper_symb.erl",
+        "src/proper_target.erl",
+        "src/proper_transformer.erl",
+        "src/proper_types.erl",
+        "src/proper_typeserver.erl",
+        "src/proper_unicode.erl",
+        "src/proper_unused_imports_remover.erl",
+        "src/vararg.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/proper.hrl",
+        "include/proper_common.hrl",
+        "include/proper_internal.hrl",
+        "include/proper_param_adts.hrl",
+    ],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "proper",
+    beam_files = [":beam_files"],
+    extra_apps = ["compiler"],
+)
+
+alias(
+    name = "proper",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

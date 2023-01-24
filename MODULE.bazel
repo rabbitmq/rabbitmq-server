@@ -263,6 +263,7 @@ erlang_package.hex_package(
 erlang_package.git_package(
     branch = "master",
     repository = "manopapad/proper",
+    build_file = "@//bazel:BUILD.proper",
 )
 
 erlang_package.hex_package(

@@ -22,8 +22,3 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         tag = "v1.4.3",
         remote = "https://github.com/rabbitmq/osiris.git",
     )
-
-    github_erlang_app(
-        name = "proper",
-        org = "manopapad",
-    )
