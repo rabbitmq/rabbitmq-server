@@ -157,6 +157,12 @@ gun:
 - gun_tls
 - gun_ws
 - gun_ws_h
+inet_tcp_proxy_dist:
+- inet_tcp_proxy_dist
+- inet_tcp_proxy_dist_app
+- inet_tcp_proxy_dist_conn_sup
+- inet_tcp_proxy_dist_controller
+- inet_tcp_proxy_dist_sup
 jose:
 - jose_base
 - jose_base64
