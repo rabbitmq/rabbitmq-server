@@ -12,7 +12,8 @@
          process_packet/2, serialise/2,
          terminate/4, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
-         proto_version_tuple/1, throttle/3, format_status/1]).
+         proto_version_tuple/1, throttle/3, format_status/1,
+         update_trace/2]).
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
@@ -77,7 +78,8 @@
          delivery_flow :: flow | noflow,
          %% quorum queues and streams whose soft limit has been exceeded
          queues_soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
-         qos0_messages_dropped = 0 :: non_neg_integer()
+         qos0_messages_dropped = 0 :: non_neg_integer(),
+         trace_state
         }).
 
 -opaque state() :: #state{}.
@@ -347,9 +349,11 @@ process_connect(#mqtt_packet{
                                fun register_client/2,
                                fun start_keepalive/2,
                                fun notify_connection_created/1,
+                               fun init_trace/2,
                                fun handle_clean_sess_qos0/2,
                                fun handle_clean_sess_qos1/2,
-                               fun cache_subscriptions/2],
+                               fun cache_subscriptions/2
+                              ],
                               PacketConnect, State0) of
         {ok, SessPresent0, State1} ->
             {?CONNACK_ACCEPT, SessPresent0, State1};
@@ -466,6 +470,21 @@ notify_connection_created(#mqtt_packet_connect{}) ->
     rabbit_networking:register_non_amqp_connection(self()),
     self() ! connection_created,
     ok.
+
+init_trace(#mqtt_packet_connect{}, State = #state{conn_name = ConnName}) ->
+    {ok, update_trace(ConnName, State)}.
+
+-spec update_trace(binary(), state()) -> state().
+update_trace(ConnName0, State = #state{auth_state = #auth_state{vhost = VHost}}) ->
+    ConnName = case rabbit_trace:enabled(VHost) of
+                   true ->
+                       ConnName0;
+                   false ->
+                       %% We won't need conn_name. Use less memmory by setting to undefined.
+                       undefined
+               end,
+    State#state{trace_state = rabbit_trace:init(VHost),
+                conn_name = ConnName}.
 
 return_connack(?CONNACK_ACCEPT, S) ->
     {ok, S};
@@ -764,7 +783,7 @@ check_user_login(#{vhost := VHost,
                    username_bin := UsernameBin,
                    pass_bin := PassBin,
                    client_id := ClientId
-                  } = In, State0) ->
+                  } = In, State) ->
     AuthProps = case PassBin of
                     none ->
                         %% SSL user name provided.
@@ -778,11 +797,7 @@ check_user_login(#{vhost := VHost,
     case rabbit_access_control:check_user_login(
            UsernameBin, AuthProps) of
         {ok, User = #user{username = Username}} ->
-            notify_auth_result(user_authentication_success, Username, State0),
-            State = State0#state{
-                      %% We won't need conn_name anymore.
-                      %% Use less memmory by setting to undefined.
-                      conn_name = undefined},
+            notify_auth_result(user_authentication_success, Username, State),
             {ok, maps:put(user, User, In), State};
         {refused, Username, Msg, Args} ->
             ?LOG_ERROR(
@@ -790,7 +805,7 @@ check_user_login(#{vhost := VHost,
               "access refused for user '~s' in vhost '~s' "
               ++ Msg,
               [self(), Username, VHost] ++ Args),
-            notify_auth_result(user_authentication_failure, Username, State0),
+            notify_auth_result(user_authentication_failure, Username, State),
             {error, ?CONNACK_BAD_CREDENTIALS}
     end.
 
@@ -1187,8 +1202,11 @@ publish_to_queues(
             dup        = Dup,
             packet_id  = PacketId,
             payload    = Payload},
-  #state{exchange       = ExchangeName,
-         delivery_flow  = Flow} = State) ->
+  #state{exchange = ExchangeName,
+         delivery_flow = Flow,
+         conn_name = ConnName,
+         auth_state = #auth_state{username = Username},
+         trace_state = TraceState} = State) ->
     RoutingKey = mqtt_to_amqp(Topic),
     Confirm = Qos > ?QOS_0,
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
@@ -1222,6 +1240,7 @@ publish_to_queues(
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
             QNames = rabbit_exchange:route(Exchange, Delivery),
+            rabbit_trace:tap_in(BasicMessage, QNames, ConnName, Username, TraceState),
             deliver_to_queues(Delivery, QNames, State);
         {error, not_found} ->
             ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
@@ -1585,7 +1604,7 @@ maybe_publish_to_client(
   {QNameOrType, _QPid, QMsgId, Redelivered,
    #basic_message{
       routing_keys = [RoutingKey | _CcRoutes],
-      content = #content{payload_fragments_rev = FragmentsRev}}},
+      content = #content{payload_fragments_rev = FragmentsRev}}} = Msg,
   QoS, State0 = #state{send_fun = SendFun}) ->
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
     Packet =
@@ -1605,6 +1624,7 @@ maybe_publish_to_client(
                      topic_name = amqp_to_mqtt(RoutingKey)},
        payload = lists:reverse(FragmentsRev)},
     SendFun(Packet, State),
+    trace_tap_out(Msg, State),
     message_delivered(QNameOrType, Redelivered, QoS, State),
     State.
 
@@ -1638,6 +1658,23 @@ maybe_notify_sent(QName, QPid, #state{queue_states = QStates}) ->
             rabbit_amqqueue:notify_sent(QPid, self());
         _ ->
             ok
+    end.
+
+trace_tap_out(Msg = {#resource{}, _, _, _, _},
+              #state{conn_name = ConnName,
+                     trace_state = TraceState,
+                     auth_state = #auth_state{username = Username}}) ->
+    rabbit_trace:tap_out(Msg, ConnName, Username, TraceState);
+trace_tap_out(Msg0 = {?QUEUE_TYPE_QOS_0, _, _, _, _},
+              State = #state{trace_state = TraceState}) ->
+    case rabbit_trace:enabled(TraceState) of
+        false ->
+            ok;
+        true ->
+            %% Pay penalty of creating queue name only if tracing is enabled.
+            QName = queue_name(?QOS_0, State),
+            Msg = setelement(1, Msg0, QName),
+            trace_tap_out(Msg, State)
     end.
 
 publish_to_queues_with_checks(

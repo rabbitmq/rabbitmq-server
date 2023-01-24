@@ -177,6 +177,12 @@ websocket_info({'$gen_cast', {force_event_refresh, Ref}}, State0) ->
     rabbit_event:notify(connection_created, Infos, Ref),
     State = rabbit_event:init_stats_timer(State0, #state.stats_timer),
     {[], State, hibernate};
+websocket_info({'$gen_cast', refresh_config},
+               State0 = #state{proc_state = PState0,
+                               conn_name = ConnName}) ->
+    PState = rabbit_mqtt_processor:update_trace(ConnName, PState0),
+    State = State0#state{proc_state = PState},
+    {[], State, hibernate};
 websocket_info({keepalive, Req}, State = #state{keepalive = KState0,
                                                 conn_name = ConnName}) ->
     case rabbit_mqtt_keepalive:handle(Req, KState0) of

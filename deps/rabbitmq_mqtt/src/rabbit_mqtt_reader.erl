@@ -148,6 +148,11 @@ handle_cast({force_event_refresh, Ref}, State0) ->
     State = rabbit_event:init_stats_timer(State0, #state.stats_timer),
     {noreply, State, ?HIBERNATE_AFTER};
 
+handle_cast(refresh_config, State = #state{proc_state = PState0,
+                                           conn_name = ConnName}) ->
+    PState = rabbit_mqtt_processor:update_trace(ConnName, PState0),
+    {noreply, pstate(State, PState), ?HIBERNATE_AFTER};
+
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 

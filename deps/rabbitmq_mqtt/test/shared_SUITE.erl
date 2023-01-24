@@ -91,6 +91,7 @@ subgroups() ->
          ,clean_session_disconnect_client
          ,clean_session_kill_node
          ,rabbit_status_connection_count
+         ,trace
         ]}
       ]},
      {cluster_size_3, [],
@@ -1272,6 +1273,69 @@ rabbit_status_connection_count(Config) ->
     ?assertNotEqual(nomatch, string:find(String, "Connection count: 2")),
 
     ok = emqtt:disconnect(C).
+
+trace(Config) ->
+    Server = atom_to_binary(get_node_config(Config, 0, nodename)),
+    Topic = Payload = TraceQ = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    declare_queue(Ch, TraceQ, []),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue       = TraceQ,
+                                             exchange    = <<"amq.rabbitmq.trace">>,
+                                             routing_key = <<"#">>}),
+
+    %% We expect traced messages for connections created before and connections
+    %% created after tracing is enabled.
+    Pub = connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_on"]),
+    Sub = connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_subscriber">>, Config),
+
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+    {ok, _} = emqtt:publish(Pub, Topic, Payload, qos1),
+    ok = expect_publishes(Sub, Topic, [Payload]),
+
+    {#'basic.get_ok'{routing_key = <<"publish.amq.topic">>},
+     #amqp_msg{props = #'P_basic'{headers = PublishHeaders},
+               payload = Payload}} =
+    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false}),
+    ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
+                   <<"routing_keys">> := [Topic],
+                   <<"connection">> := <<"127.0.0.1:", _/binary>>,
+                   <<"node">> := Server,
+                   <<"vhost">> := <<"/">>,
+                   <<"channel">> := 0,
+                   <<"user">> := <<"guest">>,
+                   <<"properties">> := #{<<"delivery_mode">> := 2,
+                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1,
+                                                            <<"x-mqtt-dup">> := false}},
+                   <<"routed_queues">> := [<<"mqtt-subscription-trace_subscriberqos0">>]},
+                 rabbit_misc:amqp_table(PublishHeaders)),
+
+    {#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-trace_subscriberqos0">>},
+     #amqp_msg{props = #'P_basic'{headers = DeliverHeaders},
+               payload = Payload}} =
+    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false}),
+    ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
+                   <<"routing_keys">> := [Topic],
+                   <<"connection">> := <<"127.0.0.1:", _/binary>>,
+                   <<"node">> := Server,
+                   <<"vhost">> := <<"/">>,
+                   <<"channel">> := 0,
+                   <<"user">> := <<"guest">>,
+                   <<"properties">> := #{<<"delivery_mode">> := 2,
+                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1,
+                                                            <<"x-mqtt-dup">> := false}},
+                   <<"redelivered">> := 0},
+                 rabbit_misc:amqp_table(DeliverHeaders)),
+
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_off"]),
+    {ok, _} = emqtt:publish(Pub, Topic, Payload, qos1),
+    ok = expect_publishes(Sub, Topic, [Payload]),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false})),
+
+    delete_queue(Ch, TraceQ),
+    [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
 
 %% -------------------------------------------------------------------
 %% Internal helpers

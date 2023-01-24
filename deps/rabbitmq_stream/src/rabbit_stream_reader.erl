@@ -1140,7 +1140,10 @@ open(cast, {force_event_refresh, Ref},
         rabbit_event:init_stats_timer(Connection,
                                       #stream_connection.stats_timer),
     Connection2 = ensure_stats_timer(Connection1),
-    {keep_state, StatemData#statem_data{connection = Connection2}}.
+    {keep_state, StatemData#statem_data{connection = Connection2}};
+open(cast, refresh_config, _StatemData) ->
+    %% tracing not supported
+    keep_state_and_data.
 
 close_sent(enter, _OldState,
            #statem_data{config =
