@@ -53,8 +53,9 @@ help_section() ->
     {plugin, stream}.
 
 validate(Args, _) ->
+    ValidKeys = lists:map(fun atom_to_list/1, ?CONSUMER_INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?CONSUMER_INFO_ITEMS)
+                                                               ValidKeys)
     of
         {ok, _} ->
             ok;
