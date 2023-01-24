@@ -13,7 +13,7 @@ genrule(
     outs = ["open-test-logs.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 if [ -n "$(CT_LOGDIR)" ]; then
@@ -65,7 +65,7 @@ genrule(
     outs = ["open-remote-test-logs.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 if [ $$# -eq 0 ]; then
     echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
