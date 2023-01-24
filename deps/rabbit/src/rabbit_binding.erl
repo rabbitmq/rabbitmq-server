@@ -79,8 +79,8 @@ new(Src, RoutingKey, Dst, Arguments) ->
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
         fun () ->
-            mnesia:lock({table, rabbit_durable_route}, read),
-            mnesia:lock({table, rabbit_semi_durable_route}, write),
+            _ = mnesia:lock({table, rabbit_durable_route}, read),
+            _ = mnesia:lock({table, rabbit_semi_durable_route}, write),
             Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
             Fun = fun(Route) ->
                 mnesia:dirty_write(rabbit_semi_durable_route, Route)

@@ -28,7 +28,7 @@ new(Dir) ->
 recover(Dir) ->
     Path = filename:join(Dir, ?FILENAME),
     case ets:file2tab(Path) of
-        {ok, Tid}  -> file:delete(Path),
+        {ok, Tid}  -> _ = file:delete(Path),
                       {ok, #state { table = Tid, dir = Dir }};
         Error      -> Error
     end.

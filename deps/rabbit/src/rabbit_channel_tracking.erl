@@ -165,7 +165,7 @@ count_tracked_items_in({user, Username}) ->
 -spec clear_tracking_tables() -> ok.
 
 clear_tracking_tables() ->
-    clear_tracked_channel_tables_for_this_node(),
+    _ = clear_tracked_channel_tables_for_this_node(),
     ok.
 
 -spec shutdown_tracked_items(list(), term()) -> ok.

@@ -563,11 +563,11 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = create_schema();
         {[], true, disc} ->
             %% First disc node up
-            maybe_force_load(),
+            _ = maybe_force_load(),
             ok;
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
-            maybe_force_load(),
+            _ = maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:ensure_local_copies(NodeType)
     end,
@@ -590,7 +590,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
          end,
     %% `maybe_upgrade_local' restarts mnesia, so ram nodes will forget
     %% about the cluster
-    case NodeType of
+    _ = case NodeType of
         ram  -> start_mnesia(),
                 change_extra_db_nodes(ClusterNodes, false);
         disc -> ok
