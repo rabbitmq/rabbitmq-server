@@ -290,6 +290,23 @@ observer_cli:
 - observer_cli_process
 - observer_cli_store
 - observer_cli_system
+osiris:
+- osiris
+- osiris_app
+- osiris_bench
+- osiris_counters
+- osiris_ets
+- osiris_log
+- osiris_log_shared
+- osiris_replica
+- osiris_replica_reader
+- osiris_replica_reader_sup
+- osiris_retention
+- osiris_server_sup
+- osiris_sup
+- osiris_tracking
+- osiris_util
+- osiris_writer
 prometheus:
 - prometheus_mnesia_collector
 - prometheus_vm_dist_collector
