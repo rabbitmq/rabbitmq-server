@@ -1,0 +1,305 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_cow_base64url_beam",
+    srcs = ["src/cow_base64url.erl"],
+    outs = ["ebin/cow_base64url.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_cookie_beam",
+    srcs = ["src/cow_cookie.erl"],
+    outs = ["ebin/cow_cookie.beam"],
+    hdrs = ["include/cow_inline.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_date_beam",
+    srcs = ["src/cow_date.erl"],
+    outs = ["ebin/cow_date.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_hpack_beam",
+    srcs = ["src/cow_hpack.erl"],
+    outs = ["ebin/cow_hpack.beam"],
+    hdrs = ["src/cow_hpack_dec_huffman_lookup.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http_beam",
+    srcs = ["src/cow_http.erl"],
+    outs = ["ebin/cow_http.beam"],
+    hdrs = ["include/cow_inline.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http2_beam",
+    srcs = ["src/cow_http2.erl"],
+    outs = ["ebin/cow_http2.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http2_machine_beam",
+    srcs = ["src/cow_http2_machine.erl"],
+    outs = ["ebin/cow_http2_machine.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http_hd_beam",
+    srcs = ["src/cow_http_hd.erl"],
+    outs = ["ebin/cow_http_hd.beam"],
+    hdrs = [
+        "include/cow_inline.hrl",
+        "include/cow_parse.hrl",
+    ],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http_struct_hd_beam",
+    srcs = ["src/cow_http_struct_hd.erl"],
+    outs = ["ebin/cow_http_struct_hd.beam"],
+    hdrs = ["include/cow_parse.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_http_te_beam",
+    srcs = ["src/cow_http_te.erl"],
+    outs = ["ebin/cow_http_te.beam"],
+    hdrs = ["include/cow_parse.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_iolists_beam",
+    srcs = ["src/cow_iolists.erl"],
+    outs = ["ebin/cow_iolists.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_link_beam",
+    srcs = ["src/cow_link.erl"],
+    outs = ["ebin/cow_link.beam"],
+    hdrs = [
+        "include/cow_inline.hrl",
+        "include/cow_parse.hrl",
+    ],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_mimetypes_beam",
+    srcs = ["src/cow_mimetypes.erl"],
+    outs = ["ebin/cow_mimetypes.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_multipart_beam",
+    srcs = ["src/cow_multipart.erl"],
+    outs = ["ebin/cow_multipart.beam"],
+    hdrs = ["include/cow_inline.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_qs_beam",
+    srcs = ["src/cow_qs.erl"],
+    outs = ["ebin/cow_qs.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_spdy_beam",
+    srcs = ["src/cow_spdy.erl"],
+    outs = ["ebin/cow_spdy.beam"],
+    hdrs = ["src/cow_spdy.hrl"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_sse_beam",
+    srcs = ["src/cow_sse.erl"],
+    outs = ["ebin/cow_sse.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_uri_beam",
+    srcs = ["src/cow_uri.erl"],
+    outs = ["ebin/cow_uri.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_uri_template_beam",
+    srcs = ["src/cow_uri_template.erl"],
+    outs = ["ebin/cow_uri_template.beam"],
+    hdrs = [
+        "include/cow_inline.hrl",
+        "include/cow_parse.hrl",
+    ],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_cow_ws_beam",
+    srcs = ["src/cow_ws.erl"],
+    outs = ["ebin/cow_ws.beam"],
+    app_name = "cowlib",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/cow_base64url.beam",
+        "ebin/cow_cookie.beam",
+        "ebin/cow_date.beam",
+        "ebin/cow_hpack.beam",
+        "ebin/cow_http.beam",
+        "ebin/cow_http2.beam",
+        "ebin/cow_http2_machine.beam",
+        "ebin/cow_http_hd.beam",
+        "ebin/cow_http_struct_hd.beam",
+        "ebin/cow_http_te.beam",
+        "ebin/cow_iolists.beam",
+        "ebin/cow_link.beam",
+        "ebin/cow_mimetypes.beam",
+        "ebin/cow_multipart.beam",
+        "ebin/cow_qs.beam",
+        "ebin/cow_spdy.beam",
+        "ebin/cow_sse.beam",
+        "ebin/cow_uri.beam",
+        "ebin/cow_uri_template.beam",
+        "ebin/cow_ws.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/cow_base64url.erl",
+        "src/cow_cookie.erl",
+        "src/cow_date.erl",
+        "src/cow_hpack.erl",
+        "src/cow_http.erl",
+        "src/cow_http2.erl",
+        "src/cow_http2_machine.erl",
+        "src/cow_http_hd.erl",
+        "src/cow_http_struct_hd.erl",
+        "src/cow_http_te.erl",
+        "src/cow_iolists.erl",
+        "src/cow_link.erl",
+        "src/cow_mimetypes.erl",
+        "src/cow_multipart.erl",
+        "src/cow_qs.erl",
+        "src/cow_spdy.erl",
+        "src/cow_sse.erl",
+        "src/cow_uri.erl",
+        "src/cow_uri_template.erl",
+        "src/cow_ws.erl",
+        "src/cowlib.app.src",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/cow_hpack_dec_huffman_lookup.hrl",
+        "src/cow_spdy.hrl",
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/cow_inline.hrl",
+        "include/cow_parse.hrl",
+    ],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "cowlib",
+    beam_files = [":beam_files"],
+    extra_apps = ["crypto"],
+)
+
+alias(
+    name = "cowlib",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

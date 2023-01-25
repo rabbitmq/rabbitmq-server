@@ -1,0 +1,100 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_quantile_beam",
+    srcs = ["src/quantile.erl"],
+    outs = ["ebin/quantile.beam"],
+    app_name = "quantile_estimator",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_quantile_estimator_beam",
+    srcs = ["src/quantile_estimator.erl"],
+    outs = ["ebin/quantile_estimator.beam"],
+    hdrs = ["include/quantile_estimator.hrl"],
+    app_name = "quantile_estimator",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/quantile.beam",
+        "ebin/quantile_estimator.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/quantile.erl",
+        "src/quantile_estimator.app.src",
+        "src/quantile_estimator.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["include/quantile_estimator.hrl"],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "quantile_estimator",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "quantile_estimator",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

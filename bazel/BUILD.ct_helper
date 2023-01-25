@@ -1,0 +1,108 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_ct_helper_beam",
+    srcs = ["src/ct_helper.erl"],
+    outs = ["ebin/ct_helper.beam"],
+    app_name = "ct_helper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ct_helper_error_h_beam",
+    srcs = ["src/ct_helper_error_h.erl"],
+    outs = ["ebin/ct_helper_error_h.beam"],
+    app_name = "ct_helper",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_erl_make_certs_beam",
+    srcs = ["src/erl_make_certs.erl"],
+    outs = ["ebin/erl_make_certs.beam"],
+    app_name = "ct_helper",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/ct_helper.beam",
+        "ebin/ct_helper_error_h.beam",
+        "ebin/erl_make_certs.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/ct_helper.app.src",
+        "src/ct_helper.erl",
+        "src/ct_helper_error_h.erl",
+        "src/erl_make_certs.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "ct_helper",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "ct_helper",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
