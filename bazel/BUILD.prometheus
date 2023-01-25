@@ -1,0 +1,471 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_unused_vars",
+            "+warnings_as_errors",
+            "+warn_export_all",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_unused_function",
+            "+warn_bif_clash",
+            "+warn_unused_record",
+            "+warn_deprecated_function",
+            "+warn_obsolete_guard",
+            "+strict_validation",
+            "+warn_export_vars",
+            "+warn_exported_vars",
+            "+{platform_define,\"^(2|3)\",recent_otp}",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+warn_unused_vars",
+            "+warnings_as_errors",
+            "+warn_export_all",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_unused_function",
+            "+warn_bif_clash",
+            "+warn_unused_record",
+            "+warn_deprecated_function",
+            "+warn_obsolete_guard",
+            "+strict_validation",
+            "+warn_export_vars",
+            "+warn_exported_vars",
+            "+{platform_define,\"^(2|3)\",recent_otp}",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_mnesia_prometheus_mnesia_collector_beam",
+    srcs = ["src/collectors/mnesia/prometheus_mnesia_collector.erl"],
+    outs = ["ebin/collectors/mnesia/prometheus_mnesia_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_vm_prometheus_vm_dist_collector_beam",
+    srcs = ["src/collectors/vm/prometheus_vm_dist_collector.erl"],
+    outs = ["ebin/collectors/vm/prometheus_vm_dist_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_vm_prometheus_vm_memory_collector_beam",
+    srcs = ["src/collectors/vm/prometheus_vm_memory_collector.erl"],
+    outs = ["ebin/collectors/vm/prometheus_vm_memory_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_vm_prometheus_vm_msacc_collector_beam",
+    srcs = ["src/collectors/vm/prometheus_vm_msacc_collector.erl"],
+    outs = ["ebin/collectors/vm/prometheus_vm_msacc_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_vm_prometheus_vm_statistics_collector_beam",
+    srcs = ["src/collectors/vm/prometheus_vm_statistics_collector.erl"],
+    outs = ["ebin/collectors/vm/prometheus_vm_statistics_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_collectors_vm_prometheus_vm_system_info_collector_beam",
+    srcs = ["src/collectors/vm/prometheus_vm_system_info_collector.erl"],
+    outs = ["ebin/collectors/vm/prometheus_vm_system_info_collector.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_collector.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_contrib_prometheus_http_beam",
+    srcs = ["src/contrib/prometheus_http.erl"],
+    outs = ["ebin/contrib/prometheus_http.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_contrib_prometheus_mnesia_beam",
+    srcs = ["src/contrib/prometheus_mnesia.erl"],
+    outs = ["ebin/contrib/prometheus_mnesia.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_contrib_prometheus_test_instrumenter_beam",
+    srcs = ["src/contrib/prometheus_test_instrumenter.erl"],
+    outs = ["ebin/contrib/prometheus_test_instrumenter.beam"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_instrumenter.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_formats_prometheus_protobuf_format_beam",
+    srcs = ["src/formats/prometheus_protobuf_format.erl"],
+    outs = ["ebin/formats/prometheus_protobuf_format.beam"],
+    hdrs = [
+        "include/prometheus.hrl",
+        "include/prometheus_model.hrl",
+    ],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_format.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_formats_prometheus_text_format_beam",
+    srcs = ["src/formats/prometheus_text_format.erl"],
+    outs = ["ebin/formats/prometheus_text_format.beam"],
+    hdrs = ["include/prometheus_model.hrl"],
+    app_name = "prometheus",
+    beam = ["ebin/prometheus_format.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_boolean_beam",
+    srcs = ["src/metrics/prometheus_boolean.erl"],
+    outs = ["ebin/metrics/prometheus_boolean.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_counter_beam",
+    srcs = ["src/metrics/prometheus_counter.erl"],
+    outs = ["ebin/metrics/prometheus_counter.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_gauge_beam",
+    srcs = ["src/metrics/prometheus_gauge.erl"],
+    outs = ["ebin/metrics/prometheus_gauge.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_histogram_beam",
+    srcs = ["src/metrics/prometheus_histogram.erl"],
+    outs = ["ebin/metrics/prometheus_histogram.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_quantile_summary_beam",
+    srcs = ["src/metrics/prometheus_quantile_summary.erl"],
+    outs = ["ebin/metrics/prometheus_quantile_summary.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+    deps = ["@quantile_estimator//:erlang_app"],
+)
+
+erlang_bytecode(
+    name = "ebin_metrics_prometheus_summary_beam",
+    srcs = ["src/metrics/prometheus_summary.erl"],
+    outs = ["ebin/metrics/prometheus_summary.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    beam = [
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_metric.beam",
+    ],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_model_prometheus_model_beam",
+    srcs = ["src/model/prometheus_model.erl"],
+    outs = ["ebin/model/prometheus_model.beam"],
+    hdrs = ["include/prometheus_model.hrl"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_model_prometheus_model_helpers_beam",
+    srcs = ["src/model/prometheus_model_helpers.erl"],
+    outs = ["ebin/model/prometheus_model_helpers.beam"],
+    hdrs = ["include/prometheus_model.hrl"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_beam",
+    srcs = ["src/prometheus.erl"],
+    outs = ["ebin/prometheus.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_buckets_beam",
+    srcs = ["src/prometheus_buckets.erl"],
+    outs = ["ebin/prometheus_buckets.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_collector_beam",
+    srcs = ["src/prometheus_collector.erl"],
+    outs = ["ebin/prometheus_collector.beam"],
+    hdrs = [
+        "include/prometheus.hrl",
+        "include/prometheus_model.hrl",
+    ],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_format_beam",
+    srcs = ["src/prometheus_format.erl"],
+    outs = ["ebin/prometheus_format.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_instrumenter_beam",
+    srcs = ["src/prometheus_instrumenter.erl"],
+    outs = ["ebin/prometheus_instrumenter.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_metric_beam",
+    srcs = ["src/prometheus_metric.erl"],
+    outs = ["ebin/prometheus_metric.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_metric_spec_beam",
+    srcs = ["src/prometheus_metric_spec.erl"],
+    outs = ["ebin/prometheus_metric_spec.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_misc_beam",
+    srcs = ["src/prometheus_misc.erl"],
+    outs = ["ebin/prometheus_misc.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_registry_beam",
+    srcs = ["src/prometheus_registry.erl"],
+    outs = ["ebin/prometheus_registry.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_sup_beam",
+    srcs = ["src/prometheus_sup.erl"],
+    outs = ["ebin/prometheus_sup.beam"],
+    hdrs = ["include/prometheus.hrl"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_prometheus_time_beam",
+    srcs = ["src/prometheus_time.erl"],
+    outs = ["ebin/prometheus_time.beam"],
+    app_name = "prometheus",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/collectors/mnesia/prometheus_mnesia_collector.beam",
+        "ebin/collectors/vm/prometheus_vm_dist_collector.beam",
+        "ebin/collectors/vm/prometheus_vm_memory_collector.beam",
+        "ebin/collectors/vm/prometheus_vm_msacc_collector.beam",
+        "ebin/collectors/vm/prometheus_vm_statistics_collector.beam",
+        "ebin/collectors/vm/prometheus_vm_system_info_collector.beam",
+        "ebin/contrib/prometheus_http.beam",
+        "ebin/contrib/prometheus_mnesia.beam",
+        "ebin/contrib/prometheus_test_instrumenter.beam",
+        "ebin/formats/prometheus_protobuf_format.beam",
+        "ebin/formats/prometheus_text_format.beam",
+        "ebin/metrics/prometheus_boolean.beam",
+        "ebin/metrics/prometheus_counter.beam",
+        "ebin/metrics/prometheus_gauge.beam",
+        "ebin/metrics/prometheus_histogram.beam",
+        "ebin/metrics/prometheus_quantile_summary.beam",
+        "ebin/metrics/prometheus_summary.beam",
+        "ebin/model/prometheus_model.beam",
+        "ebin/model/prometheus_model_helpers.beam",
+        "ebin/prometheus.beam",
+        "ebin/prometheus_buckets.beam",
+        "ebin/prometheus_collector.beam",
+        "ebin/prometheus_format.beam",
+        "ebin/prometheus_instrumenter.beam",
+        "ebin/prometheus_metric.beam",
+        "ebin/prometheus_metric_spec.beam",
+        "ebin/prometheus_misc.beam",
+        "ebin/prometheus_registry.beam",
+        "ebin/prometheus_sup.beam",
+        "ebin/prometheus_time.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/collectors/mnesia/prometheus_mnesia_collector.erl",
+        "src/collectors/vm/prometheus_vm_dist_collector.erl",
+        "src/collectors/vm/prometheus_vm_memory_collector.erl",
+        "src/collectors/vm/prometheus_vm_msacc_collector.erl",
+        "src/collectors/vm/prometheus_vm_statistics_collector.erl",
+        "src/collectors/vm/prometheus_vm_system_info_collector.erl",
+        "src/contrib/prometheus_http.erl",
+        "src/contrib/prometheus_mnesia.erl",
+        "src/contrib/prometheus_test_instrumenter.erl",
+        "src/formats/prometheus_protobuf_format.erl",
+        "src/formats/prometheus_text_format.erl",
+        "src/metrics/prometheus_boolean.erl",
+        "src/metrics/prometheus_counter.erl",
+        "src/metrics/prometheus_gauge.erl",
+        "src/metrics/prometheus_histogram.erl",
+        "src/metrics/prometheus_quantile_summary.erl",
+        "src/metrics/prometheus_summary.erl",
+        "src/model/prometheus_model.erl",
+        "src/model/prometheus_model_helpers.erl",
+        "src/prometheus.app.src",
+        "src/prometheus.erl",
+        "src/prometheus_buckets.erl",
+        "src/prometheus_collector.erl",
+        "src/prometheus_format.erl",
+        "src/prometheus_instrumenter.erl",
+        "src/prometheus_metric.erl",
+        "src/prometheus_metric_spec.erl",
+        "src/prometheus_misc.erl",
+        "src/prometheus_registry.erl",
+        "src/prometheus_sup.erl",
+        "src/prometheus_time.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/prometheus.hrl",
+        "include/prometheus_model.hrl",
+    ],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "prometheus",
+    beam_files = [":beam_files"],
+    deps = ["@quantile_estimator//:erlang_app"],
+)
+
+alias(
+    name = "prometheus",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,208 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_gun_beam",
+    srcs = ["src/gun.erl"],
+    outs = ["ebin/gun.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_app_beam",
+    srcs = ["src/gun_app.erl"],
+    outs = ["ebin/gun_app.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_content_handler_beam",
+    srcs = ["src/gun_content_handler.erl"],
+    outs = ["ebin/gun_content_handler.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_data_h_beam",
+    srcs = ["src/gun_data_h.erl"],
+    outs = ["ebin/gun_data_h.beam"],
+    app_name = "gun",
+    beam = ["ebin/gun_content_handler.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_http_beam",
+    srcs = ["src/gun_http.erl"],
+    outs = ["ebin/gun_http.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_http2_beam",
+    srcs = ["src/gun_http2.erl"],
+    outs = ["ebin/gun_http2.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_sse_h_beam",
+    srcs = ["src/gun_sse_h.erl"],
+    outs = ["ebin/gun_sse_h.beam"],
+    app_name = "gun",
+    beam = ["ebin/gun_content_handler.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_sup_beam",
+    srcs = ["src/gun_sup.erl"],
+    outs = ["ebin/gun_sup.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_tcp_beam",
+    srcs = ["src/gun_tcp.erl"],
+    outs = ["ebin/gun_tcp.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_tls_beam",
+    srcs = ["src/gun_tls.erl"],
+    outs = ["ebin/gun_tls.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_ws_beam",
+    srcs = ["src/gun_ws.erl"],
+    outs = ["ebin/gun_ws.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_gun_ws_h_beam",
+    srcs = ["src/gun_ws_h.erl"],
+    outs = ["ebin/gun_ws_h.beam"],
+    app_name = "gun",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/gun.beam",
+        "ebin/gun_app.beam",
+        "ebin/gun_content_handler.beam",
+        "ebin/gun_data_h.beam",
+        "ebin/gun_http.beam",
+        "ebin/gun_http2.beam",
+        "ebin/gun_sse_h.beam",
+        "ebin/gun_sup.beam",
+        "ebin/gun_tcp.beam",
+        "ebin/gun_tls.beam",
+        "ebin/gun_ws.beam",
+        "ebin/gun_ws_h.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/gun.app.src",
+        "src/gun.erl",
+        "src/gun_app.erl",
+        "src/gun_content_handler.erl",
+        "src/gun_data_h.erl",
+        "src/gun_http.erl",
+        "src/gun_http2.erl",
+        "src/gun_sse_h.erl",
+        "src/gun_sup.erl",
+        "src/gun_tcp.erl",
+        "src/gun_tls.erl",
+        "src/gun_ws.erl",
+        "src/gun_ws_h.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "gun",
+    beam_files = [":beam_files"],
+    extra_apps = ["ssl"],
+    deps = ["@cowlib//:erlang_app"],
+)
+
+alias(
+    name = "gun",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

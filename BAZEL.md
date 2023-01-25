@@ -59,6 +59,17 @@ Note: This takes quite some time on a single machine.
 
 `bazel test //deps/rabbit:lazy_queue_SUITE`
 
+## Add/update an external dependency from hex.pm
+
+1. `bazel run gazelle -- update-repos --verbose --build_files_dir=bazel hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
+  ~~`bazel run gazelle-update-repos -- -args hex.pm/accept@0.3.5`~~
+1. `git checkout WORKSPACE` to reset the workspace file
+1. Add/update the entry in MODULE.bazel
+
+## Add/update an external dependency from github
+
+`bazel run gazelle -- update-repos --verbose --build_files_dir=bazel github.com/extend/ct_helper`
+
 ## Additional Useful Commands
 
 - Format all bazel files consistently (requires [buildifier](https://github.com/bazelbuild/buildtools/blob/master/buildifier/README.md)):
