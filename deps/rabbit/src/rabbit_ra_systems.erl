@@ -8,13 +8,17 @@
 -module(rabbit_ra_systems).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([setup/0,
          setup/1,
          all_ra_systems/0,
-         ensure_ra_system_started/1]).
+         ensure_ra_system_started/1,
+         ensure_all_running/0, ensure_running/1,
+         ensure_none_running/0, ensure_not_running/1,
+         stop_all/0, stop/1]).
 
 -type ra_system_name() :: atom().
 
@@ -98,3 +102,24 @@ get_config(coordination = RaSystem) ->
 
 get_default_config() ->
     ra_system:default_config().
+
+ensure_all_running() ->
+    lists:foreach(fun ensure_running/1, all_ra_systems()).
+
+ensure_running(System) ->
+    Overview = ra:overview(System),
+    ?assert(is_map(Overview)).
+
+ensure_none_running() ->
+    lists:foreach(fun ensure_not_running/1, all_ra_systems()).
+
+ensure_not_running(System) ->
+    Overview = ra:overview(System),
+    ?assertEqual(system_not_started, Overview).
+
+stop_all() ->
+    lists:foreach(fun stop/1, all_ra_systems()),
+    ensure_none_running().
+
+stop(System) ->
+    ra_system:stop(System).

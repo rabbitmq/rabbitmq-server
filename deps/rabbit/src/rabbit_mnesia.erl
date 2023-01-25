@@ -272,10 +272,13 @@ reset() ->
 
 force_reset() ->
     ensure_mnesia_not_running(),
+    rabbit_ra_systems:stop_all(),
     rabbit_log:info("Resetting Rabbit forcefully", []),
     wipe().
 
 reset_gracefully() ->
+    ensure_mnesia_not_running(),
+    rabbit_ra_systems:stop_all(),
     AllNodes = cluster_nodes(all),
     %% Reconnecting so that we will get an up to date nodes.  We don't
     %% need to check for consistency because we are resetting.
