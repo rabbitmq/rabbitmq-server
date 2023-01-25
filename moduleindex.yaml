@@ -202,7 +202,6 @@ jose:
 - jose_json_poison
 - jose_json_poison_compat_encoder
 - jose_json_poison_lexical_encoder
-- jose_json_thoas
 - jose_json_unsupported
 - jose_jwa
 - jose_jwa_aes
@@ -271,6 +270,16 @@ jose:
 - jose_jws_alg_rsa_pkcs1_v1_5
 - jose_jws_alg_rsa_pss
 - jose_jwt
+jsx:
+- jsx
+- jsx_config
+- jsx_consult
+- jsx_decoder
+- jsx_encoder
+- jsx_parser
+- jsx_to_json
+- jsx_to_term
+- jsx_verify
 meck:
 - meck
 - meck_args_matcher
@@ -469,7 +478,3 @@ systemd:
 - systemd_socket
 - systemd_sup
 - systemd_watchdog
-thoas:
-- thoas
-- thoas_decode
-- thoas_encode
