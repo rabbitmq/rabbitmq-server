@@ -133,6 +133,7 @@ to_mqtt(T0) ->
     T2 = string:replace(T1, ".", "/", all),
     erlang:iolist_to_binary(T2).
 
+-spec env(atom()) -> any().
 env(Key) ->
     case application:get_env(?APP_NAME, Key) of
         {ok, Val} -> coerce_env_value(Key, Val);
@@ -145,6 +146,8 @@ coerce_env_value(exchange, Val)     -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(vhost, Val)        -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(_, Val)            -> Val.
 
+-spec table_lookup(rabbit_framing:amqp_table() | undefined,  binary()) ->
+    tuple() | undefined.
 table_lookup(undefined, _Key) ->
     undefined;
 table_lookup(Table, Key) ->
@@ -156,12 +159,13 @@ vhost_name_to_dir_name(VHost, Suffix) ->
     <<Num:128>> = erlang:md5(VHost),
     "mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num]) ++ Suffix.
 
+-spec path_for(file:name_all(), rabbit_types:vhost()) -> file:filename_all().
 path_for(Dir, VHost) ->
   filename:join(Dir, vhost_name_to_dir_name(VHost)).
 
+-spec path_for(file:name_all(), rabbit_types:vhost(), string()) -> file:filename_all().
 path_for(Dir, VHost, Suffix) ->
   filename:join(Dir, vhost_name_to_dir_name(VHost, Suffix)).
-
 
 -spec vhost_name_to_table_name(rabbit_types:vhost()) ->
     atom().

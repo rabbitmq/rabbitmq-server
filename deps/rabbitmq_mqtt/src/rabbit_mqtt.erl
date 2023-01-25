@@ -41,6 +41,7 @@ start(normal, []) ->
 stop(_) ->
     rabbit_mqtt_sup:stop_listeners().
 
+-spec emit_connection_info_all([node()], rabbit_types:info_keys(), reference(), pid()) -> term().
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
@@ -57,6 +58,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
             rabbit_control_misc:await_emitters_termination(Pids)
     end.
 
+-spec emit_connection_info_local(rabbit_types:info_keys(), reference(), pid()) -> ok.
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
     LocalPids = local_connection_pids(),
     emit_connection_info(Items, Ref, AggregatorPid, LocalPids).

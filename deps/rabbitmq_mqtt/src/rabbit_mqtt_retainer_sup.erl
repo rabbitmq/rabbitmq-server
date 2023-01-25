@@ -17,6 +17,7 @@
 start_link(SupName) ->
     supervisor:start_link(SupName, ?MODULE, []).
 
+-spec child_for_vhost(rabbit_types:vhost()) -> pid().
 child_for_vhost(VHost) when is_binary(VHost) ->
   case rabbit_mqtt_retainer_sup:start_child(VHost) of
     {ok, Pid}                       -> Pid;

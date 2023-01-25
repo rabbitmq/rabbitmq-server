@@ -1329,9 +1329,13 @@ serialise_and_send_to_client(Packet, #state{cfg = #cfg{proto_ver = ProtoVer,
                          [Sock, Error, Packet#mqtt_packet.fixed, Packet#mqtt_packet.variable])
     end.
 
+-spec serialise(#mqtt_packet{}, state()) ->
+    iodata().
 serialise(Packet, #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_mqtt_packet:serialise(Packet, ProtoVer).
 
+-spec terminate(boolean(), binary(), atom(), state()) ->
+    ok.
 terminate(SendWill, ConnName, ProtoFamily, State) ->
     maybe_send_will(SendWill, ConnName, State),
     Infos = [{name, ConnName},
@@ -1427,11 +1431,15 @@ delete_queue(QName, Username) ->
               ok
       end).
 
+-spec handle_pre_hibernate() -> ok.
 handle_pre_hibernate() ->
     erase(permission_cache),
     erase(topic_permission_cache),
     ok.
 
+-spec handle_ra_event(register_timeout
+| {applied, [{reference(), ok}]}
+| {not_leader, term(), reference()}, state()) -> state().
 handle_ra_event({applied, [{Corr, ok}]},
                 State = #state{register_state = {pending, Corr}}) ->
     %% success case - command was applied transition into registered state
@@ -1796,6 +1804,7 @@ throttle(Conserve, Connected, #state{queues_soft_limit_exceeded = QSLE,
     not sets:is_empty(QSLE) orelse
     credit_flow:blocked().
 
+-spec info(rabbit_types:info_key(), state()) -> any().
 info(host, #state{cfg = #cfg{host = Val}}) -> Val;
 info(port, #state{cfg = #cfg{port = Val}}) -> Val;
 info(peer_host, #state{cfg = #cfg{peer_host = Val}}) -> Val;

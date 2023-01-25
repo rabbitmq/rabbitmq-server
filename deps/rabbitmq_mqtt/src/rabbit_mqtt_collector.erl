@@ -36,6 +36,7 @@ register(ServerId, ClientId, Pid) ->
     erlang:send_after(5000, self(), {ra_event, undefined, register_timeout}),
     {ok, Corr}.
 
+-spec unregister(binary(), pid()) -> ok.
 unregister(ClientId, Pid) ->
     {ClusterName, _} = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
@@ -49,6 +50,7 @@ unregister(ClientId, Pid) ->
 list_pids() ->
     list(fun(#machine_state{pids = Pids}) -> maps:keys(Pids) end).
 
+-spec list() -> term().
 list() ->
     list(fun(#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end).
 
@@ -76,6 +78,7 @@ list(QF) ->
             end
     end.
 
+-spec leave(binary()) ->  ok | timeout | nodedown.
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),
     ServerId = mqtt_node:server_id(),

@@ -28,17 +28,19 @@
          upgrade/5,
          takeover/7]).
 
+-type option(T) :: undefined | T.
+
 -record(state, {
-          socket,
+          socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
           parse_state = rabbit_mqtt_packet:initial_state() :: rabbit_mqtt_packet:state(),
           proc_state :: undefined | rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
-          stats_timer :: undefined | rabbit_event:state(),
+          stats_timer :: option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-          conn_name :: undefined | binary(),
+          conn_name :: option(binary()),
           received_connect_packet = false :: boolean()
-         }).
+        }).
 
 -type state() :: #state{}.
 
@@ -66,10 +68,6 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, {HandlerState, 
                               {Handler, {HandlerState#state{socket = Sock}, PeerAddr}}).
 
 %% cowboy_websocket
--spec init(Req, any()) ->
-    {ok | module(), Req, any()} |
-    {module(), Req, any(), any()}
-      when Req::cowboy_req:req().
 init(Req, Opts) ->
     case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
         undefined ->
@@ -225,7 +223,6 @@ websocket_info(Msg, State) ->
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
     {[], State, hibernate}.
 
--spec terminate(any(), cowboy_req:req(), any()) -> ok.
 terminate(_Reason, _Req, #state{proc_state = undefined}) ->
     ok;
 terminate(Reason, Request, #state{} = State) ->

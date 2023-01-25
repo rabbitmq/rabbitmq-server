@@ -70,6 +70,7 @@ init([{Listeners, SslListeners0}]) ->
         )
       ]}}.
 
+-spec stop_listeners() -> ok.
 stop_listeners() ->
     _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
     _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
