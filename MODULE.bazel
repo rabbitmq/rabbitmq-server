@@ -256,8 +256,6 @@ sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Ma
 echo "Injecting ${VERSION} into BUILD.bazel..."
 sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
 """,
-        """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-""",
     ],
     repository = "rabbitmq/osiris",
     tag = "v1.4.3",
