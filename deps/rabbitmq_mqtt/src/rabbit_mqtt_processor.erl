@@ -53,7 +53,7 @@
          ssl_login_name :: none | binary(),
          retainer_pid :: option(pid()),
          delivery_flow :: flow | noflow,
-         trace_state,
+         trace_state :: option(rabbit_trace:state()),
          prefetch :: non_neg_integer(),
          client_id :: option(binary()),
          conn_name :: option(binary()),

@@ -30,13 +30,13 @@
 
 -record(state, {
           socket,
-          parse_state,
-          proc_state,
+          parse_state = rabbit_mqtt_packet:initial_state() :: rabbit_mqtt_packet:state(),
+          proc_state :: undefined | rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
-          stats_timer,
+          stats_timer :: undefined | rabbit_event:state(),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-          conn_name,
+          conn_name :: undefined | binary(),
           received_connect_packet = false :: boolean()
          }).
 
@@ -84,8 +84,7 @@ init(Req, Opts) ->
                 true ->
                     {?MODULE,
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     {#state{parse_state = rabbit_mqtt_packet:initial_state(),
-                             socket = maps:get(proxy_header, Req, undefined)},
+                     {#state{socket = maps:get(proxy_header, Req, undefined)},
                       PeerAddr},
                      WsOpts}
             end
@@ -275,10 +274,9 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
         {ok, Packet, Rest} ->
             case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
                 {ok, ProcState1} ->
-                    PS = rabbit_mqtt_packet:initial_state(),
                     handle_data1(
                       Rest,
-                      State#state{parse_state = PS,
+                      State#state{parse_state = rabbit_mqtt_packet:initial_state(),
                                   proc_state = ProcState1});
                 {error, Reason, _} ->
                     stop_mqtt_protocol_error(State, Reason, ConnName);

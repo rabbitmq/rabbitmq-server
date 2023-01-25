@@ -82,7 +82,7 @@
          heartbeater :: any(),
          client_properties = #{} :: #{binary() => binary()},
          monitors = #{} :: #{reference() => stream()},
-         stats_timer :: undefined | reference(),
+         stats_timer :: undefined | rabbit_event:state(),
          resource_alarm :: boolean(),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)

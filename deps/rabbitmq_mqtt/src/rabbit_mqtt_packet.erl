@@ -13,7 +13,7 @@
 -export([parse/2, initial_state/0, serialise/2]).
 -export_type([state/0]).
 
--opaque state() :: 'none' | {more, any()}.
+-opaque state() :: none | fun().
 
 -define(RESERVED, 0).
 -define(MAX_LEN, 16#fffffff).
@@ -23,7 +23,10 @@
 -spec initial_state() -> state().
 initial_state() -> none.
 
--spec parse(binary(), state()) -> {more, state()} | {ok, any(), any()} | {error, any()}.
+-spec parse(binary(), state()) ->
+    {more, state()} |
+    {ok, mqtt_packet(), binary()} |
+    {error, any()}.
 parse(<<>>, none) ->
     {more, fun(Bin) -> parse(Bin, none) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->

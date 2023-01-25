@@ -334,10 +334,9 @@ process_received_bytes(Bytes,
         {ok, Packet, Rest} ->
             case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
                 {ok, ProcState1} ->
-                    PS = rabbit_mqtt_packet:initial_state(),
                     process_received_bytes(
                       Rest,
-                      State #state{parse_state = PS,
+                      State #state{parse_state = rabbit_mqtt_packet:initial_state(),
                                    proc_state = ProcState1});
                 %% PUBLISH and more
                 {error, unauthorized = Reason, ProcState1} ->

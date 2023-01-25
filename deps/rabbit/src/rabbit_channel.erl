@@ -104,9 +104,7 @@
 
           %% same as capabilities in the reader
           capabilities,
-          %% tracing exchange resource if tracing is enabled,
-          %% 'none' otherwise
-          trace_state,
+          trace_state :: rabbit_trace:state(),
           consumer_prefetch,
           %% Message content size limit
           max_message_size,
