@@ -83,9 +83,6 @@ init([SupHelperPid, Ref, Configuration]) ->
                                 conserve_resources = false,
                                 recv_outstanding   = false})), #reader_state.stats_timer),
               {backoff, 1000, 1000, 10000});
-        {network_error, Reason} ->
-            rabbit_net:fast_close(RealSocket),
-            terminate({shutdown, Reason}, undefined);
         {error, enotconn} ->
             rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);
@@ -284,7 +281,7 @@ run_socket(State = #reader_state{state = blocked}) ->
 run_socket(State = #reader_state{recv_outstanding = true}) ->
     State;
 run_socket(State = #reader_state{socket = Sock}) ->
-    rabbit_net:setopts(Sock, [{active, once}]),
+    _ = rabbit_net:setopts(Sock, [{active, once}]),
     State#reader_state{recv_outstanding = true}.
 
 
