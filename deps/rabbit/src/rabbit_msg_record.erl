@@ -23,9 +23,9 @@
         {
          % header :: maybe(#'v1_0.header'{}),
          % delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}),
-         properties :: maybe(#'v1_0.properties'{}),
-         application_properties :: maybe(#'v1_0.application_properties'{}),
+         message_annotations :: maybe(#'v1_0.message_annotations'{}) | binary,
+         properties :: maybe(#'v1_0.properties'{}) | binary,
+         application_properties :: maybe(#'v1_0.application_properties'{}) | binary,
          data :: maybe(amqp10_data())
          % footer :: maybe(#'v1_0.footer'{})
          }).
@@ -40,6 +40,11 @@
 -export_type([
               state/0
               ]).
+
+-define(AMQP10_TYPE, <<"amqp-1.0">>).
+-define(AMQP10_PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
+-define(AMQP10_APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
+-define(AMQP10_MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 
 %% this module acts as a wrapper / converter for the internal binary storage format
 %% (AMQP 1.0) and any format it needs to be converted to / from.
@@ -72,7 +77,6 @@ decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, _}) ->
 amqp10_properties_empty(#'v1_0.properties'{message_id = undefined,
                                            user_id = undefined,
                                            to = undefined,
-                                           % subject = wrap(utf8, RKey),
                                            reply_to = undefined,
                                            correlation_id = undefined,
                                            content_type = undefined,
@@ -90,21 +94,36 @@ to_iodata(#?MODULE{msg = #msg{properties = P,
                               data = Data}}) ->
     [
      case MA of
-         #'v1_0.message_annotations'{content = []} ->
-             <<>>;
+         MsgAnnotBin when is_binary(MA) ->
+             MsgAnnotBin;
          _ ->
-             amqp10_framing:encode_bin(MA)
+             case MA of
+                 #'v1_0.message_annotations'{content = []} ->
+                     <<>>;
+                 _ ->
+                     amqp10_framing:encode_bin(MA)
+             end
      end,
-     case amqp10_properties_empty(P) of
-         true -> <<>>;
-         false ->
-             amqp10_framing:encode_bin(P)
+     case P of
+         PropsBin when is_binary(P) ->
+             PropsBin;
+         _ ->
+             case amqp10_properties_empty(P) of
+                 true -> <<>>;
+                 false ->
+                     amqp10_framing:encode_bin(P)
+             end
      end,
      case AP of
-         #'v1_0.application_properties'{content = []} ->
-             <<>>;
+         AppPropsBin when is_binary(AP) ->
+             AppPropsBin;
          _ ->
-             amqp10_framing:encode_bin(AP)
+             case AP of
+                 #'v1_0.application_properties'{content = []} ->
+                     <<>>;
+                 _ ->
+                     amqp10_framing:encode_bin(AP)
+             end
      end,
      amqp10_framing:encode_bin(Data)
     ].
@@ -112,6 +131,14 @@ to_iodata(#?MODULE{msg = #msg{properties = P,
 %% TODO: refine type spec here
 -spec add_message_annotations(#{binary() => {atom(), term()}}, state()) ->
     state().
+add_message_annotations(Anns,
+                        #?MODULE{msg =
+                                 #msg{message_annotations = MABin} = Msg} = State0)
+  when is_binary(MABin) ->
+    [MA] = amqp10_framing:decode_bin(MABin),
+    State1 = State0#?MODULE{msg =
+                            Msg#msg{message_annotations = MA}},
+    add_message_annotations(Anns, State1);
 add_message_annotations(Anns,
                         #?MODULE{msg =
                                  #msg{message_annotations = MA0} = Msg} = State) ->
@@ -159,63 +186,101 @@ message_annotation(Key,
 %% parses it and returns the current parse state
 %% this is the input function from storage and from, e.g. socket input
 -spec from_amqp091(#'P_basic'{}, iodata()) -> state().
-from_amqp091(#'P_basic'{message_id = MsgId,
-                        expiration = Expiration,
-                        delivery_mode = DelMode,
-                        headers = Headers,
-                        user_id = UserId,
-                        reply_to = ReplyTo,
-                        type = Type,
-                        priority = Priority,
-                        app_id = AppId,
-                        correlation_id = CorrId,
-                        content_type = ContentType,
-                        content_encoding = ContentEncoding,
-                        timestamp = Timestamp
-                       }, Data) ->
-    %% TODO: support parsing properties bin directly?
-    ConvertedTs = case Timestamp of
-                      undefined ->
-                          undefined;
-                      _ ->
-                          Timestamp * 1000
-                  end,
-    P = #'v1_0.properties'{message_id = wrap(utf8, MsgId),
-                           user_id = wrap(binary, UserId),
-                           to = undefined,
-                           % subject = wrap(utf8, RKey),
-                           reply_to = wrap(utf8, ReplyTo),
-                           correlation_id = wrap(utf8, CorrId),
-                           content_type = wrap(symbol, ContentType),
-                           content_encoding = wrap(symbol, ContentEncoding),
-                           creation_time = wrap(timestamp, ConvertedTs)},
+from_amqp091(PB, Data) ->
+    P = from_amqp091_to_amqp10_properties(PB),
+    AP = from_amqp091_to_amqp10_app_properties(PB),
+    MA = from_amqp091_to_amqp10_message_annotations(PB),
 
-    APC0 = [from_amqp091_header(Type, K, T, V) || {K, T, V}
-                                               <- case Headers of
-                                                      undefined -> [];
-                                                      _ -> Headers
-                                                  end, not unsupported_header_value_type(T)],
-    %% properties that do not map directly to AMQP 1.0 properties are stored
-    %% in application properties
-    APC = map_add(utf8, <<"x-basic-type">>, utf8, Type,
-                  map_add(utf8, <<"x-basic-app-id">>, utf8, AppId, APC0)),
-
-    MAC = map_add(symbol, <<"x-basic-priority">>, ubyte, Priority,
-                  map_add(symbol, <<"x-basic-delivery-mode">>, ubyte, DelMode,
-                          map_add(symbol, <<"x-basic-expiration">>, utf8, Expiration, []))),
-
-    AP = #'v1_0.application_properties'{content = APC},
-    MA = #'v1_0.message_annotations'{content = MAC},
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,
                         application_properties = AP,
                         message_annotations = MA,
                         data = #'v1_0.data'{content = Data}}}.
 
-from_amqp091_header(<<"amqp-1.0">>, <<"x-amqp-1.0-properties">> = K, longstr, V) ->
-    {wrap(utf8, K), from_091(binary, V)};
-from_amqp091_header(_MessageType, K, T, V) ->
-    {wrap(utf8, K), from_091(T, V)}.
+from_amqp091_to_amqp10_properties(#'P_basic'{type = ?AMQP10_TYPE,
+                                             headers = Headers} = P) ->
+    case proplists:lookup(?AMQP10_PROPERTIES_HEADER, Headers) of
+        none ->
+            convert_amqp091_to_amqp10_properties(P);
+        {_, _, PropsBin} ->
+            PropsBin
+    end;
+from_amqp091_to_amqp10_properties(P) ->
+    convert_amqp091_to_amqp10_properties(P).
+
+convert_amqp091_to_amqp10_properties(#'P_basic'{message_id = MsgId,
+                                                user_id = UserId,
+                                                reply_to = ReplyTo,
+                                                correlation_id = CorrId,
+                                                content_type = ContentType,
+                                                content_encoding = ContentEncoding,
+                                                timestamp = Timestamp
+                                               }) ->
+    ConvertedTs = case Timestamp of
+                      undefined ->
+                          undefined;
+                      _ ->
+                          Timestamp * 1000
+                  end,
+    #'v1_0.properties'{message_id = wrap(utf8, MsgId),
+                       user_id = wrap(binary, UserId),
+                       to = undefined,
+                       reply_to = wrap(utf8, ReplyTo),
+                       correlation_id = wrap(utf8, CorrId),
+                       content_type = wrap(symbol, ContentType),
+                       content_encoding = wrap(symbol, ContentEncoding),
+                       creation_time = wrap(timestamp, ConvertedTs)}.
+
+from_amqp091_to_amqp10_app_properties(#'P_basic'{type = ?AMQP10_TYPE,
+                                                 headers = Headers} = P) ->
+    case proplists:lookup(?AMQP10_APP_PROPERTIES_HEADER, Headers) of
+        none ->
+            convert_amqp091_to_amqp10_app_properties(P);
+        {_, _, AppPropsBin} ->
+            AppPropsBin
+    end;
+from_amqp091_to_amqp10_app_properties(P) ->
+    convert_amqp091_to_amqp10_app_properties(P).
+
+convert_amqp091_to_amqp10_app_properties(#'P_basic'{headers = Headers,
+                                                    type = Type,
+                                                    app_id = AppId}) ->
+    APC0 = [{wrap(utf8, K), from_091(T, V)} || {K, T, V}
+                                               <- case Headers of
+                                                      undefined -> [];
+                                                      _ -> Headers
+                                                  end, not unsupported_header_value_type(T),
+                                               not filtered_header(Type, K)],
+    APC1 = case Type of
+        ?AMQP10_TYPE ->
+            APC0;
+        _ ->
+            %% properties that do not map directly to AMQP 1.0 properties are stored
+            %% in application properties
+            map_add(utf8, <<"x-basic-type">>, utf8, Type,
+                    map_add(utf8, <<"x-basic-app-id">>, utf8, AppId, APC0))
+    end,
+    #'v1_0.application_properties'{content = APC1}.
+
+from_amqp091_to_amqp10_message_annotations(#'P_basic'{type = ?AMQP10_TYPE,
+                                                      headers = Headers}) ->
+    case proplists:lookup(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
+        none ->
+            #'v1_0.message_annotations'{content = []};
+        {_, _, MessageAnnotationsBin} ->
+            MessageAnnotationsBin
+    end;
+from_amqp091_to_amqp10_message_annotations(P) ->
+    convert_amqp091_to_amqp10_message_annotations(P).
+
+convert_amqp091_to_amqp10_message_annotations(#'P_basic'{priority = Priority,
+                                                         delivery_mode = DelMode,
+                                                         expiration = Expiration}) ->
+    MAC = map_add(symbol, <<"x-basic-priority">>, ubyte, Priority,
+                  map_add(symbol, <<"x-basic-delivery-mode">>, ubyte, DelMode,
+                          map_add(symbol, <<"x-basic-expiration">>, utf8, Expiration, []))),
+
+    #'v1_0.message_annotations'{content = MAC}.
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
@@ -395,12 +460,21 @@ message_id({utf8, S}, HKey, H0) ->
 message_id(MsgId, _, H) ->
     {H, unwrap(MsgId)}.
 
- unsupported_header_value_type(array) ->
-     true;
- unsupported_header_value_type(table) ->
-     true;
- unsupported_header_value_type(_) ->
-     false.
+unsupported_header_value_type(array) ->
+    true;
+unsupported_header_value_type(table) ->
+    true;
+unsupported_header_value_type(_) ->
+    false.
+
+filtered_header(?AMQP10_TYPE, ?AMQP10_PROPERTIES_HEADER) ->
+    true;
+filtered_header(?AMQP10_TYPE, ?AMQP10_APP_PROPERTIES_HEADER) ->
+    true;
+filtered_header(?AMQP10_TYPE, ?AMQP10_MESSAGE_ANNOTATIONS_HEADER) ->
+    true;
+filtered_header(_, _) ->
+    false.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
