@@ -1,0 +1,492 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_ra_beam",
+    srcs = ["src/ra.erl"],
+    outs = ["ebin/ra.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_app_beam",
+    srcs = ["src/ra_app.erl"],
+    outs = ["ebin/ra_app.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_bench_beam",
+    srcs = ["src/ra_bench.erl"],
+    outs = ["ebin/ra_bench.beam"],
+    app_name = "ra",
+    beam = ["ebin/ra_machine.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_counters_beam",
+    srcs = ["src/ra_counters.erl"],
+    outs = ["ebin/ra_counters.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_dbg_beam",
+    srcs = ["src/ra_dbg.erl"],
+    outs = ["ebin/ra_dbg.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_directory_beam",
+    srcs = ["src/ra_directory.erl"],
+    outs = ["ebin/ra_directory.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_env_beam",
+    srcs = ["src/ra_env.erl"],
+    outs = ["ebin/ra_env.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_file_handle_beam",
+    srcs = ["src/ra_file_handle.erl"],
+    outs = ["ebin/ra_file_handle.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_flru_beam",
+    srcs = ["src/ra_flru.erl"],
+    outs = ["ebin/ra_flru.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_leaderboard_beam",
+    srcs = ["src/ra_leaderboard.erl"],
+    outs = ["ebin/ra_leaderboard.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_lib_beam",
+    srcs = ["src/ra_lib.erl"],
+    outs = ["ebin/ra_lib.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_beam",
+    srcs = ["src/ra_log.erl"],
+    outs = ["ebin/ra_log.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_ets_beam",
+    srcs = ["src/ra_log_ets.erl"],
+    outs = ["ebin/ra_log_ets.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_meta_beam",
+    srcs = ["src/ra_log_meta.erl"],
+    outs = ["ebin/ra_log_meta.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_pre_init_beam",
+    srcs = ["src/ra_log_pre_init.erl"],
+    outs = ["ebin/ra_log_pre_init.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_reader_beam",
+    srcs = ["src/ra_log_reader.erl"],
+    outs = ["ebin/ra_log_reader.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_segment_beam",
+    srcs = ["src/ra_log_segment.erl"],
+    outs = ["ebin/ra_log_segment.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_segment_writer_beam",
+    srcs = ["src/ra_log_segment_writer.erl"],
+    outs = ["ebin/ra_log_segment_writer.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_snapshot_beam",
+    srcs = ["src/ra_log_snapshot.erl"],
+    outs = ["ebin/ra_log_snapshot.beam"],
+    app_name = "ra",
+    beam = ["ebin/ra_snapshot.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_sup_beam",
+    srcs = ["src/ra_log_sup.erl"],
+    outs = ["ebin/ra_log_sup.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_wal_beam",
+    srcs = ["src/ra_log_wal.erl"],
+    outs = ["ebin/ra_log_wal.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_log_wal_sup_beam",
+    srcs = ["src/ra_log_wal_sup.erl"],
+    outs = ["ebin/ra_log_wal_sup.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_machine_beam",
+    srcs = ["src/ra_machine.erl"],
+    outs = ["ebin/ra_machine.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_machine_ets_beam",
+    srcs = ["src/ra_machine_ets.erl"],
+    outs = ["ebin/ra_machine_ets.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_machine_simple_beam",
+    srcs = ["src/ra_machine_simple.erl"],
+    outs = ["ebin/ra_machine_simple.beam"],
+    app_name = "ra",
+    beam = ["ebin/ra_machine.beam"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_metrics_ets_beam",
+    srcs = ["src/ra_metrics_ets.erl"],
+    outs = ["ebin/ra_metrics_ets.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_monitors_beam",
+    srcs = ["src/ra_monitors.erl"],
+    outs = ["ebin/ra_monitors.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_server_beam",
+    srcs = ["src/ra_server.erl"],
+    outs = ["ebin/ra_server.beam"],
+    hdrs = [
+        "src/ra.hrl",
+        "src/ra_server.hrl",
+    ],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_server_proc_beam",
+    srcs = ["src/ra_server_proc.erl"],
+    outs = ["ebin/ra_server_proc.beam"],
+    hdrs = [
+        "src/ra.hrl",
+        "src/ra_server.hrl",
+    ],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_server_sup_beam",
+    srcs = ["src/ra_server_sup.erl"],
+    outs = ["ebin/ra_server_sup.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_server_sup_sup_beam",
+    srcs = ["src/ra_server_sup_sup.erl"],
+    outs = ["ebin/ra_server_sup_sup.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_snapshot_beam",
+    srcs = ["src/ra_snapshot.erl"],
+    outs = ["ebin/ra_snapshot.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_sup_beam",
+    srcs = ["src/ra_sup.erl"],
+    outs = ["ebin/ra_sup.beam"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_system_beam",
+    srcs = ["src/ra_system.erl"],
+    outs = ["ebin/ra_system.beam"],
+    hdrs = [
+        "src/ra.hrl",
+        "src/ra_server.hrl",
+    ],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_system_sup_beam",
+    srcs = ["src/ra_system_sup.erl"],
+    outs = ["ebin/ra_system_sup.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_ra_systems_sup_beam",
+    srcs = ["src/ra_systems_sup.erl"],
+    outs = ["ebin/ra_systems_sup.beam"],
+    hdrs = ["src/ra.hrl"],
+    app_name = "ra",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/ra.beam",
+        "ebin/ra_app.beam",
+        "ebin/ra_bench.beam",
+        "ebin/ra_counters.beam",
+        "ebin/ra_dbg.beam",
+        "ebin/ra_directory.beam",
+        "ebin/ra_env.beam",
+        "ebin/ra_file_handle.beam",
+        "ebin/ra_flru.beam",
+        "ebin/ra_leaderboard.beam",
+        "ebin/ra_lib.beam",
+        "ebin/ra_log.beam",
+        "ebin/ra_log_ets.beam",
+        "ebin/ra_log_meta.beam",
+        "ebin/ra_log_pre_init.beam",
+        "ebin/ra_log_reader.beam",
+        "ebin/ra_log_segment.beam",
+        "ebin/ra_log_segment_writer.beam",
+        "ebin/ra_log_snapshot.beam",
+        "ebin/ra_log_sup.beam",
+        "ebin/ra_log_wal.beam",
+        "ebin/ra_log_wal_sup.beam",
+        "ebin/ra_machine.beam",
+        "ebin/ra_machine_ets.beam",
+        "ebin/ra_machine_simple.beam",
+        "ebin/ra_metrics_ets.beam",
+        "ebin/ra_monitors.beam",
+        "ebin/ra_server.beam",
+        "ebin/ra_server_proc.beam",
+        "ebin/ra_server_sup.beam",
+        "ebin/ra_server_sup_sup.beam",
+        "ebin/ra_snapshot.beam",
+        "ebin/ra_sup.beam",
+        "ebin/ra_system.beam",
+        "ebin/ra_system_sup.beam",
+        "ebin/ra_systems_sup.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/ra.app.src",
+        "src/ra.erl",
+        "src/ra_app.erl",
+        "src/ra_bench.erl",
+        "src/ra_counters.erl",
+        "src/ra_dbg.erl",
+        "src/ra_directory.erl",
+        "src/ra_env.erl",
+        "src/ra_file_handle.erl",
+        "src/ra_flru.erl",
+        "src/ra_leaderboard.erl",
+        "src/ra_lib.erl",
+        "src/ra_log.erl",
+        "src/ra_log_ets.erl",
+        "src/ra_log_meta.erl",
+        "src/ra_log_pre_init.erl",
+        "src/ra_log_reader.erl",
+        "src/ra_log_segment.erl",
+        "src/ra_log_segment_writer.erl",
+        "src/ra_log_snapshot.erl",
+        "src/ra_log_sup.erl",
+        "src/ra_log_wal.erl",
+        "src/ra_log_wal_sup.erl",
+        "src/ra_machine.erl",
+        "src/ra_machine_ets.erl",
+        "src/ra_machine_simple.erl",
+        "src/ra_metrics_ets.erl",
+        "src/ra_monitors.erl",
+        "src/ra_server.erl",
+        "src/ra_server_proc.erl",
+        "src/ra_server_sup.erl",
+        "src/ra_server_sup_sup.erl",
+        "src/ra_snapshot.erl",
+        "src/ra_sup.erl",
+        "src/ra_system.erl",
+        "src/ra_system_sup.erl",
+        "src/ra_systems_sup.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/ra.hrl",
+        "src/ra_server.hrl",
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "ra",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "sasl",
+    ],
+    deps = [
+        "@aten//:erlang_app",
+        "@gen_batch_server//:erlang_app",
+        "@seshat//:erlang_app",
+    ],
+)
+
+alias(
+    name = "ra",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

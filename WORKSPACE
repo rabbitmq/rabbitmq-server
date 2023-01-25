@@ -1,30 +1,23 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
-http_archive(
-    name = "bazel_skylib",
-    sha256 = "af87959afe497dc8dfd4c6cb66e1279cb98ccc84284619ebfec27d9c09a903de",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.0/bazel-skylib-1.2.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.0/bazel-skylib-1.2.0.tar.gz",
-    ],
+git_repository(
+    name = "rules_erlang",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
+    tag = "3.9.1",
 )
 
-load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
 
-bazel_skylib_workspace()
+rules_erlang_internal_deps()
 
-http_archive(
-    name = "rules_pkg",
-    sha256 = "a89e203d3cf264e564fcb96b6e06dd70bc0557356eb48400ce4b5d97c2c3720d",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.5.1/rules_pkg-0.5.1.tar.gz",
-        "https://github.com/bazelbuild/rules_pkg/releases/download/0.5.1/rules_pkg-0.5.1.tar.gz",
-    ],
-)
+load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
 
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
+rules_erlang_internal_setup(go_repository_default_config = "//:WORKSPACE")
 
-rules_pkg_dependencies()
+load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
+
+gazelle_deps()
 
 http_archive(
     name = "io_bazel_rules_docker",
@@ -90,37 +83,11 @@ http_archive(
     urls = ["https://github.com/buildbuddy-io/buildbuddy-toolchain/archive/829c8a574f706de5c96c54ca310f139f4acda7dd.tar.gz"],
 )
 
-load("@io_buildbuddy_buildbuddy_toolchain//:deps.bzl", "buildbuddy_deps")
-
-buildbuddy_deps()
-
-load("@io_buildbuddy_buildbuddy_toolchain//:rules.bzl", "buildbuddy")
-
-buildbuddy(
-    name = "buildbuddy_toolchain",
-    llvm = True,
-)
-
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
-
-git_repository(
-    name = "rbe",
-    branch = "linux-rbe",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)
-
-git_repository(
-    name = "rules_erlang",
-    remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.9.0",
-)
-
 load(
     "@rules_erlang//:rules_erlang.bzl",
     "erlang_config",
     "internal_erlang_from_github_release",
     "internal_erlang_from_http_archive",
-    "rules_erlang_dependencies",
 )
 
 erlang_config(
@@ -148,8 +115,6 @@ erlang_config(
         ),
     ],
 )
-
-rules_erlang_dependencies()
 
 load("@erlang_config//:defaults.bzl", "register_defaults")
 
@@ -184,9 +149,12 @@ load(
 
 register_elixir_defaults()
 
-load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
-
-rabbitmq_external_deps(rabbitmq_workspace = "@")
+new_git_repository(
+    name = "bats",
+    build_file = "@//:BUILD.bats",
+    remote = "https://github.com/sstephenson/bats",
+    tag = "v0.4.0",
+)
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
@@ -195,3 +163,20 @@ activemq_archive()
 load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
 secondary_umbrella()
+
+load("@io_buildbuddy_buildbuddy_toolchain//:deps.bzl", "buildbuddy_deps")
+
+buildbuddy_deps()
+
+load("@io_buildbuddy_buildbuddy_toolchain//:rules.bzl", "buildbuddy")
+
+buildbuddy(
+    name = "buildbuddy_toolchain",
+    llvm = True,
+)
+
+git_repository(
+    name = "rbe",
+    branch = "linux-rbe",
+    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
+)

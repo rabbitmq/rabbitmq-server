@@ -1,0 +1,138 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_recon_beam",
+    srcs = ["src/recon.erl"],
+    outs = ["ebin/recon.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_recon_alloc_beam",
+    srcs = ["src/recon_alloc.erl"],
+    outs = ["ebin/recon_alloc.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_recon_lib_beam",
+    srcs = ["src/recon_lib.erl"],
+    outs = ["ebin/recon_lib.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_recon_map_beam",
+    srcs = ["src/recon_map.erl"],
+    outs = ["ebin/recon_map.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_recon_rec_beam",
+    srcs = ["src/recon_rec.erl"],
+    outs = ["ebin/recon_rec.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_recon_trace_beam",
+    srcs = ["src/recon_trace.erl"],
+    outs = ["ebin/recon_trace.beam"],
+    app_name = "recon",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/recon.beam",
+        "ebin/recon_alloc.beam",
+        "ebin/recon_lib.beam",
+        "ebin/recon_map.beam",
+        "ebin/recon_rec.beam",
+        "ebin/recon_trace.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/recon.app.src",
+        "src/recon.erl",
+        "src/recon_alloc.erl",
+        "src/recon_lib.erl",
+        "src/recon_map.erl",
+        "src/recon_rec.erl",
+        "src/recon_trace.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "recon",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "recon",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

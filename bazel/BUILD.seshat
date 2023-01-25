@@ -1,0 +1,134 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+recv_opt_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+recv_opt_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_seshat_beam",
+    srcs = ["src/seshat.erl"],
+    outs = ["ebin/seshat.beam"],
+    app_name = "seshat",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_seshat_app_beam",
+    srcs = ["src/seshat_app.erl"],
+    outs = ["ebin/seshat_app.beam"],
+    app_name = "seshat",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_seshat_counters_server_beam",
+    srcs = ["src/seshat_counters_server.erl"],
+    outs = ["ebin/seshat_counters_server.beam"],
+    app_name = "seshat",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_seshat_sup_beam",
+    srcs = ["src/seshat_sup.erl"],
+    outs = ["ebin/seshat_sup.beam"],
+    app_name = "seshat",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/seshat.beam",
+        "ebin/seshat_app.beam",
+        "ebin/seshat_counters_server.beam",
+        "ebin/seshat_sup.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/seshat.app.src",
+        "src/seshat.erl",
+        "src/seshat_app.erl",
+        "src/seshat_counters_server.erl",
+        "src/seshat_sup.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "seshat",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "sasl",
+    ],
+)
+
+alias(
+    name = "seshat",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
