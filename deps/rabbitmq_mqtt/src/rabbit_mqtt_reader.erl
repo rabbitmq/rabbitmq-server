@@ -528,26 +528,27 @@ format_status(Status) ->
       end, Status).
 
 -spec format_state(state()) -> map().
-format_state(#state{proc_state = PState,
-                    socket = Socket,
+format_state(#state{socket = Socket,
                     proxy_socket = ProxySock,
-                    conn_name = ConnName,
                     await_recv = AwaitRecv,
                     deferred_recv = DeferredRecv,
-                    received_connect_packet = ReceivedConnectPacket,
+                    parse_state = _,
+                    proc_state = PState,
                     connection_state = ConnectionState,
                     conserve = Conserve,
                     stats_timer = StatsTimer,
                     keepalive = Keepalive,
-                    parse_state = _}) ->
-    #{proc_state => rabbit_mqtt_processor:format_status(PState),
-      socket => Socket,
+                    conn_name = ConnName,
+                    received_connect_packet = ReceivedConnectPacket
+                   }) ->
+    #{socket => Socket,
       proxy_socket => ProxySock,
-      conn_name => ConnName,
       await_recv => AwaitRecv,
-      deferred_recv => DeferredRecv,
-      received_connect_packet => ReceivedConnectPacket,
+      deferred_recv => DeferredRecv =/= undefined,
+      proc_state => rabbit_mqtt_processor:format_status(PState),
       connection_state => ConnectionState,
       conserve => Conserve,
       stats_timer => StatsTimer,
-      keepalive => Keepalive}.
+      keepalive => Keepalive,
+      conn_name => ConnName,
+      received_connect_packet => ReceivedConnectPacket}.
