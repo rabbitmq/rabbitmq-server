@@ -46,22 +46,13 @@ encode(Term) ->
 encode(Term, Opts) ->
     jsx:encode(fixup_terms(Term), Opts).
 
-<<<<<<< HEAD
 -spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} |
-=======
--spec try_encode(thoas:input_term()) -> {ok, iodata()} |
->>>>>>> 39a6eed6e0 (Fix all dialyzer warnings in peer discovery plugins)
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).
 
-<<<<<<< HEAD
 -spec try_encode(jsx:json_term(), jsx_to_term:config()) ->
 			{ok, jsx:json_text()} | {error, Reason :: term()}.
-=======
--spec try_encode(thoas:input_term(), thoas:encode_options()) ->
-			{ok, iodata()} | {error, Reason :: term()}.
->>>>>>> 39a6eed6e0 (Fix all dialyzer warnings in peer discovery plugins)
 try_encode(Term, Opts) ->
     try
         {ok, encode(Term, Opts)}
