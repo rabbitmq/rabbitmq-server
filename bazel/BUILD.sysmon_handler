@@ -1,0 +1,135 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_sysmon_handler_app_beam",
+    srcs = ["src/sysmon_handler_app.erl"],
+    outs = ["ebin/sysmon_handler_app.beam"],
+    app_name = "sysmon_handler",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_sysmon_handler_example_handler_beam",
+    srcs = ["src/sysmon_handler_example_handler.erl"],
+    outs = ["ebin/sysmon_handler_example_handler.beam"],
+    app_name = "sysmon_handler",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_sysmon_handler_filter_beam",
+    srcs = ["src/sysmon_handler_filter.erl"],
+    outs = ["ebin/sysmon_handler_filter.beam"],
+    hdrs = ["include/sysmon_handler.hrl"],
+    app_name = "sysmon_handler",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_sysmon_handler_sup_beam",
+    srcs = ["src/sysmon_handler_sup.erl"],
+    outs = ["ebin/sysmon_handler_sup.beam"],
+    app_name = "sysmon_handler",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_sysmon_handler_testhandler_beam",
+    srcs = ["src/sysmon_handler_testhandler.erl"],
+    outs = ["ebin/sysmon_handler_testhandler.beam"],
+    app_name = "sysmon_handler",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/sysmon_handler_app.beam",
+        "ebin/sysmon_handler_example_handler.beam",
+        "ebin/sysmon_handler_filter.beam",
+        "ebin/sysmon_handler_sup.beam",
+        "ebin/sysmon_handler_testhandler.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/sysmon_handler.app.src",
+        "src/sysmon_handler_app.erl",
+        "src/sysmon_handler_example_handler.erl",
+        "src/sysmon_handler_filter.erl",
+        "src/sysmon_handler_sup.erl",
+        "src/sysmon_handler_testhandler.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["include/sysmon_handler.hrl"],
+)
+
+filegroup(
+    name = "priv",
+    srcs = ["priv/sysmon_handler.schema"],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "sysmon_handler",
+    beam_files = [":beam_files"],
+    extra_apps = ["sasl"],
+)
+
+alias(
+    name = "sysmon_handler",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

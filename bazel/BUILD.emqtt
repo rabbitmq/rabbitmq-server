@@ -1,0 +1,199 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+# gazelle:erlang_erlc_opt -DBUILD_WITHOUT_QUIC
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_all",
+            "+warn_unused_vars",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_obsolete_guard",
+            "-DBUILD_WITHOUT_QUIC",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+warn_export_all",
+            "+warn_unused_vars",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_obsolete_guard",
+            "-DBUILD_WITHOUT_QUIC",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_beam",
+    srcs = ["src/emqtt.erl"],
+    outs = ["ebin/emqtt.beam"],
+    hdrs = [
+        "include/emqtt.hrl",
+        "include/logger.hrl",
+    ],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_cli_beam",
+    srcs = ["src/emqtt_cli.erl"],
+    outs = ["ebin/emqtt_cli.beam"],
+    hdrs = ["include/emqtt.hrl"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_frame_beam",
+    srcs = ["src/emqtt_frame.erl"],
+    outs = ["ebin/emqtt_frame.beam"],
+    hdrs = ["include/emqtt.hrl"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_inflight_beam",
+    srcs = ["src/emqtt_inflight.erl"],
+    outs = ["ebin/emqtt_inflight.beam"],
+    hdrs = ["include/emqtt.hrl"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_props_beam",
+    srcs = ["src/emqtt_props.erl"],
+    outs = ["ebin/emqtt_props.beam"],
+    hdrs = ["include/emqtt.hrl"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_quic_beam",
+    srcs = ["src/emqtt_quic.erl"],
+    outs = ["ebin/emqtt_quic.beam"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_secret_beam",
+    srcs = ["src/emqtt_secret.erl"],
+    outs = ["ebin/emqtt_secret.beam"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_sock_beam",
+    srcs = ["src/emqtt_sock.erl"],
+    outs = ["ebin/emqtt_sock.beam"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_emqtt_ws_beam",
+    srcs = ["src/emqtt_ws.erl"],
+    outs = ["ebin/emqtt_ws.beam"],
+    app_name = "emqtt",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/emqtt.beam",
+        "ebin/emqtt_cli.beam",
+        "ebin/emqtt_frame.beam",
+        "ebin/emqtt_inflight.beam",
+        "ebin/emqtt_props.beam",
+        "ebin/emqtt_quic.beam",
+        "ebin/emqtt_secret.beam",
+        "ebin/emqtt_sock.beam",
+        "ebin/emqtt_ws.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/emqtt.app.src",
+        "src/emqtt.erl",
+        "src/emqtt_cli.erl",
+        "src/emqtt_frame.erl",
+        "src/emqtt_inflight.erl",
+        "src/emqtt_props.erl",
+        "src/emqtt_quic.erl",
+        "src/emqtt_secret.erl",
+        "src/emqtt_sock.erl",
+        "src/emqtt_ws.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/emqtt.hrl",
+        "include/logger.hrl",
+    ],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "emqtt",
+    beam_files = [":beam_files"],
+    deps = [
+        "@cowlib//:erlang_app",
+        "@getopt//:erlang_app",
+        "@gun//:erlang_app",
+    ],
+)
+
+alias(
+    name = "emqtt",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
