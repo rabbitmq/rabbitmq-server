@@ -1,0 +1,139 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_beam",
+    srcs = ["src/redbug.erl"],
+    outs = ["ebin/redbug.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_compiler_beam",
+    srcs = ["src/redbug_compiler.erl"],
+    outs = ["ebin/redbug_compiler.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_dtop_beam",
+    srcs = ["src/redbug_dtop.erl"],
+    outs = ["ebin/redbug_dtop.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_lexer_beam",
+    srcs = ["src/redbug_lexer.erl"],
+    outs = ["ebin/redbug_lexer.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_parser_beam",
+    srcs = ["src/redbug_parser.erl"],
+    outs = ["ebin/redbug_parser.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_redbug_targ_beam",
+    srcs = ["src/redbug_targ.erl"],
+    outs = ["ebin/redbug_targ.beam"],
+    app_name = "redbug",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/redbug.beam",
+        "ebin/redbug_compiler.beam",
+        "ebin/redbug_dtop.beam",
+        "ebin/redbug_lexer.beam",
+        "ebin/redbug_parser.beam",
+        "ebin/redbug_targ.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/redbug.app.src",
+        "src/redbug.erl",
+        "src/redbug_compiler.erl",
+        "src/redbug_dtop.erl",
+        "src/redbug_lexer.erl",
+        "src/redbug_parser.erl",
+        "src/redbug_targ.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "redbug",
+    beam_files = [":beam_files"],
+    extra_apps = ["runtime_tools"],
+)
+
+alias(
+    name = "redbug",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

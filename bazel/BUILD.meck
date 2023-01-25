@@ -1,0 +1,193 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_meck_beam",
+    srcs = ["src/meck.erl"],
+    outs = ["ebin/meck.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_args_matcher_beam",
+    srcs = ["src/meck_args_matcher.erl"],
+    outs = ["ebin/meck_args_matcher.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_code_beam",
+    srcs = ["src/meck_code.erl"],
+    outs = ["ebin/meck_code.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_code_gen_beam",
+    srcs = ["src/meck_code_gen.erl"],
+    outs = ["ebin/meck_code_gen.beam"],
+    hdrs = ["src/meck.hrl"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_cover_beam",
+    srcs = ["src/meck_cover.erl"],
+    outs = ["ebin/meck_cover.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_expect_beam",
+    srcs = ["src/meck_expect.erl"],
+    outs = ["ebin/meck_expect.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_history_beam",
+    srcs = ["src/meck_history.erl"],
+    outs = ["ebin/meck_history.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_matcher_beam",
+    srcs = ["src/meck_matcher.erl"],
+    outs = ["ebin/meck_matcher.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_proc_beam",
+    srcs = ["src/meck_proc.erl"],
+    outs = ["ebin/meck_proc.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_ret_spec_beam",
+    srcs = ["src/meck_ret_spec.erl"],
+    outs = ["ebin/meck_ret_spec.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_meck_util_beam",
+    srcs = ["src/meck_util.erl"],
+    outs = ["ebin/meck_util.beam"],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/meck.beam",
+        "ebin/meck_args_matcher.beam",
+        "ebin/meck_code.beam",
+        "ebin/meck_code_gen.beam",
+        "ebin/meck_cover.beam",
+        "ebin/meck_expect.beam",
+        "ebin/meck_history.beam",
+        "ebin/meck_matcher.beam",
+        "ebin/meck_proc.beam",
+        "ebin/meck_ret_spec.beam",
+        "ebin/meck_util.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/meck.app.src",
+        "src/meck.erl",
+        "src/meck_args_matcher.erl",
+        "src/meck_code.erl",
+        "src/meck_code_gen.erl",
+        "src/meck_cover.erl",
+        "src/meck_expect.erl",
+        "src/meck_history.erl",
+        "src/meck_matcher.erl",
+        "src/meck_proc.erl",
+        "src/meck_ret_spec.erl",
+        "src/meck_util.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = ["src/meck.hrl"],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "meck",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "compiler",
+        "tools",
+    ],
+)
+
+alias(
+    name = "meck",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
