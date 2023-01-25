@@ -1512,6 +1512,7 @@ win32_cmd_receive(Port, MonRef, Acc0) ->
             flush_exit(Port),
             {error, nodata}
     after 5000 ->
+              win32_cmd_receive_finish(Port, MonRef),
               {error, timeout}
     end.
 
