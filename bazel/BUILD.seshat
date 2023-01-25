@@ -58,8 +58,8 @@ erlang_bytecode(
 filegroup(
     name = "beam_files",
     srcs = [
-        "ebin/seshat.beam",
         "ebin/seshat_app.beam",
+        "ebin/seshat_counters.beam",
         "ebin/seshat_counters_server.beam",
         "ebin/seshat_sup.beam",
     ],
@@ -68,9 +68,8 @@ filegroup(
 filegroup(
     name = "srcs",
     srcs = [
-        "src/seshat.app.src",
-        "src/seshat.erl",
         "src/seshat_app.erl",
+        "src/seshat_counters.erl",
         "src/seshat_counters_server.erl",
         "src/seshat_sup.erl",
     ],
@@ -121,14 +120,24 @@ erlang_app(
     srcs = [":all_srcs"],
     app_name = "seshat",
     beam_files = [":beam_files"],
-    extra_apps = [
-        "crypto",
-        "sasl",
-    ],
 )
 
 alias(
     name = "seshat",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+erlang_bytecode(
+    name = "ebin_seshat_counters_beam",
+    srcs = ["src/seshat_counters.erl"],
+    outs = ["ebin/seshat_counters.beam"],
+    app_name = "seshat",
+    erlc_opts = "//:erlc_opts",
+)
+
+alias(
+    name = "seshat-0.1.0",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
 )

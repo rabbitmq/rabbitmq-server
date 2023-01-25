@@ -112,150 +112,82 @@ erlang_package = use_extension(
 erlang_package.hex_package(
     name = "accept",
     version = "0.3.5",
-<<<<<<< HEAD
     sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
-=======
     build_file = "@//bazel:BUILD.accept",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "aten",
     version = "0.5.8",
-<<<<<<< HEAD
     sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
-=======
     build_file = "@//bazel:BUILD.aten",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "base64url",
     version = "1.0.1",
-<<<<<<< HEAD
     sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
-=======
     build_file = "@//bazel:BUILD.base64url",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "cowboy",
     version = "2.8.0",
-<<<<<<< HEAD
     sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
-=======
     build_file = "@//bazel:BUILD.cowboy",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "cowlib",
     version = "2.9.1",
-<<<<<<< HEAD
     sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
-=======
     build_file = "@//bazel:BUILD.cowlib",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "credentials_obfuscation",
-<<<<<<< HEAD
     version = "3.1.0",
     sha256 = "04884e62b1c6cdfba999d4d6b3e99bc0a59d5e439517bc5c01767255afb7b778",
-=======
-    sha256 = "fe8ece91a1ba6c8a08eb1063cfd5b063a723c5fe29a1fad6b7cbd76cb18d2eeb",
-    version = "3.2.0",
     build_file = "@//bazel:BUILD.credentials_obfuscation",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
     repository = "extend/ct_helper",
-<<<<<<< HEAD
-    branch = "master",
-=======
     build_file = "@//:bazel/BUILD.ct_helper",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "cuttlefish",
-<<<<<<< HEAD
     version = "3.0.1",
     sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
-=======
-    sha256 = "d3ef90bd2f5923477ab772fbda5cd5ad088438e4fd56801b455b87ada9f46fa3",
-    version = "3.1.0",
     build_file = "@//bazel:BUILD.cuttlefish",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "eetcd",
-<<<<<<< HEAD
-    version = "0.3.6",
-    sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "eetcd",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-    runtime_deps = [
-        "@gun//:erlang_app",
-    ],
-)
-""",
-=======
     sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
     version = "0.3.6",
     build_file = "@//bazel:BUILD.eetcd",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
     name = "emqtt",
-<<<<<<< HEAD
-    repository = "emqx/emqtt",
-    tag = "1.7.0-rc.2",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "emqtt",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-        "-DBUILD_WITHOUT_QUIC",
-    ],
-)
-""",
-=======
     build_file = "@//bazel:BUILD.emqtt",
     repository = "emqx/emqtt",
     tag = "1.7.0-rc.2",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "enough",
     version = "0.1.0",
-<<<<<<< HEAD
     sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
-=======
     build_file = "@//bazel:BUILD.enough",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "gen_batch_server",
     version = "0.8.7",
-<<<<<<< HEAD
     sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
-=======
     build_file = "@//bazel:BUILD.gen_batch_server",
 )
 
@@ -264,17 +196,13 @@ erlang_package.hex_package(
     sha256 = "a0029aea4322fb82a61f6876a6d9c66dc9878b6cb61faa13df3187384fd4ea26",
     version = "1.0.2",
     build_file = "@//bazel:BUILD.getopt",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "gun",
     version = "1.3.3",
-<<<<<<< HEAD
     sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
-=======
     build_file = "@//bazel:BUILD.gun",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
@@ -286,54 +214,30 @@ erlang_package.git_package(
 erlang_package.git_package(
     name = "jose",
     repository = "potatosalad/erlang-jose",
-<<<<<<< HEAD
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-=======
     build_file = "@//bazel:BUILD.jose",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "jsx",
     version = "3.1.0",
-<<<<<<< HEAD
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
-=======
     build_file = "@//bazel:BUILD.jsx",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
     repository = "eproxus/meck",
-<<<<<<< HEAD
-    branch = "master",
-=======
     build_file = "@//bazel:BUILD.meck",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "observer_cli",
     version = "1.7.3",
-<<<<<<< HEAD
     sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
-)
-
-erlang_package.git_package(
-=======
     build_file = "@//bazel:BUILD.observer_cli",
 )
 
 erlang_package.git_package(
-    patch_cmds = [
-        """VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-""",
-    ],
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
     repository = "rabbitmq/osiris",
     tag = "v1.2.6",
     patch_cmds = ["""sed -i"_orig" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
@@ -342,94 +246,34 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
 erlang_package.hex_package(
     name = "prometheus",
-<<<<<<< HEAD
     version = "4.9.1",
     sha256 = "d75e80d7b2c1be6bf296e211e806e939ae3d9e0428f45b4caad1817f028213d3",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "prometheus",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-    deps = [
-        "@quantile_estimator//:erlang_app",
-    ],
-)
-""",
-=======
-    sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
-    version = "4.10.0",
     build_file = "@//bazel:BUILD.prometheus",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
     repository = "manopapad/proper",
-<<<<<<< HEAD
-    branch = "master",
-=======
     build_file = "@//bazel:BUILD.proper",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "quantile_estimator",
     version = "0.2.1",
-<<<<<<< HEAD
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
+    build_file = "@//bazel:BUILD.quantile_estimator",
 )
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
     tag = "v2.0.13",
-    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
-"""],
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-NAME = "ra"
-
-EXTRA_APPS = [
-    "sasl",
-    "crypto",
-]
-
-DEPS = [
-    "@gen_batch_server//:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "@aten//:erlang_app",
-]
-
-erlang_app(
-    app_name = NAME,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-)
-""",
-=======
-    build_file = "@//bazel:BUILD.quantile_estimator",
-)
-
-erlang_package.hex_package(
-    name = "ra",
-    sha256 = "7fae3112cea737bc64d5ff51c1b79a7f30f13ed3d11c565d2a6966ea5aa40473",
-    version = "2.4.6",
     build_file = "@//bazel:BUILD.ra",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "ranch",
     version = "2.1.0",
-<<<<<<< HEAD
     sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
-=======
     build_file = "@//bazel:BUILD.ranch",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
@@ -442,33 +286,21 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "redbug",
     version = "2.0.7",
-<<<<<<< HEAD
     sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    build_file = "@//bazel:BUILD.redbug",
 )
 
 erlang_package.git_package(
     repository = "rabbitmq/seshat",
     tag = "0.1.0",
-=======
-    build_file = "@//bazel:BUILD.redbug",
-)
-
-erlang_package.hex_package(
-    name = "seshat",
-    sha256 = "2c3deec7ff86e0d0c05edebd3455c8363123c227be292ffffc1a05eec08bff63",
-    version = "0.4.0",
     build_file = "@//bazel:BUILD.seshat",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "stdout_formatter",
     version = "0.2.4",
-<<<<<<< HEAD
     sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
-=======
     build_file = "@//bazel:BUILD.stdout_formatter",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.git_package(
@@ -479,36 +311,15 @@ erlang_package.git_package(
 erlang_package.hex_package(
     name = "sysmon_handler",
     version = "1.3.0",
-<<<<<<< HEAD
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
-=======
     build_file = "@//bazel:BUILD.sysmon_handler",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 erlang_package.hex_package(
     name = "systemd",
-<<<<<<< HEAD
-    version = "0.6.1",
-    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "systemd",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-    deps = [
-        "@enough//:erlang_app",
-    ],
-)
-""",
-=======
     sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
     version = "0.6.1",
     build_file = "@//bazel:BUILD.systemd",
->>>>>>> 85525f37a3 (Use gazelle for external erlang deps (backport #6935) (backport #7029) (#7030))
 )
 
 use_repo(

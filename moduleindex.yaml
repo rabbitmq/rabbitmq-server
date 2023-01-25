@@ -311,9 +311,7 @@ osiris:
 - osiris_app
 - osiris_bench
 - osiris_counters
-- osiris_ets
 - osiris_log
-- osiris_log_shared
 - osiris_replica
 - osiris_replica_reader
 - osiris_replica_reader_sup
@@ -454,8 +452,8 @@ redbug:
 - redbug_parser
 - redbug_targ
 seshat:
-- seshat
 - seshat_app
+- seshat_counters
 - seshat_counters_server
 - seshat_sup
 stdout_formatter:
