@@ -1,0 +1,108 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_thoas_beam",
+    srcs = ["src/thoas.erl"],
+    outs = ["ebin/thoas.beam"],
+    app_name = "thoas",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_thoas_decode_beam",
+    srcs = ["src/thoas_decode.erl"],
+    outs = ["ebin/thoas_decode.beam"],
+    app_name = "thoas",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_thoas_encode_beam",
+    srcs = ["src/thoas_encode.erl"],
+    outs = ["ebin/thoas_encode.beam"],
+    app_name = "thoas",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/thoas.beam",
+        "ebin/thoas_decode.beam",
+        "ebin/thoas_encode.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/thoas.app.src",
+        "src/thoas.erl",
+        "src/thoas_decode.erl",
+        "src/thoas_encode.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "thoas",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "thoas",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

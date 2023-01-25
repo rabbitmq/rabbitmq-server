@@ -1,0 +1,251 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+{src_dirs,[\"src\",\"test\"]}",
+            "+warn_unused_vars",
+            "+warn_export_all",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_unused_function",
+            "+warn_bif_clash",
+            "+warn_unused_record",
+            "+warn_deprecated_function",
+            "+warn_obsolete_guard",
+            "+strict_validation",
+            "+warn_export_vars",
+            "+warn_exported_vars",
+            "+warn_missing_spec",
+            "+warn_untyped_record",
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+{src_dirs,[\"src\",\"test\"]}",
+            "+warn_unused_vars",
+            "+warn_export_all",
+            "+warn_shadow_vars",
+            "+warn_unused_import",
+            "+warn_unused_function",
+            "+warn_bif_clash",
+            "+warn_unused_record",
+            "+warn_deprecated_function",
+            "+warn_obsolete_guard",
+            "+strict_validation",
+            "+warn_export_vars",
+            "+warn_exported_vars",
+            "+warn_missing_spec",
+            "+warn_untyped_record",
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_beam",
+    srcs = ["src/observer_cli.erl"],
+    outs = ["ebin/observer_cli.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_application_beam",
+    srcs = ["src/observer_cli_application.erl"],
+    outs = ["ebin/observer_cli_application.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_escriptize_beam",
+    srcs = ["src/observer_cli_escriptize.erl"],
+    outs = ["ebin/observer_cli_escriptize.beam"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_ets_beam",
+    srcs = ["src/observer_cli_ets.erl"],
+    outs = ["ebin/observer_cli_ets.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_help_beam",
+    srcs = ["src/observer_cli_help.erl"],
+    outs = ["ebin/observer_cli_help.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_inet_beam",
+    srcs = ["src/observer_cli_inet.erl"],
+    outs = ["ebin/observer_cli_inet.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_lib_beam",
+    srcs = ["src/observer_cli_lib.erl"],
+    outs = ["ebin/observer_cli_lib.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_mnesia_beam",
+    srcs = ["src/observer_cli_mnesia.erl"],
+    outs = ["ebin/observer_cli_mnesia.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_plugin_beam",
+    srcs = ["src/observer_cli_plugin.erl"],
+    outs = ["ebin/observer_cli_plugin.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_port_beam",
+    srcs = ["src/observer_cli_port.erl"],
+    outs = ["ebin/observer_cli_port.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_process_beam",
+    srcs = ["src/observer_cli_process.erl"],
+    outs = ["ebin/observer_cli_process.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_store_beam",
+    srcs = ["src/observer_cli_store.erl"],
+    outs = ["ebin/observer_cli_store.beam"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_observer_cli_system_beam",
+    srcs = ["src/observer_cli_system.erl"],
+    outs = ["ebin/observer_cli_system.beam"],
+    hdrs = ["include/observer_cli.hrl"],
+    app_name = "observer_cli",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/observer_cli.beam",
+        "ebin/observer_cli_application.beam",
+        "ebin/observer_cli_escriptize.beam",
+        "ebin/observer_cli_ets.beam",
+        "ebin/observer_cli_help.beam",
+        "ebin/observer_cli_inet.beam",
+        "ebin/observer_cli_lib.beam",
+        "ebin/observer_cli_mnesia.beam",
+        "ebin/observer_cli_plugin.beam",
+        "ebin/observer_cli_port.beam",
+        "ebin/observer_cli_process.beam",
+        "ebin/observer_cli_store.beam",
+        "ebin/observer_cli_system.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/observer_cli.app.src",
+        "src/observer_cli.erl",
+        "src/observer_cli_application.erl",
+        "src/observer_cli_escriptize.erl",
+        "src/observer_cli_ets.erl",
+        "src/observer_cli_help.erl",
+        "src/observer_cli_inet.erl",
+        "src/observer_cli_lib.erl",
+        "src/observer_cli_mnesia.erl",
+        "src/observer_cli_plugin.erl",
+        "src/observer_cli_port.erl",
+        "src/observer_cli_process.erl",
+        "src/observer_cli_store.erl",
+        "src/observer_cli_system.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["include/observer_cli.hrl"],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "observer_cli",
+    beam_files = [":beam_files"],
+    deps = ["@recon//:erlang_app"],
+)
+
+alias(
+    name = "observer_cli",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

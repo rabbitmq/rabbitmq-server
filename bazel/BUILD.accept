@@ -1,0 +1,122 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "ebin_accept_encoding_header_beam",
+    srcs = ["src/accept_encoding_header.erl"],
+    outs = ["ebin/accept_encoding_header.beam"],
+    hdrs = ["include/accept.hrl"],
+    app_name = "accept",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_accept_header_beam",
+    srcs = ["src/accept_header.erl"],
+    outs = ["ebin/accept_header.beam"],
+    hdrs = ["include/accept.hrl"],
+    app_name = "accept",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_accept_neg_beam",
+    srcs = ["src/accept_neg.erl"],
+    outs = ["ebin/accept_neg.beam"],
+    app_name = "accept",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "ebin_accept_parser_beam",
+    srcs = ["src/accept_parser.erl"],
+    outs = ["ebin/accept_parser.beam"],
+    hdrs = ["include/accept.hrl"],
+    app_name = "accept",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        "ebin/accept_encoding_header.beam",
+        "ebin/accept_header.beam",
+        "ebin/accept_neg.beam",
+        "ebin/accept_parser.beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/accept.app.src",
+        "src/accept_encoding_header.erl",
+        "src/accept_header.erl",
+        "src/accept_neg.erl",
+        "src/accept_parser.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["include/accept.hrl"],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "accept",
+    beam_files = [":beam_files"],
+)
+
+alias(
+    name = "accept",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
