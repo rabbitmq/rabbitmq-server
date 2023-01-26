@@ -215,7 +215,6 @@ erlang_package.git_package(
 <<<<<<< HEAD
 =======
     build_file = "@//bazel:BUILD.jose",
-<<<<<<< HEAD
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
 >>>>>>> ac70916338 (Adopt elixir 1.13.4)
     repository = "potatosalad/erlang-jose",
@@ -225,6 +224,7 @@ erlang_package.git_package(
 erlang_package.hex_package(
     name = "jsx",
     version = "3.1.0",
+<<<<<<< HEAD
 <<<<<<< HEAD
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
 =======
@@ -240,6 +240,8 @@ erlang_package.hex_package(
     version = "0.4.1",
 >>>>>>> f8651fcd02 (Adopt elixir 1.13.4)
 >>>>>>> ac70916338 (Adopt elixir 1.13.4)
+=======
+>>>>>>> cbf16c478a (Resolve conflicts)
 )
 
 erlang_package.git_package(
