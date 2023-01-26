@@ -224,7 +224,6 @@ erlang_package.git_package(
 erlang_package.git_package(
     name = "jose",
     build_file = "@//bazel:BUILD.jose",
-<<<<<<< HEAD
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
     repository = "potatosalad/erlang-jose",
 )
@@ -234,17 +233,6 @@ erlang_package.hex_package(
     build_file = "@//bazel:BUILD.jsx",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
     version = "3.1.0",
-=======
-    commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
-    repository = "michaelklishin/erlang-jose",
-)
-
-erlang_package.hex_package(
-    name = "thoas",
-    build_file = "@//bazel:BUILD.thoas",
-    sha256 = "4918d50026c073c4ab1388437132c77a6f6f7c8ac43c60c13758cc0adce2134e",
-    version = "0.4.1",
->>>>>>> 6fcf6138bb (Adopt otp 25.2.1)
 )
 
 erlang_package.git_package(
