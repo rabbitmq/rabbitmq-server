@@ -11,23 +11,35 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-import(rabbit_ct_broker_helpers, [rpc/4]).
+-import(rabbit_ct_helpers, [eventually/3]).
+-import(util, [all_connection_pids/1,
+               publish_qos1_timeout/4,
+               expect_publishes/3,
+               connect/2,
+               connect/3,
+               await_exit/1]).
+
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                block,
-                                block_connack_timeout,
-                                handle_invalid_frames,
-                                login_timeout,
-                                stats,
-                                quorum_session_false,
-                                quorum_session_true,
-                                classic_session_true,
-                                classic_session_false
+     {tests, [],
+      [
+       block_connack_timeout,
+       handle_invalid_packets,
+       login_timeout,
+       stats,
+       quorum_clean_session_false,
+       quorum_clean_session_true,
+       classic_clean_session_true,
+       classic_clean_session_false,
+       non_clean_sess_empty_client_id,
+       event_authentication_failure,
+       rabbit_mqtt_qos0_queue_overflow
       ]}
     ].
 
@@ -79,50 +91,18 @@ end_per_testcase(Testcase, Config) ->
 %% Testsuite cases
 %% -------------------------------------------------------------------
 
-block(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clientid, <<"simpleClient">>},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
-
-    %% Only here to ensure the connection is really up
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>),
-    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-    {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
-
-    {ok, _, _} = emqtt:subscribe(C, <<"Topic1">>),
-    {ok, _} = publish_qos1(C, <<"Topic1">>, <<"Not blocked yet">>),
-
-    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
-    % %% Let it block
-    timer:sleep(100),
-
-    %% Blocked, but still will publish
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Now blocked">>),
-    puback_timeout = publish_qos1(C, <<"Topic1">>, <<"Still blocked">>),
-
-    %% Unblock
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
-    expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
-                                    <<"Now blocked">>,
-                                    <<"Still blocked">>]),
-    ok = emqtt:disconnect(C).
-
 block_connack_timeout(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Ports0 = rpc(Config, erlang, ports, []),
 
-    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let connection block.
     timer:sleep(100),
 
-    %% We can still connect via TCP, but CONNECT frame will not be processed on the server.
+    %% We can still connect via TCP, but CONNECT packet will not be processed on the server.
     {ok, Client} = emqtt:start_link([{host, "localhost"},
                                      {port, P},
-                                     {clientid, <<"simpleClient">>},
+                                     {clientid, atom_to_binary(?FUNCTION_NAME)},
                                      {proto_ver, v4},
                                      {connect_timeout, 1}]),
     unlink(Client),
@@ -141,7 +121,7 @@ block_connack_timeout(Config) ->
     {connected, MqttReader} = rpc(Config, erlang, port_info, [NewPort, connected]),
     MqttReaderMRef = monitor(process, MqttReader),
 
-    %% Unblock connection. CONNECT frame will be processed on the server.
+    %% Unblock connection. CONNECT packet will be processed on the server.
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
 
     receive
@@ -153,18 +133,20 @@ block_connack_timeout(Config) ->
               ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
-    [] = rpc(Config, rabbit_mqtt_collector, list, []),
+    ?assertEqual([], all_connection_pids(Config)),
     ok.
 
-handle_invalid_frames(Config) ->
+handle_invalid_packets(Config) ->
     N = rpc(Config, ets, info, [connection_metrics, size]),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = gen_tcp:connect("localhost", P, []),
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
+    %% Wait for stats being emitted (every 100ms)
+    timer:sleep(300),
     %% No new stats entries should be inserted as connection never got to initialize
-    N = rpc(Config, ets, info, [connection_metrics, size]).
+    ?assertEqual(N, rpc(Config, ets, info, [connection_metrics, size])).
 
 login_timeout(Config) ->
     rpc(Config, application, set_env, [rabbitmq_mqtt, login_timeout, 400]),
@@ -178,23 +160,12 @@ login_timeout(Config) ->
     end.
 
 stats(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    %% CMN = rpc(Config, ets, info, [connection_metrics, size]),
-    %% CCMN = rpc(Config, ets, info, [connection_coarse_metrics, size]),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clientid, <<"simpleClient">>},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
-    %% Ensure that there are some stats
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
-    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-    {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
-    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
+    C = connect(?FUNCTION_NAME, Config),
+    %% Wait for stats being emitted (every 100ms)
+    timer:sleep(300),
     %% Retrieve the connection Pid
-    [{_, Reader}] = rpc(Config, rabbit_mqtt_collector, list, []),
-    [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
+    [Pid] = all_connection_pids(Config),
+    [{pid, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Pid, [pid]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
@@ -203,10 +174,10 @@ stats(Config) ->
                               [connection_coarse_metrics, Pid]),
     ok = emqtt:disconnect(C).
 
-get_durable_queue_type(Server, Q0) ->
-    QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
-    {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
-    amqqueue:get_type(Q1).
+get_durable_queue_type(Server, QNameBin) ->
+    QName = rabbit_misc:r(<<"/">>, queue, QNameBin),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+    amqqueue:get_type(Q).
 
 set_env(QueueType) ->
     application:set_env(rabbitmq_mqtt, durable_queue_type, QueueType).
@@ -214,80 +185,142 @@ set_env(QueueType) ->
 get_env() ->
     rabbit_mqtt_util:env(durable_queue_type).
 
-
-validate_durable_queue_type(Config, ClientName, CleanSession, Expected) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, P},
-                                {clean_start, CleanSession},
-                                {clientid, ClientName},
-                                {proto_ver, v4}]),
-    {ok, _Properties} = emqtt:connect(C),
+    C = connect(ClientName, Config, [{clean_start, CleanSession}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
-    expect_publishes(<<"TopicB">>, [<<"Payload">>]),
+    ok = expect_publishes(C, <<"TopicB">>, [<<"Payload">>]),
     {ok, _, _} = emqtt:unsubscribe(C, <<"TopicB">>),
     Prefix = <<"mqtt-subscription-">>,
     Suffix = <<"qos1">>,
-    Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
-    ?assertEqual(Expected,get_durable_queue_type(Server,Q)),
-    timer:sleep(500),
+    QNameBin = <<Prefix/binary, ClientName/binary, Suffix/binary>>,
+    ?assertEqual(ExpectedQueueType, get_durable_queue_type(Server, QNameBin)),
     ok = emqtt:disconnect(C).
 
-%% quorum queue test when enable
-quorum_session_false(Config) ->
-  %%  test if the quorum queue is enable after the setting
+quorum_clean_session_false(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),
     rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
+    validate_durable_queue_type(Config, <<"quorumCleanSessionFalse">>, false, rabbit_quorum_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
-quorum_session_true(Config) ->
-  %%  in case clean session == true must be classic since quorum
-  %% doesn't support auto-delete
+quorum_clean_session_true(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),
     rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"qCleanSessionTrue">>, true, rabbit_classic_queue),
+    %% Since we use a clean session and quorum queues cannot be auto-delete or exclusive,
+    %% we expect a classic queue.
+    validate_durable_queue_type(Config, <<"quorumCleanSessionTrue">>, true, rabbit_classic_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
-classic_session_true(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionTrue">>, true, rabbit_classic_queue).
+classic_clean_session_true(Config) ->
+    validate_durable_queue_type(Config, <<"classicCleanSessionTrue">>, true, rabbit_classic_queue).
 
-classic_session_false(Config) ->
-  %%  with default configuration the queue is classic
-    validate_durable_queue_type(Config, <<"cCleanSessionFalse">>, false, rabbit_classic_queue).
+classic_clean_session_false(Config) ->
+    validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
 
+%% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
+%% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
+%% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
+non_clean_sess_empty_client_id(Config) ->
+    {ok, C} = emqtt:start_link(
+                [{clientid, <<>>},
+                 {clean_start, false},
+                 {proto_ver, v4},
+                 {host, "localhost"},
+                 {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)}
+                ]),
+    process_flag(trap_exit, true),
+    ?assertMatch({error, {client_identifier_not_valid, _}},
+                 emqtt:connect(C)),
+    ok = await_exit(C).
 
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload|Rest]) ->
+event_authentication_failure(Config) ->
+    {ok, C} = emqtt:start_link(
+                [{username, <<"Trudy">>},
+                 {password, <<"fake-password">>},
+                 {host, "localhost"},
+                 {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
+                 {clientid, atom_to_binary(?FUNCTION_NAME)},
+                 {proto_ver, v4}]),
+    true = unlink(C),
+
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = gen_event:add_handler({rabbit_event, Server}, event_recorder, []),
+
+    ?assertMatch({error, _}, emqtt:connect(C)),
+
+    [E, _ConnectionClosedEvent] = util:get_events(Server),
+    util:assert_event_type(user_authentication_failure, E),
+    util:assert_event_prop([{name, <<"Trudy">>},
+                            {connection_type, network}],
+                           E),
+
+    ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
+
+%% Test that queue type rabbit_mqtt_qos0_queue drops QoS 0 messages when its
+%% max length is reached.
+rabbit_mqtt_qos0_queue_overflow(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Msg = binary:copy(<<"x">>, 1000),
+    NumMsgs = 10_000,
+
+    %% Provoke TCP back-pressure from client to server by using very small buffers.
+    Opts = [{tcp_opts, [{recbuf, 512},
+                        {buffer, 512}]}],
+    Sub = connect(<<"subscriber">>, Config, Opts),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+    [ServerConnectionPid] = all_connection_pids(Config),
+
+    %% Suspend the receiving client such that it stops reading from its socket
+    %% causing TCP back-pressure to the server being applied.
+    true = erlang:suspend_process(Sub),
+
+    %% Let's overflow the receiving server MQTT connection process
+    %% (i.e. the rabbit_mqtt_qos0_queue) by sending many large messages.
+    Pub = connect(<<"publisher">>, Config),
+    lists:foreach(fun(_) ->
+                          ok = emqtt:publish(Pub, Topic, Msg, qos0)
+                  end, lists:seq(1, NumMsgs)),
+
+    %% Give the server some time to process (either send or drop) the messages.
+    timer:sleep(2000),
+
+    %% Let's resume the receiving client to receive any remaining messages that did
+    %% not get dropped.
+    true = erlang:resume_process(Sub),
+    NumReceived = num_received(Topic, Msg, 0),
+
+    {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
+    [State] = [S || {data, [{"State", S}]} <- Misc],
+    #{proc_state := #{qos0_messages_dropped := NumDropped}} = State,
+    ct:pal("NumReceived=~b~nNumDropped=~b", [NumReceived, NumDropped]),
+
+    %% We expect that
+    %% 1. all sent messages were either received or dropped
+    ?assertEqual(NumMsgs, NumReceived + NumDropped),
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            %% 2. at least one message was dropped (otherwise our whole test case did not
+            %%    test what it was supposed to test: that messages are dropped due to the
+            %%    server being overflowed with messages while the client receives too slowly)
+            ?assert(NumDropped >= 1);
+        true ->
+            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+            ?assertEqual(0, NumDropped)
+    end,
+    %% 3. we received at least 1000 messages because everything below the default
+    %% of mailbox_soft_limit=1000 should not be dropped
+    ?assert(NumReceived >= 1000),
+
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub).
+
+num_received(Topic, Payload, N) ->
     receive
         {publish, #{topic := Topic,
                     payload := Payload}} ->
-            expect_publishes(Topic, Rest)
-    after 5000 ->
-              throw({publish_not_delivered, Payload})
+            num_received(Topic, Payload, N + 1)
+    after 1000 ->
+              N
     end.
-
-rpc(Config, M, F, A) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
-
-publish_qos1(Client, Topic, Payload) ->
-    Mref = erlang:monitor(process, Client),
-    ok = emqtt:publish_async(Client, Topic, #{}, Payload, [{qos, 1}], infinity,
-                             {fun ?MODULE:sync_publish_result/3, [self(), Mref]}),
-    receive
-        {Mref, Reply} ->
-            erlang:demonitor(Mref, [flush]),
-            Reply;
-        {'DOWN', Mref, process, Client, Reason} ->
-            ct:fail("client is down: ~tp", [Reason])
-    after
-        1000 ->
-            erlang:demonitor(Mref, [flush]),
-            puback_timeout
-    end.
-
-sync_publish_result(Caller, Mref, Result) ->
-    erlang:send(Caller, {Mref, Result}).

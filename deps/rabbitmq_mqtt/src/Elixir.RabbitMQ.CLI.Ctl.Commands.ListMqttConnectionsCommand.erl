@@ -30,14 +30,15 @@ scopes() -> [ctl, diagnostics].
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
-description() -> <<"Lists MQTT connections on the target node">>.
+description() -> <<"Lists all MQTT connections">>.
 
 help_section() ->
     {plugin, mqtt}.
 
 validate(Args, _) ->
+    InfoItems = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
+                                                               InfoItems) of
         {ok, _} -> ok;
         Error   -> Error
     end.
@@ -68,9 +69,7 @@ run(Args, #{node := NodeName,
         false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
     end,
 
-    %% a node uses the Raft-based collector to list connections, which knows about all connections in the cluster
-    %% so no need to reach out to all the nodes
-    Nodes = [NodeName],
+    Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(
         NodeName,

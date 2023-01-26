@@ -44,7 +44,7 @@ insert(SeqNo, QNames, #resource{kind = exchange} = XName,
                 unconfirmed = U0} = State)
   when is_integer(SeqNo)
        andalso is_list(QNames)
-       andalso is_map_key(SeqNo, U0) == false ->
+       andalso not is_map_key(SeqNo, U0) ->
     U = U0#{SeqNo => {XName, maps:from_list([{Q, ok} || Q <- QNames])}},
     S = case S0 of
             undefined -> SeqNo;

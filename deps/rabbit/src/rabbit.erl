@@ -727,7 +727,8 @@ status() ->
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
                       {connection_count,
-                       length(rabbit_networking:connections_local())},
+                       length(rabbit_networking:connections_local()) +
+                       length(rabbit_networking:local_non_amqp_connections())},
                       {queue_count, total_queue_count()}];
                  false ->
                      []
@@ -1163,12 +1164,12 @@ config_locations() ->
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
 force_event_refresh(Ref) ->
-    % direct connections, e.g. MQTT, STOMP
+    % direct connections, e.g. STOMP
     ok = rabbit_direct:force_event_refresh(Ref),
     % AMQP connections
     ok = rabbit_networking:force_connection_event_refresh(Ref),
-    % "external" connections, which are not handled by the "AMQP core",
-    % e.g. connections to the stream plugin
+    % non-AMQP connections, which are not handled by the "AMQP core",
+    % e.g. connections to the stream and MQTT plugins
     ok = rabbit_networking:force_non_amqp_connection_event_refresh(Ref),
     ok = rabbit_channel:force_event_refresh(Ref),
     ok = rabbit_amqqueue:force_event_refresh(Ref).

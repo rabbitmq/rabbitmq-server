@@ -1616,12 +1616,7 @@ wait_for_confirms(Unconfirmed) ->
         true  -> ok;
         false ->
             receive
-                {'$gen_cast',
-                 {queue_event, _QName, {confirm, Confirmed, _}}} ->
-                    wait_for_confirms(
-                      sets:subtract(
-                        Unconfirmed, sets:from_list(Confirmed)));
-                {'$gen_cast', {confirm, Confirmed, _}} ->
+                {'$gen_cast', {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
                       sets:subtract(
                         Unconfirmed, sets:from_list(Confirmed)))

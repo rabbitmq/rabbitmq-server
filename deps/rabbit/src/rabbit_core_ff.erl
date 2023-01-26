@@ -34,7 +34,8 @@
    {stream_queue,
     #{desc          => "Support queues of type `stream`",
       doc_url       => "https://www.rabbitmq.com/stream.html",
-      stability     => stable,
+      %%TODO remove compatibility code
+      stability     => required,
       depends_on    => [quorum_queue]
      }}).
 
@@ -111,14 +112,15 @@
    {classic_queue_type_delivery_support,
     #{desc          => "Bug fix for classic queue deliveries using mixed versions",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
-      stability     => stable,
+      %%TODO remove compatibility code
+      stability     => required,
       depends_on    => [stream_queue]
      }}).
 
 -rabbit_feature_flag(
    {restart_streams,
     #{desc          => "Support for restarting streams with optional preferred next leader argument. "
-                       "Used to implement stream leader rebalancing",
+      "Used to implement stream leader rebalancing",
       stability     => stable,
       depends_on    => [stream_queue]
      }}).

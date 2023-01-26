@@ -7,23 +7,28 @@
 
 -module(rabbit_trace).
 
--export([init/1, enabled/1, tap_in/6, tap_out/5, start/1, stop/1]).
+-export([init/1, enabled/1, tap_in/5, tap_in/6,
+         tap_out/4, tap_out/5, start/1, stop/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -define(TRACE_VHOSTS, trace_vhosts).
 -define(XNAME, <<"amq.rabbitmq.trace">>).
+%% "The channel number is 0 for all frames which are global to the connection" [AMQP 0-9-1 spec]
+-define(CONNECTION_GLOBAL_CHANNEL_NUM, 0).
 
 %%----------------------------------------------------------------------------
 
--type state() :: rabbit_types:exchange() | 'none'.
+-opaque state() :: rabbit_types:exchange() | 'none'.
+-export_type([state/0]).
 
 %%----------------------------------------------------------------------------
 
 -spec init(rabbit_types:vhost()) -> state().
 
-init(VHost) ->
+init(VHost)
+  when is_binary(VHost) ->
     case enabled(VHost) of
         false -> none;
         true  -> {ok, X} = rabbit_exchange:lookup(
@@ -31,11 +36,21 @@ init(VHost) ->
                  X
     end.
 
--spec enabled(rabbit_types:vhost()) -> boolean().
+-spec enabled(rabbit_types:vhost() | state()) -> boolean().
 
-enabled(VHost) ->
+enabled(VHost)
+  when is_binary(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
-    lists:member(VHost, VHosts).
+    lists:member(VHost, VHosts);
+enabled(none) ->
+    false;
+enabled(#exchange{}) ->
+    true.
+
+-spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
+             binary(), rabbit_types:username(), state()) -> 'ok'.
+tap_in(Msg, QNames, ConnName, Username, State) ->
+    tap_in(Msg, QNames, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
 -spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
                    binary(), rabbit_channel:channel_number(),
@@ -52,6 +67,11 @@ tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
            {<<"user">>,          longstr,   Username},
            {<<"routed_queues">>, array,
             [{longstr, QName#resource.name} || QName <- QNames]}]).
+
+-spec tap_out(rabbit_amqqueue:qmsg(), binary(),
+              rabbit_types:username(), state()) -> 'ok'.
+tap_out(Msg, ConnName, Username, State) ->
+    tap_out(Msg, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
 -spec tap_out(rabbit_amqqueue:qmsg(), binary(),
                     rabbit_channel:channel_number(),
@@ -73,7 +93,8 @@ tap_out({#resource{name = QName, virtual_host = VHost},
 
 -spec start(rabbit_types:vhost()) -> 'ok'.
 
-start(VHost) ->
+start(VHost)
+  when is_binary(VHost) ->
     case lists:member(VHost, vhosts_with_tracing_enabled()) of
         true  ->
             rabbit_log:info("Tracing is already enabled for vhost '~ts'", [VHost]),
@@ -87,7 +108,8 @@ start(VHost) ->
 
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 
-stop(VHost) ->
+stop(VHost)
+  when is_binary(VHost) ->
     case lists:member(VHost, vhosts_with_tracing_enabled()) of
         true  ->
             rabbit_log:info("Disabling tracing for vhost '~ts'", [VHost]),
@@ -101,11 +123,14 @@ update_config(Fun) ->
     VHosts0 = vhosts_with_tracing_enabled(),
     VHosts = Fun(VHosts0),
     application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
-    rabbit_log:debug("Will now refresh channel state after virtual host tracing changes"),
 
+    NonAmqpPids = rabbit_networking:local_non_amqp_connections(),
+    rabbit_log:debug("Will now refresh state of channels and of ~b non AMQP 0.9.1 "
+                     "connections after virtual host tracing changes",
+                     [length(NonAmqpPids)]),
+    lists:foreach(fun(Pid) -> gen_server:cast(Pid, refresh_config) end, NonAmqpPids),
     {Time, _} = timer:tc(fun rabbit_channel:refresh_config_local/0),
-    rabbit_log:debug("Refreshed channel state in ~fs", [Time/1000000]),
-
+    rabbit_log:debug("Refreshed channel state in ~fs", [Time/1_000_000]),
     ok.
 
 vhosts_with_tracing_enabled() ->

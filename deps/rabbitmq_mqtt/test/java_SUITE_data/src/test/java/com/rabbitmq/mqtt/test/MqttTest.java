@@ -740,7 +740,7 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void publishMultiple() throws MqttException, InterruptedException {
-        int pubCount = 50;
+        int pubCount = 1000;
         for (int subQos=0; subQos <= 2; subQos++){
             for (int pubQos=0; pubQos <= 2; pubQos++){
                 // avoid reusing the client in this test as a shared
@@ -960,6 +960,26 @@ public class MqttTest implements MqttCallback {
 
         waitAtMost(() -> receivedMessagesSize() == 1);
         client.disconnect();
+    }
+
+    // "A Server MAY allow a Client to supply a ClientId that has a length of zero bytes, however if it does so
+    // the Server MUST treat this as a special case and assign a unique ClientId to that Client." [MQTT-3.1.3-6]
+    // RabbitMQ allows a Client to supply a ClientId that has a length of zero bytes.
+    @Test public void emptyClientId(TestInfo info) throws MqttException, InterruptedException {
+        String emptyClientId = "";
+        MqttConnectOptions client_opts = new TestMqttConnectOptions();
+        MqttClient client = newConnectedClient(emptyClientId, client_opts);
+        MqttClient client2 = newConnectedClient(emptyClientId, client_opts);
+        client.setCallback(this);
+        client2.setCallback(this);
+        client.subscribe("/test-topic/#");
+        client2.subscribe("/test-topic/#");
+
+        publish(client, "/test-topic/1", 0, "my-message".getBytes());
+        waitAtMost(() -> receivedMessagesSize() == 2);
+
+        disconnect(client);
+        disconnect(client2);
     }
 
     private void publish(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {

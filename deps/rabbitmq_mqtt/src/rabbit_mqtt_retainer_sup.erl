@@ -11,14 +11,13 @@
 -export([start_link/1, init/1, start_child/2,start_child/1, child_for_vhost/1,
          delete_child/1]).
 
--define(ENCODING, utf8).
-
 -spec start_child(binary()) -> supervisor:startchild_ret().
 -spec start_child(term(), binary()) -> supervisor:startchild_ret().
 
 start_link(SupName) ->
     supervisor:start_link(SupName, ?MODULE, []).
 
+-spec child_for_vhost(rabbit_types:vhost()) -> pid().
 child_for_vhost(VHost) when is_binary(VHost) ->
   case rabbit_mqtt_retainer_sup:start_child(VHost) of
     {ok, Pid}                       -> Pid;

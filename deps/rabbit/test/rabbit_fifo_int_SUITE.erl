@@ -89,7 +89,7 @@ basics(Config) ->
     UId = ?config(uid, Config),
     ConsumerTag = UId,
     ok = start_cluster(ClusterName, [ServerId]),
-    FState0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
+    FState0 = rabbit_fifo_client:init([ServerId]),
     {ok, FState1} = rabbit_fifo_client:checkout(ConsumerTag, 1, simple_prefetch,
                                                 #{}, FState0),
 
@@ -97,19 +97,19 @@ basics(Config) ->
     % create segment the segment will trigger a snapshot
     timer:sleep(1000),
 
-    {ok, FState2} = rabbit_fifo_client:enqueue(one, FState1),
+    {ok, FState2, []} = rabbit_fifo_client:enqueue(ClusterName, one, FState1),
 
     DeliverFun = fun DeliverFun(S0, F) ->
                          receive
                              {ra_event, From, Evt} ->
                                  ct:pal("ra_event ~p", [Evt]),
-                                 case rabbit_fifo_client:handle_ra_event(From, Evt, S0) of
+                                 case rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, S0) of
                                      {ok, S1,
                                       [{deliver, C, true,
                                         [{_Qname, _QRef, MsgId, _SomBool, _Msg}]}]} ->
                                          {S, _A} = rabbit_fifo_client:F(C, [MsgId], S1),
                                          %% settle applied event
-                                         process_ra_event(S, ?RA_EVENT_TIMEOUT);
+                                         process_ra_event(ClusterName, S, ?RA_EVENT_TIMEOUT);
                                      {ok, S, _} ->
                                          DeliverFun(S, F)
                                  end
@@ -129,13 +129,13 @@ basics(Config) ->
     receive
         {ra_event, From, Evt} ->
             ct:pal("ra_event ~p", [Evt]),
-            {ok, F6, _} = rabbit_fifo_client:handle_ra_event(From, Evt, FState5),
+            {ok, F6, _} = rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, FState5),
             F6
     after 5000 ->
               exit(leader_change_timeout)
     end,
 
-    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
+    {ok, FState6, []} = rabbit_fifo_client:enqueue(ClusterName, two, FState5b),
     _FState8 = DeliverFun(FState6, return),
 
     rabbit_quorum_queue:stop_server(ServerId),
@@ -146,11 +146,11 @@ return(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    F00 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F0} = rabbit_fifo_client:enqueue(1, msg1, F00),
-    {ok, F1} = rabbit_fifo_client:enqueue(2, msg2, F0),
-    {_, _, F2} = process_ra_events(receive_ra_events(2, 0), F1),
-    {ok, _, {_, _, MsgId, _, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
+    F00 = rabbit_fifo_client:init([ServerId]),
+    {ok, F0, []} = rabbit_fifo_client:enqueue(ClusterName, 1, msg1, F00),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, 2, msg2, F0),
+    {_, _, F2} = process_ra_events(receive_ra_events(2, 0), ClusterName, F1),
+    {ok, _, {_, _, MsgId, _, _}, F} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, unsettled, F2),
     _F2 = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
 
     rabbit_quorum_queue:stop_server(ServerId),
@@ -160,11 +160,11 @@ rabbit_fifo_returns_correlation(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(corr1, msg1, F0),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F0),
     receive
         {ra_event, Frm, E} ->
-            case rabbit_fifo_client:handle_ra_event(Frm, E, F1) of
+            case rabbit_fifo_client:handle_ra_event(ClusterName, Frm, E, F1) of
                 {ok, _F2, [{settled, _, _}]} ->
                     ok;
                 Del ->
@@ -180,13 +180,13 @@ duplicate_delivery(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
     Fun = fun Loop(S0) ->
             receive
                 {ra_event, Frm, E} = Evt ->
-                    case rabbit_fifo_client:handle_ra_event(Frm, E, S0) of
+                    case rabbit_fifo_client:handle_ra_event(ClusterName, Frm, E, S0) of
                         {ok, S1, [{settled, _, _}]} ->
                             Loop(S1);
                         {ok, S1, _} ->
@@ -196,7 +196,7 @@ duplicate_delivery(Config) ->
                             %% repeat or crash
                             receive
                                 {ra_event, F, E1} ->
-                                    case rabbit_fifo_client:handle_ra_event(
+                                    case rabbit_fifo_client:handle_ra_event(ClusterName,
                                            F, E1, S1) of
                                         {ok, S2, _} ->
                                             S2
@@ -215,11 +215,11 @@ usage(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(corr2, msg2, F2),
-    {_, _, _} = process_ra_events(receive_ra_events(2, 2), F3),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, corr2, msg2, F2),
+    {_, _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
     % force tick and usage stats emission
     ServerId ! tick_timeout,
     timer:sleep(50),
@@ -235,17 +235,17 @@ resends_lost_command(Config) ->
 
     ok = meck:new(ra, [passthrough]),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
     % lose the enqueue
     meck:expect(ra, pipeline_command, fun (_, _, _) -> ok end),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
     meck:unload(ra),
-    {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
-    {_, _, F4} = process_ra_events(receive_ra_events(2, 0), F3),
-    {ok, _, {_, _, _, _, msg1}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
-    {ok, _, {_, _, _, _, msg2}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, _, {_, _, _, _, msg3}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
+    {_, _, F4} = process_ra_events(receive_ra_events(2, 0), ClusterName, F3),
+    {ok, _, {_, _, _, _, msg1}, F5} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F4),
+    {ok, _, {_, _, _, _, msg2}, F6} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F5),
+    {ok, _, {_, _, _, _, msg3}, _F7} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F6),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -254,10 +254,10 @@ two_quick_enqueues(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    F1 = element(2, rabbit_fifo_client:enqueue(msg1, F0)),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    _ = process_ra_events(receive_ra_events(2, 0), F2),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    F1 = element(2, rabbit_fifo_client:enqueue(ClusterName, msg1, F0)),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
+    _ = process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -266,12 +266,12 @@ detects_lost_delivery(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    F000 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F00} = rabbit_fifo_client:enqueue(msg1, F000),
-    {_, _, F0} = process_ra_events(receive_ra_events(1, 0), F00),
+    F000 = rabbit_fifo_client:init([ServerId]),
+    {ok, F00, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F000),
+    {_, _, F0} = process_ra_events(receive_ra_events(1, 0), ClusterName, F00),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
     % lose first delivery
     receive
         {ra_event, _, {machine, {delivery, _, [{_, {_, msg1}}]}}} ->
@@ -281,7 +281,7 @@ detects_lost_delivery(Config) ->
     end,
 
     % assert three deliveries were received
-    {[_, _, _], _, _} = process_ra_events(receive_ra_events(2, 2), F3),
+    {[_, _, _], _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -290,14 +290,14 @@ returns_after_down(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
-    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), F1),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     % start a consumer in a separate processes
     % that exits after checkout
     Self = self(),
     _Pid = spawn(fun () ->
-                         F = rabbit_fifo_client:init(ClusterName, [ServerId]),
+                         F = rabbit_fifo_client:init([ServerId]),
                          {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 10,
                                                                simple_prefetch,
                                                                #{}, F),
@@ -306,7 +306,7 @@ returns_after_down(Config) ->
     receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
     timer:sleep(1000),
     % message should be available for dequeue
-    {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
+    {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -315,10 +315,10 @@ resends_after_lost_applied(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
-    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(msg2, F2),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F2),
     % lose an applied event
     receive
         {ra_event, _, {applied, _}} ->
@@ -327,11 +327,11 @@ resends_after_lost_applied(Config) ->
               exit(await_ra_event_timeout)
     end,
     % send another message
-    {ok, F4} = rabbit_fifo_client:enqueue(msg3, F3),
-    {_, _, F5} = process_ra_events(receive_ra_events(1, 0), F4),
-    {ok, _, {_, _, _, _, msg1}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, _, {_, _, _, _, msg2}, F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    {ok, _, {_, _, _, _, msg3}, _F8} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F7),
+    {ok, F4, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F3),
+    {_, _, F5} = process_ra_events(receive_ra_events(1, 0), ClusterName, F4),
+    {ok, _, {_, _, _, _, msg1}, F6} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F5),
+    {ok, _, {_, _, _, _, msg2}, F7} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F6),
+    {ok, _, {_, _, _, _, msg3}, _F8} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F7),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -349,13 +349,13 @@ handles_reject_notification(Config) ->
                              {auto, 10, simple_prefetch},
                              #{})),
     % reverse order - should try the first node in the list first
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId2, ServerId1]),
-    {ok, F1} = rabbit_fifo_client:enqueue(one, F0),
+    F0 = rabbit_fifo_client:init([ServerId2, ServerId1]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, one, F0),
 
     timer:sleep(500),
 
     % the applied notification
-    _F2 = process_ra_events(receive_ra_events(1, 0), F1),
+    _F2 = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     rabbit_quorum_queue:stop_server(ServerId1),
     rabbit_quorum_queue:stop_server(ServerId2),
     ok.
@@ -378,12 +378,12 @@ discard(Config) ->
     ok = ra:trigger_election(ServerId),
     _ = ra:members(ServerId),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10,
                                            simple_prefetch, #{}, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg1, F1),
-    F3 = discard_next_delivery(F2, 5000),
-    {empty, _F4} = rabbit_fifo_client:dequeue(<<"tag1">>, settled, F3),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F1),
+    F3 = discard_next_delivery(ClusterName, F2, 5000),
+    {empty, _F4} = rabbit_fifo_client:dequeue(ClusterName, <<"tag1">>, settled, F3),
     receive
         {dead_letter, Reason, Letters} ->
             [msg1] = Letters,
@@ -400,23 +400,23 @@ cancel_checkout(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
     {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F1),
-    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), F2, [], [], fun (_, S) -> S end),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2, [], [], fun (_, S) -> S end),
     {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
     {F5, _} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
-    {ok, _, {_, _, _, _, m1}, F5} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F5),
+    {ok, _, {_, _, _, _, m1}, F5} = rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
     ok.
 
 lost_delivery(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
     {_, _, F2} = process_ra_events(
-                   receive_ra_events(1, 0), F1, [], [], fun (_, S) -> S end),
+                   receive_ra_events(1, 0), ClusterName, F1, [], [], fun (_, S) -> S end),
     {ok, F3} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F2),
     %% drop a delivery, simulating e.g. a full distribution buffer
     receive
@@ -427,11 +427,11 @@ lost_delivery(Config) ->
               exit(await_ra_event_timeout)
     end,
     % send another message
-    {ok, F4} = rabbit_fifo_client:enqueue(m2, F3),
+    {ok, F4, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F3),
     %% this hsould trigger the fifo client to fetch any missing messages
     %% from the server
     {_, _, _F5} = process_ra_events(
-                    receive_ra_events(1, 1), F4, [], [],
+                    receive_ra_events(1, 1), ClusterName, F4, [], [],
                     fun ({deliver, _, _, Dels}, S) ->
                             [{_, _, _, _, M1},
                              {_, _, _, _, M2}] = Dels,
@@ -445,39 +445,39 @@ credit(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-    {_, _, F3} = process_ra_events(receive_ra_events(2, 0), F2),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
     %% checkout with 0 prefetch
     {ok, F4} = rabbit_fifo_client:checkout(<<"tag">>, 0, credited, #{}, F3),
     %% assert no deliveries
-    {_, _, F5} = process_ra_events(receive_ra_events(), F4, [], [],
+    {_, _, F5} = process_ra_events(receive_ra_events(), ClusterName, F4, [], [],
                                    fun
                                        (D, _) -> error({unexpected_delivery, D})
                                    end),
     %% provide some credit
     {F6, []} = rabbit_fifo_client:credit(<<"tag">>, 1, false, F5),
     {[{_, _, _, _, m1}], [{send_credit_reply, _}], F7} =
-        process_ra_events(receive_ra_events(1, 1), F6),
+        process_ra_events(receive_ra_events(1, 1), ClusterName, F6),
 
     %% credit and drain
     {F8, []} = rabbit_fifo_client:credit(<<"tag">>, 4, true, F7),
     {[{_, _, _, _, m2}], [{send_credit_reply, _}, {send_drained, _}], F9} =
-        process_ra_events(receive_ra_events(2, 1), F8),
+        process_ra_events(receive_ra_events(2, 1), ClusterName, F8),
     flush(),
 
     %% enqueue another message - at this point the consumer credit should be
     %% all used up due to the drain
-    {ok, F10} = rabbit_fifo_client:enqueue(m3, F9),
+    {ok, F10, []} = rabbit_fifo_client:enqueue(ClusterName, m3, F9),
     %% assert no deliveries
-    {_, _, F11} = process_ra_events(receive_ra_events(), F10, [], [],
+    {_, _, F11} = process_ra_events(receive_ra_events(), ClusterName, F10, [], [],
                                     fun
                                         (D, _) -> error({unexpected_delivery, D})
                                     end),
     %% credit again and receive the last message
     {F12, []} = rabbit_fifo_client:credit(<<"tag">>, 10, false, F11),
-    {[{_, _, _, _, m3}], _, _} = process_ra_events(receive_ra_events(1, 1), F12),
+    {[{_, _, _, _, m3}], _, _} = process_ra_events(receive_ra_events(1, 1), ClusterName, F12),
     ok.
 
 untracked_enqueue(Config) ->
@@ -487,23 +487,24 @@ untracked_enqueue(Config) ->
 
     ok = rabbit_fifo_client:untracked_enqueue([ServerId], msg1),
     timer:sleep(100),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, _, {_, _, _, _, msg1}, _F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, _, {_, _, _, _, msg1}, _F5} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F0),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 
 flow(Config) ->
     ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
+    {Name, _Node} = ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 3),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(m3, F2),
-    {slow, F4} = rabbit_fifo_client:enqueue(m4, F3),
-    {_, _, F5} = process_ra_events(receive_ra_events(4, 0), F4),
-    {ok, _} = rabbit_fifo_client:enqueue(m5, F5),
+    F0 = rabbit_fifo_client:init([ServerId], 3),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F1),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, m3, F2),
+    {ok, F4, [{block, Name}]} = rabbit_fifo_client:enqueue(ClusterName, m4, F3),
+    {_, Actions, F5} = process_ra_events(receive_ra_events(4, 0), ClusterName, F4),
+    true = lists:member({unblock, Name}, Actions),
+    {ok, _, []} = rabbit_fifo_client:enqueue(ClusterName, m5, F5),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -514,10 +515,10 @@ test_queries(Config) ->
     ok = start_cluster(ClusterName, [ServerId]),
     Self = self(),
     P = spawn(fun () ->
-                  F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-                  {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-                  {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-                  process_ra_events(receive_ra_events(2, 0), F2),
+                  F0 = rabbit_fifo_client:init([ServerId], 4),
+                  {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+                  {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F1),
+                  process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
                   Self ! ready,
                   receive stop -> ok end
           end),
@@ -526,7 +527,7 @@ test_queries(Config) ->
     after 5000 ->
               exit(ready_timeout)
     end,
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
     {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 1, simple_prefetch, #{}, F0),
     {ok, {_, Ready}, _} = ra:local_query(ServerId,
                                          fun rabbit_fifo:query_messages_ready/1),
@@ -550,16 +551,16 @@ dequeue(Config) ->
     UId = ?config(uid, Config),
     Tag = UId,
     ok = start_cluster(ClusterName, [ServerId]),
-    F1 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {empty, F1b} = rabbit_fifo_client:dequeue(Tag, settled, F1),
-    {ok, F2_} = rabbit_fifo_client:enqueue(msg1, F1b),
-    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), F2_),
+    F1 = rabbit_fifo_client:init([ServerId]),
+    {empty, F1b} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F1),
+    {ok, F2_, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F1b),
+    {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F2_),
 
-    % {ok, {{0, {_, msg1}}, _}, F3} = rabbit_fifo_client:dequeue(Tag, settled, F2),
-    {ok, _, {_, _, 0, _, msg1}, F3} = rabbit_fifo_client:dequeue(Tag, settled, F2),
-    {ok, F4_} = rabbit_fifo_client:enqueue(msg2, F3),
-    {_, _, F4} = process_ra_events(receive_ra_events(1, 0), F4_),
-    {ok, _, {_, _, MsgId, _, msg2}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
+    % {ok, {{0, {_, msg1}}, _}, F3} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F2),
+    {ok, _, {_, _, 0, _, msg1}, F3} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F2),
+    {ok, F4_, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F3),
+    {_, _, F4} = process_ra_events(receive_ra_events(1, 0), ClusterName, F4_),
+    {ok, _, {_, _, MsgId, _, msg2}, F5} = rabbit_fifo_client:dequeue(ClusterName, Tag, unsettled, F4),
     {_F6, _A} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
@@ -572,12 +573,12 @@ conf(ClusterName, UId, ServerId, _, Peers) ->
       initial_members => Peers,
       machine => {module, rabbit_fifo, #{}}}.
 
-process_ra_event(State, Wait) ->
+process_ra_event(ClusterName, State, Wait) ->
     receive
         {ra_event, From, Evt} ->
             ct:pal("Ra_event ~p", [Evt]),
             {ok, S, _Actions} =
-            rabbit_fifo_client:handle_ra_event(From, Evt, State),
+            rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, State),
             S
     after Wait ->
               flush(),
@@ -615,19 +616,19 @@ receive_ra_events(Acc) ->
             Acc
     end.
 
-process_ra_events(Events, State) ->
+process_ra_events(Events, ClusterName, State) ->
     DeliveryFun = fun ({deliver, _, Tag, Msgs}, S) ->
                           MsgIds = [element(1, M) || M <- Msgs],
                           {S0, _} = rabbit_fifo_client:settle(Tag, MsgIds, S),
                           S0
                   end,
-    process_ra_events(Events, State, [], [], DeliveryFun).
+    process_ra_events(Events, ClusterName, State, [], [], DeliveryFun).
 
-process_ra_events([], State0, Acc, Actions0, _DeliveryFun) ->
+process_ra_events([], _ClusterName, State0, Acc, Actions0, _DeliveryFun) ->
     {Acc, Actions0, State0};
-process_ra_events([{ra_event, From, Evt} | Events], State0, Acc,
+process_ra_events([{ra_event, From, Evt} | Events], ClusterName, State0, Acc,
                   Actions0, DeliveryFun) ->
-    case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
+    case rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, State0) of
         {ok, State1, Actions1} ->
             {Msgs, Actions, State} =
                 lists:foldl(
@@ -636,15 +637,15 @@ process_ra_events([{ra_event, From, Evt} | Events], State0, Acc,
                       (Ac, {M, A, S}) ->
                           {M, A ++ [Ac], S}
                   end, {Acc, [], State1}, Actions1),
-            process_ra_events(Events, State, Msgs, Actions0 ++ Actions, DeliveryFun);
+            process_ra_events(Events, ClusterName, State, Msgs, Actions0 ++ Actions, DeliveryFun);
         eol ->
             eol
     end.
 
-discard_next_delivery(State0, Wait) ->
+discard_next_delivery(ClusterName, State0, Wait) ->
     receive
         {ra_event, _, {machine, {delivery, _, _}}} = Evt ->
-            element(3, process_ra_events([Evt], State0, [], [],
+            element(3, process_ra_events([Evt], ClusterName, State0, [], [],
                                          fun ({deliver, Tag, _, Msgs}, S) ->
                                                  MsgIds = [element(3, M) || M <- Msgs],
                                                  {S0, _} = rabbit_fifo_client:discard(Tag, MsgIds, S),
@@ -652,30 +653,6 @@ discard_next_delivery(State0, Wait) ->
                                          end))
     after Wait ->
             State0
-    end.
-
-return_next_delivery(State0, Wait) ->
-    receive
-        {ra_event, _, {machine, {delivery, _, _}}} = Evt ->
-            element(3, process_ra_events([Evt], State0, [], [],
-                                         fun ({deliver, Tag, _, Msgs}, S) ->
-                                                 MsgIds = [element(3, M) || M <- Msgs],
-                                                 {S0, _} = rabbit_fifo_client:return(Tag, MsgIds, S),
-                                                 S0
-                                         end))
-    after Wait ->
-              State0
-    end.
-
-validate_process_down(Name, 0) ->
-    exit({process_not_down, Name});
-validate_process_down(Name, Num) ->
-    case whereis(Name) of
-        undefined ->
-            ok;
-        _ ->
-            timer:sleep(100),
-            validate_process_down(Name, Num-1)
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->

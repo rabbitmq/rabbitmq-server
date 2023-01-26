@@ -84,6 +84,7 @@
 -export([raw_read_file/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
+-export([pipeline/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1471,7 +1472,6 @@ whereis_name(Name) ->
 
 %% End copypasta from gen_server2.erl
 %% -------------------------------------------------------------------------
-
 %% This will execute a Powershell command without an intervening cmd.exe
 %% process. Output lines can't exceed 512 bytes.
 %%
@@ -1552,3 +1552,45 @@ find_powershell() ->
         PwshExe ->
             PwshExe
     end.
+
+%% -------------------------------------------------------------------------
+%% Begin copy from
+%% https://github.com/emqx/emqx/blob/cffdcb42843d48bf99d8bd13695bc73149c98a23/apps/emqx/src/emqx_misc.erl#L141-L157
+
+%%--------------------------------------------------------------------
+%% Copyright (c) 2017-2022 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%--------------------------------------------------------------------
+
+pipeline([], Input, State) ->
+    {ok, Input, State};
+pipeline([Fun | More], Input, State) ->
+    case apply_fun(Fun, Input, State) of
+        ok -> pipeline(More, Input, State);
+        {ok, NState} -> pipeline(More, Input, NState);
+        {ok, Output, NState} -> pipeline(More, Output, NState);
+        {error, Reason} -> {error, Reason, State};
+        {error, Reason, NState} -> {error, Reason, NState}
+    end.
+
+-compile({inline, [apply_fun/3]}).
+apply_fun(Fun, Input, State) ->
+    case erlang:fun_info(Fun, arity) of
+        {arity, 1} -> Fun(Input);
+        {arity, 2} -> Fun(Input, State)
+    end.
+
+%% End copy from
+%% https://github.com/emqx/emqx/blob/cffdcb42843d48bf99d8bd13695bc73149c98a23/apps/emqx/src/emqx_misc.erl#L141-L157
+%% -------------------------------------------------------------------------

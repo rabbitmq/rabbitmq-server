@@ -14,7 +14,8 @@
          init/1,
          apply/3,
          state_enter/2,
-         notify_connection/2]).
+         notify_connection/2,
+         overview/1]).
 
 -type state() :: #machine_state{}.
 
@@ -171,6 +172,8 @@ apply(_Meta, Unknown, State) ->
     logger:error("MQTT Raft state machine v1 received unknown command ~tp", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
+-spec state_enter(ra_server:ra_state() | eol, state()) ->
+    ra_machine:effects().
 state_enter(leader, State) ->
     %% re-request monitors for all known pids, this would clean up
     %% records for all connections are no longer around, e.g. right after node restart
@@ -178,9 +181,16 @@ state_enter(leader, State) ->
 state_enter(_, _) ->
     [].
 
+-spec overview(state()) -> map().
+overview(#machine_state{client_ids = ClientIds,
+                        pids = Pids}) ->
+    #{num_client_ids => maps:size(ClientIds),
+      num_pids => maps:size(Pids)}.
+
 %% ==========================
 
 %% Avoids blocking the Raft leader.
+-spec notify_connection(pid(), duplicate_id | decommission_node) -> pid().
 notify_connection(Pid, Reason) ->
   spawn(fun() -> gen_server2:cast(Pid, Reason) end).
 

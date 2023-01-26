@@ -6,12 +6,13 @@
 %%
 -module(mqtt_node).
 
--export([start/0, node_id/0, server_id/0, all_node_ids/0, leave/1, trigger_election/0]).
+-export([start/0, node_id/0, server_id/0, all_node_ids/0, leave/1, trigger_election/0,
+         delete/1]).
 
 -define(ID_NAME, mqtt_node).
--define(START_TIMEOUT, 100000).
+-define(START_TIMEOUT, 100_000).
 -define(RETRY_INTERVAL, 5000).
--define(RA_OPERATION_TIMEOUT, 60000).
+-define(RA_OPERATION_TIMEOUT, 60_000).
 -define(RA_SYSTEM, coordination).
 
 node_id() ->
@@ -33,7 +34,7 @@ start() ->
     start(300, Repetitions).
 
 start(_Delay, AttemptsLeft) when AttemptsLeft =< 0 ->
-    start_server(),
+    ok = start_server(),
     trigger_election();
 start(Delay, AttemptsLeft) ->
     NodeId = server_id(),
@@ -59,16 +60,15 @@ start(Delay, AttemptsLeft) ->
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
                       rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
-                      start_server(),
-                      join_peers(NodeId, Peers),
+                      ok = start_server(),
+                      _ = join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
               end;
           _ ->
-              join_peers(NodeId, Nodes),
-              ra:restart_server(?RA_SYSTEM, NodeId),
+              _ = join_peers(NodeId, Nodes),
+              ok = ra:restart_server(?RA_SYSTEM, NodeId),
               ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
-    end,
-    ok.
+    end.
 
 compatible_peer_servers() ->
     all_node_ids() -- [(node_id())].
@@ -129,4 +129,36 @@ can_participate_in_clientid_tracking(Node) ->
     case rpc:call(Node, mqtt_machine, module_info, []) of
         {badrpc, _} -> false;
         _           -> true
+    end.
+
+-spec delete(Args) -> Ret when
+      Args :: rabbit_feature_flags:enable_callback_args(),
+      Ret :: rabbit_feature_flags:enable_callback_ret().
+delete(_) ->
+    RaNodes = all_node_ids(),
+    Nodes = lists:map(fun({_, N}) -> N end, RaNodes),
+    LockId = {?ID_NAME, node_id()},
+    rabbit_log:info("Trying to acquire lock ~p on nodes ~p ...", [LockId, Nodes]),
+    true = global:set_lock(LockId, Nodes),
+    rabbit_log:info("Acquired lock ~p", [LockId]),
+    try whereis(?ID_NAME) of
+        undefined ->
+            rabbit_log:info("Local Ra process ~s does not exist", [?ID_NAME]),
+            ok;
+        _ ->
+            rabbit_log:info("Deleting Ra cluster ~s ...", [?ID_NAME]),
+            try ra:delete_cluster(RaNodes, ?RA_OPERATION_TIMEOUT) of
+                {ok, _Leader} ->
+                    rabbit_log:info("Successfully deleted Ra cluster ~s", [?ID_NAME]),
+                    ok;
+                {error, _}  = Err ->
+                    rabbit_log:info("Failed to delete Ra cluster ~s: ~p", [?ID_NAME, Err]),
+                    Err
+            catch exit:{{shutdown, delete}, _Stacktrace} ->
+                      rabbit_log:info("Ra cluster ~s already being deleted", [?ID_NAME]),
+                      ok
+            end
+    after
+        true = global:del_lock(LockId, Nodes),
+        rabbit_log:info("Released lock ~p", [LockId])
     end.

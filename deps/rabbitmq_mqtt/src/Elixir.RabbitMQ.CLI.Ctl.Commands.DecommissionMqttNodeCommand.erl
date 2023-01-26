@@ -58,7 +58,6 @@ run([Node], #{node := NodeName,
                                          " from the cluster", [Node]))};
         Result ->
             %% 'ok' or 'timeout'
-            %% TODO: Ra will timeout if the node is not a cluster member - should this be fixed??
             Result
     end.
 

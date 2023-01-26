@@ -5,88 +5,75 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(CLIENT_ID_MAXLEN, 23).
+-define(APP_NAME, rabbitmq_mqtt).
+-define(PG_SCOPE, pg_scope_rabbitmq_mqtt_clientid).
+-define(QUEUE_TYPE_QOS_0, rabbit_mqtt_qos0_queue).
+-define(PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, mqtt_mailbox_soft_limit).
+-define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
+-define(MQTT_PROTO_V3, mqtt310).
+-define(MQTT_PROTO_V4, mqtt311).
 
-%% reader state
--record(state,      { socket,
-                      conn_name,
-                      await_recv,
-                      deferred_recv,
-                      received_connect_frame,
-                      connection_state,
-                      keepalive,
-                      keepalive_sup,
-                      conserve,
-                      parse_state,
-                      proc_state,
-                      connection,
-                      stats_timer }).
-
-%% processor state
--record(proc_state, { socket,
-                      subscriptions,
-                      consumer_tags,
-                      unacked_pubs,
-                      awaiting_ack,
-                      awaiting_seqno,
-                      message_id,
-                      client_id,
-                      clean_sess,
-                      will_msg,
-                      channels,
-                      connection,
-                      exchange,
-                      adapter_info,
-                      ssl_login_name,
-                      %% Retained messages handler. See rabbit_mqtt_retainer_sup
-                      %% and rabbit_mqtt_retainer.
-                      retainer_pid,
-                      auth_state,
-                      send_fun,
-                      peer_addr,
-                      mqtt2amqp_fun,
-                      amqp2mqtt_fun,
-                      register_state }).
-
--record(auth_state, {username,
-                     user,
-                     vhost}).
-
-%% does not include vhost: it is used in
-%% the table name
--record(retained_message, {topic,
-                           mqtt_msg}).
+-define(ITEMS,
+        [pid,
+         protocol,
+         host,
+         port,
+         peer_host,
+         peer_port,
+         ssl,
+         ssl_protocol,
+         ssl_key_exchange,
+         ssl_cipher,
+         ssl_hash,
+         vhost,
+         user
+        ]).
 
 -define(INFO_ITEMS,
-    [host,
-     port,
-     peer_host,
-     peer_port,
-     protocol,
-     channels,
-     channel_max,
-     frame_max,
-     client_properties,
-     ssl,
-     ssl_protocol,
-     ssl_key_exchange,
-     ssl_cipher,
-     ssl_hash,
-     conn_name,
-     connection_state,
-     connection,
-     consumer_tags,
-     unacked_pubs,
-     awaiting_ack,
-     awaiting_seqno,
-     message_id,
-     client_id,
-     clean_sess,
-     will_msg,
-     exchange,
-     ssl_login_name,
-     retainer_pid,
-     user,
-     vhost]).
+        ?ITEMS ++
+        [
+         client_id,
+         conn_name,
+         connection_state,
+         ssl_login_name,
+         recv_cnt,
+         recv_oct,
+         send_cnt,
+         send_oct,
+         send_pend,
+         clean_sess,
+         will_msg,
+         retainer_pid,
+         exchange,
+         prefetch,
+         messages_unconfirmed,
+         messages_unacknowledged
+        ]).
 
--define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
+-define(CREATION_EVENT_KEYS,
+        ?ITEMS ++
+        [name,
+         client_properties,
+         peer_cert_issuer,
+         peer_cert_subject,
+         peer_cert_validity,
+         auth_mechanism,
+         timeout,
+         frame_max,
+         channel_max,
+         connected_at,
+         node,
+         user_who_performed_action
+        ]).
+
+-define(SIMPLE_METRICS,
+        [pid,
+         recv_oct,
+         send_oct,
+         reductions]).
+-define(OTHER_METRICS,
+        [recv_cnt,
+         send_cnt,
+         send_pend,
+         garbage_collection,
+         state]).

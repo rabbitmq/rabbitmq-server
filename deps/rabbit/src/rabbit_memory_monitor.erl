@@ -75,6 +75,9 @@ report_ram_duration(Pid, QueueDuration) ->
 stop() ->
     gen_server2:cast(?SERVER, stop).
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 %% Paging should be enabled/disabled only in response to disk resource alarms
 %% for the current node.
 conserve_resources(Pid, disk, {_, Conserve, Node}) when node(Pid) =:= Node ->

@@ -112,7 +112,7 @@ var ALL_COLUMNS =
                   ['channels',       'Channels',       true],
                   ['channel_max',    'Channel max',    false],
                   ['frame_max',      'Frame max',      false],
-                  ['auth_mechanism', 'Auth mechanism', false],
+                  ['auth_mechanism', 'SASL auth mechanism', false],
                   ['client',         'Client',         false]],
       'Network': [['from_client',  'From client',  true],
                   ['to_client',    'To client',    true],

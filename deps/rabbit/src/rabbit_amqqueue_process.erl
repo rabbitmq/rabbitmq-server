@@ -121,6 +121,7 @@
 
 -define(CREATION_EVENT_KEYS,
         [name,
+         type,
          durable,
          auto_delete,
          arguments,
@@ -129,7 +130,7 @@
          user_who_performed_action
         ]).
 
--define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
+-define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name, type]]).
 
 %%----------------------------------------------------------------------------
 

@@ -25,6 +25,8 @@
     rewrite_node_config_file/2,
     cluster_nodes/1, cluster_nodes/2,
 
+    setup_meck/1,
+
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
@@ -36,7 +38,7 @@
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
-    rpc/5, rpc/6,
+    rpc/4, rpc/5, rpc/6,
     rpc_all/4, rpc_all/5,
 
     start_node/2,
@@ -187,6 +189,7 @@
     tcp_port_mqtt,
     tcp_port_mqtt_tls,
     tcp_port_web_mqtt,
+    tcp_port_web_mqtt_tls,
     tcp_port_stomp,
     tcp_port_stomp_tls,
     tcp_port_web_stomp,
@@ -511,6 +514,9 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mqtt_tls = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_mqtt, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_mqtt_tls | Rest]) ->
+    %% Skip this one, because we need more than just a port to configure
+    update_tcp_ports_in_rmq_config(NodeConfig, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_mqtt = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_web_mqtt, [{tcp_config, [{port, ?config(Key, NodeConfig)}]}]}),
@@ -633,6 +639,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    AdditionalErlArgs = rabbit_ct_helpers:get_config(Config, additional_erl_args, []),
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
@@ -729,7 +736,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~ts", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
-      "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
+      {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}
@@ -1454,11 +1461,10 @@ set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
       max_queues      -> <<"max-queues">>;
       Other -> rabbit_data_coercion:to_binary(Other)
     end,
-    Definition = rabbit_json:encode(#{Limit => Value}),
+    Limits = [{Limit, Value}],
     rpc(Config, Node,
-        rabbit_vhost_limit,
-        set,
-        [VHost, Definition, <<"ct-tests">>]).
+        rabbit_vhost_limit, set,
+        [VHost, Limits, <<"ct-tests">>]).
 
 set_user_limits(Config, Username, Limits) ->
     set_user_limits(Config, 0, Username, Limits).
@@ -1551,6 +1557,9 @@ add_code_path_to_all_nodes(Config, Module) ->
     [ok = add_code_path_to_node(Nodename, Module)
       || Nodename <- Nodenames],
     ok.
+
+rpc(Config, Module, Function, Args) ->
+    rpc(Config, 0, Module, Function, Args).
 
 rpc(Config, Node, Module, Function, Args)
 when is_atom(Node) andalso Node =/= undefined ->
@@ -1946,3 +1955,9 @@ if_cover(F) ->
         _ ->
             F()
     end.
+
+setup_meck(Config) ->
+    {Mod, Bin, File} = code:get_object_code(meck),
+    [true | _] = rpc_all(Config, code, add_path, [filename:dirname(File)]),
+    [{module, Mod} | _] = rpc_all(Config, code, load_binary, [Mod, File, Bin]),
+    ok.

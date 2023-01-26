@@ -25,7 +25,7 @@
 
 %%----------------------------------------------------------------------------
 
--export_type([event_type/0, event_props/0, event_timestamp/0, event/0]).
+-export_type([event_type/0, event_props/0, event_timestamp/0, event/0, state/0]).
 
 -type event_type() :: atom().
 -type event_props() :: term().
@@ -41,6 +41,7 @@
 -type timer_fun() :: fun (() -> 'ok').
 -type container() :: tuple().
 -type pos() :: non_neg_integer().
+-opaque state() :: #state{}.
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 -spec init_stats_timer(container(), pos()) -> container().

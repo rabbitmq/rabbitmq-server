@@ -5,9 +5,12 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--record(machine_state, {client_ids = #{},
-                        pids = #{},
-                        %% add acouple of fields for future extensibility
-                        reserved_1,
-                        reserved_2}).
+-record(machine_state, {
+          %% client ID to connection PID
+          client_ids = #{},
+          %% connection PID to list of client IDs
+          pids = #{},
+          %% add acouple of fields for future extensibility
+          reserved_1,
+          reserved_2}).
 

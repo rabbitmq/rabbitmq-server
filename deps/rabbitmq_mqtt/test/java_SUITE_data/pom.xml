@@ -22,13 +22,13 @@
     <dependency>
       <groupId>com.rabbitmq</groupId>
       <artifactId>amqp-client</artifactId>
-      <version>5.7.3</version>
+      <version>5.16.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>5.5.2</version>
+      <version>5.9.1</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

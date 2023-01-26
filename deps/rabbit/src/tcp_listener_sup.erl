@@ -16,24 +16,24 @@
 
 -behaviour(supervisor).
 
--export([start_link/11]).
+-export([start_link/12]).
 -export([init/1]).
 
 -type mfargs() :: {atom(), atom(), [any()]}.
 
 -spec start_link
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
-         module(), any(), mfargs(), mfargs(), integer(), integer(), string()) ->
+         module(), any(), mfargs(), mfargs(), integer(), integer(), supervisor:worker(), string()) ->
                            rabbit_types:ok_pid_or_error().
 
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-           ConcurrentAcceptorCount, ConcurrentConnsSups, Label) ->
+           ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label) ->
     supervisor:start_link(
       ?MODULE, {IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-                ConcurrentAcceptorCount, ConcurrentConnsSups, Label}).
+                ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label}).
 
 init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-      ConcurrentAcceptorCount, ConcurrentConnsSups, Label}) ->
+      ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
     MaxConnections = max_conn(rabbit_misc:get_env(rabbit, connection_max, infinity),
                               ConcurrentConnsSups),
@@ -41,7 +41,7 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
       num_acceptors => ConcurrentAcceptorCount,
       max_connections => MaxConnections,
       handshake_timeout => AckTimeout,
-      connection_type => supervisor,
+      connection_type => ConnectionType,
       socket_opts => [{ip, IPAddress},
                       {port, Port} |
                       SocketOpts],

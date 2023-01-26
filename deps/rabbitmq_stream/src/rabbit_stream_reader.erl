@@ -82,7 +82,7 @@
          heartbeater :: any(),
          client_properties = #{} :: #{binary() => binary()},
          monitors = #{} :: #{reference() => stream()},
-         stats_timer :: undefined | reference(),
+         stats_timer :: undefined | rabbit_event:state(),
          resource_alarm :: boolean(),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
@@ -119,7 +119,6 @@
          ssl_key_exchange,
          ssl_cipher,
          ssl_hash,
-         protocol,
          user,
          vhost,
          protocol,
@@ -551,11 +550,11 @@ invalid_transition(Transport, Socket, From, To) ->
     close_immediately(Transport, Socket),
     stop.
 
-resource_alarm(ConnectionPid, disk,
-               {_WasAlarmSetForNode,
-                IsThereAnyAlarmsForSameResourceInTheCluster, _Node}) ->
-    ConnectionPid
-    ! {resource_alarm, IsThereAnyAlarmsForSameResourceInTheCluster},
+-spec resource_alarm(pid(),
+                     rabbit_alarm:resource_alarm_source(),
+                     rabbit_alarm:resource_alert()) -> ok.
+resource_alarm(ConnectionPid, disk, {_, Conserve, _}) ->
+    ConnectionPid ! {resource_alarm, Conserve},
     ok;
 resource_alarm(_ConnectionPid, _Resource, _Alert) ->
     ok.
@@ -925,6 +924,14 @@ open(info, emit_stats,
          StatemData) ->
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
+open(info, {shutdown, Explanation} = Reason,
+     #statem_data{connection = Connection}) ->
+    %% rabbitmq_management or rabbitmq_stream_management plugin
+    %% requests to close connection.
+    rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
+                               [self(), Explanation]),
+    _ = demonitor_all_streams(Connection),
+    {stop, Reason};
 open(info, Unknown, _StatemData) ->
     rabbit_log_connection:warning("Received unknown message ~tp in state ~ts",
                                   [Unknown, ?FUNCTION_NAME]),
@@ -944,13 +951,6 @@ open({call, From}, {publishers_info, Items},
      #statem_data{connection = Connection}) ->
     {keep_state_and_data,
      {reply, From, publishers_infos(Items, Connection)}};
-open({call, From}, {shutdown, Explanation},
-     #statem_data{connection = Connection}) ->
-    % likely closing call from the management plugin
-    rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
-                               [self(), Explanation]),
-    _ = demonitor_all_streams(Connection),
-    {stop_and_reply, normal, {reply, From, ok}};
 open(cast,
      {queue_event, _, {osiris_written, _, undefined, CorrelationList}},
      #statem_data{transport = Transport,
@@ -1140,7 +1140,10 @@ open(cast, {force_event_refresh, Ref},
         rabbit_event:init_stats_timer(Connection,
                                       #stream_connection.stats_timer),
     Connection2 = ensure_stats_timer(Connection1),
-    {keep_state, StatemData#statem_data{connection = Connection2}}.
+    {keep_state, StatemData#statem_data{connection = Connection2}};
+open(cast, refresh_config, _StatemData) ->
+    %% tracing not supported
+    keep_state_and_data.
 
 close_sent(enter, _OldState,
            #statem_data{config =
@@ -3565,23 +3568,18 @@ i(host, #stream_connection{host = Host}, _) ->
     Host;
 i(peer_host, #stream_connection{peer_host = PeerHost}, _) ->
     PeerHost;
-i(ssl, #stream_connection{socket = Socket, proxy_socket = ProxySock},
-  _) ->
-    rabbit_net:proxy_ssl_info(Socket, ProxySock) /= nossl;
-i(peer_cert_subject, S, _) ->
-    cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
-i(peer_cert_issuer, S, _) ->
-    cert_info(fun rabbit_ssl:peer_cert_issuer/1, S);
-i(peer_cert_validity, S, _) ->
-    cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
-i(ssl_protocol, S, _) ->
-    ssl_info(fun({P, _}) -> P end, S);
-i(ssl_key_exchange, S, _) ->
-    ssl_info(fun({_, {K, _, _}}) -> K end, S);
-i(ssl_cipher, S, _) ->
-    ssl_info(fun({_, {_, C, _}}) -> C end, S);
-i(ssl_hash, S, _) ->
-    ssl_info(fun({_, {_, _, H}}) -> H end, S);
+i(SSL, #stream_connection{socket = Sock, proxy_socket = ProxySock}, _)
+  when SSL =:= ssl;
+       SSL =:= ssl_protocol;
+       SSL =:= ssl_key_exchange;
+       SSL =:= ssl_cipher;
+       SSL =:= ssl_hash ->
+    rabbit_ssl:info(SSL, {Sock, ProxySock});
+i(Cert, #stream_connection{socket = Sock},_)
+  when Cert =:= peer_cert_issuer;
+       Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_validity ->
+    rabbit_ssl:cert_info(Cert, Sock);
 i(channels, _, _) ->
     0;
 i(protocol, _, _) ->
@@ -3622,32 +3620,6 @@ i(_Unknown, _, _) ->
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->
     Transport:send(Socket, Data).
-
-cert_info(F, #stream_connection{socket = Sock}) ->
-    case rabbit_net:peercert(Sock) of
-        nossl ->
-            '';
-        {error, _} ->
-            '';
-        {ok, Cert} ->
-            list_to_binary(F(Cert))
-    end.
-
-ssl_info(F,
-         #stream_connection{socket = Sock, proxy_socket = ProxySock}) ->
-    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
-        nossl ->
-            '';
-        {error, _} ->
-            '';
-        {ok, Items} ->
-            P = proplists:get_value(protocol, Items),
-            #{cipher := C,
-              key_exchange := K,
-              mac := H} =
-                proplists:get_value(selected_cipher_suite, Items),
-            F({P, {K, C, H}})
-    end.
 
 get_chunk_selector(Properties) ->
     binary_to_atom(maps:get(<<"chunk_selector">>, Properties,

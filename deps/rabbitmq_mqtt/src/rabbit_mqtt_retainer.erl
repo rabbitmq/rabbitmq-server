@@ -7,42 +7,40 @@
 
 -module(rabbit_mqtt_retainer).
 
--behaviour(gen_server2).
 -include("rabbit_mqtt.hrl").
--include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt_packet.hrl").
+
+-behaviour(gen_server).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, start_link/2]).
+         terminate/2, start_link/2]).
 
 -export([retain/3, fetch/2, clear/2, store_module/0]).
 
--define(SERVER, ?MODULE).
--define(TIMEOUT, 30000).
+-define(TIMEOUT, 30_000).
 
 -record(retainer_state, {store_mod,
                          store}).
 
--spec retain(pid(), string(), mqtt_msg()) ->
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: term()}.
-
 %%----------------------------------------------------------------------------
 
 start_link(RetainStoreMod, VHost) ->
-    gen_server2:start_link(?MODULE, [RetainStoreMod, VHost], []).
+    gen_server:start_link(?MODULE, [RetainStoreMod, VHost], []).
 
+-spec retain(pid(), binary(), mqtt_msg()) -> ok.
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
-    gen_server2:cast(Pid, {retain, Topic, Msg});
-
+    gen_server:cast(Pid, {retain, Topic, Msg});
 retain(_Pid, _Topic, Msg = #mqtt_msg{retain = false}) ->
     throw({error, {retain_is_false, Msg}}).
 
+-spec fetch(pid(), binary()) ->
+    undefined | mqtt_msg().
 fetch(Pid, Topic) ->
-    gen_server2:call(Pid, {fetch, Topic}, ?TIMEOUT).
+    gen_server:call(Pid, {fetch, Topic}, ?TIMEOUT).
 
+-spec clear(pid(), binary()) -> ok.
 clear(Pid, Topic) ->
-    gen_server2:cast(Pid, {clear, Topic}).
+    gen_server:cast(Pid, {clear, Topic}).
 
 %%----------------------------------------------------------------------------
 
@@ -56,8 +54,9 @@ init([StoreMod, VHost]) ->
             end,
     {ok, State}.
 
+-spec store_module() -> undefined | module().
 store_module() ->
-    case application:get_env(rabbitmq_mqtt, retained_message_store) of
+    case application:get_env(?APP_NAME, retained_message_store) of
         {ok, Mod} -> Mod;
         undefined -> undefined
     end.
@@ -91,8 +90,4 @@ store_dir() ->
     rabbit:data_dir().
 
 terminate(_Reason, #retainer_state{store = Store, store_mod = Mod}) ->
-    Mod:terminate(Store),
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    Mod:terminate(Store).

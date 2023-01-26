@@ -34,11 +34,11 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/rabbit_common:erlang_app",
     "@cowboy//:erlang_app",
+    "//deps/rabbitmq_mqtt:erlang_app",
 ]
 
 RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_mqtt:erlang_app",
 ]
 
 rabbitmq_app(
@@ -64,12 +64,15 @@ dialyze(
     plt = ":base_plt",
 )
 
-broker_for_integration_suites()
+broker_for_integration_suites(
+    extra_plugins = [
+        "//deps/rabbitmq_management:erlang_app",
+    ],
+)
 
 rabbitmq_test_helper(
     name = "test_utils",
     srcs = glob(["test/src/*.erl"]),
-    hdrs = glob(["test/src/*.hrl"]),
 )
 
 rabbitmq_integration_suite(
@@ -79,7 +82,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "proxy_protocol_SUITE",
     additional_beam = [":test_utils"],
-    additional_hdrs = glob(["test/src/*.hrl"]),
     erlc_opts = [
         "-I",
         "deps/rabbitmq_web_mqtt/test",
@@ -89,7 +91,12 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "system_SUITE",
     additional_beam = [":test_utils"],
-    additional_hdrs = glob(["test/src/*.hrl"]),
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+        "@gun//:erlang_app",
+        "@cowlib//:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+    ],
 )
 
 assert_suites()

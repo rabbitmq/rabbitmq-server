@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(proxy_protocol_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -64,10 +64,10 @@ proxy_protocol(Config) ->
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-    ok = inet:send(Socket, mqtt_3_1_1_connect_frame()),
+    ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
+    timer:sleep(10),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
@@ -79,24 +79,23 @@ proxy_protocol_tls(Config) ->
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
-    ok = ssl:send(SslSocket, mqtt_3_1_1_connect_frame()),
+    ok = ssl:send(SslSocket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
+    timer:sleep(10),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
 connection_name() ->
-    Connections = ets:tab2list(connection_created),
-    {_Key, Values} = lists:nth(1, Connections),
+    [{_Key, Values}] = ets:tab2list(connection_created),
     {_, Name} = lists:keyfind(name, 1, Values),
     Name.
 
 merge_app_env(MqttConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
 
-mqtt_3_1_1_connect_frame() ->
+mqtt_3_1_1_connect_packet() ->
     <<16,
     24,
     0,

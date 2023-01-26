@@ -104,9 +104,7 @@
 
           %% same as capabilities in the reader
           capabilities,
-          %% tracing exchange resource if tracing is enabled,
-          %% 'none' otherwise
-          trace_state,
+          trace_state :: rabbit_trace:state(),
           consumer_prefetch,
           %% Message content size limit
           max_message_size,
@@ -743,27 +741,6 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(State);
 
-handle_cast({reject_publish, _MsgSeqNo, QPid} = Evt, State) ->
-    %% For backwards compatibility
-    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
-    case QRef of
-        undefined ->
-            %% ignore if no queue could be found for the given pid
-            noreply(State);
-        _ ->
-            handle_cast({queue_event, QRef, Evt}, State)
-    end;
-
-handle_cast({confirm, _MsgSeqNo, QPid} = Evt, State) ->
-    %% For backwards compatibility
-    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
-    case QRef of
-        undefined ->
-            %% ignore if no queue could be found for the given pid
-            noreply(State);
-        _ ->
-            handle_cast({queue_event, QRef, Evt}, State)
-    end;
 handle_cast({queue_event, QRef, Evt},
             #ch{queue_states = QueueStates0} = State0) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
@@ -771,25 +748,21 @@ handle_cast({queue_event, QRef, Evt},
             State1 = State0#ch{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
             noreply_coalesce(State);
-        eol ->
-            State1 = handle_consuming_queue_down_or_eol(QRef, State0),
+        {eol, Actions} ->
+            State1 = handle_queue_actions(Actions, State0),
+            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
             {ConfirmMXs, UC1} =
-                rabbit_confirms:remove_queue(QRef, State1#ch.unconfirmed),
+                rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
             %% Deleted queue is a special case.
             %% Do not nack the "rejected" messages.
-            State2 = record_confirms(ConfirmMXs,
-                                     State1#ch{unconfirmed = UC1}),
+            State3 = record_confirms(ConfirmMXs,
+                                     State2#ch{unconfirmed = UC1}),
             _ = erase_queue_stats(QRef),
             noreply_coalesce(
-              State2#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+              State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
         {protocol_error, Type, Reason, ReasonArgs} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
-
-handle_info({ra_event, {Name, _} = From, Evt}, State) ->
-    %% For backwards compatibility
-    QRef = find_queue_name_from_quorum_name(Name, State#ch.queue_states),
-    handle_cast({queue_event, QRef, {From, Evt}}, State);
 
 handle_info({bump_credit, Msg}, State) ->
     %% A rabbit_amqqueue_process is granting credit to our channel. If
@@ -811,11 +784,11 @@ handle_info(emit_stats, State) ->
     %% stats timer.
     {noreply, send_confirms_and_nacks(State1), hibernate};
 
-handle_info({'DOWN', _MRef, process, QPid, Reason},
+handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #ch{queue_states = QStates0,
                 queue_monitors = _QMons} = State0) ->
     credit_flow:peer_down(QPid),
-    case rabbit_queue_type:handle_down(QPid, Reason, QStates0) of
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QState1, Actions} ->
             State1 = State0#ch{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
@@ -1091,7 +1064,7 @@ build_topic_variable_map(AuthzContext, VHost, Username) ->
 
 %% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
 %% Extracts variable map only from amqp_params_direct, not amqp_params_network.
-%% amqp_params_direct records are usually used by plugins (e.g. MQTT, STOMP)
+%% amqp_params_direct records are usually used by plugins (e.g. STOMP)
 extract_variable_map_from_amqp_params({amqp_params, {amqp_params_direct, _, _, _, _,
                                                         {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}) ->
     proplists:get_value(variable_map, AdditionalInfo, #{});
@@ -1813,7 +1786,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                       Username, QueueStates0),
                     Q}
            end) of
-        {{ok, QueueStates, Actions}, Q} when ?is_amqqueue(Q) ->
+        {{ok, QueueStates}, Q} when ?is_amqqueue(Q) ->
             rabbit_global_counters:consumer_created(amqp091),
             CM1 = maps:put(
                     ActualConsumerTag,
@@ -1822,10 +1795,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
 
             State1 = State#ch{consumer_mapping = CM1,
                               queue_states = QueueStates},
-            State2 = handle_queue_actions(Actions, State1),
             {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State2);
-                     false -> State2
+                     true  -> consumer_monitor(ActualConsumerTag, State1);
+                     false -> State1
                  end};
         {{error, exclusive_consume_unavailable} = E, _Q} ->
             E;
@@ -2873,37 +2845,28 @@ handle_queue_actions(Actions, #ch{} = State0) ->
               confirm(MsgSeqNos, QRef, S0);
           ({rejected, _QRef, MsgSeqNos}, S0) ->
               {U, Rej} =
-                  lists:foldr(
-                    fun(SeqNo, {U1, Acc}) ->
-                            case rabbit_confirms:reject(SeqNo, U1) of
-                                {ok, MX, U2} ->
-                                    {U2, [MX | Acc]};
-                                {error, not_found} ->
-                                    {U1, Acc}
-                            end
-                    end, {S0#ch.unconfirmed, []}, MsgSeqNos),
+              lists:foldr(
+                fun(SeqNo, {U1, Acc}) ->
+                        case rabbit_confirms:reject(SeqNo, U1) of
+                            {ok, MX, U2} ->
+                                {U2, [MX | Acc]};
+                            {error, not_found} ->
+                                {U1, Acc}
+                        end
+                end, {S0#ch.unconfirmed, []}, MsgSeqNos),
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
           ({queue_down, QRef}, S0) ->
-              handle_consuming_queue_down_or_eol(QRef, S0)
-
+              handle_consuming_queue_down_or_eol(QRef, S0);
+          ({block, QName}, S0) ->
+              credit_flow:block(QName),
+              S0;
+          ({unblock, QName}, S0) ->
+              credit_flow:unblock(QName),
+              S0
       end, State0, Actions).
-
-find_queue_name_from_quorum_name(Name, QStates) ->
-    Fun = fun(K, _V, undefined) ->
-                  {ok, Q} = rabbit_amqqueue:lookup(K),
-                  case amqqueue:get_pid(Q) of
-                      {Name, _} ->
-                          amqqueue:get_name(Q);
-                      _ ->
-                          undefined
-                  end;
-             (_, _, Acc) ->
-                  Acc
-          end,
-    rabbit_queue_type:fold_state(Fun, undefined, QStates).
 
 maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->
     State0;

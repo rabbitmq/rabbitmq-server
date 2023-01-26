@@ -6,7 +6,7 @@
 
 
 -module(processor_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -23,9 +23,7 @@ groups() ->
                                 ignores_colons_in_username_if_option_set,
                                 interprets_colons_in_username_if_option_not_set,
                                 get_vhosts_from_global_runtime_parameter,
-                                get_vhost,
-                                add_client_id_to_adapter_info,
-                                quorum_configuration
+                                get_vhost
                                ]}
     ].
 
@@ -186,17 +184,6 @@ get_vhost(_Config) ->
     clear_vhost_global_parameters(),
     ok.
 
-add_client_id_to_adapter_info(_Config) ->
-    TestFun = fun(AdapterInfo) ->
-                Info0 = rabbit_mqtt_processor:add_client_id_to_adapter_info(<<"my-client-id">>, AdapterInfo),
-                AdditionalInfo0 = Info0#amqp_adapter_info.additional_info,
-                ?assertEqual(#{<<"client_id">> => <<"my-client-id">>}, proplists:get_value(variable_map, AdditionalInfo0)),
-                ClientProperties = proplists:get_value(client_properties, AdditionalInfo0),
-                ?assertEqual([{client_id,longstr,<<"my-client-id">>}], ClientProperties)
-              end,
-    lists:foreach(TestFun, [#amqp_adapter_info{}, #amqp_adapter_info{additional_info = [{client_properties, []}]}]),
-    ok.
-
 set_global_parameter(Key, Term) ->
     InsertParameterFun = fun () ->
         mnesia:write(rabbit_runtime_parameters, #runtime_parameters{key = Key, value = Term}, write)
@@ -210,22 +197,3 @@ clear_vhost_global_parameters() ->
         ok = mnesia:delete(rabbit_runtime_parameters, mqtt_port_to_vhost_mapping, write)
                          end,
     {atomic, ok} = mnesia:transaction(DeleteParameterFun).
-
-quorum_configuration(_Config) ->
-    MyArgs = [],
-%%  default setting with CleanSession = true of false
-    QMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true, <<"">>),
-    ?assertEqual(QMustBeClassic, []),
-%%  default setting with CleanSession = true of false
-    QMustBeClassicEvenFalse = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
-    ?assertEqual(QMustBeClassicEvenFalse, []),
-    application:set_env(rabbitmq_mqtt, durable_queue_type, quorum),
-%%  quorum setting with CleanSession  == false must me quorum
-    QMustBeQuorum = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
-    ?assertEqual(QMustBeQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-
-    %%  quorum setting with CleanSession  == true must me classic since
-    %% quorum does not support auto-delete
-    QEvenQuorumMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true, <<"">>),
-    ?assertEqual(QEvenQuorumMustBeClassic, []),
-    ok.

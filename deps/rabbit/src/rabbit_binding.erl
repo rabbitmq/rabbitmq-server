@@ -11,8 +11,8 @@
 
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/2, remove/3, remove/4]).
 -export([list/1, list_for_source/1, list_for_destination/1,
-         list_for_source_and_destination/2, list_explicit/0,
-         list_between/2, has_any_between/2]).
+         list_for_source_and_destination/2, list_for_source_and_destination/3,
+         list_explicit/0, list_between/2, has_any_between/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
          process_deletions/2, binding_action/3]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
@@ -253,26 +253,18 @@ list(VHostPath) ->
 list_for_source(?DEFAULT_EXCHANGE(VHostPath)) ->
     implicit_bindings(VHostPath);
 list_for_source(SrcName) ->
-    mnesia:async_dirty(
-      fun() ->
-              Route = #route{binding = #binding{source = SrcName, _ = '_'}},
-              [B || #route{binding = B}
-                        <- mnesia:match_object(rabbit_route, Route, read)]
-      end).
+    Route = #route{binding = #binding{source = SrcName, _ = '_'}},
+    Fun = list_for_route(Route, false),
+    mnesia:async_dirty(Fun).
 
 -spec list_for_destination
         (rabbit_types:binding_destination()) -> bindings().
 
 list_for_destination(DstName = #resource{}) ->
-    ExplicitBindings = mnesia:async_dirty(
-                         fun() ->
-                                 Route = #route{binding = #binding{destination = DstName,
-                                                                   _ = '_'}},
-                                 [reverse_binding(B) ||
-                                  #reverse_route{reverse_binding = B} <-
-                                  mnesia:match_object(rabbit_reverse_route,
-                                                      reverse_route(Route), read)]
-                         end),
+    Route = #route{binding = #binding{destination = DstName,
+                                      _ = '_'}},
+    Fun = list_for_route(Route, true),
+    ExplicitBindings = mnesia:async_dirty(Fun),
     implicit_for_destination(DstName) ++ ExplicitBindings.
 
 -spec list_between(
@@ -316,27 +308,40 @@ implicit_for_destination(DstQueue = #resource{kind = queue,
 implicit_for_destination(_) ->
     [].
 
--spec list_for_source_and_destination
-        (rabbit_types:binding_source(), rabbit_types:binding_destination()) ->
-                                                bindings().
+-spec list_for_source_and_destination(rabbit_types:binding_source(), rabbit_types:binding_destination()) ->
+    bindings().
+list_for_source_and_destination(SrcName, DstName) ->
+    list_for_source_and_destination(SrcName, DstName, false).
 
+-spec list_for_source_and_destination(rabbit_types:binding_source(), rabbit_types:binding_destination(), boolean()) ->
+    bindings().
 list_for_source_and_destination(?DEFAULT_EXCHANGE(VHostPath),
                                 #resource{kind = queue,
                                           virtual_host = VHostPath,
-                                          name = QName} = DstQueue) ->
+                                          name = QName} = DstQueue,
+                                _Reverse) ->
     [#binding{source = ?DEFAULT_EXCHANGE(VHostPath),
               destination = DstQueue,
               key = QName,
               args = []}];
-list_for_source_and_destination(SrcName, DstName) ->
-    mnesia:async_dirty(
-      fun() ->
-              Route = #route{binding = #binding{source      = SrcName,
-                                                destination = DstName,
-                                                _           = '_'}},
-              [B || #route{binding = B} <- mnesia:match_object(rabbit_route,
-                                                               Route, read)]
-      end).
+list_for_source_and_destination(SrcName, DstName, Reverse) ->
+    Route = #route{binding = #binding{source      = SrcName,
+                                      destination = DstName,
+                                      _           = '_'}},
+    Fun = list_for_route(Route, Reverse),
+    mnesia:async_dirty(Fun).
+
+list_for_route(Route, false) ->
+    fun() ->
+            [B || #route{binding = B} <- mnesia:match_object(rabbit_route, Route, read)]
+    end;
+list_for_route(Route, true) ->
+    fun() ->
+            [reverse_binding(B) ||
+             #reverse_route{reverse_binding = B} <-
+             mnesia:match_object(rabbit_reverse_route,
+                                 reverse_route(Route), read)]
+    end.
 
 -spec info_keys() -> rabbit_types:info_keys().
 

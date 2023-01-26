@@ -6,13 +6,12 @@
 
 
 -module(command_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
-
+-import(util, [connect/3]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
@@ -27,6 +26,11 @@ groups() ->
                                 merge_defaults,
                                 run
                                ]}
+    ].
+
+suite() ->
+    [
+      {timetrap, {minutes, 3}}
     ].
 
 init_per_suite(Config) ->
@@ -71,35 +75,21 @@ merge_defaults(_Config) ->
 
 
 run(Config) ->
-
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Opts = #{node => Node, timeout => 10000, verbose => false},
+    Opts = #{node => Node, timeout => 10_000, verbose => false},
 
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C1} = emqtt:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {clientid, <<"simpleClient">>},
-                                 {proto_ver, v4},
-                                 {ack_timeout, 1}]),
-    {ok, _} = emqtt:connect(C1),
-    ct:sleep(100),
+    C1 = connect(<<"simpleClient">>, Config, [{ack_timeout, 1}]),
+
+    timer:sleep(100),
 
     [[{client_id, <<"simpleClient">>}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
-
-    {ok, C2} = emqtt:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {clientid, <<"simpleClient1">>},
-                                 {proto_ver, v4},
-                                 {username, <<"guest">>},
-                                 {password, <<"guest">>},
-                                 {ack_timeout, 1}]),
-    {ok, _} = emqtt:connect(C2),
-    ct:sleep(200),
+    C2 = connect(<<"simpleClient1">>, Config, [{ack_timeout, 1}]),
+    timer:sleep(200),
 
     [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
      [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]] =
@@ -110,40 +100,29 @@ run(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     start_amqp_connection(network, Node, Port),
 
-    %% There are still just two connections
+    %% There are still just two MQTT connections
     [[{client_id, <<"simpleClient">>}],
      [{client_id, <<"simpleClient1">>}]] =
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     start_amqp_connection(direct, Node, Port),
-    ct:sleep(200),
+    timer:sleep(200),
 
-    %% Still two MQTT connections, one direct AMQP 0-9-1 connection
-    [[{client_id, <<"simpleClient">>}],
-     [{client_id, <<"simpleClient1">>}]] =
-        lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
+    %% Still two MQTT connections
+    ?assertEqual(
+       [[{client_id, <<"simpleClient">>}],
+        [{client_id, <<"simpleClient1">>}]],
+       lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)))),
 
     %% Verbose returns all keys
-    Infos = lists:map(fun(El) -> atom_to_binary(El, utf8) end, ?INFO_ITEMS),
-    AllKeys1 = 'Elixir.Enum':to_list(?COMMAND:run(Infos, Opts)),
-    AllKeys2 = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
-
-    %% There are two connections
-    [FirstPL, _]  = AllKeys1,
-    [SecondPL, _] = AllKeys2,
-
-    First         = maps:from_list(lists:usort(FirstPL)),
-    Second        = maps:from_list(lists:usort(SecondPL)),
+    AllKeys = lists:map(fun(I) -> atom_to_binary(I) end, ?INFO_ITEMS),
+    [AllInfos1Con1, _AllInfos1Con2] = 'Elixir.Enum':to_list(?COMMAND:run(AllKeys, Opts)),
+    [AllInfos2Con1, _AllInfos2Con2] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
 
     %% Keys are INFO_ITEMS
-    KeysCount = length(?INFO_ITEMS),
-    ?assert(KeysCount =:= maps:size(First)),
-    ?assert(KeysCount =:= maps:size(Second)),
-
-    Keys = maps:keys(First),
-
-    [] = Keys -- ?INFO_ITEMS,
-    [] = ?INFO_ITEMS -- Keys,
+    InfoItemsSorted = lists:sort(?INFO_ITEMS),
+    ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos1Con1))),
+    ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos2Con1))),
 
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
