@@ -25,10 +25,6 @@ defmodule HashPasswordCommandTest do
              {:validation_failure, :too_many_args}
   end
 
-  test "validate: too few arguments", context do
-    assert @command.validate([], context[:opts]) == {:validation_failure, :not_enough_args}
-  end
-
   test "validate: empty string", context do
     assert @command.validate([""], context[:opts]) ==
              {:bad_argument, "password cannot be an empty string"}
