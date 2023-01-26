@@ -24,6 +24,15 @@ bazel_dep(
 )
 
 bazel_dep(
+<<<<<<< HEAD
+=======
+    name = "gazelle",
+    version = "0.28.0",
+    repo_name = "bazel_gazelle",
+)
+
+bazel_dep(
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
     name = "rules_erlang",
     version = "3.9.0",
 )
@@ -105,36 +114,67 @@ erlang_package = use_extension(
 
 erlang_package.hex_package(
     name = "accept",
+<<<<<<< HEAD
     version = "0.3.5",
     sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
+=======
+    build_file = "@//bazel:BUILD.accept",
+    sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
+    version = "0.3.5",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "aten",
+<<<<<<< HEAD
     version = "0.5.8",
     sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
+=======
+    build_file = "@//bazel:BUILD.aten",
+    sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
+    version = "0.5.8",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "base64url",
+<<<<<<< HEAD
     version = "1.0.1",
     sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
+=======
+    build_file = "@//bazel:BUILD.base64url",
+    sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
+    version = "1.0.1",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "cowboy",
+<<<<<<< HEAD
     version = "2.8.0",
     sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
+=======
+    build_file = "@//bazel:BUILD.cowboy",
+    sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
+    version = "2.8.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "cowlib",
+<<<<<<< HEAD
     version = "2.9.1",
     sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
+=======
+    build_file = "@//bazel:BUILD.cowlib",
+    sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
+    version = "2.9.1",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "credentials_obfuscation",
+<<<<<<< HEAD
     version = "3.1.0",
     sha256 = "04884e62b1c6cdfba999d4d6b3e99bc0a59d5e439517bc5c01767255afb7b778",
 )
@@ -142,16 +182,34 @@ erlang_package.hex_package(
 erlang_package.git_package(
     repository = "extend/ct_helper",
     branch = "master",
+=======
+    build_file = "@//bazel:BUILD.credentials_obfuscation",
+    sha256 = "fe8ece91a1ba6c8a08eb1063cfd5b063a723c5fe29a1fad6b7cbd76cb18d2eeb",
+    version = "3.2.0",
+)
+
+erlang_package.git_package(
+    branch = "master",
+    build_file = "@//:bazel/BUILD.ct_helper",
+    repository = "extend/ct_helper",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "cuttlefish",
+<<<<<<< HEAD
     version = "3.0.1",
     sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
+=======
+    build_file = "@//bazel:BUILD.cuttlefish",
+    sha256 = "d3ef90bd2f5923477ab772fbda5cd5ad088438e4fd56801b455b87ada9f46fa3",
+    version = "3.1.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "eetcd",
+<<<<<<< HEAD
     version = "0.3.6",
     sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
@@ -167,6 +225,11 @@ erlang_app(
     ],
 )
 """,
+=======
+    build_file = "@//bazel:BUILD.eetcd",
+    sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
+    version = "0.3.6",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.git_package(
@@ -188,20 +251,45 @@ erlang_app(
 
 erlang_package.hex_package(
     name = "enough",
+<<<<<<< HEAD
     version = "0.1.0",
     sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
+=======
+    build_file = "@//bazel:BUILD.enough",
+    sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
+    version = "0.1.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "gen_batch_server",
+<<<<<<< HEAD
     version = "0.8.7",
     sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
+=======
+    build_file = "@//bazel:BUILD.gen_batch_server",
+    sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
+    version = "0.8.7",
+)
+
+erlang_package.hex_package(
+    name = "getopt",
+    build_file = "@//bazel:BUILD.getopt",
+    sha256 = "a0029aea4322fb82a61f6876a6d9c66dc9878b6cb61faa13df3187384fd4ea26",
+    version = "1.0.2",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "gun",
+<<<<<<< HEAD
     version = "1.3.3",
     sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
+=======
+    build_file = "@//bazel:BUILD.gun",
+    sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
+    version = "1.3.3",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.git_package(
@@ -212,12 +300,19 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "jose",
+<<<<<<< HEAD
     repository = "potatosalad/erlang-jose",
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+=======
+    build_file = "@//bazel:BUILD.jose",
+    commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+    repository = "potatosalad/erlang-jose",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "jsx",
+<<<<<<< HEAD
     version = "3.1.0",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
 )
@@ -225,12 +320,29 @@ erlang_package.hex_package(
 erlang_package.git_package(
     repository = "eproxus/meck",
     branch = "master",
+=======
+    build_file = "@//bazel:BUILD.jsx",
+    sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+    version = "3.1.0",
+)
+
+erlang_package.git_package(
+    branch = "master",
+    build_file = "@//bazel:BUILD.meck",
+    repository = "eproxus/meck",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "observer_cli",
+<<<<<<< HEAD
     version = "1.7.3",
     sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
+=======
+    build_file = "@//bazel:BUILD.observer_cli",
+    sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
+    version = "1.7.3",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.git_package(
@@ -242,6 +354,7 @@ erlang_package.git_package(
 
 erlang_package.hex_package(
     name = "prometheus",
+<<<<<<< HEAD
     version = "4.9.1",
     sha256 = "d75e80d7b2c1be6bf296e211e806e939ae3d9e0428f45b4caad1817f028213d3",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
@@ -262,10 +375,22 @@ erlang_app(
 erlang_package.git_package(
     repository = "manopapad/proper",
     branch = "master",
+=======
+    build_file = "@//bazel:BUILD.prometheus",
+    sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
+    version = "4.10.0",
+)
+
+erlang_package.git_package(
+    branch = "master",
+    build_file = "@//bazel:BUILD.proper",
+    repository = "manopapad/proper",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "quantile_estimator",
+<<<<<<< HEAD
     version = "0.2.1",
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
 )
@@ -299,22 +424,42 @@ erlang_app(
     deps = DEPS,
 )
 """,
+=======
+    build_file = "@//bazel:BUILD.quantile_estimator",
+    sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
+    version = "0.2.1",
+)
+
+erlang_package.hex_package(
+    name = "ra",
+    build_file = "@//bazel:BUILD.ra",
+    sha256 = "7fae3112cea737bc64d5ff51c1b79a7f30f13ed3d11c565d2a6966ea5aa40473",
+    version = "2.4.6",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "ranch",
+<<<<<<< HEAD
     version = "2.1.0",
     sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
+=======
+    build_file = "@//bazel:BUILD.ranch",
+    sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
+    version = "2.1.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "recon",
+    build_file = "@//bazel:BUILD.recon",
     sha256 = "6c6683f46fd4a1dfd98404b9f78dcabc7fcd8826613a89dcb984727a8c3099d7",
     version = "2.5.3",
 )
 
 erlang_package.hex_package(
     name = "redbug",
+<<<<<<< HEAD
     version = "2.0.7",
     sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
 )
@@ -322,12 +467,30 @@ erlang_package.hex_package(
 erlang_package.git_package(
     repository = "rabbitmq/seshat",
     tag = "0.1.0",
+=======
+    build_file = "@//bazel:BUILD.redbug",
+    sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    version = "2.0.7",
+)
+
+erlang_package.hex_package(
+    name = "seshat",
+    build_file = "@//bazel:BUILD.seshat",
+    sha256 = "2c3deec7ff86e0d0c05edebd3455c8363123c227be292ffffc1a05eec08bff63",
+    version = "0.4.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "stdout_formatter",
+<<<<<<< HEAD
     version = "0.2.4",
     sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
+=======
+    build_file = "@//bazel:BUILD.stdout_formatter",
+    sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
+    version = "0.2.4",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.git_package(
@@ -337,12 +500,19 @@ erlang_package.git_package(
 
 erlang_package.hex_package(
     name = "sysmon_handler",
+<<<<<<< HEAD
     version = "1.3.0",
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
+=======
+    build_file = "@//bazel:BUILD.sysmon_handler",
+    sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
+    version = "1.3.0",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 erlang_package.hex_package(
     name = "systemd",
+<<<<<<< HEAD
     version = "0.6.1",
     sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
@@ -358,6 +528,11 @@ erlang_app(
     ],
 )
 """,
+=======
+    build_file = "@//bazel:BUILD.systemd",
+    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
+    version = "0.6.1",
+>>>>>>> e4ed812062 (Adopt otp 24.3.4.8)
 )
 
 use_repo(
