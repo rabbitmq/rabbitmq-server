@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         include:
-        - image_tag_suffix: otp-max
+        - image_tag_suffix: otp-min-bazel
           erlang_version: "24"
     timeout-minutes: 45
     steps:
