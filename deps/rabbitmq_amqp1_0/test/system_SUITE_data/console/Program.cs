@@ -2,7 +2,6 @@
 using Amqp.Framing;
 
 // See https://aka.ms/new-console-template for more information
-Console.WriteLine("Sending 10 messages to amqp10-queue. Press a button to terminate");
 
 // Create the AMQP connection string
 var connectionString = $"amqp://guest:guest@localhost:5672/%2F";
@@ -10,35 +9,49 @@ var connectionString = $"amqp://guest:guest@localhost:5672/%2F";
 // Create the AMQP connection
 var connection = new Connection(new Address(connectionString));
 
-// Create the AMQP session
-var amqpSession = new Session(connection);
-
-  // Give a name to the sender
-var senderSubscriptionId = "rabbitmq.amqp.sender";
-
-// Name of the topic you will be sending messages (Name of the Queue)
-var topic = "amqp10-queue";
-
-// Create the AMQP sender
-var sender = new SenderLink(amqpSession, senderSubscriptionId, topic);
 
 for (var i = 0; i < 10; i++)
 {
-    // Create message
-    var message = new Message($"Received message {i}");
+    Session[] sessions = new Session[5];
+    SenderLink[] senders = new SenderLink[5];
 
-    // Add a meesage id
-    message.Properties = new Properties() { MessageId = Guid.NewGuid().ToString() };
+    for (var j = 0; j < 5; j++)
+    {
+      // Create the AMQP session
+      sessions[j] = new Session(connection);
 
-    // Add some message properties
-    message.ApplicationProperties = new ApplicationProperties();
-    message.ApplicationProperties["Message.Type.FullName"] = typeof(string).FullName;
+        // Give a name to the sender
+      var senderSubscriptionId = "rabbitmq.amqp.sender";
 
-    // Send message
-    sender.Send(message);
+      // Name of the topic you will be sending messages (Name of the Queue)
+      var topic = "amqp10-queue";
 
-    Task.Delay(2000).Wait();
+      // Create the AMQP sender
+      senders[j] = new SenderLink(sessions[j], senderSubscriptionId, topic);
+
+      // Create message
+      var message = new Message($"Received message {i}");
+
+      // Add a meesage id
+      message.Properties = new Properties() { MessageId = Guid.NewGuid().ToString() };
+
+      // Add some message properties
+      message.ApplicationProperties = new ApplicationProperties();
+      message.ApplicationProperties["Message.Type.FullName"] = typeof(string).FullName;
+
+      // Send message
+      senders[j].Send(message);
+      Console.WriteLine("Sent message " + (i+1) + "/10 to amqp10-queue from session " + j + ". Press a button to send next message");
+    }
+     // Wait for a key to close last sessions
+    Console.Read();
+
+    for (var j = 0; j < 5; j++)
+    {
+      senders[j].Close();
+      sessions[j].Close();
+    }
 }
 
- // Wait for a key to close the program
-Console.Read();
+Console.WriteLine("Sent all messages. Press a button to close the connection");
+connection.Close();
