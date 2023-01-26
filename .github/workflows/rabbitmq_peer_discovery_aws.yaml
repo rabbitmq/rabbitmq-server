@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
         - image_tag_suffix: otp-min-bazel
-          erlang_version: "24"
+          otp_version_id: "24"
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
