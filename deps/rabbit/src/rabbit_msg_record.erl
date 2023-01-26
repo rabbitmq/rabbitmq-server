@@ -187,9 +187,9 @@ message_annotation(Key,
 %% this is the input function from storage and from, e.g. socket input
 -spec from_amqp091(#'P_basic'{}, iodata()) -> state().
 from_amqp091(PB, Data) ->
+    MA = from_amqp091_to_amqp10_message_annotations(PB),
     P = from_amqp091_to_amqp10_properties(PB),
     AP = from_amqp091_to_amqp10_app_properties(PB),
-    MA = from_amqp091_to_amqp10_message_annotations(PB),
 
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,

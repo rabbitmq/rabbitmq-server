@@ -28,7 +28,8 @@ all_tests() ->
      message_id_uuid,
      message_id_binary,
      message_id_large_binary,
-     message_id_large_string
+     message_id_large_string,
+     reuse_amqp10_binary_chunks
     ].
 
 groups() ->
@@ -214,6 +215,32 @@ message_id_large_string(_Config) ->
                  Props),
     ok.
 
+reuse_amqp10_binary_chunks(_Config) ->
+    Amqp10MsgAnnotations = #'v1_0.message_annotations'{content =
+                                                       [{{symbol, <<"x-route">>}, {utf8, <<"dummy">>}}]},
+    Amqp10MsgAnnotationsBin = amqp10_encode_bin(Amqp10MsgAnnotations),
+    Amqp10Props = #'v1_0.properties'{group_id = {utf8, <<"my-group">>},
+                                     group_sequence = {uint, 42}},
+    Amqp10PropsBin = amqp10_encode_bin(Amqp10Props),
+    Amqp10AppProps = #'v1_0.application_properties'{content = [{{utf8, <<"foo">>}, {utf8, <<"bar">>}}]},
+    Amqp10AppPropsBin = amqp10_encode_bin(Amqp10AppProps),
+    Amqp091Headers = [{<<"x-amqp-1.0-message-annotations">>, longstr, Amqp10MsgAnnotationsBin},
+                      {<<"x-amqp-1.0-properties">>, longstr, Amqp10PropsBin},
+                      {<<"x-amqp-1.0-app-properties">>, longstr, Amqp10AppPropsBin}],
+    Amqp091Props = #'P_basic'{type = <<"amqp-1.0">>, headers = Amqp091Headers},
+    R = rabbit_msg_record:from_amqp091(Amqp091Props, <<"payload-does-not-matter">>),
+    RBin = rabbit_msg_record:to_iodata(R),
+    Amqp10DecodedMsg = amqp10_framing:decode_bin(list_to_binary(RBin)),
+    [Amqp10DecodedMsgAnnotations, Amqp10DecodedProps,
+     Amqp10DecodedAppProps, _] = Amqp10DecodedMsg,
+    ?assertEqual(Amqp10MsgAnnotations, Amqp10DecodedMsgAnnotations),
+    ?assertEqual(Amqp10Props, Amqp10DecodedProps),
+    ?assertEqual(Amqp10AppProps, Amqp10DecodedAppProps),
+    ok.
+
+amqp10_encode_bin(X) ->
+    list_to_binary(amqp10_framing:encode_bin(X)).
+
 %% Utility
 
 test_amqp091_roundtrip(Props, Payload) ->
@@ -226,5 +253,3 @@ test_amqp091_roundtrip(Props, Payload) ->
     ?assertEqual(iolist_to_binary(Payload),
                  iolist_to_binary(PayloadOut)),
     ok.
-
-
