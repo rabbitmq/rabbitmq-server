@@ -10,6 +10,7 @@ jobs:
         include:
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 25_2
+            otp_major: 25
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -46,7 +47,7 @@ jobs:
 
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe-${{ matrix.otp_version_id }} \
+          --config=rbe-${{ matrix.otp_major }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
