@@ -542,9 +542,12 @@ clean_channel_details(Obj) ->
          undefined -> Obj0;
          Chd ->
              pset(channel_details,
-                  lists:keydelete(pid, 1, Chd),
+                  format_channel_details(lists:keydelete(pid, 1, Chd)),
                   Obj0)
      end.
+
+format_channel_details([]) -> #{};
+format_channel_details(Any) -> Any.
 
 -spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
 format_consumer_arguments(Obj) ->
