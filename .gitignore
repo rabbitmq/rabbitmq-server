@@ -1,5 +1,6 @@
 *~
 .sw?
+*.tmp
 .*.sw?
 /.erlang.mk/
 /_build/
