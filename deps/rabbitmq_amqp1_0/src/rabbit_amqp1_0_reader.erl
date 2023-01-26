@@ -437,7 +437,7 @@ handle_1_0_connection_frame(_Frame, State) ->
     maybe_close(State#v1{connection_state = closing}).
 
 handle_1_0_session_frame(Channel, Frame, State) ->
-    case find_session_pid_for_channel(Channel, State) of
+    case maps:get(Channel, State#v1.tracked_channels, undefined) of
         undefined ->
             case ?IS_RUNNING(State) of
                 true ->
@@ -688,16 +688,16 @@ auth_phase_1_0(Response,
     end.
 
 track_channel(Channel, ChFrPid, State) ->
-  rabbit_log:debug("AMQP 1.0 opened channel = ~tp " , [{Channel, ChFrPid}]),
-  State#v1{tracked_channels = maps:put(Channel, ChFrPid, State#v1.tracked_channels)}.
+    rabbit_log:debug("AMQP 1.0 opened channel = ~tp " , [{Channel, ChFrPid}]),
+    State#v1{tracked_channels = maps:put(Channel, ChFrPid, State#v1.tracked_channels)}.
+
 untrack_channel(Channel, State) ->
-  case maps:take(Channel, State#v1.tracked_channels) of
-    {Value, NewMap} -> rabbit_log:debug("AMQP 1.0 closed channel = ~tp ", [{Channel, Value}]),
-                       State#v1{tracked_channels = NewMap};
-    error -> State
-  end.
-find_session_pid_for_channel(Channel, State) ->
-  maps:get(Channel, State#v1.tracked_channels, undefined).
+    case maps:take(Channel, State#v1.tracked_channels) of
+        {Value, NewMap} ->
+            rabbit_log:debug("AMQP 1.0 closed channel = ~tp ", [{Channel, Value}]),
+            State#v1{tracked_channels = NewMap};
+        error -> State
+    end.
 
 send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
