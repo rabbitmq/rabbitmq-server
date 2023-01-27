@@ -49,7 +49,7 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 -spec list_connections() -> [pid()].
 list_connections() ->
     PlainPids = connection_pids_of_protocol(?TCP_PROTOCOL),
-    TLSPids = connection_pids_of_protocol(?TLS_PROTOCOL),
+    TLSPids   = connection_pids_of_protocol(?TLS_PROTOCOL),
     PlainPids ++ TLSPids.
 
 %%
@@ -58,8 +58,7 @@ list_connections() ->
 
 connection_pids_of_protocol(Protocol) ->
     case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        undefined ->
-            [];
+        undefined   -> [];
         AcceptorRef ->
             lists:map(fun cowboy_ws_connection_pid/1, ranch:procs(AcceptorRef, connections))
     end.
@@ -71,38 +70,36 @@ cowboy_ws_connection_pid(RanchConnPid) ->
     Pid.
 
 mqtt_init() ->
-    CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
-    Routes = cowboy_router:compile([
-        {'_', [
-            {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
-        ]}
-    ]),
-    CowboyOpts = CowboyOpts0#{
-        env => #{dispatch => Routes},
-        proxy_header => get_env(proxy_protocol, false),
-        stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]
-    },
-    case get_env(tcp_config, []) of
-        [] -> ok;
-        TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)
-    end,
-    case get_env(ssl_config, []) of
-        [] -> ok;
-        TLSConf0 -> start_tls_listener(TLSConf0, CowboyOpts)
-    end,
-    ok.
+  CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
+  CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
+  Routes = cowboy_router:compile([{'_', [
+      {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
+  ]}]),
+  CowboyOpts = CowboyOpts0#{
+                 env => #{dispatch => Routes},
+                 proxy_header => get_env(proxy_protocol, false),
+                 stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]
+                },
+  case get_env(tcp_config, []) of
+      []       -> ok;
+      TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)
+  end,
+  case get_env(ssl_config, []) of
+      []       -> ok;
+      TLSConf0 -> start_tls_listener(TLSConf0, CowboyOpts)
+  end,
+  ok.
 
 start_tcp_listener(TCPConf0, CowboyOpts) ->
     {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
     RanchRef = rabbit_networking:ranch_ref(TCPConf),
     RanchTransportOpts =
-        #{
-            socket_opts => TCPConf,
-            max_connections => get_max_connections(),
-            num_acceptors => get_env(num_tcp_acceptors, 10),
-            num_conns_sups => get_env(num_conns_sup, 1)
-        },
+    #{
+      socket_opts => TCPConf,
+      max_connections => get_max_connections(),
+      num_acceptors => get_env(num_tcp_acceptors, 10),
+      num_conns_sups => get_env(num_conns_sup, 1)
+     },
     case cowboy:start_clear(RanchRef, RanchTransportOpts, CowboyOpts) of
         {ok, _} ->
             ok;
@@ -110,28 +107,25 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
             ok;
         {error, ErrTCP} ->
             rabbit_log:error(
-                "Failed to start a WebSocket (HTTP) listener. Error: ~p, listener settings: ~p",
-                [ErrTCP, TCPConf]
-            ),
+              "Failed to start a WebSocket (HTTP) listener. Error: ~p, listener settings: ~p",
+              [ErrTCP, TCPConf]),
             throw(ErrTCP)
     end,
     listener_started(?TCP_PROTOCOL, TCPConf),
-    rabbit_log:info(
-        "rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
-        [IpStr, Port]
-    ).
+    rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
+                    [IpStr, Port]).
 
 start_tls_listener(TLSConf0, CowboyOpts) ->
     _ = rabbit_networking:ensure_ssl(),
     {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
     RanchRef = rabbit_networking:ranch_ref(TLSConf),
     RanchTransportOpts =
-        #{
-            socket_opts => TLSConf,
-            max_connections => get_max_connections(),
-            num_acceptors => get_env(num_ssl_acceptors, 10),
-            num_conns_sups => get_env(num_conns_sup, 1)
-        },
+    #{
+      socket_opts => TLSConf,
+      max_connections => get_max_connections(),
+      num_acceptors => get_env(num_ssl_acceptors, 10),
+      num_conns_sups => get_env(num_conns_sup, 1)
+     },
     case cowboy:start_tls(RanchRef, RanchTransportOpts, CowboyOpts) of
         {ok, _} ->
             ok;
@@ -139,45 +133,34 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
             ok;
         {error, ErrTLS} ->
             rabbit_log:error(
-                "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p, listener settings: ~p",
-                [ErrTLS, TLSConf]
-            ),
+              "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p, listener settings: ~p",
+              [ErrTLS, TLSConf]),
             throw(ErrTLS)
     end,
     listener_started(?TLS_PROTOCOL, TLSConf),
-    rabbit_log:info(
-        "rabbit_web_mqtt: listening for HTTPS connections on ~s:~w",
-        [TLSIpStr, TLSPort]
-    ).
+    rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w",
+                    [TLSIpStr, TLSPort]).
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),
-    [
-        rabbit_networking:tcp_listener_started(
-            Protocol,
-            Listener,
-            IPAddress,
-            Port
-        )
-     || {IPAddress, _Port, _Family} <-
-            rabbit_networking:tcp_listener_addresses(Port)
-    ],
+    [rabbit_networking:tcp_listener_started(Protocol, Listener,
+                                            IPAddress, Port)
+     || {IPAddress, _Port, _Family}
+        <- rabbit_networking:tcp_listener_addresses(Port)],
     ok.
 
 get_tcp_conf(TCPConf0) ->
-    TCPConf1 =
-        case proplists:get_value(port, TCPConf0) of
-            undefined -> [{port, 15675} | TCPConf0];
-            _ -> TCPConf0
-        end,
+    TCPConf1 = case proplists:get_value(port, TCPConf0) of
+                   undefined -> [{port, 15675}|TCPConf0];
+                   _ -> TCPConf0
+               end,
     get_ip_port(TCPConf1).
 
 get_tls_conf(TLSConf0) ->
-    TLSConf1 =
-        case proplists:get_value(port, TLSConf0) of
-            undefined -> [{port, 15675} | proplists:delete(port, TLSConf0)];
-            _ -> TLSConf0
-        end,
+    TLSConf1 = case proplists:get_value(port, TLSConf0) of
+                   undefined -> [{port, 15675}|proplists:delete(port, TLSConf0)];
+                   _ -> TLSConf0
+               end,
     get_ip_port(TLSConf1).
 
 get_ip_port(Conf0) ->
@@ -194,7 +177,7 @@ normalize_ip(Ip) ->
     Ip.
 
 get_max_connections() ->
-    get_env(max_connections, infinity).
+  get_env(max_connections, infinity).
 
 get_env(Key, Default) ->
     rabbit_misc:get_env(rabbitmq_web_mqtt, Key, Default).

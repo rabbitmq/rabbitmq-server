@@ -18,13 +18,13 @@ all() ->
 
 groups() ->
     [
-        {tests, [], [
-            no_websocket_subprotocol,
-            unsupported_websocket_subprotocol,
-            unacceptable_data_type,
-            handle_invalid_packets,
-            duplicate_connect
-        ]}
+     {tests, [],
+      [no_websocket_subprotocol
+       ,unsupported_websocket_subprotocol
+       ,unacceptable_data_type
+       ,handle_invalid_packets
+       ,duplicate_connect
+      ]}
     ].
 
 suite() ->
@@ -35,19 +35,15 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {protocol, "ws"}
-    ]),
-    rabbit_ct_helpers:run_setup_steps(
-        Config1,
-        rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()
-    ).
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(
-        Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-            rabbit_ct_broker_helpers:teardown_steps()
-    ).
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -76,9 +72,7 @@ websocket_subprotocol(Config, SubProtocol) ->
     PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
     WS = rfc6455_client:new("ws://localhost:" ++ PortStr ++ "/ws", self(), undefined, SubProtocol),
     {_, [{http_response, Res}]} = rfc6455_client:open(WS),
-    {'HTTP/1.1', 400, <<"Bad Request">>, _} = cow_http:parse_status_line(
-        rabbit_data_coercion:to_binary(Res)
-    ),
+    {'HTTP/1.1', 400, <<"Bad Request">>, _} = cow_http:parse_status_line(rabbit_data_coercion:to_binary(Res)),
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {close, _} = rfc6455_client:recv(WS, timer:seconds(1)).
 
@@ -116,8 +110,7 @@ duplicate_connect(Config) ->
     process_flag(trap_exit, true),
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     eventually(?_assertEqual(0, num_mqtt_connections(Config, 0))),
-    receive
-        {'EXIT', WS, _} -> ok
+    receive {'EXIT', WS, _} -> ok
     after 500 -> ct:fail("expected web socket to exit")
     end.
 

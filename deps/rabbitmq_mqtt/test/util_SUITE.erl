@@ -12,18 +12,19 @@
 
 all() ->
     [
-        {group, tests}
+      {group, tests}
     ].
 
 groups() ->
     [
-        {tests, [parallel], [
-            coerce_exchange,
-            coerce_vhost,
-            coerce_default_user,
-            coerce_default_pass,
-            mqtt_amqp_topic_translation
-        ]}
+     {tests, [parallel], [
+                          coerce_exchange,
+                          coerce_vhost,
+                          coerce_default_user,
+                          coerce_default_pass,
+                          mqtt_amqp_topic_translation
+                         ]
+     }
     ].
 
 suite() ->

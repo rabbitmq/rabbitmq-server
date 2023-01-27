@@ -6,15 +6,8 @@
 %%
 -module(mqtt_node).
 
--export([
-    start/0,
-    node_id/0,
-    server_id/0,
-    all_node_ids/0,
-    leave/1,
-    trigger_election/0,
-    delete/1
-]).
+-export([start/0, node_id/0, server_id/0, all_node_ids/0, leave/1, trigger_election/0,
+         delete/1]).
 
 -define(ID_NAME, mqtt_node).
 -define(START_TIMEOUT, 100_000).
@@ -32,11 +25,8 @@ server_id(Node) ->
     {?ID_NAME, Node}.
 
 all_node_ids() ->
-    [
-        server_id(N)
-     || N <- rabbit_nodes:all(),
-        can_participate_in_clientid_tracking(N)
-    ].
+    [server_id(N) || N <- rabbit_nodes:all(),
+                   can_participate_in_clientid_tracking(N)].
 
 start() ->
     %% 3s to 6s randomized
@@ -50,41 +40,34 @@ start(Delay, AttemptsLeft) ->
     NodeId = server_id(),
     Nodes = compatible_peer_servers(),
     case ra_directory:uid_of(?RA_SYSTEM, ?ID_NAME) of
-        undefined ->
-            case Nodes of
-                [] ->
-                    %% Since cluster members are not known ahead of time and initial boot can be happening in parallel,
-                    %% we wait and check a few times (up to a few seconds) to see if we can discover any peers to
-                    %% join before forming a cluster. This reduces the probability of N independent clusters being
-                    %% formed in the common scenario of N nodes booting in parallel e.g. because they were started
-                    %% at the same time by a deployment tool.
-                    %%
-                    %% This scenario does not guarantee single cluster formation but without knowing the list of members
-                    %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
-                    %% to achieve without having consensus around expected cluster members.
-                    rabbit_log:info(
-                        "MQTT: will wait for ~tp more ms for cluster members to join before triggering a Raft leader election",
-                        [Delay]
-                    ),
-                    timer:sleep(Delay),
-                    start(Delay, AttemptsLeft - 1);
-                Peers ->
-                    %% Trigger an election.
-                    %% This is required when we start a node for the first time.
-                    %% Using default timeout because it supposed to reply fast.
-                    rabbit_log:info(
-                        "MQTT: discovered ~tp cluster peers that support client ID tracking", [
-                            length(Peers)
-                        ]
-                    ),
-                    ok = start_server(),
-                    _ = join_peers(NodeId, Peers),
-                    ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
-            end;
-        _ ->
-            _ = join_peers(NodeId, Nodes),
-            ok = ra:restart_server(?RA_SYSTEM, NodeId),
-            ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
+          undefined ->
+              case Nodes of
+                  [] ->
+                      %% Since cluster members are not known ahead of time and initial boot can be happening in parallel,
+                      %% we wait and check a few times (up to a few seconds) to see if we can discover any peers to
+                      %% join before forming a cluster. This reduces the probability of N independent clusters being
+                      %% formed in the common scenario of N nodes booting in parallel e.g. because they were started
+                      %% at the same time by a deployment tool.
+                      %%
+                      %% This scenario does not guarantee single cluster formation but without knowing the list of members
+                      %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
+                      %% to achieve without having consensus around expected cluster members.
+                      rabbit_log:info("MQTT: will wait for ~tp more ms for cluster members to join before triggering a Raft leader election", [Delay]),
+                      timer:sleep(Delay),
+                      start(Delay, AttemptsLeft - 1);
+                  Peers ->
+                      %% Trigger an election.
+                      %% This is required when we start a node for the first time.
+                      %% Using default timeout because it supposed to reply fast.
+                      rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
+                      ok = start_server(),
+                      _ = join_peers(NodeId, Peers),
+                      ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
+              end;
+          _ ->
+              _ = join_peers(NodeId, Nodes),
+              ok = ra:restart_server(?RA_SYSTEM, NodeId),
+              ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
     end.
 
 compatible_peer_servers() ->
@@ -95,15 +78,14 @@ start_server() ->
     Nodes = compatible_peer_servers(),
     UId = ra:new_uid(ra_lib:to_binary(?ID_NAME)),
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
-    Conf = #{
-        cluster_name => ?ID_NAME,
-        id => NodeId,
-        uid => UId,
-        friendly_name => atom_to_list(?ID_NAME),
-        initial_members => Nodes,
-        log_init_args => #{uid => UId},
-        tick_timeout => Timeout,
-        machine => {module, mqtt_machine, #{}}
+    Conf = #{cluster_name => ?ID_NAME,
+             id => NodeId,
+             uid => UId,
+             friendly_name => atom_to_list(?ID_NAME),
+             initial_members => Nodes,
+             log_init_args => #{uid => UId},
+             tick_timeout => Timeout,
+             machine => {module, mqtt_machine, #{}}
     },
     ra:start_server(?RA_SYSTEM, Conf).
 
@@ -121,13 +103,11 @@ join_peers(NodeId, Nodes, RetriesLeft) ->
     case ra:members(Nodes, ?START_TIMEOUT) of
         {ok, Members, _} ->
             case lists:member(NodeId, Members) of
-                true -> ok;
+                true  -> ok;
                 false -> ra:add_member(Members, NodeId)
             end;
         {timeout, _} ->
-            rabbit_log:debug("MQTT: timed out contacting cluster peers, %s retries left", [
-                RetriesLeft
-            ]),
+            rabbit_log:debug("MQTT: timed out contacting cluster peers, %s retries left", [RetriesLeft]),
             timer:sleep(?RETRY_INTERVAL),
             join_peers(NodeId, Nodes, RetriesLeft - 1);
         Err ->
@@ -148,12 +128,12 @@ leave(Node) ->
 can_participate_in_clientid_tracking(Node) ->
     case rpc:call(Node, mqtt_machine, module_info, []) of
         {badrpc, _} -> false;
-        _ -> true
+        _           -> true
     end.
 
 -spec delete(Args) -> Ret when
-    Args :: rabbit_feature_flags:enable_callback_args(),
-    Ret :: rabbit_feature_flags:enable_callback_ret().
+      Args :: rabbit_feature_flags:enable_callback_args(),
+      Ret :: rabbit_feature_flags:enable_callback_ret().
 delete(_) ->
     RaNodes = all_node_ids(),
     Nodes = lists:map(fun({_, N}) -> N end, RaNodes),
@@ -171,13 +151,12 @@ delete(_) ->
                 {ok, _Leader} ->
                     rabbit_log:info("Successfully deleted Ra cluster ~s", [?ID_NAME]),
                     ok;
-                {error, _} = Err ->
+                {error, _}  = Err ->
                     rabbit_log:info("Failed to delete Ra cluster ~s: ~p", [?ID_NAME, Err]),
                     Err
-            catch
-                exit:{{shutdown, delete}, _Stacktrace} ->
-                    rabbit_log:info("Ra cluster ~s already being deleted", [?ID_NAME]),
-                    ok
+            catch exit:{{shutdown, delete}, _Stacktrace} ->
+                      rabbit_log:info("Ra cluster ~s already being deleted", [?ID_NAME]),
+                      ok
             end
     after
         true = global:del_lock(LockId, Nodes),

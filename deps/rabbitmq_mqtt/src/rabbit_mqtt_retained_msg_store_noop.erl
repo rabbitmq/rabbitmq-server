@@ -12,19 +12,19 @@
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
 new(_Dir, _VHost) ->
-    ok.
+  ok.
 
 recover(_Dir, _VHost) ->
-    {ok, ok}.
+  {ok, ok}.
 
 insert(_Topic, _Msg, _State) ->
-    ok.
+  ok.
 
 lookup(_Topic, _State) ->
-    not_found.
+  not_found.
 
 delete(_Topic, _State) ->
-    ok.
+  ok.
 
 terminate(_State) ->
-    ok.
+  ok.

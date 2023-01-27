@@ -8,13 +8,8 @@
 -module(rabbit_mqtt_retainer_sup).
 -behaviour(supervisor).
 
--export([
-    start_link/1,
-    init/1,
-    start_child/2, start_child/1,
-    child_for_vhost/1,
-    delete_child/1
-]).
+-export([start_link/1, init/1, start_child/2,start_child/1, child_for_vhost/1,
+         delete_child/1]).
 
 -spec start_child(binary()) -> supervisor:startchild_ret().
 -spec start_child(term(), binary()) -> supervisor:startchild_ret().
@@ -24,13 +19,13 @@ start_link(SupName) ->
 
 -spec child_for_vhost(rabbit_types:vhost()) -> pid().
 child_for_vhost(VHost) when is_binary(VHost) ->
-    case rabbit_mqtt_retainer_sup:start_child(VHost) of
-        {ok, Pid} -> Pid;
-        {error, {already_started, Pid}} -> Pid
-    end.
+  case rabbit_mqtt_retainer_sup:start_child(VHost) of
+    {ok, Pid}                       -> Pid;
+    {error, {already_started, Pid}} -> Pid
+  end.
 
 start_child(VHost) when is_binary(VHost) ->
-    start_child(rabbit_mqtt_retainer:store_module(), VHost).
+  start_child(rabbit_mqtt_retainer:store_module(), VHost).
 
 start_child(RetainStoreMod, VHost) ->
     supervisor:start_child(
@@ -46,20 +41,18 @@ start_child(RetainStoreMod, VHost) ->
     ).
 
 delete_child(VHost) ->
-    Id = vhost_to_atom(VHost),
-    ok = supervisor:terminate_child(?MODULE, Id),
-    ok = supervisor:delete_child(?MODULE, Id).
+  Id = vhost_to_atom(VHost),
+  ok = supervisor:terminate_child(?MODULE, Id),
+  ok = supervisor:delete_child(?MODULE, Id).
 
 init([]) ->
-    Mod = rabbit_mqtt_retainer:store_module(),
-    rabbit_log:info(
-        "MQTT retained message store: ~tp",
-        [Mod]
-    ),
-    {ok, {
-        #{strategy => one_for_one, intensity => 5, period => 5},
-        child_specs(Mod, rabbit_vhost:list_names())
-    }}.
+  Mod = rabbit_mqtt_retainer:store_module(),
+  rabbit_log:info("MQTT retained message store: ~tp",
+    [Mod]),
+  {ok, {
+      #{strategy => one_for_one, intensity => 5, period => 5},
+      child_specs(Mod, rabbit_vhost:list_names())
+  }}.
 
 child_specs(Mod, VHosts) ->
     %% see start_child/2
