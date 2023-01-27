@@ -10,18 +10,20 @@
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
--export([scopes/0,
-         switches/0,
-         aliases/0,
-         usage/0,
-         usage_doc_guides/0,
-         banner/2,
-         validate/2,
-         merge_defaults/2,
-         run/2,
-         output/2,
-         description/0,
-         help_section/0]).
+-export([
+    scopes/0,
+    switches/0,
+    aliases/0,
+    usage/0,
+    usage_doc_guides/0,
+    banner/2,
+    validate/2,
+    merge_defaults/2,
+    run/2,
+    output/2,
+    description/0,
+    help_section/0
+]).
 
 scopes() -> [ctl].
 switches() -> [].
@@ -48,20 +50,29 @@ usage() ->
 usage_doc_guides() ->
     [?MQTT_GUIDE_URL].
 
-run([Node], #{node := NodeName,
-              timeout := Timeout}) ->
+run([Node], #{
+    node := NodeName,
+    timeout := Timeout
+}) ->
     case rabbit_misc:rpc_call(NodeName, rabbit_mqtt_collector, leave, [Node], Timeout) of
         {badrpc, _} = Error ->
             Error;
         nodedown ->
-            {ok, list_to_binary(io_lib:format("Node ~ts is down but has been successfully removed"
-                                         " from the cluster", [Node]))};
+            {ok,
+                list_to_binary(
+                    io_lib:format(
+                        "Node ~ts is down but has been successfully removed"
+                        " from the cluster",
+                        [Node]
+                    )
+                )};
         Result ->
             %% 'ok' or 'timeout'
             Result
     end.
 
-banner([Node], _) -> list_to_binary(io_lib:format("Removing node ~ts from the list of MQTT nodes...", [Node])).
+banner([Node], _) ->
+    list_to_binary(io_lib:format("Removing node ~ts from the list of MQTT nodes...", [Node])).
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

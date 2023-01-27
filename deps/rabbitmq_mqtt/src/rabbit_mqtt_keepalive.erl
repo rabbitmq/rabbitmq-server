@@ -1,23 +1,26 @@
 -module(rabbit_mqtt_keepalive).
 
--export([init/0,
-         start/2,
-         handle/2,
-         start_timer/1,
-         cancel_timer/1,
-         interval_secs/1]).
+-export([
+    init/0,
+    start/2,
+    handle/2,
+    start_timer/1,
+    cancel_timer/1,
+    interval_secs/1
+]).
 
 -export_type([state/0]).
 
 -record(state, {
-          %% Keep Alive value as sent in the CONNECT packet.
-          interval_secs :: pos_integer(),
-          timer :: reference(),
-          socket :: inet:socket(),
-          recv_oct :: non_neg_integer(),
-          received :: boolean()}).
+    %% Keep Alive value as sent in the CONNECT packet.
+    interval_secs :: pos_integer(),
+    timer :: reference(),
+    socket :: inet:socket(),
+    recv_oct :: non_neg_integer(),
+    received :: boolean()
+}).
 
--opaque(state() :: disabled | #state{}).
+-opaque state() :: disabled | #state{}.
 
 -spec init() -> state().
 init() ->
@@ -26,8 +29,9 @@ init() ->
 -spec start(IntervalSeconds :: non_neg_integer(), inet:socket()) -> ok.
 start(0, _Sock) ->
     ok;
-start(Seconds, Sock)
-  when is_integer(Seconds) andalso Seconds > 0 ->
+start(Seconds, Sock) when
+    is_integer(Seconds) andalso Seconds > 0
+->
     self() ! {keepalive, {init, Seconds, Sock}},
     ok.
 
@@ -36,20 +40,28 @@ start(Seconds, Sock)
 handle({init, IntervalSecs, Sock}, _State) ->
     case rabbit_net:getstat(Sock, [recv_oct]) of
         {ok, [{recv_oct, RecvOct}]} ->
-            {ok, #state{interval_secs = IntervalSecs,
-                        timer = start_timer0(IntervalSecs),
-                        socket = Sock,
-                        recv_oct = RecvOct,
-                        received = true}};
+            {ok, #state{
+                interval_secs = IntervalSecs,
+                timer = start_timer0(IntervalSecs),
+                socket = Sock,
+                recv_oct = RecvOct,
+                received = true
+            }};
         {error, _} = Err ->
             Err
     end;
-handle(check, State = #state{socket = Sock,
-                             recv_oct = SameRecvOct,
-                             received = ReceivedPreviously}) ->
+handle(
+    check,
+    State = #state{
+        socket = Sock,
+        recv_oct = SameRecvOct,
+        received = ReceivedPreviously
+    }
+) ->
     case rabbit_net:getstat(Sock, [recv_oct]) of
-        {ok, [{recv_oct, SameRecvOct}]}
-          when ReceivedPreviously ->
+        {ok, [{recv_oct, SameRecvOct}]} when
+            ReceivedPreviously
+        ->
             %% Did not receive from socket for the 1st time.
             {ok, start_timer(State#state{received = false})};
         {ok, [{recv_oct, SameRecvOct}]} ->
@@ -57,8 +69,11 @@ handle(check, State = #state{socket = Sock,
             {error, timeout};
         {ok, [{recv_oct, NewRecvOct}]} ->
             %% Received from socket.
-            {ok, start_timer(State#state{recv_oct = NewRecvOct,
-                                         received = true})};
+            {ok,
+                start_timer(State#state{
+                    recv_oct = NewRecvOct,
+                    received = true
+                })};
         {error, _} = Err ->
             Err
     end.
@@ -74,10 +89,13 @@ start_timer0(KeepAliveSeconds) ->
     erlang:send_after(timer_ms(KeepAliveSeconds), self(), {keepalive, check}).
 
 -spec cancel_timer(state()) -> state().
-cancel_timer(#state{timer = Ref} = State)
-  when is_reference(Ref) ->
-    ok = erlang:cancel_timer(Ref, [{async, true},
-                                   {info, false}]),
+cancel_timer(#state{timer = Ref} = State) when
+    is_reference(Ref)
+->
+    ok = erlang:cancel_timer(Ref, [
+        {async, true},
+        {info, false}
+    ]),
     State;
 cancel_timer(disabled) ->
     disabled.

@@ -9,8 +9,13 @@
 
 -include("mqtt_machine.hrl").
 
--export([register/2, register/3, unregister/2,
-         list/0, list_pids/0, leave/1]).
+-export([
+    register/2, register/3,
+    unregister/2,
+    list/0,
+    list_pids/0,
+    leave/1
+]).
 
 %%----------------------------------------------------------------------------
 -spec register(term(), pid()) -> {ok, reference()} | {error, term()}.
@@ -21,7 +26,7 @@ register(ClientId, Pid) ->
             case ra:members(NodeId) of
                 {ok, _, Leader} ->
                     register(Leader, ClientId, Pid);
-                 _ = Error ->
+                _ = Error ->
                     Error
             end;
         Leader ->
@@ -60,25 +65,31 @@ list(QF) ->
         undefined ->
             NodeIds = mqtt_node:all_node_ids(),
             case ra:leader_query(NodeIds, QF) of
-                {ok, {_, Result}, _} -> Result;
-                {timeout, _}      ->
-                    rabbit_log:debug("~ts:list/1 leader query timed out",
-                                     [?MODULE]),
+                {ok, {_, Result}, _} ->
+                    Result;
+                {timeout, _} ->
+                    rabbit_log:debug(
+                        "~ts:list/1 leader query timed out",
+                        [?MODULE]
+                    ),
                     []
             end;
         Leader ->
             case ra:leader_query(Leader, QF) of
-                {ok, {_, Result}, _} -> Result;
+                {ok, {_, Result}, _} ->
+                    Result;
                 {error, _} ->
                     [];
-                {timeout, _}      ->
-                    rabbit_log:debug("~ts:list/1 leader query timed out",
-                                     [?MODULE]),
+                {timeout, _} ->
+                    rabbit_log:debug(
+                        "~ts:list/1 leader query timed out",
+                        [?MODULE]
+                    ),
                     []
             end
     end.
 
--spec leave(binary()) ->  ok | timeout | nodedown.
+-spec leave(binary()) -> ok | timeout | nodedown.
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),
     ServerId = mqtt_node:server_id(),

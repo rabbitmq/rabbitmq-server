@@ -13,53 +13,57 @@
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
 -record(store_state, {
-  %% DETS table name
-  table
+    %% DETS table name
+    table
 }).
 
 -type store_state() :: #store_state{}.
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-  Tid = open_table(Dir, VHost),
-  #store_state{table = Tid}.
+    Tid = open_table(Dir, VHost),
+    #store_state{table = Tid}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
-  {error, uninitialized} | {ok, store_state()}.
+    {error, uninitialized} | {ok, store_state()}.
 recover(Dir, VHost) ->
-  case open_table(Dir, VHost) of
-    {error, _} -> {error, uninitialized};
-    {ok, Tid}  -> {ok, #store_state{table = Tid}}
-  end.
+    case open_table(Dir, VHost) of
+        {error, _} -> {error, uninitialized};
+        {ok, Tid} -> {ok, #store_state{table = Tid}}
+    end.
 
 -spec insert(binary(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{table = T}) ->
-  ok = dets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}).
+    ok = dets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}).
 
 -spec lookup(binary(), store_state()) -> retained_message() | not_found.
 lookup(Topic, #store_state{table = T}) ->
-  case dets:lookup(T, Topic) of
-    []      -> not_found;
-    [Entry] -> Entry
-  end.
+    case dets:lookup(T, Topic) of
+        [] -> not_found;
+        [Entry] -> Entry
+    end.
 
 -spec delete(binary(), store_state()) -> ok.
 delete(Topic, #store_state{table = T}) ->
-  ok = dets:delete(T, Topic).
+    ok = dets:delete(T, Topic).
 
 -spec terminate(store_state()) -> ok.
 terminate(#store_state{table = T}) ->
-  ok = dets:close(T).
+    ok = dets:close(T).
 
 open_table(Dir, VHost) ->
-    dets:open_file(rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-                   table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))).
+    dets:open_file(
+        rabbit_mqtt_util:vhost_name_to_table_name(VHost),
+        table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))
+    ).
 
 table_options(Path) ->
-    [{type, set},
-     {keypos, #retained_message.topic},
-     {file, Path},
-     {ram_file, true},
-     {repair, true},
-     {auto_save, rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000)}
+    [
+        {type, set},
+        {keypos, #retained_message.topic},
+        {file, Path},
+        {ram_file, true},
+        {repair, true},
+        {auto_save,
+            rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000)}
     ].

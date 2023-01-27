@@ -11,20 +11,21 @@
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
--export([queue_name_bin/2,
-         qos_from_queue_name/2,
-         env/1,
-         table_lookup/2,
-         path_for/2,
-         path_for/3,
-         vhost_name_to_table_name/1,
-         register_clientid/2,
-         remove_duplicate_clientid_connections/2,
-         init_sparkplug/0,
-         mqtt_to_amqp/1,
-         amqp_to_mqtt/1,
-         truncate_binary/2
-        ]).
+-export([
+    queue_name_bin/2,
+    qos_from_queue_name/2,
+    env/1,
+    table_lookup/2,
+    path_for/2,
+    path_for/3,
+    vhost_name_to_table_name/1,
+    register_clientid/2,
+    remove_duplicate_clientid_connections/2,
+    init_sparkplug/0,
+    mqtt_to_amqp/1,
+    amqp_to_mqtt/1,
+    truncate_binary/2
+]).
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
 -define(SPARKPLUG_MP_MQTT_TO_AMQP, sparkplug_mp_mqtt_to_amqp).
@@ -72,7 +73,8 @@ init_sparkplug() ->
 
 -spec mqtt_to_amqp(binary()) -> binary().
 mqtt_to_amqp(Topic) ->
-    T = case persistent_term:get(?SPARKPLUG_MP_MQTT_TO_AMQP, no_sparkplug) of
+    T =
+        case persistent_term:get(?SPARKPLUG_MP_MQTT_TO_AMQP, no_sparkplug) of
             no_sparkplug ->
                 Topic;
             M2A_SpRe ->
@@ -102,12 +104,13 @@ amqp_to_mqtt(Topic) ->
     end.
 
 cached(CacheName, Fun, Arg) ->
-    Cache = case get(CacheName) of
-                undefined ->
-                    [];
-                Other ->
-                    Other
-            end,
+    Cache =
+        case get(CacheName) of
+            undefined ->
+                [];
+            Other ->
+                Other
+        end,
     case lists:keyfind(Arg, 1, Cache) of
         {_, V} ->
             V;
@@ -142,11 +145,11 @@ env(Key) ->
 
 coerce_env_value(default_pass, Val) -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(default_user, Val) -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(exchange, Val)     -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(vhost, Val)        -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(_, Val)            -> Val.
+coerce_env_value(exchange, Val) -> rabbit_data_coercion:to_binary(Val);
+coerce_env_value(vhost, Val) -> rabbit_data_coercion:to_binary(Val);
+coerce_env_value(_, Val) -> Val.
 
--spec table_lookup(rabbit_framing:amqp_table() | undefined,  binary()) ->
+-spec table_lookup(rabbit_framing:amqp_table() | undefined, binary()) ->
     tuple() | undefined.
 table_lookup(undefined, _Key) ->
     undefined;
@@ -161,11 +164,11 @@ vhost_name_to_dir_name(VHost, Suffix) ->
 
 -spec path_for(file:name_all(), rabbit_types:vhost()) -> file:filename_all().
 path_for(Dir, VHost) ->
-  filename:join(Dir, vhost_name_to_dir_name(VHost)).
+    filename:join(Dir, vhost_name_to_dir_name(VHost)).
 
 -spec path_for(file:name_all(), rabbit_types:vhost(), string()) -> file:filename_all().
 path_for(Dir, VHost, Suffix) ->
-  filename:join(Dir, vhost_name_to_dir_name(VHost, Suffix)).
+    filename:join(Dir, vhost_name_to_dir_name(VHost, Suffix)).
 
 -spec vhost_name_to_table_name(rabbit_types:vhost()) ->
     atom().
@@ -174,8 +177,9 @@ vhost_name_to_table_name(VHost) ->
     list_to_atom("rabbit_mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num])).
 
 -spec register_clientid(rabbit_types:vhost(), binary()) -> ok.
-register_clientid(Vhost, ClientId)
-  when is_binary(Vhost), is_binary(ClientId) ->
+register_clientid(Vhost, ClientId) when
+    is_binary(Vhost), is_binary(ClientId)
+->
     PgGroup = {Vhost, ClientId},
     ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
     case rabbit_mqtt_ff:track_client_id_in_ra() of
@@ -183,10 +187,12 @@ register_clientid(Vhost, ClientId)
             %% Ra node takes care of removing duplicate client ID connections.
             ok;
         false ->
-            ok = erpc:multicast([node() | nodes()],
-                                ?MODULE,
-                                remove_duplicate_clientid_connections,
-                                [PgGroup, self()])
+            ok = erpc:multicast(
+                [node() | nodes()],
+                ?MODULE,
+                remove_duplicate_clientid_connections,
+                [PgGroup, self()]
+            )
     end.
 
 -spec remove_duplicate_clientid_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
@@ -194,18 +200,24 @@ remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->
     try persistent_term:get(?PG_SCOPE) of
         PgScope ->
             Pids = pg:get_local_members(PgScope, PgGroup),
-            lists:foreach(fun(Pid) ->
-                                  gen_server:cast(Pid, duplicate_id)
-                          end, Pids -- [PidToKeep])
-    catch _:badarg ->
-              %% MQTT supervision tree on this node not fully started
-              ok
+            lists:foreach(
+                fun(Pid) ->
+                    gen_server:cast(Pid, duplicate_id)
+                end,
+                Pids -- [PidToKeep]
+            )
+    catch
+        _:badarg ->
+            %% MQTT supervision tree on this node not fully started
+            ok
     end.
 
 -spec truncate_binary(binary(), non_neg_integer()) -> binary().
-truncate_binary(Bin, Size)
-  when is_binary(Bin) andalso byte_size(Bin) =< Size ->
+truncate_binary(Bin, Size) when
+    is_binary(Bin) andalso byte_size(Bin) =< Size
+->
     Bin;
-truncate_binary(Bin, Size)
-  when is_binary(Bin) ->
+truncate_binary(Bin, Size) when
+    is_binary(Bin)
+->
     binary:part(Bin, 0, Size).

@@ -9,36 +9,42 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--import(util, [expect_publishes/3,
-               connect/3,
-               connect/4,
-               await_exit/1]).
+-import(util, [
+    expect_publishes/3,
+    connect/3,
+    connect/4,
+    await_exit/1
+]).
 
--import(rabbit_ct_broker_helpers,
-        [setup_steps/0,
-         teardown_steps/0,
-         get_node_config/3,
-         rabbitmqctl/3,
-         rpc/4,
-         stop_node/2
-        ]).
+-import(
+    rabbit_ct_broker_helpers,
+    [
+        setup_steps/0,
+        teardown_steps/0,
+        get_node_config/3,
+        rabbitmqctl/3,
+        rpc/4,
+        stop_node/2
+    ]
+).
 
--define(OPTS, [{connect_timeout, 1},
-               {ack_timeout, 1}]).
+-define(OPTS, [
+    {connect_timeout, 1},
+    {ack_timeout, 1}
+]).
 
 all() ->
     [
-     {group, cluster_size_5}
+        {group, cluster_size_5}
     ].
 
 groups() ->
     [
-     {cluster_size_5, [],
-      [
-       connection_id_tracking,
-       connection_id_tracking_on_nodedown,
-       connection_id_tracking_with_decommissioned_node
-      ]}
+        {cluster_size_5, [], [
+            connection_id_tracking,
+            connection_id_tracking_on_nodedown,
+            connection_id_tracking_with_decommissioned_node
+        ]}
     ].
 
 suite() ->
@@ -50,11 +56,12 @@ suite() ->
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
-      Config,
-      {rabbit, [
-                {collect_statistics, basic},
-                {collect_statistics_interval, 100}
-               ]}).
+        Config,
+        {rabbit, [
+            {collect_statistics, basic},
+            {collect_statistics_interval, 100}
+        ]}
+    ).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -65,7 +72,8 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_5, Config) ->
     rabbit_ct_helpers:set_config(
-      Config, [{rmq_nodes_count, 5}]).
+        Config, [{rmq_nodes_count, 5}]
+    ).
 
 end_per_group(_, Config) ->
     Config.
@@ -75,19 +83,25 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]},
+        {rmq_extra_tcp_ports, [
+            tcp_port_mqtt_extra,
+            tcp_port_mqtt_tls_extra
+        ]},
         {rmq_nodes_clustered, true}
-      ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      [ fun merge_app_env/1 ] ++
-      setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    ]),
+    rabbit_ct_helpers:run_setup_steps(
+        Config1,
+        [fun merge_app_env/1] ++
+            setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps()
+    ).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      teardown_steps()),
+    rabbit_ct_helpers:run_teardown_steps(
+        Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+            teardown_steps()
+    ),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -165,14 +179,15 @@ connection_id_tracking_with_decommissioned_node(Config) ->
 %% Helpers
 %%
 
-assert_connection_count(_Config, 0,  _, NumElements) ->
+assert_connection_count(_Config, 0, _, NumElements) ->
     ct:fail("failed to match connection count ~b", [NumElements]);
 assert_connection_count(Config, Retries, NodeId, NumElements) ->
     case util:all_connection_pids(Config) of
-        Pids
-          when length(Pids) =:= NumElements ->
+        Pids when
+            length(Pids) =:= NumElements
+        ->
             ok;
         _ ->
             timer:sleep(500),
-            assert_connection_count(Config, Retries-1, NodeId, NumElements)
+            assert_connection_count(Config, Retries - 1, NodeId, NumElements)
     end.

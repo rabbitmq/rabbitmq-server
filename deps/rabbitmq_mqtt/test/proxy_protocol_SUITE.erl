@@ -34,21 +34,26 @@ init_per_suite(Config) ->
         {rabbitmq_ct_tls_verify, verify_none}
     ]),
     MqttConfig = mqtt_config(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+    rabbit_ct_helpers:run_setup_steps(
+        Config1,
+        [fun(Conf) -> merge_app_env(MqttConfig, Conf) end] ++
             rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()).
+            rabbit_ct_client_helpers:setup_steps()
+    ).
 
 mqtt_config() ->
     {rabbitmq_mqtt, [
-        {proxy_protocol,  true},
-        {ssl_cert_login,  true},
-        {allow_anonymous, true}]}.
+        {proxy_protocol, true},
+        {ssl_cert_login, true},
+        {allow_anonymous, true}
+    ]}.
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_teardown_steps(
+        Config,
         rabbit_ct_client_helpers:teardown_steps() ++
-        rabbit_ct_broker_helpers:teardown_steps()).
+            rabbit_ct_broker_helpers:teardown_steps()
+    ).
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
@@ -61,8 +66,11 @@ end_per_testcase(Testcase, Config) ->
 
 proxy_protocol(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-        [binary, {active, false}, {packet, raw}]),
+    {ok, Socket} = gen_tcp:connect(
+        {127, 0, 0, 1},
+        Port,
+        [binary, {active, false}, {packet, raw}]
+    ),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
@@ -75,8 +83,11 @@ proxy_protocol(Config) ->
 proxy_protocol_tls(Config) ->
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-        [binary, {active, false}, {packet, raw}]),
+    {ok, Socket} = gen_tcp:connect(
+        {127, 0, 0, 1},
+        Port,
+        [binary, {active, false}, {packet, raw}]
+    ),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
     ok = ssl:send(SslSocket, mqtt_3_1_1_connect_packet()),
@@ -96,29 +107,5 @@ merge_app_env(MqttConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
 
 mqtt_3_1_1_connect_packet() ->
-    <<16,
-    24,
-    0,
-    4,
-    77,
-    81,
-    84,
-    84,
-    4,
-    2,
-    0,
-    60,
-    0,
-    12,
-    84,
-    101,
-    115,
-    116,
-    67,
-    111,
-    110,
-    115,
-    117,
-    109,
-    101,
-    114>>.
+    <<16, 24, 0, 4, 77, 81, 84, 84, 4, 2, 0, 60, 0, 12, 84, 101, 115, 116, 67, 111, 110, 115, 117,
+        109, 101, 114>>.
