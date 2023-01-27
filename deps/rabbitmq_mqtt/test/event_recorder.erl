@@ -15,11 +15,10 @@
 init(_) ->
     {ok, ?INIT_STATE}.
 
-handle_event(#event{type = T}, State) when
-    T =:= node_stats orelse
-        T =:= node_node_stats orelse
-        T =:= node_node_deleted
-->
+handle_event(#event{type = T}, State)
+  when T =:= node_stats orelse
+       T =:= node_node_stats orelse
+       T =:= node_node_deleted ->
     {ok, State};
 handle_event(Event, State) ->
     {ok, [Event | State]}.

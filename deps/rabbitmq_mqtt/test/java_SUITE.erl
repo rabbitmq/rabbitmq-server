@@ -12,25 +12,24 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BASE_CONF_MQTT,
-    {rabbitmq_mqtt, [
-        {ssl_cert_login, true},
-        {allow_anonymous, false},
-        {sparkplug, true},
-        {tcp_listeners, []},
-        {ssl_listeners, []}
-    ]}
-).
+        {rabbitmq_mqtt, [
+           {ssl_cert_login,   true},
+           {allow_anonymous,  false},
+           {sparkplug,        true},
+           {tcp_listeners,    []},
+           {ssl_listeners,    []}
+           ]}).
 
 all() ->
     [
-        {group, non_parallel_tests}
+      {group, non_parallel_tests}
     ].
 
 groups() ->
     [
-        {non_parallel_tests, [], [
-            java
-        ]}
+      {non_parallel_tests, [], [
+                                java
+                               ]}
     ].
 
 suite() ->
@@ -53,20 +52,16 @@ init_per_suite(Config) ->
         {rmq_certspwd, "bunnychow"},
         {rmq_nodes_clustered, true},
         {rmq_nodes_count, 3}
-    ]),
-    rabbit_ct_helpers:run_setup_steps(
-        Config1,
-        [fun merge_app_env/1] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()
-    ).
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      [ fun merge_app_env/1 ] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(
-        Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-            rabbit_ct_broker_helpers:teardown_steps()
-    ).
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -79,37 +74,24 @@ init_per_testcase(Testcase, Config) ->
     CertFile = filename:join([CertsDir, "client", "cert.pem"]),
     {ok, CertBin} = file:read_file(CertFile),
     [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(CertBin),
-    UserBin = rabbit_ct_broker_helpers:rpc(
-        Config,
-        0,
-        rabbit_ssl,
-        peer_cert_auth_name,
-        [Cert]
-    ),
+    UserBin = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_ssl,
+                                           peer_cert_auth_name,
+                                           [Cert]),
     User = binary_to_list(UserBin),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [
-        "set_permissions", "-p", "/", User, ".*", ".*", ".*"
-    ]),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
-        Config,
-        0,
-        [
-            "set_topic_permissions",
-            "-p",
-            "/",
-            "guest",
-            "amq.topic",
+    {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,
+        ["set_topic_permissions",  "-p", "/", "guest", "amq.topic",
             % Write permission
             "test-topic|test-retained-topic|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+",
             % Read permission
-            "test-topic|test-retained-topic|last-will|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+"
-        ]
-    ),
+            "test-topic|test-retained-topic|last-will|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -140,5 +122,5 @@ q(P, [K | Rem]) ->
         undefined -> undefined;
         V -> q(V, Rem)
     end;
-q(P, []) ->
-    {ok, P}.
+q(P, []) -> {ok, P}.
+

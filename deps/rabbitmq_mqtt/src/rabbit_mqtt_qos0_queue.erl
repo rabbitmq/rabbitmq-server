@@ -24,50 +24,42 @@
 
 %% Stateless rabbit_queue_type callbacks.
 -export([
-    is_stateful/0,
-    declare/2,
-    delete/4,
-    deliver/2,
-    is_enabled/0,
-    is_compatible/3,
-    is_recoverable/1,
-    recover/2,
-    purge/1,
-    policy_changed/1,
-    info/2,
-    stat/1,
-    capabilities/0,
-    notify_decorators/1
-]).
+         is_stateful/0,
+         declare/2,
+         delete/4,
+         deliver/2,
+         is_enabled/0,
+         is_compatible/3,
+         is_recoverable/1,
+         recover/2,
+         purge/1,
+         policy_changed/1,
+         info/2,
+         stat/1,
+         capabilities/0,
+         notify_decorators/1
+        ]).
 
 %% Stateful rabbit_queue_type callbacks are unsupported by this queue type.
--define(STATEFUL_CALLBACKS, [
-    init/1,
-    close/1,
-    update/2,
-    consume/3,
-    cancel/5,
-    handle_event/3,
-    settle/5,
-    credit/5,
-    dequeue/5,
-    state_info/1
-]).
+-define(STATEFUL_CALLBACKS,
+        [
+         init/1,
+         close/1,
+         update/2,
+         consume/3,
+         cancel/5,
+         handle_event/3,
+         settle/5,
+         credit/5,
+         dequeue/5,
+         state_info/1
+        ]).
 -export(?STATEFUL_CALLBACKS).
 -dialyzer({nowarn_function, ?STATEFUL_CALLBACKS}).
 -define(UNSUPPORTED(Args), erlang:error(unsupported, Args)).
 
--define(INFO_KEYS, [
-    type,
-    name,
-    durable,
-    auto_delete,
-    arguments,
-    pid,
-    owner_pid,
-    state,
-    messages
-]).
+-define(INFO_KEYS, [type, name, durable, auto_delete, arguments,
+                    pid, owner_pid, state, messages]).
 
 -spec is_stateful() ->
     boolean().
@@ -75,8 +67,8 @@ is_stateful() ->
     false.
 
 -spec declare(amqqueue:amqqueue(), node()) ->
-    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()}
-    | {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
 declare(Q0, _Node) ->
     %% The queue gets persisted such that routing to this
     %% queue (via the topic exchange) works as usual.
@@ -84,29 +76,23 @@ declare(Q0, _Node) ->
         {created, Q} ->
             Opts = amqqueue:get_options(Q),
             ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-            rabbit_event:notify(
-                queue_created,
-                [
-                    {name, amqqueue:get_name(Q0)},
-                    {durable, true},
-                    {auto_delete, false},
-                    {exclusive, true},
-                    {type, amqqueue:get_type(Q0)},
-                    {arguments, amqqueue:get_arguments(Q0)},
-                    {user_who_performed_action, ActingUser}
-                ]
-            ),
+            rabbit_event:notify(queue_created,
+                                [{name, amqqueue:get_name(Q0)},
+                                 {durable, true},
+                                 {auto_delete, false},
+                                 {exclusive, true},
+                                 {type, amqqueue:get_type(Q0)},
+                                 {arguments, amqqueue:get_arguments(Q0)},
+                                 {user_who_performed_action, ActingUser}]),
             {new, Q};
         Other ->
             Other
     end.
 
--spec delete(
-    amqqueue:amqqueue(),
-    boolean(),
-    boolean(),
-    rabbit_types:username()
-) ->
+-spec delete(amqqueue:amqqueue(),
+             boolean(),
+             boolean(),
+             rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()).
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     QName = amqqueue:get_name(Q),
@@ -116,41 +102,35 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
 
 -spec deliver([{amqqueue:amqqueue(), stateless}], Delivery :: term()) ->
     {[], rabbit_queue_type:actions()}.
-deliver(Qs, #delivery{
-    message = BasicMessage,
-    confirm = Confirm,
-    msg_seq_no = SeqNo
-}) ->
-    Msg =
-        {queue_event, ?MODULE,
-            {?MODULE, _QPid = none, _QMsgId = none, _Redelivered = false, BasicMessage}},
+deliver(Qs, #delivery{message = BasicMessage,
+                      confirm = Confirm,
+                      msg_seq_no = SeqNo}) ->
+    Msg = {queue_event, ?MODULE,
+           {?MODULE, _QPid = none, _QMsgId = none, _Redelivered = false, BasicMessage}},
     {Pids, Actions} =
-        case Confirm of
-            false ->
-                Pids0 = lists:map(fun({Q, stateless}) -> amqqueue:get_pid(Q) end, Qs),
-                {Pids0, []};
-            true ->
-                %% We confirm the message directly here in the queue client.
-                %% Alternatively, we could have the target MQTT connection process confirm the message.
-                %% However, given that this message might be lost anyway between target MQTT connection
-                %% process and MQTT subscriber, and we know that the MQTT subscriber wants to receive
-                %% this message at most once, we confirm here directly.
-                %% Benefits:
-                %% 1. We do not block sending the confirmation back to the publishing client just because a single
-                %% (at-most-once) target queue out of potentially many (e.g. million) queues might be unavailable.
-                %% 2. Memory usage in this (publishing) process is kept lower because the target queue name can be
-                %% directly removed from rabbit_mqtt_confirms and rabbit_confirms.
-                %% 3. Reduced network traffic across RabbitMQ nodes.
-                %% 4. Lower latency of sending publisher confirmation back to the publishing client.
-                SeqNos = [SeqNo],
-                lists:mapfoldl(
-                    fun({Q, stateless}, Actions) ->
-                        {amqqueue:get_pid(Q), [{settled, amqqueue:get_name(Q), SeqNos} | Actions]}
-                    end,
-                    [],
-                    Qs
-                )
-        end,
+    case Confirm of
+        false ->
+            Pids0 = lists:map(fun({Q, stateless}) -> amqqueue:get_pid(Q) end, Qs),
+            {Pids0, []};
+        true ->
+            %% We confirm the message directly here in the queue client.
+            %% Alternatively, we could have the target MQTT connection process confirm the message.
+            %% However, given that this message might be lost anyway between target MQTT connection
+            %% process and MQTT subscriber, and we know that the MQTT subscriber wants to receive
+            %% this message at most once, we confirm here directly.
+            %% Benefits:
+            %% 1. We do not block sending the confirmation back to the publishing client just because a single
+            %% (at-most-once) target queue out of potentially many (e.g. million) queues might be unavailable.
+            %% 2. Memory usage in this (publishing) process is kept lower because the target queue name can be
+            %% directly removed from rabbit_mqtt_confirms and rabbit_confirms.
+            %% 3. Reduced network traffic across RabbitMQ nodes.
+            %% 4. Lower latency of sending publisher confirmation back to the publishing client.
+            SeqNos = [SeqNo],
+            lists:mapfoldl(fun({Q, stateless}, Actions) ->
+                                   {amqqueue:get_pid(Q),
+                                    [{settled, amqqueue:get_name(Q), SeqNos} | Actions]}
+                           end, [], Qs)
+    end,
     delegate:invoke_no_result(Pids, {gen_server, cast, [Msg]}),
     {[], Actions}.
 
@@ -172,8 +152,8 @@ is_recoverable(Q) ->
     Pid = amqqueue:get_pid(Q),
     OwnerPid = amqqueue:get_exclusive_owner(Q),
     node() =:= node(Pid) andalso
-        Pid =:= OwnerPid andalso
-        not is_process_alive(Pid).
+    Pid =:= OwnerPid andalso
+    not is_process_alive(Pid).
 
 %% We (mis)use the recover callback to clean up our exclusive queues
 %% which otherwise do not get cleaned up after a node crash.
@@ -181,24 +161,20 @@ is_recoverable(Q) ->
     {Recovered :: [amqqueue:amqqueue()], Failed :: [amqqueue:amqqueue()]}.
 recover(_VHost, Queues) ->
     lists:foreach(
-        fun(Q) ->
-            %% sanity check
-            true = is_recoverable(Q),
-            QName = amqqueue:get_name(Q),
-            log_delete(QName, amqqueue:get_exclusive_owner(Q)),
-            rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER)
-        end,
-        Queues
-    ),
+      fun(Q) ->
+              %% sanity check
+              true = is_recoverable(Q),
+              QName = amqqueue:get_name(Q),
+              log_delete(QName, amqqueue:get_exclusive_owner(Q)),
+              rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER)
+      end, Queues),
     %% We mark the queue recovery as failed because these queues are not really
     %% recovered, but deleted.
     {[], Queues}.
 
 log_delete(QName, ConPid) ->
-    rabbit_log_queue:debug(
-        "Deleting ~s of type ~s because its declaring connection ~tp was closed",
-        [rabbit_misc:rs(QName), ?MODULE, ConPid]
-    ).
+    rabbit_log_queue:debug("Deleting ~s of type ~s because its declaring connection ~tp was closed",
+                           [rabbit_misc:rs(QName), ?MODULE, ConPid]).
 
 -spec purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()}.
@@ -227,13 +203,11 @@ capabilities() ->
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
-info(Q, all_keys) when
-    ?is_amqqueue(Q)
-->
+info(Q, all_keys)
+  when ?is_amqqueue(Q) ->
     info(Q, ?INFO_KEYS);
-info(Q, Items) when
-    ?is_amqqueue(Q)
-->
+info(Q, Items)
+  when ?is_amqqueue(Q) ->
     [{Item, i(Item, Q)} || Item <- Items].
 
 i(type, _) ->
@@ -275,26 +249,26 @@ init(A1) ->
 close(A1) ->
     ?UNSUPPORTED([A1]).
 
-update(A1, A2) ->
-    ?UNSUPPORTED([A1, A2]).
+update(A1,A2) ->
+    ?UNSUPPORTED([A1,A2]).
 
-consume(A1, A2, A3) ->
-    ?UNSUPPORTED([A1, A2, A3]).
+consume(A1,A2,A3) ->
+    ?UNSUPPORTED([A1,A2,A3]).
 
-cancel(A1, A2, A3, A4, A5) ->
-    ?UNSUPPORTED([A1, A2, A3, A4, A5]).
+cancel(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-handle_event(A1, A2, A3) ->
-    ?UNSUPPORTED([A1, A2, A3]).
+handle_event(A1,A2,A3) ->
+    ?UNSUPPORTED([A1,A2,A3]).
 
-settle(A1, A2, A3, A4, A5) ->
-    ?UNSUPPORTED([A1, A2, A3, A4, A5]).
+settle(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-credit(A1, A2, A3, A4, A5) ->
-    ?UNSUPPORTED([A1, A2, A3, A4, A5]).
+credit(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-dequeue(A1, A2, A3, A4, A5) ->
-    ?UNSUPPORTED([A1, A2, A3, A4, A5]).
+dequeue(A1,A2,A3,A4,A5) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
 state_info(A1) ->
     ?UNSUPPORTED([A1]).

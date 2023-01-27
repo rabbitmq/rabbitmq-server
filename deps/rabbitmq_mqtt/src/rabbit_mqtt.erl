@@ -13,13 +13,11 @@
 -include_lib("stdlib/include/assert.hrl").
 
 -export([start/2, stop/1]).
--export([
-    emit_connection_info_all/4,
-    emit_connection_info_local/3,
-    close_local_client_connections/1,
-    %% Exported for tests, but could also be used for debugging.
-    local_connection_pids/0
-]).
+-export([emit_connection_info_all/4,
+         emit_connection_info_local/3,
+         close_local_client_connections/1,
+         %% Exported for tests, but could also be used for debugging.
+         local_connection_pids/0]).
 
 start(normal, []) ->
     init_global_counters(),
@@ -33,11 +31,10 @@ start(normal, []) ->
             ok
     end,
     Result = rabbit_mqtt_sup:start_link({Listeners, SslListeners}, []),
-    EMPid =
-        case rabbit_event:start_link() of
-            {ok, Pid} -> Pid;
-            {error, {already_started, Pid}} -> Pid
-        end,
+    EMPid = case rabbit_event:start_link() of
+                {ok, Pid}                       -> Pid;
+                {error, {already_started, Pid}} -> Pid
+            end,
     gen_event:add_handler(EMPid, rabbit_mqtt_internal_event_handler, []),
     Result.
 
@@ -55,15 +52,9 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
             %% remaining nodes, we send back 'finished' so that the CLI does not time out.
             [AggregatorPid ! {Ref, finished} || _ <- lists:seq(1, length(Nodes) - 1)];
         false ->
-            Pids = [
-                spawn_link(
-                    Node,
-                    ?MODULE,
-                    emit_connection_info_local,
-                    [Items, Ref, AggregatorPid]
-                )
-             || Node <- Nodes
-            ],
+            Pids = [spawn_link(Node, ?MODULE, emit_connection_info_local,
+                               [Items, Ref, AggregatorPid])
+                    || Node <- Nodes],
             rabbit_control_misc:await_emitters_termination(Pids)
     end.
 
@@ -74,23 +65,17 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
 
 emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
-        AggregatorPid,
-        Ref,
-        fun(Pid) ->
-            rabbit_mqtt_reader:info(Pid, Items)
-        end,
-        Pids
-    ).
+      AggregatorPid, Ref,
+      fun(Pid) ->
+              rabbit_mqtt_reader:info(Pid, Items)
+      end, Pids).
 
 -spec close_local_client_connections(string() | binary()) -> {'ok', non_neg_integer()}.
 close_local_client_connections(Reason) ->
     Pids = local_connection_pids(),
-    lists:foreach(
-        fun(Pid) ->
-            rabbit_mqtt_reader:close_connection(Pid, Reason)
-        end,
-        Pids
-    ),
+    lists:foreach(fun(Pid) ->
+                          rabbit_mqtt_reader:close_connection(Pid, Reason)
+                  end, Pids),
     {ok, length(Pids)}.
 
 -spec local_connection_pids() -> [pid()].
@@ -101,12 +86,9 @@ local_connection_pids() ->
             lists:filter(fun(Pid) -> node(Pid) =:= node() end, AllPids);
         false ->
             PgScope = persistent_term:get(?PG_SCOPE),
-            lists:flatmap(
-                fun(Group) ->
-                    pg:get_local_members(PgScope, Group)
-                end,
-                pg:which_groups(PgScope)
-            )
+            lists:flatmap(fun(Group) ->
+                                  pg:get_local_members(PgScope, Group)
+                          end, pg:which_groups(PgScope))
     end.
 
 init_global_counters() ->
