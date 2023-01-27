@@ -31,7 +31,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, helper_sup,
-             channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket}).
+             channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket,
+             tracked_channels}).
 
 -record(v1_connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                         hostname}).
@@ -66,7 +67,8 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
                                     frame_max      = ?FRAME_MIN_SIZE,
                                     auth_mechanism = none,
                                     auth_state     = none},
-        proxy_socket = ProxySocket}.
+        proxy_socket        = ProxySocket,
+        tracked_channels    = maps:new()}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
@@ -240,9 +242,9 @@ close_connection(State = #v1{connection = #v1_connection{
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
+    credit_flow:peer_down(ChPid),
+
     case {ChPid, termination_kind(Reason)} of
-        {undefined, uncontrolled} ->
-            exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
@@ -435,13 +437,21 @@ handle_1_0_connection_frame(_Frame, State) ->
     maybe_close(State#v1{connection_state = closing}).
 
 handle_1_0_session_frame(Channel, Frame, State) ->
-    case get({channel, Channel}) of
-        {ch_fr_pid, SessionPid} ->
+    case maps:get(Channel, State#v1.tracked_channels, undefined) of
+        undefined ->
+            case ?IS_RUNNING(State) of
+                true ->
+                    send_to_new_1_0_session(Channel, Frame, State);
+                false ->
+                    throw({channel_frame_while_starting,
+                           Channel, State#v1.connection_state,
+                           Frame})
+            end;
+        SessionPid ->
             ok = rabbit_amqp1_0_session:process_frame(SessionPid, Frame),
             case Frame of
                 #'v1_0.end'{} ->
-                    erase({channel, Channel}),
-                    State;
+                    untrack_channel(Channel, State);
                 #'v1_0.transfer'{} ->
                     case (State#v1.connection_state =:= blocking) of
                         true ->
@@ -453,24 +463,6 @@ handle_1_0_session_frame(Channel, Frame, State) ->
                     end;
                 _ ->
                     State
-            end;
-        closing ->
-            case Frame of
-                #'v1_0.end'{} ->
-                    erase({channel, Channel});
-                _Else ->
-                    ok
-            end,
-            State;
-        undefined ->
-            case ?IS_RUNNING(State) of
-                true ->
-                    ok = send_to_new_1_0_session(Channel, Frame, State),
-                    State;
-                false ->
-                    throw({channel_frame_while_starting,
-                           Channel, State#v1.connection_state,
-                           Frame})
             end
     end.
 
@@ -691,6 +683,18 @@ auth_phase_1_0(Response,
               handshake, 8)
     end.
 
+track_channel(Channel, ChFrPid, State) ->
+    rabbit_log:debug("AMQP 1.0 opened channel = ~tp " , [{Channel, ChFrPid}]),
+    State#v1{tracked_channels = maps:put(Channel, ChFrPid, State#v1.tracked_channels)}.
+
+untrack_channel(Channel, State) ->
+    case maps:take(Channel, State#v1.tracked_channels) of
+        {Value, NewMap} ->
+            rabbit_log:debug("AMQP 1.0 closed channel = ~tp ", [{Channel, Value}]),
+            State#v1{tracked_channels = NewMap};
+        error -> State
+    end.
+
 send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
@@ -707,16 +711,15 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                             _         -> FrameMax - 8
                         end,
                         self(), User, vhost(Hostname), Collector, ProxySocket}) of
-        {ok, ChSupPid, ChFrPid} ->
+        {ok, _ChSupPid, ChFrPid} ->
             erlang:monitor(process, ChFrPid),
-            put({channel, Channel}, {ch_fr_pid, ChFrPid}),
-            put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
-            put({ch_fr_pid, ChFrPid}, {channel, Channel}),
+            ModifiedState = track_channel(Channel, ChFrPid, State),
             rabbit_log_connection:info(
                         "AMQP 1.0 connection ~p: "
                         "user '~s' authenticated and granted access to vhost '~s'",
                         [self(), User#user.username, vhost(Hostname)]),
-            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
+            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame),
+            ModifiedState;
         {error, {not_allowed, _}} ->
             rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
                 [User#user.username, vhost(Hostname)]),
