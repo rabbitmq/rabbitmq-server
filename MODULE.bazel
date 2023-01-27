@@ -231,8 +231,8 @@ erlang_package.git_package(
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
-    sha256 = "4918d50026c073c4ab1388437132c77a6f6f7c8ac43c60c13758cc0adce2134e",
-    version = "0.4.1",
+    sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
+    version = "1.0.0",
 )
 
 erlang_package.git_package(
