@@ -6,11 +6,11 @@
 %%
 
 -record(machine_state, {
-          %% client ID to connection PID
-          client_ids = #{},
-          %% connection PID to list of client IDs
-          pids = #{},
-          %% add acouple of fields for future extensibility
-          reserved_1,
-          reserved_2}).
-
+    %% client ID to connection PID
+    client_ids = #{},
+    %% connection PID to list of client IDs
+    pids = #{},
+    %% add acouple of fields for future extensibility
+    reserved_1,
+    reserved_2
+}).
