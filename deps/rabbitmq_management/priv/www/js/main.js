@@ -786,6 +786,7 @@ function update_pages(template, page_start){
          case 'exchanges' : renderExchanges(); break;
          case 'connections' : renderConnections(); break;
          case 'channels' : renderChannels(); break;
+         case 'users' : renderUsers(); break;
          default:
              renderCallback = RENDER_CALLBACKS[template];
              if (renderCallback != undefined) {
@@ -805,6 +806,16 @@ function renderQueues() {
             pagination: true
         }
     }, 'vhosts': '/vhosts'}, 'queues', '#/queues');
+}
+
+function renderUsers() {
+    render({'users': {path: url_pagination_template('users', 1, 100),
+		      options: {
+			  sort: true,
+			  pagination: true
+		      }
+		     },
+            'permissions': '/permissions'}, 'users', '#/users');
 }
 
 function renderExchanges() {
