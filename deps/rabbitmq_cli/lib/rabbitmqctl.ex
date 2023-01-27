@@ -152,7 +152,7 @@ defmodule RabbitMQCtl do
   end
 
   defp proceed_to_execution(command, arguments, options) do
-    maybe_print_banner(command, arguments, options)
+    _ = maybe_print_banner(command, arguments, options)
     maybe_run_command(command, arguments, options)
   end
 
@@ -394,7 +394,7 @@ defmodule RabbitMQCtl do
   defp format_validation_error(err), do: inspect(err)
 
   defp exit_program(code) do
-    :net_kernel.stop()
+    _ = :net_kernel.stop()
     exit({:shutdown, code})
   end
 

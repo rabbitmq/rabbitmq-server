@@ -232,7 +232,7 @@
 -spec pset(term(), term(), [term()]) -> [term()].
 -spec format_message_queue(any(), priority_queue:q()) -> term().
 -spec os_cmd(string()) -> string().
--spec is_os_process_alive(non_neg_integer()) -> boolean().
+-spec is_os_process_alive(non_neg_integer() | string()) -> boolean().
 -spec version() -> string().
 -spec otp_release() -> string().
 -spec otp_system_version() -> string().

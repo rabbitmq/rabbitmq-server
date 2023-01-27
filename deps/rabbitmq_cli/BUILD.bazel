@@ -1,12 +1,11 @@
 load("@bazel_skylib//rules:select_file.bzl", "select_file")
-load("@rules_erlang//:dialyze.bzl", "DIALYZE_TAG")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
-load(":rabbitmqctl_dialyze.bzl", "rabbitmqctl_dialyze_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "STARTS_BACKGROUND_BROKER_TAG")
+load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
@@ -73,26 +72,20 @@ test_suite(
     tests = ["check_formatted"],
 )
 
-rabbitmqctl_dialyze_test(
-    name = "dialyze",
-    srcs = [
-        "mix.exs",
-        "config/config.exs",
-        ".formatter.exs",
-    ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
-    ]),
-    tags = [DIALYZE_TAG],
-    target_compatible_with = select({
-        "@platforms//os:macos": ["@platforms//os:macos"],
-        "//conditions:default": ["@platforms//os:linux"],
-    }),
+plt(
+    name = "deps_plt",
+    libs = [":elixir"],
     deps = [
-        "//deps/amqp_client:erlang_app",
+        ":elixir",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    libs = [":elixir"],
+    plt = ":deps_plt",
 )
 
 rabbitmqctl_test(

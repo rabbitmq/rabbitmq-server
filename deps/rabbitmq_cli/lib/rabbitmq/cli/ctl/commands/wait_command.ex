@@ -207,10 +207,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   defp wait_for_application(node_name, :rabbit_and_plugins) do
-    case :rabbit.await_startup(node_name) do
-      {:badrpc, err} -> {:error, {:badrpc, err}}
-      other -> other
-    end
+    :rabbit.await_startup(node_name)
   end
 
   defp wait_for_erlang_distribution(pid, node_name, timeout) do

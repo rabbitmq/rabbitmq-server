@@ -28,7 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def run([command_name | _], opts) do
-    CommandModules.load(opts)
+    _ = CommandModules.load(opts)
 
     module_map = CommandModules.module_map(opts)
 
@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def run([], opts) do
-    CommandModules.load(opts)
+    _ = CommandModules.load(opts)
 
     case opts[:list_commands] do
       true ->
