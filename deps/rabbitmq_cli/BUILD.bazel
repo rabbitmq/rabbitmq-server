@@ -1,6 +1,8 @@
 load("@bazel_skylib//rules:select_file.bzl", "select_file")
+load("@rules_erlang//:dialyze.bzl", "DIALYZE_TAG")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
+load(":rabbitmqctl_dialyze.bzl", "rabbitmqctl_dialyze_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -69,6 +71,28 @@ rabbitmqctl_check_formatted_test(
 test_suite(
     name = "rabbitmqctl_check_formatted",
     tests = ["check_formatted"],
+)
+
+rabbitmqctl_dialyze_test(
+    name = "dialyze",
+    srcs = [
+        "mix.exs",
+        "config/config.exs",
+        ".formatter.exs",
+    ] + glob([
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    tags = [DIALYZE_TAG],
+    target_compatible_with = select({
+        "@platforms//os:macos": ["@platforms//os:macos"],
+        "//conditions:default": ["@platforms//os:linux"],
+    }),
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
 rabbitmqctl_test(

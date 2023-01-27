@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Formatters.StringPerLine do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
-    Enum.map(output, fn el -> Helpers.string_or_inspect(el) end)
+    Enum.map(output, fn el -> Helpers.string_or_inspect(el) end) |> Enum.join()
   end
 
   def format_stream(stream, options) do

@@ -78,47 +78,18 @@ export ERL_COMPILER_OPTIONS=deterministic
 if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
     cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
 fi
-"${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
-"${{ABS_ELIXIR_HOME}}"/bin/mix compile
-
-# due to https://github.com/elixir-lang/elixir/issues/7699 we
-# "run" the tests, but skip them all, in order to trigger
-# compilation of all *_test.exs files before we actually run them
-"${{ABS_ELIXIR_HOME}}"/bin/mix test --exclude test
-
-export TEST_TMPDIR=${{TEST_UNDECLARED_OUTPUTS_DIR}}
-
-# we need a running broker with certain plugins for this to pass 
-trap 'catch $?' EXIT
-catch() {{
-    pid=$(cat ${{TEST_TMPDIR}}/*/*.pid)
-    kill -TERM "${{pid}}"
-}}
-cd ${{INITIAL_DIR}}
-./{rabbitmq_run_cmd} start-background-broker
-cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-
-# The test cases will need to be able to load code from the deps
-# directly, so we set ERL_LIBS
-export ERL_LIBS=$DEPS_DIR
-
-# run the actual tests
-set +u
 set -x
-"${{ABS_ELIXIR_HOME}}"/bin/mix test --trace --max-failures 1 ${{TEST_FILE}}
+"${{ABS_ELIXIR_HOME}}"/bin/mix dialyzer
 """.format(
             maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             package_dir = package_dir,
             deps_dir = deps_dir,
-            rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
     else:
         output = ctx.actions.declare_file(ctx.label.name + ".bat")
         script = """@echo off
-echo Erlang Version: {erlang_version}
-
 :: set LANG="en_US.UTF-8"
 :: set LC_ALL="en_US.UTF-8"
 
@@ -143,15 +114,7 @@ set MIX_ENV=test
 echo y | "{elixir_home}\\bin\\mix" local.hex --force || goto :error
 echo y | "{elixir_home}\\bin\\mix" local.rebar --force || goto :error
 "{elixir_home}\\bin\\mix" deps.get || goto :error
-"{elixir_home}\\bin\\mix" deps.compile || goto :error
-"{elixir_home}\\bin\\mix" compile || goto :error
-
-REM need to start the background broker here
-set TEST_TEMPDIR=%OUTPUTS_DIR%
-
-set ERL_LIBS=%DEPS_DIR%
-
-"{elixir_home}\\bin\\mix" test --trace --max-failures 1 || goto :error
+"{elixir_home}\\bin\\mix" dialyzer || goto :error
 goto :EOF
 :error
 exit /b 1
@@ -160,7 +123,6 @@ exit /b 1
             elixir_home = windows_path(elixir_home),
             package_dir = windows_path(ctx.label.package),
             deps_dir = deps_dir,
-            rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
 
     ctx.actions.write(
@@ -174,7 +136,6 @@ exit /b 1
     ).merge_all([
         erlang_runfiles,
         elixir_runfiles,
-        ctx.attr.rabbitmq_run[DefaultInfo].default_runfiles,
     ])
 
     return [DefaultInfo(
@@ -182,17 +143,13 @@ exit /b 1
         executable = output,
     )]
 
-rabbitmqctl_private_test = rule(
+rabbitmqctl_dialyze_private_test = rule(
     implementation = _impl,
     attrs = {
         "is_windows": attr.bool(mandatory = True),
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangAppInfo]),
-        "rabbitmq_run": attr.label(
-            executable = True,
-            cfg = "target",
-        ),
     },
     toolchains = [
         "//bazel/elixir:toolchain_type",
@@ -200,8 +157,8 @@ rabbitmqctl_private_test = rule(
     test = True,
 )
 
-def rabbitmqctl_test(**kwargs):
-    rabbitmqctl_private_test(
+def rabbitmqctl_dialyze_test(**kwargs):
+    rabbitmqctl_dialyze_private_test(
         is_windows = select({
             "@bazel_tools//src/conditions:host_windows": True,
             "//conditions:default": False,
