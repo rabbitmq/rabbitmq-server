@@ -5,42 +5,45 @@
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(reader_SUITE).
--compile([export_all,
-          nowarn_export_all]).
+-compile([
+    export_all,
+    nowarn_export_all
+]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/4]).
 -import(rabbit_ct_helpers, [eventually/3]).
--import(util, [all_connection_pids/1,
-               publish_qos1_timeout/4,
-               expect_publishes/3,
-               connect/2,
-               connect/3,
-               await_exit/1]).
+-import(util, [
+    all_connection_pids/1,
+    publish_qos1_timeout/4,
+    expect_publishes/3,
+    connect/2,
+    connect/3,
+    await_exit/1
+]).
 
 all() ->
     [
-     {group, tests}
+        {group, tests}
     ].
 
 groups() ->
     [
-     {tests, [],
-      [
-       block_connack_timeout,
-       handle_invalid_packets,
-       login_timeout,
-       stats,
-       quorum_clean_session_false,
-       quorum_clean_session_true,
-       classic_clean_session_true,
-       classic_clean_session_false,
-       non_clean_sess_empty_client_id,
-       event_authentication_failure,
-       rabbit_mqtt_qos0_queue_overflow
-      ]}
+        {tests, [], [
+            block_connack_timeout,
+            handle_invalid_packets,
+            login_timeout,
+            stats,
+            quorum_clean_session_false,
+            quorum_clean_session_true,
+            classic_clean_session_true,
+            classic_clean_session_false,
+            non_clean_sess_empty_client_id,
+            event_authentication_failure,
+            rabbit_mqtt_qos0_queue_overflow
+        ]}
     ].
 
 suite() ->
@@ -51,28 +54,36 @@ suite() ->
 %% -------------------------------------------------------------------
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics, basic},
-                                              {collect_statistics_interval, 100}
-                                             ]}).
+    rabbit_ct_helpers:merge_app_env(
+        Config,
+        {rabbit, [
+            {collect_statistics, basic},
+            {collect_statistics_interval, 100}
+        ]}
+    ).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]}
-      ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      [ fun merge_app_env/1 ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+        {rmq_extra_tcp_ports, [
+            tcp_port_mqtt_extra,
+            tcp_port_mqtt_tls_extra
+        ]}
+    ]),
+    rabbit_ct_helpers:run_setup_steps(
+        Config1,
+        [fun merge_app_env/1] ++
+            rabbit_ct_broker_helpers:setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps()
+    ).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
+    rabbit_ct_helpers:run_teardown_steps(
+        Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+            rabbit_ct_broker_helpers:teardown_steps()
+    ).
 
 init_per_group(_, Config) ->
     Config.
@@ -85,7 +96,6 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -100,11 +110,13 @@ block_connack_timeout(Config) ->
     timer:sleep(100),
 
     %% We can still connect via TCP, but CONNECT packet will not be processed on the server.
-    {ok, Client} = emqtt:start_link([{host, "localhost"},
-                                     {port, P},
-                                     {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                     {proto_ver, v4},
-                                     {connect_timeout, 1}]),
+    {ok, Client} = emqtt:start_link([
+        {host, "localhost"},
+        {port, P},
+        {clientid, atom_to_binary(?FUNCTION_NAME)},
+        {proto_ver, v4},
+        {connect_timeout, 1}
+    ]),
     unlink(Client),
     ClientMRef = monitor(process, Client),
     {error, connack_timeout} = emqtt:connect(Client),
@@ -112,7 +124,7 @@ block_connack_timeout(Config) ->
         {'DOWN', ClientMRef, process, Client, connack_timeout} ->
             ok
     after 200 ->
-              ct:fail("missing connack_timeout in client")
+        ct:fail("missing connack_timeout in client")
     end,
 
     Ports = rpc(Config, erlang, ports, []),
@@ -130,7 +142,7 @@ block_connack_timeout(Config) ->
             %% because our client already disconnected.
             ok
     after 2000 ->
-              ct:fail("missing peername_not_known from server")
+        ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
     ?assertEqual([], all_connection_pids(Config)),
@@ -170,8 +182,12 @@ stats(Config) ->
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
     %% If the coarse entry is present, stats were successfully emitted
-    [{Pid, _, _, _, _}] = rpc(Config, ets, lookup,
-                              [connection_coarse_metrics, Pid]),
+    [{Pid, _, _, _, _}] = rpc(
+        Config,
+        ets,
+        lookup,
+        [connection_coarse_metrics, Pid]
+    ),
     ok = emqtt:disconnect(C).
 
 get_durable_queue_type(Server, QNameBin) ->
@@ -216,32 +232,41 @@ classic_clean_session_true(Config) ->
     validate_durable_queue_type(Config, <<"classicCleanSessionTrue">>, true, rabbit_classic_queue).
 
 classic_clean_session_false(Config) ->
-    validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
+    validate_durable_queue_type(
+        Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue
+    ).
 
 %% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
 %% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
 %% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
 non_clean_sess_empty_client_id(Config) ->
     {ok, C} = emqtt:start_link(
-                [{clientid, <<>>},
-                 {clean_start, false},
-                 {proto_ver, v4},
-                 {host, "localhost"},
-                 {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)}
-                ]),
+        [
+            {clientid, <<>>},
+            {clean_start, false},
+            {proto_ver, v4},
+            {host, "localhost"},
+            {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)}
+        ]
+    ),
     process_flag(trap_exit, true),
-    ?assertMatch({error, {client_identifier_not_valid, _}},
-                 emqtt:connect(C)),
+    ?assertMatch(
+        {error, {client_identifier_not_valid, _}},
+        emqtt:connect(C)
+    ),
     ok = await_exit(C).
 
 event_authentication_failure(Config) ->
     {ok, C} = emqtt:start_link(
-                [{username, <<"Trudy">>},
-                 {password, <<"fake-password">>},
-                 {host, "localhost"},
-                 {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
-                 {clientid, atom_to_binary(?FUNCTION_NAME)},
-                 {proto_ver, v4}]),
+        [
+            {username, <<"Trudy">>},
+            {password, <<"fake-password">>},
+            {host, "localhost"},
+            {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
+            {clientid, atom_to_binary(?FUNCTION_NAME)},
+            {proto_ver, v4}
+        ]
+    ),
     true = unlink(C),
 
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
@@ -252,9 +277,13 @@ event_authentication_failure(Config) ->
 
     [E, _ConnectionClosedEvent] = util:get_events(Server),
     util:assert_event_type(user_authentication_failure, E),
-    util:assert_event_prop([{name, <<"Trudy">>},
-                            {connection_type, network}],
-                           E),
+    util:assert_event_prop(
+        [
+            {name, <<"Trudy">>},
+            {connection_type, network}
+        ],
+        E
+    ),
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
@@ -266,8 +295,12 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     NumMsgs = 10_000,
 
     %% Provoke TCP back-pressure from client to server by using very small buffers.
-    Opts = [{tcp_opts, [{recbuf, 512},
-                        {buffer, 512}]}],
+    Opts = [
+        {tcp_opts, [
+            {recbuf, 512},
+            {buffer, 512}
+        ]}
+    ],
     Sub = connect(<<"subscriber">>, Config, Opts),
     {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
     [ServerConnectionPid] = all_connection_pids(Config),
@@ -279,9 +312,12 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     %% Let's overflow the receiving server MQTT connection process
     %% (i.e. the rabbit_mqtt_qos0_queue) by sending many large messages.
     Pub = connect(<<"publisher">>, Config),
-    lists:foreach(fun(_) ->
-                          ok = emqtt:publish(Pub, Topic, Msg, qos0)
-                  end, lists:seq(1, NumMsgs)),
+    lists:foreach(
+        fun(_) ->
+            ok = emqtt:publish(Pub, Topic, Msg, qos0)
+        end,
+        lists:seq(1, NumMsgs)
+    ),
 
     %% Give the server some time to process (either send or drop) the messages.
     timer:sleep(2000),
@@ -318,9 +354,11 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
 
 num_received(Topic, Payload, N) ->
     receive
-        {publish, #{topic := Topic,
-                    payload := Payload}} ->
+        {publish, #{
+            topic := Topic,
+            payload := Payload
+        }} ->
             num_received(Topic, Payload, N + 1)
     after 1000 ->
-              N
+        N
     end.

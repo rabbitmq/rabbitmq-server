@@ -14,7 +14,6 @@
 -export([terminate/3]).
 -export([early_error/5]).
 
-
 -record(state, {next}).
 
 init(StreamID, Req, Opts) ->

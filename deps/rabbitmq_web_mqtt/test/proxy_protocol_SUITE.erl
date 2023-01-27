@@ -7,7 +7,6 @@
 
 -module(proxy_protocol_SUITE).
 
-
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -15,20 +14,24 @@
 
 suite() ->
     [
-      %% If a test hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 2}}
+        %% If a test hangs, no need to wait for 30 minutes.
+        {timetrap, {minutes, 2}}
     ].
 
 all() ->
-    [{group, http_tests},
-     {group, https_tests}].
+    [
+        {group, http_tests},
+        {group, https_tests}
+    ].
 
 groups() ->
     Tests = [
         proxy_protocol
     ],
-    [{https_tests, [], Tests},
-     {http_tests, [], Tests}].
+    [
+        {https_tests, [], Tests},
+        {http_tests, [], Tests}
+    ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -38,22 +41,29 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(Group, Config) ->
-    Protocol = case Group of
-        http_tests -> "ws";
-        https_tests -> "wss"
-    end,
-    Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_nodename_suffix, ?MODULE},
-                                            {protocol, Protocol},
-                                            {rabbitmq_ct_tls_verify, verify_none},
-                                            {rabbitmq_ct_tls_fail_if_no_peer_cert, false}]),
+    Protocol =
+        case Group of
+            http_tests -> "ws";
+            https_tests -> "wss"
+        end,
+    Config1 = rabbit_ct_helpers:set_config(
+        Config,
+        [
+            {rmq_nodename_suffix, ?MODULE},
+            {protocol, Protocol},
+            {rabbitmq_ct_tls_verify, verify_none},
+            {rabbitmq_ct_tls_fail_if_no_peer_cert, false}
+        ]
+    ),
 
     rabbit_ct_helpers:run_setup_steps(
         Config1,
-        rabbit_ct_broker_helpers:setup_steps() ++ [
-            fun configure_proxy_protocol/1,
-            fun configure_ssl/1
-        ]).
+        rabbit_ct_broker_helpers:setup_steps() ++
+            [
+                fun configure_proxy_protocol/1,
+                fun configure_ssl/1
+            ]
+    ).
 
 configure_proxy_protocol(Config) ->
     rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true),
@@ -64,12 +74,16 @@ configure_ssl(Config) ->
     RabbitAppConfig = proplists:get_value(rabbit, ErlangConfig, []),
     RabbitSslConfig = proplists:get_value(ssl_options, RabbitAppConfig, []),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls),
-    rabbit_ws_test_util:update_app_env(Config, ssl_config, [{port, Port} | lists:keydelete(port, 1, RabbitSslConfig)]),
+    rabbit_ws_test_util:update_app_env(Config, ssl_config, [
+        {port, Port} | lists:keydelete(port, 1, RabbitSslConfig)
+    ]),
     Config.
 
 end_per_group(_Group, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_broker_helpers:teardown_steps()).
+    rabbit_ct_helpers:run_teardown_steps(
+        Config,
+        rabbit_ct_broker_helpers:teardown_steps()
+    ).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -81,13 +95,23 @@ proxy_protocol(Config) ->
     PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
 
     Protocol = ?config(protocol, Config),
-    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
-        undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+    WS = rfc6455_client:new(
+        Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws",
+        self(),
+        undefined,
+        ["mqtt"],
+        "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"
+    ),
     {ok, _} = rfc6455_client:open(WS),
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {binary, _P} = rfc6455_client:recv(WS),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0,
+        ?MODULE,
+        connection_name,
+        []
+    ),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     {close, _} = rfc6455_client:close(WS),
     ok.

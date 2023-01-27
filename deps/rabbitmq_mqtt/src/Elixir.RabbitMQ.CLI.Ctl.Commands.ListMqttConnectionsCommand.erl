@@ -10,20 +10,22 @@
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
--export([formatter/0,
-         scopes/0,
-         switches/0,
-         aliases/0,
-         usage/0,
-         usage_additional/0,
-         usage_doc_guides/0,
-         banner/2,
-         validate/2,
-         merge_defaults/2,
-         run/2,
-         output/2,
-         description/0,
-         help_section/0]).
+-export([
+    formatter/0,
+    scopes/0,
+    switches/0,
+    aliases/0,
+    usage/0,
+    usage_additional/0,
+    usage_doc_guides/0,
+    banner/2,
+    validate/2,
+    merge_defaults/2,
+    run/2,
+    output/2,
+    description/0,
+    help_section/0
+]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
 scopes() -> [ctl, diagnostics].
@@ -37,10 +39,14 @@ help_section() ->
 
 validate(Args, _) ->
     InfoItems = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
-    case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               InfoItems) of
+    case
+        'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(
+            Args,
+            InfoItems
+        )
+    of
         {ok, _} -> ok;
-        Error   -> Error
+        Error -> Error
     end.
 
 merge_defaults([], Opts) ->
@@ -55,19 +61,22 @@ usage_additional() ->
     Prefix = <<" must be one of ">>,
     InfoItems = 'Elixir.Enum':join(lists:usort(?INFO_ITEMS), <<", ">>),
     [
-      {<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}
+        {<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}
     ].
 
 usage_doc_guides() ->
     [?MQTT_GUIDE_URL].
 
-run(Args, #{node := NodeName,
-            timeout := Timeout,
-            verbose := Verbose}) ->
-    InfoKeys = case Verbose of
-        true  -> ?INFO_ITEMS;
-        false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
-    end,
+run(Args, #{
+    node := NodeName,
+    timeout := Timeout,
+    verbose := Verbose
+}) ->
+    InfoKeys =
+        case Verbose of
+            true -> ?INFO_ITEMS;
+            false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
+        end,
 
     Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
@@ -78,7 +87,8 @@ run(Args, #{node := NodeName,
         [Nodes, InfoKeys],
         Timeout,
         InfoKeys,
-        length(Nodes)).
+        length(Nodes)
+    ).
 
 banner(_, _) -> <<"Listing MQTT connections ...">>.
 
