@@ -10,40 +10,53 @@
 -include("rabbit_mqtt_packet.hrl").
 -include("rabbit_mqtt.hrl").
 
--export([parse/2, initial_state/0, serialise/2]).
+-export([init_state/0, reset_state/0,
+         parse/2, serialise/2]).
 -export_type([state/0]).
 
--opaque state() :: none | fun().
+-opaque state() :: unauthenticated | authenticated | fun().
 
 -define(RESERVED, 0).
 -define(MAX_LEN, 16#fffffff).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
+-define(MAX_MULTIPLIER, ?HIGHBIT * ?HIGHBIT * ?HIGHBIT).
+-define(MAX_PACKET_SIZE_CONNECT, 65_536).
 
--spec initial_state() -> state().
-initial_state() -> none.
+-spec init_state() -> state().
+init_state() -> unauthenticated.
+
+-spec reset_state() -> state().
+reset_state() -> authenticated.
 
 -spec parse(binary(), state()) ->
     {more, state()} |
     {ok, mqtt_packet(), binary()} |
     {error, any()}.
-parse(<<>>, none) ->
-    {more, fun(Bin) -> parse(Bin, none) end};
-parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->
+parse(<<>>, authenticated) ->
+    {more, fun(Bin) -> parse(Bin, authenticated) end};
+parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, authenticated) ->
     parse_remaining_len(Rest, #mqtt_packet_fixed{ type   = MessageType,
                                                   dup    = bool(Dup),
                                                   qos    = QoS,
                                                   retain = bool(Retain) });
-parse(Bin, Cont) -> Cont(Bin).
+parse(<<?CONNECT:4, 0:4, Rest/binary>>, unauthenticated) ->
+    parse_remaining_len(Rest, #mqtt_packet_fixed{type = ?CONNECT});
+parse(Bin, Cont)
+  when is_function(Cont) ->
+    Cont(Bin).
 
 parse_remaining_len(<<>>, Fixed) ->
     {more, fun(Bin) -> parse_remaining_len(Bin, Fixed) end};
 parse_remaining_len(Rest, Fixed) ->
     parse_remaining_len(Rest, Fixed, 1, 0).
 
+parse_remaining_len(_Bin, _Fixed, Multiplier, _Length)
+  when Multiplier > ?MAX_MULTIPLIER ->
+    {error, malformed_remaining_length};
 parse_remaining_len(_Bin, _Fixed, _Multiplier, Length)
   when Length > ?MAX_LEN ->
-    {error, invalid_mqtt_packet_len};
+    {error, invalid_mqtt_packet_length};
 parse_remaining_len(<<>>, Fixed, Multiplier, Length) ->
     {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, Multiplier, Length) end};
 parse_remaining_len(<<1:1, Len:7, Rest/binary>>, Fixed, Multiplier, Value) ->
@@ -51,45 +64,12 @@ parse_remaining_len(<<1:1, Len:7, Rest/binary>>, Fixed, Multiplier, Value) ->
 parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value) ->
     parse_packet(Rest, Fixed, Value + Len * Multiplier).
 
-parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
-                                      qos  = Qos } = Fixed, Length)
+parse_packet(Bin, #mqtt_packet_fixed{type = ?CONNECT} = Fixed, Length) ->
+    parse_connect(Bin, Fixed, Length);
+parse_packet(Bin, #mqtt_packet_fixed{type = Type,
+                                     qos  = Qos} = Fixed, Length)
   when Length =< ?MAX_LEN ->
     case {Type, Bin} of
-        {?CONNECT, <<PacketBin:Length/binary, Rest/binary>>} ->
-            {ProtoName, Rest1} = parse_utf(PacketBin),
-            <<ProtoVersion : 8, Rest2/binary>> = Rest1,
-            <<UsernameFlag : 1,
-              PasswordFlag : 1,
-              WillRetain   : 1,
-              WillQos      : 2,
-              WillFlag     : 1,
-              CleanSession : 1,
-              _Reserved    : 1,
-              KeepAlive    : 16/big,
-              Rest3/binary>>   = Rest2,
-            {ClientId,  Rest4} = parse_utf(Rest3),
-            {WillTopic, Rest5} = parse_utf(Rest4, WillFlag),
-            {WillMsg,   Rest6} = parse_msg(Rest5, WillFlag),
-            {UserName,  Rest7} = parse_utf(Rest6, UsernameFlag),
-            {PasssWord, <<>>}  = parse_utf(Rest7, PasswordFlag),
-            case protocol_name_approved(ProtoVersion, ProtoName) of
-                true ->
-                    wrap(Fixed,
-                         #mqtt_packet_connect{
-                           proto_ver   = ProtoVersion,
-                           will_retain = bool(WillRetain),
-                           will_qos    = WillQos,
-                           will_flag   = bool(WillFlag),
-                           clean_sess  = bool(CleanSession),
-                           keep_alive  = KeepAlive,
-                           client_id   = ClientId,
-                           will_topic  = WillTopic,
-                           will_msg    = WillMsg,
-                           username    = UserName,
-                           password    = PasssWord}, Rest);
-               false ->
-                    {error, protocol_header_corrupt}
-            end;
         {?PUBLISH, <<PacketBin:Length/binary, Rest/binary>>} ->
             {TopicName, Rest1} = parse_utf(PacketBin),
             {PacketId, Payload} = case Qos of
@@ -120,6 +100,59 @@ parse_packet(Bin, #mqtt_packet_fixed{ type = Type,
                            parse_packet(<<TooShortBin/binary, BinMore/binary>>,
                                         Fixed, Length)
                    end}
+    end.
+
+parse_connect(Bin, Fixed, Length) ->
+    MaxSize = application:get_env(?APP_NAME,
+                                  max_packet_size_unauthenticated,
+                                  ?MAX_PACKET_SIZE_CONNECT),
+    case Length =< MaxSize of
+        true ->
+            case Bin of
+                <<PacketBin:Length/binary, Rest/binary>> ->
+                    {ProtoName, Rest1} = parse_utf(PacketBin),
+                    <<ProtoVersion : 8, Rest2/binary>> = Rest1,
+                    <<UsernameFlag : 1,
+                      PasswordFlag : 1,
+                      WillRetain   : 1,
+                      WillQos      : 2,
+                      WillFlag     : 1,
+                      CleanSession : 1,
+                      _Reserved    : 1,
+                      KeepAlive    : 16/big,
+                      Rest3/binary>>   = Rest2,
+                    {ClientId,  Rest4} = parse_utf(Rest3),
+                    {WillTopic, Rest5} = parse_utf(Rest4, WillFlag),
+                    {WillMsg,   Rest6} = parse_msg(Rest5, WillFlag),
+                    {UserName,  Rest7} = parse_utf(Rest6, UsernameFlag),
+                    {PasssWord, <<>>}  = parse_utf(Rest7, PasswordFlag),
+                    case protocol_name_approved(ProtoVersion, ProtoName) of
+                        true ->
+                            wrap(Fixed,
+                                 #mqtt_packet_connect{
+                                    proto_ver   = ProtoVersion,
+                                    will_retain = bool(WillRetain),
+                                    will_qos    = WillQos,
+                                    will_flag   = bool(WillFlag),
+                                    clean_sess  = bool(CleanSession),
+                                    keep_alive  = KeepAlive,
+                                    client_id   = ClientId,
+                                    will_topic  = WillTopic,
+                                    will_msg    = WillMsg,
+                                    username    = UserName,
+                                    password    = PasssWord}, Rest);
+                        false ->
+                            {error, protocol_header_corrupt}
+                    end;
+                TooShortBin
+                  when byte_size(TooShortBin) < Length ->
+                    {more, fun(BinMore) ->
+                                   parse_connect(<<TooShortBin/binary, BinMore/binary>>,
+                                                 Fixed, Length)
+                           end}
+            end;
+        false ->
+            {error, connect_packet_too_large}
     end.
 
 parse_topics(_, <<>>, Topics) ->

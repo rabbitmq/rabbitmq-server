@@ -14,6 +14,7 @@
          connect/2,
          connect/3,
          connect/4,
+         start_client/4,
          get_events/1,
          assert_event_type/2,
          assert_event_prop/2,
@@ -119,6 +120,11 @@ connect(ClientId, Config, AdditionalOpts) ->
     connect(ClientId, Config, 0, AdditionalOpts).
 
 connect(ClientId, Config, Node, AdditionalOpts) ->
+    {C, Connect} = start_client(ClientId, Config, Node, AdditionalOpts),
+    {ok, _Properties} = Connect(C),
+    C.
+
+start_client(ClientId, Config, Node, AdditionalOpts) ->
     {Port, WsOpts, Connect} =
     case rabbit_ct_helpers:get_config(Config, websocket, false) of
         false ->
@@ -136,5 +142,4 @@ connect(ClientId, Config, Node, AdditionalOpts) ->
                {clientid, rabbit_data_coercion:to_binary(ClientId)}
               ] ++ WsOpts ++ AdditionalOpts,
     {ok, C} = emqtt:start_link(Options),
-    {ok, _Properties} = Connect(C),
-    C.
+    {C, Connect}.

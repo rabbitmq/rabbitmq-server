@@ -91,7 +91,7 @@ init(Ref) ->
                             connection_state = running,
                             received_connect_packet = false,
                             conserve = false,
-                            parse_state = rabbit_mqtt_packet:initial_state(),
+                            parse_state = rabbit_mqtt_packet:init_state(),
                             proc_state = ProcessorState},
             State1 = control_throttle(State0),
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
@@ -336,7 +336,7 @@ process_received_bytes(Bytes,
                 {ok, ProcState1} ->
                     process_received_bytes(
                       Rest,
-                      State #state{parse_state = rabbit_mqtt_packet:initial_state(),
+                      State #state{parse_state = rabbit_mqtt_packet:reset_state(),
                                    proc_state = ProcState1});
                 %% PUBLISH and more
                 {error, unauthorized = Reason, ProcState1} ->
