@@ -92,6 +92,7 @@ subgroups() ->
          ,clean_session_kill_node
          ,rabbit_status_connection_count
          ,trace
+         ,max_packet_size_unauthenticated
         ]}
       ]},
      {cluster_size_3, [],
@@ -1336,6 +1337,34 @@ trace(Config) ->
 
     delete_queue(Ch, TraceQ),
     [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
+
+max_packet_size_unauthenticated(Config) ->
+    App = rabbitmq_mqtt,
+    Par = ClientId = ?FUNCTION_NAME,
+    Opts = [{will_topic, <<"will/topic">>}],
+
+    {C1, Connect} = util:start_client(
+                      ClientId, Config, 0,
+                      [{will_payload, binary:copy(<<"a">>, 64_000)} | Opts]),
+    ?assertMatch({ok, _}, Connect(C1)),
+    ok = emqtt:disconnect(C1),
+
+    MaxSize = 500,
+    ok = rpc(Config, application, set_env, [App, Par, MaxSize]),
+
+    {C2, Connect} = util:start_client(
+                      ClientId, Config, 0,
+                      [{will_payload, binary:copy(<<"b">>, MaxSize + 1)} | Opts]),
+    true = unlink(C2),
+    ?assertMatch({error, _}, Connect(C2)),
+
+    {C3, Connect} = util:start_client(
+                      ClientId, Config, 0,
+                      [{will_payload, binary:copy(<<"c">>, round(MaxSize / 2))} | Opts]),
+    ?assertMatch({ok, _}, Connect(C3)),
+    ok = emqtt:disconnect(C3),
+
+    ok = rpc(Config, application, unset_env, [App, Par]).
 
 %% -------------------------------------------------------------------
 %% Internal helpers

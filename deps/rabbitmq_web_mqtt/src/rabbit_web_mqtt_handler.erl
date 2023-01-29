@@ -32,7 +32,7 @@
 
 -record(state, {
           socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
-          parse_state = rabbit_mqtt_packet:initial_state() :: rabbit_mqtt_packet:state(),
+          parse_state = rabbit_mqtt_packet:init_state() :: rabbit_mqtt_packet:state(),
           proc_state :: undefined | rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
@@ -273,7 +273,7 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                 {ok, ProcState1} ->
                     handle_data1(
                       Rest,
-                      State#state{parse_state = rabbit_mqtt_packet:initial_state(),
+                      State#state{parse_state = rabbit_mqtt_packet:reset_state(),
                                   proc_state = ProcState1});
                 {error, Reason, _} ->
                     stop_mqtt_protocol_error(State, Reason, ConnName);
@@ -296,7 +296,7 @@ parse(Data, ParseState) ->
     end.
 
 stop_mqtt_protocol_error(State, Reason, ConnName) ->
-    ?LOG_INFO("MQTT protocol error ~tp for connection ~tp", [Reason, ConnName]),
+    ?LOG_WARNING("Web MQTT protocol error ~tp for connection ~tp", [Reason, ConnName]),
     stop(State, ?CLOSE_PROTOCOL_ERROR, Reason).
 
 stop(State) ->
