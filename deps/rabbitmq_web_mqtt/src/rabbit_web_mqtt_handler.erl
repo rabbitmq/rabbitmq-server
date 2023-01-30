@@ -57,7 +57,7 @@ upgrade(Req, Env, Handler, HandlerState) ->
 upgrade(Req, Env, Handler, HandlerState, Opts) ->
     cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
 
-takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, {HandlerState, PeerAddr}}) ->
+takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
     Sock = case HandlerState#state.socket of
                undefined ->
                    Socket;
@@ -65,7 +65,7 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, {HandlerState, 
                    {rabbit_proxy_socket, Socket, ProxyInfo}
            end,
     cowboy_websocket:takeover(Parent, Ref, Socket, Transport, Opts, Buffer,
-                              {Handler, {HandlerState#state{socket = Sock}, PeerAddr}}).
+                              {Handler, HandlerState#state{socket = Sock}}).
 
 %% cowboy_websocket
 init(Req, Opts) ->
@@ -73,7 +73,6 @@ init(Req, Opts) ->
         undefined ->
             no_supported_sub_protocol(undefined, Req);
         Protocol ->
-            {PeerAddr, _PeerPort} = maps:get(peer, Req),
             WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
             WsOpts  = maps:merge(#{compress => true}, WsOpts0),
             case lists:member(<<"mqtt">>, Protocol) of
@@ -82,16 +81,15 @@ init(Req, Opts) ->
                 true ->
                     {?MODULE,
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     {#state{socket = maps:get(proxy_header, Req, undefined)},
-                      PeerAddr},
+                     #state{socket = maps:get(proxy_header, Req, undefined)},
                      WsOpts}
             end
     end.
 
--spec websocket_init({state(), PeerAddr :: binary()}) ->
+-spec websocket_init(state()) ->
     {cowboy_websocket:commands(), state()} |
     {cowboy_websocket:commands(), state(), hibernate}.
-websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
+websocket_init(State0 = #state{socket = Sock}) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [web_mqtt]}),
     ok = file_handle_cache:obtain(),
     case rabbit_net:connection_string(Sock, inbound) of
@@ -102,8 +100,7 @@ websocket_init({State0 = #state{socket = Sock}, PeerAddr}) ->
             PState = rabbit_mqtt_processor:initial_state(
                        rabbit_net:unwrap_socket(Sock),
                        ConnName,
-                       fun send_reply/2,
-                       PeerAddr),
+                       fun send_reply/2),
             State1 = State0#state{conn_name = ConnName,
                                   proc_state = PState},
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),

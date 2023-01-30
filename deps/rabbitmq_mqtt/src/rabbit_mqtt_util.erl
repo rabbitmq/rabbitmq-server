@@ -23,7 +23,8 @@
          init_sparkplug/0,
          mqtt_to_amqp/1,
          amqp_to_mqtt/1,
-         truncate_binary/2
+         truncate_binary/2,
+         ip_address_to_binary/1
         ]).
 
 -define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
@@ -209,3 +210,7 @@ truncate_binary(Bin, Size)
 truncate_binary(Bin, Size)
   when is_binary(Bin) ->
     binary:part(Bin, 0, Size).
+
+-spec ip_address_to_binary(inet:ip_address()) -> binary().
+ip_address_to_binary(IpAddress) ->
+    list_to_binary(inet:ntoa(IpAddress)).
