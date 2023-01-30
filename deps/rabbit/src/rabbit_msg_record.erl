@@ -23,10 +23,10 @@
         {
          % header :: maybe(#'v1_0.header'{}),
          % delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}) | binary,
-         properties :: maybe(#'v1_0.properties'{}) | binary,
-         application_properties :: maybe(#'v1_0.application_properties'{}) | binary,
-         data :: maybe(amqp10_data()) | binary
+         message_annotations :: maybe(#'v1_0.message_annotations'{}) | iodata,
+         properties :: maybe(#'v1_0.properties'{}) | iodata,
+         application_properties :: maybe(#'v1_0.application_properties'{}) | iodata,
+         data :: maybe(amqp10_data()) | iodata
          % footer :: maybe(#'v1_0.footer'{})
          }).
 
@@ -114,36 +114,30 @@ to_iodata(#?MODULE{msg = #msg{properties = P,
                               data = Data}}) ->
     [
      case MA of
-         MsgAnnotBin when is_binary(MA) ->
-             MsgAnnotBin;
-         _ ->
-             case MA of
-                 #'v1_0.message_annotations'{content = []} ->
-                     <<>>;
-                 _ ->
-                     amqp10_framing:encode_bin(MA)
-             end
+         #'v1_0.message_annotations'{content = []} ->
+             <<>>;
+         #'v1_0.message_annotations'{} ->
+             amqp10_framing:encode_bin(MA);
+         MsgAnnotBin ->
+             MsgAnnotBin
      end,
      case P of
-         PropsBin when is_binary(P) ->
-             PropsBin;
-         _ ->
+         #'v1_0.properties'{} ->
              case amqp10_properties_empty(P) of
                  true -> <<>>;
                  false ->
                      amqp10_framing:encode_bin(P)
-             end
+             end;
+         PropsBin ->
+             PropsBin
      end,
      case AP of
-         AppPropsBin when is_binary(AP) ->
-             AppPropsBin;
-         _ ->
-             case AP of
-                 #'v1_0.application_properties'{content = []} ->
-                     <<>>;
-                 _ ->
-                     amqp10_framing:encode_bin(AP)
-             end
+         #'v1_0.application_properties'{content = []} ->
+             <<>>;
+         #'v1_0.application_properties'{} ->
+             amqp10_framing:encode_bin(AP);
+         AppPropsBin ->
+             AppPropsBin
      end,
      case Data of
          DataBin when is_binary(Data) orelse is_list(Data) ->
@@ -158,28 +152,31 @@ to_iodata(#?MODULE{msg = #msg{properties = P,
     state().
 add_message_annotations(Anns,
                         #?MODULE{msg =
-                                 #msg{message_annotations = MABin} = Msg} = State0)
-  when is_binary(MABin) ->
-    [MA] = amqp10_framing:decode_bin(MABin),
-    State1 = State0#?MODULE{msg =
-                            Msg#msg{message_annotations = MA}},
-    add_message_annotations(Anns, State1);
+                                 #msg{message_annotations = undefined} = Msg} = State) ->
+    add_message_annotations(Anns,
+                            State#?MODULE{msg = Msg#msg{message_annotations =
+                                                        #'v1_0.message_annotations'{content = []}}});
 add_message_annotations(Anns,
                         #?MODULE{msg =
-                                 #msg{message_annotations = MA0} = Msg} = State) ->
+                                 #msg{message_annotations =
+                                      #'v1_0.message_annotations'{content = C}} = Msg} = State) ->
     Content = maps:fold(
                 fun (K, {T, V}, Acc) ->
                         map_add(symbol, K, T, V, Acc)
                 end,
-                case MA0 of
-                    undefined -> [];
-                    #'v1_0.message_annotations'{content = C} -> C
-                end,
+                C,
                 Anns),
 
     State#?MODULE{msg =
                   Msg#msg{message_annotations =
-                            #'v1_0.message_annotations'{content = Content}}}.
+                            #'v1_0.message_annotations'{content = Content}}};
+add_message_annotations(Anns,
+                        #?MODULE{msg =
+                                 #msg{message_annotations = MABin} = Msg} = State0) ->
+    [MA] = amqp10_framing:decode_bin(iolist_to_binary(MABin)),
+    State1 = State0#?MODULE{msg =
+                            Msg#msg{message_annotations = MA}},
+    add_message_annotations(Anns, State1).
 
 %% TODO: refine
 -type amqp10_term() :: {atom(), term()}.
