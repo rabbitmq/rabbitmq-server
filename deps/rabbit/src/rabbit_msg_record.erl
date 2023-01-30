@@ -26,7 +26,7 @@
          message_annotations :: maybe(#'v1_0.message_annotations'{}) | binary,
          properties :: maybe(#'v1_0.properties'{}) | binary,
          application_properties :: maybe(#'v1_0.application_properties'{}) | binary,
-         data :: maybe(amqp10_data())
+         data :: maybe(amqp10_data()) | binary
          % footer :: maybe(#'v1_0.footer'{})
          }).
 
@@ -56,7 +56,10 @@
 init(Bin) when is_binary(Bin) ->
     %% TODO: delay parsing until needed
     {MA, P, AP, D} = decode(amqp10_framing:decode_bin(Bin),
-                            {undefined, undefined, undefined, undefined}),
+                             {undefined, undefined, undefined, undefined}),
+    %% decoded body sections already in reverse order,
+    %% no need to reverse them after decoding
+
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,
                         application_properties = AP,
@@ -71,8 +74,19 @@ decode([#'v1_0.properties'{} = P | Rem], {MA, _, AP, D}) ->
     decode(Rem, {MA, P, AP, D});
 decode([#'v1_0.application_properties'{} = AP | Rem], {MA, P, _, D}) ->
     decode(Rem, {MA, P, AP, D});
-decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, _}) ->
-    decode(Rem, {MA, P, AP, D}).
+decode([#'v1_0.amqp_value'{} = D | Rem], {MA, P, AP, _}) ->
+    decode(Rem, {MA, P, AP, D});
+decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, undefined}) ->
+    decode(Rem, {MA, P, AP, D});
+decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, B}) when is_list(B) ->
+    decode(Rem, {MA, P, AP, [D | B]});
+decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, B}) ->
+    decode(Rem, {MA, P, AP, [D | [B]]});
+decode([#'v1_0.amqp_sequence'{} = D | Rem], {MA, P, AP, undefined}) ->
+    decode(Rem, {MA, P, AP, [D]});
+decode([#'v1_0.amqp_sequence'{} = D | Rem], {MA, P, AP, B}) when is_list(B) ->
+    decode(Rem, {MA, P, AP, [D | B]}).
+
 
 amqp10_properties_empty(#'v1_0.properties'{message_id = undefined,
                                            user_id = undefined,
@@ -125,7 +139,12 @@ to_iodata(#?MODULE{msg = #msg{properties = P,
                      amqp10_framing:encode_bin(AP)
              end
      end,
-     amqp10_framing:encode_bin(Data)
+     case Data of
+         DataBin when is_binary(Data) orelse is_list(Data) ->
+             DataBin;
+         _ ->
+             amqp10_framing:encode_bin(Data)
+     end
     ].
 
 %% TODO: refine type spec here
@@ -186,19 +205,26 @@ message_annotation(Key,
 %% parses it and returns the current parse state
 %% this is the input function from storage and from, e.g. socket input
 -spec from_amqp091(#'P_basic'{}, iodata()) -> state().
-from_amqp091(PB, Data) ->
+from_amqp091(#'P_basic'{type = T} = PB, Data) ->
     MA = from_amqp091_to_amqp10_message_annotations(PB),
     P = from_amqp091_to_amqp10_properties(PB),
     AP = from_amqp091_to_amqp10_app_properties(PB),
+
+    D = case T of
+            ?AMQP10_TYPE ->
+                %% the body is already AMQP 1.0 binary content, so leave as-is
+                Data;
+            _ ->
+                #'v1_0.data'{content = Data}
+        end,
 
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,
                         application_properties = AP,
                         message_annotations = MA,
-                        data = #'v1_0.data'{content = Data}}}.
+                        data = D}}.
 
-from_amqp091_to_amqp10_properties(#'P_basic'{type = ?AMQP10_TYPE,
-                                             headers = Headers} = P) ->
+from_amqp091_to_amqp10_properties(#'P_basic'{headers = Headers} = P) when is_list(Headers) ->
     case proplists:lookup(?AMQP10_PROPERTIES_HEADER, Headers) of
         none ->
             convert_amqp091_to_amqp10_properties(P);
@@ -231,8 +257,8 @@ convert_amqp091_to_amqp10_properties(#'P_basic'{message_id = MsgId,
                        content_encoding = wrap(symbol, ContentEncoding),
                        creation_time = wrap(timestamp, ConvertedTs)}.
 
-from_amqp091_to_amqp10_app_properties(#'P_basic'{type = ?AMQP10_TYPE,
-                                                 headers = Headers} = P) ->
+from_amqp091_to_amqp10_app_properties(#'P_basic'{headers = Headers} = P)
+  when is_list(Headers) ->
     case proplists:lookup(?AMQP10_APP_PROPERTIES_HEADER, Headers) of
         none ->
             convert_amqp091_to_amqp10_app_properties(P);
@@ -250,23 +276,26 @@ convert_amqp091_to_amqp10_app_properties(#'P_basic'{headers = Headers,
                                                       undefined -> [];
                                                       _ -> Headers
                                                   end, not unsupported_header_value_type(T),
-                                               not filtered_header(Type, K)],
+                                               not filtered_header(K)],
+
     APC1 = case Type of
         ?AMQP10_TYPE ->
+            %% no need to modify the application properties for the type
+            %% this info will be restored on decoding if necessary
             APC0;
         _ ->
-            %% properties that do not map directly to AMQP 1.0 properties are stored
-            %% in application properties
-            map_add(utf8, <<"x-basic-type">>, utf8, Type,
-                    map_add(utf8, <<"x-basic-app-id">>, utf8, AppId, APC0))
+            map_add(utf8, <<"x-basic-type">>, utf8, Type, APC0)
     end,
-    #'v1_0.application_properties'{content = APC1}.
 
-from_amqp091_to_amqp10_message_annotations(#'P_basic'{type = ?AMQP10_TYPE,
-                                                      headers = Headers}) ->
+    %% properties that do not map directly to AMQP 1.0 properties are stored
+    %% in application properties
+    APC2 = map_add(utf8, <<"x-basic-app-id">>, utf8, AppId, APC1),
+    #'v1_0.application_properties'{content = APC2}.
+
+from_amqp091_to_amqp10_message_annotations(#'P_basic'{headers = Headers} = P) when is_list(Headers) ->
     case proplists:lookup(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
         none ->
-            #'v1_0.message_annotations'{content = []};
+            convert_amqp091_to_amqp10_message_annotations(P);
         {_, _, MessageAnnotationsBin} ->
             MessageAnnotationsBin
     end;
@@ -293,12 +322,20 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
                                message_annotations = MAR,
                                data = Data}}) ->
 
-  Payload =  case Data of
-               undefined ->
-                 <<>>;
-               #'v1_0.data'{content = C} ->
-                 C
-             end,
+    %% anything else than a single data section is expected to be AMQP 1.0 binary content
+    %% enforcing this convention
+    {Payload, IsAmqp10} =  case Data of
+                               undefined ->
+                                   {<<>>, false};
+                               #'v1_0.data'{content = C} ->
+                                   {C, false};
+                               Sections when is_list(Data)->
+                                   B = [amqp10_framing:encode_bin(S) || S <- Sections],
+                                   {list_to_binary(B),
+                                    true};
+                               V ->
+                                   {amqp10_framing:encode_bin(V), true}
+                           end,
 
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId,
@@ -322,7 +359,12 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
               _ -> []
           end,
 
-    {Type, AP1} = amqp10_map_get(utf8(<<"x-basic-type">>), AP0),
+    {Type, AP1} = case {amqp10_map_get(utf8(<<"x-basic-type">>), AP0), IsAmqp10} of
+                      {{undefined, M}, true} ->
+                          {?AMQP10_TYPE, M};
+                      {{T, M}, _} ->
+                          {T, M}
+                  end,
     {AppId, AP} = amqp10_map_get(utf8(<<"x-basic-app-id">>), AP1),
 
     {Priority, MA1} = amqp10_map_get(symbol(<<"x-basic-priority">>), MA0),
@@ -467,13 +509,13 @@ unsupported_header_value_type(table) ->
 unsupported_header_value_type(_) ->
     false.
 
-filtered_header(?AMQP10_TYPE, ?AMQP10_PROPERTIES_HEADER) ->
+filtered_header(?AMQP10_PROPERTIES_HEADER) ->
     true;
-filtered_header(?AMQP10_TYPE, ?AMQP10_APP_PROPERTIES_HEADER) ->
+filtered_header(?AMQP10_APP_PROPERTIES_HEADER) ->
     true;
-filtered_header(?AMQP10_TYPE, ?AMQP10_MESSAGE_ANNOTATIONS_HEADER) ->
+filtered_header(?AMQP10_MESSAGE_ANNOTATIONS_HEADER) ->
     true;
-filtered_header(_, _) ->
+filtered_header(_) ->
     false.
 
 -ifdef(TEST).

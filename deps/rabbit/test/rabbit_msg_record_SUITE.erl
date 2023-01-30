@@ -227,7 +227,7 @@ reuse_amqp10_binary_chunks(_Config) ->
     Amqp091Headers = [{<<"x-amqp-1.0-message-annotations">>, longstr, Amqp10MsgAnnotationsBin},
                       {<<"x-amqp-1.0-properties">>, longstr, Amqp10PropsBin},
                       {<<"x-amqp-1.0-app-properties">>, longstr, Amqp10AppPropsBin}],
-    Amqp091Props = #'P_basic'{type = <<"amqp-1.0">>, headers = Amqp091Headers},
+    Amqp091Props = #'P_basic'{headers = Amqp091Headers},
     R = rabbit_msg_record:from_amqp091(Amqp091Props, <<"payload-does-not-matter">>),
     RBin = rabbit_msg_record:to_iodata(R),
     Amqp10DecodedMsg = amqp10_framing:decode_bin(list_to_binary(RBin)),
