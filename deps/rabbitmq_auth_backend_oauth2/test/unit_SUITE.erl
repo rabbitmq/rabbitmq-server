@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+
 all() ->
     [
         test_own_scope,
@@ -19,6 +20,7 @@ all() ->
         test_validate_payload,
         test_validate_payload_when_verify_aud_false,
         test_successful_access_with_a_token,
+        test_successful_access_with_a_parsed_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
         test_restricted_vhost_access_with_a_valid_token,
@@ -628,6 +630,22 @@ test_successful_access_with_a_token(_) ->
     assert_resource_access_granted(User, VHost, custom, <<"bar">>, read),
 
     assert_topic_access_granted(User, VHost, <<"bar">>, read, #{routing_key => <<"#/foo">>}).
+
+test_successful_access_with_a_parsed_token(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+
+    VHost    = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
+    {ok, #auth_user{impl = Impl} } =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+
+    {ok, _ } =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{rabbit_auth_backend_oauth2, Impl}]).
+
 
 test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
