@@ -72,6 +72,16 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
               'broker_not_found_on_node' |
               {'auth_failure', string()} | 'access_refused').
 
+%% Infos is a PropList which contains the content of the Proplist #amqp_adapter_info.additional_info
+%% among other credentials such as protocol, ssl information, etc.
+%% #amqp_adapter_info.additional_info may carry a credential called `authz_bakends` which has the
+%% content of the #user.authz_backends attribute. This means that we are propagating the outcome
+%% from the first successful authentication for the current user when opening an internal
+%% amqp connection. This is particularly relevant for protocol plugins such as AMQP 1.0 where
+%% users are authenticated in one context and later on an internal amqp connection is opened
+%% on a different context. In other words, we do not have anymore the initial credentials presented
+%% during the first authentication. However, we do have the outcome from such successful authentication.
+
 connect(Creds, VHost, Protocol, Pid, Infos) ->
     ExtraAuthProps = append_authz_backends(extract_extra_auth_props(Creds, VHost, Pid, Infos), Infos),
 
@@ -114,6 +124,7 @@ extract_extra_auth_props(Creds, VHost, Pid, Infos) ->
         Protocol ->
             maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos)
     end.
+
 
 append_authz_backends(AuthProps, Infos) ->
     case proplists:get_value(authz_backends, Infos, undefined) of
