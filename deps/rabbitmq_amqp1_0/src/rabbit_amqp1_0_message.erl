@@ -25,6 +25,7 @@
 assemble(MsgBin) ->
     {RKey, Props, Content0} = assemble(header, {<<"">>, #'P_basic'{}, []},
                                       decode_section(MsgBin), MsgBin),
+
     Content1 = case Content0 of
                    Sections when is_list(Content0) ->
                        lists:reverse(Sections);

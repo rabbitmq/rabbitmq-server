@@ -55,16 +55,22 @@
 -spec init(binary()) -> state().
 init(Bin) when is_binary(Bin) ->
     %% TODO: delay parsing until needed
-    {MA, P, AP, D} = decode(amqp10_framing:decode_bin(Bin),
+    {MA, P, AP, D0} = decode(amqp10_framing:decode_bin(Bin),
                              {undefined, undefined, undefined, undefined}),
-    %% decoded body sections already in reverse order,
-    %% no need to reverse them after decoding
+
+    D1 = case D0 of
+             Sections when is_list(D0) ->
+                 lists:reverse(Sections);
+             _ ->
+                 D0
+         end,
+
 
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,
                         application_properties = AP,
                         message_annotations = MA,
-                        data = D}}.
+                        data = D1}}.
 
 decode([], Acc) ->
     Acc;
@@ -212,7 +218,7 @@ from_amqp091(#'P_basic'{type = T} = PB, Data) ->
 
     D = case T of
             ?AMQP10_TYPE ->
-                %% the body is already AMQP 1.0 binary content, so leave as-is
+                %% the body is already AMQP 1.0 binary content, so leaving it as-is
                 Data;
             _ ->
                 #'v1_0.data'{content = Data}
@@ -331,7 +337,7 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
                                    {C, false};
                                Sections when is_list(Data)->
                                    B = [amqp10_framing:encode_bin(S) || S <- Sections],
-                                   {list_to_binary(B),
+                                   {iolist_to_binary(B),
                                     true};
                                V ->
                                    {amqp10_framing:encode_bin(V), true}

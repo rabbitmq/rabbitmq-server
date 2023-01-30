@@ -23,6 +23,7 @@ all() ->
 all_tests() ->
     [
      ampq091_roundtrip,
+     amqp10_non_single_data_bodies,
      unsupported_091_header_is_dropped,
      message_id_ulong,
      message_id_uuid,
@@ -90,6 +91,43 @@ ampq091_roundtrip(_Config) ->
     Payload = [<<"data">>],
     test_amqp091_roundtrip(Props, Payload),
     test_amqp091_roundtrip(#'P_basic'{}, Payload),
+    ok.
+
+amqp10_non_single_data_bodies(_Config) ->
+    Props = #'P_basic'{type = <<"amqp-1.0">>},
+    Payloads = [
+                [#'v1_0.data'{content = <<"hello">>},
+                 #'v1_0.data'{content = <<"brave">>},
+                 #'v1_0.data'{content = <<"new">>},
+                 #'v1_0.data'{content = <<"world">>}
+                ],
+                #'v1_0.amqp_value'{content = {utf8, <<"hello world">>}},
+                [#'v1_0.amqp_sequence'{content = [{utf8, <<"one">>},
+                                                  {utf8, <<"blah">>}]},
+                 #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
+                ]
+               ],
+
+    [begin
+         EncodedPayload = amqp10_encode_bin(Payload),
+
+         MsgRecord0 = rabbit_msg_record:from_amqp091(Props, EncodedPayload),
+         MsgRecord = rabbit_msg_record:init(
+                       iolist_to_binary(rabbit_msg_record:to_iodata(MsgRecord0))),
+         {PropsOut, PayloadEncodedOut} = rabbit_msg_record:to_amqp091(MsgRecord),
+         PayloadOut = case amqp10_framing:decode_bin(iolist_to_binary(PayloadEncodedOut)) of
+                          L when length(L) =:= 1 ->
+                              lists:nth(1, L);
+                          L ->
+                              L
+                      end,
+
+         ?assertEqual(Props, PropsOut),
+         ?assertEqual(iolist_to_binary(EncodedPayload),
+                      iolist_to_binary(PayloadEncodedOut)),
+         ?assertEqual(Payload, PayloadOut)
+
+     end || Payload <- Payloads],
     ok.
 
 unsupported_091_header_is_dropped(_Config) ->
@@ -227,19 +265,24 @@ reuse_amqp10_binary_chunks(_Config) ->
     Amqp091Headers = [{<<"x-amqp-1.0-message-annotations">>, longstr, Amqp10MsgAnnotationsBin},
                       {<<"x-amqp-1.0-properties">>, longstr, Amqp10PropsBin},
                       {<<"x-amqp-1.0-app-properties">>, longstr, Amqp10AppPropsBin}],
-    Amqp091Props = #'P_basic'{headers = Amqp091Headers},
-    R = rabbit_msg_record:from_amqp091(Amqp091Props, <<"payload-does-not-matter">>),
+    Amqp091Props = #'P_basic'{type= <<"amqp-1.0">>, headers = Amqp091Headers},
+    Body = #'v1_0.amqp_value'{content = {utf8, <<"hello world">>}},
+    EncodedBody = amqp10_encode_bin(Body),
+    R = rabbit_msg_record:from_amqp091(Amqp091Props, EncodedBody),
     RBin = rabbit_msg_record:to_iodata(R),
-    Amqp10DecodedMsg = amqp10_framing:decode_bin(list_to_binary(RBin)),
+    Amqp10DecodedMsg = amqp10_framing:decode_bin(iolist_to_binary(RBin)),
     [Amqp10DecodedMsgAnnotations, Amqp10DecodedProps,
-     Amqp10DecodedAppProps, _] = Amqp10DecodedMsg,
+     Amqp10DecodedAppProps, DecodedBody] = Amqp10DecodedMsg,
     ?assertEqual(Amqp10MsgAnnotations, Amqp10DecodedMsgAnnotations),
     ?assertEqual(Amqp10Props, Amqp10DecodedProps),
     ?assertEqual(Amqp10AppProps, Amqp10DecodedAppProps),
+    ?assertEqual(Body, DecodedBody),
     ok.
 
+amqp10_encode_bin(L) when is_list(L) ->
+    iolist_to_binary([amqp10_encode_bin(X) || X <- L]);
 amqp10_encode_bin(X) ->
-    list_to_binary(amqp10_framing:encode_bin(X)).
+    iolist_to_binary(amqp10_framing:encode_bin(X)).
 
 %% Utility
 
