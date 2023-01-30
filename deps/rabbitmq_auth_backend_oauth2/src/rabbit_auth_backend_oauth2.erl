@@ -167,13 +167,16 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary()) ->
+-spec check_token(binary() | map()) ->
           {'ok', map()} |
           {'error', term() }|
           {'refused',
            'signature_invalid' |
            {'error', term()} |
            {'invalid_aud', term()}}.
+
+check_token(DecodedToken) when is_map(DecodedToken) ->
+    {ok, DecodedToken};
 
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
@@ -535,7 +538,14 @@ get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
-    maps:get(password, AuthProps, undefined).
+    case maps:get(password, AuthProps, undefined) of
+        undefined ->
+            case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
+                undefined -> undefined;
+                Impl -> Impl()
+            end;
+        Token -> Token
+    end.
 
 %% Decoded tokens look like this:
 %%
