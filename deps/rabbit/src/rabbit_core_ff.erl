@@ -131,18 +131,10 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
             ok ->
                 ok = rabbit_binding:populate_index_route_table();
             {error, Err} = Error ->
-<<<<<<< HEAD
                 rabbit_log_feature_flags:error(
-                  "Feature flags: `~s`: failed to add copy of table ~s to "
-                  "node ~p: ~p",
-                  [FeatureName, TableName, node(), Err]),
-=======
-                ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to add copy of table ~ts to "
-                  "node ~tp: ~tp",
-                  [FeatureName, NewTable, node(), Err],
-                  #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
->>>>>>> 590fa68fdc (Fix direct_exchange_routing_v2 migration)
+                  "node ~p: ~p",
+                  [FeatureName, NewTable, node(), Err]),
                 Error
         end
     catch throw:{error, Reason} ->
