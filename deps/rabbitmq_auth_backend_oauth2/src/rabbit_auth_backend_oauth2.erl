@@ -536,6 +536,13 @@ check_aud(Aud, ResourceServerId) ->
 
 get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 
+%% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
+%% credential.  The former is the most common scenario for the first time authentication.
+%% However, there are scenarios where the same user (on the same connection) is authenticated
+%% more than once. When this scenario occurs, we extract the token from the credential
+%% called rabbit_auth_backend_oauth2 whose value is the Decoded token returned during the
+%% first authentication. 
+
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
     case maps:get(password, AuthProps, undefined) of
