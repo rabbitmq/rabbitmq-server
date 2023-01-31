@@ -710,6 +710,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                                     user      = User},
         proxy_socket = ProxySocket} = State,
     %% Note: the equivalent, start_channel is in channel_sup_sup
+
     case rabbit_amqp1_0_session_sup_sup:start_session(
            %% NB subtract fixed frame header size
            ChanSupSup, {amqp10_framing, Sock, Channel,

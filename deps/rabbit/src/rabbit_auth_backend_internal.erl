@@ -92,7 +92,11 @@ user_login_authentication(Username, AuthProps) ->
                           false
                   end
               end);
-        false -> exit({unknown_auth_props, Username, AuthProps})
+        false ->
+            case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
+                undefined -> exit({unknown_auth_props, Username, AuthProps});
+                _ -> internal_check_user_login(Username, fun(_) -> true end)
+            end
     end.
 
 state_can_expire() -> false.
