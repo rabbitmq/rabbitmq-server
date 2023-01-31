@@ -98,13 +98,13 @@ defmodule RabbitMQ.CLI.Core.Parser do
         ## This is an optimisation for pluggable command discovery.
         ## Most of the time a command will be from rabbitmqctl application
         ## so there is not point in scanning plugins for potential commands
-        CommandModules.load_core(options)
+        _ = CommandModules.load_core(options)
         core_commands = CommandModules.module_map_core()
 
         command =
           case core_commands[cmd_name] do
             nil ->
-              CommandModules.load(options)
+              _ = CommandModules.load(options)
               module_map = CommandModules.module_map()
 
               module_map[cmd_name] ||
@@ -242,11 +242,12 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp assert_no_conflict(command, command_fields, formatter_fields, err) do
-    merge_if_different(
-      formatter_fields,
-      command_fields,
-      {:command_invalid, {command, {err, formatter_fields, command_fields}}}
-    )
+    _ =
+      merge_if_different(
+        formatter_fields,
+        command_fields,
+        {:command_invalid, {command, {err, formatter_fields, command_fields}}}
+      )
 
     :ok
   end

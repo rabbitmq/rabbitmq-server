@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Core.Input do
   end
 
   def consume_multiline_string() do
-    val = IO.read(:stdio, :all)
+    val = IO.read(:stdio, :eof)
 
     case val do
       :eof -> :eof

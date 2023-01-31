@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def plugin_modules(opts) do
-    require_rabbit(opts)
+    _ = require_rabbit(opts)
 
     enabled_plugins =
       try do

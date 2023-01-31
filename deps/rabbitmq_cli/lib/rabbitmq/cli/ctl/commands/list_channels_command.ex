@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], opts) do
-    run(~w(pid user consumer_count messages_unacknowledged), opts)
+    run(~w(pid user consumer_count messages_unacknowledged) |> Enum.map(&to_charlist/1), opts)
   end
 
   def run([_ | _] = args, %{node: node_name, timeout: timeout}) do

@@ -9,6 +9,7 @@ defmodule RabbitMQ.CLI.Formatters.Report do
   alias RabbitMQ.CLI.Core.{Output, Config}
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
+  @dialyzer {:nowarn_function, format_output: 2}
   def format_output(_, _) do
     raise "format_output is not implemented for report formatter"
   end
