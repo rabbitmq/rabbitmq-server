@@ -12,8 +12,6 @@
          to_091/2
          ]).
 
--dialyzer({nowarn_function, add_message_annotations/2}).
-
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -25,10 +23,10 @@
         {
          % header :: maybe(#'v1_0.header'{}),
          % delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}) | iodata,
-         properties :: maybe(#'v1_0.properties'{}) | iodata,
-         application_properties :: maybe(#'v1_0.application_properties'{}) | iodata,
-         data :: maybe(amqp10_data()) | iodata
+         message_annotations :: maybe(#'v1_0.message_annotations'{}) | iodata(),
+         properties :: maybe(#'v1_0.properties'{}) | iodata(),
+         application_properties :: maybe(#'v1_0.application_properties'{}) | iodata(),
+         data :: maybe(amqp10_data()) | iodata()
          % footer :: maybe(#'v1_0.footer'{})
          }).
 
