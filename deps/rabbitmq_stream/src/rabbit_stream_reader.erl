@@ -2721,7 +2721,7 @@ process_client_command_versions(C, []) ->
 process_client_command_versions(C, [H | T]) ->
     process_client_command_versions(process_client_command_api(C, H), T).
 
-process_client_command_api(C, {deliver, ?VERSION_1, ?VERSION_2}) ->
+process_client_command_api(C, {deliver, _, ?VERSION_2}) ->
     C#stream_connection{deliver_version = ?VERSION_2};
 process_client_command_api(C, _) ->
     C.
