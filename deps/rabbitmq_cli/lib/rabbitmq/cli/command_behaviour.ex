@@ -47,7 +47,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback printer() :: atom()
   @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
-  @callback help_section() :: String.t() | {:plugin, atom()}
+  @callback help_section() :: String.t() | atom() | {:plugin, atom()}
   @callback usage_additional() ::
               String.t()
               | [String.t()]

@@ -1,10 +1,11 @@
 load("@bazel_skylib//rules:select_file.bzl", "select_file")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "STARTS_BACKGROUND_BROKER_TAG")
+load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
@@ -69,6 +70,22 @@ rabbitmqctl_check_formatted_test(
 test_suite(
     name = "rabbitmqctl_check_formatted",
     tests = ["check_formatted"],
+)
+
+plt(
+    name = "deps_plt",
+    libs = [":elixir"],
+    deps = [
+        ":elixir",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    libs = [":elixir"],
+    plt = ":deps_plt",
 )
 
 rabbitmqctl_test(
