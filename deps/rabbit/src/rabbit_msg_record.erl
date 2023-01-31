@@ -12,6 +12,8 @@
          to_091/2
          ]).
 
+-dialyzer({nowarn_function, add_message_annotations/2}).
+
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -64,7 +66,6 @@ init(Bin) when is_binary(Bin) ->
              _ ->
                  D0
          end,
-
 
     #?MODULE{cfg = #cfg{},
              msg = #msg{properties = P,
