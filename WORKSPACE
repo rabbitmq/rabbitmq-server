@@ -78,9 +78,9 @@ http_file(
 
 http_file(
     name = "otp_src_25_2",
-    downloaded_file_path = "OTP-25.2.1.tar.gz",
-    sha256 = "d044e3699cb5261127da4bf37a495534bde85c37709f07735efc91f290f51da7",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.2.1.tar.gz"],
+    downloaded_file_path = "OTP-25.2.2.tar.gz",
+    sha256 = "535e535b2e90e71deca96c53f19710e6ebf3d4289b0a3116e7cf83b7e2c4bb7e",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.2.2.tar.gz"],
 )
 
 http_archive(
@@ -121,8 +121,8 @@ erlang_config(
         ),
         internal_erlang_from_github_release(
             name = "25_2",
-            sha256 = "d67312017464529603f60a36f4bfb891b6cf7637a375abb27c92ee79ecd14cd4",
-            version = "25.2.1",
+            sha256 = "94d5b6b0495050c5ea78a10c02ba3bdb58ce537c2a8869957760e67ec02924bd",
+            version = "25.2.2",
         ),
         internal_erlang_from_http_archive(
             name = "git_master",
