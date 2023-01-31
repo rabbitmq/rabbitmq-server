@@ -1608,7 +1608,7 @@ publish_and_confirm(Q, Payload, Count) ->
               {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
               Acc
       end, QTState0, Seqs),
-    wait_for_confirms(sets:from_list(Seqs)),
+    wait_for_confirms(sets:from_list(Seqs, [{version, 2}])),
     QTState.
 
 wait_for_confirms(Unconfirmed) ->
@@ -1619,7 +1619,7 @@ wait_for_confirms(Unconfirmed) ->
                 {'$gen_cast', {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
                       sets:subtract(
-                        Unconfirmed, sets:from_list(Confirmed)))
+                        Unconfirmed, sets:from_list(Confirmed, [{version, 2}])))
             after ?TIMEOUT ->
                       flush(),
                       exit(timeout_waiting_for_confirm)
