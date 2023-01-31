@@ -86,7 +86,7 @@ decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, undefined}) ->
 decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, B}) when is_list(B) ->
     decode(Rem, {MA, P, AP, [D | B]});
 decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, B}) ->
-    decode(Rem, {MA, P, AP, [D | [B]]});
+    decode(Rem, {MA, P, AP, [D, B]});
 decode([#'v1_0.amqp_sequence'{} = D | Rem], {MA, P, AP, undefined}) ->
     decode(Rem, {MA, P, AP, [D]});
 decode([#'v1_0.amqp_sequence'{} = D | Rem], {MA, P, AP, B}) when is_list(B) ->
@@ -281,13 +281,13 @@ convert_amqp091_to_amqp10_app_properties(#'P_basic'{headers = Headers,
                                                not filtered_header(K)],
 
     APC1 = case Type of
-        ?AMQP10_TYPE ->
-            %% no need to modify the application properties for the type
-            %% this info will be restored on decoding if necessary
-            APC0;
-        _ ->
-            map_add(utf8, <<"x-basic-type">>, utf8, Type, APC0)
-    end,
+               ?AMQP10_TYPE ->
+                   %% no need to modify the application properties for the type
+                   %% this info will be restored on decoding if necessary
+                   APC0;
+               _ ->
+                   map_add(utf8, <<"x-basic-type">>, utf8, Type, APC0)
+           end,
 
     %% properties that do not map directly to AMQP 1.0 properties are stored
     %% in application properties
@@ -328,6 +328,8 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
     %% enforcing this convention
     {Payload, IsAmqp10} =  case Data of
                                undefined ->
+                                   %% not an expected value,
+                                   %% but handling it with an empty binary anyway
                                    {<<>>, false};
                                #'v1_0.data'{content = C} ->
                                    {C, false};
@@ -336,7 +338,7 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
                                    {iolist_to_binary(B),
                                     true};
                                V ->
-                                   {amqp10_framing:encode_bin(V), true}
+                                   {iolist_to_binary(amqp10_framing:encode_bin(V)), true}
                            end,
 
     #'v1_0.properties'{message_id = MsgId,
