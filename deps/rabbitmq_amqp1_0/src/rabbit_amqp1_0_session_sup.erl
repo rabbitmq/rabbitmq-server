@@ -29,13 +29,8 @@
 
 %%----------------------------------------------------------------------------
 start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
-<<<<<<< HEAD
-            Username, VHost, Collector, ProxySocket}) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-=======
             User, VHost, Collector, ProxySocket}) ->
-    {ok, SupPid} = supervisor:start_link(?MODULE, []),
->>>>>>> 51e27f8a3f (Fix issue #6909)
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
           SupPid,
@@ -49,27 +44,10 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
     end,
     case supervisor2:start_child(
            SupPid,
-<<<<<<< HEAD
            {channel, {rabbit_amqp1_0_session_process, start_link,
-                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                        adapter_info(SocketForAdapterInfo), Collector}]},
+                      [{Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
+                        adapter_info(User, SocketForAdapterInfo), Collector}]},
             intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}) of
-=======
-           #{
-               id => channel,
-               start =>
-                   {rabbit_amqp1_0_session_process, start_link, [
-                       {Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
-                           adapter_info(User, SocketForAdapterInfo), Collector}
-                   ]},
-               restart => transient,
-               significant => true,
-               shutdown => ?WORKER_WAIT,
-               type => worker,
-               modules => [rabbit_amqp1_0_session_process]
-           }
-        ) of
->>>>>>> 51e27f8a3f (Fix issue #6909)
         {ok, ChannelPid} ->
             {ok, SupPid, ChannelPid};
         {error, Reason} ->
