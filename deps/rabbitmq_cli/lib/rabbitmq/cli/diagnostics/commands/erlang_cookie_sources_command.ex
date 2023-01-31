@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
       os_env_cookie_set: System.get_env("RABBITMQ_ERLANG_COOKIE") != nil,
       os_env_cookie_value_length: String.length(System.get_env("RABBITMQ_ERLANG_COOKIE") || ""),
       switch_cookie_set: switch_cookie != nil,
-      switch_cookie_value_length: String.length(to_string(switch_cookie) || ""),
+      switch_cookie_value_length: String.length(to_string(switch_cookie)),
       effective_user: System.get_env("USER"),
       home_dir: home_dir,
       cookie_file_path: cookie_file_path,

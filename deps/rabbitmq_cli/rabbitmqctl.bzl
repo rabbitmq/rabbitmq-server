@@ -270,9 +270,24 @@ done
             ),
         )
 
+        (_, _, erlang_runfiles) = erlang_dirs(ctx)
+        (_, elixir_runfiles) = elixir_dirs(ctx)
+
         lib_info = ctx.attr.elixir_app[ElixirAppInfo]
+
+        runfiles = ctx.runfiles([ebin]).merge_all([
+            erlang_runfiles,
+            elixir_runfiles,
+        ] + [
+            dep[DefaultInfo].default_runfiles
+            for dep in lib_info.deps
+        ])
+
         return [
-            DefaultInfo(files = depset([ebin])),
+            DefaultInfo(
+                files = depset([ebin]),
+                runfiles = runfiles,
+            ),
             ErlangAppInfo(
                 app_name = lib_info.app_name,
                 extra_apps = lib_info.extra_apps,
@@ -303,6 +318,9 @@ elixir_app_to_erlang_app = rule(
             ],
         ),
     },
+    toolchains = [
+        "//bazel/elixir:toolchain_type",
+    ],
     provides = [ErlangAppInfo],
 )
 

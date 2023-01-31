@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Core.Networking do
     end
   end
 
-  @spec address_family(String.t() | atom()) :: boolean()
+  @spec valid_address_family?(String.t() | atom()) :: boolean()
   def valid_address_family?(value) when is_atom(value) do
     valid_address_family?(to_string(value))
   end

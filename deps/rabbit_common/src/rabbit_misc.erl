@@ -231,8 +231,12 @@
 -spec pset(term(), term(), [term()]) -> [term()].
 -spec format_message_queue(any(), priority_queue:q()) -> term().
 -spec os_cmd(string()) -> string().
+<<<<<<< HEAD
 -spec is_os_process_alive(non_neg_integer()) -> boolean().
 -spec gb_sets_difference(gb_sets:set(), gb_sets:set()) -> gb_sets:set().
+=======
+-spec is_os_process_alive(non_neg_integer() | string()) -> boolean().
+>>>>>>> bdb2046185 (Add rabbitmq_cli dialyze to bazel (#7066))
 -spec version() -> string().
 -spec otp_release() -> string().
 -spec otp_system_version() -> string().

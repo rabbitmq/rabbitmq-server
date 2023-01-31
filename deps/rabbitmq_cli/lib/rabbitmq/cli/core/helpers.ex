@@ -130,7 +130,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def apply_if_exported(mod, fun, args, default) do
-    Code.ensure_loaded(mod)
+    _ = Code.ensure_loaded(mod)
 
     case function_exported?(mod, fun, length(args)) do
       true -> apply(mod, fun, args)

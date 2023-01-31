@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
   def validate([path], _) do
     dir = Path.dirname(path)
 
-    case File.exists?(dir, raw: true) do
+    case File.exists?(dir, [:raw]) do
       true -> :ok
       false -> {:validation_failure, {:bad_argument, "Directory #{dir} does not exist"}}
     end
@@ -76,7 +76,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
         body = serialise(result, format)
         abs_path = Path.absname(path)
 
-        File.rm(abs_path)
+        _ = File.rm(abs_path)
 
         case File.write(abs_path, body) do
           # no output
