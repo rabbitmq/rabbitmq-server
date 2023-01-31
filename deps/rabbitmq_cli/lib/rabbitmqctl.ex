@@ -245,9 +245,9 @@ defmodule RabbitMQCtl do
   defp handle_shutdown({_, exit_code, output}) do
     device = output_device(exit_code)
 
-    for line <- List.flatten([output]) do
+    Enum.each(List.flatten([output]), fn line ->
       IO.puts(device, Helpers.string_or_inspect(line))
-    end
+    end)
 
     exit_program(exit_code)
   end
