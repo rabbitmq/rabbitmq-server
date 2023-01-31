@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
   def receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, response_fun) do
     pid = Kernel.self()
     ref = Kernel.make_ref()
-    for {m, f, a} <- mfas, do: init_items_stream(node, m, f, a, timeout, pid, ref)
+    for {m, f, a} <- mfas, do: _ = init_items_stream(node, m, f, a, timeout, pid, ref)
 
     Stream.unfold(
       {chunks_init, :continue},

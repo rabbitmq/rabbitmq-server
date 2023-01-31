@@ -24,6 +24,7 @@ defmodule RabbitMQCtl do
   @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code(), term()} | term()
 
+  @spec main(list(string())) :: no_return()
   def main(["--auto-complete" | []]) do
     handle_shutdown(:ok)
   end
@@ -236,6 +237,7 @@ defmodule RabbitMQCtl do
     end
   end
 
+  @spec handle_shutdown({:error, integer(), nil}) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
   end
@@ -393,6 +395,7 @@ defmodule RabbitMQCtl do
 
   defp format_validation_error(err), do: inspect(err)
 
+  @spec exit_program(integer()) :: no_return()
   defp exit_program(code) do
     _ = :net_kernel.stop()
     exit({:shutdown, code})
