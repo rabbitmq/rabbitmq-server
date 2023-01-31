@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     Stream.concat([
       become(node_name, opts),
       RabbitMQ.CLI.Core.Helpers.defer(fn ->
-        :rabbit_event.start_link()
+        _ = :rabbit_event.start_link()
         :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
       end)
     ])

@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   end
 
   def validate([path], _) do
-    case File.exists?(path, raw: true) do
+    case File.exists?(path, [:raw]) do
       true -> :ok
       false -> {:validation_failure, {:bad_argument, "File #{path} does not exist"}}
     end
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, format: format, timeout: timeout}) do
-    case IO.read(:stdio, :all) do
+    case IO.read(:stdio, :eof) do
       :eof ->
         {:error, :not_enough_args}
 

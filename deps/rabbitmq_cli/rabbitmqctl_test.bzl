@@ -75,7 +75,6 @@ export ERL_COMPILER_OPTIONS=deterministic
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
-# "${{ABS_ELIXIR_HOME}}"/bin/mix dialyzer
 if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
     cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
 fi
@@ -140,7 +139,7 @@ cd %OUTPUTS_DIR% || goto :error
 set DEPS_DIR=%TEST_SRCDIR%/%TEST_WORKSPACE%/{package_dir}/{deps_dir}
 set DEPS_DIR=%DEPS_DIR:/=\\%
 set ERL_COMPILER_OPTIONS=deterministic
-set MIX_ENV=test mix dialyzer
+set MIX_ENV=test
 echo y | "{elixir_home}\\bin\\mix" local.hex --force || goto :error
 echo y | "{elixir_home}\\bin\\mix" local.rebar --force || goto :error
 "{elixir_home}\\bin\\mix" deps.get || goto :error

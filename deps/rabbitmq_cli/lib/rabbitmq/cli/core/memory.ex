@@ -90,7 +90,7 @@ defmodule RabbitMQ.CLI.Core.Memory do
   end
 
   def parse_watermark(n) when is_bitstring(n) do
-    case IU.parse(n) do
+    case IU.parse(to_charlist(n)) do
       {:ok, parsed} -> parsed
       err -> err
     end

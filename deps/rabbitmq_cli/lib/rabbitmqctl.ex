@@ -24,6 +24,7 @@ defmodule RabbitMQCtl do
   @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code(), term()} | term()
 
+  @spec main(list(string())) :: no_return()
   def main(["--auto-complete" | []]) do
     handle_shutdown(:ok)
   end
@@ -152,7 +153,7 @@ defmodule RabbitMQCtl do
   end
 
   defp proceed_to_execution(command, arguments, options) do
-    maybe_print_banner(command, arguments, options)
+    _ = maybe_print_banner(command, arguments, options)
     maybe_run_command(command, arguments, options)
   end
 
@@ -236,6 +237,7 @@ defmodule RabbitMQCtl do
     end
   end
 
+  @spec handle_shutdown({:error, integer(), nil}) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
   end
@@ -243,9 +245,9 @@ defmodule RabbitMQCtl do
   defp handle_shutdown({_, exit_code, output}) do
     device = output_device(exit_code)
 
-    for line <- List.flatten([output]) do
+    Enum.each(List.flatten([output]), fn line ->
       IO.puts(device, Helpers.string_or_inspect(line))
-    end
+    end)
 
     exit_program(exit_code)
   end
@@ -393,8 +395,9 @@ defmodule RabbitMQCtl do
 
   defp format_validation_error(err), do: inspect(err)
 
+  @spec exit_program(integer()) :: no_return()
   defp exit_program(code) do
-    :net_kernel.stop()
+    _ = :net_kernel.stop()
     exit({:shutdown, code})
   end
 
