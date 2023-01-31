@@ -23,9 +23,16 @@
 -include("rabbit_amqp1_0.hrl").
 
 assemble(MsgBin) ->
-    {RKey, Props, Content} = assemble(header, {<<"">>, #'P_basic'{}, []},
+    {RKey, Props, Content0} = assemble(header, {<<"">>, #'P_basic'{}, []},
                                       decode_section(MsgBin), MsgBin),
-    {RKey, #amqp_msg{props = Props, payload = Content}}.
+
+    Content1 = case Content0 of
+                   Sections when is_list(Content0) ->
+                       lists:reverse(Sections);
+                   _ ->
+                       Content0
+               end,
+    {RKey, #amqp_msg{props = Props, payload = Content1}}.
 
 assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
     assemble(message_annotations, {R, translate_header(H, P), C},
