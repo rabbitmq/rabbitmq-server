@@ -242,11 +242,12 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp assert_no_conflict(command, command_fields, formatter_fields, err) do
-    _ = merge_if_different(
-      formatter_fields,
-      command_fields,
-      {:command_invalid, {command, {err, formatter_fields, command_fields}}}
-    )
+    _ =
+      merge_if_different(
+        formatter_fields,
+        command_fields,
+        {:command_invalid, {command, {err, formatter_fields, command_fields}}}
+      )
 
     :ok
   end

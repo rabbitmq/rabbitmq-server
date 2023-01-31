@@ -14,8 +14,9 @@ defmodule RabbitMQ.CLI.Core.CodePath do
 
       val ->
         with {:ok, plugins_dir} <- val do
-          _ = String.split(to_string(plugins_dir), Platform.path_separator())
-          |> Enum.map(&add_directory_plugins_to_load_path/1)
+          _ =
+            String.split(to_string(plugins_dir), Platform.path_separator())
+            |> Enum.map(&add_directory_plugins_to_load_path/1)
 
           :ok
         end
