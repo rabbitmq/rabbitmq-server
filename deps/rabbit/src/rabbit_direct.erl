@@ -129,7 +129,7 @@ extract_extra_auth_props(Creds, VHost, Pid, Infos) ->
 append_authz_backends(AuthProps, Infos) ->
     case proplists:get_value(authz_backends, Infos, undefined) of
         undefined -> AuthProps;
-        Authz_backends -> AuthProps ++ Authz_backends
+        AuthzBackends -> AuthProps ++ AuthzBackends
     end.
 
 extract_protocol(Infos) ->
