@@ -286,7 +286,7 @@ parse(Data, ParseState) ->
         rabbit_mqtt_packet:parse(Data, ParseState)
     catch
         _:Reason:Stacktrace ->
-            ?LOG_ERROR("Web MQTT cannot parse a packet, reason: ~tp, stacktrace: ~tp, "
+            ?LOG_DEBUG("Web MQTT cannot parse a packet, reason: ~tp, stacktrace: ~tp, "
                        "payload (first 100 bytes): ~tp",
                        [Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Data, 100)]),
             {error, cannot_parse}
