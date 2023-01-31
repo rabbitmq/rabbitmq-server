@@ -237,6 +237,11 @@ defmodule RabbitMQCtl do
     end
   end
 
+  @spec handle_shutdown(:ok) :: no_return()
+  defp handle_shutdown(:ok) do
+    exit_program(0)
+  end
+
   @spec handle_shutdown({:error, integer(), nil}) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
