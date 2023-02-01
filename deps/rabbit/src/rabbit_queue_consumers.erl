@@ -193,9 +193,9 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
     end.
 
 -spec send_drained(rabbit_amqqueue:name()) -> 'ok'.
-
-send_drained(QName) -> [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
-                  ok.
+send_drained(QName) ->
+    [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
+    ok.
 
 -spec deliver(fun ((boolean()) -> {fetch_result(), T}),
               rabbit_amqqueue:name(), state(), boolean(),
@@ -528,7 +528,7 @@ send_drained(QName, C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     case rabbit_limiter:drained(Limiter) of
         {[],         Limiter}  -> C;
         {CTagCredits, Limiter2} ->
-            rabbit_classic_queue:send_drained(ChPid, QName, CTagCredits),
+            ok = rabbit_classic_queue:send_drained(ChPid, QName, CTagCredits),
             C#cr{limiter = Limiter2}
     end.
 
@@ -536,7 +536,7 @@ credit_and_drain(QName, C = #cr{ch_pid = ChPid, limiter = Limiter},
                  CTag, Credit, Mode, IsEmpty) ->
     case rabbit_limiter:credit(Limiter, CTag, Credit, Mode, IsEmpty) of
         {true,  Limiter1} ->
-            rabbit_classic_queue:send_drained(ChPid, QName, [{CTag, Credit}]),
+            ok = rabbit_classic_queue:send_drained(ChPid, QName, [{CTag, Credit}]),
             C#cr{limiter = Limiter1};
         {false, Limiter1} -> C#cr{limiter = Limiter1}
     end.
