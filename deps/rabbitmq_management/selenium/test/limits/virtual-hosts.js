@@ -8,7 +8,7 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 const AdminTab = require('../pageobjects/AdminTab')
 const LimitsAdminTab = require('../pageobjects/LimitsAdminTab')
 
-describe('List all virtual_host_limits', function () {
+describe('virtual_host_limits', function () {
   let login
   let overview
   let captureScreen
@@ -32,9 +32,8 @@ describe('List all virtual_host_limits', function () {
   it('when there are no limits', async function () {
     await overview.clickOnAdminTab()
     await adminTab.clickOnLimits()
+    assert.equal(0, (await limitsSection.list_virtual_host_limits()).length)
 
-    await limitsSection.list_virtual_host_limits()
-    
   })
 
 

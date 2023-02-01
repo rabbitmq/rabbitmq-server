@@ -8,7 +8,7 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 const AdminTab = require('../pageobjects/AdminTab')
 const LimitsAdminTab = require('../pageobjects/LimitsAdminTab')
 
-describe('List all user_limits', function () {
+describe('user_limits', function () {
   let login
   let overview
   let captureScreen
@@ -32,9 +32,7 @@ describe('List all user_limits', function () {
   it('when there are no limits', async function () {
     await overview.clickOnAdminTab()
     await adminTab.clickOnLimits()
-
-    await limitsSection.list_user_limits()
-
+    assert.equal(0, (await limitsSection.list_user_limits()).length)
   })
 
 
