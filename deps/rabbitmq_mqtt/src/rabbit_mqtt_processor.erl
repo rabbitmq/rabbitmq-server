@@ -176,14 +176,17 @@ process_connect(
             ra_register_state = RaRegisterState}}
     end,
     Result = case Result0 of
-                 {ok, State0} -> process_connect(State0);
-                 Error -> Error
+                 {ok, State0 = #state{}} ->
+                     process_connect(State0);
+                 {error, _} = Err0 ->
+                     Err0
              end,
     case Result of
-        {ok, SessPresent, State} ->
+        {ok, SessPresent, State = #state{}} ->
             send_conn_ack(?CONNACK_ACCEPT, SessPresent, ProtoVerAtom, SendFun),
             {ok, State};
-        {error, ReturnErrCode} = Err ->
+        {error, ReturnErrCode} = Err
+          when is_number(ReturnErrCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
@@ -206,7 +209,7 @@ process_connect(State0) ->
         rabbit_networking:register_non_amqp_connection(self()),
         {ok, SessPresent, State}
     else
-        Error ->
+        {error, _} = Error ->
             unregister_client(State0),
             Error
     end.
