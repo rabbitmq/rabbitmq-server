@@ -936,7 +936,7 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                       ignore  -> {Removed, State2}
                   end
           end, {[], State}, MsgIds),
-    noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds),
+    noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
                                          ignored, State1)));
 
 handle_cast({combine_files, Source, Destination, Reclaimed},
