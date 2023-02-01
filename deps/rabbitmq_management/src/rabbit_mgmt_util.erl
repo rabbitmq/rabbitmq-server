@@ -276,7 +276,6 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
         _                           -> []
     end,
     {IP, _} = cowboy_req:peer(ReqData),
-    RemoteAddress = list_to_binary(inet:ntoa(IP)),
     case rabbit_access_control:check_user_login(Username, AuthProps) of
         {ok, User = #user{username = ResolvedUsername, tags = Tags}} ->
             case rabbit_access_control:check_user_loopback(ResolvedUsername, IP) of
@@ -285,26 +284,24 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFail
                         true ->
                             case Fun(User) of
                                 true  ->
-                                    rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
-                                                                               ResolvedUsername, http),
+                                    rabbit_core_metrics:auth_attempt_succeeded(IP, ResolvedUsername, http),
                                     {true, ReqData,
                                      Context#context{user     = User,
                                                      password = Password}};
                                 false ->
-                                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
-                                                                            ResolvedUsername, http),
+                                    rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
                                     ErrFun(ResolvedUsername, ErrorMsg)
                             end;
                         false ->
-                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                            rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
                             ErrFun(ResolvedUsername, <<"Not management user">>)
                     end;
                 not_allowed ->
-                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                    rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
                     ErrFun(ResolvedUsername, <<"User can only log in via localhost">>)
             end;
         {refused, _Username, Msg, Args} ->
-            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
+            rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
             rabbit_log:warning("HTTP access denied: ~ts",
                                [rabbit_misc:format(Msg, Args)]),
             case ReplyWhenFailed of

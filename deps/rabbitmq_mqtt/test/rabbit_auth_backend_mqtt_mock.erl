@@ -27,7 +27,7 @@ setup(CallerPid) ->
     end.
 
 
-user_login_authentication(_, AuthProps) ->
+user_login_authentication(_Username, AuthProps) ->
     ets:insert(?MODULE, {authentication, AuthProps}),
     {ok, #auth_user{username = <<"dummy">>,
                     tags     = [],

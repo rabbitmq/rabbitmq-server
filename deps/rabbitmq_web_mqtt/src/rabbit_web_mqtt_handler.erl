@@ -33,13 +33,13 @@
 -record(state, {
           socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
           parse_state = rabbit_mqtt_packet:init_state() :: rabbit_mqtt_packet:state(),
-          proc_state :: undefined | rabbit_mqtt_processor:state(),
+          proc_state = connect_packet_unprocessed :: connect_packet_unprocessed |
+                                                     rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
           stats_timer :: option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-          conn_name :: option(binary()),
-          received_connect_packet = false :: boolean()
+          conn_name :: option(binary())
         }).
 
 -type state() :: #state{}.
@@ -97,12 +97,7 @@ websocket_init(State0 = #state{socket = Sock}) ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
             _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-            PState = rabbit_mqtt_processor:initial_state(
-                       rabbit_net:unwrap_socket(Sock),
-                       ConnName,
-                       fun send_reply/2),
-            State1 = State0#state{conn_name = ConnName,
-                                  proc_state = PState},
+            State1 = State0#state{conn_name = ConnName},
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
             process_flag(trap_exit, true),
             {[], State, hibernate};
@@ -220,8 +215,6 @@ websocket_info(Msg, State) ->
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
     {[], State, hibernate}.
 
-terminate(_Reason, _Req, #state{proc_state = undefined}) ->
-    ok;
 terminate(Reason, Request, #state{} = State) ->
     terminate(Reason, Request, {true, State});
 terminate(_Reason, _Request,
@@ -232,7 +225,12 @@ terminate(_Reason, _Request,
     maybe_emit_stats(State),
     _ = rabbit_mqtt_keepalive:cancel_timer(KState),
     ok = file_handle_cache:release(),
-    rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState).
+    case PState of
+        connect_packet_unprocessed ->
+            ok;
+        _ ->
+            rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState)
+    end.
 
 %% Internal.
 
@@ -249,33 +247,46 @@ handle_data(Data, State0 = #state{}) ->
             Other
     end.
 
-handle_data1(<<>>, State0 = #state{received_connect_packet = false,
-                                   proc_state = PState,
-                                   conn_name = ConnName}) ->
-    ?LOG_INFO("Accepted web MQTT connection ~p (~s, client ID: ~s)",
-              [self(), ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
-    State = State0#state{received_connect_packet = true},
-    {ok, ensure_stats_timer(control_throttle(State)), hibernate};
 handle_data1(<<>>, State) ->
     {ok, ensure_stats_timer(control_throttle(State)), hibernate};
-handle_data1(Data, State = #state{ parse_state = ParseState,
-                                   proc_state  = ProcState,
-                                   conn_name   = ConnName }) ->
+handle_data1(Data, State = #state{socket = Socket,
+                                  parse_state = ParseState,
+                                  proc_state = ProcState,
+                                  conn_name = ConnName}) ->
     case parse(Data, ParseState) of
         {more, ParseState1} ->
-            {ok, ensure_stats_timer(control_throttle(
-                State #state{ parse_state = ParseState1 })), hibernate};
+            {ok, ensure_stats_timer(
+                   control_throttle(
+                     State#state{parse_state = ParseState1})), hibernate};
         {ok, Packet, Rest} ->
-            case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
-                {ok, ProcState1} ->
-                    handle_data1(
-                      Rest,
-                      State#state{parse_state = rabbit_mqtt_packet:reset_state(),
-                                  proc_state = ProcState1});
-                {error, Reason, _} ->
-                    stop_mqtt_protocol_error(State, Reason, ConnName);
-                {stop, disconnect, ProcState1} ->
-                    stop({_SendWill = false, State#state{proc_state = ProcState1}})
+            case ProcState of
+                connect_packet_unprocessed ->
+                    case rabbit_mqtt_processor:init(Packet, rabbit_net:unwrap_socket(Socket),
+                                                    ConnName, fun send_reply/1) of
+                        {ok, ProcState1} ->
+                            ?LOG_INFO("Accepted Web MQTT connection ~ts for client ID ~ts",
+                                      [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),
+                            handle_data1(
+                              Rest, State#state{parse_state = rabbit_mqtt_packet:reset_state(),
+                                                proc_state = ProcState1});
+                        {error, Reason} ->
+                            ?LOG_ERROR("Rejected Web MQTT connection ~ts: ~p", [ConnName, Reason]),
+                            stop_mqtt_protocol_error({_SendWill = false, State},
+                                                     connect_packet_rejected,
+                                                     ConnName)
+                    end;
+                _ ->
+                    case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
+                        {ok, ProcState1} ->
+                            handle_data1(
+                              Rest,
+                              State#state{parse_state = rabbit_mqtt_packet:reset_state(),
+                                          proc_state = ProcState1});
+                        {error, Reason, _} ->
+                            stop_mqtt_protocol_error(State, Reason, ConnName);
+                        {stop, disconnect, ProcState1} ->
+                            stop({_SendWill = false, State#state{proc_state = ProcState1}})
+                    end
             end;
         {error, Reason} ->
             stop_mqtt_protocol_error(State, Reason, ConnName)
@@ -313,11 +324,13 @@ handle_credits(State0) ->
 
 control_throttle(State = #state{connection_state = ConnState,
                                 conserve = Conserve,
-                                received_connect_packet = Connected,
                                 proc_state = PState,
                                 keepalive = KState
                                }) ->
-    Throttle = rabbit_mqtt_processor:throttle(Conserve, Connected, PState),
+    Throttle = case PState of
+                   connect_packet_unprocessed -> Conserve;
+                   _ -> rabbit_mqtt_processor:throttle(Conserve, PState)
+               end,
     case {ConnState, Throttle} of
         {running, true} ->
             State#state{connection_state = blocked,
@@ -329,8 +342,10 @@ control_throttle(State = #state{connection_state = ConnState,
             State
     end.
 
-send_reply(Packet, PState) ->
-    self() ! {reply, rabbit_mqtt_processor:serialise(Packet, PState)}.
+-spec send_reply(iodata()) -> ok.
+send_reply(Data) ->
+    self() ! {reply, Data},
+    ok.
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
@@ -341,7 +356,7 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                                 fun() -> emit_stats(State) end).
 
-emit_stats(State=#state{received_connect_packet = false}) ->
+emit_stats(State=#state{proc_state = connect_packet_unprocessed}) ->
     %% Avoid emitting stats on terminate when the connection has not yet been
     %% established, as this causes orphan entries on the stats database
     rabbit_event:reset_stats_timer(State, #state.stats_timer);
@@ -399,7 +414,7 @@ i(Cert, #state{socket = Sock})
     rabbit_ssl:cert_info(Cert, rabbit_net:unwrap_socket(Sock));
 i(state, S) ->
     i(connection_state, S);
-i(connection_state, #state{received_connect_packet = false}) ->
+i(connection_state, #state{proc_state = connect_packet_unprocessed}) ->
     starting;
 i(connection_state, #state{connection_state = Val}) ->
     Val;
