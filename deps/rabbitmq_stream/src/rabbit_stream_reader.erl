@@ -1322,14 +1322,13 @@ handle_frame_pre_auth(Transport,
                         AS ->
                             AS
                     end,
-                RemoteAddress = list_to_binary(inet:ntoa(Host)),
                 C1 = Connection0#stream_connection{auth_mechanism =
                                                        {Mechanism,
                                                         AuthMechanism}},
                 {C2, CmdBody} =
                     case AuthMechanism:handle_response(SaslBin, AuthState) of
                         {refused, Username, Msg, Args} ->
-                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
+                            rabbit_core_metrics:auth_attempt_failed(Host,
                                                                     Username,
                                                                     stream),
                             auth_fail(Username, Msg, Args, C1, State),
@@ -1338,7 +1337,7 @@ handle_frame_pre_auth(Transport,
                              {sasl_authenticate,
                               ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
                         {protocol_error, Msg, Args} ->
-                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
+                            rabbit_core_metrics:auth_attempt_failed(Host,
                                                                     <<>>,
                                                                     stream),
                             notify_auth_result(none,
@@ -1352,7 +1351,7 @@ handle_frame_pre_auth(Transport,
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
                         {challenge, Challenge, AuthState1} ->
-                            rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
+                            rabbit_core_metrics:auth_attempt_succeeded(Host,
                                                                        <<>>,
                                                                        stream),
                             {C1#stream_connection{authentication_state =
@@ -1367,7 +1366,7 @@ handle_frame_pre_auth(Transport,
                                                                           S)
                             of
                                 ok ->
-                                    rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
+                                    rabbit_core_metrics:auth_attempt_succeeded(Host,
                                                                                Username,
                                                                                stream),
                                     notify_auth_result(Username,
@@ -1383,7 +1382,7 @@ handle_frame_pre_auth(Transport,
                                      {sasl_authenticate, ?RESPONSE_CODE_OK,
                                       <<>>}};
                                 not_allowed ->
-                                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
+                                    rabbit_core_metrics:auth_attempt_failed(Host,
                                                                             Username,
                                                                             stream),
                                     rabbit_log_connection:warning("User '~ts' can only connect via localhost",

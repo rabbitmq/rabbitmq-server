@@ -201,6 +201,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -syslog logger [] ^
 -syslog syslog_error_logger false ^
 -kernel prevent_overlapping_partitions false ^
+-enable-feature maybe_expr ^
 !STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!

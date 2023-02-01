@@ -45,6 +45,8 @@
 %% The Client is not authorized to connect.
 -define(CONNACK_NOT_AUTHORIZED,         5).
 
+-type connack_return_code() :: ?CONNACK_ACCEPT..?CONNACK_NOT_AUTHORIZED.
+
 %% qos levels
 
 -define(QOS_0, 0).
@@ -70,20 +72,20 @@
 
 -type mqtt_packet() :: #mqtt_packet{}.
 
--record(mqtt_packet_connect,  {proto_ver,
-                               will_retain,
-                               will_qos,
-                               will_flag,
-                               clean_sess,
-                               keep_alive,
-                               client_id,
-                               will_topic,
-                               will_msg,
-                               username,
-                               password}).
+-record(mqtt_packet_connect,  {proto_ver :: 3 | 4,
+                               will_retain :: boolean(),
+                               will_qos :: 0..2,
+                               will_flag :: boolean(),
+                               clean_sess :: boolean(),
+                               keep_alive :: non_neg_integer(),
+                               client_id :: binary(),
+                               will_topic :: option(binary()),
+                               will_msg :: option(binary()),
+                               username :: option(binary()),
+                               password :: option(binary())}).
 
--record(mqtt_packet_connack,  {session_present,
-                               return_code}).
+-record(mqtt_packet_connack,  {session_present :: boolean(),
+                               return_code :: connack_return_code()}).
 
 -record(mqtt_packet_publish,  {topic_name :: undefined | binary(),
                                packet_id :: packet_id()}).

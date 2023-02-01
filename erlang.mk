@@ -6667,7 +6667,8 @@ CT_RUN = ct_run \
 	-noinput \
 	-pa $(CURDIR)/ebin $(TEST_DIR) \
 	-dir $(TEST_DIR) \
-	-logdir $(CT_LOGS_DIR)
+	-logdir $(CT_LOGS_DIR) \
+	-enable-feature maybe_expr
 
 ifeq ($(CT_SUITES),)
 ct: $(if $(IS_APP)$(ROOT_DIR),,apps-ct)

@@ -71,6 +71,7 @@ if "!RABBITMQ_ALLOW_INPUT!"=="" (
 -syslog logger [] ^
 -syslog syslog_error_logger false ^
 -kernel prevent_overlapping_partitions false ^
+-enable-feature maybe_expr ^
 !STAR!
 
 if ERRORLEVEL 1 (

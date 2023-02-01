@@ -18,8 +18,6 @@
          path_for/2,
          path_for/3,
          vhost_name_to_table_name/1,
-         register_clientid/2,
-         remove_duplicate_clientid_connections/2,
          init_sparkplug/0,
          mqtt_to_amqp/1,
          amqp_to_mqtt/1,
@@ -173,35 +171,6 @@ path_for(Dir, VHost, Suffix) ->
 vhost_name_to_table_name(VHost) ->
     <<Num:128>> = erlang:md5(VHost),
     list_to_atom("rabbit_mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num])).
-
--spec register_clientid(rabbit_types:vhost(), binary()) -> ok.
-register_clientid(Vhost, ClientId)
-  when is_binary(Vhost), is_binary(ClientId) ->
-    PgGroup = {Vhost, ClientId},
-    ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
-    case rabbit_mqtt_ff:track_client_id_in_ra() of
-        true ->
-            %% Ra node takes care of removing duplicate client ID connections.
-            ok;
-        false ->
-            ok = erpc:multicast([node() | nodes()],
-                                ?MODULE,
-                                remove_duplicate_clientid_connections,
-                                [PgGroup, self()])
-    end.
-
--spec remove_duplicate_clientid_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
-remove_duplicate_clientid_connections(PgGroup, PidToKeep) ->
-    try persistent_term:get(?PG_SCOPE) of
-        PgScope ->
-            Pids = pg:get_local_members(PgScope, PgGroup),
-            lists:foreach(fun(Pid) ->
-                                  gen_server:cast(Pid, duplicate_id)
-                          end, Pids -- [PidToKeep])
-    catch _:badarg ->
-              %% MQTT supervision tree on this node not fully started
-              ok
-    end.
 
 -spec truncate_binary(binary(), non_neg_integer()) -> binary().
 truncate_binary(Bin, Size)

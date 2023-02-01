@@ -1401,18 +1401,10 @@ auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
                                        auth_mechanism = {Name, AuthMechanism},
-                                       auth_state     = AuthState},
+                                       auth_state     = AuthState,
+                                       host           = RemoteAddress},
                        sock = Sock}) ->
-    rabbit_log:debug("Raw client connection hostname during authN phase: ~tp", [Connection#connection.host]),
-    RemoteAddress = case Connection#connection.host of
-        %% the hostname was already resolved, e.g. by reverse DNS lookups
-        Bin when is_binary(Bin) -> Bin;
-        %% the hostname is an IP address
-        Tuple when is_tuple(Tuple) ->
-            rabbit_data_coercion:to_binary(inet:ntoa(Connection#connection.host));
-        Other -> rabbit_data_coercion:to_binary(Other)
-    end,
-    rabbit_log:debug("Resolved client hostname during authN phase: ~ts", [RemoteAddress]),
+    rabbit_log:debug("Client address during authN phase: ~tp", [RemoteAddress]),
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),

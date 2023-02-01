@@ -390,7 +390,7 @@ gen_server2_deleted(Pid) ->
 
 get_gen_server2_stats(Pid) ->
     case ets:lookup(gen_server2_metrics, Pid) of
-        [{Pid, BufferLength}] ->
+        [{_, BufferLength}] ->
             BufferLength;
         [] ->
             not_found
@@ -409,11 +409,17 @@ update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It's up to the operator to enable them, and reset it required
     _ = case application:get_env(rabbit, track_auth_attempt_source) of
         {ok, true} ->
-            case {RemoteAddress, Username} of
+            Addr = case inet:is_ip_address(RemoteAddress) of
+                       true ->
+                           list_to_binary(inet:ntoa(RemoteAddress));
+                       false ->
+                           rabbit_data_coercion:to_binary(RemoteAddress)
+                   end,
+            case {Addr, Username} of
                 {<<>>, <<>>} ->
                     ok;
                 _ ->
-                    Key = {RemoteAddress, Username, Protocol},
+                    Key = {Addr, Username, Protocol},
                     _ = ets:update_counter(auth_attempt_detailed_metrics, Key, Incr, {Key, 0, 0, 0})
             end;
         {ok, false} ->

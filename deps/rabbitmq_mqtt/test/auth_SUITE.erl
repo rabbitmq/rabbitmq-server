@@ -534,8 +534,8 @@ no_queue_bind_permission(Config) ->
     ["MQTT resource access refused: write access to queue "
      "'mqtt-subscription-mqtt-userqos0' in vhost 'mqtt-vhost' "
      "refused for user 'mqtt-user'",
-     "Failed to bind queue 'mqtt-subscription-mqtt-userqos0' "
-     "in vhost 'mqtt-vhost' with topic test/topic: access_refused"
+     "Failed to add binding between exchange 'amq.topic' in vhost 'mqtt-vhost' and queue "
+     "'mqtt-subscription-mqtt-userqos0' in vhost 'mqtt-vhost' for topic test/topic: access_refused"
     ],
     test_subscribe_permissions_combination(<<".*">>, <<"">>, <<".*">>, Config, ExpectedLogs).
 
@@ -570,8 +570,8 @@ no_queue_unbind_permission(Config) ->
     ok = assert_connection_closed(C2),
     ExpectedLogs =
     ["MQTT resource access refused: read access to exchange 'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
-     "Failed to unbind queue 'mqtt-subscription-mqtt-userqos1' in vhost 'mqtt-vhost' with topic 'my/topic': access_refused",
-     "MQTT protocol error on connection.*: subscribe_error"
+     "Failed to remove binding between exchange 'amq.topic' in vhost 'mqtt-vhost' and queue "
+     "'mqtt-subscription-mqtt-userqos1' in vhost 'mqtt-vhost' for topic my/topic: access_refused"
     ],
     wait_log(Config, [?FAIL_IF_CRASH_LOG, {ExpectedLogs, fun () -> stop end}]),
 
@@ -619,7 +619,7 @@ no_queue_delete_permission(Config) ->
        ,{[io_lib:format("MQTT resource access refused: configure access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "MQTT connection .* is closing due to an authorization failure"],
+          "Rejected MQTT connection .* with CONNACK return code 5"],
          fun() -> stop end}
       ]),
     ok.
@@ -653,7 +653,7 @@ no_queue_consume_permission_on_connect(Config) ->
        ,{[io_lib:format("MQTT resource access refused: read access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "MQTT connection .* is closing due to an authorization failure"],
+          "Rejected MQTT connection .* with CONNACK return code 5"],
          fun () -> stop end}
       ]),
     ok.
@@ -713,8 +713,8 @@ no_topic_read_permission(Config) ->
              [?FAIL_IF_CRASH_LOG,
               {["MQTT topic access refused: read access to topic 'test.topic' in exchange "
                 "'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
-                "Failed to bind queue 'mqtt-subscription-mqtt-userqos0' "
-                "in vhost 'mqtt-vhost' with topic test/topic: access_refused"
+                "Failed to add binding between exchange 'amq.topic' in vhost 'mqtt-vhost' and queue "
+                "'mqtt-subscription-mqtt-userqos0' in vhost 'mqtt-vhost' for topic test/topic: access_refused"
                ],
                fun () -> stop end}
              ]),
@@ -757,7 +757,7 @@ loopback_user_connects_from_remote_host(Config) ->
     wait_log(Config,
              [?FAIL_IF_CRASH_LOG,
               {["MQTT login failed: user 'mqtt-user' can only connect via localhost",
-                "MQTT connection .* is closing due to an authorization failure"],
+                "Rejected MQTT connection .* with CONNACK return code 5"],
                fun () -> stop end}
              ]),
 
