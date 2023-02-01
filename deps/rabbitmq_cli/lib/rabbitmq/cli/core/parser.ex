@@ -8,6 +8,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
   alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
 
+  @dialyzer [:no_unused, :no_return]
+
   def default_switches() do
     [
       node: :string,

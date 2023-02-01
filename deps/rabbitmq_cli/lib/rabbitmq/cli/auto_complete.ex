@@ -10,6 +10,8 @@ defmodule RabbitMQ.CLI.AutoComplete do
   # Use the same jaro distance limit as in Elixir's "did you mean?"
   @jaro_distance_limit 0.77
 
+  @dialyzer :no_unused
+
   @spec complete(String.t(), [String.t()]) :: [String.t()]
   def complete(_, []) do
     []
