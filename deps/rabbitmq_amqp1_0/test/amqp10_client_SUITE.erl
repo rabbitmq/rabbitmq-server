@@ -24,7 +24,14 @@ groups() ->
     [
      {tests, [], [
                   reliable_send_receive_with_outcomes,
+<<<<<<< HEAD
                   roundtrip_quorum_queue_with_drain
+=======
+                  roundtrip_classic_queue_with_drain,
+                  roundtrip_quorum_queue_with_drain,
+                  roundtrip_stream_queue_with_drain,
+                  message_headers_conversion
+>>>>>>> cb9aa68fec (Fix channel crash when draining AMQP 1.0 credits from classic queue)
                  ]},
      {metrics, [], [
                     auth_attempt_metrics
@@ -164,16 +171,28 @@ reliable_send_receive(Config, Outcome) ->
 
     ok.
 
+roundtrip_classic_queue_with_drain(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
+    roundtrip_queue_with_drain(Config, <<"classic">>, QName).
+
 roundtrip_quorum_queue_with_drain(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
+    roundtrip_queue_with_drain(Config, <<"quorum">>, QName).
+
+roundtrip_stream_queue_with_drain(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
+    roundtrip_queue_with_drain(Config, <<"stream">>, QName).
+
+roundtrip_queue_with_drain(Config, QueueType, QName) when is_binary(QueueType) ->
     Host = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
     Address = <<"/amq/queue/", QName/binary>>,
-    %% declare a quorum queue
+    %% declare a queue
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Args = [{<<"x-queue-type">>, longstr, QueueType}],
     amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                            durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+                                           arguments = Args}),
     % create a configuration map
     OpnConf = #{address => Host,
                 port => Port,
@@ -201,16 +220,29 @@ roundtrip_quorum_queue_with_drain(Config) ->
 
     flush("pre-receive"),
     % create a receiver link
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"test-receiver">>,
-                                                        Address),
+
+    TerminusDurability = none,
+    Filter = case QueueType of
+                 <<"stream">> ->
+                     #{<<"rabbitmq:stream-offset-spec">> => <<"first">>};
+                 _ ->
+                     #{}
+             end,
+    Properties = #{},
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"test-receiver">>,
+                                                        Address, unsettled,
+                                                        TerminusDurability,
+                                                        Filter, Properties),
 
     % grant credit and drain
     ok = amqp10_client:flow_link_credit(Receiver, 1, never, true),
 
     % wait for a delivery
     receive
-        {amqp10_msg, Receiver, _InMsg} -> ok
+        {amqp10_msg, Receiver, InMsg} ->
+            ok = amqp10_client:accept_msg(Receiver, InMsg),
+            wait_for_accepts(1),
+            ok
     after 2000 ->
               exit(delivery_timeout)
     end,

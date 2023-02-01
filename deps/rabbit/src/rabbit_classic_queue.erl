@@ -555,6 +555,7 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
             gen_server2:cast(Pid, Deliver)
     end.
 
+<<<<<<< HEAD
 send_drained(Pid, QName, CTagCredits) ->
     case has_classic_queue_type_delivery_support() of
         true ->
@@ -563,6 +564,16 @@ send_drained(Pid, QName, CTagCredits) ->
         false ->
             gen_server2:cast(Pid, {send_drained, CTagCredits})
     end.
+=======
+send_drained(Pid, QName, CTagCredits) when is_list(CTagCredits) ->
+    [_ = gen_server:cast(Pid, {queue_event, QName,
+                               {send_drained, CTagCredit}})
+     || CTagCredit <- CTagCredits],
+    ok;
+send_drained(Pid, QName, CTagCredit) when is_tuple(CTagCredit) ->
+    gen_server:cast(Pid, {queue_event, QName,
+                          {send_drained, CTagCredit}}).
+>>>>>>> 3bb32737ee (Fix channel crash when draining AMQP 1.0 credits from classic queue)
 
 send_credit_reply(Pid, QName, Len) when is_integer(Len) ->
     case rabbit_queue_type:is_supported() of
