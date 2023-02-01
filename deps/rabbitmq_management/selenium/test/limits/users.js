@@ -8,7 +8,11 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 const AdminTab = require('../pageobjects/AdminTab')
 const LimitsAdminTab = require('../pageobjects/LimitsAdminTab')
 
+<<<<<<< HEAD
 describe('user_limits', function () {
+=======
+describe('List all user_limits', function () {
+>>>>>>> 5ad72497a3 (Test display limits when there are none)
   let login
   let overview
   let captureScreen
@@ -32,7 +36,13 @@ describe('user_limits', function () {
   it('when there are no limits', async function () {
     await overview.clickOnAdminTab()
     await adminTab.clickOnLimits()
+<<<<<<< HEAD
     assert.equal(0, (await limitsSection.list_user_limits()).length)
+=======
+
+    await limitsSection.list_user_limits()
+
+>>>>>>> 5ad72497a3 (Test display limits when there are none)
   })
 
 
