@@ -619,6 +619,7 @@ var is_user_policymaker;         // ...user is not a policymaker
 var user_monitor;                // ...user cannot monitor
 var nodes_interesting;           // ...we are not in a cluster
 var vhosts_interesting;          // ...there is only one vhost
+var edit_op_policy_enabled;      // ...editing operator policies is enabled
 var queue_type;
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
 var disable_stats;               // ...disable all stats, management only mode
@@ -643,6 +644,7 @@ var user;
 function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
     rates_mode = overview.rates_mode;
+    edit_op_policy_enabled = overview.edit_op_policy_enabled;
     user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;

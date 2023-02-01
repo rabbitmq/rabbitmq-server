@@ -40,10 +40,14 @@ notify_clear(_, _, _, _) -> ok.
 %----------------------------------------------------------------------------
 
 register_policy_validator() ->
+    rabbit_registry:register(operator_policy_validator, <<"testeven">>, ?MODULE),
+    rabbit_registry:register(operator_policy_validator, <<"testpos">>,  ?MODULE),
     rabbit_registry:register(policy_validator, <<"testeven">>, ?MODULE),
     rabbit_registry:register(policy_validator, <<"testpos">>,  ?MODULE).
 
 unregister_policy_validator() ->
+    rabbit_registry:unregister(operator_policy_validator, <<"testeven">>),
+    rabbit_registry:unregister(operator_policy_validator, <<"testpos">>),
     rabbit_registry:unregister(policy_validator, <<"testeven">>),
     rabbit_registry:unregister(policy_validator, <<"testpos">>).
 

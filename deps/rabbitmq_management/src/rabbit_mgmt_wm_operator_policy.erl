@@ -72,7 +72,12 @@ delete_resource(ReqData, Context = #context{user = #user{username = Username}}) 
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    case rabbit_mgmt_features:is_edit_op_policy_disabled() of
+        true ->
+            rabbit_mgmt_util:method_not_allowed(<<"Broker settings disallow editing of operator policies.">>, ReqData, Context);
+        false ->
+            rabbit_mgmt_util:is_authorized_admin(ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 

@@ -51,6 +51,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {erlang_full_version,       erlang_full_version()},
                  {release_series_support_status, rabbit_release_series:readable_support_status()},
                  {disable_stats,                 rabbit_mgmt_util:disable_stats(ReqData)},
+                 {edit_op_policy_enabled,        not rabbit_mgmt_features:is_edit_op_policy_disabled()},
                  {enable_queue_totals,           rabbit_mgmt_util:enable_queue_totals(ReqData)}],
     try
         case rabbit_mgmt_util:disable_stats(ReqData) of

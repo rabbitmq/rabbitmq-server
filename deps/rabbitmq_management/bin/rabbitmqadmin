@@ -632,6 +632,8 @@ class Management:
             die("Access refused: {0}".format(path))
         if resp.status == 404:
             die("Not found: {0}".format(path))
+        if resp.status == 405:
+            die("Method not allowed: {0}".format(json.loads(resp.read())['reason']))
         if resp.status == 301:
             url = urlparse.urlparse(resp.getheader('location'))
             [host, port] = url.netloc.split(':')
