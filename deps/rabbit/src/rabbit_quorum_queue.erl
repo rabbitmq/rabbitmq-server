@@ -8,6 +8,8 @@
 -module(rabbit_quorum_queue).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_merge_strategy).
 
 -export([init/1,
          close/1,
@@ -66,6 +68,8 @@
          declare/2,
          is_stateful/0]).
 
+-export([validate_policy/1, merge_policy_value/3]).
+
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
                                  qname_to_internal_name/1]).
 
@@ -110,6 +114,30 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
+
+%%----------- QQ policies ---------------------------------------------------
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "QQ policy validation"},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"target-qq-replica-count">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"target-qq-replica-count">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"target-qq-replica-count">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
+
+validate_policy(Args) ->
+    Count = proplists:get_value(<<"target-qq-replica-count">>, Args, none),
+    case is_integer(Count) andalso Count > 0 of
+        true -> ok;
+        false -> {error, "~tp is not a valid qq target count value", [Count]}
+    end.
+
+merge_policy_value(<<"target-qq-replica-count">>, _Val, OpVal) ->
+    OpVal.
 
 %%----------- rabbit_queue_type ---------------------------------------------
 

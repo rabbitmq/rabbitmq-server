@@ -142,6 +142,7 @@ all_tests() ->
      consumer_metrics,
      invalid_policy,
      pre_existing_invalid_policy,
+     target_count_policy,
      delete_if_empty,
      delete_if_unused,
      queue_ttl,
@@ -1106,6 +1107,31 @@ pre_existing_invalid_policy(Config) ->
     ?assertEqual('', proplists:get_value(policy, Info)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>),
     ok.
+
+target_count_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"regular-target">>, <<"target_count_policy.*">>, <<"queues">>,
+           [{<<"target-qq-replica-count">>, 3}]),
+    Info = rpc:call(Server, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    ?assertEqual(<<"regular-target">>, proplists:get_value(policy, Info)),
+    ?assertEqual([{<<"target-qq-replica-count">>,3}],
+                 proplists:get_value(effective_policy_definition, Info)),
+    ok = rabbit_ct_broker_helpers:set_operator_policy(
+           Config, 0, <<"oper-target">>, <<"target_count_policy.*">>, <<"queues">>,
+           [{<<"target-qq-replica-count">>, 5}]),
+    InfoOp = rpc:call(Server, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    ?assertEqual(<<"oper-target">>, proplists:get_value(operator_policy, InfoOp)),
+    ?assertEqual([{<<"target-qq-replica-count">>,5}],
+                 proplists:get_value(effective_policy_definition, InfoOp)),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"regular-target">>),
+    ok = rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"oper-target">>).
 
 dead_letter_to_quorum_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
