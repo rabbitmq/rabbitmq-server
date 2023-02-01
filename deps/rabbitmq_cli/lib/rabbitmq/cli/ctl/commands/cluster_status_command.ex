@@ -111,7 +111,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)
 
-    total_cores = Enum.reduce(m[:cpu_cores], 0, fn ({_, val}, acc) -> acc + val end)
+    total_cores = Enum.reduce(m[:cpu_cores], 0, fn {_, val}, acc -> acc + val end)
+
     cluster_name_section = [
       "#{bright("Basics")}\n",
       "Cluster name: #{m[:cluster_name]}",
@@ -394,7 +395,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   end
 
   defp cpu_core_lines(mapping) do
-    Enum.map(mapping, fn {node, core_count} -> "Node: #{node}, available CPU cores: #{core_count}" end)
+    Enum.map(mapping, fn {node, core_count} ->
+      "Node: #{node}, available CPU cores: #{core_count}"
+    end)
   end
 
   defp maintenance_lines(mapping) do
