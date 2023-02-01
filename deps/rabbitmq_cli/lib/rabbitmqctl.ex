@@ -24,7 +24,7 @@ defmodule RabbitMQCtl do
   @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code(), term()} | term()
 
-  @spec main(list(string())) :: no_return()
+  @spec main(list()) :: no_return()
   def main(["--auto-complete" | []]) do
     handle_shutdown(:ok)
   end
@@ -50,14 +50,14 @@ defmodule RabbitMQCtl do
     {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")}
   end
 
-  def exec_command(["--version"] = _unparsed_command, opts) do
+  def exec_command(["--version"] = _unparsed_command, output_fun) do
     # rewrite `--version` as `version`
-    exec_command(["version"], opts)
+    exec_command(["version"], output_fun)
   end
 
-  def exec_command(["--auto-complete" | args], opts) do
+  def exec_command(["--auto-complete" | args], output_fun) do
     # rewrite `--auto-complete` as `autocomplete`
-    exec_command(["autocomplete" | args], opts)
+    exec_command(["autocomplete" | args], output_fun)
   end
 
   def exec_command(unparsed_command, output_fun) do
@@ -237,12 +237,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  @spec handle_shutdown(:ok) :: no_return()
-  defp handle_shutdown(:ok) do
-    exit_program(0)
-  end
-
-  @spec handle_shutdown({:error, integer(), nil}) :: no_return()
+  @spec handle_shutdown({:error, integer(), nil} | atom()) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
   end
