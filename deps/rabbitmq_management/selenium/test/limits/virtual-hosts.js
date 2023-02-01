@@ -9,10 +9,14 @@ const AdminTab = require('../pageobjects/AdminTab')
 const LimitsAdminTab = require('../pageobjects/LimitsAdminTab')
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 describe('virtual_host_limits', function () {
 =======
 describe('List all virtual_host_limits', function () {
 >>>>>>> 5ad72497a3 (Test display limits when there are none)
+=======
+describe('virtual_host_limits', function () {
+>>>>>>> 166faa3629 (Test when there are zero limits)
   let login
   let overview
   let captureScreen
@@ -37,6 +41,7 @@ describe('List all virtual_host_limits', function () {
     await overview.clickOnAdminTab()
     await adminTab.clickOnLimits()
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert.equal(0, (await limitsSection.list_virtual_host_limits()).length)
 
 =======
@@ -44,6 +49,10 @@ describe('List all virtual_host_limits', function () {
     await limitsSection.list_virtual_host_limits()
     
 >>>>>>> 5ad72497a3 (Test display limits when there are none)
+=======
+    assert.equal(0, (await limitsSection.list_virtual_host_limits()).length)
+
+>>>>>>> 166faa3629 (Test when there are zero limits)
   })
 
 
