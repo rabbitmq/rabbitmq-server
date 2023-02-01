@@ -551,9 +551,14 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {queue_event, QName, Deliver},
     gen_server:cast(Pid, Evt).
 
-send_drained(Pid, QName, CTagCredits) ->
+send_drained(Pid, QName, CTagCredits) when is_list(CTagCredits) ->
+    [_ = gen_server:cast(Pid, {queue_event, QName,
+                               {send_drained, CTagCredit}})
+     || CTagCredit <- CTagCredits],
+    ok;
+send_drained(Pid, QName, CTagCredit) when is_tuple(CTagCredit) ->
     gen_server:cast(Pid, {queue_event, QName,
-                          {send_drained, CTagCredits}}).
+                          {send_drained, CTagCredit}}).
 
 send_credit_reply(Pid, QName, Len) when is_integer(Len) ->
     gen_server:cast(Pid, {queue_event, QName,

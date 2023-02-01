@@ -269,7 +269,16 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
                            snd_settle_mode(), terminus_durability(), filter(),
                            properties()) ->
     {ok, link_ref()}.
-attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties) ->
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties)
+  when is_pid(Session) andalso
+       is_binary(Name) andalso
+       is_binary(Source) andalso
+       (SettleMode == unsettled orelse
+        SettleMode == settled orelse
+        SettleMode == mixed) andalso
+       is_atom(Durability) andalso
+       is_map(Filter) andalso
+       is_map(Properties) ->
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source,
                                         durable => Durability}, self()},
