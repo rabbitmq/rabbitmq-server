@@ -63,6 +63,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
                 fn n -> maintenance_status_by_node(n, per_node_timeout(timeout, count)) end
               )
 
+            cpu_cores_by_node =
+              Enum.map(
+                nodes,
+                fn n -> cpu_cores_by_node(n, per_node_timeout(timeout, count)) end
+              )
+
             feature_flags =
               case :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], timeout) do
                 {:badrpc, {:EXIT, {:undef, _}}} -> []
@@ -74,6 +80,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
               [{:alarms, alarms_by_node}] ++
               [{:listeners, listeners_by_node}] ++
               [{:versions, versions_by_node}] ++
+              [{:cpu_cores, cpu_cores_by_node}] ++
               [{:maintenance_status, maintenance_status_by_node}] ++
               [{:feature_flags, feature_flags}]
         end
@@ -104,9 +111,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)
 
+    total_cores = Enum.reduce(m[:cpu_cores], 0, fn {_, val}, acc -> acc + val end)
+
     cluster_name_section = [
       "#{bright("Basics")}\n",
-      "Cluster name: #{m[:cluster_name]}"
+      "Cluster name: #{m[:cluster_name]}",
+      "Total CPU cores available cluster-wide: #{total_cores}"
     ]
 
     disk_nodes_section =
@@ -167,6 +177,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             end)
         end
 
+    cpu_cores_section =
+      [
+        "\n#{bright("CPU Cores")}\n"
+      ] ++ cpu_core_lines(m[:cpu_cores])
+
     maintenance_section =
       [
         "\n#{bright("Maintenance status")}\n"
@@ -187,6 +202,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
         ram_nodes_section ++
         running_nodes_section ++
         versions_section ++
+        cpu_cores_section ++
         maintenance_section ++
         alarms_section ++
         partitions_section ++
@@ -240,6 +256,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
       listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{}),
       versions: Keyword.get(result, :versions, []) |> Enum.into(%{}),
+      cpu_cores: Keyword.get(result, :cpu_cores, []) |> Enum.into(%{}),
       feature_flags:
         Keyword.get(result, :feature_flags, []) |> Enum.map(fn ff -> Enum.into(ff, %{}) end)
     }
@@ -338,6 +355,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {node, result}
   end
 
+  defp cpu_cores_by_node(node, timeout) do
+    target = to_atom(node)
+
+    result =
+      case :rabbit_misc.rpc_call(
+             target,
+             :rabbit_runtime,
+             :guess_number_of_cpu_cores,
+             [],
+             timeout
+           ) do
+        {:badrpc, _} -> 0
+        value -> value
+      end
+
+    {node, result}
+  end
+
   defp node_lines(nodes) do
     Enum.map(nodes, &to_string/1) |> Enum.sort()
   end
@@ -356,6 +391,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   defp partition_lines(mapping) do
     Enum.map(mapping, fn {node, unreachable_peers} ->
       "Node #{node} cannot communicate with #{Enum.join(unreachable_peers, ", ")}"
+    end)
+  end
+
+  defp cpu_core_lines(mapping) do
+    Enum.map(mapping, fn {node, core_count} ->
+      "Node: #{node}, available CPU cores: #{core_count}"
     end)
   end
 
