@@ -60,6 +60,7 @@
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
+-export([deep_pget/2, deep_pget/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
 -export([os_cmd/1, pwsh_cmd/1, win32_cmd/2]).
@@ -1063,6 +1064,21 @@ pupdate(K, UpdateFun, P) ->
             undefined
     end.
 
+%% pget nested values
+-spec deep_pget(list(), list() | map()) -> term().
+deep_pget(K, P) ->
+    deep_pget(K, P, undefined).
+
+-spec deep_pget(list(), list() | map(), term()) -> term().
+deep_pget([], P, _) ->
+    P;
+
+deep_pget([K|Ks], P, D) ->
+    case rabbit_misc:pget(K, P, D) of
+        D -> D;
+        Pn -> deep_pget(Ks, Pn, D)
+    end.
+
 %% property merge
 pmerge(Key, Val, List) ->
       case proplists:is_defined(Key, List) of
@@ -1549,3 +1565,48 @@ find_powershell() ->
         PwshExe ->
             PwshExe
     end.
+<<<<<<< HEAD
+=======
+
+%% -------------------------------------------------------------------------
+%% Begin copy from
+%% https://github.com/emqx/emqx/blob/cffdcb42843d48bf99d8bd13695bc73149c98a23/apps/emqx/src/emqx_misc.erl#L141-L157
+
+%%--------------------------------------------------------------------
+%% Copyright (c) 2017-2022 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%--------------------------------------------------------------------
+
+pipeline([], Input, State) ->
+    {ok, Input, State};
+pipeline([Fun | More], Input, State) ->
+    case apply_fun(Fun, Input, State) of
+        ok -> pipeline(More, Input, State);
+        {ok, NState} -> pipeline(More, Input, NState);
+        {ok, Output, NState} -> pipeline(More, Output, NState);
+        {error, Reason} -> {error, Reason, State};
+        {error, Reason, NState} -> {error, Reason, NState}
+    end.
+
+-compile({inline, [apply_fun/3]}).
+apply_fun(Fun, Input, State) ->
+    case erlang:fun_info(Fun, arity) of
+        {arity, 1} -> Fun(Input);
+        {arity, 2} -> Fun(Input, State)
+    end.
+
+%% End copy from
+%% https://github.com/emqx/emqx/blob/cffdcb42843d48bf99d8bd13695bc73149c98a23/apps/emqx/src/emqx_misc.erl#L141-L157
+%% -------------------------------------------------------------------------
+>>>>>>> db99c252a0 (Add setting to disable op policy edit via API)

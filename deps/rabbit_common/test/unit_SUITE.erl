@@ -37,6 +37,7 @@ groups() ->
             data_coercion_atomize_keys_proplist,
             data_coercion_atomize_keys_map,
             pget,
+            deep_pget,
             encrypt_decrypt,
             encrypt_decrypt_term,
             version_equivalence,
@@ -327,6 +328,22 @@ pget(_Config) ->
 
     ?assertEqual(1, rabbit_misc:pget(a, #{a => 1})),
     ?assertEqual(undefined, rabbit_misc:pget(b, #{a => 1})).
+
+deep_pget(_Config) ->
+    ?assertEqual(1, rabbit_misc:deep_pget([p, p], [{p, [{p, 1}]}])),
+    ?assertEqual(1, rabbit_misc:deep_pget([m, p], #{m => [{p, 1}]})),
+    ?assertEqual(1, rabbit_misc:deep_pget([p, m], [{p, #{m => 1}}])),
+    ?assertEqual(1, rabbit_misc:deep_pget([m, m], #{m => #{m => 1}})),
+
+    ?assertEqual(undefined, rabbit_misc:deep_pget([p, x], [{p, [{p, 1}]}])),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([m, x], #{m => [{p, 1}]})),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([p, x], [{p, #{m => 1}}])),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([m, x], #{m => #{m => 1}})),
+
+    ?assertEqual(undefined, rabbit_misc:deep_pget([x, p], [{p, [{p, 1}]}])),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([x, p], #{m => [{p, 1}]})),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([x, m], [{p, #{m => 1}}])),
+    ?assertEqual(undefined, rabbit_misc:deep_pget([x, m], #{m => #{m => 1}})).
 
 pid_decompose_compose(_Config) ->
     Pid = self(),

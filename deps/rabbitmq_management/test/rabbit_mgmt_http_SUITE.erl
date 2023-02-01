@@ -132,6 +132,8 @@ all_tests() -> [
     if_empty_unused_test,
     parameters_test,
     global_parameters_test,
+    disabled_operator_policy_test,
+    operator_policy_test,
     policy_test,
     policy_permissions_test,
     issue67_test,
@@ -209,6 +211,11 @@ init_per_testcase(Testcase = stream_queues_have_consumers_field, Config) ->
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase)
     end;
+init_per_testcase(Testcase = disabled_operator_policy_test, Config) ->
+    Restrictions = [{operator_policy_changes, [{disabled, true}]}],
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbitmq_management, restrictions, Restrictions]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -265,6 +272,10 @@ end_per_testcase0(permissions_vhost_test, Config) ->
 end_per_testcase0(config_environment_test, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                  [rabbit, config_environment_test_env]),
+    Config;
+end_per_testcase0(disabled_operator_policy_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, restrictions]),
     Config;
 end_per_testcase0(_, Config) -> Config.
 
@@ -2819,6 +2830,53 @@ global_parameters_test(Config) ->
 
     InitialCount = length(InitialParameters),
     InitialCount = length(http_get(Config, "/global-parameters")),
+    passed.
+
+operator_policy_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+    PolicyPos  = #{vhost      => <<"/">>,
+                   name       => <<"policy_pos">>,
+                   pattern    => <<".*">>,
+                   definition => #{testpos => [1,2,3]},
+                   priority   => 10},
+    PolicyEven = #{vhost      => <<"/">>,
+                   name       => <<"policy_even">>,
+                   pattern    => <<".*">>,
+                   definition => #{testeven => [1,2,3,4]},
+                   priority   => 10},
+    http_put(Config,
+             "/operator-policies/%2F/policy_pos",
+             PolicyPos,
+             {group, '2xx'}),
+    http_put(Config,
+             "/operator-policies/%2F/policy_even",
+             PolicyEven,
+             {group, '2xx'}),
+    assert_item(PolicyPos,  http_get(Config, "/operator-policies/%2F/policy_pos",  ?OK)),
+    assert_item(PolicyEven, http_get(Config, "/operator-policies/%2F/policy_even", ?OK)),
+    List = [PolicyPos, PolicyEven],
+    assert_list(List, http_get(Config, "/operator-policies",     ?OK)),
+    assert_list(List, http_get(Config, "/operator-policies/%2F", ?OK)),
+
+    http_delete(Config, "/operator-policies/%2F/policy_pos", {group, '2xx'}),
+    http_delete(Config, "/operator-policies/%2F/policy_even", {group, '2xx'}),
+    0 = length(http_get(Config, "/operator-policies")),
+    0 = length(http_get(Config, "/operator-policies/%2F")),
+    unregister_parameters_and_policy_validator(Config),
+    passed.
+
+disabled_operator_policy_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+    PolicyPos  = #{vhost      => <<"/">>,
+                   name       => <<"policy_pos">>,
+                   pattern    => <<".*">>,
+                   definition => #{testpos => [1,2,3]},
+                   priority   => 10},
+    http_put(Config, "/operator-policies/%2F/policy_pos", PolicyPos, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/operator-policies/%2F/policy_pos", ?METHOD_NOT_ALLOWED),
+    0 = length(http_get(Config, "/operator-policies",     ?OK)),
+    0 = length(http_get(Config, "/operator-policies/%2F", ?OK)),
+    unregister_parameters_and_policy_validator(Config),
     passed.
 
 policy_test(Config) ->
