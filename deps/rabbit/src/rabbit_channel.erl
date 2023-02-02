@@ -2881,25 +2881,6 @@ handle_queue_actions(Actions, #ch{} = State0) ->
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
           ({queue_down, QRef}, S0) ->
-<<<<<<< HEAD
-              handle_consuming_queue_down_or_eol(QRef, S0)
-
-      end, State0, Actions).
-
-find_queue_name_from_quorum_name(Name, QStates) ->
-    Fun = fun(K, _V, undefined) ->
-                  {ok, Q} = rabbit_amqqueue:lookup(K),
-                  case amqqueue:get_pid(Q) of
-                      {Name, _} ->
-                          amqqueue:get_name(Q);
-                      _ ->
-                          undefined
-                  end;
-             (_, _, Acc) ->
-                  Acc
-          end,
-    rabbit_queue_type:fold_state(Fun, undefined, QStates).
-=======
               handle_consuming_queue_down_or_eol(QRef, S0);
           ({block, QName}, S0) ->
               credit_flow:block(QName),
@@ -2927,7 +2908,20 @@ send_drained_to_writer(WriterPid, CTag, Credit) ->
            WriterPid,
            #'basic.credit_drained'{consumer_tag = CTag,
                                    credit_drained = Credit}).
->>>>>>> 3bb32737ee (Fix channel crash when draining AMQP 1.0 credits from classic queue)
+
+find_queue_name_from_quorum_name(Name, QStates) ->
+    Fun = fun(K, _V, undefined) ->
+                    {ok, Q} = rabbit_amqqueue:lookup(K),
+                    case amqqueue:get_pid(Q) of
+                        {Name, _} ->
+                            amqqueue:get_name(Q);
+                        _ ->
+                            undefined
+                    end;
+                (_, _, Acc) ->
+                    Acc
+            end,
+    rabbit_queue_type:fold_state(Fun, undefined, QStates).
 
 maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->
     State0;
