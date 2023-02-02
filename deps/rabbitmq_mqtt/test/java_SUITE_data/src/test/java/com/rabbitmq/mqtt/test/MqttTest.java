@@ -904,7 +904,7 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void topicAuthorisationVariableExpansion(TestInfo info) throws Exception {
-        final String client_id = clientId(info);
+        final String client_id = "client-id-variable-expansion";
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client = newConnectedClient(client_id, client_opts);
         client.setCallback(this);

@@ -79,6 +79,7 @@ groups() ->
        no_publish_permission,
        no_topic_read_permission,
        no_topic_write_permission,
+       topic_write_permission_variable_expansion,
        loopback_user_connects_from_remote_host
       ]
      },
@@ -340,6 +341,7 @@ end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
                                         Testcase == no_publish_permission;
                                         Testcase == no_topic_read_permission;
                                         Testcase == no_topic_write_permission;
+                                        Testcase == topic_write_permission_variable_expansion;
                                         Testcase == loopback_user_connects_from_remote_host ->
     %% So let's wait before logs are surely flushed
     Marker = "MQTT_AUTH_SUITE_MARKER",
@@ -505,7 +507,6 @@ client_id_propagation(Config) ->
                                             rabbit_auth_backend_mqtt_mock,
                                             get,
                                             [resource_access]),
-    ?assertEqual(true, maps:size(AuthzContext) > 0),
     ?assertEqual(ClientId, maps:get(<<"client_id">>, AuthzContext)),
 
     [{topic_access, TopicContext}] = rpc(Config, 0,
@@ -735,6 +736,33 @@ no_topic_write_permission(Config) ->
              [?FAIL_IF_CRASH_LOG
               ,{["MQTT topic access refused: write access to topic 'some.other.topic' in "
                  "exchange 'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
+                 "MQTT connection .* is closing due to an authorization failure"],
+                fun () -> stop end}
+             ]),
+    ok.
+
+%% "Internal (default) authorisation backend supports variable expansion in permission patterns.
+%% Three variables are supported: username, vhost, and client_id.
+%% Note that client_id only applies to MQTT."
+topic_write_permission_variable_expansion(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    set_topic_permissions("^{username}.{vhost}.{client_id}$", ".*", Config),
+    User = ?config(mqtt_user, Config),
+    VHost = ?config(mqtt_vhost, Config),
+    ClientId = <<"my_client">>,
+    {ok, C} = connect_user(User, ?config(mqtt_password, Config), Config, ClientId),
+    {ok, _} = emqtt:connect(C),
+    Prefix = <<User/binary, "/", VHost/binary, "/">>,
+    AllowedTopic =  <<Prefix/binary, ClientId/binary>>,
+    DeniedTopic = <<Prefix/binary, <<"other_client">>/binary>>,
+    ?assertMatch({ok, _}, emqtt:publish(C, AllowedTopic, <<"payload">>, qos1)),
+    unlink(C),
+    ?assertMatch({error, _}, emqtt:publish(C, DeniedTopic, <<"payload">>, qos1)),
+    wait_log(Config,
+             [?FAIL_IF_CRASH_LOG
+              ,{["MQTT topic access refused: write access to topic "
+                 "'mqtt-user.mqtt-vhost.other_client' in exchange 'amq.topic' in vhost "
+                 "'mqtt-vhost' refused for user 'mqtt-user'",
                  "MQTT connection .* is closing due to an authorization failure"],
                 fun () -> stop end}
              ]),
