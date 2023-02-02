@@ -396,7 +396,7 @@ do_initialize_registry(RegistryVsn,
            "Feature flags:   [~ts] ~ts~n",
            [case maps:get(FeatureName, FeatureStates, false) of
                 true           -> "x";
-                state_changing -> "~~";
+                state_changing -> "~";
                 false          -> " "
             end,
             FeatureName])
