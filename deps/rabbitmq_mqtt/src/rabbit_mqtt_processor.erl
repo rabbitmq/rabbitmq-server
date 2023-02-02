@@ -1599,8 +1599,7 @@ check_resource_access(User, Resource, Perm, Context) ->
 
 check_topic_access(
   TopicName, Access,
-  #state{auth_state = #auth_state{user = User = #user{username = Username},
-                                  authz_ctx = AuthzCtx},
+  #state{auth_state = #auth_state{user = User = #user{username = Username}},
          cfg = #cfg{client_id = ClientId,
                     vhost = VHost,
                     exchange = #resource{name = ExchangeBin}}}) ->
@@ -1618,7 +1617,9 @@ check_topic_access(
                                  name = ExchangeBin},
             RoutingKey = mqtt_to_amqp(TopicName),
             Context = #{routing_key  => RoutingKey,
-                        variable_map => AuthzCtx},
+                        variable_map => #{<<"username">> => Username,
+                                          <<"vhost">> => VHost,
+                                          <<"client_id">> => ClientId}},
             try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
                 ok ->
                     CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
