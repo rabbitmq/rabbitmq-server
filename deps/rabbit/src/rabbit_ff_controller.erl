@@ -982,12 +982,32 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
     FeatureFlags = maps:merge(FeatureFlagsA, FeatureFlagsB),
     maps:map(
       fun(FeatureName, FeatureProps) ->
-              FeaturePropsA = maps:get(FeatureName, FeatureFlagsA, #{}),
-              FeaturePropsB = maps:get(FeatureName, FeatureFlagsB, #{}),
+              %% When we collect feature flag properties from all nodes, we
+              %% start with an empty cluster inventory (a common Erlang
+              %% recursion pattern). This means that all feature flags are
+              %% unknown at first.
+              %%
+              %% Here we must compute a global stability level for each
+              %% feature flag, in case all nodes are not on the same page
+              %% (like one nodes considers a feature flag experimental, but
+              %% another one marks it as stable). That's why we rank stability
+              %% level: required > stable > experimental.
+              %%
+              %% We must distinguish an unknown feature flag (they are all
+              %% unknown at the beginning of the collection) from a known
+              %% feature flags with no explicit stability level. In the latter
+              %% case, `rabbit_feature_flags:get_stability/1' will consider it
+              %% stable. However in the former case, we must consider it
+              %% experimental otherwise it would default to be stable would
+              %% superceed an experimental level, even though all nodes agree
+              %% on that level, because `rabbit_feature_flags:get_stability/1'
+              %% would return stable as well.
+              UnknownProps = #{stability => experimental},
+              FeaturePropsA = maps:get(
+                                FeatureName, FeatureFlagsA, UnknownProps),
+              FeaturePropsB = maps:get(
+                                FeatureName, FeatureFlagsB, UnknownProps),
 
-              %% There is a rank between stability levels. If a feature flag
-              %% is required somewhere, it is required globally. Otherwise if
-              %% it is stable somewhere, it is stable globally.
               StabilityA = rabbit_feature_flags:get_stability(FeaturePropsA),
               StabilityB = rabbit_feature_flags:get_stability(FeaturePropsB),
               Stability = case {StabilityA, StabilityB} of
