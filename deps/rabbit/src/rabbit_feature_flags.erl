@@ -682,7 +682,13 @@ get_state(FeatureName) when is_atom(FeatureName) ->
                  end
     end.
 
--spec get_stability(feature_name() | feature_props_extended()) -> stability().
+-spec get_stability
+(FeatureName) -> Stability | undefined when
+      FeatureName :: feature_name(),
+      Stability :: stability();
+(FeatureProps) -> Stability when
+      FeatureProps :: feature_props_extended(),
+      Stability :: stability().
 %% @doc
 %% Returns the stability of a feature flag.
 %%
@@ -696,12 +702,12 @@ get_state(FeatureName) when is_atom(FeatureName) ->
 %% <li>`experimental': the feature flag is experimental and may change in
 %%   the future (without a guaranteed upgrade path): enabling it in
 %%   production is not recommended.</li>
-%% <li>`unavailable': the feature flag is unsupported by at least one
-%%   node in the cluster and can not be enabled for now.</li>
 %% </ul>
 %%
 %% @param FeatureName The name of the feature flag to check.
-%% @returns `stable' or `experimental'.
+%% @param FeatureProps A feature flag properties map.
+%% @returns `required', `stable' or `experimental', or `undefined' if the
+%% given feature flag name doesn't correspond to a known feature flag.
 
 get_stability(FeatureName) when is_atom(FeatureName) ->
     case rabbit_ff_registry:get(FeatureName) of
