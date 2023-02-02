@@ -927,17 +927,15 @@ handle_cast({write, CRef, MsgId, Flow},
     end;
 
 handle_cast({remove, CRef, MsgIds}, State) ->
-    {RemovedMsgIds, State1} =
+    State1 =
         lists:foldl(
-          fun (MsgId, {Removed, State2}) ->
+          fun (MsgId, State2) ->
                   case update_flying(+1, MsgId, CRef, State2) of
-                      process -> {[MsgId | Removed],
-                                  remove_message(MsgId, CRef, State2)};
-                      ignore  -> {Removed, State2}
+                      process -> remove_message(MsgId, CRef, State2);
+                      ignore  -> State2
                   end
-          end, {[], State}, MsgIds),
-    noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
-                                         ignored, State1)));
+          end, State, MsgIds),
+    noreply(maybe_compact(State1));
 
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
