@@ -46,17 +46,29 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(Group, Config) ->
-    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+init_per_group(Group, Config0) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(
-                Config, [
-                         {rmq_nodename_suffix, Suffix},
-                         {amqp10_client_library, Group}
-                        ]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+                Config0, [
+                          {rmq_nodename_suffix, Suffix},
+                          {amqp10_client_library, Group}
+                         ]),
+    Ret = rabbit_ct_helpers:run_setup_steps(
+            Config1,
+            rabbit_ct_broker_helpers:setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps()),
+    case Ret of
+        {skip, _} ->
+            Ret;
+        Config ->
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue) of
+                ok ->
+                    Config;
+                {skip, _} = Skip ->
+                    Skip
+            end
+    end.
+
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
