@@ -15,7 +15,8 @@
 all() ->
     [
      fill,
-     ad_fill
+     ad_fill,
+     user_dn_pattern_gh_7161
     ].
 
 fill(_Config) ->
@@ -45,3 +46,8 @@ ad_fill(_Config) ->
     A1 = rabbit_auth_backend_ldap_util:get_active_directory_args(U1),
     F("x-${ad_domain}-x-${ad_user}-x", A1, "x-ADDomain-x-ADUser\\Extra-x"),
     ok.
+
+user_dn_pattern_gh_7161(_Config) ->
+    ok = application:load(rabbitmq_auth_backend_ldap),
+    {ok, UserDnPattern} = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    ?assertEqual("${username}", UserDnPattern).
