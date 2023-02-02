@@ -27,6 +27,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
 
 MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
 
+ENABLE_FEATURE_MAYBE_EXPR = "-enable-feature maybe_expr"
+
 RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
     "-DINSTR_MOD=gm",
 ]
@@ -168,6 +170,7 @@ def rabbitmq_app(
 def rabbitmq_suite(erlc_opts = [], test_env = {}, **kwargs):
     ct_suite(
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "LANG": "C.UTF-8",
@@ -233,6 +236,7 @@ def rabbitmq_integration_suite(
         }),
         additional_hdrs = additional_hdrs,
         additional_srcs = additional_srcs,
+        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
@@ -259,6 +263,7 @@ def rabbitmq_integration_suite(
         name = name + "-mixed",
         suite_name = name,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG, MIXED_VERSION_CLUSTER_TAG],
+        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
