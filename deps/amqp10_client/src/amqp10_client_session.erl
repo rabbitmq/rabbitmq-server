@@ -648,41 +648,51 @@ translate_terminus_durability(none) -> 0;
 translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
 
-translate_filters(Filters) when is_map(Filters) andalso map_size(Filters) =< 0 -> undefined;
-translate_filters(Filters) when is_map(Filters) -> {
-    map,
-    maps:fold(
-        fun(<<"apache.org:legacy-amqp-direct-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
-        (<<"apache.org:legacy-amqp-topic-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
-        (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
-            [{{symbol, K}, {described, {symbol, K}, translate_legacy_amqp_headers_binding(V)}} | Acc];
-        (<<"apache.org:no-local-filter:list">> = K, V, Acc) when is_list(V) ->
-            [{{symbol, K}, {described, {symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)}} | Acc];
-        (<<"apache.org:selector-filter:string">> = K, V, Acc) when is_binary(V) ->
-                [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc]
-        end,
-        [],
-        Filters)
-}.
+translate_filters(Filters)
+  when is_map(Filters) andalso
+       map_size(Filters) == 0 ->
+    undefined;
+translate_filters(Filters)
+  when is_map(Filters) ->
+    {map,
+     maps:fold(
+       fun
+          (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+               %% special case conversion
+               Key = sym(K),
+               [{Key, {described, Key, translate_legacy_amqp_headers_binding(V)}} | Acc];
+          (K, V, Acc) when is_binary(K) ->
+               %% try treat any filter value generically
+               Key = sym(K),
+               Value = filter_value_type(V),
+               [{Key, {described, Key, Value}} | Acc]
+       end, [], Filters)}.
+
+filter_value_type(V) when is_binary(V) ->
+    %% this is clearly not always correct
+    {utf8, V};
+filter_value_type(V)
+  when is_integer(V) andalso V >= 0 ->
+    {uint, V};
+filter_value_type(VList) when is_list(VList) ->
+    [filter_value_type(V) || V <- VList];
+filter_value_type({T, _} = V) when is_atom(T) ->
+    %% looks like an already tagged type, just pass it through
+    V.
 
 % https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
-translate_legacy_amqp_headers_binding(LegacyHeaders) -> {
-    map,
-    maps:fold(
-        fun(<<"x-match">> = K, <<"any">> = V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc];
-        (<<"x-match">> = K, <<"all">> = V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc];
-        (<<"x-",_/binary>>, _, Acc) ->
-            Acc;
-        (K, V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc]
-        end,
-        [],
-        LegacyHeaders)
-}.
+translate_legacy_amqp_headers_binding(LegacyHeaders) ->
+    {map,
+     maps:fold(
+       fun(<<"x-match">> = K, <<"any">> = V, Acc) ->
+               [{{utf8, K}, {utf8, V}} | Acc];
+          (<<"x-match">> = K, <<"all">> = V, Acc) ->
+               [{{utf8, K}, {utf8, V}} | Acc];
+          (<<"x-", _/binary>>, _, Acc) ->
+               Acc;
+          (K, V, Acc) ->
+               [{{utf8, K}, filter_value_type(V)} | Acc]
+       end, [], LegacyHeaders)}.
 
 send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
     case Links of
@@ -1011,8 +1021,10 @@ wrap_map_value(V) when is_atom(V) ->
     utf8(atom_to_list(V)).
 
 utf8(V) -> amqp10_client_types:utf8(V).
+
+sym(B) when is_binary(B) -> {symbol, B};
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
-sym(B) when is_binary(B) -> {symbol, B}.
+sym(B) when is_atom(B) -> {symbol, atom_to_binary(B, utf8)}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
