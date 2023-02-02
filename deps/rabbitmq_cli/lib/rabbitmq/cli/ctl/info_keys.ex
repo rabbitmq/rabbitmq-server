@@ -9,7 +9,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   alias RabbitMQ.CLI.Core.DataCoercion
 
   # internal to requested keys
-  @type info_keys :: Erlang.proplist()
+  @type info_keys :: [atom | tuple]
   # requested to internal keys
   @type aliases :: keyword(atom)
 

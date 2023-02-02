@@ -27,7 +27,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
       case Integer.parse(raw_pos) do
         {n, _} -> n
         :error -> :error
-        _ -> :error
       end
 
     invalid_pos = {:validation_failure, "position value must be a positive integer"}

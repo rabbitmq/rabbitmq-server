@@ -18,12 +18,20 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
+  @dialyzer [
+    {:no_unused, normalise_options: 1},
+    {:no_unused, normalise_timeout: 1},
+    {:nowarn_function, output_device: 1},
+    {:nowarn_function, handle_shutdown: 1}
+  ]
+
   # Enable unit tests for private functions
   @compile if Mix.env() == :test, do: :export_all
 
   @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code(), term()} | term()
 
+  @spec main(list()) :: no_return()
   def main(["--auto-complete" | []]) do
     handle_shutdown(:ok)
   end
@@ -49,14 +57,14 @@ defmodule RabbitMQCtl do
     {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")}
   end
 
-  def exec_command(["--version"] = _unparsed_command, opts) do
+  def exec_command(["--version"] = _unparsed_command, output_fun) do
     # rewrite `--version` as `version`
-    exec_command(["version"], opts)
+    exec_command(["version"], output_fun)
   end
 
-  def exec_command(["--auto-complete" | args], opts) do
+  def exec_command(["--auto-complete" | args], output_fun) do
     # rewrite `--auto-complete` as `autocomplete`
-    exec_command(["autocomplete" | args], opts)
+    exec_command(["autocomplete" | args], output_fun)
   end
 
   def exec_command(unparsed_command, output_fun) do
@@ -152,7 +160,7 @@ defmodule RabbitMQCtl do
   end
 
   defp proceed_to_execution(command, arguments, options) do
-    maybe_print_banner(command, arguments, options)
+    _ = maybe_print_banner(command, arguments, options)
     maybe_run_command(command, arguments, options)
   end
 
@@ -236,6 +244,7 @@ defmodule RabbitMQCtl do
     end
   end
 
+  @spec handle_shutdown({:error, integer(), nil} | atom()) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
   end
@@ -243,9 +252,9 @@ defmodule RabbitMQCtl do
   defp handle_shutdown({_, exit_code, output}) do
     device = output_device(exit_code)
 
-    for line <- List.flatten([output]) do
+    Enum.each(List.flatten([output]), fn line ->
       IO.puts(device, Helpers.string_or_inspect(line))
-    end
+    end)
 
     exit_program(exit_code)
   end
@@ -393,8 +402,9 @@ defmodule RabbitMQCtl do
 
   defp format_validation_error(err), do: inspect(err)
 
+  @spec exit_program(integer()) :: no_return()
   defp exit_program(code) do
-    :net_kernel.stop()
+    _ = :net_kernel.stop()
     exit({:shutdown, code})
   end
 
