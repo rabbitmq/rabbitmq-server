@@ -115,18 +115,18 @@ connection_id_tracking(Config) ->
     ok = expect_publishes(C1, <<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
-    assert_connection_count(Config, 4, 2, 1),
+    assert_connection_count(Config, 4, 1),
 
     %% connect to the same node (A or 0)
     process_flag(trap_exit, true),
     C2 = connect(Id, Config, 0, ?OPTS),
     await_exit(C1),
-    assert_connection_count(Config, 4, 2, 1),
+    assert_connection_count(Config, 4, 1),
 
     %% connect to a different node (C or 2)
     C3 = connect(Id, Config, 2, ?OPTS),
     await_exit(C2),
-    assert_connection_count(Config, 4, 2, 1),
+    assert_connection_count(Config, 4, 1),
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
@@ -135,11 +135,11 @@ connection_id_tracking_on_nodedown(Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
-    assert_connection_count(Config, 4, 2, 1),
+    assert_connection_count(Config, 4, 1),
     process_flag(trap_exit, true),
     ok = stop_node(Config, Server),
     await_exit(C),
-    assert_connection_count(Config, 4, 2, 0),
+    assert_connection_count(Config, 4, 0),
     ok.
 
 connection_id_tracking_with_decommissioned_node(Config) ->
@@ -153,11 +153,11 @@ connection_id_tracking_with_decommissioned_node(Config) ->
             ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
             ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
 
-            assert_connection_count(Config, 4, 2, 1),
+            assert_connection_count(Config, 4, 1),
             process_flag(trap_exit, true),
             {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
             await_exit(C),
-            assert_connection_count(Config, 5, 2, 0),
+            assert_connection_count(Config, 4, 0),
             ok
     end.
 
@@ -165,14 +165,15 @@ connection_id_tracking_with_decommissioned_node(Config) ->
 %% Helpers
 %%
 
-assert_connection_count(_Config, 0,  _, NumElements) ->
+assert_connection_count(_Config, 0, NumElements) ->
     ct:fail("failed to match connection count ~b", [NumElements]);
-assert_connection_count(Config, Retries, NodeId, NumElements) ->
+assert_connection_count(Config, Retries, NumElements) ->
     case util:all_connection_pids(Config) of
-        Pids
-          when length(Pids) =:= NumElements ->
+        Pids when length(Pids) =:= NumElements ->
             ok;
-        _ ->
+        Pids ->
+            ct:pal("Waiting for ~b connections, got following connections: ~p",
+                   [NumElements, Pids]),
             timer:sleep(500),
-            assert_connection_count(Config, Retries-1, NodeId, NumElements)
+            assert_connection_count(Config, Retries-1, NumElements)
     end.
