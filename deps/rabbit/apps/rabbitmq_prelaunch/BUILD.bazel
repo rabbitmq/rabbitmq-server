@@ -35,12 +35,16 @@ xref(
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    apps = ["runtime_tools", "eunit"],
+    plt = "//:base_plt",
+    deps = DEPS + RUNTIME_DEPS + [
+        "@systemd//:erlang_app",
+        "@osiris//:erlang_app",
+    ],
 )
 
 dialyze(
     plt = ":base_plt",
-    warnings_as_errors = False,
 )
 
 suites = [
