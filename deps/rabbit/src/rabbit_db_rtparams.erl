@@ -37,7 +37,7 @@ set(Key, Term) when is_atom(Key) ->
       #{mnesia => fun() -> set_in_mnesia(Key, Term) end}).
 
 set_in_mnesia(Key, Term) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> set_in_mnesia_tx(Key, Term) end).
 
 -spec set(VHostName, Comp, Name, Term) -> Ret when
@@ -63,7 +63,7 @@ set(VHostName, Comp, Name, Term)
       #{mnesia => fun() -> set_in_mnesia(VHostName, Key, Term) end}).
 
 set_in_mnesia(VHostName, Key, Term) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       rabbit_db_vhost:with_fun_in_mnesia_tx(
         VHostName,
         fun() -> set_in_mnesia_tx(Key, Term) end)).
@@ -131,7 +131,7 @@ get_or_set(Key, Default) ->
       #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end}).
 
 get_or_set_in_mnesia(Key, Default) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> get_or_set_in_mnesia_tx(Key, Default) end).
 
 get_or_set_in_mnesia_tx(Key, Default) ->
@@ -162,7 +162,7 @@ get_all() ->
       #{mnesia => fun() -> get_all_in_mnesia() end}).
 
 get_all_in_mnesia() ->
-    rabbit_misc:dirty_read_all(?MNESIA_TABLE).
+    rabbit_mnesia:dirty_read_all(?MNESIA_TABLE).
 
 -spec get_all(VHostName, Comp) -> Ret when
       VHostName :: vhost:name() | '_',
@@ -230,14 +230,14 @@ delete(VHostName, Comp, Name)
         fun() -> delete_matching_in_mnesia(VHostName, Comp, Name) end}).
 
 delete_in_mnesia(Key) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> delete_in_mnesia_tx(Key) end).
 
 delete_in_mnesia_tx(Key) ->
     mnesia:delete(?MNESIA_TABLE, Key, write).
 
 delete_matching_in_mnesia(VHostName, Comp, Name) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun() -> delete_matching_in_mnesia_tx(VHostName, Comp, Name) end).
 
 delete_matching_in_mnesia_tx(VHostName, Comp, Name) ->

@@ -261,35 +261,26 @@ recover() ->
 %% recovery has not yet happened; we must work with the rabbit_durable_<thing>
 %% variants.
 recover0() ->
-    Xs = mnesia:dirty_match_object(rabbit_durable_exchange, #exchange{_ = '_'}),
-    Qs = rabbit_amqqueue:list_with_possible_retry(
-           fun() ->
-                   mnesia:dirty_match_object(
-                     rabbit_durable_queue, amqqueue:pattern_match_all())
-           end),
+    Xs0 = rabbit_db_exchange:get_all_durable(),
     Policies = list(),
     OpPolicies = list_op(),
-    _ = [rabbit_misc:execute_mnesia_transaction(
-       fun () ->
-               mnesia:write(
-                 rabbit_durable_exchange,
-                 rabbit_exchange_decorator:set(
-                   X#exchange{policy = match(Name, Policies),
-                              operator_policy = match(Name, OpPolicies)}),
-                 write)
-       end) || X = #exchange{name = Name} <- Xs],
-    _ = [begin
-         QName = amqqueue:get_name(Q0),
-         Policy1 = match(QName, Policies),
-         Q1 = amqqueue:set_policy(Q0, Policy1),
-         OpPolicy1 = match(QName, OpPolicies),
-         Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
-         Q3 = rabbit_queue_decorator:set(Q2),
-         rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   mnesia:write(rabbit_durable_queue, Q3, write)
-           end)
-     end || Q0 <- Qs],
+    Xs = [rabbit_exchange_decorator:set(
+            X#exchange{policy = match(Name, Policies),
+                       operator_policy = match(Name, OpPolicies)})
+          || X = #exchange{name = Name} <- Xs0],
+    Qs = rabbit_amqqueue:list_durable(),
+    _ = rabbit_db_exchange:set(Xs),
+    Qs0 = [begin
+               QName = amqqueue:get_name(Q0),
+               Policy1 = match(QName, Policies),
+               Q1 = amqqueue:set_policy(Q0, Policy1),
+               OpPolicy1 = match(QName, OpPolicies),
+               Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
+               rabbit_queue_decorator:set(Q2)
+           end || Q0 <- Qs],
+    %% This function is just used to recover policies, thus no transient entities
+    %% are considered for this process as there is none to recover on boot.
+    _ = rabbit_db_queue:set_many(Qs0),
     ok.
 
 invalid_file() ->
@@ -441,72 +432,69 @@ notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
 %% [2] We could be here in a post-tx fun after the vhost has been
 %% deleted; in which case it's fine to do nothing.
 update_matched_objects(VHost, PolicyDef, ActingUser) ->
-    Tabs = [rabbit_queue,    rabbit_durable_queue,
-            rabbit_exchange, rabbit_durable_exchange],
-    {XUpdateResults, QUpdateResults} = rabbit_misc:execute_mnesia_transaction(
-        fun() ->
-            _ = [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
-            case catch {list(VHost), list_op(VHost)} of
-                {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
-                    {[], []}; %% [2]
-                {'EXIT', Exit} ->
-                    exit(Exit);
-                {Policies, OpPolicies} ->
-                    {[update_exchange(X, Policies, OpPolicies) ||
-                        X <- rabbit_exchange:list(VHost)],
-                    [update_queue(Q, Policies, OpPolicies) ||
-                        Q <- rabbit_amqqueue:list(VHost)]}
-                end
-        end),
+    {XUpdateResults, QUpdateResults} =
+        case catch {list(VHost), list_op(VHost)} of
+            {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
+                {[], []}; %% [2]
+            {'EXIT', Exit} ->
+                exit(Exit);
+            {Policies, OpPolicies} ->
+                rabbit_db_policy:update(VHost,
+                                        get_updated_exchange(Policies, OpPolicies),
+                                        get_updated_queue(Policies, OpPolicies))
+        end,
     _ = [catch maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser) || XRes <- XUpdateResults],
     _ = [catch maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser) || QRes <- QUpdateResults],
     ok.
 
-update_exchange(X = #exchange{name = XName,
-                              policy = OldPolicy,
-                              operator_policy = OldOpPolicy},
-                Policies, OpPolicies) ->
-    case {match(XName, Policies), match(XName, OpPolicies)} of
-        {OldPolicy, OldOpPolicy} -> no_change;
-        {NewPolicy, NewOpPolicy} ->
-            NewExchange = rabbit_exchange:update(
-                XName,
-                fun(X0) ->
-                    rabbit_exchange_decorator:set(
-                        X0 #exchange{policy = NewPolicy,
-                                     operator_policy = NewOpPolicy})
-                    end),
-            case NewExchange of
-                #exchange{} = X1 -> {X, X1};
-                not_found        -> {X, X }
+get_updated_exchange(Policies, OpPolicies) ->
+    fun(X = #exchange{name = XName,
+                                   policy = OldPolicy,
+                                   operator_policy = OldOpPolicy}) ->
+            case {match(XName, Policies), match(XName, OpPolicies)} of
+                {OldPolicy, OldOpPolicy} -> no_change;
+                {NewPolicy, NewOpPolicy} ->
+                    Decorators = rabbit_exchange_decorator:active(
+                                   X#exchange{policy = NewPolicy,
+                                              operator_policy = NewOpPolicy}),
+                    #{
+                      exchange => X,
+                      update_function =>
+                          fun(X0) ->
+                                  X0#exchange{policy = NewPolicy,
+                                              operator_policy = NewOpPolicy,
+                                              decorators = Decorators}
+                          end
+                     }
             end
     end.
 
-update_queue(Q0, Policies, OpPolicies) when ?is_amqqueue(Q0) ->
-    QName = amqqueue:get_name(Q0),
-    OldPolicy = amqqueue:get_policy(Q0),
-    OldOpPolicy = amqqueue:get_operator_policy(Q0),
-    case {match(QName, Policies), match(QName, OpPolicies)} of
-        {OldPolicy, OldOpPolicy} -> no_change;
-        {NewPolicy, NewOpPolicy} ->
-            F = fun (QFun0) ->
-                    QFun1 = amqqueue:set_policy(QFun0, NewPolicy),
-                    QFun2 = amqqueue:set_operator_policy(QFun1, NewOpPolicy),
-                    NewPolicyVersion = amqqueue:get_policy_version(QFun2) + 1,
-                    QFun3 = amqqueue:set_policy_version(QFun2, NewPolicyVersion),
-                    rabbit_queue_decorator:set(QFun3)
-                end,
-            NewQueue = rabbit_amqqueue:update(QName, F),
-            case NewQueue of
-                 Q1 when ?is_amqqueue(Q1) ->
-                    {Q0, Q1};
-                 not_found ->
-                    {Q0, Q0}
-             end
+get_updated_queue(Policies, OpPolicies) ->
+    fun(Q0) when ?is_amqqueue(Q0) ->
+            OldPolicy = amqqueue:get_policy(Q0),
+            OldOpPolicy = amqqueue:get_operator_policy(Q0),
+            case {match(Q0, Policies), match(Q0, OpPolicies)} of
+                {OldPolicy, OldOpPolicy} -> no_change;
+                {NewPolicy, NewOpPolicy} ->
+                    Q = amqqueue:set_operator_policy(amqqueue:set_policy(Q0, NewPolicy),
+                                                     NewOpPolicy),
+                    Decorators = rabbit_queue_decorator:active(Q),
+                    #{
+                      queue => Q0,
+                      update_function => update_queue(NewPolicy, NewOpPolicy, Decorators)
+                     }
+            end
     end.
 
-maybe_notify_of_policy_change(no_change, _PolicyDef, _ActingUser)->
-    ok;
+update_queue(Policy, OpPolicy, Decorators) ->
+    fun (Queue0) ->
+            Queue1 = amqqueue:set_policy(Queue0, Policy),
+            Queue2 = amqqueue:set_operator_policy(Queue1, OpPolicy),
+            PolicyVersion = amqqueue:get_policy_version(Queue2) + 1,
+            Queue3 = amqqueue:set_policy_version(Queue2, PolicyVersion),
+            amqqueue:set_decorators(Queue3, Decorators)
+    end.
+
 maybe_notify_of_policy_change({X1 = #exchange{}, X2 = #exchange{}}, _PolicyDef, _ActingUser) ->
     rabbit_exchange:policy_changed(X1, X2);
 %% policy has been cleared

@@ -320,7 +320,7 @@ init([Q, GM, DeathFun, DepthFun]) when ?is_amqqueue(Q) ->
               undefined ->
                   {ok, GM2} = gm:start_link(
                                 QueueName, ?MODULE, [self()],
-                                fun rabbit_misc:execute_mnesia_transaction/1),
+                                fun rabbit_mnesia:execute_mnesia_transaction/1),
                   receive {joined, GM2, _Members} ->
                           ok
                   end,

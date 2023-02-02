@@ -60,7 +60,7 @@
             {'error', {'not_synced', [pid()]}}.
 
 remove_from_queue(QueueName, Self, DeadGMPids) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
               %% get here. Or, gm group could've altered. see rabbitmq-server#914
@@ -162,7 +162,7 @@ slaves_to_start_on_failure(Q, DeadGMPids) ->
 
 on_vhost_up(VHost) ->
     QNames =
-        rabbit_misc:execute_mnesia_transaction(
+        rabbit_mnesia:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
                     fun
@@ -353,7 +353,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
     %% Normally when we remove a mirror another mirror or master will
     %% notice and update Mnesia. But we just removed them all, and
     %% have stopped listening ourselves. So manually clean up.
-    rabbit_misc:execute_mnesia_transaction(fun () ->
+    rabbit_mnesia:execute_mnesia_transaction(fun () ->
         [Q0] = mnesia:read({rabbit_queue, QName}),
         Q1 = amqqueue:set_gm_pids(Q0, []),
         Q2 = amqqueue:set_slave_pids(Q1, []),

@@ -317,7 +317,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                                  RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
                                  {RouteToQs1, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs0),
                                  State1 = log_cycles(Cycles, RKeys, State0),
-                                 RouteToQs2 = rabbit_amqqueue:lookup(RouteToQs1),
+                                 RouteToQs2 = rabbit_amqqueue:lookup_many(RouteToQs1),
                                  RouteToQs = rabbit_amqqueue:prepend_extra_bcc(RouteToQs2),
                                  State2 = case RouteToQs of
                                               [] ->
@@ -469,7 +469,7 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
     %% queues that do not exist. Therefore, filter out non-existent target queues.
     RouteToQs0 = queue_names(
                    rabbit_amqqueue:prepend_extra_bcc(
-                     rabbit_amqqueue:lookup(
+                     rabbit_amqqueue:lookup_many(
                        rabbit_exchange:route(DLX, Delivery)))),
     case {RouteToQs0, Settled} of
         {[], [_|_]} ->
@@ -501,7 +501,7 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
                                          %% to be routed to is moved back to 'unsettled'.
                                          rejected = []},
                     State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings)},
-                    deliver_to_queues(Delivery, rabbit_amqqueue:lookup(RouteToQs), State)
+                    deliver_to_queues(Delivery, rabbit_amqqueue:lookup_many(RouteToQs), State)
             end
     end.
 

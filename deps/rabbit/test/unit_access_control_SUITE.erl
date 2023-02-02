@@ -391,7 +391,7 @@ topic_matching1(_Config) ->
                        lists:nth(11, Bindings), lists:nth(19, Bindings),
                        lists:nth(21, Bindings), lists:nth(28, Bindings)],
     exchange_op_callback(X, remove_bindings, [RemovedBindings]),
-    RemainingBindings = ordsets:to_list(
+    _RemainingBindings = ordsets:to_list(
                           ordsets:subtract(ordsets:from_list(Bindings),
                                            ordsets:from_list(RemovedBindings))),
 
@@ -416,14 +416,12 @@ topic_matching1(_Config) ->
        {"args-test",           ["t6", "t22", "t23", "t24", "t25", "t27"]}]),
 
     %% remove the entire exchange
-    exchange_op_callback(X, delete, [RemainingBindings]),
+    exchange_op_callback(X, delete, []),
     %% none should match now
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
 exchange_op_callback(X, Fun, Args) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, transaction, [X] ++ Args) end),
     rabbit_exchange:callback(X, Fun, none, [X] ++ Args).
 
 test_topic_expect_match(X, List) ->

@@ -20,15 +20,8 @@
 
 -import(rabbit_jms_topic_exchange, [ description/0
                                    , serialise_events/0
-                                   , route/2
                                    , validate/1
-                                   , create/2
-                                   , delete/3
-                                   , validate_binding/2
-                                   , add_binding/3
-                                   , remove_bindings/3
-                                   , assert_args_equivalence/2
-                                   , policy_changed/3 ]).
+                                   , validate_binding/2 ]).
 
 
 all() ->
@@ -42,10 +35,7 @@ groups() ->
                                     description_test,
                                     serialise_events_test,
                                     validate_test,
-                                    create_test,
-                                    delete_test,
-                                    validate_binding_test,
-                                    add_binding_test
+                                    validate_binding_test
                                    ]}
     ].
 
@@ -82,19 +72,10 @@ serialise_events_test(_Config) ->
   ?assertMatch(false, serialise_events()).
 
 validate_test(_Config) ->
-  ?assertEqual(ok, validate(any_exchange)).
-
-create_test(_Config) ->
-  ?assertEqual(ok, create(none, any_exchange)).
-
-delete_test(_Config) ->
-  ?assertEqual(ok, delete(none, any_exchange, any_bindings)).
+  ?assertEqual(ok, validate(dummy_exchange())).
 
 validate_binding_test(_Config) ->
-  ?assertEqual(ok, validate_binding(any_exchange, any_bindings)).
-
-add_binding_test(_Config) ->
-  ?assertEqual(ok, add_binding(none, dummy_exchange(), dummy_binding())).
+  ?assertEqual(ok, validate_binding(dummy_exchange(), dummy_binding())).
 
 dummy_exchange() ->
   #exchange{name = <<"XName">>, arguments = []}.

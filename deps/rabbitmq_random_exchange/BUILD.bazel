@@ -11,6 +11,10 @@ APP_NAME = "rabbitmq_random_exchange"
 
 APP_DESCRIPTION = "RabbitMQ Random Exchange"
 
+BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
 DEPS = [
     "//deps/rabbit_common:erlang_app",
 ]
@@ -22,6 +26,7 @@ RUNTIME_DEPS = [
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -30,7 +35,7 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    deps = BUILD_DEPS + DEPS,
 )
 
 dialyze(

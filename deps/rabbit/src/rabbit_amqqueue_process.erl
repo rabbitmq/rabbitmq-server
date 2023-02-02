@@ -280,19 +280,10 @@ init_with_backing_queue_state(Q, BQ, BQS,
     State3.
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
-    QName = amqqueue:get_name(Q0),
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(
     fun (BQS) ->
-        rabbit_misc:execute_mnesia_transaction(
-             fun() ->
-                [Q] = mnesia:read({rabbit_queue, QName}),
-                Q2 = amqqueue:set_state(Q, stopped),
-                %% amqqueue migration:
-                %% The amqqueue was read from this transaction, no need
-                %% to handle migration.
-                rabbit_amqqueue:store_queue(Q2)
-             end),
+        _ = update_state(stopped, Q0),
         BQ:terminate(R, BQS)
     end, State);
 terminate({shutdown, missing_owner} = Reason, State) ->
@@ -315,10 +306,7 @@ terminate(normal,            State) -> %% delete case
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
                                Q2 = amqqueue:set_state(Q, crashed),
-                               rabbit_misc:execute_mnesia_transaction(
-                                 fun() ->
-                                         rabbit_amqqueue:store_queue(Q2)
-                                 end),
+                               rabbit_amqqueue:store_queue(Q2),
                                BQS
                        end, State).
 
@@ -1887,4 +1875,10 @@ update_ha_mode(State) ->
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
 
-
+update_state(State, Q) ->
+    Decorators = rabbit_queue_decorator:active(Q),
+    rabbit_db_queue:update(amqqueue:get_name(Q),
+                           fun(Q0) ->
+                                   Q1 = amqqueue:set_state(Q0, State),
+                                   amqqueue:set_decorators(Q1, Decorators)
+                           end).

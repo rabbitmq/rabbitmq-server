@@ -43,6 +43,16 @@
          schema_info/1
         ]).
 
+%% Mnesia queries
+-export([
+         table_filter/3,
+         dirty_read_all/1,
+         dirty_read/1,
+         execute_mnesia_tx_with_tail/1,
+         execute_mnesia_transaction/1,
+         execute_mnesia_transaction/2
+        ]).
+
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
@@ -795,6 +805,103 @@ schema_info(Items) ->
 info(Table, Items) ->
     All = [{name, Table} | mnesia:table_info(Table, all)],
     [{Item, proplists:get_value(Item, All)} || Item <- Items].
+
+%%--------------------------------------------------------------------
+%% Queries
+%%--------------------------------------------------------------------
+
+-spec table_filter
+        (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'), atom()) -> [A].
+%% Apply a pre-post-commit function to all entries in a table that
+%% satisfy a predicate, and return those entries.
+%%
+%% We ignore entries that have been modified or removed.
+table_filter(Pred, PrePostCommitFun, TableName) ->
+    lists:foldl(
+      fun (E, Acc) ->
+              case execute_mnesia_transaction(
+                     fun () -> mnesia:match_object(TableName, E, read) =/= []
+                                   andalso Pred(E) end,
+                     fun (false, _Tx) -> false;
+                         (true,   Tx) -> PrePostCommitFun(E, Tx), true
+                     end) of
+                  false -> Acc;
+                  true  -> [E | Acc]
+              end
+      end, [], dirty_read_all(TableName)).
+
+-spec dirty_read_all(atom()) -> [any()].
+dirty_read_all(TableName) ->
+    mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
+
+-spec dirty_read({atom(), any()}) ->
+          rabbit_types:ok_or_error2(any(), 'not_found').
+%% Normally we'd call mnesia:dirty_read/1 here, but that is quite
+%% expensive due to general mnesia overheads (figuring out table types
+%% and locations, etc). We get away with bypassing these because we
+%% know that the tables we are looking at here
+%% - are not the schema table
+%% - have a local ram copy
+%% - do not have any indices
+dirty_read({Table, Key}) ->
+    case ets:lookup(Table, Key) of
+        [Result] -> {ok, Result};
+        []       -> {error, not_found}
+    end.
+
+-spec execute_mnesia_tx_with_tail
+        (rabbit_misc:thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B)).
+%% Like execute_mnesia_transaction/2, but TxFun is expected to return a
+%% TailFun which gets called (only) immediately after the tx commit
+execute_mnesia_tx_with_tail(TxFun) ->
+    case mnesia:is_transaction() of
+        true  -> execute_mnesia_transaction(TxFun);
+        false -> TailFun = execute_mnesia_transaction(TxFun),
+                 TailFun()
+    end.
+
+-spec execute_mnesia_transaction(rabbit_misc:thunk(A)) -> A.
+execute_mnesia_transaction(TxFun) ->
+    %% Making this a sync_transaction allows us to use dirty_read
+    %% elsewhere and get a consistent result even when that read
+    %% executes on a different node.
+    case worker_pool:submit(
+           fun () ->
+                   case mnesia:is_transaction() of
+                       false -> DiskLogBefore = mnesia_dumper:get_log_writes(),
+                                Res = mnesia:sync_transaction(TxFun),
+                                DiskLogAfter  = mnesia_dumper:get_log_writes(),
+                                case DiskLogAfter == DiskLogBefore of
+                                    true  -> file_handle_cache_stats:update(
+                                              mnesia_ram_tx),
+                                             Res;
+                                    false -> file_handle_cache_stats:update(
+                                              mnesia_disk_tx),
+                                             {sync, Res}
+                                end;
+                       true  -> mnesia:sync_transaction(TxFun)
+                   end
+           end, single) of
+        {sync, {atomic,  Result}} -> mnesia_sync:sync(), Result;
+        {sync, {aborted, Reason}} -> throw({error, Reason});
+        {atomic,  Result}         -> Result;
+        {aborted, Reason}         -> throw({error, Reason})
+    end.
+
+-spec execute_mnesia_transaction(rabbit_misc:thunk(A), fun ((A, boolean()) -> B)) -> B.
+%% Like execute_mnesia_transaction/1 with additional Pre- and Post-
+%% commit function
+execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
+    case mnesia:is_transaction() of
+        true  -> throw(unexpected_transaction);
+        false -> ok
+    end,
+    PrePostCommitFun(execute_mnesia_transaction(
+                       fun () ->
+                               Result = TxFun(),
+                               PrePostCommitFun(Result, true),
+                               Result
+                       end), false).
 
 %%--------------------------------------------------------------------
 %% Internal helpers

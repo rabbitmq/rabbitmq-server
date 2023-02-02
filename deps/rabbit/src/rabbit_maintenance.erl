@@ -28,17 +28,13 @@
     random_primary_replica_transfer_candidate_node/2,
     transfer_leadership_of_quorum_queues/1,
     transfer_leadership_of_classic_mirrored_queues/1,
-    status_table_name/0,
-    status_table_definition/0,
     boot/0
 ]).
 
--define(TABLE, rabbit_node_maintenance_states).
 -define(DEFAULT_STATUS,  regular).
 -define(DRAINING_STATUS, draining).
 
 -type maintenance_status() :: ?DEFAULT_STATUS | ?DRAINING_STATUS.
--type mnesia_table() :: atom().
 
 -export_type([
     maintenance_status/0
@@ -54,34 +50,11 @@
         {requires,    networking}]}).
 
 boot() ->
-    TableName = status_table_name(),
-    rabbit_log:info(
-      "Creating table ~ts for maintenance mode status",
-      [TableName]),
-    try
-        _ = rabbit_table:create(
-              TableName,
-              status_table_definition())
-    catch throw:Reason  ->
-              rabbit_log:error(
-                "Failed to create maintenance status table: ~tp",
-                [Reason])
-    end.
+    rabbit_db_maintenance:setup_schema().
 
 %%
 %% API
 %%
-
--spec status_table_name() -> mnesia_table().
-status_table_name() ->
-    ?TABLE.
-
--spec status_table_definition() -> list().
-status_table_definition() ->
-    maps:to_list(#{
-        record_name => node_maintenance_state,
-        attributes  => record_info(fields, node_maintenance_state)
-    }).
 
 -spec is_enabled() -> boolean().
 is_enabled() ->
@@ -138,35 +111,12 @@ revive() ->
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
     rabbit_log:debug("Marking the node as undergoing maintenance"),
-    set_maintenance_status_status(?DRAINING_STATUS).
+    rabbit_db_maintenance:set(?DRAINING_STATUS).
 
 -spec unmark_as_being_drained() -> boolean().
 unmark_as_being_drained() ->
     rabbit_log:debug("Unmarking the node as undergoing maintenance"),
-    set_maintenance_status_status(?DEFAULT_STATUS).
-
-set_maintenance_status_status(Status) ->
-    Res = mnesia:transaction(fun () ->
-        case mnesia:wread({?TABLE, node()}) of
-           [] ->
-                Row = #node_maintenance_state{
-                        node   = node(),
-                        status = Status
-                     },
-                mnesia:write(?TABLE, Row, write);
-            [Row0] ->
-                Row = Row0#node_maintenance_state{
-                        node   = node(),
-                        status = Status
-                      },
-                mnesia:write(?TABLE, Row, write)
-        end
-    end),
-    case Res of
-        {atomic, ok} -> true;
-        _            -> false
-    end.
-
+    rabbit_db_maintenance:set(?DEFAULT_STATUS).
 
 -spec is_being_drained_local_read(node()) -> boolean().
 is_being_drained_local_read(Node) ->
@@ -180,21 +130,20 @@ is_being_drained_consistent_read(Node) ->
 
 -spec status_local_read(node()) -> maintenance_status().
 status_local_read(Node) ->
-    case catch mnesia:dirty_read(?TABLE, Node) of
-        []  -> ?DEFAULT_STATUS;
-        [#node_maintenance_state{node = Node, status = Status}] ->
-            Status;
-        _   -> ?DEFAULT_STATUS
+    case rabbit_db_maintenance:get(Node) of
+        undefined ->
+            ?DEFAULT_STATUS;
+        Status ->
+            Status
     end.
 
 -spec status_consistent_read(node()) -> maintenance_status().
 status_consistent_read(Node) ->
-    case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
-        {atomic, []} -> ?DEFAULT_STATUS;
-        {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
-            Status;
-        {atomic, _}  -> ?DEFAULT_STATUS;
-        {aborted, _Reason} -> ?DEFAULT_STATUS
+    case rabbit_db_maintenance:get_consistent(Node) of
+        undefined ->
+            ?DEFAULT_STATUS;
+        Status ->
+            Status
     end.
 
  -spec filter_out_drained_nodes_local_read([node()]) -> [node()].

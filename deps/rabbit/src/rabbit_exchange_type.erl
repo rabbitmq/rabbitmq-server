@@ -11,8 +11,7 @@
 
 -export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
 
--type(tx() :: 'transaction' | 'none').
--type(serial() :: pos_integer() | tx()).
+-type(serial() :: pos_integer() | 'none').
 
 -callback description() -> [proplists:property()].
 
@@ -35,10 +34,10 @@
     rabbit_types:ok_or_error({'binding_invalid', string(), [any()]}).
 
 %% called after declaration and recovery
--callback create(tx(), rabbit_types:exchange()) -> 'ok'.
+-callback create(serial(), rabbit_types:exchange()) -> 'ok'.
 
 %% called after exchange (auto)deletion.
--callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+-callback delete(serial(), rabbit_types:exchange()) ->
     'ok'.
 
 %% called when the policy attached to this exchange changes.

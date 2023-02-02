@@ -438,12 +438,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                           {longstr, N} -> N;
                           _            -> unknown
                       end,
-              {Serial, Bindings} =
-                  rabbit_misc:execute_mnesia_transaction(
-                    fun () ->
-                            {rabbit_exchange:peek_serial(DownXName),
-                             rabbit_binding:list_for_source(DownXName)}
-                    end),
+              {Serial, Bindings} = {rabbit_exchange:peek_serial(DownXName),
+                                    rabbit_binding:list_for_source(DownXName)},
               true = is_integer(Serial),
               %% If we are very short lived, Serial can be undefined at
               %% this point (since the deletion of the X could have

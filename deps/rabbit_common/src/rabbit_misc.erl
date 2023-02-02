@@ -23,7 +23,6 @@
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
--export([dirty_read/1]).
 -export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
@@ -31,15 +30,10 @@
 -export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
--export([with_user/2]).
--export([execute_mnesia_transaction/1]).
--export([execute_mnesia_transaction/2]).
--export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
 -export([tcp_name/3, format_inet_error/1]).
 -export([upmap/2, map_in_order/2, utf8_safe/1]).
--export([table_filter/3]).
--export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -140,8 +134,6 @@
 -spec equivalence_fail
         (any(), any(), rabbit_types:r(any()), atom() | binary()) ->
             rabbit_types:connection_exit().
--spec dirty_read({atom(), any()}) ->
-          rabbit_types:ok_or_error2(any(), 'not_found').
 -spec table_lookup(rabbit_framing:amqp_table(), binary()) ->
           'undefined' | {rabbit_framing:amqp_field_type(), any()}.
 -spec set_table_value
@@ -172,22 +164,12 @@
 -spec with_exit_handler(thunk(A), thunk(A)) -> A.
 -spec is_abnormal_exit(any()) -> boolean().
 -spec filter_exit_map(fun ((A) -> B), [A]) -> [B].
--spec with_user(rabbit_types:username(), thunk(A)) -> A.
--spec execute_mnesia_transaction(thunk(A)) -> A.
--spec execute_mnesia_transaction(thunk(A), fun ((A, boolean()) -> B)) -> B.
--spec execute_mnesia_tx_with_tail
-        (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B)).
 -spec ensure_ok(ok_or_error(), atom()) -> 'ok'.
 -spec tcp_name(atom(), inet:ip_address(), rabbit_net:ip_port()) ->
           atom().
 -spec format_inet_error(atom()) -> string().
 -spec upmap(fun ((A) -> B), [A]) -> [B].
 -spec map_in_order(fun ((A) -> B), [A]) -> [B].
--spec table_filter
-        (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'), atom()) -> [A].
--spec dirty_read_all(atom()) -> [any()].
--spec dirty_foreach_key(fun ((any()) -> any()), atom()) ->
-          'ok' | 'aborted'.
 -spec dirty_dump_log(file:filename()) -> ok_or_error().
 -spec format(string(), [any()]) -> string().
 -spec format_many([{string(), [any()]}]) -> string().
@@ -361,19 +343,6 @@ val(Value) ->
                false -> "'~tp'"
            end, [Value]).
 
-%% Normally we'd call mnesia:dirty_read/1 here, but that is quite
-%% expensive due to general mnesia overheads (figuring out table types
-%% and locations, etc). We get away with bypassing these because we
-%% know that the tables we are looking at here
-%% - are not the schema table
-%% - have a local ram copy
-%% - do not have any indices
-dirty_read({Table, Key}) ->
-    case ets:lookup(Table, Key) of
-        [Result] -> {ok, Result};
-        []       -> {error, not_found}
-    end.
-
 %%
 %% Attribute Tables
 %%
@@ -544,67 +513,6 @@ filter_exit_map(F, L) ->
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
 
-
-with_user(Username, Thunk) ->
-    fun () ->
-            case mnesia:read({rabbit_user, Username}) of
-                [] ->
-                    mnesia:abort({no_such_user, Username});
-                [_U] ->
-                    Thunk()
-            end
-    end.
-
-execute_mnesia_transaction(TxFun) ->
-    %% Making this a sync_transaction allows us to use dirty_read
-    %% elsewhere and get a consistent result even when that read
-    %% executes on a different node.
-    case worker_pool:submit(
-           fun () ->
-                   case mnesia:is_transaction() of
-                       false -> DiskLogBefore = mnesia_dumper:get_log_writes(),
-                                Res = mnesia:sync_transaction(TxFun),
-                                DiskLogAfter  = mnesia_dumper:get_log_writes(),
-                                case DiskLogAfter == DiskLogBefore of
-                                    true  -> file_handle_cache_stats:update(
-                                              mnesia_ram_tx),
-                                             Res;
-                                    false -> file_handle_cache_stats:update(
-                                              mnesia_disk_tx),
-                                             {sync, Res}
-                                end;
-                       true  -> mnesia:sync_transaction(TxFun)
-                   end
-           end, single) of
-        {sync, {atomic,  Result}} -> mnesia_sync:sync(), Result;
-        {sync, {aborted, Reason}} -> throw({error, Reason});
-        {atomic,  Result}         -> Result;
-        {aborted, Reason}         -> throw({error, Reason})
-    end.
-
-%% Like execute_mnesia_transaction/1 with additional Pre- and Post-
-%% commit function
-execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
-    case mnesia:is_transaction() of
-        true  -> throw(unexpected_transaction);
-        false -> ok
-    end,
-    PrePostCommitFun(execute_mnesia_transaction(
-                       fun () ->
-                               Result = TxFun(),
-                               PrePostCommitFun(Result, true),
-                               Result
-                       end), false).
-
-%% Like execute_mnesia_transaction/2, but TxFun is expected to return a
-%% TailFun which gets called (only) immediately after the tx commit
-execute_mnesia_tx_with_tail(TxFun) ->
-    case mnesia:is_transaction() of
-        true  -> execute_mnesia_transaction(TxFun);
-        false -> TailFun = execute_mnesia_transaction(TxFun),
-                 TailFun()
-    end.
-
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 
@@ -659,41 +567,6 @@ upmap(F, L) ->
 map_in_order(F, L) ->
     lists:reverse(
       lists:foldl(fun (E, Acc) -> [F(E) | Acc] end, [], L)).
-
-%% Apply a pre-post-commit function to all entries in a table that
-%% satisfy a predicate, and return those entries.
-%%
-%% We ignore entries that have been modified or removed.
-table_filter(Pred, PrePostCommitFun, TableName) ->
-    lists:foldl(
-      fun (E, Acc) ->
-              case execute_mnesia_transaction(
-                     fun () -> mnesia:match_object(TableName, E, read) =/= []
-                                   andalso Pred(E) end,
-                     fun (false, _Tx) -> false;
-                         (true,   Tx) -> PrePostCommitFun(E, Tx), true
-                     end) of
-                  false -> Acc;
-                  true  -> [E | Acc]
-              end
-      end, [], dirty_read_all(TableName)).
-
-dirty_read_all(TableName) ->
-    mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
-
-dirty_foreach_key(F, TableName) ->
-    dirty_foreach_key1(F, TableName, mnesia:dirty_first(TableName)).
-
-dirty_foreach_key1(_F, _TableName, '$end_of_table') ->
-    ok;
-dirty_foreach_key1(F, TableName, K) ->
-    case catch mnesia:dirty_next(TableName, K) of
-        {'EXIT', _} ->
-            aborted;
-        NextKey ->
-            F(K),
-            dirty_foreach_key1(F, TableName, NextKey)
-    end.
 
 dirty_dump_log(FileName) ->
     {ok, LH} = disk_log:open([{name, dirty_dump_log},

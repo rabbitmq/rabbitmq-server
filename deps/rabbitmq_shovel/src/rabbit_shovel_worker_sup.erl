@@ -15,7 +15,6 @@
 
 start_link(ShovelName, ShovelConfig) ->
     mirrored_supervisor:start_link({local, ShovelName}, ShovelName,
-                                   fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, [ShovelName, ShovelConfig]).
 
 init([Name, Config]) ->

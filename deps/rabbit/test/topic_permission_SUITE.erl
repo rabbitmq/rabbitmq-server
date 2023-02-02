@@ -47,10 +47,8 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 clear_tables() ->
-    {atomic, ok} = mnesia:clear_table(rabbit_topic_permission),
-    {atomic, ok} = mnesia:clear_table(rabbit_vhost),
-    {atomic, ok} = mnesia:clear_table(rabbit_user),
-    ok.
+    ok = rabbit_db_vhost:clear(),
+    ok = rabbit_db_user:clear().
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -145,14 +143,8 @@ topic_permission_checks(Config) ->
 
 topic_permission_checks1(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
-    rabbit_misc:execute_mnesia_transaction(fun() ->
-        ok = mnesia:write(rabbit_vhost,
-            vhost:new(<<"/">>, []),
-            write),
-        ok = mnesia:write(rabbit_vhost,
-            vhost:new(<<"other-vhost">>, []),
-            write)
-                                           end),
+    rabbit_db_vhost:create_or_get(<<"/">>, [], #{}),
+    rabbit_db_vhost:create_or_get(<<"other-vhost">>, [], #{}),
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
     rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>, <<"acting-user">>),
 

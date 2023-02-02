@@ -15,6 +15,7 @@ APP_NAME = "rabbitmq_consistent_hash_exchange"
 APP_DESCRIPTION = "Consistent Hash Exchange Type"
 
 BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
     "//deps/rabbitmq_cli:erlang_app",
 ]
 
@@ -42,7 +43,7 @@ xref(
 plt(
     name = "base_plt",
     libs = ["//deps/rabbitmq_cli:elixir"],
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
 )
 
 dialyze(

@@ -133,22 +133,17 @@
       Args :: rabbit_feature_flags:enable_callback_args(),
       Ret :: rabbit_feature_flags:enable_callback_ret().
 direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
-    DependantTables = [rabbit_route, rabbit_exchange],
-    ok = rabbit_table:wait(DependantTables, _Retry = true),
-    [ok = rabbit_table:create_local_copy(Tab, ram_copies) || Tab <- DependantTables],
-
-    NewTable = rabbit_index_route,
+    TableName = rabbit_index_route,
+    ok = rabbit_table:wait([rabbit_route, rabbit_exchange], _Retry = true),
     try
-        ok = rabbit_table:create(
-               NewTable, rabbit_table:rabbit_index_route_definition()),
-        case rabbit_table:ensure_table_copy(NewTable, node(), ram_copies) of
+        case rabbit_db_binding:create_index_route_table() of
             ok ->
-                ok = rabbit_binding:populate_index_route_table();
+                ok;
             {error, Err} = Error ->
                 ?LOG_ERROR(
                   "Feature flags: `~ts`: failed to add copy of table ~ts to "
                   "node ~tp: ~tp",
-                  [FeatureName, NewTable, node(), Err],
+                   [FeatureName, TableName, node(), Err],
                   #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                 Error
         end
@@ -166,7 +161,7 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
 
 listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
     try
-        rabbit_misc:execute_mnesia_transaction(
+        rabbit_mnesia:execute_mnesia_transaction(
           fun () ->
                   _ = mnesia:lock({table, rabbit_listener}, read),
                   Listeners = mnesia:select(

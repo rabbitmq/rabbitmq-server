@@ -68,7 +68,7 @@ publish(Delivery = #delivery{
     end.
 
 publish(X, Delivery) ->
-    Qs = rabbit_amqqueue:lookup(rabbit_exchange:route(X, Delivery)),
+    Qs = rabbit_amqqueue:lookup_many(rabbit_exchange:route(X, Delivery)),
     _ = rabbit_queue_type:deliver(Qs, Delivery, stateless),
     ok.
 
