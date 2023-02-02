@@ -14,7 +14,7 @@ load(
 APP_ENV = """[
 	    {servers,               undefined},
 	    {user_bind_pattern,     none},
-	    {user_dn_pattern,       "$${username}"},
+	    {user_dn_pattern,       "${username}"},
 	    {dn_lookup_attribute,   none},
 	    {dn_lookup_base,        none},
 	    {group_lookup_base,     none},
