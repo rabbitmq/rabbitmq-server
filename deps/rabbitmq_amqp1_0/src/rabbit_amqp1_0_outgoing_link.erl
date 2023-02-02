@@ -250,7 +250,7 @@ transferred(DeliveryTag, Channel,
 
 source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
     Key = {symbol, <<"rabbitmq:stream-offset-spec">>},
-    case lists:keyfind(Key, 1, KVList) of
+    case keyfind_unpack_described(Key, KVList) of
         {_, {timestamp, Ts}} ->
             [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
         {_, {utf8, Spec}} ->
@@ -262,3 +262,17 @@ source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
     end;
 source_filters_to_consumer_args(_Source) ->
     [].
+
+keyfind_unpack_described(Key, KvList) ->
+    %% filterset values _should_ be described values
+    %% they aren't always however for historical reasons so we need this bit of
+    %% code to return a plain value for the given filter key
+    case lists:keyfind(Key, 1, KvList) of
+        {Key, {described, Key, Value}} ->
+            {Key, Value};
+        {Key, _} = Kv ->
+            Kv;
+        false ->
+            false
+    end.
+
