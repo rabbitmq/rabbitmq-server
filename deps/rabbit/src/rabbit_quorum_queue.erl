@@ -205,7 +205,7 @@ start_cluster(Q) ->
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    QuorumSize = get_default_quorum_initial_group_size(Arguments),
+    QuorumSize = get_default_quorum_initial_group_size(Arguments, Q),
     RaName = case qname_to_internal_name(QName) of
                  {ok, A} ->
                      A;
@@ -1594,12 +1594,18 @@ quorum_ctag(Other) ->
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
-get_default_quorum_initial_group_size(Arguments) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of
-        undefined ->
+get_default_quorum_initial_group_size(Arguments, Q) ->
+    PolicyValue = rabbit_policy:get(<<"target-qq-replica-count">>, Q),
+    ArgValue = rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>),
+    case {ArgValue, PolicyValue} of
+        {undefined, undefined} ->
             application:get_env(rabbit, quorum_cluster_size, 3);
-        {_Type, Val} ->
-            Val
+        {undefined, V} ->
+            V;
+        {{_Type, V}, undefined} ->
+            V;
+        {{_Type, ArgV}, PolV} ->
+            max(ArgV, PolV)
     end.
 
 %% member with the current leader first
