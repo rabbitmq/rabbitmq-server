@@ -394,7 +394,7 @@ msg_store_client_init_capture(MsgStore, Ref) ->
     {Pid, rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,
                                              fun (MsgIds, _ActionTaken) ->
                                                  Pid ! {on_disk, MsgIds}
-                                             end, undefined)}.
+                                             end)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
@@ -480,7 +480,7 @@ test_msg_store_confirm_timer() ->
                 true  -> Self ! on_disk;
                 false -> ok
             end
-        end, undefined),
+        end),
     ok = msg_store_write([MsgId], MSCState),
     ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
     ok = msg_store_remove([MsgId], MSCState),
@@ -1570,7 +1570,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined, undefined).
+    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
@@ -1578,7 +1578,7 @@ variable_queue_init(Q, Recover) ->
              true  -> non_clean_shutdown;
              false -> new;
              Terms -> Terms
-         end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
+         end, fun nop/2, fun nop/1, fun nop/1).
 
 variable_queue_read_terms(QName) ->
     #resource { kind = queue,

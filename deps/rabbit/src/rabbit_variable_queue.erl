@@ -26,7 +26,7 @@
 -export([convert_from_v2_to_v1_loop/8]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/6]).
+-export([start_msg_store/3, stop_msg_store/1, init/5]).
 
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -420,14 +420,14 @@ stop_msg_store(VHost) ->
 
 init(Queue, Recover, Callback) ->
     init(
-      Queue, Recover, Callback,
+      Queue, Recover,
       fun (MsgIds, ActionTaken) ->
               msgs_written_to_disk(Callback, MsgIds, ActionTaken)
       end,
       fun (MsgIds) -> msg_indices_written_to_disk(Callback, MsgIds) end,
       fun (MsgIds) -> msgs_and_indices_written_to_disk(Callback, MsgIds) end).
 
-init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init(Q, new, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
     %% We resolve the queue version immediately to avoid converting
@@ -440,14 +440,14 @@ init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) w
          IsDurable, IndexMod, IndexState, StoreState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                            MsgOnDiskFun, AsyncCallback, VHost);
+                                            MsgOnDiskFun, VHost);
              false -> undefined
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined,
-                               AsyncCallback, VHost), VHost);
+                               VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
-init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init(Q, Terms, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
@@ -455,8 +455,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
             true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                               MsgOnDiskFun, AsyncCallback,
-                                               VHost),
+                                               MsgOnDiskFun, VHost),
                      {C, fun (MsgId) when is_binary(MsgId) ->
                                  rabbit_msg_store:contains(MsgId, C);
                              (#basic_message{is_persistent = Persistent}) ->
@@ -465,8 +464,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
-                                             undefined, AsyncCallback,
-                                             VHost),
+                                             undefined, VHost),
     %% We MUST resolve the queue version immediately in order to recover.
     IndexMod = index_mod(Q),
     {DeltaCount, DeltaBytes, IndexState} =
@@ -1343,17 +1341,13 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
                                            end),
     Res.
 
-msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
+msg_store_client_init(MsgStore, MsgOnDiskFun, VHost) ->
     msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
-                          Callback, VHost).
+                          VHost).
 
-msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
-    CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, VHost) ->
     rabbit_vhost_msg_store:client_init(VHost, MsgStore,
-                                       Ref, MsgOnDiskFun,
-                                       fun () ->
-                                           Callback(?MODULE, CloseFDsFun)
-                                       end).
+                                       Ref, MsgOnDiskFun).
 
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
@@ -1375,17 +1369,6 @@ msg_store_remove(MSCState, IsPersistent, MsgIds) ->
       fun (MCSState1) ->
               rabbit_msg_store:remove(MsgIds, MCSState1)
       end).
-
-msg_store_close_fds(MSCState, IsPersistent) ->
-    with_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
-
-msg_store_close_fds_fun(IsPersistent) ->
-    fun (?MODULE, State = #vqstate { msg_store_clients = MSCState }) ->
-            {ok, MSCState1} = msg_store_close_fds(MSCState, IsPersistent),
-            State #vqstate { msg_store_clients = MSCState1 }
-    end.
 
 betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId0 }) ->
     {Filtered, NextDeliverSeqId, Acks, RamReadyCount, RamBytes, TransientCount, TransientBytes} =

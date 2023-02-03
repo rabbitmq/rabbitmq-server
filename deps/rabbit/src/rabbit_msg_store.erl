@@ -10,7 +10,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/5, successfully_recovered_state/1,
-         client_init/4, client_terminate/1, client_delete_and_terminate/1,
+         client_init/3, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1,
          write/3, write_flow/3, read/2, read_many/2, contains/2, remove/2]).
 
@@ -169,7 +169,6 @@
                     {rabbit_types:msg_id(), non_neg_integer(), A}).
 -type maybe_msg_id_fun() ::
         'undefined' | fun ((sets:set(), 'written' | 'ignored') -> any()).
--type maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok').
 
 %%----------------------------------------------------------------------------
 
@@ -453,14 +452,13 @@ start_link(VHost, Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
--spec client_init(server(), client_ref(), maybe_msg_id_fun(),
-                        maybe_close_fds_fun()) -> client_msstate().
+-spec client_init(server(), client_ref(), maybe_msg_id_fun()) -> client_msstate().
 
-client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom(Server) ->
+client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
-          Server, {new_client_state, Ref, self(), MsgOnDiskFun, CloseFDsFun},
+          Server, {new_client_state, Ref, self(), MsgOnDiskFun},
           infinity),
     CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
                                           ?CREDIT_DISC_BOUND),
@@ -745,7 +743,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
                                       ClientRefs, Dir, Name),
     Clients = maps:from_list(
-                [{CRef, {undefined, undefined, undefined}} ||
+                [{CRef, {undefined, undefined}} ||
                     CRef <- ClientRefs1]),
     %% CleanShutdown => msg location index and file_summary both
     %% recovered correctly.
@@ -829,7 +827,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
-        {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
+        {new_client_state, _Ref, _Pid, _MODC}               -> 7;
         _                                                   -> 0
     end.
 
@@ -851,7 +849,7 @@ prioritise_info(Msg, _Len, _State) ->
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
+handle_call({new_client_state, CRef, CPid, MsgOnDiskFun}, _From,
             State = #msstate { dir                = Dir,
                                index_state        = IndexState,
                                index_module       = IndexModule,
@@ -861,7 +859,7 @@ handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
                                flying_ets         = FlyingEts,
                                clients            = Clients,
                                gc_pid             = GCPid }) ->
-    Clients1 = maps:put(CRef, {CPid, MsgOnDiskFun, CloseFDsFun}, Clients),
+    Clients1 = maps:put(CRef, {CPid, MsgOnDiskFun}, Clients),
     erlang:monitor(process, CPid),
     reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
            CurFileCacheEts, FlyingEts},
@@ -895,7 +893,7 @@ handle_cast({write, CRef, MsgId, Flow},
                                clients            = Clients,
                                credit_disc_bound  = CreditDiscBound }) ->
     case Flow of
-        flow   -> {CPid, _, _} = maps:get(CRef, Clients),
+        flow   -> {CPid, _} = maps:get(CRef, Clients),
                   %% We are going to process a message sent by the
                   %% rabbit_amqqueue_process. Now we are accessing the
                   %% msg_store process dictionary.
@@ -1308,10 +1306,9 @@ update_pending_confirms(Fun, CRef,
                         State = #msstate { clients         = Clients,
                                            cref_to_msg_ids = CTM }) ->
     case maps:get(CRef, Clients) of
-        {_CPid, undefined,    _CloseFDsFun} -> State;
-        {_CPid, MsgOnDiskFun, _CloseFDsFun} -> CTM1 = Fun(MsgOnDiskFun, CTM),
-                                               State #msstate {
-                                                 cref_to_msg_ids = CTM1 }
+        {_CPid, undefined   } -> State;
+        {_CPid, MsgOnDiskFun} -> CTM1 = Fun(MsgOnDiskFun, CTM),
+                                 State #msstate { cref_to_msg_ids = CTM1 }
     end.
 
 record_pending_confirm(CRef, MsgId, State) ->
