@@ -80,7 +80,7 @@ user_login_authentication(Username, AuthProps) ->
         {password, ""} ->
             {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
              [Username]};
-        {password, none} -> %% For cases when we do not have password, e.g. when using TLS.
+        {password, none} -> %% For cases when authenticating using an x.509 certificate
             internal_check_user_login(Username, fun(_) -> true end);
         {password, Cleartext} ->
             internal_check_user_login(
