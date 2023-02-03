@@ -69,7 +69,7 @@ hashing_module_for_user(User) ->
 %% possible when the EXTERNAL authentication mechanism is used, see
 %% rabbit_auth_mechanism_plain:handle_response/2 and rabbit_reader:auth_phase/2.
 user_login_authentication(Username, []) ->
-    internal_check_user_login(Username, fun(_) -> true end);
+    user_login_authentication(Username, [{password, none}]);
 %% For cases when we do have a set of credentials. rabbit_auth_mechanism_plain:handle_response/2
 %% performs initial validation.
 user_login_authentication(Username, AuthProps) ->
@@ -80,6 +80,8 @@ user_login_authentication(Username, AuthProps) ->
         {password, ""} ->
             {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
              [Username]};
+        {password, none} -> %% For cases when we do not have password, e.g. when using TLS.
+            internal_check_user_login(Username, fun(_) -> true end);
         {password, Cleartext} ->
             internal_check_user_login(
               Username,
