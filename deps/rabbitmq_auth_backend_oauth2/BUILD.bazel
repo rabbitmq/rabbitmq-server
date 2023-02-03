@@ -64,7 +64,11 @@ dialyze(
     plt = ":base_plt",
 )
 
-broker_for_integration_suites()
+broker_for_integration_suites(
+    extra_plugins = [
+        "//deps/rabbitmq_mqtt:erlang_app",
+    ],
+)
 
 rabbitmq_test_helper(
     name = "rabbit_auth_backend_oauth2_test_util",
@@ -110,6 +114,9 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":rabbit_auth_backend_oauth2_test_util",
+    ],
+    runtime_deps = [
+        "@emqtt//:erlang_app",
     ],
 )
 

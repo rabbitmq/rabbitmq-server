@@ -20,6 +20,11 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
+<<<<<<< HEAD
+=======
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.7.0-rc.3
+
+>>>>>>> 2d0826c335 (Add OAuth 2.0 MQTT system test)
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
