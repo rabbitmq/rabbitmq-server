@@ -41,8 +41,6 @@ groups() ->
         ]},
       {java, [], [
           roundtrip
-        ]},
-      {streams, [], [
         ]}
     ].
 
