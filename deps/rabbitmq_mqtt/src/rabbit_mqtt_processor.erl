@@ -438,7 +438,7 @@ register_client(Packet = #mqtt_packet_connect{proto_ver = ProtoVersion},
     NewProcState =
     fun(RegisterState) ->
             rabbit_mqtt_util:register_clientid(VHost, ClientId),
-            RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
+            RetainerPid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
             ExchangeBin = rabbit_mqtt_util:env(exchange),
             ExchangeName = rabbit_misc:r(VHost, exchange, ExchangeBin),
             Cfg = Cfg0#cfg{exchange = ExchangeName,

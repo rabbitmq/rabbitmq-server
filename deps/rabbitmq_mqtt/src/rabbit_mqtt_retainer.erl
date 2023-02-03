@@ -7,31 +7,25 @@
 
 -module(rabbit_mqtt_retainer).
 
--include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
 -behaviour(gen_server).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, start_link/2]).
+         terminate/2, start_link/1]).
 
--export([retain/3, fetch/2, clear/2, store_module/0]).
+-export([retain/3, fetch/2, clear/2]).
 
 -define(TIMEOUT, 30_000).
 
--record(retainer_state, {store_mod,
-                         store}).
-
-%%----------------------------------------------------------------------------
-
-start_link(RetainStoreMod, VHost) ->
-    gen_server:start_link(?MODULE, [RetainStoreMod, VHost], []).
+-spec start_link(rabbit_types:vhost()) ->
+    gen_server:start_ret().
+start_link(VHost) ->
+    gen_server:start_link(?MODULE, VHost, []).
 
 -spec retain(pid(), binary(), mqtt_msg()) -> ok.
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
-    gen_server:cast(Pid, {retain, Topic, Msg});
-retain(_Pid, _Topic, Msg = #mqtt_msg{retain = false}) ->
-    throw({error, {retain_is_false, Msg}}).
+    gen_server:cast(Pid, {retain, Topic, Msg}).
 
 -spec fetch(pid(), binary()) ->
     undefined | mqtt_msg().
@@ -42,52 +36,28 @@ fetch(Pid, Topic) ->
 clear(Pid, Topic) ->
     gen_server:cast(Pid, {clear, Topic}).
 
-%%----------------------------------------------------------------------------
-
-init([StoreMod, VHost]) ->
+-spec init(rabbit_types:vhost()) ->
+    {ok, rabbit_mqtt_retained_msg_store:state()}.
+init(VHost) ->
     process_flag(trap_exit, true),
-    State = case StoreMod:recover(store_dir(), VHost) of
-                {ok, Store} -> #retainer_state{store = Store,
-                                               store_mod = StoreMod};
-                {error, _}  -> #retainer_state{store = StoreMod:new(store_dir(), VHost),
-                                               store_mod = StoreMod}
-            end,
+    State = rabbit_mqtt_retained_msg_store:start(VHost),
     {ok, State}.
 
--spec store_module() -> undefined | module().
-store_module() ->
-    case application:get_env(?APP_NAME, retained_message_store) of
-        {ok, Mod} -> Mod;
-        undefined -> undefined
-    end.
-
-%%----------------------------------------------------------------------------
-
-handle_cast({retain, Topic, Msg},
-    State = #retainer_state{store = Store, store_mod = Mod}) ->
-    ok = Mod:insert(Topic, Msg, Store),
+handle_cast({retain, Topic, Msg}, State) ->
+    ok = rabbit_mqtt_retained_msg_store:insert(Topic, Msg, State),
     {noreply, State};
-handle_cast({clear, Topic},
-    State = #retainer_state{store = Store, store_mod = Mod}) ->
-    ok = Mod:delete(Topic, Store),
+handle_cast({clear, Topic}, State) ->
+    ok = rabbit_mqtt_retained_msg_store:delete(Topic, State),
     {noreply, State}.
 
-handle_call({fetch, Topic}, _From,
-    State = #retainer_state{store = Store, store_mod = Mod}) ->
-    Reply = case Mod:lookup(Topic, Store) of
-                #retained_message{mqtt_msg = Msg} -> Msg;
-                not_found                         -> undefined
-            end,
+handle_call({fetch, Topic}, _From, State) ->
+    Reply = rabbit_mqtt_retained_msg_store:lookup(Topic, State),
     {reply, Reply, State}.
 
 handle_info(stop, State) ->
     {stop, normal, State};
-
 handle_info(Info, State) ->
     {stop, {unknown_info, Info}, State}.
 
-store_dir() ->
-    rabbit:data_dir().
-
-terminate(_Reason, #retainer_state{store = Store, store_mod = Mod}) ->
-    Mod:terminate(Store).
+terminate(_Reason, State) ->
+    rabbit_mqtt_retained_msg_store:terminate(State).

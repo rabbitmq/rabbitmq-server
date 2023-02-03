@@ -12,10 +12,7 @@
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
--record(store_state, {
-  %% DETS table name
-  table
-}).
+-record(store_state, {table :: dets:tab_name()}).
 
 -type store_state() :: #store_state{}.
 
@@ -36,11 +33,12 @@ recover(Dir, VHost) ->
 insert(Topic, Msg, #store_state{table = T}) ->
   ok = dets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}).
 
--spec lookup(binary(), store_state()) -> retained_message() | not_found.
+-spec lookup(binary(), store_state()) ->
+    mqtt_msg() | undefined.
 lookup(Topic, #store_state{table = T}) ->
   case dets:lookup(T, Topic) of
-    []      -> not_found;
-    [Entry] -> Entry
+    []      -> undefined;
+    [#retained_message{mqtt_msg = Msg}] -> Msg
   end.
 
 -spec delete(binary(), store_state()) -> ok.

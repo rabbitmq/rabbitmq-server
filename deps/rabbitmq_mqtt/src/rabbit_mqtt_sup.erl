@@ -46,17 +46,14 @@ init([{Listeners, SslListeners0}]) ->
          start => {pg, start_link, [PgScope]},
          restart => transient,
          shutdown => ?WORKER_WAIT,
-         type => worker,
-         modules => [pg]
+         type => worker
         },
        #{
          id => rabbit_mqtt_retainer_sup,
-         start => {rabbit_mqtt_retainer_sup, start_link,
-                   [{local, rabbit_mqtt_retainer_sup}]},
+         start => {rabbit_mqtt_retainer_sup, start_link, []},
          restart => transient,
          shutdown => ?SUPERVISOR_WAIT,
-         type => supervisor,
-         modules => [rabbit_mqtt_retainer_sup]
+         type => supervisor
         }
        | listener_specs(
            fun tcp_listener_spec/1,
