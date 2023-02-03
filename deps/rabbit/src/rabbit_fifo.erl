@@ -72,7 +72,8 @@
         ]).
 
 -ifdef(TEST).
--export([update_header/4]).
+-export([update_header/4,
+         chunk_disk_msgs/3]).
 -endif.
 
 %% command records representing all the protocol actions that are supported
@@ -1876,9 +1877,9 @@ checkout(#{index := Index} = Meta,
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId,
-                 ?MSG(RaftIdx, Header), ExpiredMsg, State, Effects},
+                 ?MSG(_RaftIdx, _Header) = Msg, ExpiredMsg, State, Effects},
           SendAcc0) ->
-    DelMsg = {RaftIdx, {MsgId, Header}},
+    DelMsg = {MsgId, Msg},
     SendAcc = case maps:get(ConsumerId, SendAcc0, undefined) of
                   undefined ->
                       SendAcc0#{ConsumerId => [DelMsg]};
@@ -1887,7 +1888,7 @@ checkout0(Meta, {success, ConsumerId, MsgId,
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
 checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
-    Effects = append_delivery_effects(Effects0, SendAcc, State0),
+    Effects = add_delivery_effects(Effects0, SendAcc, State0),
     {State0, ExpiredMsg, lists:reverse(Effects)}.
 
 evaluate_limit(_Index, Result, _BeforeState,
@@ -1942,12 +1943,33 @@ evaluate_limit(Index, Result, BeforeState,
             {State0, Result, Effects0}
     end.
 
-append_delivery_effects(Effects0, AccMap, _State) when map_size(AccMap) == 0 ->
+
+%% [6,5,4,3,2,1] -> [[1,2],[3,4],[5,6]]
+chunk_disk_msgs([], _Bytes, [[] | Chunks]) ->
+    Chunks;
+chunk_disk_msgs([], _Bytes, Chunks) ->
+    Chunks;
+chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem],
+                Bytes, Chunks)
+  when Bytes >= ?DELIVERY_CHUNK_LIMIT_B ->
+    Size = get_header(size, Header),
+    chunk_disk_msgs(Rem, Size, [[Msg] | Chunks]);
+chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem], Bytes,
+                [CurChunk | Chunks]) ->
+    Size = get_header(size, Header),
+    chunk_disk_msgs(Rem, Bytes + Size, [[Msg | CurChunk] | Chunks]).
+
+add_delivery_effects(Effects0, AccMap, _State)
+  when map_size(AccMap) == 0 ->
     %% does this ever happen?
     Effects0;
-append_delivery_effects(Effects0, AccMap, State) ->
-     maps:fold(fun (C, DiskMsgs, Ef) when is_list(DiskMsgs) ->
-                       [delivery_effect(C, lists:reverse(DiskMsgs), State) | Ef]
+add_delivery_effects(Effects0, AccMap, State) ->
+     maps:fold(fun (C, DiskMsgs, Efs)
+                     when is_list(DiskMsgs) ->
+                       lists:foldl(
+                         fun (Msgs, E) ->
+                                 [delivery_effect(C, Msgs, State) | E]
+                         end, Efs, chunk_disk_msgs(DiskMsgs, 0, [[]]))
                end, Effects0, AccMap).
 
 take_next_msg(#?MODULE{returns = Returns0,
@@ -1978,18 +2000,20 @@ get_next_msg(#?MODULE{returns = Returns0,
             Msg
     end.
 
-delivery_effect({CTag, CPid}, [{Idx, {MsgId, Header}}],
+delivery_effect({CTag, CPid}, [{MsgId, ?MSG(Idx,  Header)}],
                 #?MODULE{msg_cache = {Idx, RawMsg}}) ->
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      [local, ra_event]};
 delivery_effect({CTag, CPid}, Msgs, _State) ->
-    {RaftIdxs, Data} = lists:unzip(Msgs),
+    RaftIdxs = lists:foldr(fun ({_, ?MSG(I, _)}, Acc) ->
+                                   [I | Acc]
+                           end, [], Msgs),
     {log, RaftIdxs,
      fun(Log) ->
              DelMsgs = lists:zipwith(
-                         fun (Cmd, {MsgId, Header}) ->
+                         fun (Cmd, {MsgId, ?MSG(_Idx,  Header)}) ->
                                  {MsgId, {Header, get_msg(Cmd)}}
-                         end, Log, Data),
+                         end, Log, Msgs),
              [{send_msg, CPid, {delivery, CTag, DelMsgs}, [local, ra_event]}]
      end,
      {local, node(CPid)}}.

@@ -153,7 +153,9 @@ all_tests() ->
      per_message_ttl_expiration_too_high,
      consumer_priorities,
      cancel_consumer_gh_3729,
-     cancel_and_consume_with_same_tag
+     cancel_and_consume_with_same_tag,
+     validate_messages_on_queue
+
     ].
 
 memory_tests() ->
@@ -2935,6 +2937,23 @@ cancel_and_consume_with_same_tag(Config) ->
     ok = cancel(Ch),
 
 
+
+    ok.
+
+validate_messages_on_queue(Config) ->
+    QQ = ?config(queue_name, Config),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'queue.declare_ok'{} = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    Messages = [begin
+                    M = <<I:8000/integer>>,
+                    publish(Ch, QQ, M),
+                    M
+                end || I <- lists:seq(1, 200)],
+    amqp_channel:wait_for_confirms_or_die(Ch),
+    validate_queue(Ch, QQ, Messages),
 
     ok.
 
