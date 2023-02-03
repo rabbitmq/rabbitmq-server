@@ -78,7 +78,8 @@ groups() ->
                                             leader_locator_balanced,
                                             leader_locator_balanced_maintenance,
                                             leader_locator_balanced_random_maintenance,
-                                            leader_locator_policy
+                                            leader_locator_policy,
+                                            policy_target_precedence
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -3081,6 +3082,34 @@ leader_locator_policy(Config) ->
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs],
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>).
+
+policy_target_precedence(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"target-policy">>, <<"^policy_target_precedence$">>, <<"queues">>,
+           [{<<"target-qq-replica-count">>, 3}]),
+
+    Qs =[_PolicyQ = ?config(queue_name, Config),
+         _NonPolicyQ = ?config(alt_queue_name, Config)],
+
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 2}])) || Q <- Qs],
+
+    [WithPolicyLen, NoPolicyLen] =
+        [begin
+             {ok, Members, _} = ra:members({ra_name(Q), Server}),
+             length(Members)
+         end || Q <- Qs],
+
+    ?assertEqual(3, WithPolicyLen),
+    ?assertEqual(2, NoPolicyLen),
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs],
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"target-policy">>).
 
 select_nodes_with_least_replicas(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
