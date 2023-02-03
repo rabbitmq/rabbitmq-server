@@ -639,32 +639,24 @@ parse_date_spec(Input, _Acc) ->
     io:format(standard_error, "Failed to parse rotation date spec: ~tp (error)~n", [Input]),
     error.
 
-parse_minute("", Acc) ->
-    Acc;
 parse_minute(Input, Acc) ->
     case string_to_int_within_range(Input, 0, 59) of
         {Val, _Rest} -> Acc#{minute => Val};
         error       ->  error
     end.
 
-parse_hour("", Acc) ->
-    Acc;
 parse_hour(Input, Acc) ->
     case string_to_int_within_range(Input, 0, 23) of
         {Val, _Rest} -> Acc#{hour => Val};
         error       ->  error
     end.
 
-parse_day_of_week("", Acc) ->
-    Acc;
 parse_day_of_week(Input, Acc) ->
     case string_to_int_within_range(Input, 0, 6) of
         {DayOfWeek, _Rest} -> Acc#{day_of_week => DayOfWeek};
         error              -> error
     end.
 
-parse_day_of_month("", Acc) ->
-    Acc;
 parse_day_of_month([Last | _Rest], Acc)
   when Last=:=$l orelse Last=:=$L ->
     Acc#{day_of_month => last};

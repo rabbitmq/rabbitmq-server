@@ -402,8 +402,8 @@ override_with_advanced_config(Config, AdvancedConfigFile) ->
             throw({error, failed_to_parse_advanced_configuration_file});
         {error, Reason} ->
             ?LOG_ERROR(
-              "Failed to load advanced configuration file \"~ts\": ~ts",
-              [AdvancedConfigFile, file:format_error(Reason)],
+              "Failed to load advanced configuration file \"~ts\": ~tp",
+              [AdvancedConfigFile, Reason],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_read_advanced_configuration_file})
     end.
