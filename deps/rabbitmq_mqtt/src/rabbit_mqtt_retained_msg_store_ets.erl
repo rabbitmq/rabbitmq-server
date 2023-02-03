@@ -13,11 +13,9 @@
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
 -record(store_state, {
-  %% ETS table ID
-  table,
-  %% where the table is stored on disk
-  filename
-}).
+          table :: ets:tid(),
+          filename :: file:filename_all()
+         }).
 
 -type store_state() :: #store_state{}.
 
@@ -44,11 +42,11 @@ insert(Topic, Msg, #store_state{table = T}) ->
   true = ets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}),
   ok.
 
--spec lookup(binary(), store_state()) -> retained_message() | not_found.
+-spec lookup(binary(), store_state()) -> mqtt_msg() | undefined.
 lookup(Topic, #store_state{table = T}) ->
   case ets:lookup(T, Topic) of
-    []      -> not_found;
-    [Entry] -> Entry
+    []      -> undefined;
+    [#retained_message{mqtt_msg = Msg}] -> Msg
   end.
 
 -spec delete(binary(), store_state()) -> ok.

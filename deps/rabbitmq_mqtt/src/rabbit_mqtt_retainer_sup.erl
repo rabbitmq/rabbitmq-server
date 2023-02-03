@@ -6,68 +6,57 @@
 %%
 
 -module(rabbit_mqtt_retainer_sup).
+
 -behaviour(supervisor).
 
--export([start_link/1, init/1, start_child/2,start_child/1, child_for_vhost/1,
-         delete_child/1]).
+%% supervsior callback
+-export([init/1]).
 
--spec start_child(binary()) -> supervisor:startchild_ret().
--spec start_child(term(), binary()) -> supervisor:startchild_ret().
+%% API
+-export([start_link/0,
+         start_child_for_vhost/1,
+         delete_child_for_vhost/1]).
 
-start_link(SupName) ->
-    supervisor:start_link(SupName, ?MODULE, []).
+-spec start_link() -> supervisor:startlink_ret().
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
--spec child_for_vhost(rabbit_types:vhost()) -> pid().
-child_for_vhost(VHost) when is_binary(VHost) ->
-  case rabbit_mqtt_retainer_sup:start_child(VHost) of
-    {ok, Pid}                       -> Pid;
-    {error, {already_started, Pid}} -> Pid
-  end.
+-spec start_child_for_vhost(rabbit_types:vhost()) -> pid().
+start_child_for_vhost(VHost)
+  when is_binary(VHost) ->
+    case supervisor:start_child(?MODULE, child_spec(VHost)) of
+        {ok, Pid}                       -> Pid;
+        {error, {already_started, Pid}} -> Pid
+    end.
 
-start_child(VHost) when is_binary(VHost) ->
-  start_child(rabbit_mqtt_retainer:store_module(), VHost).
+-spec delete_child_for_vhost(rabbit_types:vhost()) -> ok.
+delete_child_for_vhost(VHost) ->
+    Id = vhost_to_atom(VHost),
+    ok = supervisor:terminate_child(?MODULE, Id),
+    ok = supervisor:delete_child(?MODULE, Id).
 
-start_child(RetainStoreMod, VHost) ->
-    supervisor:start_child(
-        ?MODULE,
-        #{
-            id => vhost_to_atom(VHost),
-            start => {rabbit_mqtt_retainer, start_link, [RetainStoreMod, VHost]},
-            restart => permanent,
-            shutdown => 60,
-            type => worker,
-            modules => [rabbit_mqtt_retainer]
-        }
-    ).
-
-delete_child(VHost) ->
-  Id = vhost_to_atom(VHost),
-  ok = supervisor:terminate_child(?MODULE, Id),
-  ok = supervisor:delete_child(?MODULE, Id).
-
+-spec init([]) ->
+    {ok, {supervisor:sup_flags(),
+          [supervisor:child_spec()]}}.
 init([]) ->
-  Mod = rabbit_mqtt_retainer:store_module(),
-  rabbit_log:info("MQTT retained message store: ~tp",
-    [Mod]),
-  {ok, {
-      #{strategy => one_for_one, intensity => 5, period => 5},
-      child_specs(Mod, rabbit_vhost:list_names())
-  }}.
+    {ok, {#{intensity => 5,
+            period => 5},
+          child_specs(rabbit_vhost:list_names())
+         }}.
 
-child_specs(Mod, VHosts) ->
-    %% see start_child/2
-    [
-        #{
-            id => vhost_to_atom(V),
-            start => {rabbit_mqtt_retainer, start_link, [Mod, V]},
-            restart => permanent,
-            shutdown => infinity,
-            type => worker,
-            modules => [rabbit_mqtt_retainer]
-        }
-     || V <- VHosts
-    ].
+-spec child_specs([rabbit_types:vhost()]) ->
+    [supervisor:child_spec()].
+child_specs(VHosts) ->
+    lists:map(fun child_spec/1, VHosts).
 
+-spec child_spec(rabbit_types:vhost()) ->
+    supervisor:child_spec().
+child_spec(VHost) ->
+    #{id => vhost_to_atom(VHost),
+      start => {rabbit_mqtt_retainer, start_link, [VHost]},
+      shutdown => 120_000}.
+
+-spec vhost_to_atom(rabbit_types:vhost()) -> atom().
 vhost_to_atom(VHost) ->
     %% we'd like to avoid any conversion here because
     %% this atom isn't meant to be human-readable, only

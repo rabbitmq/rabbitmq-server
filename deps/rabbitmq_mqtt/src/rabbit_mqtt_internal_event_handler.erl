@@ -20,11 +20,11 @@ init([]) ->
 
 handle_event({event, vhost_created, Info, _, _}, ?STATE) ->
     Name = pget(name, Info),
-    rabbit_mqtt_retainer_sup:child_for_vhost(Name),
+    rabbit_mqtt_retainer_sup:start_child_for_vhost(Name),
     {ok, ?STATE};
 handle_event({event, vhost_deleted, Info, _, _}, ?STATE) ->
     Name = pget(name, Info),
-    rabbit_mqtt_retainer_sup:delete_child(Name),
+    rabbit_mqtt_retainer_sup:delete_child_for_vhost(Name),
     {ok, ?STATE};
 handle_event({event, maintenance_connections_closed, _Info, _, _}, ?STATE) ->
     %% we should close our connections
