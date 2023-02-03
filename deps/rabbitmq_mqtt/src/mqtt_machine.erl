@@ -157,7 +157,7 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids,
                         end, [], Remove),
 
     State = State0#machine_state{client_ids = Keep,
-                                 pids = maps:without(maps:keys(Remove), Pids0)},
+                                 pids = maps:without(maps:values(Remove), Pids0)},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 apply(_Meta, {machine_version, 0, 1}, {machine_state, Ids}) ->
     Pids = maps:fold(
