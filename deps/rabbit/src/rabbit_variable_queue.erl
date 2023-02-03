@@ -2648,14 +2648,20 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             List1;
         false ->
             ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
-            merge_sh_read_msgs(List1, ShPersistMsgs)
+            case map_size(ShPersistMsgs) of
+                0 -> List1;
+                _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
+            end
     end,
     List = case length(ShTransientReads) < 10 of
         true ->
             List2;
         false ->
             ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
-            merge_sh_read_msgs(List2, ShTransientMsgs)
+            case map_size(ShTransientMsgs) of
+                0 -> List2;
+                _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
+            end
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,

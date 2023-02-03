@@ -525,13 +525,13 @@ read(MsgId,
             {{ok, Msg}, CState}
     end.
 
--spec read_many([rabbit_types:msg_id()], client_msstate()) -> [msg()].
+-spec read_many([rabbit_types:msg_id()], client_msstate()) -> #{rabbit_types:msg_id() => msg()}.
 
 %% We disable read_many when the index module is not ETS for the time being.
 %% We can introduce the new index module callback as a breaking change in 4.0.
 read_many(_, #client_msstate{ index_module = IndexMod })
         when IndexMod =/= rabbit_msg_store_ets_index ->
-    [];
+    #{};
 read_many(MsgIds, CState) ->
     file_handle_cache_stats:inc(msg_store_read, length(MsgIds)),
     %% We receive MsgIds in rouhgly the younger->older order so
