@@ -41,8 +41,11 @@ groups() ->
         ]},
       {java, [], [
           roundtrip
+<<<<<<< HEAD
         ]},
       {streams, [], [
+=======
+>>>>>>> 143d7cbc31 (Remove unused group)
         ]}
     ].
 
