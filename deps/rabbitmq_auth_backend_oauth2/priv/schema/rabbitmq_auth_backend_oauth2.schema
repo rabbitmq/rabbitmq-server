@@ -38,7 +38,7 @@
 
 %% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
-%% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+%% {additional_scopes_key, <<"my_custom_scope_key">>},
 
 {mapping,
  "auth_oauth2.additional_scopes_key",
@@ -77,12 +77,6 @@
  fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("auth_oauth2.preferred_username_claims", Conf))
  end}.
-
-{mapping,
- "auth_oauth2.additional_scopes_key",
- "rabbitmq_auth_backend_oauth2.extra_scopes_source",
- [{datatype, string}]}.
-
 
 %% ID of the default signing key
 %%
