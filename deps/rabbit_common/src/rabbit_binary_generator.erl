@@ -22,11 +22,11 @@
 -type frame() :: [binary()].
 
 -spec build_simple_method_frame
-        (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record(),
+        (rabbit_types:channel_number(), rabbit_framing:amqp_method_record(),
          rabbit_types:protocol()) ->
             frame().
 -spec build_simple_content_frames
-        (rabbit_channel:channel_number(), rabbit_types:content(),
+        (rabbit_types:channel_number(), rabbit_types:content(),
          non_neg_integer(), rabbit_types:protocol()) ->
             [frame()].
 -spec build_heartbeat_frame() -> frame().
@@ -39,9 +39,9 @@
         (rabbit_types:content()) ->
             rabbit_types:unencoded_content().
 -spec map_exception
-        (rabbit_channel:channel_number(), rabbit_types:amqp_error() | any(),
+        (rabbit_types:channel_number(), rabbit_types:amqp_error() | any(),
          rabbit_types:protocol()) ->
-            {rabbit_channel:channel_number(),
+            {rabbit_types:channel_number(),
              rabbit_framing:amqp_method_record()}.
 
 %%----------------------------------------------------------------------------

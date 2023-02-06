@@ -15,7 +15,7 @@
 
 -export_type([routing_key/0, match_result/0]).
 
--type routing_key() :: binary().
+-type routing_key() :: rabbit_types:routing_key().
 -type match_result() :: [rabbit_types:binding_destination()].
 
 %%----------------------------------------------------------------------------
