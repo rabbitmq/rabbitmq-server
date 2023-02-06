@@ -59,9 +59,9 @@
 %%----------------------------------------------------------------------------
 -type(channel_stats_id() :: pid() |
 			    {pid(),
-			     {rabbit_amqqueue:name(), rabbit_exchange:name()}} |
-			    {pid(), rabbit_amqqueue:name()} |
-			    {pid(), rabbit_exchange:name()}).
+			     {rabbit_types:rabbit_amqqueue_name(), rabbit_types:exchange_name()}} |
+			    {pid(), rabbit_types:rabbit_amqqueue_name()} |
+			    {pid(), rabbit_types:exchange_name()}).
 
 -type(channel_stats_type() :: queue_exchange_stats | queue_stats |
 			      exchange_stats | reductions).
@@ -80,17 +80,17 @@
 -spec channel_stats(pid(), rabbit_types:infos()) -> ok.
 -spec channel_stats(channel_stats_type(), channel_stats_id(),
                     rabbit_types:infos() | integer()) -> ok.
--spec channel_queue_down({pid(), rabbit_amqqueue:name()}) -> ok.
--spec channel_queue_exchange_down({pid(), {rabbit_amqqueue:name(),
-                                   rabbit_exchange:name()}}) -> ok.
--spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
+-spec channel_queue_down({pid(), rabbit_types:rabbit_amqqueue_name()}) -> ok.
+-spec channel_queue_exchange_down({pid(), {rabbit_types:rabbit_amqqueue_name(),
+                                   rabbit_types:exchange_name()}}) -> ok.
+-spec channel_exchange_down({pid(), rabbit_types:exchange_name()}) -> ok.
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
+                       rabbit_types:rabbit_amqqueue_name(), integer(), boolean(), activity_status(), list()) -> ok.
 -spec consumer_updated(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
--spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
--spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
--spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
+                       rabbit_types:rabbit_amqqueue_name(), integer(), boolean(), activity_status(), list()) -> ok.
+-spec consumer_deleted(pid(), binary(), rabbit_types:rabbit_amqqueue_name()) -> ok.
+-spec queue_stats(rabbit_types:rabbit_amqqueue_name(), rabbit_types:infos()) -> ok.
+-spec queue_stats(rabbit_types:rabbit_amqqueue_name(), integer(), integer(), integer(),
                   integer()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
 -spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.

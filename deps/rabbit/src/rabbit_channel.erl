@@ -225,7 +225,7 @@
 
 -export_type([channel_number/0]).
 
--type channel_number() :: non_neg_integer().
+-type channel_number() :: rabbit_types:channel_number().
 
 -export_type([channel/0]).
 
