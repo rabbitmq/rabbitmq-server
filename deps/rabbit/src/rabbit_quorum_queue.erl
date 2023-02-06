@@ -147,7 +147,7 @@ update(Q, State) when ?amqqueue_is_quorum(Q) ->
     %% QQ state maintains it's own updates
     State.
 
--spec handle_event(rabbit_amqquue:name(),
+-spec handle_event(rabbit_amqqueue:name(),
                    {amqqueue:ra_server_id(), any()},
                    rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |

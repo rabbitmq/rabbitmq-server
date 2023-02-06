@@ -23,7 +23,7 @@
 
 -spec start_link
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
-         module(), any(), mfargs(), mfargs(), integer(), integer(), supervisor:worker(), string()) ->
+         module(), any(), mfargs(), mfargs(), integer(), integer(), 'worker' | 'supervisor', string()) ->
                            rabbit_types:ok_pid_or_error().
 
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,

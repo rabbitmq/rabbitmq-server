@@ -18,11 +18,11 @@
 -record(http_state,{
     url :: string(),
     http_options :: list(),
-    headers :: httpc:headers()
+    headers :: [{[byte()], binary() | iolist()}]
 }).
 
 list_certs(Config) ->
-    init(Config),
+    _ = init(Config),
     State = init_state(Config),
     list_certs(Config, State).
 

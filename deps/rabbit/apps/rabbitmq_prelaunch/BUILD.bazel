@@ -1,6 +1,12 @@
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_app", "rabbitmq_suite")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "APP_VERSION",
+    "rabbitmq_app",
+    "rabbitmq_suite",
+)
 
 APP_NAME = "rabbitmq_prelaunch"
 
@@ -45,6 +51,7 @@ plt(
 
 dialyze(
     plt = ":base_plt",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
 )
 
 suites = [
