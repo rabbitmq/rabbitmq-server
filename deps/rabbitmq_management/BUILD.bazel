@@ -77,11 +77,8 @@ xref()
 
 plt(
     name = "base_plt",
-    apps = [
-        "erts",
-        "kernel",
-        "stdlib",
-    ] + EXTRA_APPS,
+    plt = "//:base_plt",
+    apps = EXTRA_APPS,
     deps = DEPS + RUNTIME_DEPS,
 )
 

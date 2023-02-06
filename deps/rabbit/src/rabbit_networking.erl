@@ -214,7 +214,7 @@ tcp_listener_spec(NamePrefix, Address, SocketOpts,
 
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         any(), protocol(), non_neg_integer(), non_neg_integer(), supervisor:worker(), label()) ->
+         any(), protocol(), non_neg_integer(), non_neg_integer(), 'supervisor' | 'worker', label()) ->
             supervisor:child_spec().
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,

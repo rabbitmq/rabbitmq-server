@@ -214,7 +214,7 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
         Err -> Err
     end.
 
--spec settle(rabbit_amqqueue:name(), rarabbit_queue_type:settle_op(),
+-spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
 settle(_QName, complete, _CTag, MsgIds, State) ->

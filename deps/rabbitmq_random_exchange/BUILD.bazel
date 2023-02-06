@@ -36,6 +36,7 @@ xref()
 plt(
     name = "base_plt",
     deps = BUILD_DEPS + DEPS,
+    plt = "//:base_plt",
 )
 
 dialyze(
