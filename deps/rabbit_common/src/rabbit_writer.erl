@@ -69,32 +69,32 @@
 %%---------------------------------------------------------------------------
 
 -spec start
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name()) ->
             rabbit_types:ok(pid()).
 -spec start_link
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name()) ->
             rabbit_types:ok(pid()).
 -spec start
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name(), boolean()) ->
             rabbit_types:ok(pid()).
 -spec start_link
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name(), boolean()) ->
             rabbit_types:ok(pid()).
 -spec start
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
             rabbit_types:ok(pid()).
 -spec start_link
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid(),
          rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
             rabbit_types:ok(pid()).
@@ -123,11 +123,11 @@
             'ok'.
 -spec flush(pid()) -> 'ok'.
 -spec internal_send_command
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          rabbit_framing:amqp_method_record(), rabbit_types:protocol()) ->
             'ok'.
 -spec internal_send_command
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
+        (rabbit_net:socket(), rabbit_types:channel_number(),
          rabbit_framing:amqp_method_record(), rabbit_types:content(),
          non_neg_integer(), rabbit_types:protocol()) ->
             'ok'.

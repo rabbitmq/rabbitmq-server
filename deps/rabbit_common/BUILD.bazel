@@ -2,6 +2,7 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_suite",
@@ -55,6 +56,7 @@ RUNTIME_DEPS = [
     "@jsx//:erlang_app",
     "@recon//:erlang_app",
     "@credentials_obfuscation//:erlang_app",
+    "@ranch//:erlang_app",
 ]
 
 APP_NAME = "rabbit_common"
@@ -89,6 +91,8 @@ EXTRA_APPS = [
     "syntax_tools",
     "tools",
     "xmerl",
+    "runtime_tools",
+    "os_mon",
 ]
 
 rabbitmq_app(
@@ -106,23 +110,17 @@ rabbitmq_app(
     runtime_deps = RUNTIME_DEPS,
 )
 
-xref(
-    additional_libs = [
-        "@ranch//:erlang_app",
-    ],
-)
+xref()
 
 plt(
     name = "base_plt",
-    apps = [
-        "mnesia",
-        "crypto",
-        "ssl",
-    ] + EXTRA_APPS,
+    apps = EXTRA_APPS + ["mnesia"],
     plt = "//:base_plt",
+    deps = RUNTIME_DEPS,
 )
 
 dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
 )
 
