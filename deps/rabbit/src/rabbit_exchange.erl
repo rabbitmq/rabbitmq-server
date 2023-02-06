@@ -22,9 +22,14 @@
 %%----------------------------------------------------------------------------
 
 -export_type([name/0, type/0]).
+<<<<<<< HEAD
 
 -type name() :: rabbit_types:r('exchange').
 -type type() :: atom().
+=======
+-type name() :: rabbit_types:exchange_name().
+-type type() :: rabbit_types:exchange_type().
+>>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 -type fun_name() :: atom().
 
 %%----------------------------------------------------------------------------

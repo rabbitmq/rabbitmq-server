@@ -34,7 +34,7 @@
 
 -define(record_version, vhost_v2).
 
--type(name() :: binary()).
+-type(name() :: rabbit_types:vhost()).
 
 -type(metadata_key() :: atom()).
 

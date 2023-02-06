@@ -25,12 +25,17 @@ RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
 ]
 
+EXTRA_APPS = [
+    "public_key",
+]
+
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
+    extra_apps = EXTRA_APPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -39,7 +44,9 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(

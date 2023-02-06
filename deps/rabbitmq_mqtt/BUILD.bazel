@@ -52,9 +52,13 @@ DEPS = [
     "@ranch//:erlang_app",
 ]
 
+<<<<<<< HEAD
 RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
 ]
+=======
+EXTRA_APPS = [ "ssl" ]
+>>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
@@ -65,6 +69,7 @@ rabbitmq_app(
     build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+    extra_apps = EXTRA_APPS,
 )
 
 xref(
@@ -73,6 +78,8 @@ xref(
 
 plt(
     name = "base_plt",
+    plt = "//:base_plt",
+    apps = EXTRA_APPS,
     libs = ["//deps/rabbitmq_cli:elixir"],
     deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )

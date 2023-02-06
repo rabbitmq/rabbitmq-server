@@ -50,7 +50,7 @@
 %%     Something went wrong. Log and die.
 -callback check_resource_access(rabbit_types:auth_user(),
                                 rabbit_types:r(atom()),
-                                rabbit_access_control:permission_atom(),
+                                rabbit_types:permission_atom(),
                                 rabbit_types:authz_context()) ->
     boolean() | {'error', any()}.
 
@@ -63,7 +63,7 @@
 %%     Something went wrong. Log and die.
 -callback check_topic_access(rabbit_types:auth_user(),
     rabbit_types:r(atom()),
-    rabbit_access_control:permission_atom(),
+    rabbit_types:permission_atom(),
     rabbit_types:topic_access_context()) ->
     boolean() | {'error', any()}.
 

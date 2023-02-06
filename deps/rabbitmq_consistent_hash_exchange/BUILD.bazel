@@ -41,10 +41,14 @@ xref(
 
 plt(
     name = "base_plt",
-    plt = "//:base_plt",
     apps = ["mnesia"],
     libs = ["//deps/rabbitmq_cli:elixir"],
+<<<<<<< HEAD
     deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
+=======
+    plt = "//:base_plt",
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
+>>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 )
 
 dialyze(

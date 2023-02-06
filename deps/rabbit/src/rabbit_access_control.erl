@@ -16,12 +16,15 @@
 
 %%----------------------------------------------------------------------------
 
+<<<<<<< HEAD
 -export_type([permission_atom/0]).
 
 -type permission_atom() :: 'configure' | 'read' | 'write'.
 
 %%----------------------------------------------------------------------------
 
+=======
+>>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 -spec check_user_pass_login
         (rabbit_types:username(), rabbit_types:password()) ->
             {'ok', rabbit_types:user()} |
@@ -179,7 +182,7 @@ create_vhost_access_authz_data(PeerAddr, Context) ->
     maps:merge(PeerAddr, Context).
 
 -spec check_resource_access
-        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom(), rabbit_types:authz_context()) ->
+        (rabbit_types:user(), rabbit_types:r(atom()), rabbit_types:permission_atom(), rabbit_types:authz_context()) ->
             'ok' | rabbit_types:channel_exit().
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
