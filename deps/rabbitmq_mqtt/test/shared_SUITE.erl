@@ -1307,8 +1307,7 @@ trace(Config) ->
                    <<"channel">> := 0,
                    <<"user">> := <<"guest">>,
                    <<"properties">> := #{<<"delivery_mode">> := 2,
-                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1,
-                                                            <<"x-mqtt-dup">> := false}},
+                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1}},
                    <<"routed_queues">> := [<<"mqtt-subscription-trace_subscriberqos0">>]},
                  rabbit_misc:amqp_table(PublishHeaders)),
 
@@ -1324,8 +1323,7 @@ trace(Config) ->
                    <<"channel">> := 0,
                    <<"user">> := <<"guest">>,
                    <<"properties">> := #{<<"delivery_mode">> := 2,
-                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1,
-                                                            <<"x-mqtt-dup">> := false}},
+                                         <<"headers">> := #{<<"x-mqtt-publish-qos">> := 1}},
                    <<"redelivered">> := 0},
                  rabbit_misc:amqp_table(DeliverHeaders)),
 

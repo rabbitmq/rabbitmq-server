@@ -37,9 +37,9 @@ parse(<<>>, authenticated) ->
     {more, fun(Bin) -> parse(Bin, authenticated) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, authenticated) ->
     parse_remaining_len(Rest, #mqtt_packet_fixed{ type   = MessageType,
-                                                  dup    = bool(Dup),
+                                                  dup    = int_to_bool(Dup),
                                                   qos    = QoS,
-                                                  retain = bool(Retain) });
+                                                  retain = int_to_bool(Retain) });
 parse(<<?CONNECT:4, 0:4, Rest/binary>>, unauthenticated) ->
     parse_remaining_len(Rest, #mqtt_packet_fixed{type = ?CONNECT});
 parse(Bin, Cont)
@@ -131,10 +131,10 @@ parse_connect(Bin, Fixed, Length) ->
                             wrap(Fixed,
                                  #mqtt_packet_connect{
                                     proto_ver   = ProtoVersion,
-                                    will_retain = bool(WillRetain),
+                                    will_retain = int_to_bool(WillRetain),
                                     will_qos    = WillQos,
-                                    will_flag   = bool(WillFlag),
-                                    clean_sess  = bool(CleanSession),
+                                    will_flag   = int_to_bool(WillFlag),
+                                    clean_sess  = int_to_bool(CleanSession),
                                     keep_alive  = KeepAlive,
                                     client_id   = ClientId,
                                     will_topic  = WillTopic,
@@ -184,9 +184,6 @@ parse_msg(Bin, 0) ->
 parse_msg(<<Len:16/big, Msg:Len/binary, Rest/binary>>, _) ->
     {Msg, Rest}.
 
-bool(0) -> false;
-bool(1) -> true.
-
 %% serialisation
 
 -spec serialise(#mqtt_packet{}, ?MQTT_PROTO_V3 | ?MQTT_PROTO_V4) ->
@@ -206,7 +203,7 @@ serialise_variable(#mqtt_packet_fixed   { type        = ?CONNACK } = Fixed,
                    #mqtt_packet_connack { session_present = SessionPresent,
                                           return_code = ReturnCode },
                    <<>> = PayloadBin, _Vsn) ->
-    VariableBin = <<?RESERVED:7, (opt(SessionPresent)):1, ReturnCode:8>>,
+    VariableBin = <<?RESERVED:7, (bool_to_int(SessionPresent)):1, ReturnCode:8>>,
     serialise_fixed(Fixed, VariableBin, PayloadBin);
 
 serialise_variable(#mqtt_packet_fixed  { type       = SubAck } = Fixed,
@@ -247,15 +244,16 @@ serialise_variable(#mqtt_packet_fixed {} = Fixed,
                    <<>> = _PayloadBin, _Vsn) ->
     serialise_fixed(Fixed, <<>>, <<>>).
 
-serialise_fixed(#mqtt_packet_fixed{ type   = Type,
-                                    dup    = Dup,
-                                    qos    = Qos,
-                                    retain = Retain }, VariableBin, Payload)
-  when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?DISCONNECT ->
+serialise_fixed(#mqtt_packet_fixed{type   = Type,
+                                   dup    = Dup,
+                                   qos    = Qos,
+                                   retain = Retain}, VariableBin, Payload)
+  when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?DISCONNECT andalso
+       is_integer(Qos) andalso 0 =< Qos andalso Qos =< 2 ->
     Len = size(VariableBin) + iolist_size(Payload),
     true = (Len =< ?MAX_LEN),
     LenBin = serialise_len(Len),
-    [<<Type:4, (opt(Dup)):1, (opt(Qos)):2, (opt(Retain)):1,
+    [<<Type:4, (bool_to_int(Dup)):1, Qos:2, (bool_to_int(Retain)):1,
        LenBin/binary, VariableBin/binary>>, Payload].
 
 serialise_utf(String) ->
@@ -269,10 +267,13 @@ serialise_len(N) when N =< ?LOWBITS ->
 serialise_len(N) ->
     <<1:1, (N rem ?HIGHBIT):7, (serialise_len(N div ?HIGHBIT))/binary>>.
 
-opt(undefined)            -> ?RESERVED;
-opt(false)                -> 0;
-opt(true)                 -> 1;
-opt(X) when is_integer(X) -> X.
-
 protocol_name_approved(Ver, Name) ->
     lists:member({Ver, Name}, ?PROTOCOL_NAMES).
+
+-spec int_to_bool(0 | 1) -> boolean().
+int_to_bool(0) -> false;
+int_to_bool(1) -> true.
+
+-spec bool_to_int(boolean()) -> 0 | 1.
+bool_to_int(false) -> 0;
+bool_to_int(true) -> 1.
