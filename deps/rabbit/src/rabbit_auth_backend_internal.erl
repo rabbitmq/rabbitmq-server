@@ -17,13 +17,8 @@
 -export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-<<<<<<< HEAD
-         set_tags/3, set_permissions/6, clear_permissions/3,
+         set_tags/3, set_permissions/6, clear_permissions/3, set_permissions_globally/5,
          set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
-=======
-         set_tags/3, set_permissions/6, clear_permissions/3, clear_permissions_for_vhost/2, set_permissions_globally/5,
-         set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4, clear_topic_permissions_for_vhost/2,
->>>>>>> ab99ccfa45 (Introduce a CLI command that grants permissions to all virtual hosts)
          add_user_sans_validation/3, put_user/2, put_user/3,
          update_user/5,
          update_user_with_hash/5,
