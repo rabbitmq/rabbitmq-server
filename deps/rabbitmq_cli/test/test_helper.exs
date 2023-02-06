@@ -173,7 +173,7 @@ defmodule TestHelper do
     ])
   end
 
-    def set_permissions_globally(user, [conf, write, read]) do
+  def set_permissions_globally(user, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_permissions_globally, [
       user,
       conf,
