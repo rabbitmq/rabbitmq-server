@@ -1084,7 +1084,6 @@ binding_action(ExchangeName, TopicName, QName, BindingFun, #auth_state{user = #u
 publish_to_queues(
   #mqtt_msg{qos        = Qos,
             topic      = Topic,
-            dup        = Dup,
             packet_id  = PacketId,
             payload    = Payload},
   #state{cfg = #cfg{exchange = ExchangeName,
@@ -1095,10 +1094,8 @@ publish_to_queues(
         } = State) ->
     RoutingKey = mqtt_to_amqp(Topic),
     Confirm = Qos > ?QOS_0,
-    Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
-               {<<"x-mqtt-dup">>, bool, Dup}],
     Props = #'P_basic'{
-               headers = Headers,
+               headers = [{<<"x-mqtt-publish-qos">>, byte, Qos}],
                delivery_mode = delivery_mode(Qos)},
     {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     Content = #content{
@@ -1491,12 +1488,6 @@ maybe_publish_to_client(
        fixed = #mqtt_packet_fixed{
                   type = ?PUBLISH,
                   qos = QoS,
-                  %% "The value of the DUP flag from an incoming PUBLISH packet is not
-                  %% propagated when the PUBLISH Packet is sent to subscribers by the Server.
-                  %% The DUP flag in the outgoing PUBLISH packet is set independently to the
-                  %% incoming PUBLISH packet, its value MUST be determined solely by whether
-                  %% the outgoing PUBLISH packet is a retransmission [MQTT-3.3.1-3]."
-                  %% Therefore, we do not consider header value <<"x-mqtt-dup">> here.
                   dup = Redelivered},
        variable = #mqtt_packet_publish{
                      packet_id = PacketId,
