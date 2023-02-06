@@ -30,7 +30,12 @@ xref()
 
 plt(
     name = "base_plt",
+<<<<<<< HEAD
     deps = DEPS,
+=======
+    deps = BUILD_DEPS + DEPS,
+    plt = "//:base_plt",
+>>>>>>> c7da0da8b8 (Cleanup dialyzer calls)
 )
 
 dialyze(

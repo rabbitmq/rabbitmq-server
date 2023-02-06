@@ -211,8 +211,13 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
         Err -> Err
     end.
 
+<<<<<<< HEAD
 -spec settle(rabbit_queue_type:settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->
+=======
+-spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
+             rabbit_types:ctag(), [non_neg_integer()], state()) ->
+>>>>>>> c7da0da8b8 (Cleanup dialyzer calls)
     {state(), rabbit_queue_type:actions()}.
 settle(complete, _CTag, MsgIds, State) ->
     Pid = State#?STATE.pid,

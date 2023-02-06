@@ -25,6 +25,7 @@ EXTRA_APPS = [
     "ssl",
     "crypto",
     "public_key",
+    "inets",
 ]
 
 DEPS = [
@@ -51,7 +52,7 @@ plt(
     name = "base_plt",
     apps = EXTRA_APPS,
     plt = "//:base_plt",
-    deps = DEPS,
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
