@@ -60,6 +60,7 @@ xref()
 
 plt(
     name = "base_plt",
+    plt = "//:base_plt",
     deps = BUILD_DEPS + DEPS,
 )
 

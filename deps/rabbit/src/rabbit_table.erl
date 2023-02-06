@@ -65,8 +65,18 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
+<<<<<<< HEAD
 -spec ensure_table_copy(mnesia_table(), node()) -> ok | {error, any()}.
 ensure_table_copy(TableName, Node) ->
+=======
+%% mnesia:table() and mnesia:storage_type() are not exported
+-type mnesia_table() :: atom().
+-type mnesia_storage_type() :: 'ram_copies' | 'disc_copies' | 'disc_only_copies'.
+
+-spec ensure_table_copy(mnesia_table(), node(), mnesia_storage_type()) ->
+    ok | {error, any()}.
+ensure_table_copy(TableName, Node, StorageType) ->
+>>>>>>> 55ed637a4f (Cleanup dialyzer calls)
     rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, disc_copies) of
         {atomic, ok}                              -> ok;
@@ -229,6 +239,10 @@ create_local_copies(Type) ->
       end, definitions(Type)),
     ok.
 
+<<<<<<< HEAD
+=======
+-spec create_local_copy(mnesia_table(), mnesia_storage_type()) -> ok.
+>>>>>>> 55ed637a4f (Cleanup dialyzer calls)
 create_local_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
