@@ -79,7 +79,7 @@ path_prefix_test(_Config) ->
     ?assertEqual(Pfx0, Got3).
 
 default_restrictions(_) ->
-    ?assertEqual(false, rabbit_mgmt_features:is_edit_op_policy_disabled()).
+    ?assertEqual(false, rabbit_mgmt_features:is_op_policy_updating_disabled()).
 
 %%--------------------------------------------------------------------
 
