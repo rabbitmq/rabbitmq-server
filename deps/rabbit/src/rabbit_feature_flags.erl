@@ -1462,36 +1462,24 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
 %% Coordination with remote nodes.
 %% -------------------------------------------------------------------
 
--ifndef(TEST).
 -spec remote_nodes() -> [node()].
 %% @private
 
 remote_nodes() ->
-    mnesia:system_info(db_nodes) -- [node()].
+    rabbit_ff_controller:all_nodes() -- [node()].
 
 -spec running_remote_nodes() -> [node()].
 %% @private
 
 running_remote_nodes() ->
-    mnesia:system_info(running_db_nodes) -- [node()].
+    rabbit_ff_controller:running_nodes() -- [node()].
 
+-ifndef(TEST).
 query_running_remote_nodes(Node, Timeout) ->
     query_running_remote_nodes1(Node, Timeout).
 -else.
 -define(PT_OVERRIDDEN_NODES, {?MODULE, overridden_nodes}).
 -define(PT_OVERRIDDEN_RUNNING_NODES, {?MODULE, overridden_running_nodes}).
-
-remote_nodes() ->
-    case get_overriden_nodes() of
-        undefined -> mnesia:system_info(db_nodes) -- [node()];
-        Nodes     -> Nodes -- [node()]
-    end.
-
-running_remote_nodes() ->
-    case get_overriden_running_nodes() of
-        undefined -> mnesia:system_info(running_db_nodes) -- [node()];
-        Nodes     -> Nodes -- [node()]
-    end.
 
 query_running_remote_nodes(Node, Timeout) ->
     case rpc:call(Node, ?MODULE, get_overriden_running_nodes, [], Timeout) of
