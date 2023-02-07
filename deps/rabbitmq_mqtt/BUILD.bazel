@@ -225,8 +225,8 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
    name = "shared_SUITE",
+   shard_count = 6,
    size = "large",
-   timeout = "eternal",
    runtime_deps = [
        "@emqtt//:erlang_app",
        "//deps/rabbitmq_management_agent:erlang_app",

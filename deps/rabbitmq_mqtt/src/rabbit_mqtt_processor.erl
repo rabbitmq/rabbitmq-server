@@ -166,7 +166,7 @@ process_connect(
                        peer_port = PeerPort,
                        send_fun = SendFun,
                        exchange = rabbit_misc:r(VHost, exchange, rabbit_mqtt_util:env(exchange)),
-                       retainer_pid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
+                       retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                        vhost = VHost,
                        client_id = ClientId,
                        will_msg = make_will_msg(Packet)},
