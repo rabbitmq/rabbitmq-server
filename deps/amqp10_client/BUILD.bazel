@@ -2,6 +2,7 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_app",
@@ -36,6 +37,7 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
 """
 
 EXTRA_APPS = [
+    "public_key",
     "ssl",
     "inets",
     "crypto",
@@ -70,6 +72,7 @@ plt(
 
 dialyze(
     plt = ":base_plt",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
 )
 
 broker_for_integration_suites(

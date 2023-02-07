@@ -204,15 +204,15 @@ tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpt
             supervisor:child_spec().
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
-                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,
-                  ConcurrentConnsSupsCount, Label) ->
+            Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,
+            ConcurrentConnsSupsCount, Label) ->
     Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
             NumAcceptors, ConcurrentConnsSupsCount, Label],
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-     {tcp_listener_sup, start_link, Args},
-     transient, infinity, supervisor, [tcp_listener_sup]}.
+        {tcp_listener_sup, start_link, Args},
+        transient, infinity, supervisor, [tcp_listener_sup]}.
 
 -spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref() | undefined.
 ranch_ref(#listener{port = Port}) ->

@@ -52,10 +52,8 @@ xref(
 
 plt(
     name = "base_plt",
+    plt = "//:base_plt",
     apps = [
-        "erts",
-        "kernel",
-        "stdlib",
         "ssl",
     ],
     libs = ["//deps/rabbitmq_cli:elixir"],
