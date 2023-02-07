@@ -7,9 +7,9 @@
 
 -module(rabbit_mgmt_features).
 
--export([is_edit_op_policy_disabled/0]).
+-export([is_op_policy_updating_disabled/0]).
 
-is_edit_op_policy_disabled() ->
+is_op_policy_updating_disabled() ->
     case get_restriction([operator_policy_changes, disabled]) of
         true -> true;
         _ -> false
