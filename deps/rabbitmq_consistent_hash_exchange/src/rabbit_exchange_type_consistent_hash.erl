@@ -49,10 +49,10 @@
 -define(SEED_ALGORITHM, exs1024).
 
 init() ->
-    mnesia:create_table(?HASH_RING_STATE_TABLE, [{record_name, chx_hash_ring},
-                                                 {attributes, record_info(fields, chx_hash_ring)},
-                                                 {type, ordered_set}]),
-    mnesia:add_table_copy(?HASH_RING_STATE_TABLE, node(), ram_copies),
+    _ = mnesia:create_table(?HASH_RING_STATE_TABLE, [{record_name, chx_hash_ring},
+                                                     {attributes, record_info(fields, chx_hash_ring)},
+                                                     {type, ordered_set}]),
+    _ = mnesia:add_table_copy(?HASH_RING_STATE_TABLE, node(), ram_copies),
     rabbit_table:wait([?HASH_RING_STATE_TABLE]),
     _ = recover(),
     ok.
