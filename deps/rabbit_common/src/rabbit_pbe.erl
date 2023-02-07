@@ -41,12 +41,17 @@ decrypt_term(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=En
 
 -type encryption_result() :: {'encrypted', binary()} | {'plaintext', binary()}.
 
--spec encrypt(crypto:block_cipher(), crypto:hash_algorithms(),
+%% crypto:cipher() and crypto:hash_algorithm() are not public
+-type crypto_cipher() :: atom().
+-type crypto_hash_algorithm() :: atom().
+
+-spec encrypt(crypto_cipher(), crypto_hash_algorithm(),
     pos_integer(), iodata() | '$pending-secret', binary()) -> encryption_result().
 encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText) ->
     credentials_obfuscation_pbe:encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText).
 
--spec decrypt(crypto:block_cipher(), crypto:hash_algorithms(),
+
+-spec decrypt(crypto_cipher(), crypto_hash_algorithm(),
     pos_integer(), iodata(), encryption_result()) -> any().
 decrypt(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
     Term;

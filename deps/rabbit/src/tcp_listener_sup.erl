@@ -25,7 +25,6 @@
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
          module(), any(), mfargs(), mfargs(), integer(), integer(), string()) ->
                            rabbit_types:ok_pid_or_error().
-
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
            ConcurrentAcceptorCount, ConcurrentConnsSups, Label) ->
     supervisor:start_link(

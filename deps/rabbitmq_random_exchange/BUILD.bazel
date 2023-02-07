@@ -11,6 +11,10 @@ APP_NAME = "rabbitmq_random_exchange"
 
 APP_DESCRIPTION = "RabbitMQ Random Exchange"
 
+BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
 DEPS = [
     "//deps/rabbit_common:erlang_app",
 ]
@@ -30,7 +34,8 @@ xref()
 
 plt(
     name = "base_plt",
-    deps = DEPS,
+    deps = BUILD_DEPS + DEPS,
+    plt = "//:base_plt",
 )
 
 dialyze(

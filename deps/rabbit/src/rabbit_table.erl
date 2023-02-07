@@ -74,7 +74,11 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
--spec ensure_table_copy(mnesia:table(), node(), mnesia:storage_type()) ->
+%% mnesia:table() and mnesia:storage_type() are not exported
+-type mnesia_table() :: atom().
+-type mnesia_storage_type() :: 'ram_copies' | 'disc_copies' | 'disc_only_copies'.
+
+-spec ensure_table_copy(mnesia_table(), node(), mnesia_storage_type()) ->
     ok | {error, any()}.
 ensure_table_copy(TableName, Node, StorageType) ->
     rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
@@ -239,7 +243,7 @@ create_local_copies(Type) ->
       end, definitions(Type)),
     ok.
 
--spec create_local_copy(mnesia:table(), mnesia:storage_type()) -> ok.
+-spec create_local_copy(mnesia_table(), mnesia_storage_type()) -> ok.
 create_local_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
