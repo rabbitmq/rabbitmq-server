@@ -527,28 +527,41 @@ handle_tick(QName,
     ok.
 
 maybe_grow_qq_members(QName) ->
-    Running = rabbit_nodes:list_running(),
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    #{nodes := MemberNodes} = amqqueue:get_type_state(Q),
-    New = Running -- MemberNodes,
-    Size = case rabbit_policy:get(<<"target-qq-replica-count">>, Q) of
-               undefined-> 0;
-               V -> V
-           end,
-    CurrentSize = length(MemberNodes),
-    case {CurrentSize < Size, New} of
-        {_, []} ->
-            %No new nodes to grow towards
-            ok;
-        {true, NewNodes} ->
-            rabbit_log:info(">>>> TICK will add nodes to ~p num ~p",[NewNodes, Size - CurrentSize]),
-            % Sort/filter nodes before sending them to NewNodes, i.e perhaps
-            % Take node load or availability zones into account?
-            add_members(Q, NewNodes, 5000, Size - CurrentSize);
-        {_,_} ->
-            %Target size already achieved
-            ok
-    end.
+    Count = amqqueue:get_tick_count(Q),
+    NewCount = case Count < 5 of
+                   true ->
+                       rabbit_log:info(">>>> TICK count too low, skip ~p",[Count]),
+                       Count + 1;
+                   false ->
+                       rabbit_log:info(">>>> TICK count GO ~p",[Count]),
+                       Running = rabbit_nodes:all_running(),
+                       #{nodes := MemberNodes} = amqqueue:get_type_state(Q),
+                       New = Running -- MemberNodes,
+                       Size = case rabbit_policy:get(<<"target-qq-replica-count">>, Q) of
+                                  undefined-> 0;
+                                  V -> V
+                              end,
+                       CurrentSize = length(MemberNodes),
+                       case {CurrentSize < Size, New} of
+                           {_, []} ->
+                               %% No new nodes to grow towards
+                               ok;
+                           {true, NewNodes} ->
+                               rabbit_log:info(">>>> TICK will add nodes to ~p num ~p",[NewNodes, Size - CurrentSize]),
+                               %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
+                               %% Take node load or availability zones into account?
+                               add_members(Q, NewNodes, 5000, Size - CurrentSize);
+                           {_,_} ->
+                               %%Target size already achieved
+                               ok
+                       end,
+                       0
+               end,
+    Fun = fun (Q1) ->
+                  amqqueue:set_tick_count(Q1, NewCount)
+          end,
+    rabbit_amqqueue:update(QName, Fun).
 
 
 repair_leader_record(QName, Self) ->

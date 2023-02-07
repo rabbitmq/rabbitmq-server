@@ -70,6 +70,8 @@
          set_sync_slave_pids/2,
          get_type/1,
          get_vhost/1,
+         get_tick_count/1,
+         set_tick_count/2,
          is_amqqueue/1,
          is_auto_delete/1,
          is_durable/1,
@@ -114,7 +116,8 @@
           vhost :: rabbit_types:vhost() | undefined | '_', %% secondary index
           options = #{} :: map() | '_',
           type = ?amqqueue_v1_type :: module() | '_',
-          type_state = #{} :: map() | '_'
+          type_state = #{} :: map() | '_',
+          tick_count = 0
          }).
 
 -type amqqueue() :: amqqueue_v2().
@@ -472,6 +475,12 @@ get_type_state(#amqqueue{type_state = TState}) ->
     TState;
 get_type_state(_) ->
     #{}.
+
+get_tick_count(#amqqueue{tick_count = Count}) ->
+    Count.
+
+set_tick_count(State, Count) ->
+    State#amqqueue{tick_count = Count}.
 
 -spec set_type_state(amqqueue(), map()) -> amqqueue().
 set_type_state(#amqqueue{} = Queue, TState) ->
