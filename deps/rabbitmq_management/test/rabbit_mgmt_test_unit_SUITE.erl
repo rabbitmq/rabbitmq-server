@@ -22,6 +22,7 @@ groups() ->
      {parallel_tests, [parallel], [
                                    tokenise_test,
                                    pack_binding_test,
+                                   default_restrictions,
                                    path_prefix_test
                                   ]}
     ].
@@ -76,6 +77,9 @@ path_prefix_test(_Config) ->
     application:set_env(rabbitmq_management, path_prefix, Pfx2),
     Got3 = rabbit_mgmt_util:get_path_prefix(),
     ?assertEqual(Pfx0, Got3).
+
+default_restrictions(_) ->
+    ?assertEqual(false, rabbit_mgmt_features:is_op_policy_updating_disabled()).
 
 %%--------------------------------------------------------------------
 

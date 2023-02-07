@@ -46,6 +46,7 @@
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
 -export([catch_no_such_user_or_vhost/2]).
+-export([method_not_allowed/3]).
 
 -export([disable_stats/1, enable_queue_totals/1]).
 
@@ -770,6 +771,9 @@ not_authorised(Reason, ReqData, Context) ->
 
 not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
+
+method_not_allowed(Reason, ReqData, Context) ->
+    halt_response(405, method_not_allowed, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
     rabbit_log:error("~ts~n~ts", [Error, Reason]),
