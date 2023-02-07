@@ -60,6 +60,7 @@
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
+-export([deep_pget/2, deep_pget/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
 -export([os_cmd/1, pwsh_cmd/1, win32_cmd/2]).
@@ -1061,6 +1062,21 @@ pupdate(K, UpdateFun, P) ->
             pset(K, UpdateFun(V), P);
         _ ->
             undefined
+    end.
+
+%% pget nested values
+-spec deep_pget(list(), list() | map()) -> term().
+deep_pget(K, P) ->
+    deep_pget(K, P, undefined).
+
+-spec deep_pget(list(), list() | map(), term()) -> term().
+deep_pget([], P, _) ->
+    P;
+
+deep_pget([K|Ks], P, D) ->
+    case rabbit_misc:pget(K, P, D) of
+        D -> D;
+        Pn -> deep_pget(Ks, Pn, D)
     end.
 
 %% property merge

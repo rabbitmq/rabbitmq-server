@@ -186,7 +186,9 @@
     <th>Apply to</th>
     <th>Definition</th>
     <th>Priority</th>
+<% if (user_administrator && is_op_policy_updating_enabled) { %>
     <th class="administrator-only">Clear</th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -203,6 +205,7 @@
      <td><%= fmt_string(policy['apply-to']) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
      <td><%= fmt_string(policy.priority) %></td>
+<% if (user_administrator && is_op_policy_updating_enabled) { %>
      <td class="administrator-only">
         <form action="#/operator_policies" method="delete" class="confirm">
             <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
@@ -210,6 +213,7 @@
             <input type="submit" value="Clear"/>
         </form>
       </td>
+<% } %>
    </tr>
 <% } %>
  </tbody>
@@ -221,7 +225,7 @@
   </div>
 </div>
 
-<% if (user_administrator && vhosts.length > 0) { %>
+<% if (user_administrator && vhosts.length > 0 && is_op_policy_updating_enabled) { %>
 
 <div class="section-hidden">
   <h2>Add / update an operator policy</h2>

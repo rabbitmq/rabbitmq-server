@@ -528,3 +528,10 @@ fun(File) ->
     ReadFile = file:list_dir(File),
     element(1, ReadFile) == ok
 end}.
+
+%% Disables setting operator policies over API.
+
+{mapping, "management.restrictions.operator_policy_changes.disabled", "rabbitmq_management.restrictions.operator_policy_changes.disabled", [
+    {datatype, {enum, [true, false]}},
+    {include_default, false}
+]}.
