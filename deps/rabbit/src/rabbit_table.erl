@@ -229,10 +229,6 @@ create_local_copies(Type) ->
       end, definitions(Type)),
     ok.
 
-<<<<<<< HEAD
-=======
--spec create_local_copy(mnesia_table(), mnesia_storage_type()) -> ok.
->>>>>>> 55ed637a4f (Cleanup dialyzer calls)
 create_local_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
