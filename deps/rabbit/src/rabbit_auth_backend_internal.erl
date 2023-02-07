@@ -17,7 +17,7 @@
 -export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-         set_tags/3, set_permissions/6, clear_permissions/3,
+         set_tags/3, set_permissions/6, clear_permissions/3, set_permissions_globally/5,
          set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
          add_user_sans_validation/3, put_user/2, put_user/3,
          update_user/5,
@@ -583,6 +583,11 @@ update_user(Username, Fun) ->
                 {ok, User} = lookup_user(Username),
                 ok = mnesia:write(rabbit_user, Fun(User), write)
         end)).
+
+set_permissions_globally(Username, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
+    VirtualHosts = rabbit_vhost:list_names(),
+    [set_permissions(Username, VH, ConfigurePerm, WritePerm, ReadPerm, ActingUser) || VH <- VirtualHosts],
+    ok.
 
 set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set topic permissions on exchange '~s' for "
