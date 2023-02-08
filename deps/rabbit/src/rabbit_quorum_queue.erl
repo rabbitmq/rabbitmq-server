@@ -121,22 +121,22 @@
    {?MODULE,
     [{description, "QQ policy validation"},
      {mfa, {rabbit_registry, register,
-            [policy_validator, <<"target-qq-replica-count">>, ?MODULE]}},
+            [policy_validator, <<"target-group-size">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
-            [operator_policy_validator, <<"target-qq-replica-count">>, ?MODULE]}},
+            [operator_policy_validator, <<"target-group-size">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
-            [policy_merge_strategy, <<"target-qq-replica-count">>, ?MODULE]}},
+            [policy_merge_strategy, <<"target-group-size">>, ?MODULE]}},
      {requires, rabbit_registry},
      {enables, recovery}]}).
 
 validate_policy(Args) ->
-    Count = proplists:get_value(<<"target-qq-replica-count">>, Args, none),
+    Count = proplists:get_value(<<"target-group-size">>, Args, none),
     case is_integer(Count) andalso Count > 0 of
         true -> ok;
         false -> {error, "~tp is not a valid qq target count value", [Count]}
     end.
 
-merge_policy_value(<<"target-qq-replica-count">>, _Val, OpVal) ->
+merge_policy_value(<<"target-group-size">>, _Val, OpVal) ->
     OpVal.
 
 %%----------- rabbit_queue_type ---------------------------------------------
@@ -461,7 +461,8 @@ handle_tick(QName,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
               discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
+              smallest_raft_index := _,
+              last_active := LastActive} = Overview,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -518,7 +519,7 @@ handle_tick(QName,
                       end,
 
                       %% ----------
-                      maybe_grow_qq_members(QName)
+                      maybe_grow_qq_members(QName, LastActive)
                   catch
                       _:_ ->
                           ok
@@ -526,45 +527,41 @@ handle_tick(QName,
           end),
     ok.
 
-maybe_grow_qq_members(QName) ->
+maybe_grow_qq_members(QName, LastActive) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    Count = amqqueue:get_tick_count(Q),
-    NewCount = case should_check_if_grow(Count) of
-                   false ->
-                       Count + 1;
-                   true ->
-                       Running = rabbit_nodes:all_running(),
-                       #{nodes := MemberNodes} = amqqueue:get_type_state(Q),
-                       New = Running -- MemberNodes,
-                       Size = case rabbit_policy:get(<<"target-qq-replica-count">>, Q) of
-                                  undefined-> 0;
-                                  V -> V
-                              end,
-                       CurrentSize = length(MemberNodes),
-                       case {CurrentSize < Size, New} of
-                           {_, []} ->
-                               %% No new nodes to grow towards, regardless if QQ is below target
-                               ok;
-                           {true, NewNodes} ->
-                               %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
-                               %% Take node load or availability zones into account?
-                               add_members(Q, NewNodes, 5000, Size - CurrentSize);
-                           {_,_} ->
-                               %%Target size already achieved
-                               ok
-                       end,
-                       0
-               end,
-    Fun = fun (Q1) ->
-                  amqqueue:set_tick_count(Q1, NewCount)
-          end,
-    %% Increase or reset tick count. Expensive?
-    rabbit_amqqueue:update(QName, Fun).
+    % Rely on LastActive and compare it with system_time, to figure out 30 sec intervall
+    case should_check_if_grow(LastActive) of
+        false ->
+            rabbit_log:info(">>>> TICK do nothing",[]);
+        true ->
+            rabbit_log:info(">>>> TICK check members",[]),
+            Running = rabbit_nodes:all_running(),
+            {ok, Members, _} = ra:members(amqqueue:get_pid(Q)),
+            MemberNodes = [Node || {_, Node} <- Members],
+            New = Running -- MemberNodes,
+            Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
+                       undefined-> 0;
+                       V -> V
+                   end,
+            CurrentSize = length(MemberNodes),
+            case {CurrentSize < Size, New} of
+                {_, []} ->
+                    %% No new nodes to grow towards, regardless if QQ is below target
+                    ok;
+                {true, NewNodes} ->
+                    %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
+                    %% Take node load or availability zones into account?
+                    add_members(Q, NewNodes, 5000, Size - CurrentSize);
+                {_,_} ->
+                    %%Target size already achieved
+                    ok
+            end
+    end.
 
-%% Just a random idea of how to slowly grow the probability of a
-%% check to spread the load a bit.
-should_check_if_grow(Count) ->
-    1 / (12-Count) >= rand:uniform().
+%% Return true every ~ 30 sec
+should_check_if_grow(LastActive) ->
+    T = erlang:system_time(millisecond) - LastActive,
+    ((round(T/5000)*5000) rem 30000) =:= 0.
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -1645,7 +1642,7 @@ maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 get_default_quorum_initial_group_size(Arguments, Q) ->
-    PolicyValue = rabbit_policy:get(<<"target-qq-replica-count">>, Q),
+    PolicyValue = rabbit_policy:get(<<"target-group-size">>, Q),
     ArgValue = rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>),
     case {ArgValue, PolicyValue} of
         {undefined, undefined} ->

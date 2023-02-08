@@ -1117,19 +1117,19 @@ target_count_policy(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"regular-target">>, <<"target_count_policy.*">>, <<"queues">>,
-           [{<<"target-qq-replica-count">>, 3}]),
+           [{<<"target-group-size">>, 3}]),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual(<<"regular-target">>, proplists:get_value(policy, Info)),
-    ?assertEqual([{<<"target-qq-replica-count">>,3}],
+    ?assertEqual([{<<"target-group-size">>,3}],
                  proplists:get_value(effective_policy_definition, Info)),
     ok = rabbit_ct_broker_helpers:set_operator_policy(
            Config, 0, <<"oper-target">>, <<"target_count_policy.*">>, <<"queues">>,
-           [{<<"target-qq-replica-count">>, 5}]),
+           [{<<"target-group-size">>, 5}]),
     InfoOp = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual(<<"oper-target">>, proplists:get_value(operator_policy, InfoOp)),
-    ?assertEqual([{<<"target-qq-replica-count">>,5}],
+    ?assertEqual([{<<"target-group-size">>,5}],
                  proplists:get_value(effective_policy_definition, InfoOp)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"regular-target">>),
     ok = rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"oper-target">>).
@@ -3089,7 +3089,7 @@ policy_target_precedence(Config) ->
 
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"target-policy">>, <<"^policy_target_precedence$">>, <<"queues">>,
-           [{<<"target-qq-replica-count">>, 3}]),
+           [{<<"target-group-size">>, 3}]),
 
     Qs =[_PolicyQ = ?config(queue_name, Config),
          _NonPolicyQ = ?config(alt_queue_name, Config)],

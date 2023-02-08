@@ -891,6 +891,7 @@ state_enter0(_, _, Effects) ->
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
                              resource = QName}} = State) ->
+    rabbit_log:debug(">>>> State: ~p",[State]),
     case is_expired(Ts, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
@@ -908,7 +909,8 @@ overview(#?MODULE{consumers = Cons,
                   msg_bytes_checkout = CheckoutBytes,
                   cfg = Cfg,
                   dlx = DlxState,
-                  waiting_consumers = WaitingConsumers} = State) ->
+                  waiting_consumers = WaitingConsumers,
+                  last_active = LastActive} = State) ->
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
              release_cursor_interval => Cfg#cfg.release_cursor_interval,
@@ -943,7 +945,8 @@ overview(#?MODULE{consumers = Cons,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
                  in_memory_message_bytes => 0, %% backwards compat
-                 smallest_raft_index => smallest_raft_index(State)
+                 smallest_raft_index => smallest_raft_index(State),
+                 last_active => LastActive
                  },
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).

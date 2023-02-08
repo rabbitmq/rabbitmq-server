@@ -1,4 +1,4 @@
--define(is_amqqueue_v2(Q), is_record(Q, amqqueue, 22)).
+-define(is_amqqueue_v2(Q), is_record(Q, amqqueue, 21)).
 
 -define(amqqueue_v2_field_name(Q), element(2, Q)).
 -define(amqqueue_v2_field_durable(Q), element(3, Q)).
@@ -20,4 +20,3 @@
 -define(amqqueue_v2_field_options(Q), element(19, Q)).
 -define(amqqueue_v2_field_type(Q), element(20, Q)).
 -define(amqqueue_v2_field_type_state(Q), element(21, Q)).
--define(amqqueue_v2_field_tick_count(Q), element(22, Q)).

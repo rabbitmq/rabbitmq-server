@@ -743,7 +743,7 @@ end}.
     {datatype, integer}
 ]}.
 
-{mapping, "default_policies.operator.$id.target_qq_replica_count", "rabbit.default_policies.operator", [
+{mapping, "default_policies.operator.$id.target_group_size", "rabbit.default_policies.operator", [
     {include_default, 1},
     {commented, 1},
     {validators, ["non_zero_positive_integer"]},
