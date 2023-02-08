@@ -560,8 +560,13 @@ maybe_grow_qq_members(QName, LastActive) ->
 
 %% Return true every ~ 30 sec
 should_check_if_grow(LastActive) ->
+    %% Only works if the tick_intervals that hit the 30 sec mark tho...
+    %% Can probably round down to nearest Interval value.
+    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                      ?TICK_TIMEOUT),
     T = erlang:system_time(millisecond) - LastActive,
-    ((round(T/5000)*5000) rem 30000) =:= 0.
+    Interval = 30000, % Hardcode to 30 sec for now, but can be configurable?
+    ((round(T/TickTimeout)*TickTimeout) rem Interval) =:= 0.
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
