@@ -929,7 +929,7 @@ create_schema() ->
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
     rabbit_log:debug("Bootstraped a schema database successfully"),
     start_mnesia(),
-    
+
     rabbit_log:debug("Will create schema database tables"),
     ok = rabbit_table:create(),
     rabbit_log:debug("Created schema database tables successfully"),
@@ -1100,6 +1100,7 @@ is_virgin_node() ->
             [rabbit_node_monitor:cluster_status_filename(),
              rabbit_node_monitor:running_nodes_filename(),
              rabbit_node_monitor:coordination_filename(),
+             rabbit_node_monitor:stream_filename(),
              rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file()],
