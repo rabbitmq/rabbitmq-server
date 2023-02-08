@@ -41,11 +41,13 @@ defmodule SetPermissionsGloballyCommandTest do
     }
   end
 
+  @tag user: @user
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
+  @tag user: @user
   test "validate: wrong number of arguments leads to an arg count error" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
@@ -74,6 +76,7 @@ defmodule SetPermissionsGloballyCommandTest do
     assert p3[:configure] == "^#{context[:user]}-.*"
   end
 
+  @tag user: @user
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 
