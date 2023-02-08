@@ -10,11 +10,12 @@
 -include("rabbit_mqtt_packet.hrl").
 -include("rabbit_mqtt.hrl").
 
--export([init_state/0, reset_state/0,
-         parse/2, serialise/2]).
+-export([init_state/0, parse/2, serialise/2]).
 -export_type([state/0]).
 
--opaque state() :: unauthenticated | authenticated | fun().
+-opaque state() :: unauthenticated |
+                   protocol_version() |
+                   More :: fun().
 
 -define(RESERVED, 0).
 -define(MAX_LEN, 16#fffffff).
@@ -26,79 +27,120 @@
 -spec init_state() -> state().
 init_state() -> unauthenticated.
 
--spec reset_state() -> state().
-reset_state() -> authenticated.
-
 -spec parse(binary(), state()) ->
     {more, state()} |
-    {ok, mqtt_packet(), binary()} |
+    {ok, mqtt_packet(), Rest :: binary(), state()} |
     {error, any()}.
-parse(<<>>, authenticated) ->
-    {more, fun(Bin) -> parse(Bin, authenticated) end};
-parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, authenticated) ->
-    parse_remaining_len(Rest, #mqtt_packet_fixed{ type   = MessageType,
-                                                  dup    = int_to_bool(Dup),
-                                                  qos    = QoS,
-                                                  retain = int_to_bool(Retain) });
 parse(<<?CONNECT:4, 0:4, Rest/binary>>, unauthenticated) ->
-    parse_remaining_len(Rest, #mqtt_packet_fixed{type = ?CONNECT});
+    parse_remaining_len(Rest, #mqtt_packet_fixed{type = ?CONNECT}, proto_ver_uninitialised);
+parse(<<>>, ProtoVer)
+  when is_number(ProtoVer) ->
+    {more, fun(Bin) -> parse(Bin, ProtoVer) end};
+parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
+  when is_number(ProtoVer) ->
+    Fixed = #mqtt_packet_fixed{type = MessageType,
+                               dup = int_to_bool(Dup),
+                               qos = QoS,
+                               retain = int_to_bool(Retain)},
+    parse_remaining_len(Rest, Fixed, ProtoVer);
 parse(Bin, Cont)
   when is_function(Cont) ->
     Cont(Bin).
 
-parse_remaining_len(<<>>, Fixed) ->
-    {more, fun(Bin) -> parse_remaining_len(Bin, Fixed) end};
-parse_remaining_len(Rest, Fixed) ->
-    parse_remaining_len(Rest, Fixed, 1, 0).
+parse_remaining_len(<<>>, Fixed, ProtoVer) ->
+    {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, ProtoVer) end};
+parse_remaining_len(Rest, Fixed, ProtoVer) ->
+    parse_remaining_len(Rest, Fixed, 1, 0, ProtoVer).
 
-parse_remaining_len(_Bin, _Fixed, Multiplier, _Length)
+parse_remaining_len(_Bin, _Fixed, Multiplier, _Length, _ProtoVer)
   when Multiplier > ?MAX_MULTIPLIER ->
     {error, malformed_remaining_length};
-parse_remaining_len(_Bin, _Fixed, _Multiplier, Length)
+parse_remaining_len(_Bin, _Fixed, _Multiplier, Length, _ProtoVer)
   when Length > ?MAX_LEN ->
     {error, invalid_mqtt_packet_length};
-parse_remaining_len(<<>>, Fixed, Multiplier, Length) ->
-    {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, Multiplier, Length) end};
-parse_remaining_len(<<1:1, Len:7, Rest/binary>>, Fixed, Multiplier, Value) ->
-    parse_remaining_len(Rest, Fixed, Multiplier * ?HIGHBIT, Value + Len * Multiplier);
-parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value) ->
-    parse_packet(Rest, Fixed, Value + Len * Multiplier).
+parse_remaining_len(<<>>, Fixed, Multiplier, Length, ProtoVer) ->
+    {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, Multiplier, Length, ProtoVer) end};
+parse_remaining_len(<<1:1, Len:7, Rest/binary>>, Fixed, Multiplier, Value, ProtoVer) ->
+    parse_remaining_len(Rest, Fixed, Multiplier * ?HIGHBIT, Value + Len * Multiplier, ProtoVer);
+parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value, ProtoVer) ->
+    parse_packet(Rest, Fixed, Value + Len * Multiplier, ProtoVer).
 
-parse_packet(Bin, #mqtt_packet_fixed{type = ?CONNECT} = Fixed, Length) ->
+parse_packet(Bin, #mqtt_packet_fixed{type = ?CONNECT} = Fixed, Length, proto_ver_uninitialised) ->
     parse_connect(Bin, Fixed, Length);
 parse_packet(Bin, #mqtt_packet_fixed{type = Type,
-                                     qos  = Qos} = Fixed, Length)
+                                     qos  = Qos} = Fixed, Length, ProtoVer)
   when Length =< ?MAX_LEN ->
     case {Type, Bin} of
-        {?PUBLISH, <<PacketBin:Length/binary, Rest/binary>>} ->
-            {TopicName, Rest1} = parse_utf(PacketBin),
-            {PacketId, Payload} = case Qos of
-                                       0 -> {undefined, Rest1};
-                                       _ -> <<M:16/big, R/binary>> = Rest1,
-                                            {M, R}
-                                   end,
-            wrap(Fixed, #mqtt_packet_publish { topic_name = TopicName,
-                                               packet_id = PacketId },
-                 Payload, Rest);
-        {?PUBACK, <<PacketBin:Length/binary, Rest/binary>>} ->
-            <<PacketId:16/big>> = PacketBin,
-            wrap(Fixed, #mqtt_packet_publish { packet_id = PacketId }, Rest);
-        {Subs, <<PacketBin:Length/binary, Rest/binary>>}
-          when Subs =:= ?SUBSCRIBE orelse Subs =:= ?UNSUBSCRIBE ->
+        {?PUBLISH, <<TopicLen:16, TopicName:TopicLen/binary,
+                     PacketBin:(Length-2-TopicLen)/binary,
+                     Rest/binary>>} ->
+            {PacketId, Rest1} = case Qos of
+                                    ?QOS_0 ->
+                                        %% "The Packet Identifier field is only present in
+                                        %% PUBLISH packets where the QoS level is 1 or 2."
+                                        {undefined, PacketBin};
+                                    _ ->
+                                        <<Id:16, R/binary>> = PacketBin,
+                                        {Id, R}
+                                end,
+            {Props, Payload} = parse_props(Rest1, ProtoVer),
+            Publish = #mqtt_packet_publish{topic_name = TopicName,
+                                           packet_id = PacketId,
+                                           props = Props},
+            wrap(Fixed, Publish, Payload, Rest, ProtoVer);
+        {?PUBACK, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
+            {ReasonCode, Props} = case PacketBin of
+                                      <<>> ->
+                                          {?RC_SUCCESS, #{}};
+                                      <<Rc, PropsBin/binary>> when ProtoVer =:= 5 ->
+                                          {Props0, <<>>} = parse_props(PropsBin, ProtoVer),
+                                          {Rc, Props0}
+                                  end,
+            PubAck = #mqtt_packet_puback{packet_id = PacketId,
+                                         reason_code = ReasonCode,
+                                         props = Props},
+            wrap(Fixed, PubAck, Rest, ProtoVer);
+        {?SUBSCRIBE, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
+            %% "SUBSCRIBE messages use QoS level 1 to acknowledge multiple subscription requests."
             1 = Qos,
-            <<PacketId:16/big, Rest1/binary>> = PacketBin,
-            Topics = parse_topics(Subs, Rest1, []),
-            wrap(Fixed, #mqtt_packet_subscribe { packet_id  = PacketId,
-                                                 topic_table = Topics }, Rest);
-        {Minimal, Rest}
-          when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
-            Length = 0,
-            wrap(Fixed, Rest);
+            {Props, Rest1} = parse_props(PacketBin, ProtoVer),
+            Topics = [#mqtt_topic{filter = Topic,
+                                  qos = QoS,
+                                  no_local = int_to_bool(Nl),
+                                  retain_as_published = int_to_bool(Rap),
+                                  retain_handling = Rh} ||
+                      <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
+            Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
+                                               props = Props,
+                                               topics = Topics},
+            wrap(Fixed, Subscribe, Rest, ProtoVer);
+        {?UNSUBSCRIBE, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
+            %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
+            1 = Qos,
+            {Props, Rest1} = parse_props(PacketBin, ProtoVer),
+            Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
+            Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
+                                                   props = Props,
+                                                   topics = Topics},
+            wrap(Fixed, Unsubscribe, Rest, ProtoVer);
+        {?PINGREQ, Rest} ->
+            0 = Length,
+            wrap(Fixed, Rest, ProtoVer);
+        {?DISCONNECT, Rest}
+          when ProtoVer < 5 ->
+            0 = Length,
+            wrap(Fixed, #mqtt_packet_disconnect{}, Rest, ProtoVer);
+        {?DISCONNECT, <<ReasonCode, PacketBin:(Length-1)/binary, Rest/binary>>}
+          when ProtoVer =:= 5 ->
+            {Props, <<>>} = parse_props(PacketBin, ProtoVer),
+            Disconnect = #mqtt_packet_disconnect{reason_code = ReasonCode,
+                                                 props = Props},
+            wrap(Fixed, Disconnect, Rest, ProtoVer);
         {_, TooShortBin}
           when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
                            parse_packet(<<TooShortBin/binary, BinMore/binary>>,
-                                        Fixed, Length)
+                                        Fixed, Length, ProtoVer)
                    end}
     end.
 
@@ -110,40 +152,8 @@ parse_connect(Bin, Fixed, Length) ->
         true ->
             case Bin of
                 <<PacketBin:Length/binary, Rest/binary>> ->
-                    {ProtoName, Rest1} = parse_utf(PacketBin),
-                    <<ProtoVersion : 8, Rest2/binary>> = Rest1,
-                    <<UsernameFlag : 1,
-                      PasswordFlag : 1,
-                      WillRetain   : 1,
-                      WillQos      : 2,
-                      WillFlag     : 1,
-                      CleanSession : 1,
-                      _Reserved    : 1,
-                      KeepAlive    : 16/big,
-                      Rest3/binary>>   = Rest2,
-                    {ClientId,  Rest4} = parse_utf(Rest3),
-                    {WillTopic, Rest5} = parse_utf(Rest4, WillFlag),
-                    {WillMsg,   Rest6} = parse_msg(Rest5, WillFlag),
-                    {UserName,  Rest7} = parse_utf(Rest6, UsernameFlag),
-                    {PasssWord, <<>>}  = parse_utf(Rest7, PasswordFlag),
-                    case protocol_name_approved(ProtoVersion, ProtoName) of
-                        true ->
-                            wrap(Fixed,
-                                 #mqtt_packet_connect{
-                                    proto_ver   = ProtoVersion,
-                                    will_retain = int_to_bool(WillRetain),
-                                    will_qos    = WillQos,
-                                    will_flag   = int_to_bool(WillFlag),
-                                    clean_sess  = int_to_bool(CleanSession),
-                                    keep_alive  = KeepAlive,
-                                    client_id   = ClientId,
-                                    will_topic  = WillTopic,
-                                    will_msg    = WillMsg,
-                                    username    = UserName,
-                                    password    = PasssWord}, Rest);
-                        false ->
-                            {error, protocol_header_corrupt}
-                    end;
+                    Connect = #mqtt_packet_connect{proto_ver = ProtoVer} = parse_connect(PacketBin),
+                    wrap(Fixed, Connect, Rest, ProtoVer);
                 TooShortBin
                   when byte_size(TooShortBin) < Length ->
                     {more, fun(BinMore) ->
@@ -155,117 +165,74 @@ parse_connect(Bin, Fixed, Length) ->
             {error, connect_packet_too_large}
     end.
 
-parse_topics(_, <<>>, Topics) ->
-    Topics;
-parse_topics(?SUBSCRIBE = Sub, Bin, Topics) ->
-    {Name, <<_:6, QoS:2, Rest/binary>>} = parse_utf(Bin),
-    parse_topics(Sub, Rest, [#mqtt_topic { name = Name, qos = QoS } | Topics]);
-parse_topics(?UNSUBSCRIBE = Sub, Bin, Topics) ->
-    {Name, <<Rest/binary>>} = parse_utf(Bin),
-    parse_topics(Sub, Rest, [#mqtt_topic { name = Name } | Topics]).
+-spec parse_connect(binary()) ->
+    #mqtt_packet_connect{}.
+parse_connect(<<Len:16, ProtoName:Len/binary,
+                ProtoVer,
+                UsernameFlag:1,
+                PasswordFlag:1,
+                WillRetain:1,
+                WillQos:2,
+                WillFlag:1,
+                CleanSession:1,
+                _Reserved:1,
+                KeepAlive:16,
+                Rest0/binary>>) ->
+    true = protocol_name_approved(ProtoVer, ProtoName),
+    {Props, Rest1} = parse_props(Rest0, ProtoVer),
+    {ClientId, Rest2} = parse_bin(Rest1),
+    {WillProps, WillTopic, WillMsg, Rest3} =
+    case WillFlag of
+        0 ->
+            {#{}, undefined, undefined, Rest2};
+        1 ->
+            {WillProps0, R0} = parse_props(Rest2, ProtoVer),
+            {WillTopic0, R1} = parse_bin(R0),
+            {WillMsg0, R2} = parse_bin(R1),
+            {WillProps0, WillTopic0, WillMsg0, R2}
+    end,
+    {UserName, Rest} = parse_bin(Rest3, UsernameFlag),
+    {PasssWord, <<>>} = parse_bin(Rest, PasswordFlag),
+    #mqtt_packet_connect{
+       proto_ver = ProtoVer,
+       will_retain = int_to_bool(WillRetain),
+       will_qos = WillQos,
+       will_flag = int_to_bool(WillFlag),
+       clean_sess = int_to_bool(CleanSession),
+       keep_alive = KeepAlive,
+       props = Props,
+       client_id = ClientId,
+       will_props = WillProps,
+       will_topic = WillTopic,
+       will_msg = WillMsg,
+       username = UserName,
+       password = PasssWord}.
 
-wrap(Fixed, Variable, Payload, Rest) ->
-    {ok, #mqtt_packet { variable = Variable, fixed = Fixed, payload = Payload }, Rest}.
-wrap(Fixed, Variable, Rest) ->
-    {ok, #mqtt_packet { variable = Variable, fixed = Fixed }, Rest}.
-wrap(Fixed, Rest) ->
-    {ok, #mqtt_packet { fixed = Fixed }, Rest}.
+wrap(Fixed, Variable, Payload, Rest, ProtoVer) ->
+    {ok, #mqtt_packet { variable = Variable, fixed = Fixed, payload = Payload }, Rest, ProtoVer}.
 
-parse_utf(Bin, 0) ->
+wrap(Fixed, Variable, Rest, ProtoVer) ->
+    {ok, #mqtt_packet { variable = Variable, fixed = Fixed }, Rest, ProtoVer}.
+
+wrap(Fixed, Rest, ProtoVer) ->
+    {ok, #mqtt_packet { fixed = Fixed }, Rest, ProtoVer}.
+
+%% parse_bin/1 is used for parsing both binary data and UTF-8 encoded strings.
+%% Our parser opts out of UTF-8 validation for performance reasons.
+%% Some UTF-8 encoded strings are blindly forwarded from MQTT publisher to MQTT subscriber.
+%% Other UTF-8 encoded strings are processed by the server and checked for UTF-8
+%% well-formedness later on.
+-spec parse_bin(binary()) ->
+    {binary(), binary()}.
+parse_bin(<<Len:16, Bin:Len/binary, Rest/binary>>) ->
+    {Bin, Rest}.
+
+-spec parse_bin(binary(), 0 | 1) ->
+    {option(binary()), binary()}.
+parse_bin(Bin, 0) ->
     {undefined, Bin};
-parse_utf(Bin, _) ->
-    parse_utf(Bin).
-
-parse_utf(<<Len:16/big, Str:Len/binary, Rest/binary>>) ->
-    {Str, Rest}.
-
-parse_msg(Bin, 0) ->
-    {undefined, Bin};
-parse_msg(<<Len:16/big, Msg:Len/binary, Rest/binary>>, _) ->
-    {Msg, Rest}.
-
-%% serialisation
-
--spec serialise(#mqtt_packet{}, ?MQTT_PROTO_V3 | ?MQTT_PROTO_V4) ->
-    iodata().
-serialise(#mqtt_packet{fixed    = Fixed,
-                       variable = Variable,
-                       payload  = Payload}, Vsn) ->
-    serialise_variable(Fixed, Variable, serialise_payload(Payload), Vsn).
-
-serialise_payload(undefined) ->
-    <<>>;
-serialise_payload(P)
-  when is_binary(P) orelse is_list(P) ->
-    P.
-
-serialise_variable(#mqtt_packet_fixed   { type        = ?CONNACK } = Fixed,
-                   #mqtt_packet_connack { session_present = SessionPresent,
-                                          return_code = ReturnCode },
-                   <<>> = PayloadBin, _Vsn) ->
-    VariableBin = <<?RESERVED:7, (bool_to_int(SessionPresent)):1, ReturnCode:8>>,
-    serialise_fixed(Fixed, VariableBin, PayloadBin);
-
-serialise_variable(#mqtt_packet_fixed  { type       = SubAck } = Fixed,
-                   #mqtt_packet_suback { packet_id = PacketId,
-                                         qos_table  = Qos },
-                   <<>> = _PayloadBin, Vsn)
-  when SubAck =:= ?SUBACK orelse SubAck =:= ?UNSUBACK ->
-    VariableBin = <<PacketId:16/big>>,
-    QosBin = case Vsn of
-                 ?MQTT_PROTO_V3 ->
-                     << <<?RESERVED:6, Q:2>> || Q <- Qos >>;
-                 ?MQTT_PROTO_V4 ->
-                     %% Allow error code (0x80) in the MQTT SUBACK message.
-                     << <<Q:8>> || Q <- Qos >>
-             end,
-    serialise_fixed(Fixed, VariableBin, QosBin);
-
-serialise_variable(#mqtt_packet_fixed   { type       = ?PUBLISH,
-                                          qos        = Qos } = Fixed,
-                   #mqtt_packet_publish { topic_name = TopicName,
-                                          packet_id = PacketId },
-                   Payload, _Vsn) ->
-    TopicBin = serialise_utf(TopicName),
-    PacketIdBin = case Qos of
-                       0 -> <<>>;
-                       1 -> <<PacketId:16/big>>
-                   end,
-    serialise_fixed(Fixed, <<TopicBin/binary, PacketIdBin/binary>>, Payload);
-
-serialise_variable(#mqtt_packet_fixed   { type       = ?PUBACK } = Fixed,
-                   #mqtt_packet_publish { packet_id = PacketId },
-                   PayloadBin, _Vsn) ->
-    PacketIdBin = <<PacketId:16/big>>,
-    serialise_fixed(Fixed, PacketIdBin, PayloadBin);
-
-serialise_variable(#mqtt_packet_fixed {} = Fixed,
-                   undefined,
-                   <<>> = _PayloadBin, _Vsn) ->
-    serialise_fixed(Fixed, <<>>, <<>>).
-
-serialise_fixed(#mqtt_packet_fixed{type   = Type,
-                                   dup    = Dup,
-                                   qos    = Qos,
-                                   retain = Retain}, VariableBin, Payload)
-  when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?DISCONNECT andalso
-       is_integer(Qos) andalso 0 =< Qos andalso Qos =< 2 ->
-    Len = size(VariableBin) + iolist_size(Payload),
-    true = (Len =< ?MAX_LEN),
-    LenBin = serialise_len(Len),
-    [<<Type:4, (bool_to_int(Dup)):1, Qos:2, (bool_to_int(Retain)):1,
-       LenBin/binary, VariableBin/binary>>, Payload].
-
-serialise_utf(String) ->
-    StringBin = unicode:characters_to_binary(String),
-    Len = size(StringBin),
-    true = (Len =< 16#ffff),
-    <<Len:16/big, StringBin/binary>>.
-
-serialise_len(N) when N =< ?LOWBITS ->
-    <<0:1, N:7>>;
-serialise_len(N) ->
-    <<1:1, (N rem ?HIGHBIT):7, (serialise_len(N div ?HIGHBIT))/binary>>.
+parse_bin(Bin, 1) ->
+    parse_bin(Bin).
 
 protocol_name_approved(Ver, Name) ->
     lists:member({Ver, Name}, ?PROTOCOL_NAMES).
@@ -277,3 +244,296 @@ int_to_bool(1) -> true.
 -spec bool_to_int(boolean()) -> 0 | 1.
 bool_to_int(false) -> 0;
 bool_to_int(true) -> 1.
+
+-spec parse_props(binary(), protocol_version()) ->
+    {properties(), binary()}.
+parse_props(Bin, Vsn)
+  when Vsn < 5 ->
+    {#{}, Bin};
+parse_props(<<0, Rest/binary>>, 5) ->
+    %% "If there are no properties, this MUST be indicated by
+    %% including a Property Length of zero." [MQTT-2.2.2-1]
+    {#{}, Rest};
+parse_props(Bin, 5) ->
+    {Len, Rest0} = parse_variable_byte_integer(Bin),
+    <<PropsBin:Len/binary, Rest/binary>> = Rest0,
+    Props = parse_prop(PropsBin, #{}),
+    {Props, Rest}.
+
+-spec parse_prop(binary(), properties()) ->
+    properties().
+parse_prop(<<>>, #{'User-Property' := UserProps} = Props) ->
+    %% "The Server MUST maintain the order of User Properties"
+    maps:update('User-Property', lists:reverse(UserProps), Props);
+parse_prop(<<>>, Props) ->
+    Props;
+parse_prop(<<16#01, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Payload-Format-Indicator' => Val});
+parse_prop(<<16#02, Val:32, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Message-Expiry-Interval' => Val});
+parse_prop(<<16#03, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Content-Type' => Val});
+parse_prop(<<16#08, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Response-Topic' => Val});
+parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Correlation-Data' => Val});
+parse_prop(<<16#0B, Bin/binary>>, Props) ->
+    {Val, Rest} = parse_variable_byte_integer(Bin),
+    parse_prop(Rest, Props#{'Subscription-Identifier' => Val});
+parse_prop(<<16#11, Val:32, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Session-Expiry-Interval' => Val});
+parse_prop(<<16#12, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Assigned-Client-Identifier' => Val});
+parse_prop(<<16#13, Val:16, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Server-Keep-Alive' => Val});
+parse_prop(<<16#15, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Authentication-Method' => Val});
+parse_prop(<<16#16, Len:16, Val:Len/binary, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Authentication-Data' => Val});
+parse_prop(<<16#17, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Request-Problem-Information' => Val});
+parse_prop(<<16#18, Val:32, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Will-Delay-Interval' => Val});
+parse_prop(<<16#19, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Request-Response-Information' => Val});
+parse_prop(<<16#1A, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Response-Information' => Val});
+parse_prop(<<16#1C, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Server-Reference' => Val});
+parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
+    parse_prop(Rest, Props#{'Reason-String' => Val});
+parse_prop(<<16#21, Val:16, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Receive-Maximum' => Val});
+parse_prop(<<16#22, Val:16, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Topic-Alias-Maximum' => Val});
+parse_prop(<<16#23, Val:16, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Topic-Alias' => Val});
+parse_prop(<<16#24, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Maximum-QoS' => Val});
+parse_prop(<<16#25, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Retain-Available' => Val});
+parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binary, Rest/binary>>, Props0) ->
+    %% "The User Property is allowed to appear multiple times to represent multiple
+    %% name, value pairs. The same name is allowed to appear more than once."
+    Pair = {Name, Val},
+    Props = maps:update_with('User-Property',
+                             fun(UserProps) -> [Pair | UserProps] end,
+                             [Pair],
+                             Props0),
+    parse_prop(Rest, Props);
+parse_prop(<<16#27, Val:32, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Maximum-Packet-Size' => Val});
+parse_prop(<<16#28, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Wildcard-Subscription-Available' => Val});
+parse_prop(<<16#29, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Subscription-Identifier-Available' => Val});
+parse_prop(<<16#2A, Val, Bin/binary>>, Props) ->
+    parse_prop(Bin, Props#{'Shared-Subscription-Available' => Val});
+parse_prop(<<PropId, _Rest/binary>>, _Props) ->
+    throw({invalid_property_id, PropId}).
+
+-spec parse_variable_byte_integer(binary()) ->
+    {integer(), Rest :: binary()}.
+parse_variable_byte_integer(Bin) ->
+    parse_variable_byte_integer(Bin, 1, 0).
+
+parse_variable_byte_integer(<<1:1, _Len:7, _Rest/binary>>, Multiplier, _Value)
+  when Multiplier > ?MAX_MULTIPLIER ->
+    throw(malformed_variable_byte_integer);
+parse_variable_byte_integer(<<1:1, Len:7, Rest/binary>>, Multiplier, Value) ->
+    parse_variable_byte_integer(Rest, Multiplier * ?HIGHBIT, Value + Len * Multiplier);
+parse_variable_byte_integer(<<0:1, Len:7, Rest/binary>>, Multiplier, Value) ->
+    {Value + Len * Multiplier, Rest}.
+
+-spec serialise(mqtt_packet(), protocol_version()) ->
+    iodata().
+serialise(#mqtt_packet{fixed = Fixed,
+                       variable = Variable,
+                       payload = Payload}, Vsn) ->
+    serialise(Fixed, Variable, Payload, Vsn).
+
+-spec serialise(#mqtt_packet_fixed{},
+                VariableHeader :: option(tuple()),
+                Payload :: option(iodata()),
+                protocol_version()) ->
+    iodata().
+serialise(#mqtt_packet_fixed{type = ?CONNACK} = Fixed,
+          #mqtt_packet_connack{session_present = SessionPresent,
+                               code = ConnAckCode,
+                               props = Props},
+          undefined, Vsn) ->
+    Variable = [bool_to_int(SessionPresent),
+                ConnAckCode,
+                serialise_props(Props, Vsn)],
+    serialise_fixed(Fixed, Variable, []);
+serialise(#mqtt_packet_fixed{type = ?SUBACK} = Fixed,
+          #mqtt_packet_suback{packet_id = PacketId,
+                              props = Props,
+                              reason_codes = ReasonCodes},
+          undefined, Vsn)
+  when is_list(ReasonCodes) ->
+    Variable = [<<PacketId:16>>,
+                serialise_props(Props, Vsn)],
+    Payload = case Vsn of
+                  3 ->
+                      %% Disallow error code (0x80) in the MQTT SUBACK message.
+                      << <<?RESERVED:6, QoS:2>> || QoS <- ReasonCodes >>;
+                  V when V >= 4 ->
+                      ReasonCodes
+              end,
+    serialise_fixed(Fixed, Variable, Payload);
+serialise(#mqtt_packet_fixed{type = ?UNSUBACK} = Fixed,
+          #mqtt_packet_unsuback{packet_id = PacketId,
+                                props = Props,
+                                reason_codes = ReasonCodes},
+          undefined, Vsn)
+  when is_list(ReasonCodes) ->
+    Variable = [<<PacketId:16>>,
+                serialise_props(Props, Vsn)],
+    serialise_fixed(Fixed, Variable, ReasonCodes);
+serialise(#mqtt_packet_fixed{type = ?PUBLISH,
+                             qos = Qos } = Fixed,
+          #mqtt_packet_publish{topic_name = TopicName,
+                               packet_id = PacketId,
+                               props = Props},
+          Payload, Vsn) ->
+    PacketIdIoData = case Qos of
+                         0 -> [];
+                         1 -> <<PacketId:16>>
+                     end,
+    Variable = [serialise_binary(TopicName),
+                PacketIdIoData,
+                serialise_props(Props, Vsn)],
+    serialise_fixed(Fixed, Variable, Payload);
+serialise(#mqtt_packet_fixed{type = ?PUBACK} = Fixed,
+          #mqtt_packet_puback{packet_id = PacketId,
+                              reason_code = ReasonCode,
+                              props = Props},
+          undefined, Vsn) ->
+    PacketIdBin = <<PacketId:16>>,
+    Variable = case Vsn of
+                   V when V =< 4 orelse
+                          %% MQTT 5.0 spec: "The Reason Code and Property Length can be omitted
+                          %% if the Reason Code is 0x00 (Success) and there are no Properties."
+                          V =:= 5 andalso reason_code =:= ?RC_SUCCESS andalso map_size(Props) =:= 0 ->
+                       PacketIdBin;
+                   5 ->
+                       [PacketIdBin,
+                        ReasonCode,
+                        serialise_props(Props, Vsn)]
+               end,
+    serialise_fixed(Fixed, Variable, []);
+serialise(#mqtt_packet_fixed{type = ?PINGRESP} = Fixed,
+          undefined, undefined, _Vsn) ->
+    serialise_fixed(Fixed, [], []).
+
+-spec serialise_fixed(#mqtt_packet_fixed{},
+                      VariableHeader :: iodata(),
+                      Payload :: iodata()) ->
+    iodata().
+serialise_fixed(#mqtt_packet_fixed{type = Type,
+                                   dup = Dup,
+                                   qos = Qos,
+                                   retain = Retain}, Variable, Payload)
+  when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?AUTH andalso
+       is_integer(Qos) andalso 0 =< Qos andalso Qos =< 2 ->
+    Len = iolist_size(Variable) + iolist_size(Payload),
+    true = (Len =< ?MAX_LEN),
+    [<<Type:4, (bool_to_int(Dup)):1, Qos:2, (bool_to_int(Retain)):1>>,
+     serialise_variable_byte_integer(Len),
+     Variable,
+     Payload].
+
+%% 1.5.6 Binary Data
+%% "Binary Data is represented by a Two Byte Integer length which indicates the number of
+%% data bytes, followed by that number of bytes. Thus, the length of Binary Data is
+%% limited to the range of 0 to 65,535 Bytes."
+-spec serialise_binary(binary()) -> iodata().
+serialise_binary(Bin) ->
+    Len = byte_size(Bin),
+    true = (Len =< 16#ffff),
+    LenBin = <<Len:16>>,
+    [LenBin, Bin].
+
+-spec serialise_variable_byte_integer(non_neg_integer()) -> iodata().
+serialise_variable_byte_integer(N)
+  when N =< ?LOWBITS ->
+    %% Optimisation: Prevent binary construction.
+    [N];
+serialise_variable_byte_integer(N) ->
+    serialise_variable_byte_integer0(N).
+
+-spec serialise_variable_byte_integer0(non_neg_integer()) -> binary().
+serialise_variable_byte_integer0(N)
+  when N =< ?LOWBITS ->
+    <<0:1, N:7>>;
+serialise_variable_byte_integer0(N) ->
+    <<1:1, (N rem ?HIGHBIT):7, (serialise_variable_byte_integer0(N div ?HIGHBIT))/binary>>.
+
+-spec serialise_props(properties(), protocol_version()) ->
+    iodata().
+serialise_props(_Props, Vsn)
+  when Vsn < 5 ->
+    [];
+serialise_props(Props, 5)
+  when map_size(Props) =:= 0 ->
+    %% "If there are no properties, this MUST be indicated by
+    %% including a Property Length of zero." [MQTT-2.2.2-1]
+    [0];
+serialise_props(Props, 5) ->
+    IoList = maps:fold(fun(Id, Val, Acc) ->
+                               [serialise_prop(Id, Val) | Acc]
+                       end, [], Props),
+    [serialise_variable_byte_integer(iolist_size(IoList)),
+     IoList].
+
+-spec serialise_prop(property_name(), property_value()) ->
+    iodata().
+serialise_prop('Payload-Format-Indicator', Val) ->
+    [16#01, Val];
+serialise_prop('Message-Expiry-Interval', Val) ->
+    <<16#02, Val:32>>;
+serialise_prop('Content-Type', Val) ->
+    [16#03, serialise_binary(Val)];
+serialise_prop('Response-Topic', Val) ->
+    [16#08, serialise_binary(Val)];
+serialise_prop('Correlation-Data', Val) ->
+    [16#09, serialise_binary(Val)];
+serialise_prop('Subscription-Identifier', Val) ->
+    [16#0B, serialise_variable_byte_integer(Val)];
+serialise_prop('Session-Expiry-Interval', Val) ->
+    <<16#11, Val:32>>;
+serialise_prop('Assigned-Client-Identifier', Val) ->
+    [16#12, serialise_binary(Val)];
+serialise_prop('Server-Keep-Alive', Val) ->
+    <<16#13, Val:16>>;
+serialise_prop('Authentication-Method', Val) ->
+    [16#15, serialise_binary(Val)];
+serialise_prop('Authentication-Data', Val) ->
+    [16#16, serialise_binary(Val)];
+serialise_prop('Reason-String', Val) ->
+    [16#1F, serialise_binary(Val)];
+serialise_prop('Receive-Maximum', Val) ->
+    <<16#21, Val:16>>;
+serialise_prop('Topic-Alias-Maximum', Val) ->
+    <<16#22, Val:16>>;
+serialise_prop('Topic-Alias', Val) ->
+    <<16#23, Val:16>>;
+serialise_prop('Maximum-QoS', Val) ->
+    [16#24, Val];
+serialise_prop('Retain-Available', Val) ->
+    [16#25, Val];
+serialise_prop('User-Property', Props) ->
+    lists:map(fun({Name, Val}) ->
+                      [16#26,
+                       serialise_binary(Name),
+                       serialise_binary(Val)]
+              end, Props);
+serialise_prop('Maximum-Packet-Size', Val) ->
+    <<16#27, Val:32>>;
+serialise_prop('Wildcard-Subscription-Available', Val) ->
+    [16#28, Val];
+serialise_prop('Subscription-Identifier-Available', Val) ->
+    [16#29, Val];
+serialise_prop('Shared-Subscription-Available', Val) ->
+    [16#2A, Val].

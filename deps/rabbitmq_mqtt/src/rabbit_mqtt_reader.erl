@@ -321,7 +321,7 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
             {noreply,
              ensure_stats_timer(State#state{parse_state = ParseState1}),
              ?HIBERNATE_AFTER};
-        {ok, Packet, Rest} ->
+        {ok, Packet, Rest, ParseState1} ->
             case ProcState of
                 connect_packet_unprocessed ->
                     Send = fun(Data) ->
@@ -337,16 +337,16 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                             ?LOG_INFO("Accepted MQTT connection ~ts for client ID ~ts",
                                       [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),
                             process_received_bytes(
-                              Rest, State#state{parse_state = rabbit_mqtt_packet:reset_state(),
+                              Rest, State#state{parse_state = ParseState1,
                                                 proc_state = ProcState1});
                         {error, {socket_ends, Reason} = R} ->
                             ?LOG_ERROR("MQTT connection ~ts failed to establish because socket "
                                        "addresses could not be determined: ~tp",
                                        [ConnName, Reason]),
                             {stop, {shutdown, R}, {_SendWill = false, State}};
-                        {error, ConnAckReturnCode} ->
-                            ?LOG_ERROR("Rejected MQTT connection ~ts with CONNACK return code ~p",
-                                       [ConnName, ConnAckReturnCode]),
+                        {error, ConnAckCode} ->
+                            ?LOG_ERROR("Rejected MQTT connection ~ts with CONNACK code ~p",
+                                       [ConnName, ConnAckCode]),
                             {stop, shutdown, {_SendWill = false, State}}
                     end;
                 _ ->
@@ -354,7 +354,7 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                         {ok, ProcState1} ->
                             process_received_bytes(
                               Rest,
-                              State #state{parse_state = rabbit_mqtt_packet:reset_state(),
+                              State #state{parse_state = ParseState1,
                                            proc_state = ProcState1});
                         {error, unauthorized = Reason, ProcState1} ->
                             ?LOG_ERROR("MQTT connection ~ts is closing due to an authorization failure", [ConnName]),

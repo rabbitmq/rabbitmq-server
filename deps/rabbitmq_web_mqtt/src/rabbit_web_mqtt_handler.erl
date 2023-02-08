@@ -260,7 +260,7 @@ handle_data1(Data, State = #state{socket = Socket,
             {ok, ensure_stats_timer(
                    control_throttle(
                      State#state{parse_state = ParseState1})), hibernate};
-        {ok, Packet, Rest} ->
+        {ok, Packet, Rest, ParseState1} ->
             case ProcState of
                 connect_packet_unprocessed ->
                     case rabbit_mqtt_processor:init(Packet, rabbit_net:unwrap_socket(Socket),
@@ -269,7 +269,7 @@ handle_data1(Data, State = #state{socket = Socket,
                             ?LOG_INFO("Accepted Web MQTT connection ~ts for client ID ~ts",
                                       [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),
                             handle_data1(
-                              Rest, State#state{parse_state = rabbit_mqtt_packet:reset_state(),
+                              Rest, State#state{parse_state = ParseState1,
                                                 proc_state = ProcState1});
                         {error, Reason} ->
                             ?LOG_ERROR("Rejected Web MQTT connection ~ts: ~p", [ConnName, Reason]),
@@ -281,7 +281,7 @@ handle_data1(Data, State = #state{socket = Socket,
                         {ok, ProcState1} ->
                             handle_data1(
                               Rest,
-                              State#state{parse_state = rabbit_mqtt_packet:reset_state(),
+                              State#state{parse_state = ParseState1,
                                           proc_state = ProcState1});
                         {error, Reason, _} ->
                             stop_mqtt_protocol_error(State, Reason, ConnName);
