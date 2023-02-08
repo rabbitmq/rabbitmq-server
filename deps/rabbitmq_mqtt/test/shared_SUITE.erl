@@ -98,6 +98,7 @@ subgroups() ->
          ,max_packet_size_unauthenticated
          ,default_queue_type
          ,incoming_message_interceptors
+         ,utf8
         ]}
       ]},
      {cluster_size_3, [],
@@ -1475,6 +1476,17 @@ incoming_message_interceptors(Config) ->
 
     delete_queue(Ch, QName),
     true = rpc(Config, persistent_term, erase, [Key]),
+    ok = emqtt:disconnect(C).
+
+%% Test that the server can handle UTF-8 encoded strings.
+utf8(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    % "The Topic Name MUST be present as the first field in the PUBLISH Packet Variable header.
+    % It MUST be a UTF-8 encoded string [MQTT-3.3.2-1] as defined in section 1.5.3."
+    Topic = <<"うさぎ"/utf8>>, %% Rabbit in Japanese
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"msg">>, qos1),
+    ok = expect_publishes(C, Topic, [<<"msg">>]),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------

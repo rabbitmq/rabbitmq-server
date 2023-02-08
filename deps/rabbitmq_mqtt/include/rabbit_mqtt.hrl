@@ -12,6 +12,7 @@
 -define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
 -define(MQTT_PROTO_V3, mqtt310).
 -define(MQTT_PROTO_V4, mqtt311).
+-define(MQTT_PROTO_V5, mqtt50).
 
 -define(ITEMS,
         [pid,

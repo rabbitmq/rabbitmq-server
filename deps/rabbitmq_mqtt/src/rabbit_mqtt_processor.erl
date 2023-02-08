@@ -97,7 +97,7 @@
            RawSocket :: rabbit_net:socket(),
            ConnectionName :: binary(),
            SendFun :: send_fun()) ->
-    {ok, state()} | {error, {socket_ends, any()} | connack_return_code()}.
+    {ok, state()} | {error, {socket_ends, any()} | connack_code()}.
 init(#mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNECT},
                   variable = ConnectPacket},
      Socket, ConnName, SendFun) ->
@@ -124,7 +124,6 @@ process_connect(
                "clean session: ~s, protocol version: ~p, keepalive: ~p",
                [ClientId0, Username0, CleanSess, ProtoVer, KeepaliveSecs]),
     SslLoginName = ssl_login_name(Socket),
-    ProtoVerAtom = proto_integer_to_atom(ProtoVer),
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
                true   -> flow;
                false  -> noflow
@@ -152,7 +151,7 @@ process_connect(
         {ok,
          #state{
             cfg = #cfg{socket = Socket,
-                       proto_ver = ProtoVerAtom,
+                       proto_ver = proto_integer_to_atom(ProtoVer),
                        clean_sess = CleanSess,
                        ssl_login_name = SslLoginName,
                        delivery_flow = Flow,
@@ -182,22 +181,22 @@ process_connect(
              end,
     case Result of
         {ok, SessPresent, State = #state{}} ->
-            send_conn_ack(?CONNACK_ACCEPT, SessPresent, ProtoVerAtom, SendFun),
+            send_conn_ack(?CONNACK_ACCEPT, SessPresent, ProtoVer, SendFun),
             {ok, State};
-        {error, ReturnErrCode} = Err
-          when is_integer(ReturnErrCode) ->
+        {error, ConnAckErrCode} = Err
+          when is_integer(ConnAckErrCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
-            send_conn_ack(ReturnErrCode, SessPresent, ProtoVerAtom, SendFun),
+            send_conn_ack(ConnAckErrCode, SessPresent, ProtoVer, SendFun),
             Err
     end.
 
-send_conn_ack(ReturnCode, SessPresent, ProtoVer, SendFun) ->
+send_conn_ack(ConnAckCode, SessPresent, ProtoVer, SendFun) ->
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNACK},
                           variable = #mqtt_packet_connack{
                                         session_present = SessPresent,
-                                        return_code = ReturnCode}},
+                                        code = ConnAckCode}},
     ok = send(Packet, ProtoVer, SendFun).
 
 process_connect(State0) ->
@@ -228,7 +227,7 @@ process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
     {stop, disconnect, state()} |
     {error, Reason :: term(), state()}.
 process_request(?PUBACK,
-                #mqtt_packet{variable = #mqtt_packet_publish{packet_id = PacketId}},
+                #mqtt_packet{variable = #mqtt_packet_puback{packet_id = PacketId}},
                 #state{unacked_server_pubs = U0,
                        queue_states = QStates0,
                        cfg = #cfg{queue_qos1 = QName}} = State) ->
@@ -285,18 +284,18 @@ process_request(?SUBSCRIBE,
                 #mqtt_packet{
                    variable = #mqtt_packet_subscribe{
                                  packet_id  = SubscribePktId,
-                                 topic_table = Topics},
+                                 topics = Topics},
                    payload = undefined},
                 #state{cfg = #cfg{retainer_pid = RPid}} = State0) ->
     ?LOG_DEBUG("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
-    {QosResponse, State1} =
+    {ReasonCodes, State1} =
     lists:foldl(
       fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
               %% Once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
               {[?SUBACK_FAILURE | L], S};
-         (#mqtt_topic{name = TopicName,
+         (#mqtt_topic{filter = TopicName,
                       qos = TopicQos},
           {L, S0}) ->
               QoS = maybe_downgrade_qos(TopicQos),
@@ -326,9 +325,9 @@ process_request(?SUBSCRIBE,
     Reply = #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
                          variable = #mqtt_packet_suback{
                                        packet_id = SubscribePktId,
-                                       qos_table  = QosResponse}},
+                                       reason_codes = lists:reverse(ReasonCodes)}},
     send(Reply, State1),
-    case QosResponse of
+    case ReasonCodes of
         [?SUBACK_FAILURE | _] ->
             {error, subscribe_error, State1};
         _ ->
@@ -339,13 +338,13 @@ process_request(?SUBSCRIBE,
     end;
 
 process_request(?UNSUBSCRIBE,
-                #mqtt_packet{variable = #mqtt_packet_subscribe{packet_id  = PacketId,
-                                                               topic_table = Topics},
+                #mqtt_packet{variable = #mqtt_packet_unsubscribe{packet_id  = PacketId,
+                                                                 topics = Topics},
                              payload = undefined},
                 State0) ->
     ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     State = lists:foldl(
-              fun(#mqtt_topic{name = TopicName}, #state{subscriptions = Subs0} = S0) ->
+              fun(TopicName, #state{subscriptions = Subs0} = S0) ->
                       case maps:take(TopicName, Subs0) of
                           {QoS, Subs} ->
                               QName = queue_name(QoS, S0),
@@ -362,7 +361,7 @@ process_request(?UNSUBSCRIBE,
                       end
               end, State0, Topics),
     Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
-                         variable = #mqtt_packet_suback{packet_id = PacketId}},
+                         variable = #mqtt_packet_unsuback{packet_id = PacketId}},
     send(Reply, State),
     {ok, State};
 
@@ -611,7 +610,7 @@ hand_off_to_retainer(RetainerPid, Topic0, Msg) ->
     rabbit_mqtt_retainer:retain(RetainerPid, Topic1, Msg),
     ok.
 
-maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos},
+maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQos},
                             State0 = #state{packet_id = PacketId0}) ->
     Topic1 = amqp_to_mqtt(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
@@ -1178,15 +1177,15 @@ send_puback(PktIds0, State)
 send_puback(PktId, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
-                          variable = #mqtt_packet_publish{packet_id = PktId}},
+                          variable = #mqtt_packet_puback{packet_id = PktId}},
     send(Packet, State).
 
 -spec send(mqtt_packet(), state()) -> ok.
 send(Packet, #state{cfg = #cfg{proto_ver = ProtoVer,
                                send_fun = SendFun}}) ->
-    send(Packet, ProtoVer, SendFun).
+    send(Packet, proto_atom_to_integer(ProtoVer), SendFun).
 
--spec send(mqtt_packet(), mqtt310 | mqtt311, send_fun()) -> ok.
+-spec send(mqtt_packet(), protocol_version(), send_fun()) -> ok.
 send(Packet, ProtoVer, SendFun) ->
     Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
     ok = SendFun(Data).
@@ -1478,7 +1477,7 @@ msg_id_to_packet_id(QMsgId, ?QOS_1, #state{packet_id = PktId,
 
 -spec increment_packet_id(packet_id()) -> packet_id().
 increment_packet_id(Id)
-  when Id >= 16#ffff ->
+  when Id >= ?MAX_PACKET_ID ->
     1;
 increment_packet_id(Id) ->
     Id + 1.
@@ -1694,6 +1693,11 @@ proto_integer_to_atom(3) ->
     ?MQTT_PROTO_V3;
 proto_integer_to_atom(4) ->
     ?MQTT_PROTO_V4.
+
+proto_atom_to_integer(?MQTT_PROTO_V3) ->
+    3;
+proto_atom_to_integer(?MQTT_PROTO_V4) ->
+    4.
 
 -spec proto_version_tuple(state()) -> tuple().
 proto_version_tuple(#state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V3}}) ->

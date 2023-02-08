@@ -622,7 +622,7 @@ no_queue_delete_permission(Config) ->
        ,{[io_lib:format("MQTT resource access refused: configure access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "Rejected MQTT connection .* with CONNACK return code 5"],
+          "Rejected MQTT connection .* with CONNACK code 5"],
          fun() -> stop end}
       ]),
     ok.
@@ -656,7 +656,7 @@ no_queue_consume_permission_on_connect(Config) ->
        ,{[io_lib:format("MQTT resource access refused: read access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "Rejected MQTT connection .* with CONNACK return code 5"],
+          "Rejected MQTT connection .* with CONNACK code 5"],
          fun () -> stop end}
       ]),
     ok.
@@ -824,7 +824,7 @@ loopback_user_connects_from_remote_host(Config) ->
     wait_log(Config,
              [?FAIL_IF_CRASH_LOG,
               {["MQTT login failed: user 'mqtt-user' can only connect via localhost",
-                "Rejected MQTT connection .* with CONNACK return code 5"],
+                "Rejected MQTT connection .* with CONNACK code 5"],
                fun () -> stop end}
              ]),
 
@@ -947,11 +947,10 @@ vhost_queue_limit(Config) ->
     {ok, _} = emqtt:connect(C),
     process_flag(trap_exit, true),
     %% qos0 queue can be created, qos1 queue fails to be created.
-    %% (RabbitMQ creates subscriptions in the reverse order of the SUBSCRIBE packet.)
-    ?assertMatch({ok, _Properties, [?SUBACK_FAILURE, ?SUBACK_FAILURE, 0]},
-                 emqtt:subscribe(C, [{<<"topic1">>, qos1},
+    ?assertMatch({ok, _Properties, [0, ?SUBACK_FAILURE, ?SUBACK_FAILURE]},
+                 emqtt:subscribe(C, [{<<"topic1">>, qos0},
                                      {<<"topic2">>, qos1},
-                                     {<<"topic3">>, qos0}])),
+                                     {<<"topic3">>, qos1}])),
     ok = assert_connection_closed(C).
 
 user_connection_limit(Config) ->
