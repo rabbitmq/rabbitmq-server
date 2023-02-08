@@ -41,11 +41,13 @@ defmodule SetPermissionsGloballyCommandTest do
     }
   end
 
+  @tag user: @user
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
+  @tag user: @user
   test "validate: wrong number of arguments leads to an arg count error" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
@@ -74,6 +76,7 @@ defmodule SetPermissionsGloballyCommandTest do
     assert p3[:configure] == "^#{context[:user]}-.*"
   end
 
+  @tag user: @user
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 
@@ -90,19 +93,23 @@ defmodule SetPermissionsGloballyCommandTest do
 
   @tag user: @user
   test "run: invalid regex patterns returns an error", context do
+    p1 = Enum.find(list_permissions(@vhost1), fn x -> x[:user] == context[:user] end)
+    p2 = Enum.find(list_permissions(@vhost2), fn x -> x[:user] == context[:user] end)
+    p3 = Enum.find(list_permissions(@vhost3), fn x -> x[:user] == context[:user] end)
+
     assert @command.run(
              [context[:user], "^#{context[:user]}-.*", ".*", "*"],
              context[:opts]
            ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
 
     # asserts that the failed command didn't change anything
-    p1 = Enum.find(list_permissions(@vhost1), fn x -> x[:user] == context[:user] end)
-    p2 = Enum.find(list_permissions(@vhost2), fn x -> x[:user] == context[:user] end)
-    p3 = Enum.find(list_permissions(@vhost3), fn x -> x[:user] == context[:user] end)
+    p4 = Enum.find(list_permissions(@vhost1), fn x -> x[:user] == context[:user] end)
+    p5 = Enum.find(list_permissions(@vhost2), fn x -> x[:user] == context[:user] end)
+    p6 = Enum.find(list_permissions(@vhost3), fn x -> x[:user] == context[:user] end)
 
-    assert p1 == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
-    assert p2 == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
-    assert p3 == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
+    assert p1 == p4
+    assert p2 == p5
+    assert p3 == p6
   end
 
   @tag user: @user
