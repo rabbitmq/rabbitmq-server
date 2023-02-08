@@ -891,7 +891,6 @@ state_enter0(_, _, Effects) ->
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
                              resource = QName}} = State) ->
-    rabbit_log:debug(">>>> State: ~p",[State]),
     case is_expired(Ts, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
