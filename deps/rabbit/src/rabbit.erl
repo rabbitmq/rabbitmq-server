@@ -22,6 +22,7 @@
 
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
+-export([data_dir/0]).
 -export([product_info/0,
          product_name/0,
          product_version/0,
@@ -1057,6 +1058,24 @@ stop(State) ->
     end,
     rabbit_boot_state:set(stopped),
     ok.
+
+-spec data_dir() -> DataDir when
+    DataDir :: file:filename().
+%% @doc Returns the data directory.
+%%
+%% This directory is used by many subsystems to store their files, either
+%% directly underneath or in subdirectories.
+%%
+%% Here are a few examples:
+%% <ul>
+%% <li>Mnesia</li>
+%% <li>Feature flags state</li>
+%% <li>Ra systems's WAL and segment files</li>
+%% <li>Classic queues' messages</li>
+%% </ul>
+
+data_dir() ->
+    rabbit_mnesia:dir().
 
 %%---------------------------------------------------------------------------
 %% boot step functions
