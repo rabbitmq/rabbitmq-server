@@ -1019,6 +1019,7 @@ is_virgin_node() ->
             [rabbit_node_monitor:cluster_status_filename(),
              rabbit_node_monitor:running_nodes_filename(),
              rabbit_node_monitor:coordination_filename(),
+             rabbit_node_monitor:stream_filename(),
              rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file()],
