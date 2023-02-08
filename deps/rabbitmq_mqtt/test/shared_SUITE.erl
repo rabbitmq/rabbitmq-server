@@ -167,14 +167,6 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase = maintenance, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "maintenance mode wrongly closes cluster-wide MQTT connections "
-             "in RMQ < 3.11.2 and < 3.10.10"};
-        false ->
-            init_per_testcase0(Testcase, Config)
-    end;
 init_per_testcase(T, Config)
   when T =:= management_plugin_connection;
        T =:= management_plugin_enable ->
