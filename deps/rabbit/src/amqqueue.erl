@@ -117,6 +117,7 @@
           options = #{} :: map() | '_',
           type = ?amqqueue_v1_type :: module() | '_',
           type_state = #{} :: map() | '_',
+          %% New state value to store num of ticks
           tick_count = 0
          }).
 

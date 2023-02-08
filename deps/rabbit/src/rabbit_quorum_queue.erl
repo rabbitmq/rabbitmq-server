@@ -529,12 +529,10 @@ handle_tick(QName,
 maybe_grow_qq_members(QName) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     Count = amqqueue:get_tick_count(Q),
-    NewCount = case Count < 5 of
-                   true ->
-                       rabbit_log:info(">>>> TICK count too low, skip ~p",[Count]),
-                       Count + 1;
+    NewCount = case should_check_if_grow(Count) of
                    false ->
-                       rabbit_log:info(">>>> TICK count GO ~p",[Count]),
+                       Count + 1;
+                   true ->
                        Running = rabbit_nodes:all_running(),
                        #{nodes := MemberNodes} = amqqueue:get_type_state(Q),
                        New = Running -- MemberNodes,
@@ -545,10 +543,9 @@ maybe_grow_qq_members(QName) ->
                        CurrentSize = length(MemberNodes),
                        case {CurrentSize < Size, New} of
                            {_, []} ->
-                               %% No new nodes to grow towards
+                               %% No new nodes to grow towards, regardless if QQ is below target
                                ok;
                            {true, NewNodes} ->
-                               rabbit_log:info(">>>> TICK will add nodes to ~p num ~p",[NewNodes, Size - CurrentSize]),
                                %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
                                %% Take node load or availability zones into account?
                                add_members(Q, NewNodes, 5000, Size - CurrentSize);
@@ -561,8 +558,13 @@ maybe_grow_qq_members(QName) ->
     Fun = fun (Q1) ->
                   amqqueue:set_tick_count(Q1, NewCount)
           end,
+    %% Increase or reset tick count. Expensive?
     rabbit_amqqueue:update(QName, Fun).
 
+%% Just a random idea of how to slowly grow the probability of a
+%% check to spread the load a bit.
+should_check_if_grow(Count) ->
+    1 / (12-Count) >= rand:uniform().
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
