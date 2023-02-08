@@ -881,7 +881,7 @@ ntoab(IP) ->
 %% loop in rabbit_amqqueue:on_node_down/1 and any delays we incur
 %% would be bad news.
 %%
-%% See also rabbit_mnesia:is_process_alive/1 which also requires the
+%% See also rabbit_process:is_process_alive/1 which also requires the
 %% process be in the same running cluster as us (i.e. not partitioned
 %% or some random node).
 is_process_alive(Pid) when node(Pid) =:= node() ->

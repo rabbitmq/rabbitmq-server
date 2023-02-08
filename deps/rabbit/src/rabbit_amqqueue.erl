@@ -574,7 +574,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
         {stopped, false} ->
             E({absent, Q, stopped});
         _ ->
-            case rabbit_mnesia:is_process_alive(QPid) of
+            case rabbit_process:is_process_alive(QPid) of
                 true ->
                     % rabbitmq-server#1682
                     % The old check would have crashed here,
@@ -1814,7 +1814,7 @@ is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;
 is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is_pid(Q) ->
     Pid = amqqueue:get_pid(Q),
-    not rabbit_mnesia:is_process_alive(Pid).
+    not rabbit_process:is_process_alive(Pid).
 
 -spec has_synchronised_mirrors_online(amqqueue:amqqueue()) -> boolean().
 has_synchronised_mirrors_online(Q) ->
@@ -1881,7 +1881,7 @@ on_node_down(Node) ->
 filter_transient_queues_to_delete(Node) ->
     fun(Q) ->
             amqqueue:qnode(Q) == Node andalso
-                not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q))
+                not rabbit_process:is_process_alive(amqqueue:get_pid(Q))
                 andalso (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q))
                 andalso (not rabbit_amqqueue:is_replicated(Q)
                          orelse rabbit_amqqueue:is_dead_exclusive(Q))

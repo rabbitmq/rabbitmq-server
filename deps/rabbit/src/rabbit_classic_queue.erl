@@ -129,7 +129,7 @@ is_recoverable(Q) when ?is_amqqueue(Q) ->
     %% the policy). Thus, we must check if the local pid is alive
     %% - if the record is present - in order to restart.
     (not rabbit_db_queue:consistent_exists(amqqueue:get_name(Q))
-     orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q))).
+     orelse not rabbit_process:is_process_alive(amqqueue:get_pid(Q))).
 
 recover(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
@@ -438,11 +438,11 @@ wait_for_promoted_or_stopped(Q0) ->
         {ok, Q} ->
             QPid = amqqueue:get_pid(Q),
             SPids = amqqueue:get_slave_pids(Q),
-            case rabbit_mnesia:is_process_alive(QPid) of
+            case rabbit_process:is_process_alive(QPid) of
                 true  -> {promoted, Q};
                 false ->
                     case lists:any(fun(Pid) ->
-                                       rabbit_mnesia:is_process_alive(Pid)
+                                       rabbit_process:is_process_alive(Pid)
                                    end, SPids) of
                         %% There is a live slave. May be promoted
                         true ->

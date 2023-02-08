@@ -56,6 +56,13 @@
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
+-deprecated({on_running_node, 1,
+             "Use rabbit_process:on_running_node/1 instead"}).
+-deprecated({is_process_alive, 1,
+             "Use rabbit_process:is_process_alive/1 instead"}).
+-deprecated({is_registered_process_alive, 1,
+             "Use rabbit_process:is_registered_process_alive/1 instead"}).
+
 -ifdef(TEST).
 -compile(export_all).
 -export([init_with_lock/3]).
