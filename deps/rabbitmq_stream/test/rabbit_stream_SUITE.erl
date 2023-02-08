@@ -33,8 +33,7 @@ all() ->
 
 groups() ->
     [{single_node, [],
-      [sac_ff, %% must stay at the top, stream sac feature flag disabled for this one
-       test_stream,
+      [test_stream,
        test_stream_tls,
        test_gc_consumers,
        test_gc_publishers,
@@ -129,19 +128,6 @@ end_per_group(java, Config) ->
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(sac_ff, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_feature_flags,
-                                 enable,
-                                 [stream_single_active_consumer]),
-    ok;
-end_per_testcase(_Test, _Config) ->
-    ok.
 
 test_global_counters(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
@@ -359,41 +345,6 @@ timeout_close_sent(Config) ->
         receive_commands(gen_tcp, S, C2),
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
-
-sac_ff(Config) ->
-    Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C),
-    test_authenticate(gen_tcp, S, C),
-    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    test_create_stream(gen_tcp, S, Stream, C),
-    test_declare_publisher(gen_tcp, S, 1, Stream, C),
-    ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
-    Body = <<"hello">>,
-    test_publish_confirm(gen_tcp, S, 1, Body, C),
-
-    SubscriptionId = 42,
-    SubCmd =
-        {request, 1,
-         {subscribe,
-          SubscriptionId,
-          Stream,
-          0,
-          10,
-          #{<<"single-active-consumer">> => <<"true">>,
-            <<"name">> => <<"foo">>}}},
-    SubscribeFrame = rabbit_stream_core:frame(SubCmd),
-    ok = gen_tcp:send(S, SubscribeFrame),
-    {Cmd, C} = receive_commands(gen_tcp, S, C),
-    ?assertMatch({response, 1,
-                  {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
-                 Cmd),
-    test_delete_stream(gen_tcp, S, Stream, C),
-    test_close(gen_tcp, S, C),
-    closed = wait_for_socket_close(gen_tcp, S, 10),
-    ok.
 
 max_segment_size_bytes_validation(Config) ->
     Transport = gen_tcp,
