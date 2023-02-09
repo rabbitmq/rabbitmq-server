@@ -32,8 +32,6 @@
 
 -export([recover/0, recover/1]).
 
--export([create_index_route_table/0]).
-
 %% For testing
 -export([clear/0]).
 
@@ -471,52 +469,6 @@ recover_in_mnesia(RecoverFun) ->
         #route{binding = #binding{destination = Dst,
                                   source = Src}} = Route <-
             rabbit_mnesia:dirty_read_all(?MNESIA_SEMI_DURABLE_TABLE)].
-
-%% -------------------------------------------------------------------
-%% create_index_route_table().
-%% -------------------------------------------------------------------
-
--spec create_index_route_table() -> ok | {error, any()}.
-create_index_route_table() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_index_route_table_in_mnesia() end
-       }).
-
-create_index_route_table_in_mnesia() ->
-    DependantTables = [?MNESIA_TABLE, rabbit_exchange],
-    ok = rabbit_table:wait(DependantTables, _Retry = true),
-    [ok = rabbit_table:create_local_copy(Tab, ram_copies) || Tab <- DependantTables],
-    ok = rabbit_table:create(
-           ?MNESIA_INDEX_TABLE, rabbit_table:rabbit_index_route_definition()),
-    case rabbit_table:ensure_table_copy(?MNESIA_INDEX_TABLE, node(), ram_copies) of
-        ok ->
-            ok = populate_index_route_table_in_mnesia();
-        Error ->
-            Error
-    end.
-
-populate_index_route_table_in_mnesia() ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun () ->
-              _ = mnesia:lock({table, ?MNESIA_TABLE}, read),
-              _ = mnesia:lock({table, rabbit_exchange}, read),
-              _ = mnesia:lock({table, ?MNESIA_INDEX_TABLE}, write),
-              Routes = rabbit_mnesia:dirty_read_all(?MNESIA_TABLE),
-              lists:foreach(fun(#route{binding = #binding{source = Exchange}} = Route) ->
-                                    case rabbit_db_exchange:get(Exchange) of
-                                        {ok, X} ->
-                                            case should_index_table(X) of
-                                                true ->
-                                                    mnesia:dirty_write(?MNESIA_INDEX_TABLE,
-                                                                       rabbit_binding:index_route(Route));
-                                                false ->
-                                                    ok
-                                            end;
-                                        _ ->
-                                            ok
-                                    end
-                            end, Routes)
-      end).
 
 %% -------------------------------------------------------------------
 %% delete_all_for_exchange_in_mnesia().

@@ -10,11 +10,13 @@
 -rabbit_feature_flag(
    {empty_basic_get_metric,
     #{desc          => "Count AMQP `basic.get` on empty queues in stats",
-      stability     => stable
+      %%TODO remove compatibility code
+      stability     => required
      }}).
 
 -rabbit_feature_flag(
   {drop_unroutable_metric,
    #{desc          => "Count unroutable publishes to be dropped in stats",
-     stability     => stable
+     %%TODO remove compatibility code
+     stability     => required
     }}).

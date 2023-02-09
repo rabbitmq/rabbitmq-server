@@ -29,16 +29,14 @@
 -export([list/0, list_of_user/1, list_on_node/1,
          tracked_channel_table_name_for/1,
          tracked_channel_per_user_table_name_for/1,
-         get_all_tracked_channel_table_names_for_node/1,
          ensure_tracked_tables_for_this_node/0,
          delete_tracked_channel_user_entry/1]).
 
-%% All nodes (that support the `tracking_records_in_ets' feature) must
-%% export this function with the same spec, as they are called via
-%% RPC from other nodes. (Their implementation can differ.)
 -export([count_local_tracked_items_of_user/1]).
 
--export([migrate_tracking_records/0]).
+-ifdef(TEST).
+-export([get_all_tracked_channel_table_names_for_node/1]).
+-endif.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -464,27 +462,3 @@ close_channels(TrackedChannels = [#tracked_channel{}|_]) ->
         || #tracked_channel{pid = ChPid} <- TrackedChannels],
     ok;
 close_channels(_TrackedChannels = []) -> ok.
-
-migrate_tracking_records() ->
-    Node = node(),
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun () ->
-              Table = tracked_channel_table_name_for(Node),
-              _ = mnesia:lock({table, Table}, read),
-              Channels = mnesia:select(Table, [{'$1',[],['$1']}]),
-              lists:foreach(
-                fun(Channel) ->
-                        ets:insert(tracked_channel, Channel)
-                end, Channels)
-      end),
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun () ->
-              Table = tracked_channel_per_user_table_name_for(Node),
-              _ = mnesia:lock({table, Table}, read),
-              Channels = mnesia:select(Table, [{'$1',[],['$1']}]),
-              lists:foreach(
-                fun(#tracked_channel_per_user{channel_count = C,
-                                              user = Username}) ->
-                        ets:update_counter(tracked_channel_per_user, Username, C, {Username, 0})
-                end, Channels)
-      end).
