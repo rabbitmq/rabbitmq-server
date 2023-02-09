@@ -356,8 +356,7 @@ lookup_smaller_sample(Table, Id) ->
         [] ->
             not_found;
         [{_, Slide}] ->
-            Slide1 = exometer_slide:optimize(Slide),
-            maybe_convert_for_compatibility(Table, Slide1)
+            exometer_slide:optimize(Slide)
     end.
 
 -spec lookup_samples(atom(), any(), #range{}) -> maybe_slide().
@@ -366,8 +365,7 @@ lookup_samples(Table, Id, Range) ->
         [] ->
             not_found;
         [{_, Slide}] ->
-            Slide1 = exometer_slide:optimize(Slide),
-            maybe_convert_for_compatibility(Table, Slide1)
+            exometer_slide:optimize(Slide)
     end.
 
 lookup_all(Table, Ids, SecondKey) ->
@@ -383,38 +381,8 @@ lookup_all(Table, Ids, SecondKey) ->
         [] ->
             not_found;
         _ ->
-            Slide = exometer_slide:sum(Slides, empty(Table, 0)),
-            maybe_convert_for_compatibility(Table, Slide)
+            exometer_slide:sum(Slides, empty(Table, 0))
     end.
-
-maybe_convert_for_compatibility(Table, Slide)
-  when Table =:= channel_stats_fine_stats orelse
-       Table =:= channel_exchange_stats_fine_stats orelse
-       Table =:= vhost_stats_fine_stats ->
-     ConversionNeeded = rabbit_feature_flags:is_disabled(
-                          drop_unroutable_metric),
-     case ConversionNeeded of
-         false ->
-             Slide;
-         true ->
-             %% drop_drop because the metric is named "drop_unroutable"
-             rabbit_mgmt_data_compat:drop_drop_unroutable_metric(Slide)
-     end;
-maybe_convert_for_compatibility(Table, Slide)
-  when Table =:= channel_queue_stats_deliver_stats orelse
-       Table =:= channel_stats_deliver_stats orelse
-       Table =:= queue_stats_deliver_stats orelse
-       Table =:= vhost_stats_deliver_stats ->
-    ConversionNeeded = rabbit_feature_flags:is_disabled(
-                         empty_basic_get_metric),
-    case ConversionNeeded of
-        false ->
-            Slide;
-        true ->
-            rabbit_mgmt_data_compat:drop_get_empty_queue_metric(Slide)
-    end;
-maybe_convert_for_compatibility(_, Slide) ->
-    Slide.
 
 get_table_keys(Table, Id0) ->
     ets:select(Table, match_spec_keys(Id0)).

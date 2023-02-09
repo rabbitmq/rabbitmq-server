@@ -26,4 +26,4 @@
 
 -spec track_client_id_in_ra() -> boolean().
 track_client_id_in_ra() ->
-    not rabbit_feature_flags:is_enabled(delete_ra_cluster_mqtt_node).
+    rabbit_feature_flags:is_disabled(delete_ra_cluster_mqtt_node).
