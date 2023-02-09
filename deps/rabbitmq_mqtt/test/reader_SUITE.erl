@@ -299,14 +299,13 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     %% We expect that
     %% 1. all sent messages were either received or dropped
     ?assertEqual(NumMsgs, NumReceived + NumDropped),
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+        true ->
             %% 2. at least one message was dropped (otherwise our whole test case did not
             %%    test what it was supposed to test: that messages are dropped due to the
             %%    server being overflowed with messages while the client receives too slowly)
             ?assert(NumDropped >= 1);
-        true ->
-            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+        false ->
             ?assertEqual(0, NumDropped)
     end,
     %% 3. we received at least 1000 messages because everything below the default
