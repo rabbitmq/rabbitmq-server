@@ -390,9 +390,9 @@ do_initialize_registry(RegistryVsn,
                        WrittenToDisk) ->
     %% We log the state of those feature flags.
     ?LOG_DEBUG(
-      "Feature flags: list of feature flags found:~n" ++
+      "Feature flags: list of feature flags found:\n" ++
       lists:flatten(
-        [rabbit_misc:format(
+        [io_lib:format(
            "Feature flags:   [~ts] ~ts~n",
            [case maps:get(FeatureName, FeatureStates, false) of
                 true           -> "x";
@@ -401,7 +401,7 @@ do_initialize_registry(RegistryVsn,
             end,
             FeatureName])
          || FeatureName <- lists:sort(maps:keys(AllFeatureFlags))] ++
-        [rabbit_misc:format(
+        [io_lib:format(
            "Feature flags: scanned applications: ~tp~n"
            "Feature flags: feature flag states written to disk: ~ts",
            [ScannedApps,
