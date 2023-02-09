@@ -34,15 +34,7 @@ wait_for_messages(Servers, QName, Number, Fun, 0) ->
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
     ct:pal("Got messages ~tp ~tp", [QName, Msgs]),
-    %% hack to allow the check to succeed in mixed versions clusters if at
-    %% least one node matches the criteria rather than all nodes for
-    F = case rabbit_ct_helpers:is_mixed_versions() of
-            true ->
-                any;
-            false ->
-                all
-        end,
-    case lists:F(fun(C) when is_integer(C) ->
+    case lists:all(fun(C) when is_integer(C) ->
                          C == Number;
                     (_) ->
                          false

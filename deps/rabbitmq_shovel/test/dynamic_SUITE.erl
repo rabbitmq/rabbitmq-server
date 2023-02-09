@@ -70,16 +70,6 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(quorum_queue_tests, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false -> Config;
-        _     -> {skip, "quorum queue tests are skipped in mixed mode"}
-    end;
-init_per_group(stream_queue_tests, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false -> Config;
-        _     -> {skip, "stream queue tests are skipped in mixed mode"}
-    end;
 init_per_group(_, Config) ->
     Config.
 

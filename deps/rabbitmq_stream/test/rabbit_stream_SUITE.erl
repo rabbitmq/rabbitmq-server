@@ -51,13 +51,8 @@ groups() ->
      {cluster, [], [test_stream, test_stream_tls, test_metadata, java]}].
 
 init_per_suite(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "mixed version clusters are not supported"};
-        _ ->
-            rabbit_ct_helpers:log_environment(),
-            Config
-    end.
+    rabbit_ct_helpers:log_environment(),
+    Config.
 
 end_per_suite(Config) ->
     Config.

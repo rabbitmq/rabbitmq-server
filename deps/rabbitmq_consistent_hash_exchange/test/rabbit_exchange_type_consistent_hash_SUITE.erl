@@ -65,15 +65,7 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(clustered = Group, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            init_per_group(Group, Config, 3);
-        true ->
-            %% Consistent hash exchange plugin prior to
-            %% https://github.com/rabbitmq/rabbitmq-server/pull/5121
-            %% does not add bindings idempotently which makes test node_restart fail.
-            {skip, "not mixed versions compatible"}
-    end;
+    init_per_group(Group, Config, 3);
 init_per_group(Group, Config) ->
     init_per_group(Group, Config, 1).
 
