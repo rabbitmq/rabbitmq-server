@@ -553,12 +553,24 @@ maybe_grow_qq_members(QName, LastActive) ->
                 {true, NewNodes} ->
                     %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
                     %% Take node load or availability zones into account?
-                    add_members(Q, NewNodes, 5000, Size - CurrentSize);
+                    add_members(Q, grow_order_sort(NewNodes), 5000, Size - CurrentSize);
                 {_,_} ->
                     %%Target size already achieved
                     ok
             end
     end.
+
+%% Sort nodes based on number of QQ they have
+grow_order_sort(Nodes) ->
+    QueueLenFun =
+        fun(Node) ->
+                length([Q || Q <- rabbit_amqqueue:list_by_type(quorum),
+                             amqqueue:get_state(Q) =/= crashed,
+                             lists:member(Node, rabbit_amqqueue:get_quorum_nodes(Q))])
+        end,
+    lists:keysort(
+          2,
+          [{Node, QueueLenFun(Node)} || Node <- Nodes]).
 
 %% Return true every aprox GROW_CHECK_TIMEOUT sec
 check_if_grow(LastActive) ->
@@ -1131,7 +1143,7 @@ add_members(_Q, [], _Timeout, _N) ->
     ok;
 add_members(_Q, _Nodes, _Timeout, N) when N =< 0 ->
     ok;
-add_members(Q, [Node|Nodes], Timeout, N) ->
+add_members(Q, [{Node, _}|Nodes], Timeout, N) ->
     add_member(Q, Node, Timeout),
     add_members(Q, Nodes, Timeout, N - 1).
 
