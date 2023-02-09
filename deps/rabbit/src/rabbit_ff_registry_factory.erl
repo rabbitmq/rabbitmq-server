@@ -371,16 +371,16 @@ do_initialize_registry(RegistryVsn,
     rabbit_log_feature_flags:debug(
       "Feature flags: list of feature flags found:~n" ++
       lists:flatten(
-        [rabbit_misc:format(
+        [io_lib:format(
            "Feature flags:   [~s] ~s~n",
            [case maps:get(FeatureName, FeatureStates, false) of
                 true           -> "x";
-                state_changing -> "~";
+                state_changing -> "~~";
                 false          -> " "
             end,
             FeatureName])
          || FeatureName <- lists:sort(maps:keys(AllFeatureFlags))] ++
-        [rabbit_misc:format(
+        [io_lib:format(
            "Feature flags: scanned applications: ~p~n"
            "Feature flags: feature flag states written to disk: ~s",
            [ScannedApps,
