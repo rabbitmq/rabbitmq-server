@@ -111,6 +111,7 @@
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 7000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
+-define(GROW_CHECK_TIMEOUT, 30000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
@@ -529,10 +530,11 @@ handle_tick(QName,
 
 maybe_grow_qq_members(QName, LastActive) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    % Rely on LastActive and compare it with system_time, to figure out 30 sec intervall
-    case should_check_if_grow(LastActive) of
+    % Rely on LastActive and compare it with system_time, to figure out intervall
+    case check_if_grow(LastActive) of
         false ->
-            rabbit_log:info(">>>> TICK do nothing",[]);
+            rabbit_log:info(">>>> TICK do nothing",[]),
+            ok;
         true ->
             rabbit_log:info(">>>> TICK check members",[]),
             Running = rabbit_nodes:all_running(),
@@ -558,15 +560,17 @@ maybe_grow_qq_members(QName, LastActive) ->
             end
     end.
 
-%% Return true every ~ 30 sec
-should_check_if_grow(LastActive) ->
-    %% Only works if the tick_intervals that hit the 30 sec mark tho...
-    %% Can probably round down to nearest Interval value.
+%% Return true every aprox GROW_CHECK_TIMEOUT sec
+check_if_grow(LastActive) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
     T = erlang:system_time(millisecond) - LastActive,
-    Interval = 30000, % Hardcode to 30 sec for now, but can be configurable?
-    ((round(T/TickTimeout)*TickTimeout) rem Interval) =:= 0.
+    Interval = application:get_env(rabbit, quorum_grow_check_interval,
+                                   ?GROW_CHECK_TIMEOUT),
+    %% Doing some simple calculations here to make sure we come as close to the
+    %% desired interval value as possible, and also make sure it will return true
+    %% consistently.
+    (round(T/TickTimeout)*TickTimeout) rem (round(Interval/TickTimeout)*TickTimeout) =:= 0.
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
