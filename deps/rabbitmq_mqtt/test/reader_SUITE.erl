@@ -261,6 +261,8 @@ event_authentication_failure(Config) ->
 %% Test that queue type rabbit_mqtt_qos0_queue drops QoS 0 messages when its
 %% max length is reached.
 rabbit_mqtt_qos0_queue_overflow(Config) ->
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
+
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 1000),
     NumMsgs = 10_000,
@@ -299,16 +301,10 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     %% We expect that
     %% 1. all sent messages were either received or dropped
     ?assertEqual(NumMsgs, NumReceived + NumDropped),
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
-            %% 2. at least one message was dropped (otherwise our whole test case did not
-            %%    test what it was supposed to test: that messages are dropped due to the
-            %%    server being overflowed with messages while the client receives too slowly)
-            ?assert(NumDropped >= 1);
-        true ->
-            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
-            ?assertEqual(0, NumDropped)
-    end,
+    %% 2. at least one message was dropped (otherwise our whole test case did not
+    %%    test what it was supposed to test: that messages are dropped due to the
+    %%    server being overflowed with messages while the client receives too slowly)
+    ?assert(NumDropped >= 1),
     %% 3. we received at least 1000 messages because everything below the default
     %% of mailbox_soft_limit=1000 should not be dropped
     ?assert(NumReceived >= 1000),

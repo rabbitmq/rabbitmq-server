@@ -61,6 +61,7 @@
 
     is_feature_flag_supported/2,
     is_feature_flag_supported/3,
+    is_feature_flag_enabled/2,
     enable_feature_flag/2,
     enable_feature_flag/3,
 
@@ -1684,6 +1685,11 @@ forget_cluster_node(Config, Node, NodeToForget, Opts) ->
     NameToForget =
         rabbit_ct_broker_helpers:get_node_config(Config, NodeToForget, nodename),
     rabbit_control_helper:command(forget_cluster_node, Name, [NameToForget], Opts).
+
+is_feature_flag_enabled(Config, FeatureName) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rabbit_ct_broker_helpers:rpc(
+      Config, Node, rabbit_feature_flags, is_enabled, [FeatureName]).
 
 is_feature_flag_supported(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

@@ -22,7 +22,8 @@
          rpc_all/4,
          get_node_config/3,
          drain_node/2,
-         revive_node/2
+         revive_node/2,
+         is_feature_flag_enabled/2
         ]).
 -import(rabbit_ct_helpers,
         [eventually/3,
@@ -446,12 +447,11 @@ events(Config) ->
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
     [E2, E3 | E4] = get_events(Server),
-    QueueType = case rabbit_ct_helpers:is_mixed_versions(Config) of
-                    false ->
+    QueueType = case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+                    true ->
                         ?assertEqual([], E4),
                         rabbit_mqtt_qos0_queue;
-                    true ->
-                        %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+                    false ->
                         [ConsumerCreated] = E4,
                         assert_event_type(consumer_created, ConsumerCreated),
                         assert_event_prop([{queue, QueueName},
@@ -488,11 +488,11 @@ events(Config) ->
     [E6, E7 | E8] = get_events(Server),
     assert_event_type(connection_closed, E6),
     assert_event_prop(ExpectedConnectionProps, E6),
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
+    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+        true ->
             assert_event_type(queue_deleted, E7),
             assert_event_prop({name, QueueName}, E7);
-        true ->
+        false ->
             assert_event_type(consumer_deleted, E7),
             assert_event_prop({queue, QueueName}, E7),
             [QueueDeleted] = E8,
@@ -542,8 +542,8 @@ global_counters(Config, ProtoVer) ->
                    messages_unroutable_returned_total => 1},
                  get_global_counters(Config, ProtoVer)),
 
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
+    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+        true ->
             ?assertEqual(#{messages_delivered_total => 2,
                            messages_acknowledged_total => 1,
                            messages_delivered_consume_auto_ack_total => 1,
@@ -562,8 +562,7 @@ global_counters(Config, ProtoVer) ->
                            messages_get_empty_total => 0,
                            messages_redelivered_total => 0},
                          get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}]));
-        true ->
-            %% Feature flag rabbit_mqtt_qos0_queue is disabled.
+        false ->
             ?assertEqual(#{messages_delivered_total => 3,
                            messages_acknowledged_total => 1,
                            messages_delivered_consume_auto_ack_total => 2,
@@ -1026,10 +1025,10 @@ cli_list_queues(Config) ->
             "type", "name", "state", "durable", "auto_delete",
             "arguments", "pid", "owner_pid", "messages", "exclusive_consumer_tag"
            ]),
-    ExpectedQueueType = case rabbit_ct_helpers:is_mixed_versions(Config) of
-                            false ->
-                                <<"MQTT QoS 0">>;
+    ExpectedQueueType = case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
                             true ->
+                                <<"MQTT QoS 0">>;
+                            false ->
                                 <<"classic">>
                         end,
     ?assertMatch([[ExpectedQueueType, <<"mqtt-subscription-cli_list_queuesqos0">>,
@@ -1219,11 +1218,11 @@ clean_session_disconnect_client(Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
     QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
     QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
+    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+        true ->
             ?assertEqual(1, length(QsQos0)),
             ?assertEqual(1, length(QsClassic));
-        true ->
+        false ->
             ?assertEqual(0, length(QsQos0)),
             ?assertEqual(2, length(QsClassic))
     end,
@@ -1240,11 +1239,11 @@ clean_session_kill_node(Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
     QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
     QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        false ->
+    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
+        true ->
             ?assertEqual(1, length(QsQos0)),
             ?assertEqual(1, length(QsClassic));
-        true ->
+        false ->
             ?assertEqual(0, length(QsQos0)),
             ?assertEqual(2, length(QsClassic))
     end,
