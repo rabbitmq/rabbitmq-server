@@ -305,9 +305,9 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     %%    test what it was supposed to test: that messages are dropped due to the
     %%    server being overflowed with messages while the client receives too slowly)
     ?assert(NumDropped >= 1),
-    %% 3. we received at least 1000 messages because everything below the default
-    %% of mailbox_soft_limit=1000 should not be dropped
-    ?assert(NumReceived >= 1000),
+    %% 3. we received at least 200 messages because everything below the default
+    %% of mailbox_soft_limit=200 should not be dropped
+    ?assert(NumReceived >= 200),
 
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).

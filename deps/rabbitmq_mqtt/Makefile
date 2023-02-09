@@ -27,7 +27,7 @@ define PROJECT_ENV
 	                         ]},
 	    {proxy_protocol, false},
 	    {sparkplug, false},
-	    {mailbox_soft_limit, 1000}
+	    {mailbox_soft_limit, 200}
 	  ]
 endef
 
