@@ -94,6 +94,7 @@ subgroups() ->
          ,rabbit_status_connection_count
          ,trace
          ,max_packet_size_unauthenticated
+         ,default_queue_type
         ]}
       ]},
      {cluster_size_3, [],
@@ -1354,6 +1355,41 @@ max_packet_size_unauthenticated(Config) ->
     ok = emqtt:disconnect(C3),
 
     ok = rpc(Config, application, unset_env, [App, Par]).
+
+%% Test that the per vhost default queue type introduced in
+%% https://github.com/rabbitmq/rabbitmq-server/pull/5305
+%% does not apply to queues created for MQTT connections
+%% because having millions of quorum queues is too expensive.
+default_queue_type(Config) ->
+    Server = get_node_config(Config, 0, nodename),
+    QName = Vhost = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    ok = erpc:call(Server, rabbit_vhost, add, [Vhost,
+                                               #{default_queue_type => <<"quorum">>},
+                                               <<"acting-user">>]),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+
+    ?assertEqual([], rpc(Config, rabbit_amqqueue, list, [])),
+    %% Sanity check that the configured default queue type works with AMQP 0.9.1.
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server, Vhost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    declare_queue(Ch, QName, []),
+    QuorumQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_quorum_queue]),
+    ?assertEqual(1, length(QuorumQueues)),
+    delete_queue(Ch, QName),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+
+    %% Test that the configured default queue type does not apply to MQTT.
+    Creds = [{username, <<Vhost/binary, ":guest">>},
+             {password, <<"guest">>}],
+    C1 = connect(ClientId, Config, [{clean_start, false} | Creds]),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    ClassicQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
+    ?assertEqual(1, length(ClassicQueues)),
+
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config, [{clean_start, true} | Creds]),
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, Vhost).
 
 %% -------------------------------------------------------------------
 %% Internal helpers
