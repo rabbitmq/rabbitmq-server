@@ -117,15 +117,15 @@
     ]},
 
     {auth_attempt_metrics, [
-        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts"},
+        {2, undefined, auth_attempts_total, counter, "Total number of authentication attempts"},
         {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts"},
         {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authentication attempts"}
     ]},
 
     {auth_attempt_detailed_metrics, [
-        {2, undefined, auth_attempts_detailed_total, counter, "Total number of authorization attempts with source info"},
-        {3, undefined, auth_attempts_detailed_succeeded_total, counter, "Total number of successful authorization attempts with source info"},
-        {4, undefined, auth_attempts_detailed_failed_total, counter, "Total number of failed authorization attempts with source info"}
+        {2, undefined, auth_attempts_detailed_total, counter, "Total number of authentication attempts with source info"},
+        {3, undefined, auth_attempts_detailed_succeeded_total, counter, "Total number of successful authentication attempts with source info"},
+        {4, undefined, auth_attempts_detailed_failed_total, counter, "Total number of failed authentication attempts with source info"}
     ]},
 
 %%% Those metrics have reference only to a queue name. This is the only group where filtering (e.g. by vhost) makes sense.
