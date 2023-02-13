@@ -38,7 +38,7 @@ groups() ->
                        ++ memory_tests()
                        ++ [node_removal_is_quorum_critical]},
      {unclustered, [], [
-                        {uncluster_size_2, [], [add_member]}
+                        {uncluster_size_2, [], [add_member, auto_grow]}
                        ]},
      {clustered, [], [
                       {cluster_size_2, [], [add_member_not_running,
@@ -312,6 +312,18 @@ end_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publi
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+end_per_testcase(Testcase, Config) when Testcase == add_member;
+                                        Testcase == auto_grow ->
+    [Server0, Server1] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server1)]),
+    ok = rabbit_control_helper:command(reset, Server1),
+    ok = rabbit_control_helper:command(start_app, Server1),
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
     % catch delete_queues(),
@@ -1745,6 +1757,10 @@ add_member(Config) ->
     ?assertEqual({error, node_not_running},
                  rpc:call(Server0, rabbit_quorum_queue, add_member,
                           [<<"/">>, QQ, Server1, 5000])),
+
+    {ok, Members, _} = ra:members({ra_name(QQ), Server0}),
+    ?assertEqual(1, length(Members)),
+
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
     rabbit_control_helper:command(start_app, Server1),
@@ -3159,6 +3175,36 @@ select_nodes_with_least_replicas_node_down(Config) ->
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
+
+auto_grow(Config) ->
+    [Server0, Server1] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_tick_interval, 1000]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_grow_check_interval, 5000]),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"target-policy">>, <<"^auto_grow$">>, <<"queues">>,
+           [{<<"target-group-size">>, 3}]),
+    QQ = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    {ok, Members, _} = ra:members({ra_name(QQ), Server0}),
+    ?assertEqual(1, length(Members)),
+
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
+    rabbit_control_helper:command(start_app, Server1),
+
+    wait_until(fun() ->
+                       {ok, M, _} = ra:members({ra_name(QQ), Server0}),
+                       2 =:= length(M)
+               end).
 
 %%----------------------------------------------------------------------------
 
