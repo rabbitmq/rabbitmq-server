@@ -548,6 +548,7 @@ assert(VHostName) ->
         false -> throw({error, {no_such_vhost, VHostName}})
     end.
 
+<<<<<<< HEAD
 -spec update(vhost:name(), fun((vhost:vhost()) -> vhost:vhost())) -> vhost:vhost().
 update(VHostName, Fun) ->
     case mnesia:read({rabbit_vhost, VHostName}) of
@@ -567,9 +568,29 @@ update_metadata(VHostName, Fun) ->
     end).
 
 -spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
+=======
+are_different0([], []) ->
+    false;
+are_different0([], [_ | _]) ->
+    true;
+are_different0([_ | _], []) ->
+    true;
+are_different0([E], [E]) ->
+    false;
+are_different0([E | R1], [E | R2]) ->
+    are_different0(R1, R2);
+are_different0(_, _) ->
+    true.
+
+are_different(L1, L2) ->
+    are_different0(lists:usort(L1), lists:usort(L2)).
+
+-spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost().
+>>>>>>> 12ec3a55ff (rabbit_vhost:set_tags/2 avoids notifying if tags are unchanged)
 update_tags(VHostName, Tags, ActingUser) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     try
+<<<<<<< HEAD
         R = rabbit_misc:execute_mnesia_transaction(fun() ->
             update_tags(VHostName, ConvertedTags)
         end),
@@ -578,6 +599,20 @@ update_tags(VHostName, Tags, ActingUser) ->
                                              {tags, ConvertedTags},
                                              {user_who_performed_action, ActingUser}]),
         R
+=======
+        CurrentTags = case rabbit_db_vhost:get(VHostName) of
+                          undefined -> [];
+                          V -> vhost:get_tags(V)
+                      end,
+        VHost = rabbit_db_vhost:set_tags(VHostName, Tags),
+        ConvertedTags = vhost:get_tags(VHost),
+        rabbit_log:info("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
+        rabbit_event:notify_if(are_different(CurrentTags, ConvertedTags),
+                               vhost_tags_set, [{name, VHostName},
+                                                {tags, ConvertedTags},
+                                                {user_who_performed_action, ActingUser}]),
+        VHost
+>>>>>>> 12ec3a55ff (rabbit_vhost:set_tags/2 avoids notifying if tags are unchanged)
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
             rabbit_log:warning("Failed to set tags for virtual host '~ts': the virtual host does not exist", [VHostName]),
