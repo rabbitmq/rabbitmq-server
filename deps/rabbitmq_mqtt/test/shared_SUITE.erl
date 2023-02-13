@@ -579,15 +579,15 @@ global_counters(Config, ProtoVer) ->
     ?assertEqual(1, maps:get(consumers, get_global_counters(Config, ProtoVer))),
 
     ok = emqtt:disconnect(C),
-    ?assertEqual(#{publishers => 0,
-                   consumers => 0,
-                   messages_confirmed_total => 2,
-                   messages_received_confirm_total => 2,
-                   messages_received_total => 5,
-                   messages_routed_total => 3,
-                   messages_unroutable_dropped_total => 1,
-                   messages_unroutable_returned_total => 1},
-                 get_global_counters(Config, ProtoVer)).
+    eventually(?_assertEqual(#{publishers => 0,
+                               consumers => 0,
+                               messages_confirmed_total => 2,
+                               messages_received_confirm_total => 2,
+                               messages_received_total => 5,
+                               messages_routed_total => 3,
+                               messages_unroutable_dropped_total => 1,
+                               messages_unroutable_returned_total => 1},
+                             get_global_counters(Config, ProtoVer))).
 
 queue_down_qos1(Config) ->
     {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
