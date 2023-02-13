@@ -643,7 +643,7 @@ delete(Tab, #index_route{} = Record, LockKind) ->
 %% types. This reduces write lock conflicts on the same tuple {SourceExchange, RoutingKey}
 %% reducing the number of restarted Mnesia transactions.
 should_index_table(#exchange{name = #resource{name = Name},
-                      type = direct})
+                             type = direct})
   when Name =/= <<>> ->
     true;
 should_index_table(_) ->
@@ -683,25 +683,10 @@ sync_route(Route, transient, ShouldIndexTable, Fun) ->
 sync_transient_route(Route, ShouldIndexTable, Fun) ->
     ok = Fun(?MNESIA_TABLE, Route, write),
     ok = Fun(?MNESIA_REVERSE_TABLE, rabbit_binding:reverse_route(Route), write),
-    sync_index_route(Route, ShouldIndexTable, Fun).
+    ok = sync_index_route(Route, ShouldIndexTable, Fun).
 
 sync_index_route(Route, true, Fun) ->
-    %% Do not block as blocking will cause a dead lock when
-    %% function rabbit_binding:populate_index_route_table/0
-    %% (i.e. feature flag migration) runs in parallel.
-    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking) of
-        true ->
-            ok = Fun(?MNESIA_INDEX_TABLE, rabbit_binding:index_route(Route), write);
-       false ->
-            ok;
-        state_changing ->
-            case rabbit_table:exists(?MNESIA_INDEX_TABLE) of
-                true ->
-                    ok = Fun(?MNESIA_INDEX_TABLE, rabbit_binding:index_route(Route), write);
-                false ->
-                    ok
-            end
-    end;
+    ok = Fun(?MNESIA_INDEX_TABLE, rabbit_binding:index_route(Route), write);
 sync_index_route(_, _, _) ->
     ok.
 
