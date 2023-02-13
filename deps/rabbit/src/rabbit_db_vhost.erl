@@ -132,7 +132,7 @@ merge_metadata_in_mnesia_tx(VHostName, Metadata) ->
 
 set_tags(VHostName, Tags)
   when is_binary(VHostName) andalso is_list(Tags) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(Tag) || Tag <- Tags],
+    ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(Tag) || Tag <- Tags]),
     rabbit_db:run(
       #{mnesia => fun() -> set_tags_in_mnesia(VHostName, ConvertedTags) end}).
 
