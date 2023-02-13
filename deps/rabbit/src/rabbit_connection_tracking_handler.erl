@@ -57,10 +57,6 @@ handle_event(#event{type = vhost_down, props = Details}, State) ->
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     ok = rabbit_connection_tracking:update_tracked({user_deleted, Details}),
     {ok, State};
-%% A node had been deleted from the cluster.
-handle_event(#event{type = node_deleted, props = Details}, State) ->
-    ok = rabbit_connection_tracking:update_tracked({node_deleted, Details}),
-    {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
 

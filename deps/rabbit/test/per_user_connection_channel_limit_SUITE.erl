@@ -110,28 +110,10 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    clear_all_connection_tracking_tables(Config),
-    clear_all_channel_tracking_tables(Config),
     Config.
 
 end_per_testcase(Testcase, Config) ->
-    clear_all_connection_tracking_tables(Config),
-    clear_all_channel_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
-clear_all_connection_tracking_tables(Config) ->
-    [rabbit_ct_broker_helpers:rpc(Config,
-        N,
-        rabbit_connection_tracking,
-        clear_tracking_tables,
-        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
-
-clear_all_channel_tracking_tables(Config) ->
-    [rabbit_ct_broker_helpers:rpc(Config,
-        N,
-        rabbit_channel_tracking,
-        clear_tracking_tables,
-        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
 
 %% -------------------------------------------------------------------
 %% Test cases.
