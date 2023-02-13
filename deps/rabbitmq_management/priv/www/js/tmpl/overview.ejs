@@ -303,7 +303,7 @@
 </div>
 <% } %>
 
-<div class="section-hidden administrator-only">
+<div class="section-hidden administrator-only" id="download-definitions-section">
 <h2>Export definitions</h2>
 <div class="hider">
     <table class="two-col-layout">
@@ -340,10 +340,10 @@
 </div>
 </div>
 
-<div class="section-hidden administrator-only">
+<div class="section-hidden administrator-only" id="upload-definitions-section">
 <h2>Import definitions</h2>
 <div class="hider">
-  <form  method="post" enctype="multipart/form-data">
+  <form  method="post" enctype="multipart/form-data" name="upload-definitions">
     <table class="two-col-layout">
       <tr>
         <td>
@@ -354,7 +354,7 @@
         </td>
         <td>
           <p>
-            <input type="submit" value="Upload broker definitions" onclick="submit_import($(this).closest('form')[0]); return false"/>
+            <input type="submit" name="upload-definitions" value="Upload broker definitions" onclick="submit_import($(this).closest('form')[0]); return false"/>
             <span class="help" id="import-definitions"></span>
           </p>
         </td>

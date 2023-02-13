@@ -19,6 +19,23 @@
  fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_id", Conf))
  end}.
 
+
+%% An identifier used for JWT Tokens compliant with Rich Authorization Request spec
+%% RabbitMq uses this field as discriminator to filter out permissions meant for RabbitMQ
+%% as a Resource server
+%%
+%% {resource_server_type, <<"rabbitmq">>},
+
+{mapping,
+ "auth_oauth2.resource_server_type",
+ "rabbitmq_auth_backend_oauth2.resource_server_type",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.resource_server_type",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_type", Conf))
+ end}.
+
 %% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
 %% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
@@ -33,6 +50,39 @@
  fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
+
+%% Configure the plugin to skip validation of the aud field
+%%
+%% {verify_aud, true},
+
+{mapping,
+ "auth_oauth2.verify_aud",
+ "rabbitmq_auth_backend_oauth2.verify_aud",
+ [{datatype, {enum, [true, false]}}]}.
+
+%% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
+%% used to determine the user's identity, a.k.a username.
+%% RabbitMQ appends `sub` and `client_id` claims.
+%% e.g. RabbitMQ first looks for username claim. If it is not present, it looks for user_name
+%% and so forth. If it cannot find any, it defauls to unknown.
+%% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
+
+{mapping,
+ "auth_oauth2.preferred_username_claims",
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_oauth2.preferred_username_claims", Conf))
+ end}.
+
+{mapping,
+ "auth_oauth2.additional_scopes_key",
+ "rabbitmq_auth_backend_oauth2.extra_scopes_source",
+ [{datatype, string}]}.
+
 
 %% ID of the default signing key
 %%

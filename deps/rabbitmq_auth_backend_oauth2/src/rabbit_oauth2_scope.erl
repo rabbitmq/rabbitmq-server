@@ -50,7 +50,7 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
 
 %% Internal -------------------------------------------------------------------
 
-%% -spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
+-spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
 get_scope_permissions(Scopes) when is_list(Scopes) ->
     lists:filtermap(
         fun(ScopeEl) ->
@@ -65,7 +65,7 @@ get_scope_permissions(Scopes) when is_list(Scopes) ->
 concat_scopes(Scopes, Separator) when is_list(Scopes) ->
     lists:concat(lists:join(Separator, lists:map(fun rabbit_data_coercion:to_list/1, Scopes))).
 
--spec parse_permission_pattern(binary()) -> {rabbit_types:vhost(), binary(), binary() | none, permission()} | 'ignore'.
+-spec parse_permission_pattern(binary()) -> {rabbit_types:r(pattern), permission()}.
 parse_permission_pattern(<<"read:", ResourcePatternBin/binary>>) ->
     Permission = read,
     parse_resource_pattern(ResourcePatternBin, Permission);
@@ -79,7 +79,7 @@ parse_permission_pattern(_Other) ->
     ignore.
 
 -spec parse_resource_pattern(binary(), permission()) ->
-    {rabbit_types:vhost(), binary(), binary() | none, permission()} | 'ignore'.
+    {rabbit_types:vhost(), binary(), binary() | none, permission()}.
 parse_resource_pattern(Pattern, Permission) ->
     case binary:split(Pattern, <<"/">>, [global]) of
         [VhostPattern, NamePattern] ->

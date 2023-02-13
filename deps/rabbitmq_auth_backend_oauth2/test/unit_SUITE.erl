@@ -17,6 +17,7 @@ all() ->
         test_own_scope,
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
+        test_validate_payload_when_verify_aud_false,
         test_successful_access_with_a_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
@@ -24,11 +25,14 @@ all() ->
         test_insufficient_permissions_in_a_valid_token,
         test_command_json,
         test_command_pem,
+        test_username_from,
         test_command_pem_no_kid,
         test_token_expiration,
         test_incorrect_kid,
         test_post_process_token_payload,
         test_post_process_token_payload_keycloak,
+        test_post_process_payload_rich_auth_request,
+        test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster,
         test_post_process_token_payload_complex_claims,
         test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field,
         test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
@@ -58,6 +62,23 @@ init_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
   Config;
 
+init_per_testcase(test_validate_payload_when_verify_aud_false, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, verify_aud, false),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+  Config;
+
+
+
+init_per_testcase(test_post_process_payload_rich_auth_request, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+  Config;
+
+init_per_testcase(test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-test">>),
+  Config;
+
 init_per_testcase(_, Config) ->
   Config.
 
@@ -65,8 +86,10 @@ end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
   Config;
+
 end_per_testcase(_, Config) ->
   Config.
+
 
 %%
 %% Test Cases
@@ -74,6 +97,7 @@ end_per_testcase(_, Config) ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+-define(RESOURCE_SERVER_TYPE, <<"rabbitmq-type">>).
 
 test_post_process_token_payload(_) ->
     ArgumentsExpections = [
@@ -161,7 +185,353 @@ post_process_payload_with_keycloak_authorization(Authorization) ->
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
 
+test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster(_) ->
 
+  Pairs = [
+
+  { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-test">>],
+        <<"actions">> => [<<"read">>]
+       },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq-test.read:*/*/*">> ]
+  },
+
+  { "can use regular expression on any location's attribute ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-*">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq-test.read:^finance-*/*/*">> ]
+  },
+
+  { "should filter out any location which does not match the cluster's pattern ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-t-*/vhost:^finance-*">>,
+          <<"cluster:^rabbitmq$/vhost:^finance-*">>  ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    []
+  }
+  ],
+
+  lists:foreach(
+      fun({Case, Permissions, ExpectedScope}) ->
+          Payload = post_process_payload_with_rich_auth_request(Permissions),
+          ?assertEqual(lists:sort(ExpectedScope), lists:sort(maps:get(<<"scope">>, Payload)), Case)
+      end, Pairs).
+
+test_post_process_payload_rich_auth_request(_) ->
+
+  Pairs = [
+  { "should merge all permissions for the current cluster",
+    [
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:finance/vhost:primary-*">>],
+        <<"actions">> => [<<"configure">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"management">> ]
+       },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+       <<"locations">> => [<<"cluster:rabbitmq">>],
+       <<"actions">> => [<<"administrator">> ]
+      }
+    ],
+    [ <<"rabbitmq.tag:management">>, <<"rabbitmq.tag:administrator">> ]
+  },
+  { "should filter out those permisions whose type does not match <resource_server_type>",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read">>]
+      },
+      #{<<"type">> => <<"unknown">>,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should filter out those permisions whose type is the empty string",
+    [
+      #{<<"type">> => <<>>,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [ ]
+  },
+  { "should filter out those permisions with empty string action",
+    [
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => <<>>
+      }
+    ],
+    [ ]
+  },
+  { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read">>]
+       },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should filter out those permisions whose locations' regexpr do not match the cluster : {resource_server_id} ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbit*">>],
+        <<"actions">> => [<<"read">>]
+       },
+       #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+       <<"locations">> => [<<"cluster:*">>],
+       <<"actions">> => [<<"write">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
+        <<"actions">> => [<<"configure">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">>, <<"rabbitmq.write:*/*/*">>  ]
+  },
+
+  { "should ignore permissions without actions",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbit*">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">>]
+  },
+  { "should ignore permissions without locations",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"actions">> => [<<"read">>]
+        }
+    ]
+    ,[]
+  },
+  { "should ignore unknown actions",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq">>],
+        <<"actions">> => [<<"read2">>, <<"read">>]
+       }
+    ]
+    ,[<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should filter out locations with permissions not meant for {resource_server_id}",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+       <<"locations">> => [<<"cluster:rabbitmq">>, <<"cluster:unknown">> ],
+       <<"actions">> => [<<"read">>]
+       }
+    ],
+    [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should produce a scope for every (action, location) permutation for all locations meant for {resource_server_id}",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">> ],
+        <<"actions">> => [<<"read">>]
+       }
+    ],
+    [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.read:b/*/*">> ]
+  },
+  { "should support all known user tags ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">>, <<"cluster:other">>  ],
+        <<"actions">> => [<<"management">>, <<"policymaker">>, <<"management">>, <<"monitoring">>]
+      }
+    ],
+    [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>, <<"rabbitmq.tag:management">>, <<"rabbitmq.tag:monitoring">>  ]
+  },
+  { "should produce a scope for every user tag action but only for the clusters that match {resource_server_id}",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">>, <<"cluster:other">>  ],
+        <<"actions">> => [<<"management">>, <<"policymaker">>]
+      }
+    ],
+    [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">> ]
+  },
+
+  { "should produce as scope for every location meant for {resource_server_id} multiplied by actions",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">> ],
+        <<"actions">> => [<<"read">>, <<"write">>]
+       }
+    ],
+    [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.read:b/*/*">>, <<"rabbitmq.write:a/*/*">>, <<"rabbitmq.write:b/*/*">> ]
+  },
+  { "should accept single value locations",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq">>,
+        <<"actions">> => [<<"read">>]
+       }
+    ],
+    [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should accept single value actions",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq">>,
+        <<"actions">> => <<"read">>
+      }
+    ],
+    [<<"rabbitmq.read:*/*/*">> ]
+  },
+  { "should merge all scopes produced by each permission",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">> ],
+        <<"actions">> => [<<"read">>]
+      },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:b">> ],
+        <<"actions">> => [<<"write">>]
+      }
+    ],
+    [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.write:b/*/*">> ]
+  },
+  { "can grant permission to a queue in any virtual host",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:b">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/b/*">> ]
+  },
+  { "can grant permission to an exchange in any virtual host",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/exchange:b">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq.read:*/b/*">> ]
+  },
+  { "cannot specify both exchange and queue unless they have the same value",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:b/exchange:c">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    []
+  },
+  { "can specify exchange and queue when have same value",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:*/exchange:*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [ <<"rabbitmq.read:*/*/*">> ]
+  },
+  { "can specify routing-key only -> on any vhost and on any queue if that makes sense ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/routing-key:b">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/b">> ]
+  },
+  { "can specify vhost, queue or exchange and routing-key that combine fixed values and wildcards",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:finance-*/queue:*-invoice/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
+  },
+  { "should ignore any location's attribute other than the supported ones",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/unknown:finance-*/queue:*-invoice/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*-invoice/r-*">> ]
+  },
+  { "should not matter the location's attributes order",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:invoices/vhost:finance/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:finance/invoices/r-*">> ]
+  },
+  { "should ignore locations like //",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq//routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/r-*">> ]
+  },
+  { "should default to wildcard those attributes with empty value",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:/vhost:/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/r-*">> ]
+  },
+  { "should ignore any location path element which is not compliant with <key>:<value> format",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"some-prefix-value/cluster:rabbitmq/vhost:finance-*/queue:*-invoice/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
+  },
+  { "can use regular expression on any location's attribute",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-*">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
+  },
+  { "can use single string value for location",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq/vhost:^finance-*">>,
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
+  },
+  { "can use single string value for action",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq/vhost:^finance-*">>,
+        <<"actions">> => <<"read">>
+        }
+    ],
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
+  },
+  { "should ignore empty permission lists",
+    [],
+    []
+  }
+  ],
+
+  lists:foreach(
+      fun({Case, Permissions, ExpectedScope}) ->
+          Payload = post_process_payload_with_rich_auth_request(Permissions),
+          ?assertEqual(lists:sort(ExpectedScope), lists:sort(maps:get(<<"scope">>, Payload)), Case)
+      end, Pairs).
+
+post_process_payload_with_rich_auth_request(Permissions) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    Token = maps:put(<<"authorization_details">>, Permissions, ?UTIL_MOD:plain_token_without_scopes_and_aud()),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
+    {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
+    rabbit_auth_backend_oauth2:post_process_payload(Payload).
 
 test_post_process_token_payload_complex_claims(_) ->
     Pairs = [
@@ -244,7 +614,7 @@ test_successful_access_with_a_token(_) ->
 
     VHost    = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
 
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -265,8 +635,8 @@ test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token([<<"rabbitmq.tag:management">>,
-                                                                <<"rabbitmq.tag:policymaker">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(
+        [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>]), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]).
@@ -291,7 +661,8 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field(
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -336,7 +707,8 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_fi
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+    ?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]), Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -373,7 +745,8 @@ test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_fie
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_denied(AuthUser, VHost),
@@ -410,7 +783,8 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
@@ -454,7 +828,8 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_sc
     VHost = <<"vhost">>,
     Username = <<"username">>,
     Claims   = [Role1, Role2, Role3],
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
@@ -491,7 +866,8 @@ test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_sco
 
     VHost = <<"vhost">>,
     Username = <<"username">>,
-    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Username), Jwk),
 
     {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_denied(AuthUser, VHost),
@@ -526,7 +902,7 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = ?UTIL_MOD:fixture_jwk(),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
@@ -543,7 +919,7 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = ?UTIL_MOD:fixture_jwk(),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
@@ -562,8 +938,7 @@ test_token_expiration(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    TokenData = ?UTIL_MOD:expirable_token(),
-    Username  = <<"username">>,
+    TokenData =  ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username),
     Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -585,7 +960,7 @@ test_incorrect_kid(_) ->
     Jwk      = ?UTIL_MOD:fixture_jwk(),
     Jwk1     = Jwk#{<<"kid">> := AltKid},
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk1),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk1),
 
     ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~p", [{error,key_not_found}]},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token})).
@@ -598,11 +973,72 @@ test_command_json(_) ->
         [<<"token-key">>],
         #{node => node(), json => Json}),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_vhost_access(User, <<"vhost">>, none)).
+
+test_username_from(_) ->
+    Pairs = [
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS 'sub' ">>,  % Comment
+        [ ],  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"sub">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS when there are no preferred_username_claims">>,  % Comment
+        <<>>,  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"sub">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
+      { <<"resolved username from DEFAULT_PREFERRED_USERNAME_CLAIMS 'client_id' ">>,  % Comment
+        [ ],  % Given this configure preferred_username_claims
+        #{ % When we test this Token
+          <<"client_id">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>  % We expect username to be this one
+      },
+      { <<"resolve username from 1st claim in the array of configured claims ">>,
+        [<<"user_name">>, <<"email">>],
+        #{
+          <<"user_name">> => <<"rabbit_user">>,
+          <<"email">> => <<"rabbit_user@">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"resolve username from 2nd claim in the array of configured claims">>,
+        [<<"user_name">>, <<"email">>],
+        #{
+          <<"email">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"resolve username from configured string claim ">>,
+        <<"email">>,
+        #{
+          <<"email">> => <<"rabbit_user">>
+         },
+        <<"rabbit_user">>
+      },
+      { <<"unresolve username">>,
+        [<<"user_name">>, <<"email">>],
+        #{
+          <<"email2">> => <<"rabbit_user">>
+         },
+        <<"unknown">>
+      }
+    ],
+    lists:foreach(
+        fun(
+          {Comment, PreferredUsernameClaims, Token, ExpectedUsername}) ->
+            ActualUsername = rabbit_auth_backend_oauth2:username_from(PreferredUsernameClaims, Token),
+            ?assertEqual(ExpectedUsername, ActualUsername, Comment)
+            end,
+          Pairs).
 
 test_command_pem_file(Config) ->
     Username = <<"username">>,
@@ -666,7 +1102,7 @@ test_command_pem(Config) ->
         [<<"token-key">>],
         #{node => node(), pem => Pem}),
 
-    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(), Jwk, <<"token-key">>),
+    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
@@ -692,7 +1128,7 @@ test_command_pem_no_kid(Config) ->
     UaaEnv2 = [{default_key, <<"token-key">>} | UaaEnv1],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv2),
 
-    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
@@ -737,6 +1173,25 @@ test_validate_payload(_) ->
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
+
+test_validate_payload_when_verify_aud_false(_) ->
+    WithoutAud = #{
+                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                                              <<"bar.foo">>, <<"one.two">>,
+                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
+    ?assertEqual({ok, #{
+                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_oauth2:validate_payload(WithoutAud, ?RESOURCE_SERVER_ID)),
+
+    WithAudWithUnknownResourceId = #{
+                              <<"aud">>   => [<<"unknown">>],
+                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                                              <<"bar.foo">>, <<"one.two">>,
+                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
+    ?assertEqual({ok, #{<<"aud">>   => [<<"unknown">>],
+                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_oauth2:validate_payload(WithAudWithUnknownResourceId, ?RESOURCE_SERVER_ID)).
+
 
 
 %%

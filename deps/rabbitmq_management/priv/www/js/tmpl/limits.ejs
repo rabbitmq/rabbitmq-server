@@ -1,6 +1,6 @@
 <h1>Limits</h1>
 
-<div class="section">
+<div class="section" id="virtual-host-limits">
     <h2>Virtual host Limits</h2>
     <div class="hider">
         <div class="updatable">
@@ -49,7 +49,7 @@
     </div>
 </div>
 
-<div class="section administrator-only">
+<div class="section administrator-only" id="set-virtual-host-limits">
     <h2>Set / update a virtual host limit</h2>
     <div class="hider">
         <form action="#/limits" method="put">
@@ -88,7 +88,7 @@
     </div>
 </div>
 
-<div class="section">
+<div class="section" id="user-limits">
   <h2>User Limits</h2>
   <div class="hider">
       <div class="updatable">
@@ -137,7 +137,7 @@
   </div>
 </div>
 
-<div class="section administrator-only">
+<div class="section administrator-only" id="set-user-limits">
   <h2>Set / update a user limit</h2>
   <div class="hider">
       <form action="#/user-limits" method="put">
@@ -146,9 +146,9 @@
                 <th><label>User:</label></th>
                 <td>
                   <select name="user">
-                      <% for (var i = 0; i < users.items.length; i++) { %>
-                      <option value="<%= fmt_string(users.items[i].name) %>">
-                          <%= fmt_string(users.items[i].name) %>
+                      <% for (var i = 0; i < users.length; i++) { %>
+                      <option value="<%= fmt_string(users[i].name) %>">
+                          <%= fmt_string(users[i].name) %>
                       </option>
                       <% } %>
                   </select>
