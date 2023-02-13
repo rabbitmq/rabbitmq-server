@@ -21,12 +21,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/connections/:vhost", ?MODULE, []}];
-        false ->
-            []
-    end.
+    [{"/stream/connections/:vhost", ?MODULE, []}].
 
 web_ui() ->
     [].

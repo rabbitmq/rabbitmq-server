@@ -26,33 +26,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
         default_queue_type: default_qt
       }) do
     meta = %{description: desc, tags: parse_tags(tags), default_queue_type: default_qt}
-    # check if the respective feature flag is enabled
-    case default_qt do
-      "quorum" ->
-        FeatureFlags.assert_feature_flag_enabled(node_name, :quorum_queue, fn ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-            vhost,
-            meta,
-            Helpers.cli_acting_user()
-          ])
-        end)
 
-      "stream" ->
-        FeatureFlags.assert_feature_flag_enabled(node_name, :stream_queue, fn ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-            vhost,
-            meta,
-            Helpers.cli_acting_user()
-          ])
-        end)
-
-      _ ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
-          vhost,
-          meta,
-          Helpers.cli_acting_user()
-        ])
-    end
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
+      vhost,
+      meta,
+      Helpers.cli_acting_user()
+    ])
   end
 
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do

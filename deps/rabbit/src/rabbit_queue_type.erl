@@ -15,7 +15,6 @@
          discover/1,
          feature_flag_name/1,
          default/0,
-         is_enabled/1,
          is_compatible/4,
          declare/2,
          delete/4,
@@ -115,8 +114,6 @@
               action/0,
               actions/0,
               settle_op/0]).
-
--callback is_enabled() -> boolean().
 
 -callback is_compatible(Durable :: boolean(),
                         Exclusive :: boolean(),
@@ -236,11 +233,6 @@ feature_flag_name(_) ->
 
 default() ->
     rabbit_classic_queue.
-
-%% is a specific queue type implementation enabled
--spec is_enabled(module()) -> boolean().
-is_enabled(Type) ->
-    Type:is_enabled().
 
 -spec is_compatible(module(), boolean(), boolean(), boolean()) ->
     boolean().

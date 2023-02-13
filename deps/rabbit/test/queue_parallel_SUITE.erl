@@ -119,16 +119,11 @@ init_per_group(mirrored_queue, Config) ->
                          {queue_durable, true}]),
     rabbit_ct_helpers:run_steps(Config1, []);
 init_per_group(stream_queue, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue) of
-        ok ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"stream">>}]},
-               {consumer_args, [{<<"x-stream-offset">>, long, 0}]},
-               {queue_durable, true}]);
-        Skip ->
-            Skip
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"stream">>}]},
+       {consumer_args, [{<<"x-stream-offset">>, long, 0}]},
+       {queue_durable, true}]);
 init_per_group(Group, Config0) ->
     case lists:member({group, Group}, all()) of
         true ->

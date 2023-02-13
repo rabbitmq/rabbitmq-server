@@ -217,24 +217,16 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
-    case rabbit_queue_type:is_enabled(Type) of
-        true ->
-            Q = amqqueue:new(QueueName,
-                              none,
-                              Durable,
-                              AutoDelete,
-                              Owner,
-                              Args,
-                              VHost,
-                              #{user => ActingUser},
-                              Type),
-            rabbit_queue_type:declare(Q, Node);
-        false ->
-            {protocol_error, internal_error,
-             "Cannot declare a queue '~ts' of type '~ts' on node '~ts': "
-             "the corresponding feature flag is disabled",
-              [rabbit_misc:rs(QueueName), Type, Node]}
-    end.
+    Q = amqqueue:new(QueueName,
+                     none,
+                     Durable,
+                     AutoDelete,
+                     Owner,
+                     Args,
+                     VHost,
+                     #{user => ActingUser},
+                     Type),
+    rabbit_queue_type:declare(Q, Node).
 
 get_queue_type(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
