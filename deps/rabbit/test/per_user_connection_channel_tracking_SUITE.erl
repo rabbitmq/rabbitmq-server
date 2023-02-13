@@ -89,28 +89,10 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    clear_all_connection_tracking_tables(Config),
-    clear_all_channel_tracking_tables(Config),
     Config.
 
 end_per_testcase(Testcase, Config) ->
-    clear_all_connection_tracking_tables(Config),
-    clear_all_channel_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
-clear_all_connection_tracking_tables(Config) ->
-    [rabbit_ct_broker_helpers:rpc(Config,
-        N,
-        rabbit_connection_tracking,
-        clear_tracking_tables,
-        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
-
-clear_all_channel_tracking_tables(Config) ->
-    [rabbit_ct_broker_helpers:rpc(Config,
-        N,
-        rabbit_channel_tracking,
-        clear_tracking_tables,
-        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
 
 %% -------------------------------------------------------------------
 %% Test cases.
@@ -635,18 +617,6 @@ cluster_node_removed(Config) ->
     timer:sleep(200),
     NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
 
-    DroppedConnTrackingTables =
-        rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedConnTrackingTables],
-
-    DroppedChTrackingTables =
-        rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedChTrackingTables],
-
     ?assertEqual(false, is_process_alive(Conn2)),
     [?assertEqual(false, is_process_alive(Ch)) || Ch <- Chans2],
 
@@ -774,18 +744,9 @@ exists_in_tracking_table(Config, NodeIndex, TableNameFun, Table, Key) ->
     Node = rabbit_ct_broker_helpers:get_node_config(
                 Config, NodeIndex, nodename),
     Tab = TableNameFun(Node),
-    case rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_feature_flags,
-                                      is_enabled, [tracking_records_in_ets]) of
-        true ->
-            All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                               ets, lookup, [Table, Key]),
-            lists:keymember(Key, 1, All);
-        false ->
-            AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                                   mnesia,
-                                                   dirty_all_keys, [Tab]),
-            lists:member(Key, AllKeys)
-    end.
+    All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
+                                       ets, lookup, [Table, Key]),
+    lists:keymember(Key, 1, All).
 
 mimic_vhost_down(Config, NodeIndex, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,

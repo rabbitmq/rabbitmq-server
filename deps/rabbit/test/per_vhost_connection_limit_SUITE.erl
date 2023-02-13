@@ -123,7 +123,6 @@ init_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
       rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    clear_all_connection_tracking_tables(Config),
     Config.
 
 end_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
@@ -133,15 +132,7 @@ end_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
-    clear_all_connection_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
-clear_all_connection_tracking_tables(Config) ->
-    rabbit_ct_broker_helpers:rpc_all(
-      Config,
-      rabbit_connection_tracking,
-      clear_tracked_connection_tables_for_this_node,
-      []).
 
 %% -------------------------------------------------------------------
 %% Test cases.

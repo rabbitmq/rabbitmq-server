@@ -97,7 +97,6 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    clear_all_connection_tracking_tables(Config),
     Config.
 
 end_per_testcase(Testcase, Config) ->
@@ -110,7 +109,6 @@ end_per_testcase(Testcase, Config) ->
             delete_vhost(Config, VHost2)
     end,
     delete_vhost(Config, VHost1),
-    clear_all_connection_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 delete_vhost(Config, VHost) ->
@@ -118,13 +116,6 @@ delete_vhost(Config, VHost) ->
         ok                          -> ok;
         {error, {no_such_vhost, _}} -> ok
     end.
-
-clear_all_connection_tracking_tables(Config) ->
-    [rabbit_ct_broker_helpers:rpc(Config,
-        N,
-        rabbit_connection_tracking,
-        clear_tracked_connection_tables_for_this_node,
-        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
 
 %% -------------------------------------------------------------------
 %% Test cases.
