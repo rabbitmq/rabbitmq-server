@@ -59,7 +59,6 @@
    {stream_single_active_consumer,
     #{desc          => "Single active consumer for streams",
       doc_url       => "https://www.rabbitmq.com/stream.html",
-      %%TODO remove compatibility code
       stability     => required,
       depends_on    => [stream_queue]
      }}).
