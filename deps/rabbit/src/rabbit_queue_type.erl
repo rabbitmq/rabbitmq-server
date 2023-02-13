@@ -239,7 +239,7 @@ default() ->
 is_compatible(Type, Durable, Exclusive, AutoDelete) ->
     Type:is_compatible(Durable, Exclusive, AutoDelete).
 
--spec declare(amqqueue:amqqueue(), node()) ->
+-spec declare(amqqueue:amqqueue(), node() | {'ignore_location', node()}) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()} |
