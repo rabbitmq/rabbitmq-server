@@ -26,6 +26,7 @@ groups() ->
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
         vhost_creation_idempotency,
+        vhost_update_idempotency,
         parse_tags
     ],
     ClusterSize2Tests = [
@@ -319,6 +320,67 @@ vhost_creation_idempotency(Config) ->
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
 
+<<<<<<< HEAD
+=======
+vhost_update_idempotency(Config) ->
+    VHost = <<"update-idempotency-test">>,
+    ActingUser = <<"acting-user">>,
+    try
+        % load the dummy event handler on the node
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, test_rabbit_event_handler, okay, []),
+
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, gen_event, add_handler,
+                                          [rabbit_event, test_rabbit_event_handler, []]),
+
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+
+        ?assertMatch({vhost,VHost, [], #{tags := [private,replicate]}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                  rabbit_vhost, update_tags,
+                                                  [VHost, [private, replicate], ActingUser])),
+        ?assertMatch({vhost,VHost, [], #{tags := [private,replicate]}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                  rabbit_vhost, update_tags,
+                                                  [VHost, [replicate, private], ActingUser])),
+
+        Events = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                              gen_event, call,
+                                              [rabbit_event, test_rabbit_event_handler, events, 100]),
+        ct:pal(?LOW_IMPORTANCE, "Events: ~p", [lists:reverse(Events)]),
+        TagsSetEvents = lists:filter(fun
+                                         (#event{type = vhost_tags_set}) -> true;
+                                         (_) -> false
+                                     end, Events),
+        ?assertMatch([#event{}], TagsSetEvents)
+    after
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+                                     gen_event, delete_handler, [rabbit_event, test_rabbit_event_handler, []]),
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
+vhost_is_created_with_default_limits(Config) ->
+    VHost = <<"vhost1">>,
+    Limits = [{<<"max-connections">>, 10}, {<<"max-queues">>, 1}],
+    Pattern = [{<<"pattern">>, ".*"}],
+    Env = [{vhosts, [{<<"id">>, Limits++Pattern}]}],
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            application, set_env, [rabbit, default_limits, Env])),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            rabbit_vhost_limit, list, [VHost])).
+
+vhost_is_created_with_operator_policies(Config) ->
+    VHost = <<"vhost1">>,
+    PolicyName = <<"default-operator-policy">>,
+    Definition = [{<<"expires">>, 10}],
+    Env = [{operator, [{PolicyName, Definition}]}],
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            application, set_env, [rabbit, default_policies, Env])),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            rabbit_policy, lookup_op, [VHost, PolicyName])).
+
+>>>>>>> bb65d2af48 (rabbit_vhost:set_tags/2 avoids notifying if tags are unchanged)
 parse_tags(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_tags1, [Config]).
 
