@@ -1,3 +1,6 @@
+% vim:ft=erlang:
+%
+
 [{internal_auth_backend,
   "auth_backends.1 = internal",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_internal]}]}],
@@ -118,6 +121,49 @@ ssl_options.fail_if_no_peer_cert = true",
   "disk_free_limit.absolute = 50000",
    [{rabbit, [{disk_free_limit, 50000}]}],[]},
 
+<<<<<<< HEAD
+=======
+ {default_users,
+ "
+  default_users.a.vhost_pattern = banana
+  default_users.a.tags = administrator,operator
+  default_users.a.password = SECRET
+  default_users.a.read = .*
+ ",
+  [{rabbit, [{default_users, [
+      {<<"a">>, [{<<"vhost_pattern">>, "banana"},
+                 {<<"tags">>, [administrator, operator]},
+                 {<<"password">>, "SECRET"},
+                 {<<"read">>, ".*"}]}]}]}],
+  []},
+
+ {default_policies_operator,
+ "
+  default_policies.operator.a.expires = 1h
+  default_policies.operator.a.queue_pattern = apple
+  default_policies.operator.a.vhost_pattern = banana
+  default_policies.operator.a.classic_queues.ha_mode = exactly
+  default_policies.operator.a.classic_queues.ha_params = 2
+ ",
+  [{rabbit, [{default_policies, [{operator, [
+      {<<"a">>, [{<<"expires">>, 3600000},
+                 {<<"ha_mode">>, "exactly"},
+                 {<<"ha_params">>, 2},
+                 {<<"queue_pattern">>, "apple"},
+                 {<<"vhost_pattern">>, "banana"}]}]}]}]}],
+  []},
+
+ {default_vhost_limits,
+ "
+  default_limits.vhosts.a.pattern = banana
+  default_limits.vhosts.a.max_queues = 10
+ ",
+  [{rabbit, [{default_limits, [{vhosts, [
+      {<<"a">>, [{<<"pattern">>, "banana"},
+                 {<<"max_queues">>, 10}]}]}]}]}],
+  []},
+
+>>>>>>> 6a96304dba (Add default_users per #7208)
  {default_user_settings,
   "default_user = guest
 default_pass = guest

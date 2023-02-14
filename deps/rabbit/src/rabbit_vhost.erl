@@ -136,7 +136,12 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- Val];
       Int when is_integer(Int) ->
         %% this is a string/charlist
+<<<<<<< HEAD
         [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
+=======
+        ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
+        [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
+>>>>>>> 6a96304dba (Add default_users per #7208)
     end.
 
 -spec add(vhost:name(), rabbit_types:username()) ->
@@ -183,6 +188,11 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)",
                             [Name, Description, Tags])
     end,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+    DefaultLimits = default_limits(Name),
+>>>>>>> 6a96304dba (Add default_users per #7208)
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
@@ -215,6 +225,31 @@ do_add(Name, Metadata, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   VHost1
           end),
+=======
+    DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
+    {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
+    case NewOrNot of
+        new ->
+            rabbit_log:info("Inserted a virtual host record ~tp", [VHost]);
+        existing ->
+            ok
+    end,
+    rabbit_vhost_defaults:apply(Name, ActingUser),
+    _ = [begin
+         Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+         rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+         _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
+     end || {ExchangeName, Type, Internal} <-
+            [{<<"">>,                   direct,  false},
+             {<<"amq.direct">>,         direct,  false},
+             {<<"amq.topic">>,          topic,   false},
+             %% per 0-9-1 pdf
+             {<<"amq.match">>,          headers, false},
+             %% per 0-9-1 xml
+             {<<"amq.headers">>,        headers, false},
+             {<<"amq.fanout">>,         fanout,  false},
+             {<<"amq.rabbitmq.trace">>, topic,   true}]],
+>>>>>>> 5ded435d49 (Add default_users per #7208)
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
