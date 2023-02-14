@@ -26,17 +26,20 @@ jobs:
           name: '25_0'
           branch: main
           labels: |
+            backport-v3.12.x
             backport-v3.11.x
         - erlang_version: "25.1"
           name: '25_1'
           branch: main
           labels: |
+            backport-v3.12.x
             backport-v3.11.x
             backport-v3.10.x
         - erlang_version: "25.2"
           name: '25_2'
           branch: main
           labels: |
+            backport-v3.12.x
             backport-v3.11.x
             backport-v3.10.x
     timeout-minutes: 10
