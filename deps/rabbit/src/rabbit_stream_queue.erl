@@ -9,7 +9,8 @@
 
 -behaviour(rabbit_queue_type).
 
--export([is_compatible/3,
+-export([is_enabled/0,
+         is_compatible/3,
          declare/2,
          delete/4,
          purge/1,
@@ -88,6 +89,9 @@
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
 
 -type client() :: #stream_client{}.
+
+-spec is_enabled() -> boolean().
+is_enabled() -> true.
 
 -spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
 is_compatible(_Durable = true,
