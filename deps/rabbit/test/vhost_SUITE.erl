@@ -351,7 +351,11 @@ vhost_update_idempotency(Config) ->
                                          (#event{type = vhost_tags_set}) -> true;
                                          (_) -> false
                                      end, Events),
-        ?assertMatch([#event{}], TagsSetEvents)
+        ?assertMatch([#event{type = vhost_tags_set,
+                             props = [{name, VHost},
+                                      {tags, [private, replicate]},
+                                      {user_who_performed_action, ActingUser}]}],
+                     TagsSetEvents)
     after
         rabbit_ct_broker_helpers:rpc(Config, 0,
                                      gen_event, delete_handler, [rabbit_event, test_rabbit_event_handler, []]),
