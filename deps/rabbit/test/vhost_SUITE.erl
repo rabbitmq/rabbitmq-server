@@ -320,8 +320,6 @@ vhost_creation_idempotency(Config) ->
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
 
-<<<<<<< HEAD
-=======
 vhost_update_idempotency(Config) ->
     VHost = <<"update-idempotency-test">>,
     ActingUser = <<"acting-user">>,
@@ -384,7 +382,6 @@ vhost_is_created_with_operator_policies(Config) ->
     ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
                             rabbit_policy, lookup_op, [VHost, PolicyName])).
 
->>>>>>> bb65d2af48 (rabbit_vhost:set_tags/2 avoids notifying if tags are unchanged)
 parse_tags(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_tags1, [Config]).
 

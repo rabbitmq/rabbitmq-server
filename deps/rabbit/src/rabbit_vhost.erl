@@ -528,21 +528,6 @@ update_tags(VHostName, Tags, ActingUser) ->
         R = rabbit_misc:execute_mnesia_transaction(fun() ->
             update_tags(VHostName, ConvertedTags)
         end),
-<<<<<<< HEAD
-        rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
-        rabbit_event:notify(vhost_tags_set, [{name, VHostName},
-                                             {tags, ConvertedTags},
-                                             {user_who_performed_action, ActingUser}]),
-        R
-=======
-        CurrentTags = case rabbit_db_vhost:get(VHostName) of
-                          undefined -> [];
-                          V -> vhost:get_tags(V)
-                      end,
-        VHost = rabbit_db_vhost:set_tags(VHostName, Tags),
-        ConvertedTags = vhost:get_tags(VHost),
-=======
->>>>>>> 81fbaba2e9 (Fixup backport merge)
         rabbit_log:info("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
         rabbit_event:notify_if(are_different(CurrentTags, ConvertedTags),
                                vhost_tags_set, [{name, VHostName},
@@ -551,13 +536,13 @@ update_tags(VHostName, Tags, ActingUser) ->
         R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': the virtual host does not exist", [VHostName]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': the virtual host does not exist", [VHostName]),
             throw(Error);
         throw:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             throw(Error);
         exit:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             exit(Error)
     end.
 
