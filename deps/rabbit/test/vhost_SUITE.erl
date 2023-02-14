@@ -28,6 +28,7 @@ groups() ->
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
         vhost_creation_idempotency,
+        vhost_update_idempotency,
         parse_tags
     ],
     ClusterSize2Tests = [
@@ -318,6 +319,46 @@ vhost_creation_idempotency(Config) ->
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost))
     after
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
+vhost_update_idempotency(Config) ->
+    VHost = <<"update-idempotency-test">>,
+    ActingUser = <<"acting-user">>,
+    try
+        % load the dummy event handler on the node
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, test_rabbit_event_handler, okay, []),
+
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, gen_event, add_handler,
+                                          [rabbit_event, test_rabbit_event_handler, []]),
+
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+
+        ?assertMatch({vhost,VHost, _, #{tags := [private,replicate]}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                  rabbit_vhost, update_tags,
+                                                  [VHost, [private, replicate], ActingUser])),
+        ?assertMatch({vhost,VHost, _, #{tags := [private,replicate]}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                  rabbit_vhost, update_tags,
+                                                  [VHost, [replicate, private], ActingUser])),
+
+        Events = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                              gen_event, call,
+                                              [rabbit_event, test_rabbit_event_handler, events, 100]),
+        ct:pal(?LOW_IMPORTANCE, "Events: ~p", [lists:reverse(Events)]),
+        TagsSetEvents = lists:filter(fun
+                                         (#event{type = vhost_tags_set}) -> true;
+                                         (_) -> false
+                                     end, Events),
+        ?assertMatch([#event{type = vhost_tags_set,
+                             props = [{name, VHost},
+                                      {tags, [private, replicate]},
+                                      {user_who_performed_action, ActingUser}]}],
+                     TagsSetEvents)
+    after
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+                                     gen_event, delete_handler, [rabbit_event, test_rabbit_event_handler, []]),
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
 
