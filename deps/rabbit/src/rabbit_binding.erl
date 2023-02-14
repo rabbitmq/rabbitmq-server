@@ -56,9 +56,9 @@
 
 %%----------------------------------------------------------------------------
 
--spec new(rabbit_types:exchange(),
+-spec new(rabbit_types:binding_source(),
           key(),
-          rabbit_types:exchange() | amqqueue:amqqueue(),
+          rabbit_types:binding_destination(),
           rabbit_framing:amqp_table()) ->
     rabbit_types:binding().
 
