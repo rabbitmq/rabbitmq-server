@@ -12,9 +12,7 @@
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
-    wait_for_replicated/0, exists/1]).
-
--export([rabbit_index_route_definition/0]).
+    wait_for_replicated/0]).
 
 %% for testing purposes
 -export([definitions/0]).
@@ -51,17 +49,6 @@ create(TableName, TableDefinition) ->
         {aborted, Reason}                         ->
             throw({error, {table_creation_failed, TableName, TableDefinition1, Reason}})
     end.
-
--spec exists(atom()) -> boolean().
-exists(Table) ->
-    case mnesia:is_transaction() of
-        true ->
-            _ = mnesia_schema:get_tid_ts_and_lock(schema, read),
-            ok;
-        false ->
-            ok
-    end,
-    lists:member(Table, mnesia:system_info(tables)).
 
 %% Sets up secondary indexes in a blank node database.
 ensure_secondary_indexes() ->
@@ -356,6 +343,14 @@ definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_index_route,
+      [{record_name, index_route},
+       {attributes, record_info(fields, index_route)},
+       {type, bag},
+       {storage_properties, [{ets, [{read_concurrency, true}]}]},
+       {match, #index_route{source_key = {exchange_name_match(), '_'},
+                            destination = binding_destination_match(),
+                            _='_'}}]},
      {rabbit_topic_trie_node,
       [{record_name, topic_trie_node},
        {attributes, record_info(fields, topic_trie_node)},
@@ -403,29 +398,13 @@ definitions() ->
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions(),
 
-    MaybeRouting = case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
-                       true ->
-                           [{rabbit_index_route, rabbit_index_route_definition()}];
-                       false ->
-                           []
-                   end,
     MaybeListener = case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
                         false ->
                             [{rabbit_listener, rabbit_listener_definition()}];
                         true ->
                             []
                     end,
-    Definitions ++ MaybeRouting ++ MaybeListener.
-
--spec rabbit_index_route_definition() -> list(tuple()).
-rabbit_index_route_definition() ->
-    [{record_name, index_route},
-     {attributes, record_info(fields, index_route)},
-     {type, bag},
-     {storage_properties, [{ets, [{read_concurrency, true}]}]},
-     {match, #index_route{source_key = {exchange_name_match(), '_'},
-                          destination = binding_destination_match(),
-                          _='_'}}].
+    Definitions ++ MaybeListener.
 
 rabbit_listener_definition() ->
     [{record_name, listener},

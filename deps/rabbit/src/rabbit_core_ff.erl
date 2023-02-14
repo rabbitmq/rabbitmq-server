@@ -72,7 +72,6 @@
 -rabbit_feature_flag(
    {direct_exchange_routing_v2,
     #{desc       => "v2 direct exchange routing implementation",
-      %%TODO remove compatibility code
       stability  => required,
       depends_on => [feature_flags_v2, implicit_default_bindings]
      }}).
