@@ -78,7 +78,6 @@
 -rabbit_feature_flag(
    {listener_records_in_ets,
     #{desc       => "Store listener records in ETS instead of Mnesia",
-      %%TODO remove compatibility code
       stability  => required,
       depends_on => [feature_flags_v2]
      }}).
