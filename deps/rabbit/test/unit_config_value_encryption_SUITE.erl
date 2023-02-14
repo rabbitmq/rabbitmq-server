@@ -35,6 +35,9 @@ groups() ->
 
 init_per_suite(Config) ->
     application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
+    ThisNode = node(),
+    ok = rabbit_feature_flags:override_nodes([ThisNode]),
+    ok = rabbit_feature_flags:override_running_nodes([ThisNode]),
     {ok, _Pid} = rabbit_ff_controller:start(),
     Config.
 

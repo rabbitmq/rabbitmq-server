@@ -108,10 +108,10 @@ wait(TableNames, Timeout, Retries) ->
                  ok ->
                      ok;
                  {timeout, BadTabs} ->
-                     AllNodes = rabbit_nodes:all(),
+                     AllNodes = rabbit_nodes:list_members(),
                      {error, {timeout_waiting_for_tables, AllNodes, BadTabs}};
                  {error, Reason} ->
-                     AllNodes = rabbit_nodes:all(),
+                     AllNodes = rabbit_nodes:list_members(),
                      {error, {failed_waiting_for_tables, AllNodes, Reason}}
              end,
     case {Retries, Result} of

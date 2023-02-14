@@ -422,7 +422,7 @@ is_running_on_all_nodes(VHost) ->
 
 -spec vhost_cluster_state(vhost:name()) -> [{atom(), atom()}].
 vhost_cluster_state(VHost) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     lists:map(fun(Node) ->
         State = case rabbit_misc:rpc_call(Node,
                                           rabbit_vhost_sup_sup, is_vhost_alive,

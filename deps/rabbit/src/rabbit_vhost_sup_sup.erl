@@ -52,7 +52,7 @@ init([]) ->
 
 start_on_all_nodes(VHost) ->
     %% Do not try to start a vhost on booting peer nodes
-    AllBooted = [Node || Node <- rabbit_nodes:all_running(), rabbit:is_booted(Node)],
+    AllBooted = [Node || Node <- rabbit_nodes:list_running()],
     Nodes     = [node() | AllBooted],
     Results   = [{Node, start_vhost(VHost, Node)} || Node <- Nodes],
     Failures  = lists:filter(fun
@@ -67,7 +67,7 @@ start_on_all_nodes(VHost) ->
     end.
 
 delete_on_all_nodes(VHost) ->
-    _ = [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
+    _ = [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:list_running() ],
     ok.
 
 stop_and_delete_vhost(VHost) ->

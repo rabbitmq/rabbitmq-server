@@ -105,7 +105,7 @@ gc_exchanges() ->
     gc_process_and_entity(channel_exchange_stats_fine_stats, GbSet).
 
 gc_nodes() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     GbSet = gb_sets:from_list(Nodes),
     gc_entity(node_stats, GbSet),
     gc_entity(node_coarse_stats, GbSet),

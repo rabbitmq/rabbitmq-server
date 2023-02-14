@@ -27,7 +27,7 @@ allowed_methods(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     case get_node(ReqData) of
         none       -> {true, ReqData, Context};
-        {ok, Node} -> {lists:member(Node, rabbit_nodes:all_running()),
+        {ok, Node} -> {rabbit:is_running(Node),
                        ReqData, Context}
     end.
 

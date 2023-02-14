@@ -27,7 +27,8 @@ queue_leader_locators() ->
     {Leader :: node(), Followers :: [node()]}.
 select_leader_and_followers(Q, Size)
   when (?amqqueue_is_quorum(Q) orelse ?amqqueue_is_stream(Q)) andalso is_integer(Size) ->
-    {AllNodes, _DiscNodes, RunningNodes} = rabbit_mnesia:cluster_nodes(status),
+    AllNodes = rabbit_nodes:list_members(),
+    RunningNodes = rabbit_nodes:filter_running(AllNodes),
     true = lists:member(node(), AllNodes),
     QueueType = amqqueue:get_type(Q),
     GetQueues0 = get_queues_for_type(QueueType),
