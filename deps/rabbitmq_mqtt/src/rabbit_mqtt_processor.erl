@@ -980,7 +980,7 @@ queue_args(_, _) ->
     [].
 
 queue_type(?QOS_0, true, QArgs) ->
-    case rabbit_feature_flags:is_enabled(?QUEUE_TYPE_QOS_0) of
+    case rabbit_queue_type:is_enabled(?QUEUE_TYPE_QOS_0) of
         true ->
             ?QUEUE_TYPE_QOS_0;
         false ->

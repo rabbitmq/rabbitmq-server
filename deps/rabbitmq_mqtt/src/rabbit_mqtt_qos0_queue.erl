@@ -28,6 +28,7 @@
          declare/2,
          delete/4,
          deliver/2,
+         is_enabled/0,
          is_compatible/3,
          is_recoverable/1,
          recover/2,
@@ -132,6 +133,9 @@ deliver(Qs, #delivery{message = BasicMessage,
     end,
     delegate:invoke_no_result(Pids, {gen_server, cast, [Msg]}),
     {[], Actions}.
+
+-spec is_enabled() -> boolean().
+is_enabled() -> rabbit_feature_flags:is_enabled(?MODULE).
 
 -spec is_compatible(boolean(), boolean(), boolean()) ->
     boolean().
