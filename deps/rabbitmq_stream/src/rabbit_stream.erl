@@ -39,23 +39,12 @@
 -include("rabbit_stream_metrics.hrl").
 
 start(_Type, _Args) ->
-    case rabbit_feature_flags:is_enabled(stream_queue) of
-        true ->
-            rabbit_stream_metrics:init(),
-            rabbit_global_counters:init([{protocol, stream}],
-                                        ?PROTOCOL_COUNTERS),
-            rabbit_global_counters:init([{protocol, stream},
-                                         {queue_type, ?STREAM_QUEUE_TYPE}]),
-            rabbit_stream_sup:start_link();
-        false ->
-            rabbit_log:warning("Unable to start the stream plugin. The stream_queue "
-                               "feature flag is disabled. "
-                               ++ "Enable stream_queue feature flag then disable "
-                                  "and re-enable the rabbitmq_stream plugin. ",
-                               "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more"),
-            {ok, self()}
-    end.
+    rabbit_stream_metrics:init(),
+    rabbit_global_counters:init([{protocol, stream}],
+                                ?PROTOCOL_COUNTERS),
+    rabbit_global_counters:init([{protocol, stream},
+                                 {queue_type, ?STREAM_QUEUE_TYPE}]),
+    rabbit_stream_sup:start_link().
 
 tls_host() ->
     case application:get_env(rabbitmq_stream, advertised_tls_host,

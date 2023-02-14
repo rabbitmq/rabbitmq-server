@@ -21,14 +21,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/publishers", ?MODULE, []},
-             {"/stream/publishers/:vhost", ?MODULE, []},
-             {"/stream/publishers/:vhost/:queue", ?MODULE, []}];
-        false ->
-            []
-    end.
+    [{"/stream/publishers", ?MODULE, []},
+     {"/stream/publishers/:vhost", ?MODULE, []},
+     {"/stream/publishers/:vhost/:queue", ?MODULE, []}].
 
 web_ui() ->
     [].

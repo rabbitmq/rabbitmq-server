@@ -44,20 +44,10 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 routing_key=queueName,
                 body='Hello World!')
 
-        # could we declare a quorum queue?
-        quorum_queue_supported = True
-        if len(self.listener.errors) > 0:
-            pattern = re.compile(r"feature flag is disabled", re.MULTILINE)
-            for error in self.listener.errors:
-                if pattern.search(error['message']) != None:
-                    quorum_queue_supported = False
-                    break
-
-        if quorum_queue_supported:
-            # check if we receive the message from the STOMP subscription
-            self.assertTrue(self.listener.wait_for_complete_countdown(), "initial message not received")
-            self.assertEqual(1, len(self.listener.messages))
-            self.conn.disconnect()
+        # check if we receive the message from the STOMP subscription
+        self.assertTrue(self.listener.wait_for_complete_countdown(), "initial message not received")
+        self.assertEqual(1, len(self.listener.messages))
+        self.conn.disconnect()
 
         connection.close()
 

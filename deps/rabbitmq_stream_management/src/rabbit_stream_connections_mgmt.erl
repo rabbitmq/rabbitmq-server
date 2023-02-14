@@ -19,27 +19,10 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/connections", ?MODULE, []}];
-        false ->
-            []
-    end.
+    [{"/stream/connections", ?MODULE, []}].
 
 web_ui() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{javascript, <<"stream.js">>}];
-        false ->
-            rabbit_log:warning("Unable to show the stream management plugin. "
-                               "The stream_queue feature flag is disabled. "
-                               ++ "Enable stream_queue feature flag then disable "
-                                  "and re-enable the rabbitmq_stream_management "
-                                  "plugin. ",
-                               "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more"),
-            []
-    end.
+    [{javascript, <<"stream.js">>}].
 
 %%--------------------------------------------------------------------
 

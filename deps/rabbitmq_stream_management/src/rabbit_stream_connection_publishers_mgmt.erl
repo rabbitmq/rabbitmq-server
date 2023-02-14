@@ -22,13 +22,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/connections/:vhost/:connection/publishers", ?MODULE,
-              []}];
-        false ->
-            []
-    end.
+    [{"/stream/connections/:vhost/:connection/publishers", ?MODULE, []}].
 
 web_ui() ->
     [].

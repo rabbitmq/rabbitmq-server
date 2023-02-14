@@ -23,7 +23,6 @@
 -export_type([state/0]).
 
 -export([
-         is_enabled/0,
          is_compatible/3,
          declare/2,
          delete/4,
@@ -58,8 +57,6 @@
          deliver_to_consumer/5,
          send_drained/3,
          send_credit_reply/3]).
-
-is_enabled() -> true.
 
 -spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
 is_compatible(_, _, _) ->

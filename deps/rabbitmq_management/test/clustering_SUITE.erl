@@ -253,14 +253,10 @@ queue_on_other_node(Config) ->
     ok.
 
 queue_with_multiple_consumers(Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue),
-    %% this may not be supported in mixed mode
-    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, classic_queue_type_delivery_support),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Q = <<"multi-consumer-queue1">>,
     _ = queue_declare(Chan, Q),
     _ = wait_for_queue(Config, "/queues/%2F/multi-consumer-queue1"),
-
 
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),

@@ -86,7 +86,6 @@ queue(Config, QName0, Args) ->
     ok.
 
 stream(Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ConsumerTag = QName0 = atom_to_binary(?FUNCTION_NAME),
     QName = <<QName0/binary, ?UNICODE_STRING/utf8>>,
