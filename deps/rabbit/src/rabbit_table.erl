@@ -296,7 +296,6 @@ definitions(ram) ->
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
-    Definitions =
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, internal_user:fields()},
@@ -396,21 +395,7 @@ definitions() ->
        {match, amqqueue:pattern_match_on_name(queue_name_match())}]}
     ]
         ++ gm:table_definitions()
-        ++ mirrored_supervisor:table_definitions(),
-
-    MaybeListener = case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
-                        false ->
-                            [{rabbit_listener, rabbit_listener_definition()}];
-                        true ->
-                            []
-                    end,
-    Definitions ++ MaybeListener.
-
-rabbit_listener_definition() ->
-    [{record_name, listener},
-     {attributes, record_info(fields, listener)},
-     {type, bag},
-     {match, #listener{_='_'}}].
+        ++ mirrored_supervisor:table_definitions().
 
 binding_match() ->
     #binding{source = exchange_name_match(),
