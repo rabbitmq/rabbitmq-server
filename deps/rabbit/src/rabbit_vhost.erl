@@ -566,17 +566,38 @@ update_metadata(VHostName, Fun) ->
         vhost:set_metadata(Record, Meta)
     end).
 
--spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
+are_different0([], []) ->
+    false;
+are_different0([], [_ | _]) ->
+    true;
+are_different0([_ | _], []) ->
+    true;
+are_different0([E], [E]) ->
+    false;
+are_different0([E | R1], [E | R2]) ->
+    are_different0(R1, R2);
+are_different0(_, _) ->
+    true.
+
+are_different(L1, L2) ->
+    are_different0(lists:usort(L1), lists:usort(L2)).
+
+-spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost().
 update_tags(VHostName, Tags, ActingUser) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    CurrentTags = case mnesia:dirty_read({rabbit_vhost, VHostName}) of
+        [V] when ?is_vhost(V) -> vhost:get_tags(V);
+        []                    -> []
+    end,
+    ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(I) || I <- Tags]),
     try
         R = rabbit_misc:execute_mnesia_transaction(fun() ->
             update_tags(VHostName, ConvertedTags)
         end),
         rabbit_log:info("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
-        rabbit_event:notify(vhost_tags_set, [{name, VHostName},
-                                             {tags, ConvertedTags},
-                                             {user_who_performed_action, ActingUser}]),
+        rabbit_event:notify_if(are_different(CurrentTags, ConvertedTags),
+                               vhost_tags_set, [{name, VHostName},
+                                                {tags, ConvertedTags},
+                                                {user_who_performed_action, ActingUser}]),
         R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
@@ -592,7 +613,7 @@ update_tags(VHostName, Tags, ActingUser) ->
 
 -spec update_tags(vhost:name(), [vhost_tag()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 update_tags(VHostName, Tags) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(I) || I <- Tags]),
     update(VHostName, fun(Record) ->
         Meta0 = vhost:get_metadata(Record),
         Meta  = maps:put(tags, ConvertedTags, Meta0),

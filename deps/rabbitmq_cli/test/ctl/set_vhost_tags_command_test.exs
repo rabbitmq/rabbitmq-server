@@ -77,7 +77,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:vhost] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:tags]
+    assert Enum.sort(result[:tags]) == Enum.sort(context[:tags])
   end
 
   @tag user: @vhost, tags: [:qa]
