@@ -41,6 +41,10 @@ RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
 ]
 
+EXTRA_APPS = [
+    "ssl",
+]
+
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
@@ -49,6 +53,7 @@ rabbitmq_app(
     build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+    extra_apps = EXTRA_APPS,
 )
 
 xref()
@@ -56,6 +61,7 @@ xref()
 plt(
     name = "base_plt",
     plt = "//:base_plt",
+    apps = EXTRA_APPS,
     deps = BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
