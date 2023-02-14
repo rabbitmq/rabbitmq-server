@@ -43,7 +43,7 @@ RABBITMQ_DIALYZER_OPTS = [
     "-Wunmatched_returns",
 ]
 
-APP_VERSION = "3.12.0"
+APP_VERSION = "3.13.0"
 
 BROKER_VERSION_REQUIREMENTS_ANY = """
 	{broker_version_requirements, []}
