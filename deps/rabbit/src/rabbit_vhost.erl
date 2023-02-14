@@ -141,40 +141,6 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
     end.
 
--spec default_limits(vhost:name()) -> proplists:proplist().
-default_limits(Name) ->
-    AllLimits = application:get_env(rabbit, default_limits, []),
-    VHostLimits = proplists:get_value(vhosts, AllLimits, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, VHostLimits),
-    case Match of
-        {value, {_, Ss}} ->
-            proplists:delete(<<"pattern">>, Ss);
-        _ ->
-            []
-    end.
-
--spec default_operator_policies(vhost:name()) ->
-    {binary(), binary(), proplists:proplist()} | not_found.
-default_operator_policies(Name) ->
-    AllPolicies = application:get_env(rabbit, default_policies, []),
-    OpPolicies = proplists:get_value(operator, AllPolicies, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"vhost-pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, OpPolicies),
-    case Match of
-        {value, {PolicyName, Ss}} ->
-            QPattern = proplists:get_value(<<"queue-pattern">>, Ss, ".*"),
-            Ss1 = proplists:delete(<<"queue-pattern">>, Ss),
-            Ss2 = proplists:delete(<<"vhost-pattern">>, Ss1),
-            {PolicyName, list_to_binary(QPattern), Ss2};
-        _ ->
-            not_found
-    end.
-
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
@@ -227,7 +193,7 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
-    DefaultLimits = default_limits(Name),
+    DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
@@ -235,23 +201,7 @@ do_add(Name, Metadata, ActingUser) ->
         existing ->
             ok
     end,
-    case DefaultLimits of
-        [] ->
-            ok;
-        _  ->
-            ok = rabbit_vhost_limit:set(Name, DefaultLimits, ActingUser),
-            rabbit_log:info("Applied default limits to vhost '~tp': ~tp",
-                            [Name, DefaultLimits])
-    end,
-    case default_operator_policies(Name) of
-        not_found ->
-            ok;
-        {PolicyName, QPattern, Definition} = Policy ->
-            ok = rabbit_policy:set_op(Name, PolicyName, QPattern, Definition,
-                                undefined, undefined, ActingUser),
-            rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
-                            [Name, Policy])
-    end,
+    rabbit_vhost_defaults:apply(Name, ActingUser),
     _ = [begin
          Resource = rabbit_misc:r(Name, exchange, ExchangeName),
          rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
