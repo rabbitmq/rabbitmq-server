@@ -93,6 +93,13 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(vhost_update_idempotency = Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    clear_all_connection_tracking_tables(Config),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
+        ok -> Config;
+        Skip -> Skip
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     clear_all_connection_tracking_tables(Config),
