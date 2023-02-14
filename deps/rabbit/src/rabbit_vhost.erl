@@ -140,40 +140,6 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
     end.
 
--spec default_limits(vhost:name()) -> proplists:proplist().
-default_limits(Name) ->
-    AllLimits = application:get_env(rabbit, default_limits, []),
-    VHostLimits = proplists:get_value(vhosts, AllLimits, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, VHostLimits),
-    case Match of
-        {value, {_, Ss}} ->
-            proplists:delete(<<"pattern">>, Ss);
-        _ ->
-            []
-    end.
-
--spec default_operator_policies(vhost:name()) ->
-    {binary(), binary(), proplists:proplist()} | not_found.
-default_operator_policies(Name) ->
-    AllPolicies = application:get_env(rabbit, default_policies, []),
-    OpPolicies = proplists:get_value(operator, AllPolicies, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"vhost-pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, OpPolicies),
-    case Match of
-        {value, {PolicyName, Ss}} ->
-            QPattern = proplists:get_value(<<"queue-pattern">>, Ss, ".*"),
-            Ss1 = proplists:delete(<<"queue-pattern">>, Ss),
-            Ss2 = proplists:delete(<<"vhost-pattern">>, Ss1),
-            {PolicyName, list_to_binary(QPattern), Ss2};
-        _ ->
-            not_found
-    end.
-
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
@@ -226,6 +192,7 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
+<<<<<<< HEAD
     DefaultLimits = default_limits(Name),
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -273,6 +240,31 @@ do_add(Name, Metadata, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   VHost1
           end),
+=======
+    DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
+    {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
+    case NewOrNot of
+        new ->
+            rabbit_log:info("Inserted a virtual host record ~tp", [VHost]);
+        existing ->
+            ok
+    end,
+    rabbit_vhost_defaults:apply(Name, ActingUser),
+    _ = [begin
+         Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+         rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+         _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
+     end || {ExchangeName, Type, Internal} <-
+            [{<<"">>,                   direct,  false},
+             {<<"amq.direct">>,         direct,  false},
+             {<<"amq.topic">>,          topic,   false},
+             %% per 0-9-1 pdf
+             {<<"amq.match">>,          headers, false},
+             %% per 0-9-1 xml
+             {<<"amq.headers">>,        headers, false},
+             {<<"amq.fanout">>,         fanout,  false},
+             {<<"amq.rabbitmq.trace">>, topic,   true}]],
+>>>>>>> 5ded435d49 (Add default_users per #7208)
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
