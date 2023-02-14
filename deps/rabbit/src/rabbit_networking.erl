@@ -21,7 +21,7 @@
 
 -export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
          start_ssl_listener/3, start_ssl_listener/4,
-         stop_tcp_listener/1, on_node_down/1, active_listeners/0,
+         stop_tcp_listener/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
@@ -251,9 +251,6 @@ ranch_ref_of_protocol(Protocol) ->
 
 -spec listener_of_protocol(atom()) -> #listener{}.
 listener_of_protocol(Protocol) ->
-    listener_of_protocol_ets(Protocol).
-
-listener_of_protocol_ets(Protocol) ->
     MatchSpec = #listener{
                    protocol = Protocol,
                    _ = '_'
@@ -361,9 +358,6 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
                   ip_address = IPAddress,
                   port = Port,
                   opts = Opts},
-    tcp_listener_started_ets(L).
-
-tcp_listener_started_ets(L) ->
     true = ets:insert(?ETS_TABLE, L),
     ok.
 
@@ -382,9 +376,6 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                   ip_address = IPAddress,
                   port = Port,
                   opts = Opts},
-    tcp_listener_stopped_ets(L).
-
-tcp_listener_stopped_ets(L) ->
     true = ets:delete_object(?ETS_TABLE, L),
     ok.
 
@@ -440,9 +431,6 @@ active_listeners() ->
 -spec node_listeners(node()) -> [rabbit_types:listener()].
 
 node_listeners(Node) ->
-    node_listeners_ets(Node).
-
-node_listeners_ets(Node) ->
     case rabbit_misc:rpc_call(Node, ets, tab2list, [?ETS_TABLE]) of
         {badrpc, _} ->
             %% Some of the reasons are the node being down or is
@@ -463,11 +451,6 @@ node_client_listeners(Node) ->
                              (_) -> true
                          end, Xs)
     end.
-
--spec on_node_down(node()) -> 'ok'.
-
-on_node_down(_Node) ->
-    ok.
 
 -spec register_connection(pid()) -> ok.
 
