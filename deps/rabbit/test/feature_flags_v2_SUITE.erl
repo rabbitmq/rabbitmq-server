@@ -351,7 +351,7 @@ enable_supported_feature_flag_on_a_single_node(Config) ->
 
 enable_supported_feature_flag_on_a_single_node() ->
     FeatureName = ?FUNCTION_NAME,
-    FeatureFlags = #{FeatureName => #{provided_by => ?MODULE,
+    FeatureFlags = #{FeatureName => #{provided_by => rabbit,
                                       stability => stable}},
     ?assertEqual(
        ok, rabbit_feature_flags:inject_test_feature_flags(FeatureFlags)),
@@ -417,7 +417,7 @@ enable_supported_feature_flag_in_a_3node_cluster(Config) ->
     override_running_nodes(Nodes),
 
     FeatureName = ?FUNCTION_NAME,
-    FeatureFlags = #{FeatureName => #{provided_by => ?MODULE,
+    FeatureFlags = #{FeatureName => #{provided_by => rabbit,
                                       stability => stable}},
     inject_on_nodes(Nodes, FeatureFlags),
 
@@ -584,7 +584,7 @@ enable_feature_flag_in_cluster_and_add_member_after(Config) ->
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable,
                        callbacks => #{enable => {?MODULE, mf_count_runs}}}},
     inject_on_nodes(AllNodes, FeatureFlags),
@@ -686,7 +686,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable,
                        callbacks =>
                        #{enable =>
@@ -871,7 +871,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable,
                        callbacks =>
                        #{enable =>
@@ -990,7 +990,7 @@ enable_feature_flag_with_post_enable(Config) ->
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable,
                        callbacks =>
                        #{post_enable =>
@@ -1175,10 +1175,10 @@ have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable}},
     RequiredFeatureFlags = #{FeatureName =>
-                             #{provided_by => ?MODULE,
+                             #{provided_by => rabbit,
                                stability => required}},
     inject_on_nodes([NewNode], FeatureFlags),
     inject_on_nodes(Nodes, RequiredFeatureFlags),
@@ -1258,10 +1258,10 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable}},
     RequiredFeatureFlags = #{FeatureName =>
-                             #{provided_by => ?MODULE,
+                             #{provided_by => rabbit,
                                stability => required}},
     inject_on_nodes([NewNode], FeatureFlags),
     inject_on_nodes(Nodes, RequiredFeatureFlags),
@@ -1355,7 +1355,7 @@ error_during_migration_after_initial_success(Config) ->
 
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName =>
-                     #{provided_by => ?MODULE,
+                     #{provided_by => rabbit,
                        stability => stable,
                        callbacks =>
                        #{enable => {?MODULE, mf_crash_on_joining_node}}}},
