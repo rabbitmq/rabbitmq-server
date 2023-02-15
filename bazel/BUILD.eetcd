@@ -6,14 +6,12 @@ erlc_opts(
     values = select({
         "@rules_erlang//:debug_build": [
             "+debug_info",
-            "+{i,\"./_build/default/plugins/gpb/include\"}",
         ],
         "//conditions:default": [
             "+debug_info",
             "+deterministic",
-            "+{i,\"./_build/default/plugins/gpb/include\"}",
         ],
-    }),
+    }),  # keep
     visibility = [":__subpackages__"],
 )
 
