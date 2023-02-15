@@ -10,7 +10,6 @@
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
-      %%TODO remove compatibility code
       stability     => required
      }}).
 
