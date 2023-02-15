@@ -31,7 +31,11 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
+<<<<<<< HEAD
     version = "3.9.2",
+=======
+    version = "3.9.5",
+>>>>>>> 733aad5589 (Regenerate bazel/BUILD.eetcd with the latest rules_erlang)
 )
 
 erlang_config = use_extension(
