@@ -8,14 +8,11 @@ const FILTER_USER = By.css('input#users-name')
 const CHECKBOX_REGEX = By.css('input#filter-regex-mode')
 const FILTERED_USER = By.css('span.filter-highlight')
 
-<<<<<<< HEAD
-=======
 // RHM : RIGHT HAND MENU
 const USERS_ON_RHM = By.css('div#rhs ul li a[href="#/users"]')
 const LIMITS_ON_RHM = By.css('div#rhs ul li a[href="#/limits"]')
 const VHOSTS_ON_RHM = By.css('div#rhs ul li a[href="#/vhosts"]')
 
->>>>>>> f0a3753cec (Fix issue 7301)
 module.exports = class AdminTab extends OverviewPage {
   async isLoaded () {
     await this.waitForDisplayed(ADMIN_TAB)
