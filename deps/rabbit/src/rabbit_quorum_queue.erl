@@ -537,25 +537,39 @@ maybe_grow_qq_members(QName, LastActive) ->
             ok;
         true ->
             rabbit_log:info(">>>> TICK check members",[]),
-            Running = rabbit_nodes:all_running(),
             {ok, Members, _} = ra:members(amqqueue:get_pid(Q)),
             MemberNodes = [Node || {_, Node} <- Members],
-            New = Running -- MemberNodes,
-            Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
-                       undefined-> 0;
-                       V -> V
-                   end,
-            CurrentSize = length(MemberNodes),
-            case {CurrentSize < Size, New} of
-                {_, []} ->
-                    %% No new nodes to grow towards, regardless if QQ is below target
-                    ok;
-                {true, NewNodes} ->
-                    %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
-                    %% Take node load or availability zones into account?
-                    add_members(Q, grow_order_sort(NewNodes), 5000, Size - CurrentSize);
-                {_,_} ->
-                    %%Target size already achieved
+            All = rabbit_nodes:all(),
+            RemovedFromCluster = MemberNodes -- All,
+
+            case RemovedFromCluster of
+                [] ->
+                    rabbit_log:info(">>>> TICK No membernodes not part of the cluster",[]),
+                    Running = rabbit_nodes:all_running(),
+                    New = Running -- MemberNodes,
+                    Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
+                               undefined-> 0;
+                               V -> V
+                           end,
+                    CurrentSize = length(MemberNodes),
+                    case {CurrentSize < Size, New} of
+                        {_, []} ->
+                            %% No new nodes to grow towards, regardless if QQ is below target
+                            rabbit_log:info(">>>> TICK NO new nodes to grow towards",[]),
+                            ok;
+                        {true, NewNodes} ->
+                            %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
+                            %% Take node load or availability zones into account?
+                            rabbit_log:info(">>>> TICK new nodes: ~p",[NewNodes]),
+                            add_members(Q, grow_order_sort(NewNodes), 5000, Size - CurrentSize);
+                        {_,_} ->
+                            %%Target size already achieved
+                            rabbit_log:info(">>>> TICK TArget size achieved",[]),
+                            ok
+                    end;
+                Old ->
+                    rabbit_log:info(">>>> TICK Old nodes? Remove em ~p",[Old]),
+                    [shrink_all(N) || N <- Old],
                     ok
             end
     end.
