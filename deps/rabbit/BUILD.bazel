@@ -1033,6 +1033,9 @@ rabbitmq_integration_suite(
     name = "vhost_SUITE",
     size = "medium",
     flaky = True,
+    additional_srcs = [
+        "test/test_rabbit_event_handler.erl",
+    ],
 )
 
 rabbitmq_suite(
