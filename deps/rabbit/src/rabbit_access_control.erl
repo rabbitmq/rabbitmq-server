@@ -16,15 +16,6 @@
 
 %%----------------------------------------------------------------------------
 
-<<<<<<< HEAD
--export_type([permission_atom/0]).
-
--type permission_atom() :: 'configure' | 'read' | 'write'.
-
-%%----------------------------------------------------------------------------
-
-=======
->>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 -spec check_user_pass_login
         (rabbit_types:username(), rabbit_types:password()) ->
             {'ok', rabbit_types:user()} |

@@ -1435,6 +1435,7 @@ is_regular_file(Name) ->
     end.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 %% not exported by supervisor
 -type supervisor_child_id() :: term().
@@ -1454,6 +1455,8 @@ find_child(Supervisor, Name) ->
 
 >>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 >>>>>>> 2ae27f206f (Fix all dependencies for the dialyzer)
+=======
+>>>>>>> b205ac9249 (Resolve conflicts)
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
 
