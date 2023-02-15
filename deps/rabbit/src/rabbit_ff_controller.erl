@@ -747,11 +747,12 @@ check_required_and_enable(
     %% Required feature flags vs. virgin nodes.
     FeatureProps = maps:get(FeatureName, FeatureFlags),
     Stability = rabbit_feature_flags:get_stability(FeatureProps),
+    ProvidedBy = maps:get(provided_by, FeatureProps),
     NodesWhereDisabled = list_nodes_where_feature_flag_is_disabled(
                            Inventory, FeatureName),
 
     MarkDirectly = case Stability of
-                       required ->
+                       required when ProvidedBy =:= rabbit ->
                            ?LOG_DEBUG(
                               "Feature flags: `~s`: the feature flag is "
                               "required on some nodes; list virgin nodes "
@@ -770,6 +771,25 @@ check_required_and_enable(
                                      end
                              end, NodesWhereDisabled),
                            VirginNodesWhereDisabled =:= NodesWhereDisabled;
+                       required when ProvidedBy =/= rabbit ->
+                           %% A plugin can be enabled/disabled at runtime and
+                           %% between restarts. Thus we have no way to
+                           %% distinguish a newly enabled plugin from a plugin
+                           %% which was enabled in the past.
+                           %%
+                           %% Therefore, we always mark required feature flags
+                           %% from plugins directly as enabled. However, the
+                           %% plugin is responsible for checking that its
+                           %% possibly existing data is as it expects it or
+                           %% perform any cleanup/conversion!
+                           ?LOG_DEBUG(
+                              "Feature flags: `~s`: the feature flag is "
+                              "required on some nodes; it comes from a "
+                              "plugin which can be enabled at runtime, "
+                              "so it can be marked as enabled",
+                              [FeatureName],
+                              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                           true;
                        _ ->
                            false
                    end,
