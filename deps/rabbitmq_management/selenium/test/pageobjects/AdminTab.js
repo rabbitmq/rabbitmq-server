@@ -14,6 +14,7 @@ const FILTERED_USER = By.css('span.filter-highlight')
 // RHM : RIGHT HAND MENU
 const USERS_ON_RHM = By.css('div#rhs ul li a[href="#/users"]')
 const LIMITS_ON_RHM = By.css('div#rhs ul li a[href="#/limits"]')
+const VHOSTS_ON_RHM = By.css('div#rhs ul li a[href="#/vhosts"]')
 
 module.exports = class AdminTab extends OverviewPage {
   async isLoaded () {
@@ -24,6 +25,9 @@ module.exports = class AdminTab extends OverviewPage {
   }
   async clickOnLimits() {
     await this.click(LIMITS_ON_RHM)
+  }
+  async clickOnVhosts() {
+    await this.click(VHOSTS_ON_RHM)
   }
 
   async searchForUser(user, regex = false) {
