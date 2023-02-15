@@ -521,12 +521,6 @@ rabbitmq_suite(
     additional_srcs = [
         "test/mirrored_supervisor_SUITE_gs.erl",
     ],
-<<<<<<< HEAD
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-    ],
-=======
->>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 )
 
 rabbitmq_suite(

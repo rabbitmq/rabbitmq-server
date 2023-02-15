@@ -1450,25 +1450,6 @@ is_regular_file(Name) ->
         _ -> false
     end.
 
-<<<<<<< HEAD
-=======
-%% not exported by supervisor
--type supervisor_child_id() :: term().
--type supervisor_sup_ref() :: (Name :: atom())
-                            | {Name :: atom(), Node :: node()}
-                            | {'global', Name :: atom()}
-                            | {'via', Module :: module(), Name :: any()}
-                            | pid().
-
-%% this used to be in supervisor2
--spec find_child(Supervisor, Name) -> [pid()] when
-      Supervisor :: supervisor_sup_ref(),
-      Name :: supervisor_child_id().
-find_child(Supervisor, Name) ->
-    [Pid || {Name1, Pid, _Type, _Modules} <- supervisor:which_children(Supervisor),
-            Name1 =:= Name].
-
->>>>>>> 3a3ff308aa (Fix all dependencies for the dialyzer)
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
 
