@@ -63,63 +63,44 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(Group, Config)
-    when Group == single_node orelse Group == single_node_1 ->
-    Config1 =
-        rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]),
-    Config2 =
-        rabbit_ct_helpers:set_config(Config1,
-                                     {rabbitmq_ct_tls_verify, verify_none}),
-    Config3 =
-        rabbit_ct_helpers:set_config(Config2, {rabbitmq_stream, verify_none}),
-    %% stream sac feature flag disabled for the first test,
-    %% then enabled in the end_per_testcase function
-    ExtraSetupSteps =
-        case Group of
-            single_node ->
-                [fun(StepConfig) ->
-                    rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                    {rabbit,
-                                                     [{forced_feature_flags_on_init,
-                                                       [classic_mirrored_queue_version,
-                                                        stream_queue]}]})
-                 end];
-            _ ->
-                []
-        end,
-    rabbit_ct_helpers:run_setup_steps(Config3,
-                                      [fun(StepConfig) ->
-                                          rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                                          {rabbit,
-                                                                           [{core_metrics_gc_interval,
-                                                                             1000}]})
-                                       end,
-                                       fun(StepConfig) ->
-                                          rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                                          {rabbitmq_stream,
-                                                                           [{connection_negotiation_step_timeout,
-                                                                             500}]})
-                                       end]
-                                      ++ ExtraSetupSteps
-                                      ++ rabbit_ct_broker_helpers:setup_steps());
+  when Group == single_node orelse Group == single_node_1 ->
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, false},
+                         {rabbitmq_ct_tls_verify, verify_none},
+                         {rabbitmq_stream, verify_none}
+                        ]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {rabbit,
+                                                [{core_metrics_gc_interval,
+                                                  1000}]})
+       end,
+       fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {rabbitmq_stream,
+                                                [{connection_negotiation_step_timeout,
+                                                  500}]})
+       end]
+      ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
-    Config1 =
-        rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]),
-    Config2 =
-        rabbit_ct_helpers:set_config(Config1,
-                                     [{rmq_nodes_count, 3},
-                                      {rmq_nodename_suffix, Group},
-                                      {tcp_ports_base}]),
-    Config3 =
-        rabbit_ct_helpers:set_config(Config2,
-                                     {rabbitmq_ct_tls_verify, verify_none}),
-    rabbit_ct_helpers:run_setup_steps(Config3,
-                                      [fun(StepConfig) ->
-                                          rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                                          {aten,
-                                                                           [{poll_interval,
-                                                                             1000}]})
-                                       end]
-                                      ++ rabbit_ct_broker_helpers:setup_steps());
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, true},
+                         {rmq_nodes_count, 3},
+                         {rmq_nodename_suffix, Group},
+                         {tcp_ports_base},
+                         {rabbitmq_ct_tls_verify, verify_none}
+                        ]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {aten,
+                                                [{poll_interval,
+                                                  1000}]})
+       end]
+      ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(_, Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).
 
