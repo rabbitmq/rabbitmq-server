@@ -1105,7 +1105,7 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "bindings_SUITE",
-    size = "small",
+    size = "medium",
 )
 
 rabbitmq_integration_suite(
