@@ -520,7 +520,7 @@ handle_tick(QName,
                       end,
 
                       %% ----------
-                      maybe_adjust_qq_members(QName, check_grow_interval(LastActive))
+                      maybe_adjust_qq_members(QName, ExpectedNodes, check_grow_interval(LastActive))
                   catch
                       _:_ ->
                           ok
@@ -528,15 +528,14 @@ handle_tick(QName,
           end),
     ok.
 
-maybe_adjust_qq_members(_QName, false) ->
+maybe_adjust_qq_members(_QName, _, false) ->
     rabbit_log:info(">>>> TICK do nothing",[]),
     ok;
-maybe_adjust_qq_members(QName, true) ->
+maybe_adjust_qq_members(QName, All, true) ->
     rabbit_log:info(">>>> TICK check members",[]),
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     {ok, Members, _} = ra:members(amqqueue:get_pid(Q)),
     MemberNodes = [Node || {_, Node} <- Members],
-    All = rabbit_nodes:all(),
     RemovedFromCluster = MemberNodes -- All,
     case RemovedFromCluster of
         [] ->
