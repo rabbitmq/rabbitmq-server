@@ -548,7 +548,7 @@ maybe_adjust_qq_members(QName, All, true) ->
 
 maybe_grow_qq_members(Q, MemberNodes) ->
     rabbit_log:info(">>>> TICK No membernodes not part of the cluster",[]),
-    Running = rabbit_nodes:all_running(),
+    Running = rabbit_nodes:list_running(),
     New = Running -- MemberNodes,
     Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
                undefined-> 0;
