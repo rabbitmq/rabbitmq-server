@@ -1,4 +1,4 @@
-<div class="section">
+<div class="section" id="topic-permissions">
   <h2>Topic permissions</h2>
   <div class="hider">
     <h3>Current topic permissions</h3>
@@ -56,8 +56,8 @@ for (var i = 0; i < topic_permissions.length; i++) {
           <td>
             <input type="hidden" name="vhost" value="<%= fmt_string(parent.name) %>"/>
             <select name="username">
-              <% for (var i = 0; i < users.items.length; i++) { %>
-              <option value="<%= fmt_string(users.items[i].name) %>"><%= fmt_string(users.items[i].name) %></option>
+              <% for (var i = 0; i < users.length; i++) { %>
+              <option value="<%= fmt_string(users[i].name) %>"><%= fmt_string(users[i].name) %></option>
               <% } %>
             </select>
           </td>
