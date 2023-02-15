@@ -8,11 +8,11 @@
 <% } %>
 
 <% if (!disable_stats) { %>
-<div class="section">
+<div class="section" id="overview">
   <h2>Overview</h2>
   <div class="hider updatable">
     <%= queue_lengths('lengths-vhost', vhost) %>
-<% if (rates_mode != 'none') { %>
+<% if (rates_mode != 'none' && vhost.message_stats) { %>
     <%= message_rates('msg-rates-vhost', vhost.message_stats) %>
 <% } %>
     <%= data_rates('data-rates-vhost', vhost, 'Data rates') %>
@@ -44,6 +44,7 @@
             </td>
             </tr>
         <% } %>
+
         </table>
         </td>
       </tr>
@@ -56,7 +57,7 @@
 
 <%= format('topic-permissions', {'mode': 'vhost', 'topic_permissions': topic_permissions, 'users':users, 'parent': vhost, 'exchanges': exchanges}) %>
 
-<div class="section-hidden">
+<div class="section-hidden" id="delete-vhost">
 <h2>Delete this vhost</h2>
 <div class="hider">
 <form action="#/vhosts" method="delete" class="confirm">
