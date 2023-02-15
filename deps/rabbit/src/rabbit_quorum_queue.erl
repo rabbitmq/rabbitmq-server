@@ -520,7 +520,7 @@ handle_tick(QName,
                       end,
 
                       %% ----------
-                      maybe_grow_qq_members(QName, LastActive)
+                      maybe_adjust_qq_members(QName, check_grow_interval(LastActive))
                   catch
                       _:_ ->
                           ok
@@ -528,50 +528,48 @@ handle_tick(QName,
           end),
     ok.
 
-maybe_grow_qq_members(QName, LastActive) ->
+maybe_adjust_qq_members(_QName, false) ->
+    rabbit_log:info(">>>> TICK do nothing",[]),
+    ok;
+maybe_adjust_qq_members(QName, true) ->
+    rabbit_log:info(">>>> TICK check members",[]),
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    % Rely on LastActive and compare it with system_time, to figure out intervall
-    case check_if_grow(LastActive) of
-        false ->
-            rabbit_log:info(">>>> TICK do nothing",[]),
-            ok;
-        true ->
-            rabbit_log:info(">>>> TICK check members",[]),
-            {ok, Members, _} = ra:members(amqqueue:get_pid(Q)),
-            MemberNodes = [Node || {_, Node} <- Members],
-            All = rabbit_nodes:all(),
-            RemovedFromCluster = MemberNodes -- All,
+    {ok, Members, _} = ra:members(amqqueue:get_pid(Q)),
+    MemberNodes = [Node || {_, Node} <- Members],
+    All = rabbit_nodes:all(),
+    RemovedFromCluster = MemberNodes -- All,
+    case RemovedFromCluster of
+        [] ->
+            maybe_grow_qq_members(Q, MemberNodes);
+        Old ->
+            rabbit_log:info(">>>> TICK Old nodes? Remove em ~p",[Old]),
+            [shrink_all(N) || N <- Old],
+            ok
+    end.
 
-            case RemovedFromCluster of
-                [] ->
-                    rabbit_log:info(">>>> TICK No membernodes not part of the cluster",[]),
-                    Running = rabbit_nodes:all_running(),
-                    New = Running -- MemberNodes,
-                    Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
-                               undefined-> 0;
-                               V -> V
-                           end,
-                    CurrentSize = length(MemberNodes),
-                    case {CurrentSize < Size, New} of
-                        {_, []} ->
-                            %% No new nodes to grow towards, regardless if QQ is below target
-                            rabbit_log:info(">>>> TICK NO new nodes to grow towards",[]),
-                            ok;
-                        {true, NewNodes} ->
-                            %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
-                            %% Take node load or availability zones into account?
-                            rabbit_log:info(">>>> TICK new nodes: ~p",[NewNodes]),
-                            add_members(Q, grow_order_sort(NewNodes), 5000, Size - CurrentSize);
-                        {_,_} ->
-                            %%Target size already achieved
-                            rabbit_log:info(">>>> TICK TArget size achieved",[]),
-                            ok
-                    end;
-                Old ->
-                    rabbit_log:info(">>>> TICK Old nodes? Remove em ~p",[Old]),
-                    [shrink_all(N) || N <- Old],
-                    ok
-            end
+maybe_grow_qq_members(Q, MemberNodes) ->
+    rabbit_log:info(">>>> TICK No membernodes not part of the cluster",[]),
+    Running = rabbit_nodes:all_running(),
+    New = Running -- MemberNodes,
+    Size = case rabbit_policy:get(<<"target-group-size">>, Q) of
+               undefined-> 0;
+               V -> V
+           end,
+    CurrentSize = length(MemberNodes),
+    case {CurrentSize < Size, New} of
+        {_, []} ->
+            %% No new nodes to grow towards, regardless if QQ is below target
+            rabbit_log:info(">>>> TICK NO new nodes to grow towards",[]),
+            ok;
+        {true, NewNodes} ->
+            %% Sort/filter nodes before sending them to NewNodes, i.e perhaps
+            %% Take node load or availability zones into account?
+            rabbit_log:info(">>>> TICK new nodes: ~p",[NewNodes]),
+            add_members(Q, grow_order_sort(NewNodes), 5000, Size - CurrentSize);
+        {_,_} ->
+            %%Target size already achieved
+            rabbit_log:info(">>>> TICK TArget size achieved",[]),
+            ok
     end.
 
 %% Sort nodes based on number of QQ they have
@@ -587,7 +585,7 @@ grow_order_sort(Nodes) ->
           [{Node, QueueLenFun(Node)} || Node <- Nodes]).
 
 %% Return true every aprox GROW_CHECK_TIMEOUT sec
-check_if_grow(LastActive) ->
+check_grow_interval(LastActive) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
     T = erlang:system_time(millisecond) - LastActive,
