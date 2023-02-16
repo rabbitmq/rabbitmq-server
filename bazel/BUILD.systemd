@@ -10,86 +10,26 @@ erlc_opts(
         ],
         "//conditions:default": [
             "+debug_info",
-            "+warnings_as_errors",
             "+deterministic",
+            "+warnings_as_errors",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_systemd_beam",
-    srcs = ["src/systemd.erl"],
-    outs = ["ebin/systemd.beam"],
-    hdrs = ["src/systemd_internal.hrl"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_app_beam",
-    srcs = ["src/systemd_app.erl"],
-    outs = ["ebin/systemd_app.beam"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_journal_h_beam",
-    srcs = ["src/systemd_journal_h.erl"],
-    outs = ["ebin/systemd_journal_h.beam"],
-    hdrs = ["src/systemd_internal.hrl"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-    deps = ["@enough//:erlang_app"],
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_kmsg_formatter_beam",
-    srcs = ["src/systemd_kmsg_formatter.erl"],
-    outs = ["ebin/systemd_kmsg_formatter.beam"],
-    hdrs = ["include/systemd.hrl"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_protocol_beam",
-    srcs = ["src/systemd_protocol.erl"],
-    outs = ["ebin/systemd_protocol.beam"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_socket_beam",
-    srcs = ["src/systemd_socket.erl"],
-    outs = ["ebin/systemd_socket.beam"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_sup_beam",
-    srcs = ["src/systemd_sup.erl"],
-    outs = ["ebin/systemd_sup.beam"],
-    hdrs = ["src/systemd_internal.hrl"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_systemd_watchdog_beam",
-    srcs = ["src/systemd_watchdog.erl"],
-    outs = ["ebin/systemd_watchdog.beam"],
-    hdrs = ["src/systemd_internal.hrl"],
-    app_name = "systemd",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/systemd.erl",
+        "src/systemd_app.erl",
+        "src/systemd_journal_h.erl",
+        "src/systemd_kmsg_formatter.erl",
+        "src/systemd_protocol.erl",
+        "src/systemd_socket.erl",
+        "src/systemd_sup.erl",
+        "src/systemd_watchdog.erl",
+    ],
+    outs = [
         "ebin/systemd.beam",
         "ebin/systemd_app.beam",
         "ebin/systemd_journal_h.beam",
@@ -99,6 +39,19 @@ filegroup(
         "ebin/systemd_sup.beam",
         "ebin/systemd_watchdog.beam",
     ],
+    hdrs = [
+        "include/systemd.hrl",
+        "src/systemd_internal.hrl",
+    ],
+    app_name = "systemd",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+    deps = ["@enough//:erlang_app"],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
