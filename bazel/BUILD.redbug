@@ -6,14 +6,12 @@ erlc_opts(
     values = select({
         "@rules_erlang//:debug_build": [
             "+debug_info",
-            "+warnings_as_errors",
         ],
         "//conditions:default": [
             "+debug_info",
             "+deterministic",
-            "+warnings_as_errors",
         ],
-    }),
+    }),  # keep
     visibility = [":__subpackages__"],
 )
 
