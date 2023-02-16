@@ -521,14 +521,6 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
                                                  {user_who_performed_action, ActingUser}]),
         R
     catch
-        throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to clear permissions for user '~ts': virtual host '~ts' does not exist",
-                               [Username, VirtualHost]),
-            throw(Error);
-        throw:{error, {no_such_user, _}} = Error ->
-            rabbit_log:warning("Failed to clear permissions for user '~ts': the user does not exist",
-                               [Username]),
-            throw(Error);
         Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear permissions for user '~ts' in virtual host '~ts': ~tp",
                                [Username, VirtualHost, Error]),
