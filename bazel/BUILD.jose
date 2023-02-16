@@ -18,169 +18,17 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_base_jose_base_beam",
+    name = "parse_transforms",
     srcs = ["src/base/jose_base.erl"],
-    outs = ["ebin/base/jose_base.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_base_jose_base64_beam",
-    srcs = ["src/base/jose_base64.erl"],
-    outs = ["ebin/base/jose_base64.beam"],
-    hdrs = ["include/jose_base.hrl"],
-    app_name = "jose",
-    beam = ["ebin/base/jose_base.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_base_jose_base64url_beam",
-    srcs = ["src/base/jose_base64url.erl"],
-    outs = ["ebin/base/jose_base64url.beam"],
-    hdrs = ["include/jose_base.hrl"],
-    app_name = "jose",
-    beam = ["ebin/base/jose_base.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_beam",
-    srcs = ["src/jose.erl"],
-    outs = ["ebin/jose.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_app_beam",
-    srcs = ["src/jose_app.erl"],
-    outs = ["ebin/jose_app.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_block_encryptor_beam",
-    srcs = ["src/jose_block_encryptor.erl"],
-    outs = ["ebin/jose_block_encryptor.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_chacha20_poly1305_beam",
-    srcs = ["src/jose_chacha20_poly1305.erl"],
-    outs = ["ebin/jose_chacha20_poly1305.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_block_encryptor.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_chacha20_poly1305_crypto_beam",
-    srcs = ["src/jose_chacha20_poly1305_crypto.erl"],
-    outs = ["ebin/jose_chacha20_poly1305_crypto.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_chacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_chacha20_poly1305_libsodium_beam",
-    srcs = ["src/jose_chacha20_poly1305_libsodium.erl"],
-    outs = ["ebin/jose_chacha20_poly1305_libsodium.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_chacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_chacha20_poly1305_unsupported_beam",
-    srcs = ["src/jose_chacha20_poly1305_unsupported.erl"],
-    outs = ["ebin/jose_chacha20_poly1305_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_chacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_crypto_compat_beam",
-    srcs = ["src/jose_crypto_compat.erl"],
-    outs = ["ebin/jose_crypto_compat.beam"],
-    hdrs = ["include/jose_compat.hrl"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve25519_beam",
-    srcs = ["src/jose_curve25519.erl"],
-    outs = ["ebin/jose_curve25519.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve25519_libdecaf_beam",
-    srcs = ["src/jose_curve25519_libdecaf.erl"],
-    outs = ["ebin/jose_curve25519_libdecaf.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve25519.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve25519_libsodium_beam",
-    srcs = ["src/jose_curve25519_libsodium.erl"],
-    outs = ["ebin/jose_curve25519_libsodium.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve25519.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve25519_unsupported_beam",
-    srcs = ["src/jose_curve25519_unsupported.erl"],
-    outs = ["ebin/jose_curve25519_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve25519.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve448_beam",
-    srcs = ["src/jose_curve448.erl"],
-    outs = ["ebin/jose_curve448.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve448_libdecaf_beam",
-    srcs = ["src/jose_curve448_libdecaf.erl"],
-    outs = ["ebin/jose_curve448_libdecaf.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve448.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_curve448_unsupported_beam",
-    srcs = ["src/jose_curve448_unsupported.erl"],
-    outs = ["ebin/jose_curve448_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve448.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_public_key_beam",
-    srcs = ["src/jose_public_key.erl"],
-    outs = ["ebin/jose_public_key.beam"],
+    outs = ["ebin/jose_base.beam"],
     hdrs = [
+        "include/jose.hrl",
+        "include/jose_base.hrl",
         "include/jose_compat.hrl",
+        "include/jose_jwe.hrl",
+        "include/jose_jwk.hrl",
+        "include/jose_jws.hrl",
+        "include/jose_jwt.hrl",
         "include/jose_public_key.hrl",
     ],
     app_name = "jose",
@@ -188,1005 +36,268 @@ erlang_bytecode(
 )
 
 erlang_bytecode(
-    name = "ebin_jose_server_beam",
-    srcs = ["src/jose_server.erl"],
-    outs = ["ebin/jose_server.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sha3_beam",
-    srcs = ["src/jose_sha3.erl"],
-    outs = ["ebin/jose_sha3.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sha3_keccakf1600_driver_beam",
-    srcs = ["src/jose_sha3_keccakf1600_driver.erl"],
-    outs = ["ebin/jose_sha3_keccakf1600_driver.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_sha3.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sha3_keccakf1600_nif_beam",
-    srcs = ["src/jose_sha3_keccakf1600_nif.erl"],
-    outs = ["ebin/jose_sha3_keccakf1600_nif.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_sha3.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sha3_libdecaf_beam",
-    srcs = ["src/jose_sha3_libdecaf.erl"],
-    outs = ["ebin/jose_sha3_libdecaf.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_sha3.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sha3_unsupported_beam",
-    srcs = ["src/jose_sha3_unsupported.erl"],
-    outs = ["ebin/jose_sha3_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_sha3.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_sup_beam",
-    srcs = ["src/jose_sup.erl"],
-    outs = ["ebin/jose_sup.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_xchacha20_poly1305_beam",
-    srcs = ["src/jose_xchacha20_poly1305.erl"],
-    outs = ["ebin/jose_xchacha20_poly1305.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_block_encryptor.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_xchacha20_poly1305_crypto_beam",
-    srcs = ["src/jose_xchacha20_poly1305_crypto.erl"],
-    outs = ["ebin/jose_xchacha20_poly1305_crypto.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_xchacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jose_xchacha20_poly1305_unsupported_beam",
-    srcs = ["src/jose_xchacha20_poly1305_unsupported.erl"],
-    outs = ["ebin/jose_xchacha20_poly1305_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_xchacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_beam",
-    srcs = ["src/json/jose_json.erl"],
-    outs = ["ebin/json/jose_json.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_jason_beam",
-    srcs = ["src/json/jose_json_jason.erl"],
-    outs = ["ebin/json/jose_json_jason.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_jiffy_beam",
-    srcs = ["src/json/jose_json_jiffy.erl"],
-    outs = ["ebin/json/jose_json_jiffy.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_jsone_beam",
-    srcs = ["src/json/jose_json_jsone.erl"],
-    outs = ["ebin/json/jose_json_jsone.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_jsx_beam",
-    srcs = ["src/json/jose_json_jsx.erl"],
-    outs = ["ebin/json/jose_json_jsx.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_ojson_beam",
-    srcs = ["src/json/jose_json_ojson.erl"],
-    outs = ["ebin/json/jose_json_ojson.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_poison_beam",
-    srcs = ["src/json/jose_json_poison.erl"],
-    outs = ["ebin/json/jose_json_poison.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_poison_compat_encoder_beam",
-    srcs = ["src/json/jose_json_poison_compat_encoder.erl"],
-    outs = ["ebin/json/jose_json_poison_compat_encoder.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_poison_lexical_encoder_beam",
-    srcs = ["src/json/jose_json_poison_lexical_encoder.erl"],
-    outs = ["ebin/json/jose_json_poison_lexical_encoder.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_thoas_beam",
-    srcs = ["src/json/jose_json_thoas.erl"],
-    outs = ["ebin/json/jose_json_thoas.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_json_jose_json_unsupported_beam",
-    srcs = ["src/json/jose_json_unsupported.erl"],
-    outs = ["ebin/json/jose_json_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/json/jose_json.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_beam",
-    srcs = ["src/jwa/jose_jwa.erl"],
-    outs = ["ebin/jwa/jose_jwa.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_aes_beam",
-    srcs = ["src/jwa/jose_jwa_aes.erl"],
-    outs = ["ebin/jwa/jose_jwa_aes.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_block_encryptor.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_aes_kw_beam",
-    srcs = ["src/jwa/jose_jwa_aes_kw.erl"],
-    outs = ["ebin/jwa/jose_jwa_aes_kw.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_base64url_beam",
-    srcs = ["src/jwa/jose_jwa_base64url.erl"],
-    outs = ["ebin/jwa/jose_jwa_base64url.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_bench_beam",
-    srcs = ["src/jwa/jose_jwa_bench.erl"],
-    outs = ["ebin/jwa/jose_jwa_bench.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_chacha20_beam",
-    srcs = ["src/jwa/jose_jwa_chacha20.erl"],
-    outs = ["ebin/jwa/jose_jwa_chacha20.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_chacha20_poly1305_beam",
-    srcs = ["src/jwa/jose_jwa_chacha20_poly1305.erl"],
-    outs = ["ebin/jwa/jose_jwa_chacha20_poly1305.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_chacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_concat_kdf_beam",
-    srcs = ["src/jwa/jose_jwa_concat_kdf.erl"],
-    outs = ["ebin/jwa/jose_jwa_concat_kdf.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_curve25519_beam",
-    srcs = ["src/jwa/jose_jwa_curve25519.erl"],
-    outs = ["ebin/jwa/jose_jwa_curve25519.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve25519.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_curve448_beam",
-    srcs = ["src/jwa/jose_jwa_curve448.erl"],
-    outs = ["ebin/jwa/jose_jwa_curve448.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_curve448.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_ed25519_beam",
-    srcs = ["src/jwa/jose_jwa_ed25519.erl"],
-    outs = ["ebin/jwa/jose_jwa_ed25519.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_ed448_beam",
-    srcs = ["src/jwa/jose_jwa_ed448.erl"],
-    outs = ["ebin/jwa/jose_jwa_ed448.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_hchacha20_beam",
-    srcs = ["src/jwa/jose_jwa_hchacha20.erl"],
-    outs = ["ebin/jwa/jose_jwa_hchacha20.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_math_beam",
-    srcs = ["src/jwa/jose_jwa_math.erl"],
-    outs = ["ebin/jwa/jose_jwa_math.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_pkcs1_beam",
-    srcs = ["src/jwa/jose_jwa_pkcs1.erl"],
-    outs = ["ebin/jwa/jose_jwa_pkcs1.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_pkcs5_beam",
-    srcs = ["src/jwa/jose_jwa_pkcs5.erl"],
-    outs = ["ebin/jwa/jose_jwa_pkcs5.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_pkcs7_beam",
-    srcs = ["src/jwa/jose_jwa_pkcs7.erl"],
-    outs = ["ebin/jwa/jose_jwa_pkcs7.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_poly1305_beam",
-    srcs = ["src/jwa/jose_jwa_poly1305.erl"],
-    outs = ["ebin/jwa/jose_jwa_poly1305.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_sha3_beam",
-    srcs = ["src/jwa/jose_jwa_sha3.erl"],
-    outs = ["ebin/jwa/jose_jwa_sha3.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_unsupported_beam",
-    srcs = ["src/jwa/jose_jwa_unsupported.erl"],
-    outs = ["ebin/jwa/jose_jwa_unsupported.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_block_encryptor.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_x25519_beam",
-    srcs = ["src/jwa/jose_jwa_x25519.erl"],
-    outs = ["ebin/jwa/jose_jwa_x25519.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_x448_beam",
-    srcs = ["src/jwa/jose_jwa_x448.erl"],
-    outs = ["ebin/jwa/jose_jwa_x448.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_xchacha20_beam",
-    srcs = ["src/jwa/jose_jwa_xchacha20.erl"],
-    outs = ["ebin/jwa/jose_jwa_xchacha20.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwa_jose_jwa_xchacha20_poly1305_beam",
-    srcs = ["src/jwa/jose_jwa_xchacha20_poly1305.erl"],
-    outs = ["ebin/jwa/jose_jwa_xchacha20_poly1305.beam"],
-    app_name = "jose",
-    beam = ["ebin/jose_xchacha20_poly1305.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_beam",
-    srcs = ["src/jwe/jose_jwe.erl"],
-    outs = ["ebin/jwe/jose_jwe.beam"],
+    name = "behaviours",
+    srcs = [
+        "src/jose_block_encryptor.erl",
+        "src/jose_chacha20_poly1305.erl",
+        "src/jose_curve25519.erl",
+        "src/jose_curve448.erl",
+        "src/jose_sha3.erl",
+        "src/jose_xchacha20_poly1305.erl",
+        "src/json/jose_json.erl",
+        "src/jwe/jose_jwe.erl",
+        "src/jwe/jose_jwe_alg.erl",
+        "src/jwe/jose_jwe_enc.erl",
+        "src/jwk/jose_jwk.erl",
+        "src/jwk/jose_jwk_kty.erl",
+        "src/jwk/jose_jwk_oct.erl",
+        "src/jwk/jose_jwk_use_enc.erl",
+        "src/jwk/jose_jwk_use_sig.erl",
+        "src/jws/jose_jws.erl",
+        "src/jws/jose_jws_alg.erl",
+    ],
+    outs = [
+        "ebin/jose_block_encryptor.beam",
+        "ebin/jose_chacha20_poly1305.beam",
+        "ebin/jose_curve25519.beam",
+        "ebin/jose_curve448.beam",
+        "ebin/jose_json.beam",
+        "ebin/jose_jwe.beam",
+        "ebin/jose_jwe_alg.beam",
+        "ebin/jose_jwe_enc.beam",
+        "ebin/jose_jwk.beam",
+        "ebin/jose_jwk_kty.beam",
+        "ebin/jose_jwk_oct.beam",
+        "ebin/jose_jwk_use_enc.beam",
+        "ebin/jose_jwk_use_sig.beam",
+        "ebin/jose_jws.beam",
+        "ebin/jose_jws_alg.beam",
+        "ebin/jose_sha3.beam",
+        "ebin/jose_xchacha20_poly1305.beam",
+    ],
     hdrs = [
-        "include/jose_jwe.hrl",
-        "include/jose_jwk.hrl",
-    ],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_beam",
-    srcs = ["src/jwe/jose_jwe_alg.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_aes_kw_beam",
-    srcs = ["src/jwe/jose_jwe_alg_aes_kw.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_aes_kw.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_c20p_kw_beam",
-    srcs = ["src/jwe/jose_jwe_alg_c20p_kw.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_c20p_kw.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_dir_beam",
-    srcs = ["src/jwe/jose_jwe_alg_dir.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_dir.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_ecdh_1pu_beam",
-    srcs = ["src/jwe/jose_jwe_alg_ecdh_1pu.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_ecdh_1pu.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_ecdh_es_beam",
-    srcs = ["src/jwe/jose_jwe_alg_ecdh_es.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_ecdh_es.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_pbes2_beam",
-    srcs = ["src/jwe/jose_jwe_alg_pbes2.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_pbes2.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_rsa_beam",
-    srcs = ["src/jwe/jose_jwe_alg_rsa.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_rsa.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_alg_xc20p_kw_beam",
-    srcs = ["src/jwe/jose_jwe_alg_xc20p_kw.erl"],
-    outs = ["ebin/jwe/jose_jwe_alg_xc20p_kw.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_enc_beam",
-    srcs = ["src/jwe/jose_jwe_enc.erl"],
-    outs = ["ebin/jwe/jose_jwe_enc.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_enc_aes_beam",
-    srcs = ["src/jwe/jose_jwe_enc_aes.erl"],
-    outs = ["ebin/jwe/jose_jwe_enc_aes.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_enc.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_enc_c20p_beam",
-    srcs = ["src/jwe/jose_jwe_enc_c20p.erl"],
-    outs = ["ebin/jwe/jose_jwe_enc_c20p.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_enc.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_enc_xc20p_beam",
-    srcs = ["src/jwe/jose_jwe_enc_xc20p.erl"],
-    outs = ["ebin/jwe/jose_jwe_enc_xc20p.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_enc.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwe_jose_jwe_zip_beam",
-    srcs = ["src/jwe/jose_jwe_zip.erl"],
-    outs = ["ebin/jwe/jose_jwe_zip.beam"],
-    app_name = "jose",
-    beam = ["ebin/jwe/jose_jwe.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_beam",
-    srcs = ["src/jwk/jose_jwk.erl"],
-    outs = ["ebin/jwk/jose_jwk.beam"],
-    hdrs = [
-        "include/jose_jwe.hrl",
-        "include/jose_jwk.hrl",
-        "include/jose_jws.hrl",
-    ],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_der_beam",
-    srcs = ["src/jwk/jose_jwk_der.erl"],
-    outs = ["ebin/jwk/jose_jwk_der.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_beam",
-    srcs = ["src/jwk/jose_jwk_kty.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_ec_beam",
-    srcs = ["src/jwk/jose_jwk_kty_ec.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_ec.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_oct_beam",
-    srcs = ["src/jwk/jose_jwk_kty_oct.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_oct.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_oct.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_ed25519_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_ed25519.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_ed25519.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_ed25519ph_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_ed25519ph.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_ed25519ph.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_ed448_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_ed448.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_ed448.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_ed448ph_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_ed448ph.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_ed448ph.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_x25519_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_x25519.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_x25519.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_okp_x448_beam",
-    srcs = ["src/jwk/jose_jwk_kty_okp_x448.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_okp_x448.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_kty_rsa_beam",
-    srcs = ["src/jwk/jose_jwk_kty_rsa.erl"],
-    outs = ["ebin/jwk/jose_jwk_kty_rsa.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_oct_beam",
-    srcs = ["src/jwk/jose_jwk_oct.erl"],
-    outs = ["ebin/jwk/jose_jwk_oct.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_openssh_key_beam",
-    srcs = ["src/jwk/jose_jwk_openssh_key.erl"],
-    outs = ["ebin/jwk/jose_jwk_openssh_key.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_pem_beam",
-    srcs = ["src/jwk/jose_jwk_pem.erl"],
-    outs = ["ebin/jwk/jose_jwk_pem.beam"],
-    hdrs = ["include/jose_public_key.hrl"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_set_beam",
-    srcs = ["src/jwk/jose_jwk_set.erl"],
-    outs = ["ebin/jwk/jose_jwk_set.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_use_enc_beam",
-    srcs = ["src/jwk/jose_jwk_use_enc.erl"],
-    outs = ["ebin/jwk/jose_jwk_use_enc.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwk_jose_jwk_use_sig_beam",
-    srcs = ["src/jwk/jose_jwk_use_sig.erl"],
-    outs = ["ebin/jwk/jose_jwk_use_sig.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_beam",
-    srcs = ["src/jws/jose_jws.erl"],
-    outs = ["ebin/jws/jose_jws.beam"],
-    hdrs = [
-        "include/jose_jwk.hrl",
-        "include/jose_jws.hrl",
-    ],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_beam",
-    srcs = ["src/jws/jose_jws_alg.erl"],
-    outs = ["ebin/jws/jose_jws_alg.beam"],
-    app_name = "jose",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_ecdsa_beam",
-    srcs = ["src/jws/jose_jws_alg_ecdsa.erl"],
-    outs = ["ebin/jws/jose_jws_alg_ecdsa.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_eddsa_beam",
-    srcs = ["src/jws/jose_jws_alg_eddsa.erl"],
-    outs = ["ebin/jws/jose_jws_alg_eddsa.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_hmac_beam",
-    srcs = ["src/jws/jose_jws_alg_hmac.erl"],
-    outs = ["ebin/jws/jose_jws_alg_hmac.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_none_beam",
-    srcs = ["src/jws/jose_jws_alg_none.erl"],
-    outs = ["ebin/jws/jose_jws_alg_none.beam"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_poly1305_beam",
-    srcs = ["src/jws/jose_jws_alg_poly1305.erl"],
-    outs = ["ebin/jws/jose_jws_alg_poly1305.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_rsa_pkcs1_v1_5_beam",
-    srcs = ["src/jws/jose_jws_alg_rsa_pkcs1_v1_5.erl"],
-    outs = ["ebin/jws/jose_jws_alg_rsa_pkcs1_v1_5.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jws_jose_jws_alg_rsa_pss_beam",
-    srcs = ["src/jws/jose_jws_alg_rsa_pss.erl"],
-    outs = ["ebin/jws/jose_jws_alg_rsa_pss.beam"],
-    hdrs = ["include/jose_jwk.hrl"],
-    app_name = "jose",
-    beam = [
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-    ],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jwt_jose_jwt_beam",
-    srcs = ["src/jwt/jose_jwt.erl"],
-    outs = ["ebin/jwt/jose_jwt.beam"],
-    hdrs = [
+        "include/jose.hrl",
+        "include/jose_base.hrl",
+        "include/jose_compat.hrl",
         "include/jose_jwe.hrl",
         "include/jose_jwk.hrl",
         "include/jose_jws.hrl",
         "include/jose_jwt.hrl",
+        "include/jose_public_key.hrl",
     ],
     app_name = "jose",
+    beam = [":parse_transforms"],
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/base/jose_base64.erl",
+        "src/base/jose_base64url.erl",
+        "src/jose.erl",
+        "src/jose_app.erl",
+        "src/jose_chacha20_poly1305_crypto.erl",
+        "src/jose_chacha20_poly1305_libsodium.erl",
+        "src/jose_chacha20_poly1305_unsupported.erl",
+        "src/jose_crypto_compat.erl",
+        "src/jose_curve25519_libdecaf.erl",
+        "src/jose_curve25519_libsodium.erl",
+        "src/jose_curve25519_unsupported.erl",
+        "src/jose_curve448_libdecaf.erl",
+        "src/jose_curve448_unsupported.erl",
+        "src/jose_public_key.erl",
+        "src/jose_server.erl",
+        "src/jose_sha3_keccakf1600_driver.erl",
+        "src/jose_sha3_keccakf1600_nif.erl",
+        "src/jose_sha3_libdecaf.erl",
+        "src/jose_sha3_unsupported.erl",
+        "src/jose_sup.erl",
+        "src/jose_xchacha20_poly1305_crypto.erl",
+        "src/jose_xchacha20_poly1305_unsupported.erl",
+        "src/json/jose_json_jason.erl",
+        "src/json/jose_json_jiffy.erl",
+        "src/json/jose_json_jsone.erl",
+        "src/json/jose_json_jsx.erl",
+        "src/json/jose_json_ojson.erl",
+        "src/json/jose_json_poison.erl",
+        "src/json/jose_json_poison_compat_encoder.erl",
+        "src/json/jose_json_poison_lexical_encoder.erl",
+        "src/json/jose_json_thoas.erl",
+        "src/json/jose_json_unsupported.erl",
+        "src/jwa/jose_jwa.erl",
+        "src/jwa/jose_jwa_aes.erl",
+        "src/jwa/jose_jwa_aes_kw.erl",
+        "src/jwa/jose_jwa_base64url.erl",
+        "src/jwa/jose_jwa_bench.erl",
+        "src/jwa/jose_jwa_chacha20.erl",
+        "src/jwa/jose_jwa_chacha20_poly1305.erl",
+        "src/jwa/jose_jwa_concat_kdf.erl",
+        "src/jwa/jose_jwa_curve25519.erl",
+        "src/jwa/jose_jwa_curve448.erl",
+        "src/jwa/jose_jwa_ed25519.erl",
+        "src/jwa/jose_jwa_ed448.erl",
+        "src/jwa/jose_jwa_hchacha20.erl",
+        "src/jwa/jose_jwa_math.erl",
+        "src/jwa/jose_jwa_pkcs1.erl",
+        "src/jwa/jose_jwa_pkcs5.erl",
+        "src/jwa/jose_jwa_pkcs7.erl",
+        "src/jwa/jose_jwa_poly1305.erl",
+        "src/jwa/jose_jwa_sha3.erl",
+        "src/jwa/jose_jwa_unsupported.erl",
+        "src/jwa/jose_jwa_x25519.erl",
+        "src/jwa/jose_jwa_x448.erl",
+        "src/jwa/jose_jwa_xchacha20.erl",
+        "src/jwa/jose_jwa_xchacha20_poly1305.erl",
+        "src/jwe/jose_jwe_alg_aes_kw.erl",
+        "src/jwe/jose_jwe_alg_c20p_kw.erl",
+        "src/jwe/jose_jwe_alg_dir.erl",
+        "src/jwe/jose_jwe_alg_ecdh_1pu.erl",
+        "src/jwe/jose_jwe_alg_ecdh_es.erl",
+        "src/jwe/jose_jwe_alg_pbes2.erl",
+        "src/jwe/jose_jwe_alg_rsa.erl",
+        "src/jwe/jose_jwe_alg_xc20p_kw.erl",
+        "src/jwe/jose_jwe_enc_aes.erl",
+        "src/jwe/jose_jwe_enc_c20p.erl",
+        "src/jwe/jose_jwe_enc_xc20p.erl",
+        "src/jwe/jose_jwe_zip.erl",
+        "src/jwk/jose_jwk_der.erl",
+        "src/jwk/jose_jwk_kty_ec.erl",
+        "src/jwk/jose_jwk_kty_oct.erl",
+        "src/jwk/jose_jwk_kty_okp_ed25519.erl",
+        "src/jwk/jose_jwk_kty_okp_ed25519ph.erl",
+        "src/jwk/jose_jwk_kty_okp_ed448.erl",
+        "src/jwk/jose_jwk_kty_okp_ed448ph.erl",
+        "src/jwk/jose_jwk_kty_okp_x25519.erl",
+        "src/jwk/jose_jwk_kty_okp_x448.erl",
+        "src/jwk/jose_jwk_kty_rsa.erl",
+        "src/jwk/jose_jwk_openssh_key.erl",
+        "src/jwk/jose_jwk_pem.erl",
+        "src/jwk/jose_jwk_set.erl",
+        "src/jws/jose_jws_alg_ecdsa.erl",
+        "src/jws/jose_jws_alg_eddsa.erl",
+        "src/jws/jose_jws_alg_hmac.erl",
+        "src/jws/jose_jws_alg_none.erl",
+        "src/jws/jose_jws_alg_poly1305.erl",
+        "src/jws/jose_jws_alg_rsa_pkcs1_v1_5.erl",
+        "src/jws/jose_jws_alg_rsa_pss.erl",
+        "src/jwt/jose_jwt.erl",
+    ],
+    outs = [
+        "ebin/jose.beam",
+        "ebin/jose_app.beam",
+        "ebin/jose_base64.beam",
+        "ebin/jose_base64url.beam",
+        "ebin/jose_chacha20_poly1305_crypto.beam",
+        "ebin/jose_chacha20_poly1305_libsodium.beam",
+        "ebin/jose_chacha20_poly1305_unsupported.beam",
+        "ebin/jose_crypto_compat.beam",
+        "ebin/jose_curve25519_libdecaf.beam",
+        "ebin/jose_curve25519_libsodium.beam",
+        "ebin/jose_curve25519_unsupported.beam",
+        "ebin/jose_curve448_libdecaf.beam",
+        "ebin/jose_curve448_unsupported.beam",
+        "ebin/jose_json_jason.beam",
+        "ebin/jose_json_jiffy.beam",
+        "ebin/jose_json_jsone.beam",
+        "ebin/jose_json_jsx.beam",
+        "ebin/jose_json_ojson.beam",
+        "ebin/jose_json_poison.beam",
+        "ebin/jose_json_poison_compat_encoder.beam",
+        "ebin/jose_json_poison_lexical_encoder.beam",
+        "ebin/jose_json_thoas.beam",
+        "ebin/jose_json_unsupported.beam",
+        "ebin/jose_jwa.beam",
+        "ebin/jose_jwa_aes.beam",
+        "ebin/jose_jwa_aes_kw.beam",
+        "ebin/jose_jwa_base64url.beam",
+        "ebin/jose_jwa_bench.beam",
+        "ebin/jose_jwa_chacha20.beam",
+        "ebin/jose_jwa_chacha20_poly1305.beam",
+        "ebin/jose_jwa_concat_kdf.beam",
+        "ebin/jose_jwa_curve25519.beam",
+        "ebin/jose_jwa_curve448.beam",
+        "ebin/jose_jwa_ed25519.beam",
+        "ebin/jose_jwa_ed448.beam",
+        "ebin/jose_jwa_hchacha20.beam",
+        "ebin/jose_jwa_math.beam",
+        "ebin/jose_jwa_pkcs1.beam",
+        "ebin/jose_jwa_pkcs5.beam",
+        "ebin/jose_jwa_pkcs7.beam",
+        "ebin/jose_jwa_poly1305.beam",
+        "ebin/jose_jwa_sha3.beam",
+        "ebin/jose_jwa_unsupported.beam",
+        "ebin/jose_jwa_x25519.beam",
+        "ebin/jose_jwa_x448.beam",
+        "ebin/jose_jwa_xchacha20.beam",
+        "ebin/jose_jwa_xchacha20_poly1305.beam",
+        "ebin/jose_jwe_alg_aes_kw.beam",
+        "ebin/jose_jwe_alg_c20p_kw.beam",
+        "ebin/jose_jwe_alg_dir.beam",
+        "ebin/jose_jwe_alg_ecdh_1pu.beam",
+        "ebin/jose_jwe_alg_ecdh_es.beam",
+        "ebin/jose_jwe_alg_pbes2.beam",
+        "ebin/jose_jwe_alg_rsa.beam",
+        "ebin/jose_jwe_alg_xc20p_kw.beam",
+        "ebin/jose_jwe_enc_aes.beam",
+        "ebin/jose_jwe_enc_c20p.beam",
+        "ebin/jose_jwe_enc_xc20p.beam",
+        "ebin/jose_jwe_zip.beam",
+        "ebin/jose_jwk_der.beam",
+        "ebin/jose_jwk_kty_ec.beam",
+        "ebin/jose_jwk_kty_oct.beam",
+        "ebin/jose_jwk_kty_okp_ed25519.beam",
+        "ebin/jose_jwk_kty_okp_ed25519ph.beam",
+        "ebin/jose_jwk_kty_okp_ed448.beam",
+        "ebin/jose_jwk_kty_okp_ed448ph.beam",
+        "ebin/jose_jwk_kty_okp_x25519.beam",
+        "ebin/jose_jwk_kty_okp_x448.beam",
+        "ebin/jose_jwk_kty_rsa.beam",
+        "ebin/jose_jwk_openssh_key.beam",
+        "ebin/jose_jwk_pem.beam",
+        "ebin/jose_jwk_set.beam",
+        "ebin/jose_jws_alg_ecdsa.beam",
+        "ebin/jose_jws_alg_eddsa.beam",
+        "ebin/jose_jws_alg_hmac.beam",
+        "ebin/jose_jws_alg_none.beam",
+        "ebin/jose_jws_alg_poly1305.beam",
+        "ebin/jose_jws_alg_rsa_pkcs1_v1_5.beam",
+        "ebin/jose_jws_alg_rsa_pss.beam",
+        "ebin/jose_jwt.beam",
+        "ebin/jose_public_key.beam",
+        "ebin/jose_server.beam",
+        "ebin/jose_sha3_keccakf1600_driver.beam",
+        "ebin/jose_sha3_keccakf1600_nif.beam",
+        "ebin/jose_sha3_libdecaf.beam",
+        "ebin/jose_sha3_unsupported.beam",
+        "ebin/jose_sup.beam",
+        "ebin/jose_xchacha20_poly1305_crypto.beam",
+        "ebin/jose_xchacha20_poly1305_unsupported.beam",
+    ],
+    hdrs = [
+        "include/jose.hrl",
+        "include/jose_base.hrl",
+        "include/jose_compat.hrl",
+        "include/jose_jwe.hrl",
+        "include/jose_jwk.hrl",
+        "include/jose_jws.hrl",
+        "include/jose_jwt.hrl",
+        "include/jose_public_key.hrl",
+    ],
+    app_name = "jose",
+    beam = [
+        ":parse_transforms",
+        ":behaviours",
+    ],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
     srcs = [
-        "ebin/base/jose_base.beam",
-        "ebin/base/jose_base64.beam",
-        "ebin/base/jose_base64url.beam",
-        "ebin/jose.beam",
-        "ebin/jose_app.beam",
-        "ebin/jose_block_encryptor.beam",
-        "ebin/jose_chacha20_poly1305.beam",
-        "ebin/jose_chacha20_poly1305_crypto.beam",
-        "ebin/jose_chacha20_poly1305_libsodium.beam",
-        "ebin/jose_chacha20_poly1305_unsupported.beam",
-        "ebin/jose_crypto_compat.beam",
-        "ebin/jose_curve25519.beam",
-        "ebin/jose_curve25519_libdecaf.beam",
-        "ebin/jose_curve25519_libsodium.beam",
-        "ebin/jose_curve25519_unsupported.beam",
-        "ebin/jose_curve448.beam",
-        "ebin/jose_curve448_libdecaf.beam",
-        "ebin/jose_curve448_unsupported.beam",
-        "ebin/jose_public_key.beam",
-        "ebin/jose_server.beam",
-        "ebin/jose_sha3.beam",
-        "ebin/jose_sha3_keccakf1600_driver.beam",
-        "ebin/jose_sha3_keccakf1600_nif.beam",
-        "ebin/jose_sha3_libdecaf.beam",
-        "ebin/jose_sha3_unsupported.beam",
-        "ebin/jose_sup.beam",
-        "ebin/jose_xchacha20_poly1305.beam",
-        "ebin/jose_xchacha20_poly1305_crypto.beam",
-        "ebin/jose_xchacha20_poly1305_unsupported.beam",
-        "ebin/json/jose_json.beam",
-        "ebin/json/jose_json_jason.beam",
-        "ebin/json/jose_json_jiffy.beam",
-        "ebin/json/jose_json_jsone.beam",
-        "ebin/json/jose_json_jsx.beam",
-        "ebin/json/jose_json_ojson.beam",
-        "ebin/json/jose_json_poison.beam",
-        "ebin/json/jose_json_poison_compat_encoder.beam",
-        "ebin/json/jose_json_poison_lexical_encoder.beam",
-        "ebin/json/jose_json_thoas.beam",
-        "ebin/json/jose_json_unsupported.beam",
-        "ebin/jwa/jose_jwa.beam",
-        "ebin/jwa/jose_jwa_aes.beam",
-        "ebin/jwa/jose_jwa_aes_kw.beam",
-        "ebin/jwa/jose_jwa_base64url.beam",
-        "ebin/jwa/jose_jwa_bench.beam",
-        "ebin/jwa/jose_jwa_chacha20.beam",
-        "ebin/jwa/jose_jwa_chacha20_poly1305.beam",
-        "ebin/jwa/jose_jwa_concat_kdf.beam",
-        "ebin/jwa/jose_jwa_curve25519.beam",
-        "ebin/jwa/jose_jwa_curve448.beam",
-        "ebin/jwa/jose_jwa_ed25519.beam",
-        "ebin/jwa/jose_jwa_ed448.beam",
-        "ebin/jwa/jose_jwa_hchacha20.beam",
-        "ebin/jwa/jose_jwa_math.beam",
-        "ebin/jwa/jose_jwa_pkcs1.beam",
-        "ebin/jwa/jose_jwa_pkcs5.beam",
-        "ebin/jwa/jose_jwa_pkcs7.beam",
-        "ebin/jwa/jose_jwa_poly1305.beam",
-        "ebin/jwa/jose_jwa_sha3.beam",
-        "ebin/jwa/jose_jwa_unsupported.beam",
-        "ebin/jwa/jose_jwa_x25519.beam",
-        "ebin/jwa/jose_jwa_x448.beam",
-        "ebin/jwa/jose_jwa_xchacha20.beam",
-        "ebin/jwa/jose_jwa_xchacha20_poly1305.beam",
-        "ebin/jwe/jose_jwe.beam",
-        "ebin/jwe/jose_jwe_alg.beam",
-        "ebin/jwe/jose_jwe_alg_aes_kw.beam",
-        "ebin/jwe/jose_jwe_alg_c20p_kw.beam",
-        "ebin/jwe/jose_jwe_alg_dir.beam",
-        "ebin/jwe/jose_jwe_alg_ecdh_1pu.beam",
-        "ebin/jwe/jose_jwe_alg_ecdh_es.beam",
-        "ebin/jwe/jose_jwe_alg_pbes2.beam",
-        "ebin/jwe/jose_jwe_alg_rsa.beam",
-        "ebin/jwe/jose_jwe_alg_xc20p_kw.beam",
-        "ebin/jwe/jose_jwe_enc.beam",
-        "ebin/jwe/jose_jwe_enc_aes.beam",
-        "ebin/jwe/jose_jwe_enc_c20p.beam",
-        "ebin/jwe/jose_jwe_enc_xc20p.beam",
-        "ebin/jwe/jose_jwe_zip.beam",
-        "ebin/jwk/jose_jwk.beam",
-        "ebin/jwk/jose_jwk_der.beam",
-        "ebin/jwk/jose_jwk_kty.beam",
-        "ebin/jwk/jose_jwk_kty_ec.beam",
-        "ebin/jwk/jose_jwk_kty_oct.beam",
-        "ebin/jwk/jose_jwk_kty_okp_ed25519.beam",
-        "ebin/jwk/jose_jwk_kty_okp_ed25519ph.beam",
-        "ebin/jwk/jose_jwk_kty_okp_ed448.beam",
-        "ebin/jwk/jose_jwk_kty_okp_ed448ph.beam",
-        "ebin/jwk/jose_jwk_kty_okp_x25519.beam",
-        "ebin/jwk/jose_jwk_kty_okp_x448.beam",
-        "ebin/jwk/jose_jwk_kty_rsa.beam",
-        "ebin/jwk/jose_jwk_oct.beam",
-        "ebin/jwk/jose_jwk_openssh_key.beam",
-        "ebin/jwk/jose_jwk_pem.beam",
-        "ebin/jwk/jose_jwk_set.beam",
-        "ebin/jwk/jose_jwk_use_enc.beam",
-        "ebin/jwk/jose_jwk_use_sig.beam",
-        "ebin/jws/jose_jws.beam",
-        "ebin/jws/jose_jws_alg.beam",
-        "ebin/jws/jose_jws_alg_ecdsa.beam",
-        "ebin/jws/jose_jws_alg_eddsa.beam",
-        "ebin/jws/jose_jws_alg_hmac.beam",
-        "ebin/jws/jose_jws_alg_none.beam",
-        "ebin/jws/jose_jws_alg_poly1305.beam",
-        "ebin/jws/jose_jws_alg_rsa_pkcs1_v1_5.beam",
-        "ebin/jws/jose_jws_alg_rsa_pss.beam",
-        "ebin/jwt/jose_jwt.beam",
+        ":behaviours",
+        ":other_beam",
+        ":parse_transforms",
     ],
 )
 

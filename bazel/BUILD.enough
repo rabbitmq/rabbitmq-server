@@ -16,17 +16,18 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_enough_beam",
+    name = "other_beam",
     srcs = ["src/enough.erl"],
     outs = ["ebin/enough.beam"],
     hdrs = ["src/enough.hrl"],
     app_name = "enough",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = ["ebin/enough.beam"],
+    srcs = [":other_beam"],
 )
 
 filegroup(
