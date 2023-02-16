@@ -154,15 +154,14 @@ find_missing_queues(Q1s, Q2s) when length(Q1s) == length(Q2s)->
 find_missing_queues(Q1s, Q2s) ->
     find_missing_queues(lists:sort(Q1s), lists:sort(Q2s), []).
 
-find_missing_queues([], Q2s, Acc) ->
-    %% Q2s should always be empty here
-    Acc ++ Q2s;
+find_missing_queues([], [], Acc) ->
+    Acc;
 find_missing_queues([Q1|Rem1], [Q2|Rem2] = Q2s, Acc) ->
     case amqqueue:get_name(Q1) == amqqueue:get_name(Q2) of
         true ->
             find_missing_queues(Rem1, Rem2, Acc);
         false ->
-            find_missing_queues(Rem1, Q2s, Acc ++ Q1)
+            find_missing_queues(Rem1, Q2s, [Q1|Acc])
     end.
 
 -spec policy_changed(amqqueue:amqqueue()) -> ok.
