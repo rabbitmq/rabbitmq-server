@@ -116,3 +116,23 @@ make RABBITMQ_CONFIG_FILE=rabbitmq-localhost-keycloak.config start-rabbitmq
 
 We do not have this issue when we run the headless suites because they use dedicated files
 for each suite. Doing the same when running locally, i.e using `localhost`, would be too tedious.
+
+## Chrome vs Chrome driver version mismatch
+
+If you find the following error when you first attempt to run one of the selenium tests
+```
+SessionNotCreatedError: session not created: This version of ChromeDriver only supports Chrome version 108
+Current browser version is 110.0.5481.100 with binary path /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+```
+It is because your current Chrome version is newer than the `chromedriver` configured in package.json.
+```
+  ....
+  "dependencies": {
+    "chromedriver": "^110.0.0",
+  ...
+```
+To fix the problem, bump the version in your package.json to match your local chrome version and run again the
+following command:
+```
+  npm install
+```
