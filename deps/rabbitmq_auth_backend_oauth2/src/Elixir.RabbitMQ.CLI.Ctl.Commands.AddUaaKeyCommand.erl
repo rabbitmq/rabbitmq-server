@@ -71,7 +71,7 @@ validate_json(Json) ->
                     {validation_failure, {bad_argument, Err}}
             end;
         {error, _}   ->
-            {validation_failure, {bad_argument, <<"Invalid JSON">>}}
+              {validation_failure, {bad_argument, <<"Invalid JSON">>}}
     end.
 
 validate_pem(Pem) ->
@@ -132,10 +132,3 @@ output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Erlang'.
-
-
-
-
-
-
-

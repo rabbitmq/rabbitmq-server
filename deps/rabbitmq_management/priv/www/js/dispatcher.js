@@ -287,21 +287,13 @@ dispatcher_add(function(sammy) {
 
     sammy.put('#/logout', function() {
         // clear a local storage value used by earlier versions
-        clear_pref('auth');
-        clear_cookie_value('auth');
-        if (uaa_logged_in) {
-            clear_pref('uaa_token');
-            var redirect;
-            if (window.location.hash != "") {
-                redirect = window.location.href.split(window.location.hash)[0];
-            } else {
-                redirect = window.location.href
-            };
-            uaa_logged_in = false;
-            var logoutRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
-            get(logoutRedirectUrl, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", function(req) { });
+        clear_auth()
+        if (oauth.logged_in) {
+            oauth.logged_in = false
+            oauth_initiateLogout()
+        }else {
+          go_to_home()
         }
-        location.reload();
     });
 
     sammy.put('#/rate-options', function() {

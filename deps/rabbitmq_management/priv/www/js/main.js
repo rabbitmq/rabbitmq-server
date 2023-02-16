@@ -1,19 +1,44 @@
 $(document).ready(function() {
-    if (enable_uaa) {
-        get(uaa_location + "/info", "application/json", function(req) {
-            if (req.status !== 200) {
-                replace_content('outer', format('login_uaa', {}));
-                replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="uaa_login_window()">Single Sign On</button>');
-            } else {
-                replace_content('outer', format('login_uaa', {}));
-            }
-        });
-    } else {
-        replace_content('outer', format('login', {}));
-        start_app_login();
+   var url_string = window.location.href;
+   var url = new URL(url_string);
+   var error = url.searchParams.get('error');
+   if (error) {
+     renderWarningMessageInLoginStatus(fmt_escape_html(error));
+   } else {
+      if (oauth.enabled) {
+        startWithOAuthLogin();
+      } else {
+        startWithLoginPage();
+      }
     }
 });
-
+function startWithLoginPage() {
+  replace_content('outer', format('login', {}));
+  start_app_login();
+}
+function startWithOAuthLogin () {
+  if (!oauth.logged_in) {
+    if (oauth.sp_initiated) {
+      get(oauth.readiness_url, 'application/json', function (req) {
+        if (req.status !== 200) {
+          renderWarningMessageInLoginStatus(oauth.authority + ' does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate')
+        } else {
+          replace_content('outer', format('login_oauth', {}))
+          start_app_login()
+        }
+      })
+    } else {
+      replace_content('outer', format('login_oauth', {}))
+      start_app_login()
+    }
+  } else {
+    start_app_login()
+  }
+}
+function renderWarningMessageInLoginStatus (message) {
+  replace_content('outer', format('login_oauth', {}))
+  replace_content('login-status', '<p class="warning">' + message + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button>')
+}
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
     if (dispatcher_modules.length == extension_count) {
@@ -27,23 +52,6 @@ function dispatcher() {
     }
 }
 
-function set_auth_pref(userinfo) {
-    // clear a local storage value used by earlier versions
-    clear_local_pref('auth');
-
-    var b64 = b64_encode_utf8(userinfo);
-    var date  = new Date();
-    var login_session_timeout = get_login_session_timeout();
-
-    if (login_session_timeout) {
-        date.setMinutes(date.getMinutes() + login_session_timeout);
-    } else {
-        // 8 hours from now
-        date.setHours(date.getHours() + 8);
-    }
-    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
-}
-
 function getParameterByName(name) {
     var match = RegExp('[#&]' + name + '=([^&]*)').exec(window.location.hash);
     return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
@@ -53,99 +61,58 @@ function getAccessToken() {
     return getParameterByName('access_token');
 }
 
-function start_app_login() {
-    app = new Sammy.Application(function () {
-        this.get('#/', function() {});
-        this.put('#/login', function() {
-            username = this.params['username'];
-            password = this.params['password'];
-            set_auth_pref(username + ':' + password);
-            check_login();
-        });
-    });
-    if (enable_uaa) {
-        var token = getAccessToken();
-        if (token != null) {
-            set_auth_pref(uaa_client_id + ':' + token);
-            store_pref('uaa_token', token);
-            check_login();
-        } else if(has_auth_cookie_value()) {
-            check_login();
-        };
-    } else {
-        app.run();
-        if (get_cookie_value('auth') != null) {
-            check_login();
-        }
+function start_app_login () {
+  app = new Sammy.Application(function () {
+    this.get('/', function () {})
+    this.get('#/', function () {})
+    if (!oauth.enabled) {
+      this.put('#/login', function() {
+        set_basic_auth(this.params['username'], this.params['password'])
+        check_login()
+      });
     }
-}
-
-
-function uaa_logout_window() {
-    uaa_invalid = true;
-    uaa_login_window();
-}
-
-function uaa_login_window() {
-    var redirect;
-    if (window.location.hash != "") {
-        redirect = window.location.href.split(window.location.hash)[0];
+  })
+  // TODO REFACTOR: this code can be simplified
+  if (oauth.enabled) {
+    if (has_auth_credentials()) {
+      check_login();
     } else {
-        redirect = window.location.href
-    };
-    var loginRedirectUrl;
-    if (uaa_invalid) {
-        loginRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
+      app.run();
+    }
+  } else
+    if (!has_auth_credentials() || !check_login()) {
+      app.run();
+    }
+
+}
+
+function check_login () {
+  user = JSON.parse(sync_get('/whoami'));
+  if (user == false || user.error) {
+    clear_auth();
+    if (oauth.enabled) {
+      hide_popup_warn();
+      renderWarningMessageInLoginStatus('Not authorized');
     } else {
-        loginRedirectUrl = Singular.properties.uaaLocation + '/oauth/authorize?response_type=token&client_id=' + Singular.properties.clientId + '&redirect_uri=' + redirect;
-    };
-    window.open(loginRedirectUrl, "LOGIN_WINDOW");
-}
-
-function check_login() {
-    user = JSON.parse(sync_get('/whoami'));
-    if (user == false) {
-        // clear a local storage value used by earlier versions
-        clear_pref('auth');
-        clear_pref('uaa_token');
-        clear_cookie_value('auth');
-        if (enable_uaa) {
-            uaa_invalid = true;
-            replace_content('login-status', '<button id="loginWindow" onclick="uaa_login_window()">Log out</button>');
-        } else {
-            replace_content('login-status', '<p>Login failed</p>');
-        }
+      replace_content('login-status', '<p>Login failed</p>');
     }
-    else {
-        hide_popup_warn();
-        replace_content('outer', format('layout', {}));
-        var user_login_session_timeout = parseInt(user.login_session_timeout);
-        // Update auth login_session_timeout if changed
-        if (has_auth_cookie_value() && !isNaN(user_login_session_timeout) &&
-            user_login_session_timeout !== get_login_session_timeout()) {
+    return false;
+  }
 
-            update_login_session_timeout(user_login_session_timeout);
-        }
-        setup_global_vars();
-        setup_constant_events();
-        update_vhosts();
-        update_interval();
-        setup_extensions();
-    }
+  hide_popup_warn()
+  replace_content('outer', format('layout', {}))
+  var user_login_session_timeout = parseInt(user.login_session_timeout)
+  if (!isNaN(user_login_session_timeout)) {
+    update_login_session_timeout(user_login_session_timeout)
+  }
+  setup_global_vars()
+  setup_constant_events()
+  update_vhosts()
+  update_interval()
+  setup_extensions()
+  return true
 }
 
-function get_login_session_timeout() {
-    parseInt(get_cookie_value('login_session_timeout'));
-}
-
-function update_login_session_timeout(login_session_timeout) {
-    var auth_info = get_cookie_value('auth');
-    var date  = new Date();
-    // `login_session_timeout` minutes from now
-    date.setMinutes(date.getMinutes() + login_session_timeout);
-    store_cookie_value('login_session_timeout', login_session_timeout);
-    store_cookie_value_with_expiration('auth', auth_info, date);
-}
 
 function start_app() {
     if (app !== undefined) {
@@ -170,8 +137,7 @@ function start_app() {
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
 
-    app = new Sammy.Application(dispatcher);
-    app.run();
+
 
     var url = this.location.toString();
     var hash = this.location.hash;
@@ -183,8 +149,11 @@ function start_app() {
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, "#/");
+        this.location = url.replace(/#token_type.+/gi, '#/');
     }
+
+    app = new Sammy.Application(dispatcher);
+    app.run();
 }
 
 function setup_constant_events() {
@@ -602,11 +571,7 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            if (enable_uaa) {
-                var form_action = "/definitions" + vhost_part + '?token=' + get_pref('uaa_token');
-            } else {
-                var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
-            };
+            var form_action = "/definitions" + vhost_part;
             var fd = new FormData();
             fd.append('file', file);
             with_req('POST', form_action, fd, function(resp) {
@@ -644,21 +609,41 @@ function postprocess() {
         });
 
     $('#download-definitions').on('click', function() {
-            var idx = $("select[name='vhost-download'] option:selected").index();
-            var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
-        if (enable_uaa) {
-            var path = 'api/definitions' + vhost + '?download=' +
-                esc($('#download-filename').val()) +
-                '&token=' + get_pref('uaa_token');
-            } else {
-                var path = 'api/definitions' + vhost + '?download=' +
-                    esc($('#download-filename').val()) +
-                    '&auth=' + get_cookie_value('auth');
-            };
-            window.location = path;
-            setTimeout('app.run()');
-            return false;
+      var idx = $("select[name='vhost-download'] option:selected").index()
+      var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()))
+      var download_filename = esc($('#download-filename').val())
+      var path = '/definitions' + vhost
+      with_req('GET', path, null, function(resp) {
+          if (resp.status >= 200 && resp.status <= 299) {
+              var type = resp.getResponseHeader('Content-Type')
+              var blob = new Blob([resp.response], { type: type })
+              if (typeof window.navigator.msSaveBlob !== 'undefined') {
+                  window.navigator.msSaveBlob(blob, download_filename)
+              } else {
+                  var URL = window.URL || window.webkitURL
+                  var downloadUrl = URL.createObjectURL(blob)
+                  var a = document.createElement("a")
+                  if (typeof a.download === 'undefined') {
+                      window.location = downloadUrl
+                  } else {
+                      a.href = downloadUrl
+                      a.download = download_filename
+                      document.body.appendChild(a)
+                      a.click()
+                  }
+                  var cleanup = function () {
+                      URL.revokeObjectURL(downloadUrl)
+                      document.body.removeChild(a)
+                  };
+                  setTimeout(cleanup, 1000)
+              }
+          } else {
+              // Unsuccessful status
+              show_popup('warn', 'Error downloading definitions')
+          }
+
         });
+    });
 
     $('.update-manual').on('click', function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
@@ -1195,24 +1180,10 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function has_auth_cookie_value() {
-    return get_cookie_value('auth') != null;
-}
 
-function auth_header() {
-    if(has_auth_cookie_value() && enable_uaa) {
-        return "Bearer " + decodeURIComponent(get_pref('uaa_token'));
-    } else {
-        if(has_auth_cookie_value()) {
-            return "Basic " + decodeURIComponent(get_cookie_value('auth'));
-        } else {
-            return null;
-        }
-    }
-}
 
 function with_req(method, path, body, fun) {
-    if(!has_auth_cookie_value()) {
+    if (!has_auth_credentials()) {
         // navigate to the login form
         location.reload();
         return;
@@ -1221,7 +1192,7 @@ function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
-    var header = auth_header();
+    var header = authorization_header();
     if (header !== null) {
         req.setRequestHeader('authorization', header);
     }
@@ -1284,7 +1255,7 @@ function sync_req(type, params0, path_template, options) {
     var req = xmlHttpRequest();
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.setRequestHeader('authorization', auth_header());
+    req.setRequestHeader('authorization', authorization_header());
 
     if (options != undefined || options != null) {
         if (options.headers != undefined || options.headers != null) {
@@ -1320,7 +1291,11 @@ function sync_req(type, params0, path_template, options) {
         return false;
     }
 }
-
+function initiate_logout(error = "") {
+    clear_pref('auth');
+    clear_cookie_value('auth');
+    renderWarningMessageInLoginStatus(error);
+}
 function check_bad_response(req, full_page_404) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
@@ -1338,8 +1313,12 @@ function check_bad_response(req, full_page_404) {
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
-        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised') {
+        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
+          if ((req.status == 401 || req.status == 403) && oauth.enabled) {
+            initiate_logout(reason);
+          } else {
             show_popup('warn', fmt_escape_html(reason));
+          }
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
             if (last_page_out_of_range_error > 0)
@@ -1589,18 +1568,6 @@ function xmlHttpRequest() {
     return res;
 }
 
-// Our base64 library takes a string that is really a byte sequence,
-// and will throw if given a string with chars > 255 (and hence not
-// DTRT for chars > 127). So encode a unicode string as a UTF-8
-// sequence of "bytes".
-function b64_encode_utf8(str) {
-    return base64.encode(encode_utf8(str));
-}
-
-// encodeURIComponent handles utf-8, unescape does not. Neat!
-function encode_utf8(str) {
-  return unescape(encodeURIComponent(str));
-}
 
 (function($){
     $.fn.extend({

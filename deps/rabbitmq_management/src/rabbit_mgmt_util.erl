@@ -12,14 +12,14 @@
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
          is_authorized_admin/3, vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
-         is_authorized_user/4,
+         is_authorized_user/4, is_authorized_user/5,
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
          is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
 
 -export([bad_request/3, bad_request_exception/4, internal_server_error/4,
-         id/2, parse_bool/1, parse_int/1]).
+         id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
 -export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
@@ -83,7 +83,7 @@ is_authorized_admin(ReqData, Context) ->
 is_authorized_admin(ReqData, Context, Token) ->
     is_authorized(ReqData, Context,
                   rabbit_data_coercion:to_binary(
-                    application:get_env(rabbitmq_management, uaa_client_id, "")),
+                    application:get_env(rabbitmq_management, oauth_client_id, "")),
                   Token, <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
@@ -209,6 +209,9 @@ is_authorized_global_parameters(ReqData, Context) ->
 is_basic_auth_disabled() ->
     get_bool_env(rabbitmq_management, disable_basic_auth, false).
 
+is_oauth2_enabled() ->
+    get_bool_env(rabbitmq_management, oauth_enabled, false).
+
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
         <<"OPTIONS">> -> {true, ReqData, Context};
@@ -230,7 +233,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             end;
         {bearer, Token} ->
             Username = rabbit_data_coercion:to_binary(
-                         application:get_env(rabbitmq_management, uaa_client_id, "")),
+                         application:get_env(rabbitmq_management, oauth_client_id, "")),
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
             case is_basic_auth_disabled() of
@@ -248,12 +251,23 @@ is_authorized_user(ReqData, Context, Username, Password) ->
     Fun = fun(_) -> true end,
     is_authorized(ReqData, Context, Username, Password, Msg, Fun).
 
+is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
+    Msg = <<"User not authorized">>,
+    Fun = fun(_) -> true end,
+    is_authorized(ReqData, Context, Username, Password, Msg, Fun, ReplyWhenFailed).
+
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
-    ErrFun = fun (Msg) ->
-                     rabbit_log:warning("HTTP access denied: user '~s' - ~s",
-                                        [Username, Msg]),
-                     not_authorised(Msg, ReqData, Context)
-             end,
+    is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, true).
+
+is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, ReplyWhenFailed) ->
+    ErrFun = fun (ResolvedUserName, Msg) ->
+                 rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
+                                    [ResolvedUserName, Msg]),
+                 case ReplyWhenFailed of
+                   true -> not_authorised(Msg, ReqData, Context);
+                   false -> {false, ReqData, "Not_Authorized"}
+                 end
+         end,
     AuthProps = [{password, Password}] ++ case vhost(ReqData) of
         VHost when is_binary(VHost) -> [{vhost, VHost}];
         _                           -> []
@@ -261,36 +275,39 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     {IP, _} = cowboy_req:peer(ReqData),
     RemoteAddress = list_to_binary(inet:ntoa(IP)),
     case rabbit_access_control:check_user_login(Username, AuthProps) of
-        {ok, User = #user{tags = Tags}} ->
-            case rabbit_access_control:check_user_loopback(Username, IP) of
+        {ok, User = #user{username = ResolvedUsername, tags = Tags}} ->
+            case rabbit_access_control:check_user_loopback(ResolvedUsername, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
                         true ->
                             case Fun(User) of
                                 true  ->
                                     rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
-                                                                               Username, http),
+                                                                               ResolvedUsername, http),
                                     {true, ReqData,
                                      Context#context{user     = User,
                                                      password = Password}};
                                 false ->
                                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
-                                                                            Username, http),
-                                    ErrFun(ErrorMsg)
+                                                                            ResolvedUsername, http),
+                                    ErrFun(ResolvedUsername, ErrorMsg)
                             end;
                         false ->
-                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-                            ErrFun(<<"Not management user">>)
+                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                            ErrFun(ResolvedUsername, <<"Not management user">>)
                     end;
                 not_allowed ->
-                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-                    ErrFun(<<"User can only log in via localhost">>)
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, ResolvedUsername, http),
+                    ErrFun(ResolvedUsername, <<"User can only log in via localhost">>)
             end;
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
             rabbit_log:warning("HTTP access denied: ~s",
                                [rabbit_misc:format(Msg, Args)]),
-            not_authenticated(<<"Login failed">>, ReqData, Context)
+            case ReplyWhenFailed of
+              true -> not_authenticated(<<"Not_Authorized">>, ReqData, Context);
+              false -> {false, ReqData, "Not_Authorized"}
+            end
     end.
 
 vhost_from_headers(ReqData) ->
@@ -737,8 +754,13 @@ bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
 not_authenticated(Reason, ReqData, Context) ->
-    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
-    halt_response(401, not_authorized, Reason, ReqData1, Context).
+    case is_oauth2_enabled() of
+      false ->
+          ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+          halt_response(401, not_authorized, Reason, ReqData1, Context);
+      true ->
+          halt_response(401, not_authorized, Reason, ReqData, Context)
+    end.
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0
@@ -753,6 +775,14 @@ internal_server_error(Error, Reason, ReqData, Context) ->
 
 invalid_pagination(Type,Reason, ReqData, Context) ->
     halt_response(400, Type, Reason, ReqData, Context).
+
+redirect_to_home(ReqData, Reason, Context) ->
+    Home = cowboy_req:uri(ReqData, #{path => rabbit_mgmt_util:get_path_prefix() ++ "/", qs => Reason}),
+    rabbit_log:info("redirect_to_home ~ts ~ts", [Reason, iolist_to_binary(Home)]),
+    ReqData1 = cowboy_req:reply(302,
+        #{<<"Location">> => iolist_to_binary(Home) },
+        <<>>, ReqData),
+    {stop, ReqData1, Context}.
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
     ReasonFormatted = format_reason(Reason),
@@ -846,6 +876,8 @@ decode(Body) ->
         case rabbit_json:decode(Body) of
             Val when is_map(Val) ->
                 {ok, Val};
+            Val when is_atom(Val) ->
+                {ok, #{}};
             %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839
             Bin when is_binary(Bin) ->
                 {error, "invalid payload: the request body JSON-decoded to a string. "
@@ -1216,7 +1248,7 @@ int(Name, ReqData) ->
 def(undefined, Def) -> Def;
 def(V, _) -> V.
 
--spec qs_val(binary(), cowboy_req:req()) -> any() | undefined.
+-spec qs_val(binary(), cowboy:req()) -> any() | undefined.
 qs_val(Name, ReqData) ->
     Qs = cowboy_req:parse_qs(ReqData),
     proplists:get_value(Name, Qs, undefined).

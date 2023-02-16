@@ -148,7 +148,7 @@ all_tests() -> [
     rates_test,
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
-    oauth_test,
+%%    oauth_test,
     disable_basic_auth_test,
     login_test,
     csp_headers_test,

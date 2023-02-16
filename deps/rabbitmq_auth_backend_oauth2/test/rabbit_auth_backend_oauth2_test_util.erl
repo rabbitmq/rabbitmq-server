@@ -87,6 +87,9 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
 fixture_token() ->
     fixture_token([]).
 
+token_with_sub(TokenFixture, Sub) ->
+    maps:put(<<"sub">>, Sub, TokenFixture).
+
 fixture_token(ExtraScopes) ->
     Scopes = [<<"rabbitmq.configure:vhost/foo">>,
               <<"rabbitmq.write:vhost/foo">>,
@@ -97,6 +100,13 @@ fixture_token(ExtraScopes) ->
 
 fixture_token_with_full_permissions() ->
     fixture_token_with_scopes(full_permission_scopes()).
+
+plain_token_without_scopes_and_aud() ->
+  %% expiration is a timestamp with precision in seconds
+  #{<<"exp">> => default_expiration_moment(),
+    <<"kid">> => <<"token-key">>,
+    <<"iss">> => <<"unit_test">>,
+    <<"foo">> => <<"bar">>}.
 
 token_with_scope_alias_in_scope_field(Value) ->
     %% expiration is a timestamp with precision in seconds

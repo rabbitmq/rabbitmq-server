@@ -50,7 +50,7 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
 
 %% Internal -------------------------------------------------------------------
 
-%% -spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
+-spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
 get_scope_permissions(Scopes) when is_list(Scopes) ->
     lists:filtermap(
         fun(ScopeEl) ->
