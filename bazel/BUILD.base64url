@@ -6,34 +6,36 @@ erlc_opts(
     values = select({
         "@rules_erlang//:debug_build": [
             "+debug_info",
-            "+warn_format",
-            "+warn_export_vars",
-            "+warn_obsolete_guard",
             "+warn_bif_clash",
+            "+warn_export_vars",
+            "+warn_format",
+            "+warn_obsolete_guard",
         ],
         "//conditions:default": [
             "+debug_info",
-            "+warn_format",
-            "+warn_export_vars",
-            "+warn_obsolete_guard",
-            "+warn_bif_clash",
             "+deterministic",
+            "+warn_bif_clash",
+            "+warn_export_vars",
+            "+warn_format",
+            "+warn_obsolete_guard",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_base64url_beam",
+    name = "other_beam",
     srcs = ["src/base64url.erl"],
     outs = ["ebin/base64url.beam"],
+    hdrs = [],
     app_name = "base64url",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = ["ebin/base64url.beam"],
+    srcs = [":other_beam"],
 )
 
 filegroup(

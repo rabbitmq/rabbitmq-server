@@ -16,36 +16,26 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_thoas_beam",
-    srcs = ["src/thoas.erl"],
-    outs = ["ebin/thoas.beam"],
+    name = "other_beam",
+    srcs = [
+        "src/thoas.erl",
+        "src/thoas_decode.erl",
+        "src/thoas_encode.erl",
+    ],
+    outs = [
+        "ebin/thoas.beam",
+        "ebin/thoas_decode.beam",
+        "ebin/thoas_encode.beam",
+    ],
+    hdrs = [],
     app_name = "thoas",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_thoas_decode_beam",
-    srcs = ["src/thoas_decode.erl"],
-    outs = ["ebin/thoas_decode.beam"],
-    app_name = "thoas",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_thoas_encode_beam",
-    srcs = ["src/thoas_encode.erl"],
-    outs = ["ebin/thoas_encode.beam"],
-    app_name = "thoas",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = [
-        "ebin/thoas.beam",
-        "ebin/thoas_decode.beam",
-        "ebin/thoas_encode.beam",
-    ],
+    srcs = [":other_beam"],
 )
 
 filegroup(

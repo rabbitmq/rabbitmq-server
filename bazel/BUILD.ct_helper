@@ -16,36 +16,26 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_ct_helper_beam",
-    srcs = ["src/ct_helper.erl"],
-    outs = ["ebin/ct_helper.beam"],
+    name = "other_beam",
+    srcs = [
+        "src/ct_helper.erl",
+        "src/ct_helper_error_h.erl",
+        "src/erl_make_certs.erl",
+    ],
+    outs = [
+        "ebin/ct_helper.beam",
+        "ebin/ct_helper_error_h.beam",
+        "ebin/erl_make_certs.beam",
+    ],
+    hdrs = [],
     app_name = "ct_helper",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ct_helper_error_h_beam",
-    srcs = ["src/ct_helper_error_h.erl"],
-    outs = ["ebin/ct_helper_error_h.beam"],
-    app_name = "ct_helper",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_erl_make_certs_beam",
-    srcs = ["src/erl_make_certs.erl"],
-    outs = ["ebin/erl_make_certs.beam"],
-    app_name = "ct_helper",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = [
-        "ebin/ct_helper.beam",
-        "ebin/ct_helper_error_h.beam",
-        "ebin/erl_make_certs.beam",
-    ],
+    srcs = [":other_beam"],
 )
 
 filegroup(
