@@ -16,146 +16,35 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_ranch_beam",
-    srcs = ["src/ranch.erl"],
-    outs = ["ebin/ranch.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_acceptor_beam",
-    srcs = ["src/ranch_acceptor.erl"],
-    outs = ["ebin/ranch_acceptor.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_acceptors_sup_beam",
-    srcs = ["src/ranch_acceptors_sup.erl"],
-    outs = ["ebin/ranch_acceptors_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_app_beam",
-    srcs = ["src/ranch_app.erl"],
-    outs = ["ebin/ranch_app.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_conns_sup_beam",
-    srcs = ["src/ranch_conns_sup.erl"],
-    outs = ["ebin/ranch_conns_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_conns_sup_sup_beam",
-    srcs = ["src/ranch_conns_sup_sup.erl"],
-    outs = ["ebin/ranch_conns_sup_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_crc32c_beam",
-    srcs = ["src/ranch_crc32c.erl"],
-    outs = ["ebin/ranch_crc32c.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_embedded_sup_beam",
-    srcs = ["src/ranch_embedded_sup.erl"],
-    outs = ["ebin/ranch_embedded_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_listener_sup_beam",
-    srcs = ["src/ranch_listener_sup.erl"],
-    outs = ["ebin/ranch_listener_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_protocol_beam",
-    srcs = ["src/ranch_protocol.erl"],
-    outs = ["ebin/ranch_protocol.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_proxy_header_beam",
-    srcs = ["src/ranch_proxy_header.erl"],
-    outs = ["ebin/ranch_proxy_header.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_server_beam",
-    srcs = ["src/ranch_server.erl"],
-    outs = ["ebin/ranch_server.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_server_proxy_beam",
-    srcs = ["src/ranch_server_proxy.erl"],
-    outs = ["ebin/ranch_server_proxy.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_ssl_beam",
-    srcs = ["src/ranch_ssl.erl"],
-    outs = ["ebin/ranch_ssl.beam"],
-    app_name = "ranch",
-    beam = ["ebin/ranch_transport.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_sup_beam",
-    srcs = ["src/ranch_sup.erl"],
-    outs = ["ebin/ranch_sup.beam"],
-    app_name = "ranch",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_tcp_beam",
-    srcs = ["src/ranch_tcp.erl"],
-    outs = ["ebin/ranch_tcp.beam"],
-    app_name = "ranch",
-    beam = ["ebin/ranch_transport.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_ranch_transport_beam",
+    name = "behaviours",
     srcs = ["src/ranch_transport.erl"],
     outs = ["ebin/ranch_transport.beam"],
+    hdrs = [],
     app_name = "ranch",
     erlc_opts = "//:erlc_opts",
 )
 
-filegroup(
-    name = "beam_files",
+erlang_bytecode(
+    name = "other_beam",
     srcs = [
+        "src/ranch.erl",
+        "src/ranch_acceptor.erl",
+        "src/ranch_acceptors_sup.erl",
+        "src/ranch_app.erl",
+        "src/ranch_conns_sup.erl",
+        "src/ranch_conns_sup_sup.erl",
+        "src/ranch_crc32c.erl",
+        "src/ranch_embedded_sup.erl",
+        "src/ranch_listener_sup.erl",
+        "src/ranch_protocol.erl",
+        "src/ranch_proxy_header.erl",
+        "src/ranch_server.erl",
+        "src/ranch_server_proxy.erl",
+        "src/ranch_ssl.erl",
+        "src/ranch_sup.erl",
+        "src/ranch_tcp.erl",
+    ],
+    outs = [
         "ebin/ranch.beam",
         "ebin/ranch_acceptor.beam",
         "ebin/ranch_acceptors_sup.beam",
@@ -172,7 +61,18 @@ filegroup(
         "ebin/ranch_ssl.beam",
         "ebin/ranch_sup.beam",
         "ebin/ranch_tcp.beam",
-        "ebin/ranch_transport.beam",
+    ],
+    hdrs = [],
+    app_name = "ranch",
+    beam = [":behaviours"],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
     ],
 )
 
