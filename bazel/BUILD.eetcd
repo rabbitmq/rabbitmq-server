@@ -5,331 +5,97 @@ erlc_opts(
     name = "erlc_opts",
     values = select({
         "@rules_erlang//:debug_build": [
-            "+{i,\"./_build/default/plugins/gpb/include\"}",
+            "+debug_info",
         ],
         "//conditions:default": [
-            "+{i,\"./_build/default/plugins/gpb/include\"}",
+            "+debug_info",
             "+deterministic",
         ],
-    }),
+    }),  # keep
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_clients_eetcd_auth_gen_beam",
-    srcs = ["src/clients/eetcd_auth_gen.erl"],
-    outs = ["ebin/clients/eetcd_auth_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_cluster_gen_beam",
-    srcs = ["src/clients/eetcd_cluster_gen.erl"],
-    outs = ["ebin/clients/eetcd_cluster_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_election_gen_beam",
-    srcs = ["src/clients/eetcd_election_gen.erl"],
-    outs = ["ebin/clients/eetcd_election_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_health_gen_beam",
-    srcs = ["src/clients/eetcd_health_gen.erl"],
-    outs = ["ebin/clients/eetcd_health_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_kv_gen_beam",
-    srcs = ["src/clients/eetcd_kv_gen.erl"],
-    outs = ["ebin/clients/eetcd_kv_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_lease_gen_beam",
-    srcs = ["src/clients/eetcd_lease_gen.erl"],
-    outs = ["ebin/clients/eetcd_lease_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_lock_gen_beam",
-    srcs = ["src/clients/eetcd_lock_gen.erl"],
-    outs = ["ebin/clients/eetcd_lock_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_maintenance_gen_beam",
-    srcs = ["src/clients/eetcd_maintenance_gen.erl"],
-    outs = ["ebin/clients/eetcd_maintenance_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_clients_eetcd_watch_gen_beam",
-    srcs = ["src/clients/eetcd_watch_gen.erl"],
-    outs = ["ebin/clients/eetcd_watch_gen.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_beam",
-    srcs = ["src/eetcd.erl"],
-    outs = ["ebin/eetcd.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_app_beam",
-    srcs = ["src/eetcd_app.erl"],
-    outs = ["ebin/eetcd_app.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_auth_beam",
-    srcs = ["src/eetcd_auth.erl"],
-    outs = ["ebin/eetcd_auth.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_cluster_beam",
-    srcs = ["src/eetcd_cluster.erl"],
-    outs = ["ebin/eetcd_cluster.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_compare_beam",
-    srcs = ["src/eetcd_compare.erl"],
-    outs = ["ebin/eetcd_compare.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_conn_beam",
-    srcs = ["src/eetcd_conn.erl"],
-    outs = ["ebin/eetcd_conn.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_conn_sup_beam",
-    srcs = ["src/eetcd_conn_sup.erl"],
-    outs = ["ebin/eetcd_conn_sup.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_data_coercion_beam",
-    srcs = ["src/eetcd_data_coercion.erl"],
-    outs = ["ebin/eetcd_data_coercion.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_election_beam",
-    srcs = ["src/eetcd_election.erl"],
-    outs = ["ebin/eetcd_election.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_grpc_beam",
-    srcs = ["src/eetcd_grpc.erl"],
-    outs = ["ebin/eetcd_grpc.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_kv_beam",
-    srcs = ["src/eetcd_kv.erl"],
-    outs = ["ebin/eetcd_kv.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_lease_beam",
-    srcs = ["src/eetcd_lease.erl"],
-    outs = ["ebin/eetcd_lease.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_lease_sup_beam",
-    srcs = ["src/eetcd_lease_sup.erl"],
-    outs = ["ebin/eetcd_lease_sup.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_lock_beam",
-    srcs = ["src/eetcd_lock.erl"],
-    outs = ["ebin/eetcd_lock.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_maintenance_beam",
-    srcs = ["src/eetcd_maintenance.erl"],
-    outs = ["ebin/eetcd_maintenance.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_op_beam",
-    srcs = ["src/eetcd_op.erl"],
-    outs = ["ebin/eetcd_op.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_stream_beam",
-    srcs = ["src/eetcd_stream.erl"],
-    outs = ["ebin/eetcd_stream.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_sup_beam",
-    srcs = ["src/eetcd_sup.erl"],
-    outs = ["ebin/eetcd_sup.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_eetcd_watch_beam",
-    srcs = ["src/eetcd_watch.erl"],
-    outs = ["ebin/eetcd_watch.beam"],
-    hdrs = ["include/eetcd.hrl"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_protos_auth_pb_beam",
-    srcs = ["src/protos/auth_pb.erl"],
-    outs = ["ebin/protos/auth_pb.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_protos_gogo_pb_beam",
-    srcs = ["src/protos/gogo_pb.erl"],
-    outs = ["ebin/protos/gogo_pb.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_protos_health_pb_beam",
-    srcs = ["src/protos/health_pb.erl"],
-    outs = ["ebin/protos/health_pb.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_protos_kv_pb_beam",
-    srcs = ["src/protos/kv_pb.erl"],
-    outs = ["ebin/protos/kv_pb.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_protos_router_pb_beam",
-    srcs = ["src/protos/router_pb.erl"],
-    outs = ["ebin/protos/router_pb.beam"],
-    app_name = "eetcd",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
-        "ebin/clients/eetcd_auth_gen.beam",
-        "ebin/clients/eetcd_cluster_gen.beam",
-        "ebin/clients/eetcd_election_gen.beam",
-        "ebin/clients/eetcd_health_gen.beam",
-        "ebin/clients/eetcd_kv_gen.beam",
-        "ebin/clients/eetcd_lease_gen.beam",
-        "ebin/clients/eetcd_lock_gen.beam",
-        "ebin/clients/eetcd_maintenance_gen.beam",
-        "ebin/clients/eetcd_watch_gen.beam",
+        "src/clients/eetcd_auth_gen.erl",
+        "src/clients/eetcd_cluster_gen.erl",
+        "src/clients/eetcd_election_gen.erl",
+        "src/clients/eetcd_health_gen.erl",
+        "src/clients/eetcd_kv_gen.erl",
+        "src/clients/eetcd_lease_gen.erl",
+        "src/clients/eetcd_lock_gen.erl",
+        "src/clients/eetcd_maintenance_gen.erl",
+        "src/clients/eetcd_watch_gen.erl",
+        "src/eetcd.erl",
+        "src/eetcd_app.erl",
+        "src/eetcd_auth.erl",
+        "src/eetcd_cluster.erl",
+        "src/eetcd_compare.erl",
+        "src/eetcd_conn.erl",
+        "src/eetcd_conn_sup.erl",
+        "src/eetcd_data_coercion.erl",
+        "src/eetcd_election.erl",
+        "src/eetcd_grpc.erl",
+        "src/eetcd_kv.erl",
+        "src/eetcd_lease.erl",
+        "src/eetcd_lease_sup.erl",
+        "src/eetcd_lock.erl",
+        "src/eetcd_maintenance.erl",
+        "src/eetcd_op.erl",
+        "src/eetcd_stream.erl",
+        "src/eetcd_sup.erl",
+        "src/eetcd_watch.erl",
+        "src/protos/auth_pb.erl",
+        "src/protos/gogo_pb.erl",
+        "src/protos/health_pb.erl",
+        "src/protos/kv_pb.erl",
+        "src/protos/router_pb.erl",
+    ],
+    outs = [
+        "ebin/auth_pb.beam",
         "ebin/eetcd.beam",
         "ebin/eetcd_app.beam",
         "ebin/eetcd_auth.beam",
+        "ebin/eetcd_auth_gen.beam",
         "ebin/eetcd_cluster.beam",
+        "ebin/eetcd_cluster_gen.beam",
         "ebin/eetcd_compare.beam",
         "ebin/eetcd_conn.beam",
         "ebin/eetcd_conn_sup.beam",
         "ebin/eetcd_data_coercion.beam",
         "ebin/eetcd_election.beam",
+        "ebin/eetcd_election_gen.beam",
         "ebin/eetcd_grpc.beam",
+        "ebin/eetcd_health_gen.beam",
         "ebin/eetcd_kv.beam",
+        "ebin/eetcd_kv_gen.beam",
         "ebin/eetcd_lease.beam",
+        "ebin/eetcd_lease_gen.beam",
         "ebin/eetcd_lease_sup.beam",
         "ebin/eetcd_lock.beam",
+        "ebin/eetcd_lock_gen.beam",
         "ebin/eetcd_maintenance.beam",
+        "ebin/eetcd_maintenance_gen.beam",
         "ebin/eetcd_op.beam",
         "ebin/eetcd_stream.beam",
         "ebin/eetcd_sup.beam",
         "ebin/eetcd_watch.beam",
-        "ebin/protos/auth_pb.beam",
-        "ebin/protos/gogo_pb.beam",
-        "ebin/protos/health_pb.beam",
-        "ebin/protos/kv_pb.beam",
-        "ebin/protos/router_pb.beam",
+        "ebin/eetcd_watch_gen.beam",
+        "ebin/gogo_pb.beam",
+        "ebin/health_pb.beam",
+        "ebin/kv_pb.beam",
+        "ebin/router_pb.beam",
     ],
+    hdrs = ["include/eetcd.hrl"],
+    app_name = "eetcd",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
