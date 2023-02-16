@@ -7,237 +7,68 @@ erlc_opts(
         "@rules_erlang//:debug_build": [
             "+debug_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
-            "+warn_obsolete_guard",
             "+warn_missing_spec",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
             "+warn_untyped_record",
         ],
         "//conditions:default": [
             "+debug_info",
-            "+warn_export_vars",
-            "+warn_shadow_vars",
-            "+warn_obsolete_guard",
-            "+warn_missing_spec",
-            "+warn_untyped_record",
             "+deterministic",
+            "+warn_export_vars",
+            "+warn_missing_spec",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
+            "+warn_untyped_record",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_cowboy_beam",
-    srcs = ["src/cowboy.erl"],
-    outs = ["ebin/cowboy.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_app_beam",
-    srcs = ["src/cowboy_app.erl"],
-    outs = ["ebin/cowboy_app.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_bstr_beam",
-    srcs = ["src/cowboy_bstr.erl"],
-    outs = ["ebin/cowboy_bstr.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_children_beam",
-    srcs = ["src/cowboy_children.erl"],
-    outs = ["ebin/cowboy_children.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_clear_beam",
-    srcs = ["src/cowboy_clear.erl"],
-    outs = ["ebin/cowboy_clear.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_clock_beam",
-    srcs = ["src/cowboy_clock.erl"],
-    outs = ["ebin/cowboy_clock.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_compress_h_beam",
-    srcs = ["src/cowboy_compress_h.erl"],
-    outs = ["ebin/cowboy_compress_h.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_stream.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_constraints_beam",
-    srcs = ["src/cowboy_constraints.erl"],
-    outs = ["ebin/cowboy_constraints.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_handler_beam",
-    srcs = ["src/cowboy_handler.erl"],
-    outs = ["ebin/cowboy_handler.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_middleware.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_http_beam",
-    srcs = ["src/cowboy_http.erl"],
-    outs = ["ebin/cowboy_http.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-    deps = ["@cowlib//:erlang_app"],
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_http2_beam",
-    srcs = ["src/cowboy_http2.erl"],
-    outs = ["ebin/cowboy_http2.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_loop_beam",
-    srcs = ["src/cowboy_loop.erl"],
-    outs = ["ebin/cowboy_loop.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_sub_protocol.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_metrics_h_beam",
-    srcs = ["src/cowboy_metrics_h.erl"],
-    outs = ["ebin/cowboy_metrics_h.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_stream.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_middleware_beam",
-    srcs = ["src/cowboy_middleware.erl"],
-    outs = ["ebin/cowboy_middleware.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_req_beam",
-    srcs = ["src/cowboy_req.erl"],
-    outs = ["ebin/cowboy_req.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_rest_beam",
-    srcs = ["src/cowboy_rest.erl"],
-    outs = ["ebin/cowboy_rest.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_sub_protocol.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_router_beam",
-    srcs = ["src/cowboy_router.erl"],
-    outs = ["ebin/cowboy_router.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_middleware.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_static_beam",
-    srcs = ["src/cowboy_static.erl"],
-    outs = ["ebin/cowboy_static.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_stream_beam",
-    srcs = ["src/cowboy_stream.erl"],
-    outs = ["ebin/cowboy_stream.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_stream_h_beam",
-    srcs = ["src/cowboy_stream_h.erl"],
-    outs = ["ebin/cowboy_stream_h.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_stream.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_sub_protocol_beam",
-    srcs = ["src/cowboy_sub_protocol.erl"],
-    outs = ["ebin/cowboy_sub_protocol.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_sup_beam",
-    srcs = ["src/cowboy_sup.erl"],
-    outs = ["ebin/cowboy_sup.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_tls_beam",
-    srcs = ["src/cowboy_tls.erl"],
-    outs = ["ebin/cowboy_tls.beam"],
-    app_name = "cowboy",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_tracer_h_beam",
-    srcs = ["src/cowboy_tracer_h.erl"],
-    outs = ["ebin/cowboy_tracer_h.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_stream.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cowboy_websocket_beam",
-    srcs = ["src/cowboy_websocket.erl"],
-    outs = ["ebin/cowboy_websocket.beam"],
-    app_name = "cowboy",
-    beam = ["ebin/cowboy_sub_protocol.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "behaviours",
     srcs = [
+        "src/cowboy_middleware.erl",
+        "src/cowboy_stream.erl",
+        "src/cowboy_sub_protocol.erl",
+    ],
+    outs = [
+        "ebin/cowboy_middleware.beam",
+        "ebin/cowboy_stream.beam",
+        "ebin/cowboy_sub_protocol.beam",
+    ],
+    hdrs = [],
+    app_name = "cowboy",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/cowboy.erl",
+        "src/cowboy_app.erl",
+        "src/cowboy_bstr.erl",
+        "src/cowboy_children.erl",
+        "src/cowboy_clear.erl",
+        "src/cowboy_clock.erl",
+        "src/cowboy_compress_h.erl",
+        "src/cowboy_constraints.erl",
+        "src/cowboy_handler.erl",
+        "src/cowboy_http.erl",
+        "src/cowboy_http2.erl",
+        "src/cowboy_loop.erl",
+        "src/cowboy_metrics_h.erl",
+        "src/cowboy_req.erl",
+        "src/cowboy_rest.erl",
+        "src/cowboy_router.erl",
+        "src/cowboy_static.erl",
+        "src/cowboy_stream_h.erl",
+        "src/cowboy_sup.erl",
+        "src/cowboy_tls.erl",
+        "src/cowboy_tracer_h.erl",
+        "src/cowboy_websocket.erl",
+    ],
+    outs = [
         "ebin/cowboy.beam",
         "ebin/cowboy_app.beam",
         "ebin/cowboy_bstr.beam",
@@ -251,18 +82,31 @@ filegroup(
         "ebin/cowboy_http2.beam",
         "ebin/cowboy_loop.beam",
         "ebin/cowboy_metrics_h.beam",
-        "ebin/cowboy_middleware.beam",
         "ebin/cowboy_req.beam",
         "ebin/cowboy_rest.beam",
         "ebin/cowboy_router.beam",
         "ebin/cowboy_static.beam",
-        "ebin/cowboy_stream.beam",
         "ebin/cowboy_stream_h.beam",
-        "ebin/cowboy_sub_protocol.beam",
         "ebin/cowboy_sup.beam",
         "ebin/cowboy_tls.beam",
         "ebin/cowboy_tracer_h.beam",
         "ebin/cowboy_websocket.beam",
+    ],
+    hdrs = [],
+    app_name = "cowboy",
+    beam = [":behaviours"],
+    erlc_opts = "//:erlc_opts",
+    deps = [
+        "@cowlib//:erlang_app",
+        "@ranch//:erlang_app",
+    ],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
     ],
 )
 

@@ -7,124 +7,47 @@ erlc_opts(
         "@rules_erlang//:debug_build": [
             "+debug_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
             "+warn_obsolete_guard",
+            "+warn_shadow_vars",
         ],
         "//conditions:default": [
             "+debug_info",
-            "+warn_export_vars",
-            "+warn_shadow_vars",
-            "+warn_obsolete_guard",
             "+deterministic",
+            "+warn_export_vars",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_gun_beam",
-    srcs = ["src/gun.erl"],
-    outs = ["ebin/gun.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_app_beam",
-    srcs = ["src/gun_app.erl"],
-    outs = ["ebin/gun_app.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_content_handler_beam",
+    name = "behaviours",
     srcs = ["src/gun_content_handler.erl"],
     outs = ["ebin/gun_content_handler.beam"],
+    hdrs = [],
     app_name = "gun",
     erlc_opts = "//:erlc_opts",
 )
 
 erlang_bytecode(
-    name = "ebin_gun_data_h_beam",
-    srcs = ["src/gun_data_h.erl"],
-    outs = ["ebin/gun_data_h.beam"],
-    app_name = "gun",
-    beam = ["ebin/gun_content_handler.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_http_beam",
-    srcs = ["src/gun_http.erl"],
-    outs = ["ebin/gun_http.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_http2_beam",
-    srcs = ["src/gun_http2.erl"],
-    outs = ["ebin/gun_http2.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_sse_h_beam",
-    srcs = ["src/gun_sse_h.erl"],
-    outs = ["ebin/gun_sse_h.beam"],
-    app_name = "gun",
-    beam = ["ebin/gun_content_handler.beam"],
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_sup_beam",
-    srcs = ["src/gun_sup.erl"],
-    outs = ["ebin/gun_sup.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_tcp_beam",
-    srcs = ["src/gun_tcp.erl"],
-    outs = ["ebin/gun_tcp.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_tls_beam",
-    srcs = ["src/gun_tls.erl"],
-    outs = ["ebin/gun_tls.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_ws_beam",
-    srcs = ["src/gun_ws.erl"],
-    outs = ["ebin/gun_ws.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_gun_ws_h_beam",
-    srcs = ["src/gun_ws_h.erl"],
-    outs = ["ebin/gun_ws_h.beam"],
-    app_name = "gun",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/gun.erl",
+        "src/gun_app.erl",
+        "src/gun_data_h.erl",
+        "src/gun_http.erl",
+        "src/gun_http2.erl",
+        "src/gun_sse_h.erl",
+        "src/gun_sup.erl",
+        "src/gun_tcp.erl",
+        "src/gun_tls.erl",
+        "src/gun_ws.erl",
+        "src/gun_ws_h.erl",
+    ],
+    outs = [
         "ebin/gun.beam",
         "ebin/gun_app.beam",
-        "ebin/gun_content_handler.beam",
         "ebin/gun_data_h.beam",
         "ebin/gun_http.beam",
         "ebin/gun_http2.beam",
@@ -134,6 +57,18 @@ filegroup(
         "ebin/gun_tls.beam",
         "ebin/gun_ws.beam",
         "ebin/gun_ws_h.beam",
+    ],
+    hdrs = [],
+    app_name = "gun",
+    beam = [":behaviours"],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
     ],
 )
 

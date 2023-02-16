@@ -16,28 +16,24 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_quantile_beam",
-    srcs = ["src/quantile.erl"],
-    outs = ["ebin/quantile.beam"],
-    app_name = "quantile_estimator",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_quantile_estimator_beam",
-    srcs = ["src/quantile_estimator.erl"],
-    outs = ["ebin/quantile_estimator.beam"],
+    name = "other_beam",
+    srcs = [
+        "src/quantile.erl",
+        "src/quantile_estimator.erl",
+    ],
+    outs = [
+        "ebin/quantile.beam",
+        "ebin/quantile_estimator.beam",
+    ],
     hdrs = ["include/quantile_estimator.hrl"],
     app_name = "quantile_estimator",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = [
-        "ebin/quantile.beam",
-        "ebin/quantile_estimator.beam",
-    ],
+    srcs = [":other_beam"],
 )
 
 filegroup(

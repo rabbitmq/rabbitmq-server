@@ -8,32 +8,34 @@ erlc_opts(
             "+debug_info",
             "+recv_opt_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
             "+warn_obsolete_guard",
+            "+warn_shadow_vars",
         ],
         "//conditions:default": [
             "+debug_info",
+            "+deterministic",
             "+recv_opt_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
             "+warn_obsolete_guard",
-            "+deterministic",
+            "+warn_shadow_vars",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_gen_batch_server_beam",
+    name = "other_beam",
     srcs = ["src/gen_batch_server.erl"],
     outs = ["ebin/gen_batch_server.beam"],
+    hdrs = [],
     app_name = "gen_batch_server",
+    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
-    srcs = ["ebin/gen_batch_server.beam"],
+    srcs = [":other_beam"],
 )
 
 filegroup(
