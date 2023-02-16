@@ -16,48 +16,28 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_accept_encoding_header_beam",
-    srcs = ["src/accept_encoding_header.erl"],
-    outs = ["ebin/accept_encoding_header.beam"],
-    hdrs = ["include/accept.hrl"],
-    app_name = "accept",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_accept_header_beam",
-    srcs = ["src/accept_header.erl"],
-    outs = ["ebin/accept_header.beam"],
-    hdrs = ["include/accept.hrl"],
-    app_name = "accept",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_accept_neg_beam",
-    srcs = ["src/accept_neg.erl"],
-    outs = ["ebin/accept_neg.beam"],
-    app_name = "accept",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_accept_parser_beam",
-    srcs = ["src/accept_parser.erl"],
-    outs = ["ebin/accept_parser.beam"],
-    hdrs = ["include/accept.hrl"],
-    app_name = "accept",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/accept_encoding_header.erl",
+        "src/accept_header.erl",
+        "src/accept_neg.erl",
+        "src/accept_parser.erl",
+    ],
+    outs = [
         "ebin/accept_encoding_header.beam",
         "ebin/accept_header.beam",
         "ebin/accept_neg.beam",
         "ebin/accept_parser.beam",
     ],
+    hdrs = ["include/accept.hrl"],
+    app_name = "accept",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(

@@ -11,61 +11,21 @@ erlc_opts(
             "+debug_info",
             "+deterministic",
         ],
-    }),
+    }),  # keep
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_redbug_beam",
-    srcs = ["src/redbug.erl"],
-    outs = ["ebin/redbug.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_redbug_compiler_beam",
-    srcs = ["src/redbug_compiler.erl"],
-    outs = ["ebin/redbug_compiler.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_redbug_dtop_beam",
-    srcs = ["src/redbug_dtop.erl"],
-    outs = ["ebin/redbug_dtop.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_redbug_lexer_beam",
-    srcs = ["src/redbug_lexer.erl"],
-    outs = ["ebin/redbug_lexer.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_redbug_parser_beam",
-    srcs = ["src/redbug_parser.erl"],
-    outs = ["ebin/redbug_parser.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_redbug_targ_beam",
-    srcs = ["src/redbug_targ.erl"],
-    outs = ["ebin/redbug_targ.beam"],
-    app_name = "redbug",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/redbug.erl",
+        "src/redbug_compiler.erl",
+        "src/redbug_dtop.erl",
+        "src/redbug_lexer.erl",
+        "src/redbug_parser.erl",
+        "src/redbug_targ.erl",
+    ],
+    outs = [
         "ebin/redbug.beam",
         "ebin/redbug_compiler.beam",
         "ebin/redbug_dtop.beam",
@@ -73,6 +33,15 @@ filegroup(
         "ebin/redbug_parser.beam",
         "ebin/redbug_targ.beam",
     ],
+    hdrs = [],
+    app_name = "redbug",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
