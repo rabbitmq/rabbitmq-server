@@ -7,6 +7,7 @@
 
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_merge_strategy).
 
 -include("amqqueue.hrl").
 
@@ -15,6 +16,7 @@
          initial_queue_node/2, suggested_queue_nodes/1, actual_queue_nodes/1,
          is_mirrored/1, is_mirrored_ha_nodes/1,
          update_mirrors/2, update_mirrors/1, validate_policy/1,
+         merge_policy_value/3,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, default_max_sync_throughput/0,
          log_info/3, log_warning/3]).
@@ -46,6 +48,14 @@
             [policy_validator, <<"ha-promote-on-shutdown">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
             [policy_validator, <<"ha-promote-on-failure">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"ha-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"ha-params">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"ha-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"ha-params">>, ?MODULE]}},
      {requires, rabbit_registry},
      {enables, recovery}]}).
 
@@ -787,4 +797,37 @@ validate_pof(PromoteOnShutdown) ->
         none              -> ok;
         Mode              -> {error, "ha-promote-on-failure must be "
                               "\"always\" or \"when-synced\", got ~tp", [Mode]}
+    end.
+
+merge_policy_value(<<"ha-mode">>, Val, Val) ->
+    Val;
+merge_policy_value(<<"ha-mode">>, <<"all">> = Val, _OpVal) ->
+    Val;
+merge_policy_value(<<"ha-mode">>, _Val, <<"all">> = OpVal) ->
+    OpVal;
+merge_policy_value(<<"ha-mode">>, <<"exactly">> = Val, _OpVal) ->
+    Val;
+merge_policy_value(<<"ha-mode">>, _Val, <<"exactly">> = OpVal) ->
+    OpVal;
+%% Both values are integers, both are ha-mode 'exactly'
+merge_policy_value(<<"ha-params">>, Val, OpVal) when is_integer(Val)
+                                                     andalso
+                                                     is_integer(OpVal)->
+    if Val > OpVal ->
+            Val;
+       true ->
+            OpVal
+    end;
+%% The integer values is of ha-mode 'exactly', the other is a list and of
+%% ha-mode 'nodes'. 'exactly' takes precedence
+merge_policy_value(<<"ha-params">>, Val, _OpVal) when is_integer(Val) ->
+    Val;
+merge_policy_value(<<"ha-params">>, _Val, OpVal) when is_integer(OpVal) ->
+    OpVal;
+%% Both values are lists, of ha-mode 'nodes', max length takes precedence.
+merge_policy_value(<<"ha-params">>, Val, OpVal) ->
+    if length(Val) > length(OpVal) ->
+            Val;
+       true ->
+            OpVal
     end.
