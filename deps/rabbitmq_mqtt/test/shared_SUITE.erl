@@ -1259,7 +1259,7 @@ clean_session_kill_node(Config) ->
     ?assertEqual(0, rpc(Config, ets, info, [rabbit_durable_queue, size])).
 
 rabbit_status_connection_count(Config) ->
-    _ = rabbit_ct_client_helpers:open_connection(Config, 0),
+    _Pid = rabbit_ct_client_helpers:open_connection(Config, 0),
     C = connect(?FUNCTION_NAME, Config),
 
     {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["status"]),
