@@ -63,9 +63,9 @@ When VMware products that depend on RabbitMQ are also affected, the disclosure p
 further to allow those projects to ship patch releases.
 
 
-## Tanzu RabbitMQ
+## VMware RabbitMQ
 
-[Tanzu RabbitMQ](https://tanzu.vmware.com/rabbitmq) is covered by the [VMware Security Response Policy](https://www.vmware.com/support/policies/security_response.html).
+[VMware RabbitMQ](https://www.vmware.com/products/rabbitmq.html) is covered by the [VMware Security Response Policy](https://www.vmware.com/support/policies/security_response.html).
 
-Vulnerabilities found in Tanzu RabbitMQ can be reported to the RabbitMQ core team or
+Vulnerabilities found in VMware RabbitMQ can be reported to the RabbitMQ core team or
 via the [VMware Security Response Center](https://www.vmware.com/security/vsrc.html).

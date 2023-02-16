@@ -44,7 +44,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^
 -run escript start ^
 -escript main rabbitmqctl_escript ^
--extra "%RABBITMQ_HOME%\escript\rabbitmq-tanzu" !STAR!
+-extra "%RABBITMQ_HOME%\escript\vmware-rabbitmq" !STAR!
 
 if ERRORLEVEL 1 (
     exit /B %ERRORLEVEL%
