@@ -44,7 +44,7 @@ RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq
 
 ## Commercial Features and Support
 
- * [Commercial edition of RabbitMQ](https://tanzu.vmware.com/rabbitmq)
+ * [Commercial edition of RabbitMQ](https://www.vmware.com/products/rabbitmq.html)
  * [Commercial edition for Kubernetes](https://rabbitmq.com/kubernetes/tanzu/installation.html)
  * [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
 

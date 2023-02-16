@@ -34,7 +34,7 @@ LINKED_ESCRIPTS = escript/rabbitmq-plugins \
 		  escript/rabbitmq-diagnostics \
 		  escript/rabbitmq-queues \
 		  escript/rabbitmq-streams \
-			escript/rabbitmq-tanzu \
+			escript/vmware-rabbitmq \
       escript/rabbitmq-upgrade
 ESCRIPTS = $(ACTUAL_ESCRIPTS) $(LINKED_ESCRIPTS)
 
@@ -44,9 +44,9 @@ rabbitmq-plugins = escript/rabbitmqctl
 rabbitmq-diagnostics = escript/rabbitmqctl
 rabbitmq-queues = escript/rabbitmqctl
 rabbitmq-streams = escript/rabbitmqctl
-rabbitmq-tanzu = escript/rabbitmqctl
 rabbitmq-upgrade = escript/rabbitmqctl
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues escript/rabbitmq-streams escript/rabbitmq-tanzu escript/rabbitmq-upgrade: escript/rabbitmqctl
+vmware-rabbitmq = escript/rabbitmqctl
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues escript/rabbitmq-streams escript/rabbitmq-upgrade escript/vmware-rabbitmq: escript/rabbitmqctl
 
 # We use hardlinks or symlinks in the `escript` directory and
 # install's PREFIX when a single escript can have several names (eg.
