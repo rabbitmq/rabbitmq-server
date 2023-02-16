@@ -167,7 +167,14 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary()) -> {ok, map()} | {error, term()}.
+-spec check_token(binary() | map()) ->
+          {'ok', map()} |
+          {'error', term() }|
+          {'refused',
+           'signature_invalid' |
+           {'error', term()} |
+           {'invalid_aud', term()}}.
+         
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
     case uaa_jwt:decode_and_verify(Token) of
