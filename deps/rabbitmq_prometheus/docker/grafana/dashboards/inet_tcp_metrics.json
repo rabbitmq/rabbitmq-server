@@ -129,7 +129,7 @@
         },
         {
           "$$hashKey": "object:3230",
-          "alias": "Tanzu RabbitMQ",
+          "alias": "VMware RabbitMQ",
           "align": "auto",
           "colorMode": null,
           "colors": [
