@@ -29,7 +29,7 @@
                                    [rabbit_event, ?MODULE, []]}},
                     {cleanup,     {gen_event, delete_handler,
                                    [rabbit_event, ?MODULE, []]}},
-                    {requires,    [connection_tracking]},
+                    {requires,    [tracking_metadata_store]},
                     {enables,     recovery}]}).
 
 %%

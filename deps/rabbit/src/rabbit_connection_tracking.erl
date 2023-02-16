@@ -17,8 +17,7 @@
 %%  * rabbit_event
 -behaviour(rabbit_tracking).
 
--export([boot/0,
-         update_tracked/1,
+-export([update_tracked/1,
          handle_cast/1,
          register_tracked/1,
          unregister_tracked/1,
@@ -56,13 +55,6 @@
 %%
 
 %% Behaviour callbacks
-
--spec boot() -> ok.
-
-%% Sets up and resets connection tracking tables for this
-%% node.
-boot() ->
-    ok.
 
 -spec update_tracked(term()) -> ok.
 
