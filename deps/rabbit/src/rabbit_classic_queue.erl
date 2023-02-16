@@ -154,8 +154,10 @@ find_missing_queues(Q1s, Q2s) when length(Q1s) == length(Q2s)->
 find_missing_queues(Q1s, Q2s) ->
     find_missing_queues(lists:sort(Q1s), lists:sort(Q2s), []).
 
-find_missing_queues([], [], Acc) ->
+find_missing_queues([], _, Acc) ->
     Acc;
+find_missing_queues(Q1s, [], Acc) ->
+    Q1s ++ Acc;
 find_missing_queues([Q1|Rem1], [Q2|Rem2] = Q2s, Acc) ->
     case amqqueue:get_name(Q1) == amqqueue:get_name(Q2) of
         true ->
