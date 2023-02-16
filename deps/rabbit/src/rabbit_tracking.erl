@@ -13,7 +13,6 @@
 %%  * rabbit_connection_tracking
 %%  * rabbit_channel_tracking
 
--callback boot() -> ok.
 -callback update_tracked(term()) -> ok.
 -callback handle_cast(term()) -> ok.
 -callback register_tracked(
