@@ -15,7 +15,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.2.0
+      uses: lewagon/wait-on-check-action@v1.3.1
       with:
         ref: ${{ github.ref }}
         check-name: build-publish-dev (${{ matrix.image_tag_suffix }})
