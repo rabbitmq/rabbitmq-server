@@ -16,48 +16,28 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_stdout_formatter_beam",
-    srcs = ["src/stdout_formatter.erl"],
-    outs = ["ebin/stdout_formatter.beam"],
-    hdrs = ["include/stdout_formatter.hrl"],
-    app_name = "stdout_formatter",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_stdout_formatter_paragraph_beam",
-    srcs = ["src/stdout_formatter_paragraph.erl"],
-    outs = ["ebin/stdout_formatter_paragraph.beam"],
-    hdrs = ["include/stdout_formatter.hrl"],
-    app_name = "stdout_formatter",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_stdout_formatter_table_beam",
-    srcs = ["src/stdout_formatter_table.erl"],
-    outs = ["ebin/stdout_formatter_table.beam"],
-    hdrs = ["include/stdout_formatter.hrl"],
-    app_name = "stdout_formatter",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_stdout_formatter_utils_beam",
-    srcs = ["src/stdout_formatter_utils.erl"],
-    outs = ["ebin/stdout_formatter_utils.beam"],
-    app_name = "stdout_formatter",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/stdout_formatter.erl",
+        "src/stdout_formatter_paragraph.erl",
+        "src/stdout_formatter_table.erl",
+        "src/stdout_formatter_utils.erl",
+    ],
+    outs = [
         "ebin/stdout_formatter.beam",
         "ebin/stdout_formatter_paragraph.beam",
         "ebin/stdout_formatter_table.beam",
         "ebin/stdout_formatter_utils.beam",
     ],
+    hdrs = ["include/stdout_formatter.hrl"],
+    app_name = "stdout_formatter",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
