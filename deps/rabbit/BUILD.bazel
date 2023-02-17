@@ -10,6 +10,7 @@ load(
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
     "rabbitmq_test_helper",
+    "without",
 )
 load(":bats.bzl", "bats")
 
@@ -213,7 +214,8 @@ plt(
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    # A few `lg` functions are unknown
+    dialyzer_opts = without("-Wunknown", RABBITMQ_DIALYZER_OPTS),
     plt = ":base_plt",
 )
 
@@ -518,9 +520,6 @@ rabbitmq_suite(
     size = "small",
     additional_srcs = [
         "test/mirrored_supervisor_SUITE_gs.erl",
-    ],
-    deps = [
-        "//deps/rabbit_common:erlang_app",
     ],
 )
 

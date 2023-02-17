@@ -22,9 +22,8 @@
 %%----------------------------------------------------------------------------
 
 -export_type([name/0, type/0]).
-
--type name() :: rabbit_types:r('exchange').
--type type() :: atom().
+-type name() :: rabbit_types:exchange_name().
+-type type() :: rabbit_types:exchange_type().
 -type fun_name() :: atom().
 
 %%----------------------------------------------------------------------------

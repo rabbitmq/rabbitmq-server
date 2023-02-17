@@ -2,8 +2,8 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "RABBITMQ_DIALYZER_OPTS",
     "APP_VERSION",
+    "RABBITMQ_DIALYZER_OPTS",
     "rabbitmq_app",
     "rabbitmq_suite",
 )
@@ -41,7 +41,10 @@ xref(
 
 plt(
     name = "base_plt",
-    apps = ["runtime_tools", "eunit"],
+    apps = [
+        "runtime_tools",
+        "eunit",
+    ],
     plt = "//:base_plt",
     deps = DEPS + RUNTIME_DEPS + [
         "@systemd//:erlang_app",
@@ -50,8 +53,8 @@ plt(
 )
 
 dialyze(
-    plt = ":base_plt",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
 )
 
 suites = [

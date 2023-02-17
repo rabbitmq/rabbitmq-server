@@ -41,9 +41,9 @@ xref(
 
 plt(
     name = "base_plt",
-    plt = "//:base_plt",
     apps = ["mnesia"],
     libs = ["//deps/rabbitmq_cli:elixir"],
+    plt = "//:base_plt",
     deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 

@@ -1,5 +1,5 @@
 load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
@@ -12,16 +12,27 @@ APP_NAME = "rabbitmq_stream_common"
 
 APP_DESCRIPTION = "RabbitMQ Stream Common"
 
+BUILD_DEPS = [
+    "@osiris//:erlang_app",
+]
+
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
 )
 
 xref()
 
+plt(
+    name = "base_plt",
+    plt = "//:base_plt",
+    deps = BUILD_DEPS,
+)
+
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = "//:base_plt",
+    plt = ":base_plt",
 )
 
 rabbitmq_suite(

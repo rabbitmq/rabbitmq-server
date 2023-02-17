@@ -39,6 +39,7 @@ RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
 RABBITMQ_DIALYZER_OPTS = [
     "-Werror_handling",
     "-Wunmatched_returns",
+    "-Wunknown",
 ]
 
 APP_VERSION = "3.11.0"

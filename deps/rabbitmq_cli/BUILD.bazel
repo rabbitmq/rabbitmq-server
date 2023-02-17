@@ -5,7 +5,7 @@ load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG")
+load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG", "without")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
@@ -74,6 +74,14 @@ test_suite(
 
 plt(
     name = "deps_plt",
+    apps = [
+        "kernel",
+        "stdlib",
+        "erts",
+        "mnesia",
+        "public_key",
+        "runtime_tools",
+    ],
     libs = [":elixir"],
     deps = [
         ":elixir",
@@ -83,7 +91,11 @@ plt(
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    dialyzer_opts = without(
+        # Some Elixir.CSV, Elixir.JSON and Elixir.Logger functions are unknown
+        "-Wunknown",
+        RABBITMQ_DIALYZER_OPTS,
+    ),
     libs = [":elixir"],
     plt = ":deps_plt",
 )
