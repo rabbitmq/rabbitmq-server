@@ -136,13 +136,28 @@ recover(VHost, Queues) ->
         {ok, _}         ->
             RecoveredQs = recover_durable_queues(lists:zip(Queues,
                                                            OrderedRecoveryTerms)),
-            RecoveredNames = [amqqueue:get_name(Q) || Q <- RecoveredQs],
-            FailedQueues = [Q || Q <- Queues,
-                                 not lists:member(amqqueue:get_name(Q), RecoveredNames)],
-            {RecoveredQs, FailedQueues};
+            FailedQs = find_missing_queues(Queues,RecoveredQs),
+            {RecoveredQs, FailedQs};
         {error, Reason} ->
             rabbit_log:error("Failed to start queue supervisor for vhost '~ts': ~s", [VHost, Reason]),
             throw({error, Reason})
+    end.
+
+find_missing_queues(Q1s, Q2s) when length(Q1s) == length(Q2s)->
+    [];
+find_missing_queues(Q1s, Q2s) ->
+    find_missing_queues(lists:sort(Q1s), lists:sort(Q2s), []).
+
+find_missing_queues([], _, Acc) ->
+    Acc;
+find_missing_queues(Q1s, [], Acc) ->
+    Q1s ++ Acc;
+find_missing_queues([Q1|Rem1], [Q2|Rem2] = Q2s, Acc) ->
+    case amqqueue:get_name(Q1) == amqqueue:get_name(Q2) of
+        true ->
+            find_missing_queues(Rem1, Rem2, Acc);
+        false ->
+            find_missing_queues(Rem1, Q2s, [Q1|Acc])
     end.
 
 -spec policy_changed(amqqueue:amqqueue()) -> ok.
