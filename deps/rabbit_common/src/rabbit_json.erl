@@ -18,7 +18,7 @@ decode(JSON) ->
     decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec decode(jsx:json_text(), jsx_to_term:config()) -> jsx:json_term().
+-spec decode(jsx:json_text(), proplists:proplist()) -> jsx:json_term().
 decode(JSON, Opts) ->
     jsx:decode(JSON, Opts).
 
@@ -29,7 +29,7 @@ try_decode(JSON) ->
     try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec try_decode(jsx:json_text(), jsx_to_term:config()) ->
+-spec try_decode(jsx:json_text(), proplists:proplist()) ->
 			{ok, jsx:json_term()} | {error, Reason :: term()}.
 try_decode(JSON, Opts) ->
     try
@@ -42,7 +42,7 @@ try_decode(JSON, Opts) ->
 encode(Term) ->
     encode(Term, []).
 
--spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
+-spec encode(jsx:json_term(), proplists:proplist()) -> jsx:json_text().
 encode(Term, Opts) ->
     jsx:encode(fixup_terms(Term), Opts).
 
@@ -51,7 +51,7 @@ encode(Term, Opts) ->
 try_encode(Term) ->
     try_encode(Term, []).
 
--spec try_encode(jsx:json_term(), jsx_to_term:config()) ->
+-spec try_encode(jsx:json_term(), proplists:proplist()) ->
 			{ok, jsx:json_text()} | {error, Reason :: term()}.
 try_encode(Term, Opts) ->
     try

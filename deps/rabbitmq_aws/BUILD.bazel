@@ -46,8 +46,8 @@ xref(
 
 plt(
     name = "base_plt",
-    plt = "//:base_plt",
     apps = EXTRA_APPS,
+    plt = "//:base_plt",
     deps = BUILD_DEPS,
 )
 
