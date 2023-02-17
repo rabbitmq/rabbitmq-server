@@ -625,7 +625,7 @@ create_session(Name, TTL) ->
 -spec consul_session_create(Query, Headers, Body) -> {ok, term()} | {error, any()} when
       Query :: list(),
       Headers :: [{string(), string()}],
-      Body :: thoas:input_term().
+      Body :: jsx:json_term().
 consul_session_create(Query, Headers, Body) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case serialize_json_body(Body) of
@@ -651,7 +651,7 @@ consul_session_create(Query, Headers, Body) ->
 %% the JSON serialization library.
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_json_body(thoas:input_term()) -> {ok, Payload :: binary()} | {error, atom()}.
+-spec serialize_json_body(jsx:json_term()) -> {ok, Payload :: binary()} | {error, atom()}.
 serialize_json_body([]) -> {ok, []};
 serialize_json_body(Payload) ->
     case rabbit_json:try_encode(Payload) of
