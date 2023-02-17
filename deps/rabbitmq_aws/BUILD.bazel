@@ -64,7 +64,7 @@ eunit(
     ],
     runtime_deps = [
         "//deps/rabbit_common:erlang_app",
+        "@jsx//:erlang_app",
         "@meck//:erlang_app",
-        "@thoas//:erlang_app",
     ],
 )
