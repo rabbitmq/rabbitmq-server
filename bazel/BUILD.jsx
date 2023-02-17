@@ -16,83 +16,19 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_jsx_beam",
-    srcs = ["src/jsx.erl"],
-    outs = ["ebin/jsx.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_config_beam",
-    srcs = ["src/jsx_config.erl"],
-    outs = ["ebin/jsx_config.beam"],
-    hdrs = ["src/jsx_config.hrl"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_consult_beam",
-    srcs = ["src/jsx_consult.erl"],
-    outs = ["ebin/jsx_consult.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_decoder_beam",
-    srcs = ["src/jsx_decoder.erl"],
-    outs = ["ebin/jsx_decoder.beam"],
-    hdrs = ["src/jsx_config.hrl"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_encoder_beam",
-    srcs = ["src/jsx_encoder.erl"],
-    outs = ["ebin/jsx_encoder.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_parser_beam",
-    srcs = ["src/jsx_parser.erl"],
-    outs = ["ebin/jsx_parser.beam"],
-    hdrs = ["src/jsx_config.hrl"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_to_json_beam",
-    srcs = ["src/jsx_to_json.erl"],
-    outs = ["ebin/jsx_to_json.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_to_term_beam",
-    srcs = ["src/jsx_to_term.erl"],
-    outs = ["ebin/jsx_to_term.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_jsx_verify_beam",
-    srcs = ["src/jsx_verify.erl"],
-    outs = ["ebin/jsx_verify.beam"],
-    app_name = "jsx",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/jsx.erl",
+        "src/jsx_config.erl",
+        "src/jsx_consult.erl",
+        "src/jsx_decoder.erl",
+        "src/jsx_encoder.erl",
+        "src/jsx_parser.erl",
+        "src/jsx_to_json.erl",
+        "src/jsx_to_term.erl",
+        "src/jsx_verify.erl",
+    ],
+    outs = [
         "ebin/jsx.beam",
         "ebin/jsx_config.beam",
         "ebin/jsx_consult.beam",
@@ -103,6 +39,15 @@ filegroup(
         "ebin/jsx_to_term.beam",
         "ebin/jsx_verify.beam",
     ],
+    hdrs = ["src/jsx_config.hrl"],
+    app_name = "jsx",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
