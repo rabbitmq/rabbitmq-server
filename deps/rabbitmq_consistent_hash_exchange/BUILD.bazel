@@ -44,7 +44,7 @@ plt(
     apps = ["mnesia"],
     libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
+    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
