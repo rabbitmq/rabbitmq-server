@@ -247,6 +247,8 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                       fun(FeatureName, FeatureProps) ->
                               Stability = maps:get(
                                             stability, FeatureProps, stable),
+                              ProvidedBy = maps:get(
+                                             provided_by, FeatureProps),
                               State = case FeatureStates0 of
                                           #{FeatureName := FeatureState} ->
                                               FeatureState;
@@ -262,6 +264,9 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                       %% This is the very first time the node
                                       %% starts, we already mark the required
                                       %% feature flag as enabled.
+                                      ?assertNotEqual(state_changing, State),
+                                      true;
+                                  required when ProvidedBy =/= rabbit ->
                                       ?assertNotEqual(state_changing, State),
                                       true;
                                   required ->

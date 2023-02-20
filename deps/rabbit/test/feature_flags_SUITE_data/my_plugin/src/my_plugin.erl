@@ -8,3 +8,6 @@
 -module(my_plugin).
 
 -rabbit_feature_flag({plugin_ff, #{desc => "Plugin's feature flag A"}}).
+
+-rabbit_feature_flag({required_plugin_ff, #{desc => "Plugin's feature flag B",
+                                            stability => required}}).
