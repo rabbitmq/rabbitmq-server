@@ -5,209 +5,48 @@ erlc_opts(
     name = "erlc_opts",
     values = select({
         "@rules_erlang//:debug_build": [
-            "+warnings_as_errors",
             "+debug_info",
             "+warn_untyped_record",
+            "+warnings_as_errors",
         ],
         "//conditions:default": [
-            "+warnings_as_errors",
             "+debug_info",
-            "+warn_untyped_record",
             "+deterministic",
+            "+warn_untyped_record",
+            "+warnings_as_errors",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_conf_parse_beam",
-    srcs = ["src/conf_parse.erl"],
-    outs = ["ebin/conf_parse.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_beam",
-    srcs = ["src/cuttlefish.erl"],
-    outs = ["ebin/cuttlefish.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_advanced_beam",
-    srcs = ["src/cuttlefish_advanced.erl"],
-    outs = ["ebin/cuttlefish_advanced.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_bytesize_beam",
-    srcs = ["src/cuttlefish_bytesize.erl"],
-    outs = ["ebin/cuttlefish_bytesize.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_conf_beam",
-    srcs = ["src/cuttlefish_conf.erl"],
-    outs = ["ebin/cuttlefish_conf.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_datatypes_beam",
-    srcs = ["src/cuttlefish_datatypes.erl"],
-    outs = ["ebin/cuttlefish_datatypes.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_duration_beam",
-    srcs = ["src/cuttlefish_duration.erl"],
-    outs = ["ebin/cuttlefish_duration.beam"],
-    hdrs = ["src/cuttlefish_duration.hrl"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_duration_parse_beam",
-    srcs = ["src/cuttlefish_duration_parse.erl"],
-    outs = ["ebin/cuttlefish_duration_parse.beam"],
-    hdrs = ["src/cuttlefish_duration.hrl"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_effective_beam",
-    srcs = ["src/cuttlefish_effective.erl"],
-    outs = ["ebin/cuttlefish_effective.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_enum_beam",
-    srcs = ["src/cuttlefish_enum.erl"],
-    outs = ["ebin/cuttlefish_enum.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_error_beam",
-    srcs = ["src/cuttlefish_error.erl"],
-    outs = ["ebin/cuttlefish_error.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_escript_beam",
-    srcs = ["src/cuttlefish_escript.erl"],
-    outs = ["ebin/cuttlefish_escript.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_flag_beam",
-    srcs = ["src/cuttlefish_flag.erl"],
-    outs = ["ebin/cuttlefish_flag.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_generator_beam",
-    srcs = ["src/cuttlefish_generator.erl"],
-    outs = ["ebin/cuttlefish_generator.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_mapping_beam",
-    srcs = ["src/cuttlefish_mapping.erl"],
-    outs = ["ebin/cuttlefish_mapping.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_rebar_plugin_beam",
-    srcs = ["src/cuttlefish_rebar_plugin.erl"],
-    outs = ["ebin/cuttlefish_rebar_plugin.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_schema_beam",
-    srcs = ["src/cuttlefish_schema.erl"],
-    outs = ["ebin/cuttlefish_schema.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_translation_beam",
-    srcs = ["src/cuttlefish_translation.erl"],
-    outs = ["ebin/cuttlefish_translation.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_unit_beam",
-    srcs = ["src/cuttlefish_unit.erl"],
-    outs = ["ebin/cuttlefish_unit.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_util_beam",
-    srcs = ["src/cuttlefish_util.erl"],
-    outs = ["ebin/cuttlefish_util.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_validator_beam",
-    srcs = ["src/cuttlefish_validator.erl"],
-    outs = ["ebin/cuttlefish_validator.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_variable_beam",
-    srcs = ["src/cuttlefish_variable.erl"],
-    outs = ["ebin/cuttlefish_variable.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_cuttlefish_vmargs_beam",
-    srcs = ["src/cuttlefish_vmargs.erl"],
-    outs = ["ebin/cuttlefish_vmargs.beam"],
-    app_name = "cuttlefish",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/conf_parse.erl",
+        "src/cuttlefish.erl",
+        "src/cuttlefish_advanced.erl",
+        "src/cuttlefish_bytesize.erl",
+        "src/cuttlefish_conf.erl",
+        "src/cuttlefish_datatypes.erl",
+        "src/cuttlefish_duration.erl",
+        "src/cuttlefish_duration_parse.erl",
+        "src/cuttlefish_effective.erl",
+        "src/cuttlefish_enum.erl",
+        "src/cuttlefish_error.erl",
+        "src/cuttlefish_escript.erl",
+        "src/cuttlefish_flag.erl",
+        "src/cuttlefish_generator.erl",
+        "src/cuttlefish_mapping.erl",
+        "src/cuttlefish_rebar_plugin.erl",
+        "src/cuttlefish_schema.erl",
+        "src/cuttlefish_translation.erl",
+        "src/cuttlefish_unit.erl",
+        "src/cuttlefish_util.erl",
+        "src/cuttlefish_validator.erl",
+        "src/cuttlefish_variable.erl",
+        "src/cuttlefish_vmargs.erl",
+    ],
+    outs = [
         "ebin/conf_parse.beam",
         "ebin/cuttlefish.beam",
         "ebin/cuttlefish_advanced.beam",
@@ -232,6 +71,15 @@ filegroup(
         "ebin/cuttlefish_variable.beam",
         "ebin/cuttlefish_vmargs.beam",
     ],
+    hdrs = ["src/cuttlefish_duration.hrl"],
+    app_name = "cuttlefish",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(

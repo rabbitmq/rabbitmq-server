@@ -8,61 +8,44 @@ erlc_opts(
             "+debug_info",
             "+recv_opt_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
             "+warn_obsolete_guard",
+            "+warn_shadow_vars",
         ],
         "//conditions:default": [
             "+debug_info",
+            "+deterministic",
             "+recv_opt_info",
             "+warn_export_vars",
-            "+warn_shadow_vars",
             "+warn_obsolete_guard",
-            "+deterministic",
+            "+warn_shadow_vars",
         ],
     }),
     visibility = [":__subpackages__"],
 )
 
 erlang_bytecode(
-    name = "ebin_seshat_beam",
-    srcs = ["src/seshat.erl"],
-    outs = ["ebin/seshat.beam"],
-    app_name = "seshat",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_seshat_app_beam",
-    srcs = ["src/seshat_app.erl"],
-    outs = ["ebin/seshat_app.beam"],
-    app_name = "seshat",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_seshat_counters_server_beam",
-    srcs = ["src/seshat_counters_server.erl"],
-    outs = ["ebin/seshat_counters_server.beam"],
-    app_name = "seshat",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_seshat_sup_beam",
-    srcs = ["src/seshat_sup.erl"],
-    outs = ["ebin/seshat_sup.beam"],
-    app_name = "seshat",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/seshat.erl",
+        "src/seshat_app.erl",
+        "src/seshat_counters_server.erl",
+        "src/seshat_sup.erl",
+    ],
+    outs = [
         "ebin/seshat.beam",
         "ebin/seshat_app.beam",
         "ebin/seshat_counters_server.beam",
         "ebin/seshat_sup.beam",
     ],
+    hdrs = [],
+    app_name = "seshat",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(
