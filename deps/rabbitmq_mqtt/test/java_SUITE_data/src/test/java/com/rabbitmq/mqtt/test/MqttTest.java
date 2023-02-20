@@ -532,6 +532,8 @@ public class MqttTest implements MqttCallback {
         failOnDelivery = false;
 
         client.setCallback(this);
+        // Wait for client to leave connection state 'DISCONNECTING'.
+        Thread.sleep(500);
         client.connect(client_opts);
 
         // Message has been redelivered after session resume
