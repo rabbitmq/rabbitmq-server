@@ -681,6 +681,132 @@ fun(Conf) ->
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
 end}.
 
+<<<<<<< HEAD
+=======
+{mapping, "default_policies.operator.$id.vhost_pattern", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, ".*"},
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.queue_pattern", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, ".*"},
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.expires", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, "1s"},
+    {datatype, {duration, ms}}
+]}.
+
+{mapping, "default_policies.operator.$id.message_ttl", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, "1s"},
+    {datatype, {duration, ms}}
+]}.
+
+{mapping, "default_policies.operator.$id.max_length", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, 100},
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_policies.operator.$id.max_length_bytes", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, "1GB"},
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, bytesize}
+]}.
+
+{mapping, "default_policies.operator.$id.max_in_memory_bytes", "rabbit.default_policies.operator", [
+        {include_default, 1},
+        {commented, "1GB"},
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, bytesize}
+    ]}.
+
+{mapping, "default_policies.operator.$id.max_in_memory_length", "rabbit.default_policies.operator",
+    [
+        {include_default, 1},
+        {commented, 1000},
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, integer}
+    ]}.
+
+{mapping, "default_policies.operator.$id.delivery_limit", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, 1},
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_policies.operator.$id.ha_mode", "rabbit.default_policies.operator", [
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.ha_params", "rabbit.default_policies.operator", [
+    {datatype, [integer, {list, string}]}
+]}.
+
+{translation, "rabbit.default_policies.operator", fun(Conf) ->
+    Props = rabbit_cuttlefish:aggregate_props(Conf, ["default_policies", "operator"]),
+    Props1 = lists:map(
+                fun({K, Ss}) ->
+                    {K,
+                     lists:map(fun({N, V}) ->
+                        {binary:replace(N, <<"_">>, <<"-">>, [global]), V}
+                     end, Ss)}
+                end, Props),
+    case Props1 of
+        [] -> cuttlefish:unset();
+        _ -> Props1
+    end,
+    Props1
+end}.
+
+{mapping, "default_limits.vhosts.$id.pattern", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {commented, ".*"},
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {commented, 1000},
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
+    {include_default, 1},
+    {commented, 100},
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{translation, "rabbit.default_limits.vhosts", fun(Conf) ->
+    Props = rabbit_cuttlefish:aggregate_props(Conf, ["default_limits", "vhosts"]),
+    Props1 = lists:map(
+                fun({K, Ss}) ->
+                    {K,
+                     lists:map(fun({N, V}) ->
+                        {binary:replace(N, <<"_">>, <<"-">>, [global]), V}
+                     end, Ss)}
+                end, Props),
+    case Props1 of
+        [] -> cuttlefish:unset();
+        _ -> Props1
+    end,
+    Props1
+end}.
+
+>>>>>>> 964746be3d (See #7323. Add ha-mode and ha-params to default_policies)
 %% Tags for default user
 %%
 %% For more details about tags, see the documentation for the
