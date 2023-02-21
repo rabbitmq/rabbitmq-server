@@ -20,7 +20,7 @@ describe('An internal user with administrator tag', function () {
   })
 
   it('can log in into the management ui', async function () {
-    await login.login('guest', 'guest')    
+    await login.login('guest', 'guest')
     await overview.isLoaded()
     assert.equal(await overview.getUser(), 'User guest')
   })
