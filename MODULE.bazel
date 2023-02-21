@@ -184,7 +184,7 @@ erlang_package.git_package(
     name = "emqtt",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
     repository = "emqx/emqtt",
-    tag = "1.7.0-rc.3",
+    tag = "1.8.2",
 )
 
 erlang_package.hex_package(
