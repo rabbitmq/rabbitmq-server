@@ -11,5 +11,10 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 dep_jose = git https://github.com/potatosalad/erlang-jose 2b1d66b
 dep_base64url = hex 1.0.1
 
+<<<<<<< HEAD
+=======
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.8.2
+
+>>>>>>> bfa4e9f2c7 (Bump emqx/emqtt to 1.8.2)
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
