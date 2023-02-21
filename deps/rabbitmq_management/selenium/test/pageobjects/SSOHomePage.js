@@ -10,7 +10,7 @@ module.exports = class SSOHomePage extends BasePage {
     return this.waitForDisplayed(LOGIN_BUTTON)
   }
 
-  async clickToLogin (username, password) {
+  async clickToLogin () {
     await this.isLoaded()
     if (!await this.isWarningVisible()) {
       return this.click(LOGIN_BUTTON)
