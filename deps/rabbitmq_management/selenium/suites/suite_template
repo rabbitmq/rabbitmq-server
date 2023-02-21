@@ -52,12 +52,17 @@ kill_container_if_exist() {
   docker stop $1 &> /dev/null || true && docker rm $1 &> /dev/null || true
 }
 wait_for_message() {
+  attemps_left=10
   while ! docker logs $1 | grep -q "$2";
   do
       sleep 5
-      echo "Waiting 5sec for $1 to start ..."
+      echo "Waiting 5sec for $1 to start ($attemps_left attempts left )..."
+      ((attemps_left--))
+      if [[ "$attemps_left" -lt 1 ]]; then
+        echo "Timed out waiting"
+        exit 1
+      fi
   done
-
 }
 
 init_rabbitmq() {

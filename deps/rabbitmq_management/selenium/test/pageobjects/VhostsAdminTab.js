@@ -19,8 +19,7 @@ module.exports = class VhostsAdminTab extends AdminTab {
       await this.click(CHECKBOX_REGEX)
     }
     await this.driver.sleep(250)
-    await this.waitForDisplayed(VHOSTS_TABLE_ROWS)
-    return this.driver.findElement(VHOSTS_TABLE_ROWS)
+    return this.waitForDisplayed(VHOSTS_TABLE_ROWS)
   }
   async hasVhosts(vhost, regex = false) {
     return await this.searchForVhosts(vhost, regex) != undefined
