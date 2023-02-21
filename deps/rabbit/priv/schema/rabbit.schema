@@ -743,6 +743,14 @@ end}.
     {datatype, integer}
 ]}.
 
+{mapping, "default_policies.operator.$id.ha_mode", "rabbit.default_policies.operator", [
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.ha_params", "rabbit.default_policies.operator", [
+    {datatype, [integer, {list, string}]}
+]}.
+
 {translation, "rabbit.default_policies.operator", fun(Conf) ->
     Props = rabbit_cuttlefish:aggregate_props(Conf, ["default_policies", "operator"]),
     Props1 = lists:map(
