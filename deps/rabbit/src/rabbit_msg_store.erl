@@ -174,12 +174,11 @@
 
 %% Message store is responsible for storing messages
 %% on disk and loading them back. The store handles both
-%% persistent messages and transient ones (when a node
-%% is under RAM pressure and needs to page messages out
-%% to disk). The store is responsible for locating messages
+%% persistent messages and transient ones.
+%% The store is responsible for locating messages
 %% on disk and maintaining an index.
 %%
-%% There are two message stores per node: one for transient
+%% There are two message stores per vhost: one for transient
 %% and one for persistent messages.
 %%
 %% Queue processes interact with the stores via clients.
@@ -194,99 +193,61 @@
 %%
 %% The basic idea is that messages are appended to the current file up
 %% until that file becomes too big (> file_size_limit). At that point,
-%% the file is closed and a new file is created on the _right_ of the
-%% old file which is used for new messages. Files are named
+%% the file is closed and a new file is created. Files are named
 %% numerically ascending, thus the file with the lowest name is the
 %% eldest file.
 %%
 %% We need to keep track of which messages are in which files (this is
-%% the index); how much useful data is in each file and which files
-%% are on the left and right of each other. This is the purpose of the
-%% file summary ETS table.
+%% the index) and how much useful data is in each file: this is the
+%% purpose of the file summary table.
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
 %% data left in the file. This is needed for garbage collection.
 %%
 %% When we discover that a file is now empty, we delete it. When we
-%% discover that it can be combined with the useful data in either its
-%% left or right neighbour, and overall, across all the files, we have
-%% ((the amount of garbage) / (the sum of all file sizes)) >
-%% ?GARBAGE_FRACTION, we start a garbage collection run concurrently,
-%% which will compact the two files together. This keeps disk
-%% utilisation high and aids performance. We deliberately do this
-%% lazily in order to prevent doing GC on files which are soon to be
-%% emptied (and hence deleted).
+%% discover that a file has less valid data than removed data (or in
+%% other words, the valid data accounts for less than half the total
+%% size of the file), we start a garbage collection run concurrently,
+%% which will compact the file. This keeps utilisation high.
+%% @todo The comment used to claim file combining helped performance. Double check?
 %%
-%% Given the compaction between two files, the left file (i.e. elder
-%% file) is considered the ultimate destination for the good data in
-%% the right file. If necessary, the good data in the left file which
-%% is fragmented throughout the file is written out to a temporary
-%% file, then read back in to form a contiguous chunk of good data at
-%% the start of the left file. Thus the left file is garbage collected
-%% and compacted. Then the good data from the right file is copied
-%% onto the end of the left file. Index and file summary tables are
-%% updated.
+%% The discovery is done periodically on files that had messages
+%% acked and removed. We delibirately do this lazily in order to
+%% prevent doing GC on files which are soon to be emptied (and
+%% hence deleted).
+%%
+%% Compaction is a two step process: first the file gets compacted;
+%% then it gets truncated.
+%%
+%% Compaction is done concurrently regardless of there being readers
+%% for this file. The compaction process carefully moves the data
+%% at the end of the file to holes at the beginning of the file,
+%% without overwriting anything. Index information is updated once
+%% that data is fully moved and so the message data is always
+%% available to readers, including those reading the data from
+%% the end of the file.
+%%
+%% Truncation gets scheduled afterwards and only happens when
+%% we know there are no readers using the data from the end of
+%% the file. We do this by keeping track of what time readers
+%% started operating and comparing it to the time at which
+%% truncation was scheduled. It is therefore possible for the
+%% file to be truncated when there are readers, but only when
+%% those readers are reading from the start of the file.
+%%
+%% While there is no need to lock the files for compaction or
+%% truncation, we still mark the file as soft-locked in the file
+%% summary table in order to benefit from optimisations related
+%% to fan-out scenarios and transient stores as there the behavior
+%% will change depending on whether the file is getting
+%% compacted or not.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
 %% the possibilities of a crash having occurred during a compaction
-%% (this consists of tidyup - the compaction is deliberately designed
-%% such that data is duplicated on disk rather than risking it being
-%% lost), and rebuild the file summary and index ETS table.
+%% (we keep duplicate messages near the start of the file rather
+%% than the end), and rebuild the file summary and index ETS table.
 %%
-%% So, with this design, messages move to the left. Eventually, they
-%% should end up in a contiguous block on the left and are then never
-%% rewritten. But this isn't quite the case. If in a file there is one
-%% message that is being ignored, for some reason, and messages in the
-%% file to the right and in the current block are being read all the
-%% time then it will repeatedly be the case that the good data from
-%% both files can be combined and will be written out to a new
-%% file. Whenever this happens, our shunned message will be rewritten.
-%%
-%% So, provided that we combine messages in the right order,
-%% (i.e. left file, bottom to top, right file, bottom to top),
-%% eventually our shunned message will end up at the bottom of the
-%% left file. The compaction/combining algorithm is smart enough to
-%% read in good data from the left file that is scattered throughout
-%% (i.e. C and D in the below diagram), then truncate the file to just
-%% above B (i.e. truncate to the limit of the good contiguous region
-%% at the start of the file), then write C and D on top and then write
-%% E, F and G from the right file on top. Thus contiguous blocks of
-%% good data at the bottom of files are not rewritten.
-%%
-%% +-------+    +-------+         +-------+
-%% |   X   |    |   G   |         |   G   |
-%% +-------+    +-------+         +-------+
-%% |   D   |    |   X   |         |   F   |
-%% +-------+    +-------+         +-------+
-%% |   X   |    |   X   |         |   E   |
-%% +-------+    +-------+         +-------+
-%% |   C   |    |   F   |   ===>  |   D   |
-%% +-------+    +-------+         +-------+
-%% |   X   |    |   X   |         |   C   |
-%% +-------+    +-------+         +-------+
-%% |   B   |    |   X   |         |   B   |
-%% +-------+    +-------+         +-------+
-%% |   A   |    |   E   |         |   A   |
-%% +-------+    +-------+         +-------+
-%%   left         right             left
-%%
-%% From this reasoning, we do have a bound on the number of times the
-%% message is rewritten. From when it is inserted, there can be no
-%% files inserted between it and the head of the queue, and the worst
-%% case is that every time it is rewritten, it moves one position lower
-%% in the file (for it to stay at the same position requires that
-%% there are no holes beneath it, which means truncate would be used
-%% and so it would not be rewritten at all). Thus this seems to
-%% suggest the limit is the number of messages ahead of it in the
-%% queue, though it's likely that that's pessimistic, given the
-%% requirements for compaction/combination of files.
-%%
-%% The other property that we have is the bound on the lowest
-%% utilisation, which should be 50% - worst case is that all files are
-%% fractionally over half full and can't be combined (equivalent is
-%% alternating full files and files with only one tiny message in
-%% them).
 %%
 %% Messages are reference-counted. When a message with the same msg id
 %% is written several times we only store it once, and only remove it
@@ -297,6 +258,8 @@
 %% deltas for all recovered messages. This is only used on startup
 %% when the shutdown was non-clean.
 %%
+
+%% @todo Heh? Is that something real? Double check if that actually exists/existed and whether it matters.
 %% Read messages with a reference count greater than one are entered
 %% into a message cache. The purpose of the cache is not especially
 %% performance, though it can help there too, but prevention of memory
@@ -304,12 +267,12 @@
 %% are read from several processes they are read back as the same
 %% binary object rather than multiples of identical binary
 %% objects.
+
 %%
-%% Reads can be performed directly by clients without calling to the
+%% Reads are always performed directly by clients without calling the
 %% server. This is safe because multiple file handles can be used to
-%% read files. However, locking is used by the concurrent GC to make
-%% sure that reads are not attempted from files which are in the
-%% process of being garbage collected.
+%% read files, and the compaction method ensures the data is always
+%% available for reading by clients.
 %%
 %% When a message is removed, its reference count is decremented. Even
 %% if the reference count becomes 0, its entry is not removed. This is
@@ -320,12 +283,8 @@
 %% writes here. Of course, there are complications: the file to which
 %% the message has already been written could be locked pending
 %% deletion or GC, which means we have to rewrite the message as the
-%% original copy will now be lost.
-%%
-%% The server automatically defers reads, removes and contains calls
-%% that occur which refer to files which are currently being
-%% GC'd. Contains calls are only deferred in order to ensure they do
-%% not overtake removes.
+%% original copy will now be lost. (Messages with 0 references get
+%% deleted on GC as they're not considered valid data.)
 %%
 %% The current file to which messages are being written has a
 %% write-back cache. This is written to immediately by clients and can
@@ -387,10 +346,14 @@
 %% small as possible. Inspecting the set of all clients would degrade
 %% performance with many healthy clients and few, if any, dying
 %% clients, which is the typical case.
+%% @todo Honestly if there wasn't gen_server2 we could just selective
+%%       receive everything and drop the messages instead of doing
+%%       all this.
 %%
 %% Client termination messages are stored in a separate ets index to
 %% avoid filling primary message store index and message files with
 %% client termination messages.
+%% @todo I have no idea what this is talking about.
 %%
 %% When the msg_store has a backlog (i.e. it has unprocessed messages
 %% in its mailbox / gen_server priority queue), a further optimisation
