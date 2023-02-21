@@ -15,7 +15,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 dep_jose = git https://github.com/michaelklishin/erlang-jose mk-thoas-support
 dep_base64url = hex 1.0.1
 
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.7.0-rc.3
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.8.2
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
