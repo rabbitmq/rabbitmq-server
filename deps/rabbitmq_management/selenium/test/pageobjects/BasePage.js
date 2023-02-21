@@ -1,5 +1,15 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 
+const MENU_TABS = By.css('div#menu ul#tabs')
+const USER = By.css('li#logout')
+const LOGOUT_FORM = By.css('li#logout form')
+
+const CONNECTION_TAB = By.css('div#menu ul#tabs li a[href="#/connections"]')
+const CHANNELS_TAB = By.css('div#menu ul#tabs li a[href="#/channels"]')
+const QUEUES_TAB = By.css('div#menu ul#tabs li a[href="#/queues"]')
+const EXCHANGES_TAB = By.css('div#menu ul#tabs li a[href="#/exchanges"]')
+const ADMIN_TAB = By.css('div#menu ul#tabs li a[href="#/users"]')
+
 module.exports = class BasePage {
   driver
   timeout
@@ -10,6 +20,53 @@ module.exports = class BasePage {
     // this is another timeout (--timeout 10000) which is the maximum test execution time
     this.timeout = parseInt(process.env.TIMEOUT) || 5000 // max time waiting to locate an element. Should be less that test timeout
     this.polling = parseInt(process.env.POLLING) || 1000 // how frequent selenium searches for an element
+  }
+
+  async isLoaded () {
+    return this.waitForDisplayed(MENU_TABS)
+  }
+
+  async logout () {
+    await this.submit(LOGOUT_FORM)
+  }
+
+  async getUser () {
+    return this.getText(USER)
+  }
+
+  async clickOnConnectionsTab () {
+    return this.click(CONNECTION_TAB)
+  }
+
+  async clickOnAdminTab () {
+    return this.click(ADMIN_TAB)
+  }
+
+  async clickOnChannelsTab () {
+    return this.click(CHANNELS_TAB)
+  }
+
+  async clickOnExchangesTab () {
+    return this.click(EXCHANGES_TAB)
+  }
+
+  async clickOnQueuesTab () {
+    return this.click(QUEUES_TAB)
+  }
+
+  async getTable(locator, firstNColumns) {
+    let table = await this.waitForDisplayed(locator)
+    let rows = await table.findElements(By.css('tbody tr'))
+    let table_model = []
+    for (let row of rows) {
+      let columns = await row.findElements(By.css('td'))
+      let table_row = []
+      for (let column of columns) {
+        if (table_row.length < firstNColumns) table_row.push(await column.getText())
+      }
+      table_model.push(table_row)
+    }
+    return table_model
   }
 
   async waitForLocated (locator) {
