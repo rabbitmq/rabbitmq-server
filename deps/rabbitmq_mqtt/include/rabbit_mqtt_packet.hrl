@@ -118,9 +118,9 @@
 %% The Client is not authorized to connect.
 -define(CONNACK_NOT_AUTHORIZED, 5).
 %%
--type connack_return_code() :: ?CONNACK_ACCEPT..?CONNACK_NOT_AUTHORIZED.
+-type connect_return_code() :: ?CONNACK_ACCEPT..?CONNACK_NOT_AUTHORIZED.
 
--type connack_code() :: connack_return_code() | %% v3 or v4
+-type connect_code() :: connect_return_code() | %% v3 or v4
                         reason_code(). %% v5
 
 -define(SUBACK_FAILURE, ?RC_UNSPECIFIED_ERROR).
@@ -162,7 +162,7 @@
                              }).
 
 -record(mqtt_packet_connack, {session_present :: boolean(),
-                              code :: connack_code(),
+                              code :: connect_code(),
                               props = #{} :: properties()}).
 
 -record(mqtt_packet_publish, {topic_name :: binary(),

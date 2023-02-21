@@ -359,11 +359,11 @@ serialise(#mqtt_packet{fixed = Fixed,
     iodata().
 serialise(#mqtt_packet_fixed{type = ?CONNACK} = Fixed,
           #mqtt_packet_connack{session_present = SessionPresent,
-                               code = ConnAckCode,
+                               code = ConnectCode,
                                props = Props},
           undefined, Vsn) ->
     Variable = [bool_to_int(SessionPresent),
-                ConnAckCode,
+                ConnectCode,
                 serialise_props(Props, Vsn)],
     serialise_fixed(Fixed, Variable, []);
 serialise(#mqtt_packet_fixed{type = ?SUBACK} = Fixed,

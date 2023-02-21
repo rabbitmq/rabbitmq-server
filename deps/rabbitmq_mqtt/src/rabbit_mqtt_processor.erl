@@ -47,7 +47,7 @@
 
 -record(cfg,
         {socket :: rabbit_net:socket(),
-         proto_ver :: mqtt310 | mqtt311,
+         proto_ver :: protocol_version_atom(),
          clean_sess :: boolean(),
          will_msg :: option(mqtt_msg()),
          exchange :: rabbit_exchange:name(),
@@ -97,7 +97,7 @@
            RawSocket :: rabbit_net:socket(),
            ConnectionName :: binary(),
            SendFun :: send_fun()) ->
-    {ok, state()} | {error, {socket_ends, any()} | connack_code()}.
+    {ok, state()} | {error, {socket_ends, any()} | reason_code()}.
 init(#mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNECT},
                   variable = ConnectPacket},
      Socket, ConnName, SendFun) ->
@@ -181,23 +181,49 @@ process_connect(
              end,
     case Result of
         {ok, SessPresent, State = #state{}} ->
-            send_conn_ack(?CONNACK_ACCEPT, SessPresent, ProtoVer, SendFun),
+            send_conn_ack(?RC_SUCCESS, SessPresent, ProtoVer, SendFun),
             {ok, State};
-        {error, ConnAckErrCode} = Err
-          when is_integer(ConnAckErrCode) ->
+        {error, ConnectReasonCode} = Err
+          when is_integer(ConnectReasonCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
-            send_conn_ack(ConnAckErrCode, SessPresent, ProtoVer, SendFun),
+            send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun),
             Err
     end.
 
-send_conn_ack(ConnAckCode, SessPresent, ProtoVer, SendFun) ->
+-spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun()) -> ok.
+send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun) ->
+    Code = case ProtoVer of
+               5 -> ConnectReasonCode;
+               _ -> connect_reason_code_to_return_code(ConnectReasonCode)
+           end,
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNACK},
                           variable = #mqtt_packet_connack{
                                         session_present = SessPresent,
-                                        code = ConnAckCode}},
+                                        code = Code}},
     ok = send(Packet, ProtoVer, SendFun).
+
+%% "Connect Reason Code" used in v5:
+%% https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901079
+%% "Connect Return Code" used in v3 and v4:
+%% http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc385349257
+-spec connect_reason_code_to_return_code(reason_code()) ->
+    connect_return_code().
+connect_reason_code_to_return_code(?RC_SUCCESS) ->
+    ?CONNACK_ACCEPT;
+connect_reason_code_to_return_code(?RC_UNSUPPORTED_PROTOCOL_VERSION) ->
+    ?CONNACK_UNACCEPTABLE_PROTO_VER;
+connect_reason_code_to_return_code(?RC_CLIENT_IDENTIFIER_NOT_VALID) ->
+    ?CONNACK_ID_REJECTED;
+connect_reason_code_to_return_code(?RC_BAD_USER_NAME_OR_PASSWORD) ->
+    ?CONNACK_BAD_CREDENTIALS;
+connect_reason_code_to_return_code(RC) when RC =:= ?RC_NOT_AUTHORIZED orelse
+                                            RC =:= ?RC_QUOTA_EXCEEDED ->
+    ?CONNACK_NOT_AUTHORIZED;
+connect_reason_code_to_return_code(_) ->
+    %% Everything else gets mapped to the most generic Connect Return Code.
+    ?CONNACK_SERVER_UNAVAILABLE.
 
 process_connect(State0) ->
     maybe
@@ -381,8 +407,8 @@ check_protocol_version(ProtoVersion) ->
         true ->
             ok;
         false ->
-            ?LOG_ERROR("unacceptable MQTT protocol version: ~p", [ProtoVersion]),
-            {error, ?CONNACK_UNACCEPTABLE_PROTO_VER}
+            ?LOG_ERROR("unsupported MQTT protocol version: ~p", [ProtoVersion]),
+            {error, ?RC_UNSUPPORTED_PROTOCOL_VERSION}
     end.
 
 check_credentials(Username, Password, SslLoginName, PeerIp) ->
@@ -390,22 +416,22 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
         nocreds ->
             auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no credentials provided"),
-            {error, ?CONNACK_BAD_CREDENTIALS};
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
             auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no username is provided"),
-            {error, ?CONNACK_BAD_CREDENTIALS};
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {User, undefined}} when is_binary(User) ->
             auth_attempt_failed(PeerIp, User),
             ?LOG_ERROR("MQTT login failed for user '~p': no password provided", [User]),
-            {error, ?CONNACK_BAD_CREDENTIALS};
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {UserBin, PassBin} ->
             {ok, {UserBin, PassBin}}
     end.
 
 ensure_client_id(<<>>, _CleanSess = false) ->
     ?LOG_ERROR("MQTT client ID must be provided for non-clean session"),
-    {error, ?CONNACK_ID_REJECTED};
+    {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID};
 ensure_client_id(<<>>, _CleanSess = true) ->
     {ok, rabbit_data_coercion:to_binary(
            rabbit_misc:base64url(
@@ -416,7 +442,7 @@ ensure_client_id(ClientId, _CleanSess)
 
 -spec register_client_id(rabbit_types:vhost(), binary()) ->
     {ok, RaRegisterState :: undefined | {pending, reference()}} |
-    {error, ConnAckErrorCode :: pos_integer()}.
+    {error, ConnectErrorCode :: pos_integer()}.
 register_client_id(VHost, ClientId)
   when is_binary(VHost), is_binary(ClientId) ->
     %% Always register client ID in pg.
@@ -433,7 +459,7 @@ register_client_id(VHost, ClientId)
                     %% e.g. this node was removed from the MQTT cluster members
                     ?LOG_ERROR("MQTT connection failed to register client ID ~s in vhost ~s in Ra: ~p",
                                [ClientId, VHost, Err]),
-                    {error, ?CONNACK_SERVER_UNAVAILABLE}
+                    {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
             end;
         false ->
             ok = erpc:multicast([node() | nodes()],
@@ -512,7 +538,7 @@ handle_clean_sess(_, QoS,
                     delete_queue(QName, Username),
                     {ok, SessPresent, State};
                 {error, access_refused} ->
-                    {error, ?CONNACK_NOT_AUTHORIZED}
+                    {error, ?RC_NOT_AUTHORIZED}
             end
     end;
 handle_clean_sess(SessPresent, QoS,
@@ -526,10 +552,9 @@ handle_clean_sess(SessPresent, QoS,
                 {ok, State} ->
                     {ok, _SessionPresent = true, State};
                 {error, access_refused} ->
-                    {error, ?CONNACK_NOT_AUTHORIZED};
+                    {error, ?RC_NOT_AUTHORIZED};
                 {error, _Reason} ->
-                    %% Let's use most generic error return code.
-                    {error, ?CONNACK_SERVER_UNAVAILABLE}
+                    {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
             end
     end.
 
@@ -665,7 +690,7 @@ check_vhost_exists(VHost, Username, PeerIp) ->
         false ->
             auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: virtual host '~s' does not exist", [VHost]),
-            {error, ?CONNACK_BAD_CREDENTIALS}
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
 check_vhost_connection_limit(VHost) ->
@@ -675,7 +700,7 @@ check_vhost_connection_limit(VHost) ->
         {true, Limit} ->
             ?LOG_ERROR("MQTT connection failed: connection limit ~p is reached for vhost '~s'",
                        [Limit, VHost]),
-            {error, ?CONNACK_NOT_AUTHORIZED}
+            {error, ?RC_QUOTA_EXCEEDED}
     end.
 
 check_vhost_alive(VHost) ->
@@ -684,7 +709,7 @@ check_vhost_alive(VHost) ->
             ok;
         false ->
             ?LOG_ERROR("MQTT connection failed: vhost '~s' is down", [VHost]),
-            {error, ?CONNACK_NOT_AUTHORIZED}
+            {error, ?RC_NOT_AUTHORIZED}
     end.
 
 check_user_login(VHost, Username, Password, ClientId, PeerIp, ConnName) ->
@@ -707,7 +732,7 @@ check_user_login(VHost, Username, Password, ClientId, PeerIp, ConnName) ->
             ?LOG_ERROR("MQTT connection failed: access refused for user '~s':" ++ Msg,
                        [Username | Args]),
             notify_auth_result(user_authentication_failure, Username, ConnName),
-            {error, ?CONNACK_BAD_CREDENTIALS}
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
 notify_auth_result(AuthResult, Username, ConnName) ->
@@ -724,7 +749,7 @@ check_user_connection_limit(Username) ->
             ?LOG_ERROR(
                "MQTT connection failed: connection limit ~p is reached for user ~s",
                [Limit, Username]),
-            {error, ?CONNACK_NOT_AUTHORIZED}
+            {error, ?RC_QUOTA_EXCEEDED}
     end.
 
 
@@ -738,7 +763,7 @@ check_vhost_access(VHost, User = #user{username = Username}, ClientId, PeerIp) -
               auth_attempt_failed(PeerIp, Username),
               ?LOG_ERROR("MQTT connection failed: access refused for user '~s' to vhost '~s'",
                          [Username, VHost]),
-              {error, ?CONNACK_NOT_AUTHORIZED}
+              {error, ?RC_NOT_AUTHORIZED}
     end.
 
 check_user_loopback(Username, PeerIp) ->
@@ -749,7 +774,7 @@ check_user_loopback(Username, PeerIp) ->
             auth_attempt_failed(PeerIp, Username),
             ?LOG_WARNING(
               "MQTT login failed: user '~s' can only connect via localhost", [Username]),
-            {error, ?CONNACK_NOT_AUTHORIZED}
+            {error, ?RC_NOT_AUTHORIZED}
     end.
 
 get_vhost(UserBin, none, Port) ->
@@ -1689,21 +1714,29 @@ ssl_login_name(Sock) ->
         nossl                -> none
     end.
 
+-spec proto_integer_to_atom(protocol_version()) -> protocol_version_atom().
 proto_integer_to_atom(3) ->
     ?MQTT_PROTO_V3;
 proto_integer_to_atom(4) ->
-    ?MQTT_PROTO_V4.
+    ?MQTT_PROTO_V4;
+proto_integer_to_atom(5) ->
+    ?MQTT_PROTO_V5.
 
+-spec proto_atom_to_integer(protocol_version_atom()) -> protocol_version().
 proto_atom_to_integer(?MQTT_PROTO_V3) ->
     3;
 proto_atom_to_integer(?MQTT_PROTO_V4) ->
-    4.
+    4;
+proto_atom_to_integer(?MQTT_PROTO_V5) ->
+    5.
 
 -spec proto_version_tuple(state()) -> tuple().
 proto_version_tuple(#state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V3}}) ->
     {3, 1, 0};
 proto_version_tuple(#state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V4}}) ->
-    {3, 1, 1}.
+    {3, 1, 1};
+proto_version_tuple(#state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+    {5, 0}.
 
 maybe_increment_publisher(State = #state{cfg = Cfg = #cfg{published = false,
                                                           proto_ver = ProtoVer}}) ->

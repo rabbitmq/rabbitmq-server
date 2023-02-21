@@ -13,16 +13,21 @@
 
 all() ->
     [
-     {group, dets},
-     {group, ets},
-     {group, noop}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-     {dets, [], tests()},
-     {ets, [], tests()},
-     {noop, [], [does_not_retain]}
+     {v4, [], sub_groups()},
+     {v5, [], sub_groups()}
+    ].
+
+sub_groups() ->
+    [
+     {dets, [shuffle], tests()},
+     {ets, [shuffle], tests()},
+     {noop, [shuffle], [does_not_retain]}
     ].
 
 tests() ->
@@ -34,7 +39,7 @@ tests() ->
     ].
 
 suite() ->
-    [{timetrap, {minutes, 2}}].
+    [{timetrap, {minutes, 1}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -47,11 +52,16 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+init_per_group(G, Config)
+  when G =:= v4;
+       G =:= v5 ->
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, G});
 init_per_group(Group, Config0) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
     Config = rabbit_ct_helpers:set_config(
                Config0,
                [
-                {rmq_nodename_suffix, Group},
+                {rmq_nodename_suffix, Suffix},
                 {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
                                        tcp_port_mqtt_tls_extra]}
                ]),
@@ -69,6 +79,10 @@ init_per_group(Group, Config0) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
+end_per_group(G, Config)
+  when G =:= v4;
+       G =:= v5 ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
       Config,
