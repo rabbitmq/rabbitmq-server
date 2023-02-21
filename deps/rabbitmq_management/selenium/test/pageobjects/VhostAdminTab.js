@@ -13,7 +13,7 @@ module.exports = class VhostAdminTab extends AdminTab {
     await this.waitForDisplayed(VHOST_NAME)
     await this.waitForDisplayed(OVERVIEW_SECTION)
     await this.waitForDisplayed(PERMISSIONS_SECTION)
-    return await this.waitForDisplayed(TOPIC_PERMISSIONS_SECTION)
+    return this.waitForDisplayed(TOPIC_PERMISSIONS_SECTION)
   }
 
   async getName() {

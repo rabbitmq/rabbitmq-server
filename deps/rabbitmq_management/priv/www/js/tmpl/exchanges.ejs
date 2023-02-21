@@ -1,8 +1,8 @@
 <h1>Exchanges</h1>
-<div class="section">
+<div class="section" id="exchanges-paging-section">
    <%= paginate_ui(exchanges, 'exchanges') %>
-</div> 
-<div class="updatable">
+</div>
+<div class="updatable" id="exchanges-table-section">
 <% if (exchanges.items.length > 0) { %>
 <table class="list">
  <thead>
@@ -84,7 +84,7 @@
   </div>
 </div>
 
-<div class="section-hidden">
+<div class="section-hidden" id="add-new-exchange">
   <h2>Add a new exchange</h2>
   <div class="hider">
     <form action="#/exchanges" method="put">
