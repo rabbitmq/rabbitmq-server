@@ -211,12 +211,6 @@ declare(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true}).
 
-declare(Ch, Q, Args) ->
-    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
-                                           durable   = true,
-                                           auto_delete = false,
-                                           arguments = Args}).
-
 delete(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
@@ -280,7 +274,6 @@ verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
 verify_policy([], _, _) ->
     ok;
 verify_policy([{HA, Expect} | Tail], Server, QName) ->
-    ct:print(">>> Expect: ~p >>> actual ~p",[Expect, check_policy_value(Server, QName, HA)]),
     Expect = check_policy_value(Server, QName, HA),
     verify_policy(Tail, Server, QName).
 
