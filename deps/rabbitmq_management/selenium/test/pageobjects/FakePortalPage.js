@@ -2,7 +2,7 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 
 const BasePage = require('./BasePage')
 
-const FORM = By.css('form')
+const FORM = By.css('form#login_form')
 const FAKE_PORTAL_URL = process.env.FAKE_PORTAL_URL || 'http://localhost:3000'
 
 module.exports = class FakePortalPage extends BasePage {
