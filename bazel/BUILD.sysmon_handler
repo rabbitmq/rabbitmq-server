@@ -16,55 +16,30 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_sysmon_handler_app_beam",
-    srcs = ["src/sysmon_handler_app.erl"],
-    outs = ["ebin/sysmon_handler_app.beam"],
-    app_name = "sysmon_handler",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_sysmon_handler_example_handler_beam",
-    srcs = ["src/sysmon_handler_example_handler.erl"],
-    outs = ["ebin/sysmon_handler_example_handler.beam"],
-    app_name = "sysmon_handler",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_sysmon_handler_filter_beam",
-    srcs = ["src/sysmon_handler_filter.erl"],
-    outs = ["ebin/sysmon_handler_filter.beam"],
-    hdrs = ["include/sysmon_handler.hrl"],
-    app_name = "sysmon_handler",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_sysmon_handler_sup_beam",
-    srcs = ["src/sysmon_handler_sup.erl"],
-    outs = ["ebin/sysmon_handler_sup.beam"],
-    app_name = "sysmon_handler",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_sysmon_handler_testhandler_beam",
-    srcs = ["src/sysmon_handler_testhandler.erl"],
-    outs = ["ebin/sysmon_handler_testhandler.beam"],
-    app_name = "sysmon_handler",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/sysmon_handler_app.erl",
+        "src/sysmon_handler_example_handler.erl",
+        "src/sysmon_handler_filter.erl",
+        "src/sysmon_handler_sup.erl",
+        "src/sysmon_handler_testhandler.erl",
+    ],
+    outs = [
         "ebin/sysmon_handler_app.beam",
         "ebin/sysmon_handler_example_handler.beam",
         "ebin/sysmon_handler_filter.beam",
         "ebin/sysmon_handler_sup.beam",
         "ebin/sysmon_handler_testhandler.beam",
     ],
+    hdrs = ["include/sysmon_handler.hrl"],
+    app_name = "sysmon_handler",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(

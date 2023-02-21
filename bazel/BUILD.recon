@@ -16,56 +16,16 @@ erlc_opts(
 )
 
 erlang_bytecode(
-    name = "ebin_recon_beam",
-    srcs = ["src/recon.erl"],
-    outs = ["ebin/recon.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_recon_alloc_beam",
-    srcs = ["src/recon_alloc.erl"],
-    outs = ["ebin/recon_alloc.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_recon_lib_beam",
-    srcs = ["src/recon_lib.erl"],
-    outs = ["ebin/recon_lib.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_recon_map_beam",
-    srcs = ["src/recon_map.erl"],
-    outs = ["ebin/recon_map.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_recon_rec_beam",
-    srcs = ["src/recon_rec.erl"],
-    outs = ["ebin/recon_rec.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-erlang_bytecode(
-    name = "ebin_recon_trace_beam",
-    srcs = ["src/recon_trace.erl"],
-    outs = ["ebin/recon_trace.beam"],
-    app_name = "recon",
-    erlc_opts = "//:erlc_opts",
-)
-
-filegroup(
-    name = "beam_files",
+    name = "other_beam",
     srcs = [
+        "src/recon.erl",
+        "src/recon_alloc.erl",
+        "src/recon_lib.erl",
+        "src/recon_map.erl",
+        "src/recon_rec.erl",
+        "src/recon_trace.erl",
+    ],
+    outs = [
         "ebin/recon.beam",
         "ebin/recon_alloc.beam",
         "ebin/recon_lib.beam",
@@ -73,6 +33,15 @@ filegroup(
         "ebin/recon_rec.beam",
         "ebin/recon_trace.beam",
     ],
+    hdrs = [],
+    app_name = "recon",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
 )
 
 filegroup(

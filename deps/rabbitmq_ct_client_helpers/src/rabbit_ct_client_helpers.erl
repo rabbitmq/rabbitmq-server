@@ -147,6 +147,8 @@ open_connection(Config, Node) ->
     Pid ! {open_connection, self()},
     receive
         Conn when is_pid(Conn) -> Conn
+    after 60_000 ->
+        ct:fail("Timed out waiting for connection to open")
     end.
 
 open_unmanaged_connection(Config) ->

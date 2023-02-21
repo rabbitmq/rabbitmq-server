@@ -41,7 +41,8 @@ plt(
     name = "base_plt",
     plt = "//:base_plt",
     deps = DEPS + without(
-        # eetcd uses subdirectories in `src/`, and this confuses dialyzer.
+        # eetcd depends on gun, which still uses erlang:get_stacktrace/0
+        # and fails this rule if included
         "@eetcd//:erlang_app",
         RUNTIME_DEPS,
     ),
