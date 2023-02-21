@@ -184,7 +184,11 @@ erlang_package.git_package(
     name = "emqtt",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
     repository = "emqx/emqtt",
+<<<<<<< HEAD
     tag = "1.7.0-rc.2",
+=======
+    tag = "1.8.2",
+>>>>>>> bfa4e9f2c7 (Bump emqx/emqtt to 1.8.2)
 )
 
 erlang_package.hex_package(

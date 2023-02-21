@@ -39,7 +39,11 @@ DEPS = ranch rabbit_common rabbit amqp_client ra
 TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
+<<<<<<< HEAD
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.7.0-rc.2
+=======
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.8.2
+>>>>>>> bfa4e9f2c7 (Bump emqx/emqtt to 1.8.2)
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
