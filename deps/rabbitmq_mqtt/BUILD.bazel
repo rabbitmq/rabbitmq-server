@@ -131,6 +131,7 @@ broker_for_integration_suites(
 
 rabbitmq_integration_suite(
     name = "auth_SUITE",
+    shard_count = 14,
     additional_beam = [
         "test/rabbit_auth_backend_mqtt_mock.beam",
         "test/util.beam",
@@ -220,6 +221,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_util_beam",
     ],
+    shard_count = 6,
     runtime_deps = [
         "@emqtt//:erlang_app",
     ],
@@ -232,7 +234,7 @@ rabbitmq_integration_suite(
         ":test_util_beam",
         ":test_event_recorder_beam",
     ],
-    shard_count = 6,
+    shard_count = 12,
     runtime_deps = [
         "//deps/rabbitmq_management_agent:erlang_app",
         "@emqtt//:erlang_app",

@@ -17,15 +17,20 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                merge_defaults,
-                                run
-                               ]}
+     {v4, [shuffle], tests()},
+     {v5, [shuffle], tests()}
+    ].
+
+tests() ->
+    [
+     merge_defaults,
+     run
     ].
 
 suite() ->
@@ -51,8 +56,8 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(Group, Config) ->
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
 
 end_per_group(_, Config) ->
     Config.

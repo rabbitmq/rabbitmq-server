@@ -344,9 +344,9 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                                        "addresses could not be determined: ~tp",
                                        [ConnName, Reason]),
                             {stop, {shutdown, R}, {_SendWill = false, State}};
-                        {error, ConnAckCode} ->
-                            ?LOG_ERROR("Rejected MQTT connection ~ts with CONNACK code ~p",
-                                       [ConnName, ConnAckCode]),
+                        {error, ConnectReasonCode} ->
+                            ?LOG_ERROR("Rejected MQTT connection ~ts with Connect Reason Code ~p",
+                                       [ConnName, ConnectReasonCode]),
                             {stop, shutdown, {_SendWill = false, State}}
                     end;
                 _ ->

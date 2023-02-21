@@ -19,16 +19,19 @@
 -import(rabbit_ct_broker_helpers, [rpc/5]).
 
 all() ->
-    [{group, anonymous_no_ssl_user},
-     {group, anonymous_ssl_user},
-     {group, no_ssl_user},
-     {group, ssl_user},
-     {group, client_id_propagation},
-     {group, authz},
-     {group, limit}].
+    [
+     {group, v4},
+     {group, v5}
+    ].
 
 groups() ->
-    [{anonymous_ssl_user, [],
+    [
+     {v4, [], sub_groups()},
+     {v5, [], sub_groups()}
+    ].
+
+sub_groups() ->
+    [{anonymous_ssl_user, [shuffle],
       [anonymous_auth_success,
        user_credentials_auth,
        ssl_user_auth_success,
@@ -38,7 +41,7 @@ groups() ->
        ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
        ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping
       ]},
-     {anonymous_no_ssl_user, [],
+     {anonymous_no_ssl_user, [shuffle],
       [anonymous_auth_success,
        user_credentials_auth,
        port_vhost_mapping_success,
@@ -47,7 +50,7 @@ groups() ->
        port_vhost_mapping_vhost_does_not_exist
        %% SSL auth will succeed, because we cannot ignore anonymous
        ]},
-     {ssl_user, [],
+     {ssl_user, [shuffle],
       [anonymous_auth_failure,
        user_credentials_auth,
        ssl_user_auth_success,
@@ -57,7 +60,7 @@ groups() ->
        ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
        ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping
       ]},
-     {no_ssl_user, [],
+     {no_ssl_user, [shuffle],
       [anonymous_auth_failure,
        user_credentials_auth,
        ssl_user_auth_failure,
@@ -66,7 +69,7 @@ groups() ->
        port_vhost_mapping_not_allowed,
        port_vhost_mapping_vhost_does_not_exist
      ]},
-     {client_id_propagation, [],
+     {client_id_propagation, [shuffle],
       [client_id_propagation]
      },
      {authz, [],
@@ -84,7 +87,7 @@ groups() ->
        loopback_user_connects_from_remote_host
       ]
      },
-     {limit, [],
+     {limit, [shuffle],
       [vhost_connection_limit,
        vhost_queue_limit,
        user_connection_limit
@@ -98,6 +101,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+init_per_group(G, Config)
+  when G =:= v4;
+       G =:= v5 ->
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, G});
 init_per_group(authz, Config0) ->
     User = <<"mqtt-user">>,
     Password = <<"mqtt-password">>,
@@ -137,6 +144,10 @@ init_per_group(Group, Config) ->
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()).
 
+end_per_group(G, Config)
+  when G =:= v4;
+       G =:= v5 ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
@@ -457,7 +468,7 @@ connect_anonymous(Config, ClientId) ->
     emqtt:start_link([{host, "localhost"},
                       {port, P},
                       {clientid, ClientId},
-                      {proto_ver, v4}]).
+                      {proto_ver, ?config(mqtt_version, Config)}]).
 
 connect_ssl(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
@@ -468,7 +479,7 @@ connect_ssl(Config) ->
     emqtt:start_link([{host, "localhost"},
                       {port, P},
                       {clientid, <<"simpleClient">>},
-                      {proto_ver, v4},
+                      {proto_ver, ?config(mqtt_version, Config)},
                       {ssl, true},
                       {ssl_opts, SSLConfig}]).
 
@@ -549,7 +560,7 @@ no_queue_unbind_permission(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Opts = [{host, "localhost"},
             {port, P},
-            {proto_ver, v4},
+            {proto_ver, ?config(mqtt_version, Config)},
             {clientid, User},
             {username, User},
             {password, ?config(mqtt_password, Config)}],
@@ -622,7 +633,7 @@ no_queue_delete_permission(Config) ->
        ,{[io_lib:format("MQTT resource access refused: configure access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "Rejected MQTT connection .* with CONNACK code 5"],
+          "Rejected MQTT connection .* with Connect Reason Code 135"],
          fun() -> stop end}
       ]),
     ok.
@@ -656,7 +667,7 @@ no_queue_consume_permission_on_connect(Config) ->
        ,{[io_lib:format("MQTT resource access refused: read access to queue "
                         "'mqtt-subscription-~sqos1' in vhost 'mqtt-vhost' refused for user 'mqtt-user'",
                         [ClientId]),
-          "Rejected MQTT connection .* with CONNACK code 5"],
+          "Rejected MQTT connection .* with Connect Reason Code 135"],
          fun () -> stop end}
       ]),
     ok.
@@ -824,7 +835,7 @@ loopback_user_connects_from_remote_host(Config) ->
     wait_log(Config,
              [?FAIL_IF_CRASH_LOG,
               {["MQTT login failed: user 'mqtt-user' can only connect via localhost",
-                "Rejected MQTT connection .* with CONNACK code 5"],
+                "Rejected MQTT connection .* with Connect Reason Code 135"],
                fun () -> stop end}
              ]),
 
@@ -862,10 +873,10 @@ test_subscribe_permissions_combination(PermConf, PermWrite, PermRead, Config, Ex
             {clientid, User},
             {username, User},
             {password, ?config(mqtt_password, Config)}],
-    {ok, C1} = emqtt:start_link([{proto_ver, v4} | Opts]),
+    {ok, C1} = emqtt:start_link([{proto_ver, ?config(mqtt_version, Config)} | Opts]),
     {ok, _} = emqtt:connect(C1),
     process_flag(trap_exit, true),
-    %% In v4, we expect to receive a failure return code for our subscription in the SUBACK packet.
+    %% In v4 and v5, we expect to receive a failure return code for our subscription in the SUBACK packet.
     ?assertMatch({ok, _Properties, [?SUBACK_FAILURE]},
                  emqtt:subscribe(C1, <<"test/topic">>)),
     ok = assert_connection_closed(C1),
@@ -900,7 +911,7 @@ connect_user(User, Pass, Config, ClientID0, Opts) ->
                end,
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     emqtt:start_link(Opts ++ Creds ++ ClientID ++
-                     [{host, "localhost"}, {port, P}, {proto_ver, v4}]).
+                     [{host, "localhost"}, {port, P}, {proto_ver, ?config(mqtt_version, Config)}]).
 
 expect_successful_connection(ConnectFun, Config) ->
     rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
@@ -936,8 +947,9 @@ vhost_connection_limit(Config) ->
     {ok, C2} = connect_anonymous(Config, <<"client2">>),
     {ok, _} = emqtt:connect(C2),
     {ok, C3} = connect_anonymous(Config, <<"client3">>),
+    ExpectedError = expected_connection_limit_error(Config),
     unlink(C3),
-    ?assertMatch({error, {unauthorized_client, _}}, emqtt:connect(C3)),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
 
@@ -959,10 +971,20 @@ user_connection_limit(Config) ->
     {ok, C1} = connect_anonymous(Config, <<"client1">>),
     {ok, _} = emqtt:connect(C1),
     {ok, C2} = connect_anonymous(Config, <<"client2">>),
+    ExpectedError = expected_connection_limit_error(Config),
     unlink(C2),
-    ?assertMatch({error, {unauthorized_client, _}}, emqtt:connect(C2)),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
     ok = emqtt:disconnect(C1),
     ok = rabbit_ct_broker_helpers:clear_user_limits(Config, DefaultUser, max_connections).
+
+expected_connection_limit_error(Config) ->
+    case ?config(mqtt_version, Config) of
+        v4 ->
+            unauthorized_client;
+        v5 ->
+            %% MQTT 5.0 has more specific error codes.
+            quota_exceeded
+    end.
 
 wait_log(Config, Clauses) ->
     wait_log(Config, Clauses, erlang:monotonic_time(millisecond) + 1000).

@@ -93,7 +93,8 @@ local_connection_pids() ->
 
 init_global_counters() ->
     init_global_counters(?MQTT_PROTO_V3),
-    init_global_counters(?MQTT_PROTO_V4).
+    init_global_counters(?MQTT_PROTO_V4),
+    init_global_counters(?MQTT_PROTO_V5).
 
 init_global_counters(ProtoVer) ->
     Proto = {protocol, ProtoVer},

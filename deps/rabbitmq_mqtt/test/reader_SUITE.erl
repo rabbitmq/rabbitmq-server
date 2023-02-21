@@ -22,24 +22,28 @@
 
 all() ->
     [
-     {group, tests}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-     {tests, [],
-      [
-       block_connack_timeout,
-       handle_invalid_packets,
-       login_timeout,
-       stats,
-       quorum_clean_session_false,
-       quorum_clean_session_true,
-       classic_clean_session_true,
-       classic_clean_session_false,
-       event_authentication_failure,
-       rabbit_mqtt_qos0_queue_overflow
-      ]}
+     {v4, [shuffle], tests()},
+     {v5, [shuffle], tests()}
+    ].
+
+tests() ->
+    [
+     block_connack_timeout,
+     handle_invalid_packets,
+     login_timeout,
+     stats,
+     quorum_clean_session_false,
+     quorum_clean_session_true,
+     classic_clean_session_true,
+     classic_clean_session_false,
+     event_authentication_failure,
+     rabbit_mqtt_qos0_queue_overflow
     ].
 
 suite() ->
@@ -50,11 +54,10 @@ suite() ->
 %% -------------------------------------------------------------------
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics, basic},
-                                              {collect_statistics_interval, 100}
-                                             ]}).
+    rabbit_ct_helpers:merge_app_env(
+      Config, {rabbit, [{collect_statistics, basic},
+                        {collect_statistics_interval, 100}
+                       ]}).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -73,8 +76,8 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(Group, Config) ->
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
 
 end_per_group(_, Config) ->
     Config.
@@ -84,7 +87,6 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -102,7 +104,7 @@ block_connack_timeout(Config) ->
     {ok, Client} = emqtt:start_link([{host, "localhost"},
                                      {port, P},
                                      {clientid, atom_to_binary(?FUNCTION_NAME)},
-                                     {proto_ver, v4},
+                                     {proto_ver, ?config(mqtt_version, Config)},
                                      {connect_timeout, 1}]),
     unlink(Client),
     ClientMRef = monitor(process, Client),
@@ -224,7 +226,7 @@ event_authentication_failure(Config) ->
                  {host, "localhost"},
                  {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
                  {clientid, atom_to_binary(?FUNCTION_NAME)},
-                 {proto_ver, v4}]),
+                 {proto_ver, ?config(mqtt_version, Config)}]),
     true = unlink(C),
 
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
