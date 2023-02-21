@@ -728,15 +728,17 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
+            %% Transient.
             undefined -> ok = rabbit_file:recursive_delete([Dir]),
                          ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
                          false;
+            %% Persistent.
             _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
-                         recover_crashed_compactions(Dir)
+                         true
         end,
-    %% if we found crashed compactions we trust neither the
-    %% file_summary nor the location index. Note the file_summary is
-    %% left empty here if it can't be recovered.
+    %% Always attempt to recover the file summary for persistent store.
+    %% If the shutdown isn't clean we will delete all objects before
+    %% we start recovering messages from the files on disk.
     {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AttemptFileSummaryRecovery, Dir),
     {CleanShutdown, IndexState, ClientRefs1} =
@@ -1528,7 +1530,7 @@ recover_file_summary(false, _Dir) ->
     %% odering and the left/right pointers in the entries - replacing
     %% the former with some additional bit of state would be easy, but
     %% ditching the latter would be neater.
-    %% @todo Update above comment.
+    %% @todo Update above comment. Maybe drop ordered_set in favor of set.
     {false, ets:new(rabbit_msg_store_file_summary,
                     [ordered_set, public, {keypos, #file_summary.file}])};
 recover_file_summary(true, Dir) ->
@@ -1563,37 +1565,6 @@ count_msg_refs(Gen, Seed, State) ->
                  end,
             count_msg_refs(Gen, Next, State)
     end.
-
-recover_crashed_compactions(Dir) ->
-    FileNames =    list_sorted_filenames(Dir, ?FILE_EXTENSION),
-    TmpFileNames = list_sorted_filenames(Dir, ?FILE_EXTENSION_TMP),
-    lists:foreach(
-      fun (TmpFileName) ->
-              NonTmpRelatedFileName =
-                  filename:rootname(TmpFileName) ++ ?FILE_EXTENSION,
-              true = lists:member(NonTmpRelatedFileName, FileNames),
-              ok = recover_crashed_compaction(
-                     Dir, TmpFileName, NonTmpRelatedFileName)
-      end, TmpFileNames),
-    TmpFileNames == [].
-
-recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
-    %% Because a msg can legitimately appear multiple times in the
-    %% same file, identifying the contents of the tmp file and where
-    %% they came from is non-trivial. If we are recovering a crashed
-    %% compaction then we will be rebuilding the index, which can cope
-    %% with duplicates appearing. Thus the simplest and safest thing
-    %% to do is to append the contents of the tmp file to its main
-    %% file.
-    {ok, TmpHdl}  = open_file(Dir, TmpFileName, ?READ_MODE),
-    {ok, MainHdl} = open_file(Dir, NonTmpRelatedFileName,
-                              ?READ_MODE ++ ?WRITE_MODE),
-    {ok, _End} = file_handle_cache:position(MainHdl, eof),
-    Size = filelib:file_size(form_filename(Dir, TmpFileName)),
-    {ok, Size} = file_handle_cache:copy(TmpHdl, MainHdl, Size),
-    ok = file_handle_cache:close(MainHdl),
-    ok = file_handle_cache:delete(TmpHdl),
-    ok.
 
 scan_file_for_valid_messages(File) ->
     case open_file(File, ?READ_MODE) of
@@ -1647,11 +1618,15 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
     FileName = filenum_to_name(File),
     rabbit_log:debug("Rebuilding message location index from ~ts (~B file(s) remaining)",
                      [form_filename(Dir, FileName), length(Files)]),
-    {ok, Messages, FileSize} =
+    {ok, Messages0, FileSize} =
         scan_file_for_valid_messages(Dir, FileName),
+    %% The scan gives us messages end-of-file first so we reverse the list
+    %% in case a compaction had occurred before shutdown to not have to repeat it.
+    Messages = lists:reverse(Messages0),
     {ValidMessages, ValidTotalSize} =
         lists:foldl(
           fun (Obj = {MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
+                  %% We only keep the first message in the file. Duplicates (due to compaction) get ignored.
                   case index_lookup(MsgId, State) of
                       #msg_location { file = undefined } = StoreEntry ->
                           ok = index_update(StoreEntry #msg_location {
