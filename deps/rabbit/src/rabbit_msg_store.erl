@@ -1646,7 +1646,7 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
             []    -> case ValidMessages of
                          [] -> 0;
                          _  -> {_MsgId, TotalSize, Offset} =
-                                   lists:last(ValidMessages),
+                                   hd(ValidMessages),
                                Offset + TotalSize
                      end;
             [_|_] -> FileSize
