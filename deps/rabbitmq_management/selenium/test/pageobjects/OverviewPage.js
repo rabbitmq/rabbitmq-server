@@ -22,7 +22,7 @@ const DOWNLOAD_BROKER_FILE = By.css('button#upload-definitions')
 
 module.exports = class OverviewPage extends BasePage {
   async isLoaded () {
-    return await this.waitForDisplayed(MENU_TABS)
+    return this.waitForDisplayed(MENU_TABS)
   }
 
   async logout () {
