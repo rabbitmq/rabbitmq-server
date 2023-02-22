@@ -743,16 +743,22 @@ end}.
     {datatype, integer}
 ]}.
 
-{mapping, "default_policies.operator.$id.ha_mode", "rabbit.default_policies.operator", [
+{mapping, "default_policies.operator.$id.classic_queues.ha_mode", "rabbit.default_policies.operator", [
     {datatype, string}
 ]}.
 
-{mapping, "default_policies.operator.$id.ha_params", "rabbit.default_policies.operator", [
+{mapping, "default_policies.operator.$id.classic_queues.ha_params", "rabbit.default_policies.operator", [
     {datatype, [integer, {list, string}]}
 ]}.
 
 {translation, "rabbit.default_policies.operator", fun(Conf) ->
-    Props = rabbit_cuttlefish:aggregate_props(Conf, ["default_policies", "operator"]),
+    Props = rabbit_cuttlefish:aggregate_props(
+                Conf,
+                ["default_policies", "operator"],
+                fun({["default_policies","operator",ID,"classic_queues"|T], V}) ->
+                    {["default_policies","operator",ID|T],V};
+                   (E) -> E
+                end),
     Props1 = lists:map(
                 fun({K, Ss}) ->
                     {K,
