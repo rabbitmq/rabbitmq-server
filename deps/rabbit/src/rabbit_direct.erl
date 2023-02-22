@@ -53,7 +53,7 @@ auth_fun({none, _}, _VHost, _ExtraAuthProps) ->
     fun () -> {ok, rabbit_auth_backend_dummy:user()} end;
 
 auth_fun({Username, none}, _VHost, ExtraAuthProps) ->
-    fun () -> rabbit_access_control:check_user_login(Username, [] ++ ExtraAuthProps) end;
+    fun () -> rabbit_access_control:check_user_login(Username, [{password, none}] ++ ExtraAuthProps) end;
 
 auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
     fun () ->
@@ -83,7 +83,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 %% during the first authentication. However, we do have the outcome from such successful authentication.
 
 connect(Creds, VHost, Protocol, Pid, Infos) ->
-    ExtraAuthProps = append_authz_backends(extract_extra_auth_props(Creds, VHost, Pid, Infos), Infos),
+    ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
 
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit_boot_state:has_reached_and_is_active(core_started) of
