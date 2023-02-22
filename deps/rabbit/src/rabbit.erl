@@ -1026,7 +1026,7 @@ prep_stop(State) ->
 
 stop(State) ->
     ok = rabbit_alarm:stop(),
-    ok = case rabbit_mnesia:is_clustered() of
+    ok = case rabbit_db_cluster:is_clustered() of
              true  -> ok;
              false -> rabbit_table:clear_ram_only_tables()
          end,

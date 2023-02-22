@@ -780,7 +780,7 @@ wait_for_cluster_status(N, Max, Status, AllNodes, Nodes) ->
 
 verify_status_equal(Node, Status, AllNodes) ->
     NodeStatus = sort_cluster_status(cluster_status(Node)),
-    (AllNodes =/= [Node]) =:= rpc:call(Node, rabbit_mnesia, is_clustered, [])
+    (AllNodes =/= [Node]) =:= rpc:call(Node, rabbit_db_cluster, is_clustered, [])
         andalso NodeStatus =:= Status.
 
 cluster_status(Node) ->
