@@ -38,6 +38,7 @@
 -spec get(FeatureName) -> FeatureProps when
       FeatureName :: rabbit_feature_flags:feature_name(),
       FeatureProps :: rabbit_feature_flags:feature_props_extended() |
+                      rabbit_deprecated_features:feature_props_extended() |
                       undefined.
 %% @doc
 %% Returns the properties of a feature flag.

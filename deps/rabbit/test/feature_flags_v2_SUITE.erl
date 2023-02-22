@@ -23,6 +23,13 @@
          init_per_testcase/2,
          end_per_testcase/2,
 
+         start_slave_nodes/2,
+         stop_slave_nodes/1,
+         inject_on_nodes/2,
+         run_on_node/2,
+         connect_nodes/1,
+         override_running_nodes/1,
+
          mf_count_runs/1,
          mf_wait_and_count_runs_v2_enable/1,
          mf_wait_and_count_runs_v2_post_enable/1,
@@ -286,7 +293,12 @@ inject_on_nodes(Nodes, FeatureFlags) ->
            end,
            [])
          || Node <- Nodes],
-    ok.
+    run_on_node(
+      hd(Nodes),
+      fun() ->
+              rabbit_feature_flags:refresh_feature_flags_after_app_load()
+      end,
+      []).
 
 %% -------------------------------------------------------------------
 %% Migration functions.
@@ -443,7 +455,7 @@ enable_supported_feature_flag_in_a_3node_cluster(Config) ->
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName => #{provided_by => rabbit,
                                       stability => stable}},
-    inject_on_nodes(Nodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(Nodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -493,7 +505,7 @@ enable_partially_supported_feature_flag_in_a_3node_cluster(Config) ->
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName => #{provided_by => ?MODULE,
                                       stability => stable}},
-    inject_on_nodes([FirstNode], FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes([FirstNode], FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -560,7 +572,7 @@ enable_unsupported_feature_flag_in_a_3node_cluster(Config) ->
     FeatureName = ?FUNCTION_NAME,
     FeatureFlags = #{FeatureName => #{provided_by => rabbit,
                                       stability => stable}},
-    inject_on_nodes([FirstNode], FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes([FirstNode], FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is unsupported and disabled on all nodes"),
@@ -611,7 +623,7 @@ enable_feature_flag_in_cluster_and_add_member_after(Config) ->
                      #{provided_by => rabbit,
                        stability => stable,
                        callbacks => #{enable => {?MODULE, mf_count_runs}}}},
-    inject_on_nodes(AllNodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(AllNodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -715,7 +727,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
                        callbacks =>
                        #{enable =>
                          {?MODULE, mf_wait_and_count_runs_v2_enable}}}},
-    inject_on_nodes(AllNodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(AllNodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -903,7 +915,7 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
                        callbacks =>
                        #{enable =>
                          {?MODULE, mf_wait_and_count_runs_v2_enable}}}},
-    inject_on_nodes(AllNodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(AllNodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -1022,7 +1034,7 @@ enable_feature_flag_with_post_enable(Config) ->
                        callbacks =>
                        #{post_enable =>
                          {?MODULE, mf_wait_and_count_runs_v2_post_enable}}}},
-    inject_on_nodes(AllNodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(AllNodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),
@@ -1207,8 +1219,8 @@ have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
     RequiredFeatureFlags = #{FeatureName =>
                              #{provided_by => rabbit,
                                stability => required}},
-    inject_on_nodes([NewNode], FeatureFlags),
-    inject_on_nodes(Nodes, RequiredFeatureFlags),
+    ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
+    ?assertEqual(ok, inject_on_nodes(Nodes, RequiredFeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported everywhere but enabled on the "
@@ -1290,8 +1302,8 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
     RequiredFeatureFlags = #{FeatureName =>
                              #{provided_by => rabbit,
                                stability => required}},
-    inject_on_nodes([NewNode], FeatureFlags),
-    inject_on_nodes(Nodes, RequiredFeatureFlags),
+    ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
+    ?assertEqual(ok, inject_on_nodes(Nodes, RequiredFeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported and enabled on existing the "
@@ -1386,7 +1398,7 @@ error_during_migration_after_initial_success(Config) ->
                        stability => stable,
                        callbacks =>
                        #{enable => {?MODULE, mf_crash_on_joining_node}}}},
-    inject_on_nodes(AllNodes, FeatureFlags),
+    ?assertEqual(ok, inject_on_nodes(AllNodes, FeatureFlags)),
 
     ct:pal(
       "Checking the feature flag is supported but disabled on all nodes"),

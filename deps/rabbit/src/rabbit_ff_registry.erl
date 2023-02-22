@@ -70,6 +70,7 @@
       FeatureName :: rabbit_feature_flags:feature_name(),
       Ret :: FeatureProps | init_required,
       FeatureProps :: rabbit_feature_flags:feature_props_extended() |
+                      rabbit_deprecated_features:feature_props_extended() |
                       undefined.
 %% @doc
 %% Returns the properties of a feature flag.
@@ -84,7 +85,20 @@ get(FeatureName) ->
     ?convince_dialyzer(
        ?MODULE:get(FeatureName),
        init_required,
-       #{provided_by => rabbit}).
+       lists:nth(
+         rand:uniform(2),
+         [#{name => feature_flag,
+            provided_by => rabbit},
+          #{name => deprecated_feature,
+            deprecation_phase =>
+            lists:nth(
+              4,
+              [permitted_by_default,
+               denied_by_default,
+               disconnected,
+               removed]),
+            messages => #{},
+            provided_by => rabbit}])).
 
 -spec list(Which) -> Ret when
       Which :: all | enabled | disabled,
@@ -151,7 +165,8 @@ is_supported(FeatureName) ->
 is_enabled(FeatureName) ->
     ?convince_dialyzer(?MODULE:is_enabled(FeatureName), init_required, true).
 
--spec is_registry_initialized() -> boolean().
+-spec is_registry_initialized() -> IsInitialized when
+      IsInitialized :: boolean().
 %% @doc
 %% Indicates if the registry is initialized.
 %%
@@ -165,7 +180,8 @@ is_enabled(FeatureName) ->
 is_registry_initialized() ->
     always_return_false().
 
--spec is_registry_written_to_disk() -> boolean().
+-spec is_registry_written_to_disk() -> WrittenToDisk when
+      WrittenToDisk :: boolean().
 %% @doc
 %% Indicates if the feature flags state was successfully persisted to disk.
 %%

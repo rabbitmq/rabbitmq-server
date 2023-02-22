@@ -95,6 +95,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_definitions_hashing.erl",
             "src/rabbit_definitions_import_https.erl",
             "src/rabbit_definitions_import_local_filesystem.erl",
+            "src/rabbit_deprecated_features.erl",
             "src/rabbit_diagnostics.erl",
             "src/rabbit_direct.erl",
             "src/rabbit_direct_reply_to.erl",
@@ -338,6 +339,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_definitions_hashing.erl",
             "src/rabbit_definitions_import_https.erl",
             "src/rabbit_definitions_import_local_filesystem.erl",
+            "src/rabbit_deprecated_features.erl",
             "src/rabbit_diagnostics.erl",
             "src/rabbit_direct.erl",
             "src/rabbit_direct_reply_to.erl",
@@ -512,6 +514,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "private_hdrs",
         srcs = [
+            "src/rabbit_feature_flags.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
             "src/rabbit_fifo_v0.hrl",
@@ -593,6 +596,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_definitions_hashing.erl",
             "src/rabbit_definitions_import_https.erl",
             "src/rabbit_definitions_import_local_filesystem.erl",
+            "src/rabbit_deprecated_features.erl",
             "src/rabbit_diagnostics.erl",
             "src/rabbit_direct.erl",
             "src/rabbit_direct_reply_to.erl",
@@ -877,6 +881,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "deprecated_features_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/deprecated_features_SUITE.erl"],
+        outs = ["test/deprecated_features_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
         name = "direct_exchange_routing_v2_SUITE_beam_files",

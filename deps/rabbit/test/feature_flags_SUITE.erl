@@ -651,7 +651,7 @@ try_to_deadlock_in_registry_reload_1(_Config) ->
     ct:pal("Waiting for process B to exit"),
     receive
         {ProcessB, FF} ->
-            ?assertEqual(FeatureProps, FF),
+            ?assertEqual(FeatureProps#{name => FeatureName}, FF),
             ok
     after 10000 ->
               {_, StacktraceB} = erlang:process_info(
