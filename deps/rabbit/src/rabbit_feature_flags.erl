@@ -175,10 +175,10 @@
 -type feature_props_extended() :: #{desc => string(),
                                     doc_url => string(),
                                     stability => stability(),
+                                    depends_on => [feature_name()],
                                     callbacks =>
                                     #{callback_name() => callback_fun_name()},
-                                    depends_on => [feature_name()],
-                                    provided_by => atom()}.
+                                    provided_by := atom()}.
 %% The feature flag properties, once expanded by this module when feature
 %% flags are discovered.
 %%

@@ -63,7 +63,7 @@
         end).
 
 -spec get(rabbit_feature_flags:feature_name()) ->
-    rabbit_feature_flags:feature_props() | undefined.
+    rabbit_feature_flags:feature_props_extended() | undefined.
 %% @doc
 %% Returns the properties of a feature flag.
 %%
@@ -75,7 +75,10 @@
 
 get(FeatureName) ->
     _ = rabbit_ff_registry_factory:initialize_registry(),
-    ?convince_dialyzer(?MODULE:get(FeatureName), undefined, #{}).
+    ?convince_dialyzer(
+       ?MODULE:get(FeatureName),
+       undefined,
+       #{provided_by => rabbit}).
 
 -spec list(all | enabled | disabled) -> rabbit_feature_flags:feature_flags().
 %% @doc
