@@ -41,9 +41,15 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        [X] = rabbit_mgmt_db:augment_exchanges(
+      case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+          [X] = rabbit_mgmt_db:augment_exchanges(
                 [exchange(ReqData)], rabbit_mgmt_util:range(ReqData), full),
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(X), ReqData, Context)
+          rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(X), ReqData, Context);
+        true ->
+          rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(exchange(ReqData)),
+                ReqData, Context)
+      end
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
