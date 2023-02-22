@@ -30,5 +30,5 @@ setup(Context) ->
     ?LOG_DEBUG(
        "Checking cluster consistency", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    rabbit_mnesia:check_cluster_consistency(),
+    rabbit_db_cluster:check_consistency(),
     ok.

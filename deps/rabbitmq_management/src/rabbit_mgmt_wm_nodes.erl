@@ -47,7 +47,7 @@ all_nodes(ReqData) ->
     end.
 
 all_nodes_raw() ->
-    S = rabbit_mnesia:status(),
+    S = rabbit_db_cluster:cli_cluster_status(),
     Nodes = proplists:get_value(nodes, S),
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),

@@ -13,6 +13,9 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([init/0,
+         reset/0,
+         force_reset/0,
+         force_load_on_next_boot/0,
          is_virgin_node/0, is_virgin_node/1,
          dir/0,
          ensure_dir_exists/0]).
@@ -40,7 +43,7 @@ init() ->
        "DB: this node is virgin: ~ts", [IsVirgin],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     ensure_dir_exists(),
-    case init_mnesia() of
+    case init_using_mnesia() of
         ok ->
             ?LOG_DEBUG(
                "DB: initialization successeful",
@@ -53,13 +56,55 @@ init() ->
             Error
     end.
 
-init_mnesia() ->
+init_using_mnesia() ->
     ?LOG_DEBUG(
       "DB: initialize Mnesia",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     ok = rabbit_mnesia:init(),
     ?assertEqual(rabbit:data_dir(), mnesia_dir()),
     rabbit_sup:start_child(mnesia_sync).
+
+-spec reset() -> Ret when
+      Ret :: ok.
+%% @doc Resets the database and the node.
+
+reset() ->
+    reset_using_mnesia().
+
+reset_using_mnesia() ->
+    ?LOG_DEBUG(
+      "DB: resetting node",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_mnesia:reset().
+
+-spec force_reset() -> Ret when
+      Ret :: ok.
+%% @doc Resets the database and the node.
+
+force_reset() ->
+    force_reset_using_mnesia().
+
+force_reset_using_mnesia() ->
+    ?LOG_DEBUG(
+      "DB: resetting node forcefully",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_mnesia:force_reset().
+
+-spec force_load_on_next_boot() -> Ret when
+      Ret :: ok.
+%% @doc Requests that the database to be forcefully loaded during next boot.
+%%
+%% This is necessary when a node refuses to boot when the cluster is in a bad
+%% state, like if critical members are MIA.
+
+force_load_on_next_boot() ->
+    force_load_on_next_boot_using_mnesia().
+
+force_load_on_next_boot_using_mnesia() ->
+    ?LOG_DEBUG(
+      "DB: resetting node forcefully",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_mnesia:force_load_next_boot().
 
 -spec is_virgin_node() -> IsVirgin when
       IsVirgin :: boolean().

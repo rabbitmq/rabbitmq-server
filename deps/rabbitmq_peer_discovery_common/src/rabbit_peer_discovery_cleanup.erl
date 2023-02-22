@@ -277,7 +277,7 @@ maybe_remove_nodes([Node | Nodes], false) ->
     ?LOG_WARNING(
        "Peer discovery: removing unknown node ~ts from the cluster", [Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-    rabbit_mnesia:forget_cluster_node(Node, false),
+    rabbit_db_cluster:forget_member(Node, false),
     maybe_remove_nodes(Nodes, false).
 
 %%--------------------------------------------------------------------
@@ -288,13 +288,7 @@ maybe_remove_nodes([Node | Nodes], false) ->
 %%--------------------------------------------------------------------
 -spec unreachable_nodes() -> [node()].
 unreachable_nodes() ->
-    Status = rabbit_mnesia:status(),
-    Nodes = proplists:get_value(nodes, Status, []),
-    Running = proplists:get_value(running_nodes, Status, []),
-    All = lists:merge(proplists:get_value(disc, Nodes, []),
-                      proplists:get_value(ram, Nodes, [])),
-    lists:subtract(All, Running).
-
+    rabbit_nodes:list_unreachable().
 
 %%--------------------------------------------------------------------
 %% @private

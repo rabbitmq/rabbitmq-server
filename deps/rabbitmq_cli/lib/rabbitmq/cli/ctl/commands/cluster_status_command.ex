@@ -33,7 +33,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
+    status =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :cli_cluster_status, []) do
+        {:badrpc, {:EXIT, {:undef, _}}} ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
+
+        {:badrpc, _} = err ->
+          err
+
+        status ->
+          status
+      end
+
+    case status do
       {:badrpc, _} = err ->
         err
 

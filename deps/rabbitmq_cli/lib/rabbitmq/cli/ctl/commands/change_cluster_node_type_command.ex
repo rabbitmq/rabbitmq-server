@@ -29,14 +29,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
 
   def run([node_type_arg], %{node: node_name}) do
     normalized_type = normalize_type(String.to_atom(node_type_arg))
-    current_type = :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :node_type, [])
+    current_type = :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :node_type, [])
 
     case current_type do
       ^normalized_type ->
         {:ok, "Node type is already #{normalized_type}"}
 
       _ ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :change_cluster_node_type, [
+        :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :change_node_type, [
           normalized_type
         ])
     end

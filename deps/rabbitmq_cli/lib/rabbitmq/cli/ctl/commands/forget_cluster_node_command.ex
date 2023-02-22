@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
       become(node_name, opts),
       RabbitMQ.CLI.Core.Helpers.defer(fn ->
         _ = :rabbit_event.start_link()
-        :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
+        :rabbit_db_cluster.forget_member(to_atom(node_to_remove), true)
       end)
     ])
   end
@@ -48,7 +48,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     atom_name = to_atom(node_to_remove)
     args = [atom_name, false]
 
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args) do
+    ret =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, args) do
+        {:badrpc, {:EXIT, {:undef, _}}} ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args)
+
+        ret0 ->
+          ret0
+      end
+
+    case ret do
       {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
         {:error,
          "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}

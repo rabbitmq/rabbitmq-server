@@ -127,7 +127,4 @@ v(#resource{virtual_host = VHost}) ->
     VHost.
 
 foreach_node(F) ->
-    [F(Node) || Node <- running_nodes()].
-
-running_nodes() ->
-    proplists:get_value(running_nodes, rabbit_mnesia:status(), []).
+    [F(Node) || Node <- rabbit_nodes:list_running()].
