@@ -20,8 +20,13 @@
 %% To prevent clashes with a Packet ID and given Packet IDs must be non-zero, we choose 0.
 -define(WILL_MSG_QOS_1_CORRELATION, 0).
 
--define(VARIABLE_BYTE_INTEGER_MAX, 16#FFFFFF7F).
--type variable_byte_integer() :: 0..?VARIABLE_BYTE_INTEGER_MAX.
+%% MQTT 3.1.1 spec:
+%% "This allows applications to send Control Packets of size up to 268,435,455 (256 MB).
+%% The representation of this number on the wire is: 0xFF, 0xFF, 0xFF, 0x7F."
+%% 268,435,455 = 16#FFFFFFF
+-define(VARIABLE_BYTE_INTEGER_MAX, 16#FFFFFFF).
+-define(MAX_PACKET_SIZE, ?VARIABLE_BYTE_INTEGER_MAX).
+-type max_packet_size() :: 1..?MAX_PACKET_SIZE.
 
 -define(UINT_MAX, 16#FFFFFFFF).
 
@@ -132,7 +137,7 @@
 %%
 -type qos() :: ?QOS_0 | ?QOS_1 | ?QOS_2.
 
--record(mqtt_packet_fixed, {type = 0 :: packet_type(),
+-record(mqtt_packet_fixed, {type :: packet_type(),
                             dup = false :: boolean(),
                             qos = 0 :: qos(),
                             retain = false :: boolean()

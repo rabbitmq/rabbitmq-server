@@ -1340,7 +1340,7 @@ dead_letter_extra_bcc(Config) ->
     declare_dead_letter_queues(Ch, Config, SourceQ, TargetQ, [{<<"x-message-ttl">>, long, 0}]),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = ExtraBCCQ,
                                                                    durable = Durable}),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options,
+    rabbit_ct_broker_helpers:rpc(Config, ?MODULE, set_queue_options,
                                  [TargetQ, #{extra_bcc => ExtraBCCQ}]),
     %% Publish message
     P = <<"msg">>,
@@ -1480,7 +1480,7 @@ sync_mirrors(QName, Config) ->
     end.
 
 get_global_counters(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+    rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []).
 
 %% Returns the delta of Metric between testcase start and now.
 counted(Metric, Config) ->

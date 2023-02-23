@@ -18,7 +18,6 @@
                    More :: fun().
 
 -define(RESERVED, 0).
--define(MAX_LEN, 16#fffffff).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
 -define(MAX_MULTIPLIER, ?HIGHBIT * ?HIGHBIT * ?HIGHBIT).
@@ -56,7 +55,7 @@ parse_remaining_len(_Bin, _Fixed, Multiplier, _Length, _ProtoVer)
   when Multiplier > ?MAX_MULTIPLIER ->
     {error, malformed_remaining_length};
 parse_remaining_len(_Bin, _Fixed, _Multiplier, Length, _ProtoVer)
-  when Length > ?MAX_LEN ->
+  when Length > ?VARIABLE_BYTE_INTEGER_MAX ->
     {error, invalid_mqtt_packet_length};
 parse_remaining_len(<<>>, Fixed, Multiplier, Length, ProtoVer) ->
     {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, Multiplier, Length, ProtoVer) end};
@@ -69,7 +68,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = ?CONNECT} = Fixed, Length, proto_ver
     parse_connect(Bin, Fixed, Length);
 parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                      qos  = Qos} = Fixed, Length, ProtoVer)
-  when Length =< ?MAX_LEN ->
+  when Length =< ?VARIABLE_BYTE_INTEGER_MAX ->
     case {Type, Bin} of
         {?PUBLISH, <<TopicLen:16, TopicName:TopicLen/binary,
                      PacketBin:(Length-2-TopicLen)/binary,
@@ -322,6 +321,8 @@ parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binar
                              Props0),
     parse_prop(Rest, Props);
 parse_prop(<<16#27, Val:32, Bin/binary>>, Props) ->
+    %% "It is a Protocol Error [...] for the value to be set to zero." [MQTT 5.0 3.1.2.11.4]
+    true = Val > 0,
     parse_prop(Bin, Props#{'Maximum-Packet-Size' => Val});
 parse_prop(<<16#28, Val, Bin/binary>>, Props) ->
     parse_prop(Bin, Props#{'Wildcard-Subscription-Available' => Val});
@@ -438,7 +439,6 @@ serialise_fixed(#mqtt_packet_fixed{type = Type,
   when is_integer(Type) andalso ?CONNECT =< Type andalso Type =< ?AUTH andalso
        is_integer(Qos) andalso 0 =< Qos andalso Qos =< 2 ->
     Len = iolist_size(Variable) + iolist_size(Payload),
-    true = (Len =< ?MAX_LEN),
     [<<Type:4, (bool_to_int(Dup)):1, Qos:2, (bool_to_int(Retain)):1>>,
      serialise_variable_byte_integer(Len),
      Variable,
@@ -455,12 +455,13 @@ serialise_binary(Bin) ->
     LenBin = <<Len:16>>,
     [LenBin, Bin].
 
--spec serialise_variable_byte_integer(non_neg_integer()) -> iodata().
+-spec serialise_variable_byte_integer(0..?VARIABLE_BYTE_INTEGER_MAX) -> iodata().
 serialise_variable_byte_integer(N)
   when N =< ?LOWBITS ->
     %% Optimisation: Prevent binary construction.
     [N];
-serialise_variable_byte_integer(N) ->
+serialise_variable_byte_integer(N)
+  when N =< ?VARIABLE_BYTE_INTEGER_MAX ->
     serialise_variable_byte_integer0(N).
 
 -spec serialise_variable_byte_integer0(non_neg_integer()) -> binary().
