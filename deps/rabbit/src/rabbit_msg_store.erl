@@ -243,17 +243,6 @@
 %% deltas for all recovered messages. This is only used on startup
 %% when the shutdown was non-clean.
 %%
-
-%% @todo Heh? Is that something real? Double check if that actually exists/existed and whether it matters.
-%% Read messages with a reference count greater than one are entered
-%% into a message cache. The purpose of the cache is not especially
-%% performance, though it can help there too, but prevention of memory
-%% explosion. It ensures that as messages with a high reference count
-%% are read from several processes they are read back as the same
-%% binary object rather than multiples of identical binary
-%% objects.
-
-%%
 %% Reads are always performed directly by clients without calling the
 %% server. This is safe because multiple file handles can be used to
 %% read files, and the compaction method ensures the data is always
