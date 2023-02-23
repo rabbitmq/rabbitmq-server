@@ -65,10 +65,7 @@
           file_handle_cache, %% @todo Make that unused.
           %% TRef for our interval timer
           sync_timer_ref,
-          %% @todo sum_valid_data and sum_file_size only exist to decide
-          %%       whether compaction should occur. If we instead decide
-          %%       to compact based on what the individual file size is
-          %%       when messages get removed, we don't need these two values.
+          %% @todo The following two values are no longer necessary.
           %% sum of valid data in all files
           sum_valid_data,
           %% sum of file sizes
@@ -1486,14 +1483,9 @@ store_file_summary(Tid, Dir) ->
                       [{extended_info, [object_count]}]).
 
 recover_file_summary(false, _Dir) ->
-    %% TODO: the only reason for this to be an *ordered*_set is so
-    %% that a) maybe_compact can start a traversal from the eldest
-    %% file, and b) build_index in fast recovery mode can easily
-    %% identify the current file. It's awkward to have both that
-    %% odering and the left/right pointers in the entries - replacing
-    %% the former with some additional bit of state would be easy, but
-    %% ditching the latter would be neater.
-    %% @todo Update above comment. Maybe drop ordered_set in favor of set.
+    %% The only reason for this to be an *ordered*_set is so
+    %% that build_index in fast recovery mode can easily identify
+    %% the current file.
     {false, ets:new(rabbit_msg_store_file_summary,
                     [ordered_set, public, {keypos, #file_summary.file}])};
 recover_file_summary(true, Dir) ->
@@ -1697,12 +1689,9 @@ maybe_roll_to_new_file(
 maybe_roll_to_new_file(_, State) ->
     State.
 
-%% @todo We could keep track of files that have seen removes and only check those periodically for compaction.
-%%       - Mark on remove the file as being modified
-%%       - Ensure there is a maybe_gc timer set
-%%       - Remove the mark on file delete
-%%       - On timer, check whether the marked files are worth compacting (find_files_to_compact conditions)
-%%       - Queue compaction for those that are worth compacting
+%% We keep track of files that have seen removes and
+%% check those periodically for compaction. We only
+%% compact files that have less than half valid data.
 maybe_gc(State = #msstate { current_file          = CurrentFile,
                             gc_pid                = GCPid,
                             gc_candidates         = Candidates,
@@ -1781,11 +1770,6 @@ delete_file_if_empty(File, State = #msstate {
 %% can happen when the holes are smaller than the last message in the file for example.
 %% We do not try to look at messages that are not the last because we do not want to
 %% accidentally write over messages that were moved earlier.
-%% @todo How can we prevent trying to compact this file in a loop? Perhaps by only
-%%       attempting to compact a file after a message was removed and of course if
-%%       there's enough potential to reclaim space. We also want to wait a little
-%%       after the remove before we compact because compacting files that are
-%%       consumed is a waste of time.
 
 compact_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                        dir              = Dir,
@@ -1798,7 +1782,6 @@ compact_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
     {ok, Fd} = file:open(form_filename(Dir, FileName), [read, write, binary, raw]),
     %% Load the messages.
     Messages = load_and_vacuum_message_file(File, State),
-    %% @todo It's possible that we end up with no messages and truncation would result in 0 bytes file. Don't compact and schedule a file deletion instead.
     %% Compact the file.
     {ok, TruncateSize, IndexUpdates} = do_compact_file(Fd, 0, Messages, lists:reverse(Messages), []),
     %% Sync and close the file.
