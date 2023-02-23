@@ -744,7 +744,6 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     {ok, CurOffset} = file_handle_cache:position(CurHdl, CurOffset),
     ok = file_handle_cache:truncate(CurHdl),
 
-    %% @todo Do we want to maybe_gc on init by checking all files?
     {ok, State1 #msstate { current_file_handle = CurHdl,
                            current_file_offset = CurOffset },
      hibernate,
@@ -1807,8 +1806,6 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
                                      [File]),
                     defer;
                 _ ->
-                    %% @todo Should probably make sure the file still exists before we try to truncate.
-                    %%       The file may have been deleted in the meantime (fully acked during compact, delete scheduled, then executed, then truncate scheduled).
                     FileName = filenum_to_name(File),
                     {ok, Fd} = file:open(form_filename(Dir, FileName), [read, write, binary, raw]),
                     {ok, _} = file:position(Fd, Size),
