@@ -19,7 +19,7 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit/src/rabbit_stream_sac_coordinator.hrl").
+-include("rabbit_stream_sac_coordinator.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks
