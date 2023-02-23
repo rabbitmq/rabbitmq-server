@@ -8,7 +8,8 @@
 -module(rabbit_cuttlefish).
 
 -export([
-    aggregate_props/2
+    aggregate_props/2,
+    aggregate_props/3
 ]).
 
 -type keyed_props() :: [{binary(), [{binary(), any()}]}].
@@ -16,13 +17,19 @@
 -spec aggregate_props([{string(), any()}], [string()]) ->
     keyed_props().
 aggregate_props(Conf, Prefix) ->
+    aggregate_props(Conf, Prefix, fun(E) -> E end).
+
+-spec aggregate_props([{string(), any()}], [string()], function()) ->
+    keyed_props().
+aggregate_props(Conf, Prefix, KeyFun) ->
     Pattern = Prefix ++ ["$id", "$_"],
     PrefixLen = length(Prefix),
     FlatList = lists:filtermap(
-        fun({K, V}) ->
+        fun(E) ->
+            {K, V} = KeyFun(E),
             case cuttlefish_variable:is_fuzzy_match(K, Pattern) of
                 true -> {true, {lists:nthtail(PrefixLen, K), V}};
-                _ -> false
+                false -> false
             end
         end,
         Conf

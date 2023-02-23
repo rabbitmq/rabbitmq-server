@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+
 -compile(export_all).
 
 all() ->
@@ -20,6 +21,7 @@ all() ->
 groups() ->
     [
      {cluster_size_2, [], [
+                           target_count_policy,
                            policy_ttl,
                            operator_policy_ttl,
                            operator_retroactive_policy_ttl,
@@ -149,6 +151,59 @@ operator_retroactive_policy_publish_ttl(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+target_count_policy(Config) ->
+    [Server | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"policy_ha">>,
+    declare(Ch, QName),
+    BNodes = [atom_to_binary(N) || N <- Nodes],
+
+    AllPolicy = [{<<"ha-mode">>, <<"all">>}],
+    ExactlyPolicyOne = [{<<"ha-mode">>, <<"exactly">>},
+                        {<<"ha-params">>, 1}],
+    ExactlyPolicyTwo = [{<<"ha-mode">>, <<"exactly">>},
+                        {<<"ha-params">>, 2}],
+    NodesPolicyAll = [{<<"ha-mode">>, <<"nodes">>},
+                      {<<"ha-params">>, BNodes}],
+    NodesPolicyOne = [{<<"ha-mode">>, <<"nodes">>},
+                      {<<"ha-params">>, [hd(BNodes)]}],
+
+    %% ALL has precedence
+    Opts = #{config => Config,
+             server => Server,
+             qname  => QName},
+
+    verify_policies(AllPolicy, ExactlyPolicyTwo, [{<<"ha-mode">>, <<"all">>}], Opts),
+
+    verify_policies(ExactlyPolicyTwo, AllPolicy, [{<<"ha-mode">>, <<"all">>}], Opts),
+
+    verify_policies(AllPolicy, NodesPolicyAll, [{<<"ha-mode">>, <<"all">>}], Opts),
+
+    verify_policies(NodesPolicyAll, AllPolicy, [{<<"ha-mode">>, <<"all">>}], Opts),
+
+    %% exactly has precedence over nodes
+    verify_policies(ExactlyPolicyTwo, NodesPolicyAll,[{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}], Opts),
+
+    verify_policies(NodesPolicyAll, ExactlyPolicyTwo, [{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}], Opts),
+
+    %% Highest exactly value has precedence
+    verify_policies(ExactlyPolicyTwo, ExactlyPolicyOne, [{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}], Opts),
+
+    verify_policies(ExactlyPolicyOne, ExactlyPolicyTwo, [{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}], Opts),
+
+    %% Longest node count has precedence
+    SortedNodes = lists:sort(BNodes),
+    verify_policies(NodesPolicyAll, NodesPolicyOne, [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, SortedNodes}], Opts),
+    verify_policies(NodesPolicyOne, NodesPolicyAll, [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, SortedNodes}], Opts),
+
+    delete(Ch, QName),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"op_policy">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+
 %%----------------------------------------------------------------------------
 
 
@@ -200,5 +255,27 @@ get_messages(Number, Ch, Q) ->
         #'basic.get_empty'{} ->
             exit(failed)
     end.
+
+check_policy_value(Server, QName, Value) ->
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]),
+    proplists:get_value(Value, rpc:call(Server, rabbit_policy, effective_definition, [Q])).
+
+verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
+                                                  server := Server,
+                                                  qname := QName}) ->
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy">>,
+                                        <<"policy_ha">>, <<"queues">>,
+                                        Policy),
+    rabbit_ct_broker_helpers:set_operator_policy(Config, 0, <<"op_policy">>,
+                                                 <<"policy_ha">>, <<"queues">>,
+                                                 OperPolicy),
+    verify_policy(VerifyFuns, Server, QName).
+
+verify_policy([], _, _) ->
+    ok;
+verify_policy([{HA, Expect} | Tail], Server, QName) ->
+    Expect = check_policy_value(Server, QName, HA),
+    verify_policy(Tail, Server, QName).
+
 
 %%----------------------------------------------------------------------------
