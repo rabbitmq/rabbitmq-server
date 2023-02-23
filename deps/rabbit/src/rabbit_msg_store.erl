@@ -324,11 +324,6 @@
 %%       receive everything and drop the messages instead of doing
 %%       all this.
 %%
-%% Client termination messages are stored in a separate ets index to
-%% avoid filling primary message store index and message files with
-%% client termination messages.
-%% @todo I have no idea what this is talking about.
-%%
 %% When the msg_store has a backlog (i.e. it has unprocessed messages
 %% in its mailbox / gen_server priority queue), a further optimisation
 %% opportunity arises: we can eliminate pairs of 'write' and 'remove'
