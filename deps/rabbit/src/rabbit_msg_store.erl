@@ -96,13 +96,10 @@
 -record(client_msstate,
         { server,
           client_ref,
-          file_handle_cache, %% Unused.
           index_state,
           index_module,
           dir,
-          gc_pid, %% Value is set correctly but unused.
           file_handles_ets,
-          file_summary_ets, %% Value is set correctly but unused.
           cur_file_cache_ets,
           flying_ets,
           credit_disc_bound
@@ -144,14 +141,11 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      file_handle_cache  :: map(),
                       index_state        :: any(),
                       index_module       :: atom(),
                       %% Stored as binary() as opposed to file:filename() to save memory.
                       dir                :: binary(),
-                      gc_pid             :: pid(),
                       file_handles_ets   :: ets:tid(),
-                      file_summary_ets   :: ets:tid(),
                       cur_file_cache_ets :: ets:tid(),
                       flying_ets         :: ets:tid(),
                       credit_disc_bound  :: {pos_integer(), pos_integer()}}.
@@ -409,8 +403,7 @@ successfully_recovered_state(Server) ->
 -spec client_init(server(), client_ref(), maybe_msg_id_fun()) -> client_msstate().
 
 client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
-    {IState, IModule, Dir, GCPid,
-     FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
+    {IState, IModule, Dir, FileHandlesEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
           Server, {new_client_state, Ref, self(), MsgOnDiskFun},
           infinity),
@@ -418,13 +411,10 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
                                           ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
-                      file_handle_cache  = #{},
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = rabbit_file:filename_to_binary(Dir),
-                      gc_pid             = GCPid,
                       file_handles_ets   = FileHandlesEts,
-                      file_summary_ets   = FileSummaryEts,
                       cur_file_cache_ets = CurFileCacheEts,
                       flying_ets         = FlyingEts,
                       credit_disc_bound  = CreditDiscBound }.
@@ -806,14 +796,12 @@ handle_call({new_client_state, CRef, CPid, MsgOnDiskFun}, _From,
                                index_state        = IndexState,
                                index_module       = IndexModule,
                                file_handles_ets   = FileHandlesEts,
-                               file_summary_ets   = FileSummaryEts,
                                cur_file_cache_ets = CurFileCacheEts,
                                flying_ets         = FlyingEts,
-                               clients            = Clients,
-                               gc_pid             = GCPid }) ->
+                               clients            = Clients }) ->
     Clients1 = maps:put(CRef, {CPid, MsgOnDiskFun}, Clients),
     erlang:monitor(process, CPid),
-    reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
+    reply({IndexState, IndexModule, Dir, FileHandlesEts,
            CurFileCacheEts, FlyingEts},
           State #msstate { clients = Clients1 });
 
