@@ -178,7 +178,7 @@
   ]).
 
 -define(DEFAULT_USER, "guest").
--define(NODE_START_ATTEMPTS, 10).
+-define(NODE_START_ATTEMPTS, 3).
 
 -define(TCP_PORTS_BASE, 21000).
 -define(TCP_PORTS_LIST, [
