@@ -2,7 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--include("include/rabbitmq_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 init_test_() ->
   {foreach,
