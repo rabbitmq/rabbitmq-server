@@ -83,7 +83,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 %% during the first authentication. However, we do have the outcome from such successful authentication.
 
 connect(Creds, VHost, Protocol, Pid, Infos) ->
-    ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
+    ExtraAuthProps = append_authz_backends(extract_extra_auth_props(Creds, VHost, Pid, Infos), Infos),
 
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit_boot_state:has_reached_and_is_active(core_started) of
