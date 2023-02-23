@@ -65,11 +65,6 @@
           file_handle_cache, %% @todo Make that unused.
           %% TRef for our interval timer
           sync_timer_ref,
-          %% @todo The following two values are no longer necessary.
-          %% sum of valid data in all files
-          sum_valid_data,
-          %% sum of file sizes
-          sum_file_size,
           %% files that had removes
           gc_candidates,
           %% timer ref for checking gc_candidates
@@ -747,8 +742,6 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                        file_handle_cache      = #{},
                        current_file_offset    = 0,
                        sync_timer_ref         = undefined,
-                       sum_valid_data         = 0,
-                       sum_file_size          = 0,
                        gc_candidates          = #{},
                        gc_check_timer         = undefined,
                        gc_pid                 = GCPid,
@@ -795,11 +788,10 @@ prioritise_call(Msg, _From, _Len, _State) ->
 
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
-        {compact_file, _File, _Reclaimed}                  -> 8;
-        {delete_file, _File, _Reclaimed}                   -> 8;
-        {set_maximum_since_use, _Age}                      -> 8;
-        {client_dying, _Pid}                               -> 7;
-        _                                                  -> 0
+        {compacted_file, _File}       -> 8;
+        {set_maximum_since_use, _Age} -> 8;
+        {client_dying, _Pid}          -> 7;
+        _                             -> 0
     end.
 
 prioritise_info(Msg, _Len, _State) ->
@@ -907,21 +899,14 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                                     ignored, State1))
     end;
 
-handle_cast({compact_file, File, Reclaimed},
-            State = #msstate { sum_file_size    = SumFileSize,
-                               file_summary_ets = FileSummaryEts }) ->
+handle_cast({compacted_file, File},
+            State = #msstate { file_summary_ets = FileSummaryEts }) ->
     %% This can return false if the file gets deleted immediately
     %% after compaction ends, but before we can process this message.
     %% So this will become a no-op and we can ignore the return value.
     _ = ets:update_element(FileSummaryEts, File,
                            {#file_summary.locked, false}),
-    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
-    noreply(State1);
-
-handle_cast({delete_file, _File, Reclaimed},
-            State = #msstate { sum_file_size = SumFileSize }) ->
-    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
-    noreply(State1);
+    noreply(State);
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -1202,8 +1187,6 @@ write_message(MsgId, Msg,
               State = #msstate { current_file_handle = CurHdl,
                                  current_file        = CurFile,
                                  current_file_offset = CurOffset,
-                                 sum_valid_data      = SumValid,
-                                 sum_file_size       = SumFileSize,
                                  file_summary_ets    = FileSummaryEts }) ->
     {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
     ok = index_insert(
@@ -1214,9 +1197,7 @@ write_message(MsgId, Msg,
                                 {#file_summary.file_size,        TotalSize}]),
     maybe_roll_to_new_file(CurOffset + TotalSize,
                            State #msstate {
-                             current_file_offset = CurOffset + TotalSize,
-                             sum_valid_data = SumValid    + TotalSize,
-                             sum_file_size  = SumFileSize + TotalSize }).
+                             current_file_offset = CurOffset + TotalSize }).
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
                                total_size = TotalSize }, State = #client_msstate{ dir = Dir }) ->
@@ -1258,11 +1239,10 @@ update_msg_cache(CacheEts, MsgId, Msg) ->
     end.
 
 adjust_valid_total_size(File, Delta, State = #msstate {
-                                       sum_valid_data   = SumValid,
                                        file_summary_ets = FileSummaryEts }) ->
     [_] = ets:update_counter(FileSummaryEts, File,
                              [{#file_summary.valid_total_size, Delta}]),
-    State #msstate { sum_valid_data = SumValid + Delta }.
+    State.
 
 update_pending_confirms(Fun, CRef,
                         State = #msstate { clients         = Clients,
@@ -1542,17 +1522,9 @@ scan_fun({MsgId, TotalSize, Offset, _Msg}, Acc) ->
 
 build_index(true, _StartupFunState,
             State = #msstate { file_summary_ets = FileSummaryEts }) ->
-    ets:foldl(
-      fun (#file_summary { valid_total_size = ValidTotalSize,
-                           file_size        = FileSize,
-                           file             = File },
-           {_Offset, State1 = #msstate { sum_valid_data = SumValid,
-                                         sum_file_size  = SumFileSize }}) ->
-              {FileSize, State1 #msstate {
-                           sum_valid_data = SumValid + ValidTotalSize,
-                           sum_file_size  = SumFileSize + FileSize,
-                           current_file   = File }}
-      end, {0, State}, FileSummaryEts);
+    File = ets:last(FileSummaryEts),
+    FileSize = ets:lookup_element(FileSummaryEts, File, #file_summary.file_size),
+    {FileSize, State#msstate{ current_file = File }};
 build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
             State = #msstate { dir = Dir }) ->
     rabbit_log:debug("Rebuilding message refcount...", []),
@@ -1627,9 +1599,7 @@ enqueue_build_index_workers(Gatherer, [File|Files], State) ->
     enqueue_build_index_workers(Gatherer, Files, State).
 
 reduce_index(Gatherer, LastFile,
-             State = #msstate { file_summary_ets = FileSummaryEts,
-                                sum_valid_data   = SumValid,
-                                sum_file_size    = SumFileSize }) ->
+             State = #msstate { file_summary_ets = FileSummaryEts }) ->
     case gatherer:out(Gatherer) of
         empty ->
             ok = gatherer:stop(Gatherer),
@@ -1639,13 +1609,9 @@ reduce_index(Gatherer, LastFile,
                          [#file_summary { file_size = FileSize }] -> FileSize
                      end,
             {Offset, State #msstate { current_file = LastFile }};
-        {value, #file_summary { valid_total_size = ValidTotalSize,
-                                file_size = FileSize } = FileSummary} ->
+        {value, FileSummary} ->
             true = ets:insert_new(FileSummaryEts, FileSummary),
-            reduce_index(Gatherer, LastFile,
-                         State #msstate {
-                           sum_valid_data = SumValid + ValidTotalSize,
-                           sum_file_size  = SumFileSize + FileSize })
+            reduce_index(Gatherer, LastFile, State)
     end.
 
 rebuild_index(Gatherer, Files, State) ->
@@ -1699,6 +1665,17 @@ maybe_gc(State = #msstate { current_file          = CurrentFile,
     FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts, CurrentFile),
     State3 = lists:foldl(fun(File, State1) ->
             State2 = close_handle(File, State1),
+            %% We must lock the file here and not in the GC process to avoid
+            %% some concurrency issues that can arise otherwise. The lock is
+            %% a soft-lock mostly used to handle fan-out edge cases (such as
+            %% writing (incrementing the reference of) a fan-out message when
+            %% the file it already exists in is getting GC and the message
+            %% reference is 0. The GC will remove the data in that case. The
+            %% soft-lock prevents us from incrementing the reference of data
+            %% soon to be removed.
+            %% @todo Perhaps this soft-lock is worse than potentially writing
+            %% the fan-out message multiple times and we can just avoid
+            %% incrementing messages that have a reference count of 0.
             true = ets:update_element(FileSummaryEts, File,
                                       {#file_summary.locked, true}),
             ok = rabbit_msg_store_gc:compact(GCPid, File),
@@ -1804,7 +1781,7 @@ compact_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
     rabbit_log:debug("Compacted segment file number ~tp; ~tp bytes can now be reclaimed",
                      [File, Reclaimed]),
     %% Tell the message store to update its state.
-    gen_server2:cast(Server, {compact_file, File, Reclaimed}),
+    gen_server2:cast(Server, {compacted_file, File}),
     %% Tell the GC process to truncate the file.
     %%
     %% We will truncate later when there are no readers. We want current
@@ -1898,8 +1875,7 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,
-                                      dir              = Dir,
-                                      msg_store        = Server }) ->
+                                      dir              = Dir }) ->
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} ->
             rabbit_log:debug("Asked to delete file ~p but it has active readers. Deferring.",
@@ -1911,7 +1887,6 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
             {[], 0} = scan_and_vacuum_message_file(File, State),
             ok = file:delete(form_filename(Dir, filenum_to_name(File))),
             true = ets:delete(FileSummaryEts, File),
-            gen_server2:cast(Server, {delete_file, File, FileSize}),
             rabbit_log:debug("Deleted empty file number ~tp; reclaimed ~tp bytes", [File, FileSize]),
             ok
     end.
