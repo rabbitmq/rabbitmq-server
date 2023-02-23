@@ -62,7 +62,6 @@
           current_file_handle,
           %% file handle cache
           current_file_offset,
-          file_handle_cache, %% @todo Make that unused.
           %% TRef for our interval timer
           sync_timer_ref,
           %% files that had removes
@@ -739,7 +738,6 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                        index_state            = IndexState,
                        current_file           = 0,
                        current_file_handle    = undefined,
-                       file_handle_cache      = #{},
                        current_file_offset    = 0,
                        sync_timer_ref         = undefined,
                        gc_candidates          = #{},
@@ -958,13 +956,12 @@ terminate(Reason, State = #msstate { index_state         = IndexState,
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
-    State1 = case CurHdl of
+    State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
                               ok = file_handle_cache:close(CurHdl),
                               State2
              end,
-    State3 = close_all_handles(State1),
     case store_file_summary(FileSummaryEts, Dir) of
         ok           -> ok;
         {error, FSErr} ->
@@ -1326,16 +1323,6 @@ open_file(File, Mode) ->
 open_file(Dir, FileName, Mode) ->
     open_file(form_filename(Dir, FileName), Mode).
 
-close_handle(Key, State = #msstate { file_handle_cache = FHC }) ->
-    State #msstate { file_handle_cache = close_handle(Key, FHC) };
-
-close_handle(Key, FHC) ->
-    case maps:find(Key, FHC) of
-        {ok, Hdl} -> ok = file_handle_cache:close(Hdl),
-                     maps:remove(Key, FHC);
-        error     -> FHC
-    end.
-
 mark_handle_open(FileHandlesEts, File, Ref) ->
     %% This is fine to fail (already exists). Note it could fail with
     %% the value being close, and not have it updated to open.
@@ -1345,11 +1332,6 @@ mark_handle_open(FileHandlesEts, File, Ref) ->
 
 mark_handle_closed(FileHandlesEts, File, Ref) ->
     ets:delete(FileHandlesEts, {Ref, File}).
-
-close_all_handles(State = #msstate { file_handle_cache = FHC }) ->
-    ok = maps:fold(fun (_Key, Hdl, ok) -> file_handle_cache:close(Hdl) end,
-                   ok, FHC),
-    State #msstate { file_handle_cache = #{} }.
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
@@ -1663,8 +1645,7 @@ maybe_gc(State = #msstate { current_file          = CurrentFile,
                             gc_candidates         = Candidates,
                             file_summary_ets      = FileSummaryEts }) ->
     FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts, CurrentFile),
-    State3 = lists:foldl(fun(File, State1) ->
-            State2 = close_handle(File, State1),
+    lists:foreach(fun(File) ->
             %% We must lock the file here and not in the GC process to avoid
             %% some concurrency issues that can arise otherwise. The lock is
             %% a soft-lock mostly used to handle fan-out edge cases (such as
@@ -1678,11 +1659,10 @@ maybe_gc(State = #msstate { current_file          = CurrentFile,
             %% incrementing messages that have a reference count of 0.
             true = ets:update_element(FileSummaryEts, File,
                                       {#file_summary.locked, true}),
-            ok = rabbit_msg_store_gc:compact(GCPid, File),
-            State2
-    end, State, FilesToCompact),
-    State3#msstate{ gc_candidates  = #{},
-                    gc_check_timer = undefined }.
+            ok = rabbit_msg_store_gc:compact(GCPid, File)
+    end, FilesToCompact),
+    State#msstate{ gc_candidates  = #{},
+                   gc_check_timer = undefined }.
 
 find_files_to_compact([], _, _) ->
     [];
@@ -1722,8 +1702,7 @@ delete_file_if_empty(File, State = #msstate {
         %% note that locking would require us to delay the removal
         %% request while GC is happening.
         0 -> ok = rabbit_msg_store_gc:delete(GCPid, File),
-             State1 = close_handle(File, State), %% @todo Probably doesn't actually do anything since we only have the current file open.
-             State1#msstate{ gc_candidates = maps:remove(File, Candidates) };
+             State#msstate{ gc_candidates = maps:remove(File, Candidates) };
         _ -> State
     end.
 
