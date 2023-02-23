@@ -123,9 +123,13 @@ ssl_options.fail_if_no_peer_cert = true",
   default_policies.operator.a.expires = 1h
   default_policies.operator.a.queue_pattern = apple
   default_policies.operator.a.vhost_pattern = banana
+  default_policies.operator.a.classic_queues.ha_mode = exactly
+  default_policies.operator.a.classic_queues.ha_params = 2
  ",
   [{rabbit, [{default_policies, [{operator, [
       {<<"a">>, [{<<"expires">>, 3600000},
+                 {<<"ha-mode">>, "exactly"},
+                 {<<"ha-params">>, 2},
                  {<<"queue-pattern">>, "apple"},
                  {<<"vhost-pattern">>, "banana"}]}]}]}]}],
   []},
