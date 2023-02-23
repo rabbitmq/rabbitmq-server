@@ -9,7 +9,7 @@
 %% 2. MQTT versions v3, v4 and v5
 %%
 %% In other words, this test suite should not contain any test case that is executed
-%% only with a particular plugin or MQTT version.
+%% only with a particular plugin or particular MQTT version.
 -module(shared_SUITE).
 -compile([export_all,
           nowarn_export_all]).
@@ -178,31 +178,7 @@ init_per_group(Group, Config0) ->
                Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-
-    case {?config(mqtt_version, Config), Group} of
-        {v5, cluster_size_3} ->
-            ClientId = ?FUNCTION_NAME,
-            %% We should always be able to connect to the 1st node as it runs the latest version.
-            C1 = connect(ClientId, Config, 0, []),
-            ok = emqtt:disconnect(C1),
-            %% Check whether we can connect to the 2nd node.
-            {C2, Connect} = util:start_client(ClientId, Config, 1, [{connect_timeout, 3}]),
-            true = unlink(C2),
-            Skip = {skip, "The 2nd node in the cluster does not support MQTT 5.0"},
-            try Connect(C2) of
-                {ok, _} ->
-                    ok = emqtt:disconnect(C2),
-                    Config;
-                {error, _} ->
-                    %% [mqtt,v5,cluster_size_3] in mixed version
-                    Skip
-            catch exit:_ ->
-                      %% [web_mqtt,v5,cluster_size_3] in mixed version
-                      Skip
-            end;
-        _ ->
-            Config
-    end.
+    util:maybe_skip_v5(Config).
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;

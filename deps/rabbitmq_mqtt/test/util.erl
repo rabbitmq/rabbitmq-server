@@ -2,6 +2,7 @@
 
 -include("rabbit_mqtt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([all_connection_pids/1,
@@ -21,7 +22,8 @@
          assert_event_type/2,
          assert_event_prop/2,
          await_exit/1,
-         await_exit/2
+         await_exit/2,
+         maybe_skip_v5/1
         ]).
 
 all_connection_pids(Config) ->
@@ -123,6 +125,34 @@ await_exit(Pid, Reason) ->
         {'EXIT', Pid, Reason} -> ok
     after
         20_000 -> ct:fail({missing_exit, Pid})
+    end.
+
+%% In mixed version, we skip MQTT v5 tests if the old version does not support it.
+maybe_skip_v5(Config) ->
+    case {?config(mqtt_version, Config),
+          ?config(rmq_nodes_count, Config)} of
+        {v5, C} when C > 1 ->
+            ClientId = ?FUNCTION_NAME,
+            %% We should always be able to connect to the 1st node as it runs the latest version.
+            C1 = connect(ClientId, Config, 0, []),
+            ok = emqtt:disconnect(C1),
+            %% Check whether we can connect to the 2nd node.
+            {C2, Connect} = start_client(ClientId, Config, 1, [{connect_timeout, 3}]),
+            true = unlink(C2),
+            Skip = {skip, "The 2nd node in the cluster does not support MQTT 5.0"},
+            try Connect(C2) of
+                {ok, _} ->
+                    ok = emqtt:disconnect(C2),
+                    Config;
+                {error, _} ->
+                    %% MQTT
+                    Skip
+            catch exit:_ ->
+                      %% Web MQTT
+                      Skip
+            end;
+        _ ->
+            Config
     end.
 
 connect(ClientId, Config) ->

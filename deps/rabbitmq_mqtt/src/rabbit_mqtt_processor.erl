@@ -68,7 +68,9 @@
          peer_ip_addr :: inet:ip_address(),
          peer_port :: inet:port_number(),
          connected_at = os:system_time(milli_seconds) :: pos_integer(),
-         send_fun :: send_fun()
+         send_fun :: send_fun(),
+         %% Maximum MQTT packet size in bytes for packets sent from server to client.
+         max_packet_size :: max_packet_size()
          }).
 
 -record(state,
@@ -118,16 +120,18 @@ process_connect(
      proto_ver  = ProtoVer,
      clean_sess = CleanSess,
      client_id  = ClientId0,
-     keep_alive = KeepaliveSecs} = Packet,
+     keep_alive = KeepaliveSecs,
+     props = ConnectProps} = Packet,
   Socket, ConnName0, SendFun, {PeerIp, PeerPort, Ip, Port}) ->
-    ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, "
-               "clean session: ~s, protocol version: ~p, keepalive: ~p",
-               [ClientId0, Username0, CleanSess, ProtoVer, KeepaliveSecs]),
+    ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, clean session: ~s, "
+               "protocol version: ~p, keepalive: ~p, property names: ~p",
+               [ClientId0, Username0, CleanSess, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
     SslLoginName = ssl_login_name(Socket),
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
                true   -> flow;
                false  -> noflow
            end,
+    MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
@@ -167,7 +171,8 @@ process_connect(
                        retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                        vhost = VHost,
                        client_id = ClientId,
-                       will_msg = make_will_msg(Packet)},
+                       will_msg = make_will_msg(Packet),
+                       max_packet_size = MaxPacketSize},
             auth_state = #auth_state{
                             user = User,
                             authz_ctx = AuthzCtx},
@@ -181,19 +186,19 @@ process_connect(
              end,
     case Result of
         {ok, SessPresent, State = #state{}} ->
-            send_conn_ack(?RC_SUCCESS, SessPresent, ProtoVer, SendFun),
+            send_conn_ack(?RC_SUCCESS, SessPresent, ProtoVer, SendFun, MaxPacketSize),
             {ok, State};
         {error, ConnectReasonCode} = Err
           when is_integer(ConnectReasonCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
-            send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun),
+            send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize),
             Err
     end.
 
--spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun()) -> ok.
-send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun) ->
+-spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun(), max_packet_size()) -> ok.
+send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize) ->
     Code = case ProtoVer of
                5 -> ConnectReasonCode;
                _ -> connect_reason_code_to_return_code(ConnectReasonCode)
@@ -202,7 +207,8 @@ send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun) ->
                           variable = #mqtt_packet_connack{
                                         session_present = SessPresent,
                                         code = Code}},
-    ok = send(Packet, ProtoVer, SendFun).
+    _ = send(Packet, ProtoVer, SendFun, MaxPacketSize),
+    ok.
 
 %% "Connect Reason Code" used in v5:
 %% https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901079
@@ -352,7 +358,7 @@ process_request(?SUBSCRIBE,
                          variable = #mqtt_packet_suback{
                                        packet_id = SubscribePktId,
                                        reason_codes = lists:reverse(ReasonCodes)}},
-    send(Reply, State1),
+    _ = send(Reply, State1),
     case ReasonCodes of
         [?SUBACK_FAILURE | _] ->
             {error, subscribe_error, State1};
@@ -388,13 +394,13 @@ process_request(?UNSUBSCRIBE,
               end, State0, Topics),
     Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
                          variable = #mqtt_packet_unsuback{packet_id = PacketId}},
-    send(Reply, State),
+    _ = send(Reply, State),
     {ok, State};
 
 process_request(?PINGREQ, #mqtt_packet{}, State = #state{cfg = #cfg{client_id = ClientId}}) ->
     ?LOG_DEBUG("Received a PINGREQ from client ID ~s", [ClientId]),
     Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PINGRESP}},
-    send(Reply, State),
+    _ = send(Reply, State),
     ?LOG_DEBUG("Sent a PINGRESP to client ID ~s", [ClientId]),
     {ok, State};
 
@@ -660,7 +666,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
                                                 topic_name = Topic1
                                                },
                                   payload = Msg#mqtt_msg.payload},
-            send(Packet, State),
+            _ = send(Packet, State),
             State
     end.
 
@@ -1191,6 +1197,7 @@ process_routing_confirm(#delivery{confirm = true,
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
     State#state{unacked_client_pubs = U}.
 
+-spec send_puback(packet_id() | list(packet_id()), state()) -> ok.
 send_puback(PktIds0, State)
   when is_list(PktIds0) ->
     %% Classic queues confirm messages unordered.
@@ -1203,17 +1210,37 @@ send_puback(PktId, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
                           variable = #mqtt_packet_puback{packet_id = PktId}},
-    send(Packet, State).
+    _ = send(Packet, State),
+    ok.
 
--spec send(mqtt_packet(), state()) -> ok.
+-spec send(mqtt_packet(), state()) ->
+    ok | {error, packet_too_large}.
 send(Packet, #state{cfg = #cfg{proto_ver = ProtoVer,
-                               send_fun = SendFun}}) ->
-    send(Packet, proto_atom_to_integer(ProtoVer), SendFun).
+                               send_fun = SendFun,
+                               max_packet_size = MaxPacketSize}}) ->
+    send(Packet, proto_atom_to_integer(ProtoVer), SendFun, MaxPacketSize).
 
--spec send(mqtt_packet(), protocol_version(), send_fun()) -> ok.
-send(Packet, ProtoVer, SendFun) ->
+-spec send(mqtt_packet(), protocol_version(), send_fun(), max_packet_size()) ->
+    ok | {error, packet_too_large}.
+send(Packet, ProtoVer, SendFun, MaxPacketSize) ->
     Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
-    ok = SendFun(Data).
+    PacketSize = iolist_size(Data),
+    if PacketSize =< MaxPacketSize ->
+           ok = SendFun(Data);
+       true ->
+           %% "Where a Packet is too large to send, the Server MUST discard it without sending it
+           %% and then behave as if it had completed sending that Application Message [MQTT-3.1.2-25]."
+           case Packet#mqtt_packet.fixed#mqtt_packet_fixed.type of
+               T when T =/= ?PUBLISH andalso
+                      T =/= ?PUBACK ->
+                   ?LOG_DEBUG("Dropping MQTT packet (type ~b). Packet size "
+                              "(~b bytes) exceeds maximum packet size (~b bytes)",
+                              [T, PacketSize, MaxPacketSize]);
+               _ ->
+                   ok
+           end,
+           {error, packet_too_large}
+    end.
 
 -spec terminate(boolean(), binary(), rabbit_event:event_props(), state()) -> ok.
 terminate(SendWill, ConnName, Infos, State) ->
@@ -1455,8 +1482,8 @@ deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
                             ?QOS_0
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
-    State1 = maybe_publish_to_client(Msg, QoS, State0),
-    State = maybe_auto_ack(AckRequired, QoS, QNameOrType, QMsgId, State1),
+    {SettleOp, State1} = maybe_publish_to_client(Msg, QoS, State0),
+    State = maybe_auto_settle(AckRequired, SettleOp, QoS, QNameOrType, QMsgId, State1),
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
 
@@ -1469,7 +1496,7 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
 
 maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
-    State;
+    {complete, State};
 maybe_publish_to_client(
   {QNameOrType, _QPid, QMsgId, Redelivered,
    #basic_message{
@@ -1487,10 +1514,15 @@ maybe_publish_to_client(
                      packet_id = PacketId,
                      topic_name = amqp_to_mqtt(RoutingKey)},
        payload = lists:reverse(FragmentsRev)},
-    send(Packet, State),
-    trace_tap_out(Msg, State),
-    message_delivered(QNameOrType, Redelivered, QoS, State),
-    State.
+    SettleOp = case send(Packet, State) of
+                   ok ->
+                       trace_tap_out(Msg, State),
+                       message_delivered(QNameOrType, Redelivered, QoS, State),
+                       complete;
+                   {error, packet_too_large} ->
+                       discard
+               end,
+    {SettleOp, State}.
 
 msg_id_to_packet_id(_, ?QOS_0, State) ->
     %% "A PUBLISH packet MUST NOT contain a Packet Identifier if its QoS value is set to 0 [MQTT-2.2.1-2]."
@@ -1507,11 +1539,17 @@ increment_packet_id(Id)
 increment_packet_id(Id) ->
     Id + 1.
 
-maybe_auto_ack(_AckRequired = true, ?QOS_0, QName, QMsgId,
-               State = #state{queue_states = QStates0}) ->
-    {ok, QStates, Actions} = rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0),
+maybe_auto_settle(_AckRequired = true, SettleOp, QoS, QName, QMsgId,
+                  State = #state{queue_states = QStates0})
+%% We have to auto-settle if the client is not going to ack the message. This happens
+  when
+      QoS =:= ?QOS_0 %% QoS 0 messages are never acked,
+      orelse
+      SettleOp =:= discard %% message was never sent to the client because it was too large
+      ->
+    {ok, QStates, Actions} = rabbit_queue_type:settle(QName, SettleOp, ?CONSUMER_TAG, [QMsgId], QStates0),
     handle_queue_actions(Actions, State#state{queue_states = QStates});
-maybe_auto_ack(_, _, _, _, State) ->
+maybe_auto_settle(_, _, _, _, _, State) ->
     State.
 
 maybe_notify_sent(?QUEUE_TYPE_QOS_0, _, _) ->
