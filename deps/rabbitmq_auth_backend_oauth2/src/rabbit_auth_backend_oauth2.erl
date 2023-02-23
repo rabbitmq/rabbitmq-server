@@ -167,13 +167,16 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary()) ->
+-spec check_token(binary() | map()) ->
           {'ok', map()} |
           {'error', term() }|
           {'refused',
            'signature_invalid' |
            {'error', term()} |
            {'invalid_aud', term()}}.
+
+check_token(DecodedToken) when is_map(DecodedToken) ->
+    {ok, DecodedToken};
 
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
@@ -533,9 +536,23 @@ check_aud(Aud, ResourceServerId) ->
 
 get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 
+%% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
+%% credential.  The former is the most common scenario for the first time authentication.
+%% However, there are scenarios where the same user (on the same connection) is authenticated
+%% more than once. When this scenario occurs, we extract the token from the credential
+%% called rabbit_auth_backend_oauth2 whose value is the Decoded token returned during the
+%% first authentication. 
+
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
-    maps:get(password, AuthProps, undefined).
+    case maps:get(password, AuthProps, undefined) of
+        undefined ->
+            case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
+                undefined -> undefined;
+                Impl -> Impl()
+            end;
+        Token -> Token
+    end.
 
 %% Decoded tokens look like this:
 %%
