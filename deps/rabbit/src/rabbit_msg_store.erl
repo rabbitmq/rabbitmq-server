@@ -195,7 +195,6 @@
 %% other words, the valid data accounts for less than half the total
 %% size of the file), we start a garbage collection run concurrently,
 %% which will compact the file. This keeps utilisation high.
-%% @todo The comment used to claim file combining helped performance. Double check?
 %%
 %% The discovery is done periodically on files that had messages
 %% acked and removed. We delibirately do this lazily in order to
