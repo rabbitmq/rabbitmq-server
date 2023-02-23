@@ -55,7 +55,7 @@ def _plugins_dir_links(ctx, plugin):
         if f.is_directory:
             if f.basename != "ebin":
                 fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.lib_name))
-            o = ctx.actions.declare_file(path_join(plugin_path, "ebin"))
+            o = ctx.actions.declare_directory(path_join(plugin_path, "ebin"))
         else:
             o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
         ctx.actions.symlink(
