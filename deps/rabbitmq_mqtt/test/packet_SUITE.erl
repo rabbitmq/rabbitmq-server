@@ -24,7 +24,9 @@ groups() ->
      {v3, [parallel, shuffle], test_cases()},
      {v4, [parallel, shuffle], test_cases()},
      {v5, [parallel, shuffle], test_cases() ++ [publish_properties,
-                                                puback_properties]}
+                                                puback_properties,
+                                                disconnect_remaining_length_0,
+                                                disconnect_properties]}
     ].
 
 test_cases() ->
@@ -32,6 +34,15 @@ test_cases() ->
      publish,
      puback
     ].
+
+init_per_suite(Config) ->
+    MaxPacketSize = 10_000,
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, MaxPacketSize),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxPacketSize),
+    Config.
+
+end_per_suite(_) ->
+    ok.
 
 init_per_group(Group, Config) ->
     Vsn = case Group of
@@ -100,6 +111,29 @@ puback_properties(Config) ->
                               reason_code = ?RC_QUOTA_EXCEEDED,
                               props = #{'Reason-String' => <<"Target queue rejected message">>,
                                         'User-Property' => [{<<"queue name">>, <<"queue 'q' in vhost '/'">>}]}}
+               },
+    serialise_parse(Packet, ?config(mqtt_vsn, Config)).
+
+%% "The Reason Code and Property Length can be omitted if the Reason Code is 0x00
+%% (Normal disconnecton) and there are no Properties. In this case the DISCONNECT
+%% has a Remaining Length of 0."
+disconnect_remaining_length_0(Config) ->
+    Packet = #mqtt_packet{
+                fixed = #mqtt_packet_fixed{type = ?DISCONNECT},
+                variable = #mqtt_packet_disconnect{
+                              reason_code = ?RC_NORMAL_DISCONNECTION,
+                              props = #{}}
+               },
+    serialise_parse(Packet, ?config(mqtt_vsn, Config)).
+
+disconnect_properties(Config) ->
+    Packet = #mqtt_packet{
+                fixed = #mqtt_packet_fixed{type = ?DISCONNECT},
+                variable = #mqtt_packet_disconnect{
+                              reason_code = ?RC_PACKET_TOO_LARGE,
+                              props = #{'Reason-String' => <<"うさぎ can handle at most 2MB, but packet size was 3MB"/utf8>>,
+                                        'User-Property' => [{<<"client subscriptions">>, <<"2">>},
+                                                            {<<"network connection uptime">>, <<"87 minutes">>}]}}
                },
     serialise_parse(Packet, ?config(mqtt_vsn, Config)).
 

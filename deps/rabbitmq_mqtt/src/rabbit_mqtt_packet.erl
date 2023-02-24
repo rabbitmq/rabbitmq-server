@@ -9,6 +9,7 @@
 
 -include("rabbit_mqtt_packet.hrl").
 -include("rabbit_mqtt.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([init_state/0, parse/2, serialise/2]).
 -export_type([state/0]).
@@ -21,7 +22,6 @@
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
 -define(MAX_MULTIPLIER, ?HIGHBIT * ?HIGHBIT * ?HIGHBIT).
--define(MAX_PACKET_SIZE_CONNECT, 65_536).
 
 -spec init_state() -> state().
 init_state() -> unauthenticated.
@@ -62,13 +62,41 @@ parse_remaining_len(<<>>, Fixed, Multiplier, Length, ProtoVer) ->
 parse_remaining_len(<<1:1, Len:7, Rest/binary>>, Fixed, Multiplier, Value, ProtoVer) ->
     parse_remaining_len(Rest, Fixed, Multiplier * ?HIGHBIT, Value + Len * Multiplier, ProtoVer);
 parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value, ProtoVer) ->
-    parse_packet(Rest, Fixed, Value + Len * Multiplier, ProtoVer).
+    RemainingLen = Value + Len * Multiplier,
+    case check_max_packet_size(Fixed#mqtt_packet_fixed.type, RemainingLen) of
+        ok ->
+            parse_packet(Rest, Fixed, RemainingLen, ProtoVer);
+        Err ->
+            Err
+    end.
+
+-spec check_max_packet_size(packet_type(), non_neg_integer()) ->
+    ok | {error, {disconnect_reason_code, ?RC_PACKET_TOO_LARGE} | connect_packet_too_large}.
+check_max_packet_size(?CONNECT, Length) ->
+    MaxSize = persistent_term:get(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED),
+    if Length =< MaxSize ->
+           ok;
+       true ->
+           ?LOG_ERROR("CONNECT packet size (~b bytes) exceeds "
+                      "mqtt.max_packet_size_unauthenticated (~b bytes)",
+                      [Length, MaxSize]),
+           {error, connect_packet_too_large}
+    end;
+check_max_packet_size(Type, Length) ->
+    MaxSize = persistent_term:get(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED),
+    if Length =< MaxSize ->
+           ok;
+       true ->
+           ?LOG_ERROR("MQTT packet size (~b bytes, type ~b) exceeds "
+                      "mqtt.max_packet_size_authenticated (~p bytes)",
+                      [Length, Type, MaxSize]),
+           {error, {disconnect_reason_code, ?RC_PACKET_TOO_LARGE}}
+    end.
 
 parse_packet(Bin, #mqtt_packet_fixed{type = ?CONNECT} = Fixed, Length, proto_ver_uninitialised) ->
     parse_connect(Bin, Fixed, Length);
 parse_packet(Bin, #mqtt_packet_fixed{type = Type,
-                                     qos  = Qos} = Fixed, Length, ProtoVer)
-  when Length =< ?VARIABLE_BYTE_INTEGER_MAX ->
+                                     qos  = Qos} = Fixed, Length, ProtoVer) ->
     case {Type, Bin} of
         {?PUBLISH, <<TopicLen:16, TopicName:TopicLen/binary,
                      PacketBin:(Length-2-TopicLen)/binary,
@@ -125,16 +153,28 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {?PINGREQ, Rest} ->
             0 = Length,
             wrap(Fixed, Rest, ProtoVer);
-        {?DISCONNECT, Rest}
-          when ProtoVer < 5 ->
-            0 = Length,
-            wrap(Fixed, #mqtt_packet_disconnect{}, Rest, ProtoVer);
+        {?DISCONNECT, <<ReasonCode, Rest/binary>>}
+          when ProtoVer =:= 5 andalso Length =:= 1 ->
+            %% "3.14.2.2.1 Property Length
+            %% The length of Properties in the DISCONNECT packet Variable Header encoded as a
+            %% Variable Byte Integer. If the Remaining Length is less than 2, a value of 0 is used."
+            %% This branch is a bit special because the MQTT v5 protocol spec is not very
+            %% precise: It does suggest that a remaining length of 1 is valid.
+            Disconnect = #mqtt_packet_disconnect{reason_code = ReasonCode},
+            wrap(Fixed, Disconnect, Rest, ProtoVer);
         {?DISCONNECT, <<ReasonCode, PacketBin:(Length-1)/binary, Rest/binary>>}
-          when ProtoVer =:= 5 ->
+          when ProtoVer =:= 5 andalso Length > 1 ->
             {Props, <<>>} = parse_props(PacketBin, ProtoVer),
             Disconnect = #mqtt_packet_disconnect{reason_code = ReasonCode,
                                                  props = Props},
             wrap(Fixed, Disconnect, Rest, ProtoVer);
+        {?DISCONNECT, Rest} ->
+            %% v3, v4, or v5 because for v5:
+            %% "The Reason Code and Property Length can be omitted if the Reason Code is 0x00
+            %% (Normal disconnecton) and there are no Properties. In this case the DISCONNECT
+            %% has a Remaining Length of 0."
+            0 = Length,
+            wrap(Fixed, #mqtt_packet_disconnect{}, Rest, ProtoVer);
         {_, TooShortBin}
           when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
@@ -144,24 +184,16 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
     end.
 
 parse_connect(Bin, Fixed, Length) ->
-    MaxSize = application:get_env(?APP_NAME,
-                                  max_packet_size_unauthenticated,
-                                  ?MAX_PACKET_SIZE_CONNECT),
-    case Length =< MaxSize of
-        true ->
-            case Bin of
-                <<PacketBin:Length/binary, Rest/binary>> ->
-                    Connect = #mqtt_packet_connect{proto_ver = ProtoVer} = parse_connect(PacketBin),
-                    wrap(Fixed, Connect, Rest, ProtoVer);
-                TooShortBin
-                  when byte_size(TooShortBin) < Length ->
-                    {more, fun(BinMore) ->
-                                   parse_connect(<<TooShortBin/binary, BinMore/binary>>,
-                                                 Fixed, Length)
-                           end}
-            end;
-        false ->
-            {error, connect_packet_too_large}
+    case Bin of
+        <<PacketBin:Length/binary, Rest/binary>> ->
+            Connect = #mqtt_packet_connect{proto_ver = ProtoVer} = parse_connect(PacketBin),
+            wrap(Fixed, Connect, Rest, ProtoVer);
+        TooShortBin
+          when byte_size(TooShortBin) < Length ->
+            {more, fun(BinMore) ->
+                           parse_connect(<<TooShortBin/binary, BinMore/binary>>,
+                                         Fixed, Length)
+                   end}
     end.
 
 -spec parse_connect(binary()) ->
@@ -426,7 +458,22 @@ serialise(#mqtt_packet_fixed{type = ?PUBACK} = Fixed,
     serialise_fixed(Fixed, Variable, []);
 serialise(#mqtt_packet_fixed{type = ?PINGRESP} = Fixed,
           undefined, undefined, _Vsn) ->
-    serialise_fixed(Fixed, [], []).
+    serialise_fixed(Fixed, [], []);
+serialise(#mqtt_packet_fixed{type = ?DISCONNECT} = Fixed,
+          #mqtt_packet_disconnect{reason_code = ?RC_NORMAL_DISCONNECTION,
+                                  props = Props},
+          undefined, 5)
+  when map_size(Props) =:= 0 ->
+    %% "The Reason Code and Property Length can be omitted if the Reason
+    %% Code is 0x00 (Normal disconnecton) and there are no Properties."
+    serialise_fixed(Fixed, [], []);
+serialise(#mqtt_packet_fixed{type = ?DISCONNECT} = Fixed,
+          #mqtt_packet_disconnect{reason_code = ReasonCode,
+                                  props = Props},
+          undefined, Vsn = 5) ->
+    Variable = [ReasonCode,
+                serialise_props(Props, Vsn)],
+    serialise_fixed(Fixed, Variable, []).
 
 -spec serialise_fixed(#mqtt_packet_fixed{},
                       VariableHeader :: iodata(),
