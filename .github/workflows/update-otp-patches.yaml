@@ -20,8 +20,7 @@ jobs:
         - erlang_version: "24.3"
           name: '24'
           branch: v3.10.x
-          labels: |
-            backport-v3.9.x
+          labels: ""
         - erlang_version: "25.0"
           name: '25_0'
           branch: main
