@@ -316,7 +316,7 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                                              parse_state = ParseState,
                                              proc_state = ProcState,
                                              conn_name = ConnName}) ->
-    case parse(Bytes, ParseState) of
+    try rabbit_mqtt_packet:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {noreply,
              ensure_stats_timer(State#state{parse_state = ParseState1}),
@@ -366,29 +366,23 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                             {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
                     end
             end;
-        {error, {cannot_parse, Reason, Stacktrace}} ->
-            ?LOG_ERROR("Unparseable MQTT packet received from connection ~ts", [ConnName]),
-            ?LOG_DEBUG("MQTT cannot parse a packet on connection '~ts', reason: ~tp, "
-                       "stacktrace: ~tp, payload (first 100 bytes): ~tp",
-                       [ConnName, Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Bytes, 100)]),
+        {error, {disconnect_reason_code, ReasonCode} = Reason} ->
+            rabbit_mqtt_processor:send_disconnect(ReasonCode, ProcState),
             {stop, {shutdown, Reason}, State};
         {error, Error} ->
-            ?LOG_ERROR("MQTT detected a framing error on connection ~ts: ~tp", [ConnName, Error]),
+            ?LOG_ERROR("MQTT detected a packet error on connection ~ts: ~tp", [ConnName, Error]),
             {stop, {shutdown, Error}, State}
+    catch _:Reason:Stacktrace ->
+              ?LOG_ERROR("Unparseable MQTT packet received from connection ~ts", [ConnName]),
+              ?LOG_DEBUG("MQTT cannot parse a packet on connection '~ts', reason: ~tp, "
+                         "stacktrace: ~tp, payload (first 100 bytes): ~tp",
+                         [ConnName, Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Bytes, 100)]),
+              {stop, {shutdown, Reason}, State}
     end.
 
 -spec pstate(state(), rabbit_mqtt_processor:state()) -> state().
 pstate(State = #state {}, PState) ->
     State #state{ proc_state = PState }.
-
-%%----------------------------------------------------------------------------
-parse(Bytes, ParseState) ->
-    try
-        rabbit_mqtt_packet:parse(Bytes, ParseState)
-    catch
-        _:Reason:Stacktrace ->
-            {error, {cannot_parse, Reason, Stacktrace}}
-    end.
 
 network_error(closed,
               State = #state{conn_name  = ConnName,

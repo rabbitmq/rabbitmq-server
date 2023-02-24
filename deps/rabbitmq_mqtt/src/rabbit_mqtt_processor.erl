@@ -15,7 +15,7 @@
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
          proto_version_tuple/1, throttle/2, format_status/1,
          remove_duplicate_client_id_connections/2,
-         update_trace/2]).
+         update_trace/2, send_disconnect/2]).
 
 -ifdef(TEST).
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
@@ -1241,6 +1241,15 @@ send(Packet, ProtoVer, SendFun, MaxPacketSize) ->
            end,
            {error, packet_too_large}
     end.
+
+-spec send_disconnect(reason_code(), state()) -> ok.
+send_disconnect(ReasonCode, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}} = State) ->
+    Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?DISCONNECT},
+                          variable = #mqtt_packet_disconnect{reason_code = ReasonCode}},
+    _ = send(Packet, State),
+    ok;
+send_disconnect(_, _) ->
+    ok.
 
 -spec terminate(boolean(), binary(), rabbit_event:event_props(), state()) -> ok.
 terminate(SendWill, ConnName, Infos, State) ->

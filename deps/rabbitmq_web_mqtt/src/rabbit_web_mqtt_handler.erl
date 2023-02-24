@@ -255,7 +255,7 @@ handle_data1(Data, State = #state{socket = Socket,
                                   parse_state = ParseState,
                                   proc_state = ProcState,
                                   conn_name = ConnName}) ->
-    case parse(Data, ParseState) of
+    try rabbit_mqtt_packet:parse(Data, ParseState) of
         {more, ParseState1} ->
             {ok, ensure_stats_timer(
                    control_throttle(
@@ -289,19 +289,18 @@ handle_data1(Data, State = #state{socket = Socket,
                             stop({_SendWill = false, State#state{proc_state = ProcState1}})
                     end
             end;
+        {error, {disconnect_reason_code, ReasonCode}} ->
+            rabbit_mqtt_processor:send_disconnect(ReasonCode, ProcState),
+            %% Instead of closing immediately, first send the DISCONNECT packet to the client.
+            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+            {[], State};
         {error, Reason} ->
             stop_mqtt_protocol_error(State, Reason, ConnName)
-    end.
-
-parse(Data, ParseState) ->
-    try
-        rabbit_mqtt_packet:parse(Data, ParseState)
-    catch
-        _:Reason:Stacktrace ->
-            ?LOG_DEBUG("Web MQTT cannot parse a packet, reason: ~tp, stacktrace: ~tp, "
-                       "payload (first 100 bytes): ~tp",
-                       [Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Data, 100)]),
-            {error, cannot_parse}
+    catch _:Reason:Stacktrace ->
+              ?LOG_DEBUG("Web MQTT cannot parse a packet, reason: ~tp, "
+                         "stacktrace: ~tp, payload (first 100 bytes): ~tp",
+                         [Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Data, 100)]),
+              stop_mqtt_protocol_error(State, cannot_parse, ConnName)
     end.
 
 stop_mqtt_protocol_error(State, Reason, ConnName) ->

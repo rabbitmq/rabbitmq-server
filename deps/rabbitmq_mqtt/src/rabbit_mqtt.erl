@@ -10,6 +10,7 @@
 -behaviour(application).
 
 -include("rabbit_mqtt.hrl").
+-include("rabbit_mqtt_packet.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
 -export([start/2, stop/1]).
@@ -108,4 +109,17 @@ persist_static_configuration() ->
 
     {ok, MailboxSoftLimit} = application:get_env(?APP_NAME, mailbox_soft_limit),
     ?assert(is_integer(MailboxSoftLimit)),
-    ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit).
+    ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit),
+
+    {ok, MaxSizeUnauth} = application:get_env(?APP_NAME, max_packet_size_unauthenticated),
+    assert_valid_max_packet_size(MaxSizeUnauth),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, MaxSizeUnauth),
+
+    {ok, MaxSizeAuth} = application:get_env(?APP_NAME, max_packet_size_authenticated),
+    assert_valid_max_packet_size(MaxSizeAuth),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
+
+assert_valid_max_packet_size(Val) ->
+    ?assert(is_integer(Val) andalso
+            Val > 0 andalso
+            Val =< ?MAX_PACKET_SIZE).

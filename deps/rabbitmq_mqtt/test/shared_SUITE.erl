@@ -112,6 +112,7 @@ cluster_size_1_tests() ->
      ,rabbit_status_connection_count
      ,trace
      ,max_packet_size_unauthenticated
+     ,max_packet_size_authenticated
      ,default_queue_type
      ,incoming_message_interceptors
      ,utf8
@@ -1398,8 +1399,7 @@ trace(Config) ->
     [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
 
 max_packet_size_unauthenticated(Config) ->
-    App = rabbitmq_mqtt,
-    Par = ClientId = ?FUNCTION_NAME,
+    ClientId = ?FUNCTION_NAME,
     Opts = [{will_topic, <<"will/topic">>}],
 
     {C1, Connect} = util:start_client(
@@ -1408,8 +1408,10 @@ max_packet_size_unauthenticated(Config) ->
     ?assertMatch({ok, _}, Connect(C1)),
     ok = emqtt:disconnect(C1),
 
+    Key = mqtt_max_packet_size_unauthenticated,
+    OldMaxSize = rpc(Config, persistent_term, get, [Key]),
     MaxSize = 500,
-    ok = rpc(Config, application, set_env, [App, Par, MaxSize]),
+    ok = rpc(Config, persistent_term, put, [Key, MaxSize]),
 
     {C2, Connect} = util:start_client(
                       ClientId, Config, 0,
@@ -1423,7 +1425,28 @@ max_packet_size_unauthenticated(Config) ->
     ?assertMatch({ok, _}, Connect(C3)),
     ok = emqtt:disconnect(C3),
 
-    ok = rpc(Config, application, unset_env, [App, Par]).
+    ok = rpc(Config, persistent_term, put, [Key, OldMaxSize]).
+
+max_packet_size_authenticated(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Key = mqtt_max_packet_size_authenticated,
+    OldMaxSize = rpc(Config, persistent_term, get, [Key]),
+    MaxSize = 500,
+    ok = rpc(Config, persistent_term, put, [Key, MaxSize]),
+
+    C = connect(ClientId, Config),
+    process_flag(trap_exit, true),
+    ok = emqtt:publish(C, Topic, binary:copy(<<"x">>, MaxSize + 1), qos0),
+    await_exit(C),
+    case ?config(mqtt_version, Config) of
+        V when V =:= v3; V =:= v4 ->
+            ok;
+        v5 ->
+            receive {disconnected, _ReasonCodePacketTooLarge = 149, _Props} -> ok
+            after 1000 -> ct:fail("missing DISCONNECT packet from server")
+            end
+    end,
+    ok = rpc(Config, persistent_term, put, [Key, OldMaxSize]).
 
 %% Test that the per vhost default queue type introduced in
 %% https://github.com/rabbitmq/rabbitmq-server/pull/5305
