@@ -20,11 +20,8 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
-<<<<<<< HEAD
-=======
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.8.2
 
->>>>>>> 1c4f30742e (Bump emqx/emqtt to 1.8.2)
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
