@@ -5,7 +5,11 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
+<<<<<<< HEAD
   alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+=======
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
+>>>>>>> 9cec4a5907 (Move rabbit_password to rabbit_common)
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
