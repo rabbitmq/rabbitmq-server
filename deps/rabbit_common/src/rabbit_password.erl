@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_password).
--include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(DEFAULT_HASHING_MODULE, rabbit_password_hashing_sha256).
 
