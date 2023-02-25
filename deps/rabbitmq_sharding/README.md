@@ -20,7 +20,7 @@ of a publisher and a consumer:
 
 ![Sharding Overview](https://raw.githubusercontent.com/rabbitmq/rabbitmq-sharding/master/docs/sharded_queues.png)
 
-On the picture above the producers publishes a series of
+On the picture above the producer publishes a series of
 messages, those messages get partitioned to different queues, and then
 our consumer get messages from one of those queues. Therefore if there is
 a partition with 3 queues, it is assumed that there are at least 3
