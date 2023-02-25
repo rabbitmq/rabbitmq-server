@@ -146,6 +146,11 @@ rabbitmq_suite(
 )
 
 rabbitmq_suite(
+    name = "unit_password_hashing_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
     name = "unit_SUITE",
     size = "medium",
     additional_srcs = [
