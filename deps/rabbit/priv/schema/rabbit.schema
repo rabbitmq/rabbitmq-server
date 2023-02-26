@@ -714,10 +714,6 @@ end}.
     {datatype, {list, atom}}
 ]}.
 
-{mapping, "default_users.$name.password", "rabbit.default_users", [
-    {datatype, string}
-]}.
-
 {translation, "rabbit.default_users", fun(Conf) ->
     case rabbit_cuttlefish:aggregate_props(Conf, ["default_users"]) of
         [] -> cuttlefish:unset();
