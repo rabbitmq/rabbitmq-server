@@ -193,7 +193,7 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
-    DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
+    DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
@@ -201,7 +201,7 @@ do_add(Name, Metadata, ActingUser) ->
         existing ->
             ok
     end,
-    rabbit_vhost_defaults:apply(Name, ActingUser),
+    rabbit_db_vhost_defaults:apply(Name, ActingUser),
     _ = [begin
          Resource = rabbit_misc:r(Name, exchange, ExchangeName),
          rabbit_log:debug("Will declare an exchange ~tp", [Resource]),

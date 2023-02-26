@@ -5,20 +5,20 @@
 %% Copyright (c) 2023-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(rabbit_vhost_defaults).
+-module(rabbit_db_vhost_defaults).
 
 -export([apply/2]).
 -export([list_limits/1, list_operator_policies/1, list_users/1]).
 
 -type definitions() :: [{binary(), term()}].
 
--record(policy, {
+-record(seeding_policy, {
     name                     :: binary(),
     queue_pattern = <<".*">> :: binary(),
     definition    = []       :: definitions()
 }).
 
--type user() :: #{
+-type seeded_user_properties() :: #{
     name      := binary(),
     configure := binary(),
     read      := binary(),
@@ -40,7 +40,7 @@ apply(VHost, ActingUser) ->
     end,
     lists:foreach(
         fun(P) ->
-            ok = rabbit_policy:set_op(VHost, P#policy.name, P#policy.queue_pattern, P#policy.definition,
+            ok = rabbit_policy:set_op(VHost, P#seeding_policy.name, P#seeding_policy.queue_pattern, P#seeding_policy.definition,
                                       undefined, undefined, ActingUser),
             rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp", [VHost, P])
         end,
@@ -80,7 +80,7 @@ list_limits(VHost) ->
     end.
 
 %% Operator policies that were configured with a matching vhost pattern.
--spec list_operator_policies(vhost:name()) -> [#policy{}].
+-spec list_operator_policies(vhost:name()) -> [#seeding_policy{}].
 list_operator_policies(VHost) ->
     AllPolicies = application:get_env(rabbit, default_policies, []),
     OpPolicies = proplists:get_value(operator, AllPolicies, []),
@@ -92,7 +92,7 @@ list_operator_policies(VHost) ->
                     QPattern = proplists:get_value(<<"queue_pattern">>, Ss, <<".*">>),
                     Ss1 = proplists:delete(<<"queue_pattern">>, Ss),
                     Ss2 = proplists:delete(<<"vhost_pattern">>, Ss1),
-                    {true, #policy{
+                    {true, #seeding_policy{
                         name = PolicyName,
                         queue_pattern = QPattern,
                         definition = underscore_to_dash(Ss2)
@@ -105,7 +105,7 @@ list_operator_policies(VHost) ->
     ).
 
 %% Users (permissions) that were configured with a matching vhost pattern.
--spec list_users(vhost:name()) -> [user()].
+-spec list_users(vhost:name()) -> [seeded_user_properties()].
 list_users(VHost) ->
     Users = application:get_env(rabbit, default_users, []),
     lists:filtermap(
@@ -160,7 +160,7 @@ underscore_to_dash(Props) ->
     ).
 
 %% Add user iff it doesn't exist & set permissions per vhost.
--spec add_user(rabbit_types:vhost(), user(), rabbit_types:username()) -> ok.
+-spec add_user(rabbit_types:vhost(), seeded_user_properties(), rabbit_types:username()) -> ok.
 add_user(VHost, #{name := Name, configure := C, write := W, read := R} = User, ActingUser) ->
     %% put_user has its own existence check, but it still updates password if the user exists.
     %% We want only the newly created users to have password set from the config.
