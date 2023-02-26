@@ -2222,6 +2222,15 @@ The name of the queue to purge.
 .Pp
 Purges a queue (removes all messages in it).
 .El
+.\" ------------------------------------------------------------------
+.It Cm hash_password Ar plaintext
+.Bl -tag -width Ds
+.It Ar plaintext
+The plaintext password to hash
+.El
+.Pp
+Hashes a plaintext password according to the currently configured password hashing algorithm
+.El
 .\" ------------------------------------------------------------------------------------------------
 .Sh PLUGIN COMMANDS
 .\" ------------------------------------------------------------------------------------------------
