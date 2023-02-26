@@ -9,7 +9,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.DefaultOutput
 
   def run([cleartextpassword], _opts) do
     hash_password(cleartextpassword)
@@ -46,6 +45,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
     :ok
   end
 
+  ## Use default output for all non-special case outputs
+  use RabbitMQ.CLI.DefaultOutput
+
   def usage, do: "hash_password <cleartext_password>"
 
   def banner([arg], _options),
@@ -53,4 +55,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
 
   def banner([], _options),
     do: "Will hash provided password"
+
+  def description(), do: "Hashes a plaintext password"
 end
