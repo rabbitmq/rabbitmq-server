@@ -5,7 +5,7 @@
 ## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Distribution do
-  alias RabbitMQ.CLI.Core.{ANSI, Config, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, Helpers}
 
   #
   # API
