@@ -189,7 +189,10 @@ do_add(Name, Metadata, ActingUser) ->
                             [Name, Description, Tags])
     end,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> d6ebf8bfe9 (Naming)
 <<<<<<< HEAD
     DefaultLimits = default_limits(Name),
 >>>>>>> 6a96304dba (Add default_users per #7208)
@@ -227,6 +230,9 @@ do_add(Name, Metadata, ActingUser) ->
           end),
 =======
     DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
+=======
+    DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
+>>>>>>> 32124ef323 (Naming)
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
@@ -234,7 +240,7 @@ do_add(Name, Metadata, ActingUser) ->
         existing ->
             ok
     end,
-    rabbit_vhost_defaults:apply(Name, ActingUser),
+    rabbit_db_vhost_defaults:apply(Name, ActingUser),
     _ = [begin
          Resource = rabbit_misc:r(Name, exchange, ExchangeName),
          rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
