@@ -616,8 +616,6 @@ end}.
     {datatype, string}
 ]}.
 
-
-
 %%
 %% Default User / VHost
 %% ====================
@@ -681,64 +679,91 @@ fun(Conf) ->
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
 end}.
 
+%%
+%% Extra Default Users
+%% ====================
+%%
+
+{mapping, "default_users.$name.vhost_pattern", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.password", "rabbit.default_users", [
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.configure", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.read", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.write", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.tags", "rabbit.default_users", [
+    {datatype, {list, atom}}
+]}.
+
+{translation, "rabbit.default_users", fun(Conf) ->
+    case rabbit_cuttlefish:aggregate_props(Conf, ["default_users"]) of
+        [] -> cuttlefish:unset();
+        Props -> Props
+    end
+end}.
+
+%%
+%% Default Policies
+%% ====================
+%%
+
 {mapping, "default_policies.operator.$id.vhost_pattern", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, ".*"},
     {validators, ["valid_regex"]},
     {datatype, string}
 ]}.
 
 {mapping, "default_policies.operator.$id.queue_pattern", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, ".*"},
     {validators, ["valid_regex"]},
     {datatype, string}
 ]}.
 
 {mapping, "default_policies.operator.$id.expires", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, "1s"},
     {datatype, {duration, ms}}
 ]}.
 
 {mapping, "default_policies.operator.$id.message_ttl", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, "1s"},
     {datatype, {duration, ms}}
 ]}.
 
 {mapping, "default_policies.operator.$id.max_length", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, 100},
     {validators, ["non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
 
 {mapping, "default_policies.operator.$id.max_length_bytes", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, "1GB"},
     {validators, ["non_zero_positive_integer"]},
     {datatype, bytesize}
 ]}.
 
 {mapping, "default_policies.operator.$id.max_in_memory_bytes", "rabbit.default_policies.operator", [
-        {include_default, 1},
-        {commented, "1GB"},
         {validators, ["non_zero_positive_integer"]},
         {datatype, bytesize}
     ]}.
 
 {mapping, "default_policies.operator.$id.max_in_memory_length", "rabbit.default_policies.operator",
     [
-        {include_default, 1},
-        {commented, 1000},
         {validators, ["non_zero_positive_integer"]},
         {datatype, integer}
     ]}.
 
 {mapping, "default_policies.operator.$id.delivery_limit", "rabbit.default_policies.operator", [
-    {include_default, 1},
-    {commented, 1},
     {validators, ["non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
@@ -759,55 +784,37 @@ end}.
                     {["default_policies","operator",ID|T],V};
                    (E) -> E
                 end),
-    Props1 = lists:map(
-                fun({K, Ss}) ->
-                    {K,
-                     lists:map(fun({N, V}) ->
-                        {binary:replace(N, <<"_">>, <<"-">>, [global]), V}
-                     end, Ss)}
-                end, Props),
-    case Props1 of
+    case Props of
         [] -> cuttlefish:unset();
-        _ -> Props1
-    end,
-    Props1
+        Props -> Props
+    end
 end}.
 
+%%
+%% Default VHost Limits
+%% ====================
+%%
+
 {mapping, "default_limits.vhosts.$id.pattern", "rabbit.default_limits.vhosts", [
-    {include_default, 1},
-    {commented, ".*"},
     {validators, ["valid_regex"]},
     {datatype, string}
 ]}.
 
 {mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
-    {include_default, 1},
-    {commented, 1000},
     {validators, [ "non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
 
 {mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
-    {include_default, 1},
-    {commented, 100},
     {validators, [ "non_zero_positive_integer"]},
     {datatype, integer}
 ]}.
 
 {translation, "rabbit.default_limits.vhosts", fun(Conf) ->
-    Props = rabbit_cuttlefish:aggregate_props(Conf, ["default_limits", "vhosts"]),
-    Props1 = lists:map(
-                fun({K, Ss}) ->
-                    {K,
-                     lists:map(fun({N, V}) ->
-                        {binary:replace(N, <<"_">>, <<"-">>, [global]), V}
-                     end, Ss)}
-                end, Props),
-    case Props1 of
+    case rabbit_cuttlefish:aggregate_props(Conf, ["default_limits", "vhosts"]) of
         [] -> cuttlefish:unset();
-        _ -> Props1
-    end,
-    Props1
+        Props -> Props
+    end
 end}.
 
 %% Tags for default user
