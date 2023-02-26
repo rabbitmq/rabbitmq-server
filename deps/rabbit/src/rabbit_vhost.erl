@@ -193,6 +193,7 @@ do_add(Name, Metadata, ActingUser) ->
                             [Name, Description, Tags])
     end,
 <<<<<<< HEAD
+<<<<<<< HEAD
     DefaultLimits = default_limits(Name),
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -242,6 +243,9 @@ do_add(Name, Metadata, ActingUser) ->
           end),
 =======
     DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
+=======
+    DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
+>>>>>>> 32124ef323 (Naming)
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
@@ -249,7 +253,7 @@ do_add(Name, Metadata, ActingUser) ->
         existing ->
             ok
     end,
-    rabbit_vhost_defaults:apply(Name, ActingUser),
+    rabbit_db_vhost_defaults:apply(Name, ActingUser),
     _ = [begin
          Resource = rabbit_misc:r(Name, exchange, ExchangeName),
          rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
