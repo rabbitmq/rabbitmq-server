@@ -96,6 +96,7 @@
 
 -define(MB, 1_048_576).
 -define(LOW_LIMIT, 0.8).
+-define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),

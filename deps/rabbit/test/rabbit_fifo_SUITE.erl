@@ -1971,6 +1971,27 @@ header_test(_) ->
     ?assertEqual(undefined, rabbit_fifo:get_header(blah, H5)),
     ok.
 
+chunk_disk_msgs_test(_Config) ->
+    %% NB: this does test an internal function
+    %% input to this function is a reversed list of MSGs
+    Input = [{I, ?MSG(I, 1000)} || I <- lists:seq(200, 1, -1)],
+    Chunks = rabbit_fifo:chunk_disk_msgs(Input, 0, [[]]),
+    ?assertMatch([_, _], Chunks),
+    [Chunk1, Chunk2] = Chunks,
+    ?assertMatch([{1, ?MSG(1, 1000)} | _], Chunk1),
+    %% the chunks are worked out in backwards order, hence the first chunk
+    %% will be a "remainder" chunk
+    ?assertMatch([{73, ?MSG(73, 1000)} | _], Chunk2),
+    ?assertEqual(128, length(Chunk2)),
+    ?assertEqual(72, length(Chunk1)),
+
+    TwoBigMsgs = [{124, ?MSG(124, 200_000)},
+                  {123, ?MSG(123, 200_000)}],
+    ?assertMatch([[{123, ?MSG(123, 200_000)}],
+                  [{124, ?MSG(124, 200_000)}]],
+                 rabbit_fifo:chunk_disk_msgs(TwoBigMsgs, 0, [[]])),
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
