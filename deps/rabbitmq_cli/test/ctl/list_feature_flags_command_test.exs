@@ -21,12 +21,12 @@ defmodule ListFeatureFlagsCommandTest do
 
     new_feature_flags = %{
       @flag1 => %{
-        desc: "My feature flag #1",
+        desc: 'My feature flag #1',
         provided_by: :ListFeatureFlagsCommandTest,
         stability: :stable
       },
       @flag2 => %{
-        desc: "My feature flag #2",
+        desc: 'My feature flag #2',
         provided_by: :ListFeatureFlagsCommandTest,
         stability: :stable
       }
