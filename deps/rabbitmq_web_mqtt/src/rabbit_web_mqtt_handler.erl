@@ -139,6 +139,8 @@ websocket_info({bump_credit, Msg}, State) ->
     handle_credits(State);
 websocket_info({reply, Data}, State) ->
     {[{binary, Data}], State, hibernate};
+websocket_info({stop, CloseCode, Error}, State) ->
+    stop(State, CloseCode, Error);
 websocket_info({'EXIT', _, _}, State) ->
     stop(State);
 websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
@@ -271,9 +273,8 @@ handle_data1(Data, State = #state{socket = Socket,
                                                 proc_state = ProcState1});
                         {error, Reason} ->
                             ?LOG_ERROR("Rejected Web MQTT connection ~ts: ~p", [ConnName, Reason]),
-                            stop_mqtt_protocol_error({_SendWill = false, State},
-                                                     connect_packet_rejected,
-                                                     ConnName)
+                            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, connect_packet_rejected},
+                            {[], {_SendWill = false, State}}
                     end;
                 _ ->
                     case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
