@@ -651,23 +651,24 @@ maybe_replace_old_sub(TopicName, QoS, State = #state{subscriptions = Subs}) ->
     end.
 
 -spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
-hand_off_to_retainer(RetainerPid, Topic0, #mqtt_msg{payload = <<"">>}) ->
-    Topic1 = amqp_to_mqtt(Topic0),
-    rabbit_mqtt_retainer:clear(RetainerPid, Topic1),
-    ok;
-hand_off_to_retainer(RetainerPid, Topic0, Msg) ->
-    Topic1 = amqp_to_mqtt(Topic0),
-    rabbit_mqtt_retainer:retain(RetainerPid, Topic1, Msg),
-    ok.
+hand_off_to_retainer(RetainerPid, Topic0, Msg = #mqtt_msg{payload = Payload}) ->
+    Topic = amqp_to_mqtt(Topic0),
+    if Payload =:= <<>> ->
+           rabbit_mqtt_retainer:clear(RetainerPid, Topic);
+       true ->
+           rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg)
+    end.
 
 maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQos},
                             State0 = #state{packet_id = PacketId0}) ->
-    Topic1 = amqp_to_mqtt(Topic0),
-    case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
+    Topic = amqp_to_mqtt(Topic0),
+    case rabbit_mqtt_retainer:fetch(RPid, Topic) of
         undefined ->
             State0;
-        Msg ->
-            Qos = effective_qos(Msg#mqtt_msg.qos, SubscribeQos),
+        #mqtt_msg{qos = MsgQos,
+                  retain = Retain,
+                  payload = Payload} ->
+            Qos = effective_qos(MsgQos, SubscribeQos),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->
                                         {undefined, State0};
@@ -678,13 +679,13 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
                                              type = ?PUBLISH,
                                              qos  = Qos,
                                              dup  = false,
-                                             retain = Msg#mqtt_msg.retain
+                                             retain = Retain
                                             },
                                   variable = #mqtt_packet_publish{
                                                 packet_id = PacketId,
-                                                topic_name = Topic1
+                                                topic_name = Topic
                                                },
-                                  payload = Msg#mqtt_msg.payload},
+                                  payload = Payload},
             _ = send(Packet, State),
             State
     end.
