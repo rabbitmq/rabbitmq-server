@@ -33,8 +33,13 @@ erlc_opts(
 
 erlang_bytecode(
     name = "parse_transforms",
-    srcs = ["src/vararg.erl"],
-    outs = ["ebin/vararg.beam"],
+    testonly = True,
+    srcs = [
+        "src/vararg.erl",
+    ],
+    outs = [
+        "ebin/vararg.beam",
+    ],
     hdrs = [
         "include/proper.hrl",
         "include/proper_common.hrl",
@@ -47,8 +52,13 @@ erlang_bytecode(
 
 erlang_bytecode(
     name = "behaviours",
-    srcs = ["src/proper_target.erl"],
-    outs = ["ebin/proper_target.beam"],
+    testonly = True,
+    srcs = [
+        "src/proper_target.erl",
+    ],
+    outs = [
+        "ebin/proper_target.beam",
+    ],
     hdrs = [
         "include/proper.hrl",
         "include/proper_common.hrl",
@@ -62,6 +72,7 @@ erlang_bytecode(
 
 erlang_bytecode(
     name = "other_beam",
+    testonly = True,
     srcs = [
         "src/proper.erl",
         "src/proper_arith.erl",
@@ -130,6 +141,7 @@ erlang_bytecode(
 
 filegroup(
     name = "beam_files",
+    testonly = True,
     srcs = [
         ":behaviours",
         ":other_beam",
@@ -139,6 +151,7 @@ filegroup(
 
 filegroup(
     name = "srcs",
+    testonly = True,
     srcs = [
         "src/proper.app.src",
         "src/proper.erl",
@@ -172,11 +185,12 @@ filegroup(
 
 filegroup(
     name = "private_hdrs",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "public_hdrs",
+    testonly = True,
     srcs = [
         "include/proper.hrl",
         "include/proper_common.hrl",
@@ -187,16 +201,17 @@ filegroup(
 
 filegroup(
     name = "priv",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "licenses",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "public_and_private_hdrs",
+    testonly = True,
     srcs = [
         ":private_hdrs",
         ":public_hdrs",
@@ -205,6 +220,7 @@ filegroup(
 
 filegroup(
     name = "all_srcs",
+    testonly = True,
     srcs = [
         ":public_and_private_hdrs",
         ":srcs",
@@ -213,6 +229,7 @@ filegroup(
 
 erlang_app(
     name = "erlang_app",
+    testonly = True,
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_name = "proper",
