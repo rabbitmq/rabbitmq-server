@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -import(util, [expect_publishes/3,
+               connect/2,
                connect/3]).
 
 all() ->
@@ -35,7 +36,8 @@ tests() ->
      coerce_configuration_data,
      should_translate_amqp2mqtt_on_publish,
      should_translate_amqp2mqtt_on_retention,
-     should_translate_amqp2mqtt_on_retention_search
+     should_translate_amqp2mqtt_on_retention_search,
+     recover
     ].
 
 suite() ->
@@ -158,3 +160,15 @@ does_not_retain(Config) ->
               ok
     end,
     ok = emqtt:disconnect(C).
+
+recover(Config) ->
+    Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config),
+    {ok, _} = emqtt:publish(C1, Topic, Payload, [{retain, true},
+                                                 {qos, 1}]),
+    ok = emqtt:disconnect(C1),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    C2 = connect(ClientId, Config),
+    {ok, _, _} = emqtt:subscribe(C2, Topic, qos1),
+    ok = expect_publishes(C2, Topic, [Payload]),
+    ok = emqtt:disconnect(C2).
