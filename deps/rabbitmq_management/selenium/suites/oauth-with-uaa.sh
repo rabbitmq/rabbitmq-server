@@ -11,6 +11,7 @@ TEST_CASES_PATH=/oauth/with-uaa
 TEST_CONFIG_PATH=/oauth
 # Path to the uaa configuration. It is relative to the TEST_CONFIG_PATH
 UAA_CONFIG_PATH=/uaa
+RABBITMQ_CONFIG_FILENAME=rabbitmq.conf
 
 source $SCRIPT/suite_template
 
