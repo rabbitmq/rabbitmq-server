@@ -2441,6 +2441,13 @@ Username associated with the connection.
 .It Cm vhost
 Virtual host name with non-ASCII characters escaped as in C.
 .El
+.It Cm decommission_mqtt_node
+Before the plugin is disabled on a node, or a node removed from the cluster,
+it must be decommissioned.
+.Pp
+For example, this command will remove the node rabbit@stringer:
+.sp
+.Dl rabbitmqctl decommission_mqtt_node rabbit@stringer
 .El
 .\" ------------------------------------------------------------------
 .\" ## STOMP
