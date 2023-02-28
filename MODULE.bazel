@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.5",
+    version = "3.9.9",
 )
 
 erlang_config = use_extension(
@@ -174,13 +174,6 @@ erlang_package.hex_package(
     version = "0.3.6",
 )
 
-erlang_package.git_package(
-    name = "emqtt",
-    build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
-    repository = "emqx/emqtt",
-    tag = "1.8.2",
-)
-
 erlang_package.hex_package(
     name = "enough",
     build_file = "@rabbitmq-server//bazel:BUILD.enough",
@@ -320,7 +313,6 @@ use_repo(
     "credentials_obfuscation",
     "cuttlefish",
     "eetcd",
-    "emqtt",
     "gen_batch_server",
     "getopt",
     "gun",
@@ -353,9 +345,17 @@ erlang_dev_package.git_package(
 )
 
 erlang_dev_package.git_package(
+    name = "emqtt",
+    build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
+    repository = "emqx/emqtt",
+    tag = "1.8.2",
+)
+
+erlang_dev_package.git_package(
     name = "inet_tcp_proxy_dist",
     branch = "master",
     repository = "rabbitmq/inet_tcp_proxy",
+    testonly = True,
 )
 
 erlang_dev_package.git_package(
@@ -373,6 +373,7 @@ erlang_dev_package.git_package(
 use_repo(
     erlang_dev_package,
     "ct_helper",
+    "emqtt",
     "inet_tcp_proxy_dist",
     "meck",
     "proper",
