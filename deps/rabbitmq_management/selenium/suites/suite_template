@@ -84,14 +84,21 @@ start_rabbitmq () {
   init_rabbitmq
   kill_container_if_exist rabbitmq
 
+  MOUNT_RABBITMQ_CONFIG="/etc/rabbitmq/rabbitmq.config"
+  if [[ "$RABBITMQ_CONFIG_FILE" == *.conf ]]
+  then
+    MOUNT_RABBITMQ_CONFIG="/etc/rabbitmq/rabbitmq.conf"
+  fi
+
   docker run \
     --detach \
     --name rabbitmq \
     --net ${DOCKER_NETWORK} \
     -p 15672:15672 -p 5672:5672 \
     -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-    -v ${RABBITMQ_CONFIG_FILE}:/etc/rabbitmq/rabbitmq.config:ro \
+    -v ${RABBITMQ_CONFIG_FILE}:${MOUNT_RABBITMQ_CONFIG}:ro \
     -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
+    -v ${RABBITMQ_CONFIG_DIR}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
 
   wait_for_message rabbitmq "Server startup complete"
@@ -283,6 +290,8 @@ run() {
   build_mocha_image
   start_selenium
 
+  trap _teardown EXIT
+  
   echo "Set up ..."
   [[ $(type -t _setup) == function ]] &&  _setup
 
