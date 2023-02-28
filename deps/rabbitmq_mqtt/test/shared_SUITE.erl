@@ -79,6 +79,7 @@ subgroups() ->
          ,non_clean_sess_reconnect_qos1
          ,non_clean_sess_reconnect_qos0
          ,non_clean_sess_reconnect_qos0_and_qos1
+         ,non_clean_sess_empty_client_id
          ,subscribe_same_topic_same_qos
          ,subscribe_same_topic_different_qos
          ,subscribe_multiple
@@ -851,6 +852,16 @@ non_clean_sess_reconnect_qos0_and_qos1(Config) ->
     ok = emqtt:disconnect(C2),
     C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
+
+%% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
+%% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
+%% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
+non_clean_sess_empty_client_id(Config) ->
+    {C, Connect} = util:start_client(<<>>, Config, 0, [{clean_start, false}]),
+    process_flag(trap_exit, true),
+    ?assertMatch({error, {client_identifier_not_valid, _}},
+                 Connect(C)),
+    ok = await_exit(C).
 
 subscribe_same_topic_same_qos(Config) ->
     C = connect(?FUNCTION_NAME, Config),
