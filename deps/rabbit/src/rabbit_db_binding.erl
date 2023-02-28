@@ -343,11 +343,13 @@ get_all_for_destination_in_mnesia(Dst) ->
 -spec fold(Fun, Acc) -> Acc when
       Fun :: fun((Binding :: rabbit_types:binding(), Acc) -> Acc),
       Acc :: any().
-%% @doc Folds over all the bindings, making it more efficient than `get_all()` and
-%% folding over the returned binding list.
-%% Just used by prometheus_rabbitmq_core_metrics_collector to iterate over the bindings.
+%% @doc Folds over all the bindings, making it more efficient than `get_all()'
+%% and folding over the returned binding list.
 %%
-%% @returns the fold accumulator
+%% Just used by prometheus_rabbitmq_core_metrics_collector to iterate over the
+%% bindings.
+%%
+%% @returns the fold accumulator.
 %%
 %% @private
 
