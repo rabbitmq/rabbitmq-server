@@ -683,6 +683,14 @@ password for the user named
 This user now cannot log in with a password (but may be able to through
 e.g. SASL EXTERNAL if configured).
 .\" ------------------------------------------------------------------
+.It Cm hash_password Ar plaintext
+.Bl -tag -width Ds
+.It Ar plaintext
+The plaintext password to hash
+.El
+.Pp
+Hashes a plaintext password according to the currently configured password hashing algorithm
+.\" ------------------------------------------------------------------
 .It Cm delete_user Ar username
 .Bl -tag -width Ds
 .It Ar username
