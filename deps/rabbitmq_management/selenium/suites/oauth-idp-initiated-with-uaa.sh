@@ -12,12 +12,12 @@ TEST_CONFIG_PATH=/oauth
 # Path to the uaa configuration. It is relative to the TEST_CONFIG_PATH
 UAA_CONFIG_PATH=/uaa
 # Name of the rabbitmq config file. It is relative to the TEST_CONFIG_PATH
-RABBITMQ_CONFIG_FILENAME=rabbitmq-idp-initiated.config
+RABBITMQ_CONFIG_FILENAME=rabbitmq-idp-initiated.conf
 
 source $SCRIPT/suite_template
 
 _setup () {
-  start_uaa  
+  start_uaa
   start_rabbitmq
   start_fakeportal
 }
