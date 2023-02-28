@@ -620,16 +620,16 @@
    management.oauth_provider_url = http://localhost:8080
    management.oauth_client_id = rabbitmq_client_code
    management.oauth_client_secret = rabbitmq_client_secret
-   management.oauth_scopes = openid profile
-   management.oauth_initiated_logon_type = sp_initiated",
+   management.oauth_scopes = openid profile rabbitmq.*
+   management.oauth_initiated_logon_type = idp_initiated",
   [
    {rabbitmq_management, [
                           {oauth_enabled, true},
                           {oauth_provider_url, "http://localhost:8080"},
                           {oauth_client_id, "rabbitmq_client_code"},
                           {oauth_client_secret, "rabbitmq_client_secret"},
-                          {oauth_scopes, "openid profile"},
-                          {oauth_initiated_logon_type, sp_initiated}
+                          {oauth_scopes, "openid profile rabbitmq.*"},
+                          {oauth_initiated_logon_type, idp_initiated}
                          ]}
   ], [rabbitmq_management]
  }
