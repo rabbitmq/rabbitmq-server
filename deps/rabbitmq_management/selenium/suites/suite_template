@@ -290,6 +290,8 @@ run() {
   build_mocha_image
   start_selenium
 
+  trap _teardown EXIT
+  
   echo "Set up ..."
   [[ $(type -t _setup) == function ]] &&  _setup
 
