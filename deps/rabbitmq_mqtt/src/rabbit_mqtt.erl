@@ -106,5 +106,5 @@ persist_static_configuration() ->
     rabbit_mqtt_util:init_sparkplug(),
 
     {ok, MailboxSoftLimit} = application:get_env(?APP_NAME, mailbox_soft_limit),
-    ?assert(is_number(MailboxSoftLimit)),
+    ?assert(is_integer(MailboxSoftLimit)),
     ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit).

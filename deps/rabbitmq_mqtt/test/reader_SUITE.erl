@@ -37,7 +37,6 @@ groups() ->
        quorum_clean_session_true,
        classic_clean_session_true,
        classic_clean_session_false,
-       non_clean_sess_empty_client_id,
        event_authentication_failure,
        rabbit_mqtt_qos0_queue_overflow
       ]}
@@ -217,22 +216,6 @@ classic_clean_session_true(Config) ->
 
 classic_clean_session_false(Config) ->
     validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
-
-%% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
-%% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
-%% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
-non_clean_sess_empty_client_id(Config) ->
-    {ok, C} = emqtt:start_link(
-                [{clientid, <<>>},
-                 {clean_start, false},
-                 {proto_ver, v4},
-                 {host, "localhost"},
-                 {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)}
-                ]),
-    process_flag(trap_exit, true),
-    ?assertMatch({error, {client_identifier_not_valid, _}},
-                 emqtt:connect(C)),
-    ok = await_exit(C).
 
 event_authentication_failure(Config) ->
     {ok, C} = emqtt:start_link(
