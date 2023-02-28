@@ -135,7 +135,7 @@ process_connect(
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
-        {ok, ClientId} ?= ensure_client_id(ClientId0, CleanSess),
+        {ok, ClientId} ?= ensure_client_id(ClientId0, CleanSess, ProtoVer),
         {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
 
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
@@ -186,19 +186,34 @@ process_connect(
              end,
     case Result of
         {ok, SessPresent, State = #state{}} ->
-            send_conn_ack(?RC_SUCCESS, SessPresent, ProtoVer, SendFun, MaxPacketSize),
+            Props0 = #{'Maximum-QoS' => ?QOS_1,
+                       'Maximum-Packet-Size' => persistent_term:get(
+                                                  ?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED),
+                       'Subscription-Identifier-Available' => 0,
+                       'Shared-Subscription-Available' => 0
+                      },
+            Props = case {ClientId0, ProtoVer} of
+                        {<<>>, 5} ->
+                            %% "If the Client connects using a zero length Client Identifier, the Server
+                            %% MUST respond with a CONNACK containing an Assigned Client Identifier."
+                            maps:put('Assigned-Client-Identifier', State#state.cfg#cfg.client_id, Props0);
+                        _ ->
+                            Props0
+                    end,
+            send_conn_ack(?RC_SUCCESS, SessPresent, ProtoVer, SendFun, MaxPacketSize, Props),
             {ok, State};
         {error, ConnectReasonCode} = Err
           when is_integer(ConnectReasonCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
-            send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize),
+            send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize, #{}),
             Err
     end.
 
--spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun(), max_packet_size()) -> ok.
-send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize) ->
+-spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun(),
+                    max_packet_size(), properties()) -> ok.
+send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize, Props) ->
     Code = case ProtoVer of
                5 -> ConnectReasonCode;
                _ -> connect_reason_code_to_return_code(ConnectReasonCode)
@@ -206,7 +221,8 @@ send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize) 
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNACK},
                           variable = #mqtt_packet_connack{
                                         session_present = SessPresent,
-                                        code = Code}},
+                                        code = Code,
+                                        props = Props}},
     _ = send(Packet, ProtoVer, SendFun, MaxPacketSize),
     ok.
 
@@ -435,14 +451,17 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
             {ok, {UserBin, PassBin}}
     end.
 
-ensure_client_id(<<>>, _CleanSess = false) ->
-    ?LOG_ERROR("MQTT client ID must be provided for non-clean session"),
+-spec ensure_client_id(binary(), boolean(), protocol_version()) ->
+    {ok, binary()} | {error, reason_code()}.
+ensure_client_id(<<>>, _CleanSess = false, ProtoVer)
+  when ProtoVer < 5 ->
+    ?LOG_ERROR("MQTT client ID must be provided for non-clean session in MQTT v~b", [ProtoVer]),
     {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID};
-ensure_client_id(<<>>, _CleanSess = true) ->
+ensure_client_id(<<>>, _, _) ->
     {ok, rabbit_data_coercion:to_binary(
            rabbit_misc:base64url(
              rabbit_guid:gen_secure()))};
-ensure_client_id(ClientId, _CleanSess)
+ensure_client_id(ClientId, _, _)
   when is_binary(ClientId) ->
     {ok, ClientId}.
 

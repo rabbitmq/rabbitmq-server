@@ -15,6 +15,7 @@
 
 -import(util,
         [
+         start_client/4,
          connect/2, connect/3, connect/4
         ]).
 
@@ -124,17 +125,17 @@ client_set_max_packet_size_publish(Config) ->
     ok = emqtt:disconnect(C).
 
 client_set_max_packet_size_connack(Config) ->
-    {C, Connect} = util:start_client(?FUNCTION_NAME, Config, 0,
-                                     [{properties, #{'Maximum-Packet-Size' => 2}},
-                                      {connect_timeout, 1}]),
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
+                                [{properties, #{'Maximum-Packet-Size' => 2}},
+                                 {connect_timeout, 1}]),
     %% We expect the server to drop the CONNACK packet because it's larger than 2 bytes.
     ?assertEqual({error, connack_timeout}, Connect(C)).
 
 %% "It is a Protocol Error to include the Receive Maximum
 %% value more than once or for it to have the value 0."
 client_set_max_packet_size_invalid(Config) ->
-    {C, Connect} = util:start_client(?FUNCTION_NAME, Config, 0,
-                                     [{properties, #{'Maximum-Packet-Size' => 0}}]),
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
+                                [{properties, #{'Maximum-Packet-Size' => 0}}]),
     unlink(C),
     ?assertMatch({error, _}, Connect(C)).
 
