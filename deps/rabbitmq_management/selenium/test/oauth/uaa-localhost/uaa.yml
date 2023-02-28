@@ -129,7 +129,7 @@ oauth:
       authorities: rabbitmq.tag:monitoring
     rabbit_client_code:
       id: rabbit_client_code
-      secret: " "
+      secret: rabbit_client_code
       authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq.*

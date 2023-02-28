@@ -1,7 +1,12 @@
 [
   {oauth2_pem_config2,
        "auth_oauth2.resource_server_id = new_resource_server_id
+        auth_oauth2.resource_server_type = new_resource_server_type
         auth_oauth2.additional_scopes_key = my_custom_scope_key
+        auth_oauth2.preferred_username_claims.1 = user_name
+        auth_oauth2.preferred_username_claims.2 = username
+        auth_oauth2.preferred_username_claims.3 = email
+        auth_oauth2.verify_aud = true
         auth_oauth2.default_key = id1
         auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
         auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
@@ -17,7 +22,10 @@
         [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
+            {resource_server_type,<<"new_resource_server_type">>},
             {extra_scopes_source, <<"my_custom_scope_key">>},
+            {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
+            {verify_aud, true},
             {key_config, [
             {default_key, <<"id1">>},
             {signing_keys,
