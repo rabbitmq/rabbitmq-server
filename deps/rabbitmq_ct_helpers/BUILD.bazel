@@ -1,6 +1,7 @@
 load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
+    testonly = True,
     app_name = "rabbitmq_ct_helpers",
     app_version = "main",
     extra_priv = [
