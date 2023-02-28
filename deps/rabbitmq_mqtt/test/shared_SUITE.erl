@@ -897,15 +897,28 @@ non_clean_sess_reconnect_qos0_and_qos1(Config) ->
     C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 
-%% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
-%% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
-%% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
 non_clean_sess_empty_client_id(Config) ->
     {C, Connect} = util:start_client(<<>>, Config, 0, [{clean_start, false}]),
-    process_flag(trap_exit, true),
-    ?assertMatch({error, {client_identifier_not_valid, _}},
-                 Connect(C)),
-    ok = await_exit(C).
+    case ?config(mqtt_version, Config) of
+        V when V =:= v3;
+               V =:= v4 ->
+            %% "If the Client supplies a zero-byte ClientId with CleanSession set to 0,
+            %% the Server MUST respond to the CONNECT Packet with a CONNACK return code 0x02
+            %% (Identifier rejected) and then close the Network Connection" [MQTT-3.1.3-8].
+            process_flag(trap_exit, true),
+            ?assertMatch({error, {client_identifier_not_valid, _}}, Connect(C)),
+            ok = await_exit(C);
+        v5 ->
+            %% "If the Client connects using a zero length Client Identifier, the Server MUST respond with
+            %% a CONNACK containing an Assigned Client Identifier. The Assigned Client Identifier MUST be
+            %% a new Client Identifier not used by any other Session currently in the Server [MQTT-3.2.2-16]."
+            {ok, #{'Assigned-Client-Identifier' := ClientId}} = Connect(C),
+            {C2, Connect2} = util:start_client(<<>>, Config, 0, [{clean_start, true}]),
+            {ok, #{'Assigned-Client-Identifier' := ClientId2}} = Connect2(C2),
+            ?assertNotEqual(ClientId, ClientId2),
+            ok = emqtt:disconnect(C),
+            ok = emqtt:disconnect(C2)
+    end.
 
 subscribe_same_topic_same_qos(Config) ->
     C = connect(?FUNCTION_NAME, Config),
@@ -1434,7 +1447,8 @@ max_packet_size_authenticated(Config) ->
     MaxSize = 500,
     ok = rpc(Config, persistent_term, put, [Key, MaxSize]),
 
-    C = connect(ClientId, Config),
+    {C, Connect} = util:start_client(ClientId, Config, 0, []),
+    {ok, ConnAckProps} = Connect(C),
     process_flag(trap_exit, true),
     ok = emqtt:publish(C, Topic, binary:copy(<<"x">>, MaxSize + 1), qos0),
     await_exit(C),
@@ -1442,6 +1456,7 @@ max_packet_size_authenticated(Config) ->
         V when V =:= v3; V =:= v4 ->
             ok;
         v5 ->
+            ?assertMatch(#{'Maximum-Packet-Size' := MaxSize}, ConnAckProps),
             receive {disconnected, _ReasonCodePacketTooLarge = 149, _Props} -> ok
             after 1000 -> ct:fail("missing DISCONNECT packet from server")
             end
