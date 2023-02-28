@@ -311,7 +311,7 @@
  %%
  %% Inter-node query result caching
  %%
- 
+
  {db_cache_multiplier,
   "management.db_cache_multiplier = 7",
   [
@@ -320,7 +320,7 @@
                          ]}
   ], [rabbitmq_management]
  },
- 
+
  %%
  %% CORS
  %%
@@ -611,6 +611,25 @@
   [
    {rabbitmq_management, [
                           {listener, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {oauth2,
+  "management.oauth_enabled = true
+   management.oauth_provider_url = http://localhost:8080
+   management.oauth_client_id = rabbitmq_client_code
+   management.oauth_client_secret = rabbitmq_client_secret
+   management.oauth_scopes = openid profile rabbitmq.*
+   management.oauth_initiated_logon_type = idp_initiated",
+  [
+   {rabbitmq_management, [
+                          {oauth_enabled, true},
+                          {oauth_provider_url, "http://localhost:8080"},
+                          {oauth_client_id, "rabbitmq_client_code"},
+                          {oauth_client_secret, "rabbitmq_client_secret"},
+                          {oauth_scopes, "openid profile rabbitmq.*"},
+                          {oauth_initiated_logon_type, idp_initiated}
                          ]}
   ], [rabbitmq_management]
  }

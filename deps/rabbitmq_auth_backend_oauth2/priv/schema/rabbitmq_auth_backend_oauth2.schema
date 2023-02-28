@@ -68,14 +68,15 @@
 %% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
 
 {mapping,
- "auth_oauth2.preferred_username_claims",
+ "auth_oauth2.preferred_username_claims.$preferred_username_claims",
  "rabbitmq_auth_backend_oauth2.preferred_username_claims",
  [{datatype, string}]}.
 
 {translation,
  "rabbitmq_auth_backend_oauth2.preferred_username_claims",
  fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("auth_oauth2.preferred_username_claims", Conf))
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.preferred_username_claims", Conf),
+    [list_to_binary(V) || {_, V} <- Settings]
  end}.
 
 %% ID of the default signing key
