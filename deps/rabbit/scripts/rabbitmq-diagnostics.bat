@@ -36,7 +36,13 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\erl.exe" +B ^
+if "%1"=="remote_shell" (
+    set ERL_CMD=werl.exe
+) else (
+    set ERL_CMD=erl.exe
+)
+
+"!ERLANG_HOME!\bin\!ERL_CMD!" +B ^
 -boot !CLEAN_BOOT_FILE! ^
 -noinput -noshell -hidden -smp enable ^
 !RABBITMQ_CTL_ERL_ARGS! ^
