@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_cli
 
 BUILD_DEPS = rabbit_common
-DEPS = observer_cli
+DEPS = observer_cli stdout_formatter
 TEST_DEPS = amqp_client rabbit
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
