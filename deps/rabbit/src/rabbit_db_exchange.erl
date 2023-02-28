@@ -196,7 +196,7 @@ count_in_mnesia() ->
 %% `UpdateFun'.
 %%
 %% @returns the updated exchange record if the record existed and the
-%% update succeeded. It returns `not_found` if the transaction fails.
+%% update succeeded. It returns `not_found' if the transaction fails.
 %%
 %% @private
 
