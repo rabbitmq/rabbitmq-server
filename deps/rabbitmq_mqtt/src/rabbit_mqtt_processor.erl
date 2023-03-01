@@ -247,15 +247,6 @@ process_request(?PUBACK,
     end;
 
 process_request(?PUBLISH,
-                Packet = #mqtt_packet{
-                            fixed = Fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
-                State) ->
-    % Downgrade QOS_2 to QOS_1
-    process_request(?PUBLISH,
-                    Packet#mqtt_packet{
-                      fixed = Fixed#mqtt_packet_fixed{qos = ?QOS_1}},
-                    State);
-process_request(?PUBLISH,
                 #mqtt_packet{
                    fixed = #mqtt_packet_fixed{qos = Qos,
                                               retain = Retain,
@@ -266,11 +257,12 @@ process_request(?PUBLISH,
                 State0 = #state{unacked_client_pubs = U,
                                 cfg = #cfg{retainer_pid = RPid,
                                            proto_ver = ProtoVer}}) ->
+    EffectiveQos = maybe_downgrade_qos(Qos),
     rabbit_global_counters:messages_received(ProtoVer, 1),
     State = maybe_increment_publisher(State0),
     Publish = fun() ->
                       Msg = #mqtt_msg{retain     = Retain,
-                                      qos        = Qos,
+                                      qos        = EffectiveQos,
                                       topic      = Topic,
                                       dup        = Dup,
                                       packet_id  = PacketId,
@@ -288,8 +280,10 @@ process_request(?PUBLISH,
                               Error
                       end
               end,
-    case Qos of
-        N when N > ?QOS_0 ->
+    case EffectiveQos of
+        ?QOS_0 ->
+            publish_to_queues_with_checks(Topic, Publish, State);
+        ?QOS_1 ->
             rabbit_global_counters:messages_received_confirm(ProtoVer, 1),
             case rabbit_mqtt_confirms:contains(PacketId, U) of
                 false ->
@@ -299,9 +293,7 @@ process_request(?PUBLISH,
                     %% We already sent this message to target queues awaiting confirmations.
                     %% Hence, we ignore this re-send.
                     {ok, State}
-            end;
-        _ ->
-            publish_to_queues_with_checks(Topic, Publish, State)
+            end
     end;
 
 process_request(?SUBSCRIBE,
@@ -322,7 +314,7 @@ process_request(?SUBSCRIBE,
          (#mqtt_topic{name = TopicName,
                       qos = TopicQos},
           {L, S0}) ->
-              QoS = supported_sub_qos(TopicQos),
+              QoS = maybe_downgrade_qos(TopicQos),
               maybe
                   ok ?= maybe_replace_old_sub(TopicName, QoS, S0),
                   {ok, Q} ?= ensure_queue(QoS, S0),
@@ -663,16 +655,23 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}
             State
     end.
 
-make_will_msg(#mqtt_packet_connect{will_flag   = false}) ->
+make_will_msg(#mqtt_packet_connect{will_flag = false}) ->
     undefined;
-make_will_msg(#mqtt_packet_connect{will_retain = Retain,
-                                   will_qos    = Qos,
-                                   will_topic  = Topic,
-                                   will_msg    = Msg}) ->
-    #mqtt_msg{retain  = Retain,
-              qos     = Qos,
-              topic   = Topic,
-              dup     = false,
+make_will_msg(#mqtt_packet_connect{will_flag = true,
+                                   will_retain = Retain,
+                                   will_qos = Qos,
+                                   will_topic = Topic,
+                                   will_msg = Msg}) ->
+    EffectiveQos = maybe_downgrade_qos(Qos),
+    Correlation = case EffectiveQos of
+                      ?QOS_0 -> undefined;
+                      ?QOS_1 -> ?WILL_MSG_QOS_1_CORRELATION
+                  end,
+    #mqtt_msg{retain = Retain,
+              qos = EffectiveQos,
+              packet_id = Correlation,
+              topic = Topic,
+              dup = false,
               payload = Msg}.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
@@ -885,13 +884,13 @@ creds(User, Pass, SSLLoginName) ->
 auth_attempt_failed(PeerIp, Username) ->
     rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt).
 
-supported_sub_qos(?QOS_0) -> ?QOS_0;
-supported_sub_qos(?QOS_1) -> ?QOS_1;
-supported_sub_qos(?QOS_2) -> ?QOS_1.
-
 delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
+
+maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
+maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
+maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
 ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username = Username}}}) ->
     case get_queue(QoS, State) of
@@ -1155,9 +1154,9 @@ process_routing_confirm(#delivery{confirm = false},
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
 process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = undefined},
+                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
-    %% unroutable will message with QoS > 0
+    %% unroutable will message with QoS 1
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
 process_routing_confirm(#delivery{confirm = true,
@@ -1172,8 +1171,8 @@ process_routing_confirm(#delivery{confirm = true,
 process_routing_confirm(#delivery{confirm = false}, _, State) ->
     State;
 process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = undefined}, [_|_], State) ->
-    %% routable will message with QoS > 0
+                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION}, [_|_], State) ->
+    %% routable will message with QoS 1
     State;
 process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = PktId},
