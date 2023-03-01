@@ -615,7 +615,6 @@ cluster_node_removed(Config) ->
 
     rabbit_ct_broker_helpers:forget_cluster_node(Config, 0, 1),
     timer:sleep(200),
-    NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
 
     ?assertEqual(false, is_process_alive(Conn2)),
     [?assertEqual(false, is_process_alive(Ch)) || Ch <- Chans2],
@@ -720,7 +719,6 @@ exists_in_tracked_connection_per_vhost_table(Config, VHost) ->
     exists_in_tracked_connection_per_vhost_table(Config, 0, VHost).
 exists_in_tracked_connection_per_vhost_table(Config, NodeIndex, VHost) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_connection_tracking:tracked_connection_per_vhost_table_name_for/1,
         tracked_connection_per_vhost,
         VHost).
 
@@ -728,7 +726,6 @@ exists_in_tracked_connection_per_user_table(Config, Username) ->
     exists_in_tracked_connection_per_user_table(Config, 0, Username).
 exists_in_tracked_connection_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_connection_tracking:tracked_connection_per_user_table_name_for/1,
         tracked_connection_per_user,
         Username).
 
@@ -736,14 +733,10 @@ exists_in_tracked_channel_per_user_table(Config, Username) ->
     exists_in_tracked_channel_per_user_table(Config, 0, Username).
 exists_in_tracked_channel_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_channel_tracking:tracked_channel_per_user_table_name_for/1,
         tracked_channel_per_user,
         Username).
 
-exists_in_tracking_table(Config, NodeIndex, TableNameFun, Table, Key) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(
-                Config, NodeIndex, nodename),
-    Tab = TableNameFun(Node),
+exists_in_tracking_table(Config, NodeIndex, Table, Key) ->
     All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                        ets, lookup, [Table, Key]),
     lists:keymember(Key, 1, All).
