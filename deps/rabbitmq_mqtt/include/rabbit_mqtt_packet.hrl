@@ -59,6 +59,11 @@
 %% Packet identifier is a non zero two byte integer.
 -type packet_id() :: 1..16#ffff.
 
+%% Defining a single correlation term (sequence number) for the will message is
+%% sufficient because there can be only a single will message per MQTT session.
+%% To prevent clashes with a Packet ID and given Packet IDs must be non-zero, we choose 0.
+-define(WILL_MSG_QOS_1_CORRELATION, 0).
+
 -record(mqtt_packet_fixed,    {type = 0 :: packet_type(),
                                dup = false :: boolean(),
                                qos = 0 :: qos(),
@@ -100,12 +105,13 @@
 -record(mqtt_packet_suback,   {packet_id :: packet_id(),
                                qos_table = []}).
 
--record(mqtt_msg,             {retain :: boolean(),
-                               qos :: qos(),
-                               topic :: binary(),
-                               dup :: boolean(),
-                               packet_id :: option(packet_id()),
-                               payload :: binary()}).
+%% MQTT application message.
+-record(mqtt_msg, {retain :: boolean(),
+                   qos :: qos(),
+                   topic :: binary(),
+                   dup :: boolean(),
+                   packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
+                   payload :: binary()}).
 
 -type mqtt_msg() :: #mqtt_msg{}.
 
