@@ -20,7 +20,6 @@ erlc_opts(
             "+warn_unused_import",
             "+warn_unused_record",
             "+warn_unused_vars",
-            "+{platform_define,\"^2\",unicode_str}",
         ],
         "//conditions:default": [
             "+debug_info",
@@ -39,7 +38,6 @@ erlc_opts(
             "+warn_unused_import",
             "+warn_unused_record",
             "+warn_unused_vars",
-            "+{platform_define,\"^2\",unicode_str}",
         ],
     }),
     visibility = [":__subpackages__"],

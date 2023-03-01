@@ -19,7 +19,6 @@ erlc_opts(
             "+warn_unused_record",
             "+warn_unused_vars",
             "+warnings_as_errors",
-            "+{platform_define,\"^(2|3)\",recent_otp}",
         ],
         "//conditions:default": [
             "+debug_info",
@@ -37,7 +36,6 @@ erlc_opts(
             "+warn_unused_record",
             "+warn_unused_vars",
             "+warnings_as_errors",
-            "+{platform_define,\"^(2|3)\",recent_otp}",
         ],
     }),
     visibility = [":__subpackages__"],
