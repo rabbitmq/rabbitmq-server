@@ -135,6 +135,8 @@ emqtt:
 - emqtt_inflight
 - emqtt_props
 - emqtt_quic
+- emqtt_quic_connection
+- emqtt_quic_stream
 - emqtt_secret
 - emqtt_sock
 - emqtt_ws
