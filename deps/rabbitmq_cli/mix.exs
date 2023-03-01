@@ -123,59 +123,51 @@ defmodule RabbitMQCtl.MixfileBase do
   # self-contained and RabbitMQ must be buildable offline). However, we
   # don't have the equivalent for other methods.
   defp deps() do
-    elixir_deps = [
-      {:json, "~> 1.4.1"},
-      {:csv, "~> 2.4.0"},
-      {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.7.3"},
+    deps_dir = System.get_env("DEPS_DIR", "deps")
+
+    # Mix is confused by any `rebar.{config,lock}` we might have left in
+    # `rabbit_common` or `amqp_client`. So just remove those files to be
+    # safe, as they are generated when we publish to Hex.pm only.
+    for dir <- ["rabbit_common", "amqp_client"] do
+      for file <- ["rebar.config", "rebar.lock"] do
+        File.rm(Path.join([deps_dir, dir, file]))
+      end
+    end
+
+    make_cmd = System.get_env("MAKE", "make")
+    is_bazel = System.get_env("IS_BAZEL") != nil
+
+    [
+      {:json, "1.4.1"},
+      {:csv, "2.4.1"},
+      {
+        :stdout_formatter,
+        path: Path.join(deps_dir, "stdout_formatter"),
+        compile: if(is_bazel, do: false, else: make_cmd)
+      },
+      {
+        :observer_cli,
+        path: Path.join(deps_dir, "observer_cli"),
+        compile: if(is_bazel, do: false, else: make_cmd)
+      },
       {:amqp, "~> 2.1.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
       {:temp, "~> 0.4", only: :test},
-      {:x509, "~> 0.7", only: :test}
+      {:x509, "~> 0.7", only: :test},
+      {
+        :rabbit_common,
+        path: Path.join(deps_dir, "rabbit_common"),
+        compile: if(is_bazel, do: false, else: make_cmd),
+        override: true
+      },
+      {
+        :amqp_client,
+        path: Path.join(deps_dir, "amqp_client"),
+        compile: if(is_bazel, do: false, else: make_cmd),
+        override: true,
+        only: :test
+      }
     ]
-
-    rabbitmq_deps =
-      case System.get_env("DEPS_DIR") do
-        nil ->
-          # rabbitmq_cli is built as a standalone Elixir application.
-          [
-            {:rabbit_common, "~> 3.8.0"},
-            {:amqp_client, "~> 3.8.0", only: :test}
-          ]
-
-        deps_dir ->
-          # rabbitmq_cli is built as part of RabbitMQ.
-
-          # Mix is confused by any `rebar.{config,lock}` we might have left in
-          # `rabbit_common` or `amqp_client`. So just remove those files to be
-          # safe, as they are generated when we publish to Hex.pm only.
-          for dir <- ["rabbit_common", "amqp_client"] do
-            for file <- ["rebar.config", "rebar.lock"] do
-              File.rm(Path.join([deps_dir, dir, file]))
-            end
-          end
-
-          make_cmd = System.get_env("MAKE", "make")
-          is_bazel = System.get_env("IS_BAZEL") != nil
-
-          [
-            {
-              :rabbit_common,
-              path: Path.join(deps_dir, "rabbit_common"),
-              compile: if(is_bazel, do: false, else: make_cmd),
-              override: true
-            },
-            {
-              :amqp_client,
-              path: Path.join(deps_dir, "amqp_client"),
-              compile: if(is_bazel, do: false, else: make_cmd),
-              override: true,
-              only: :test
-            }
-          ]
-      end
-
-    elixir_deps ++ rabbitmq_deps
   end
 
   defp aliases do
