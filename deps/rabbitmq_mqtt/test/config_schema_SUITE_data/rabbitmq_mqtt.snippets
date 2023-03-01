@@ -151,5 +151,13 @@
   "mqtt.mailbox_soft_limit = 30",
   [{rabbitmq_mqtt,[
       {mailbox_soft_limit, 30}]}],
+   [rabbitmq_mqtt]},
+
+ {max_packet_size,
+  "mqtt.max_packet_size_unauthenticated = 1234
+   mqtt.max_packet_size_authenticated = 5678",
+  [{rabbitmq_mqtt,[
+      {max_packet_size_unauthenticated, 1234},
+      {max_packet_size_authenticated, 5678}]}],
    [rabbitmq_mqtt]}
 ].

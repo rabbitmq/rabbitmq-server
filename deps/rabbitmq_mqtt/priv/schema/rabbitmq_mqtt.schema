@@ -284,3 +284,15 @@ end}.
 %% {mailbox_soft_limit, 30},
 {mapping, "mqtt.mailbox_soft_limit", "rabbitmq_mqtt.mailbox_soft_limit",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Maximum packet size
+
+{mapping, "mqtt.max_packet_size_unauthenticated", "rabbitmq_mqtt.max_packet_size_unauthenticated", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "mqtt.max_packet_size_authenticated", "rabbitmq_mqtt.max_packet_size_authenticated", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
