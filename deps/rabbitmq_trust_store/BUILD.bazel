@@ -62,6 +62,7 @@ dialyze(
 
 rabbitmq_home(
     name = "broker-for-tests-home",
+    testonly = True,
     plugins = [
         "//deps/rabbit:erlang_app",
         ":erlang_app",
@@ -72,6 +73,7 @@ rabbitmq_home(
 
 rabbitmq_run(
     name = "rabbitmq-for-tests-run",
+    testonly = True,
     home = ":broker-for-tests-home",
 )
 

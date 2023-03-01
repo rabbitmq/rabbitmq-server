@@ -17,6 +17,7 @@ erlc_opts(
 
 erlang_bytecode(
     name = "other_beam",
+    testonly = True,
     srcs = [
         "src/ct_helper.erl",
         "src/ct_helper_error_h.erl",
@@ -27,19 +28,19 @@ erlang_bytecode(
         "ebin/ct_helper_error_h.beam",
         "ebin/erl_make_certs.beam",
     ],
-    hdrs = [],
     app_name = "ct_helper",
-    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
+    testonly = True,
     srcs = [":other_beam"],
 )
 
 filegroup(
     name = "srcs",
+    testonly = True,
     srcs = [
         "src/ct_helper.app.src",
         "src/ct_helper.erl",
@@ -50,26 +51,30 @@ filegroup(
 
 filegroup(
     name = "private_hdrs",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "public_hdrs",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "priv",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "licenses",
-    srcs = ["LICENSE"],
+    testonly = True,
+    srcs = [
+        "LICENSE",
+    ],
 )
 
 filegroup(
     name = "public_and_private_hdrs",
+    testonly = True,
     srcs = [
         ":private_hdrs",
         ":public_hdrs",
@@ -78,6 +83,7 @@ filegroup(
 
 filegroup(
     name = "all_srcs",
+    testonly = True,
     srcs = [
         ":public_and_private_hdrs",
         ":srcs",
@@ -86,6 +92,7 @@ filegroup(
 
 erlang_app(
     name = "erlang_app",
+    testonly = True,
     srcs = [":all_srcs"],
     app_name = "ct_helper",
     beam_files = [":beam_files"],

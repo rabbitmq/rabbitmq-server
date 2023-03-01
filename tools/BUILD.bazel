@@ -3,6 +3,7 @@ load(":erlang_ls.bzl", "deps_symlinks")
 
 deps_symlinks(
     name = "symlink_deps_for_erlang_ls",
+    testonly = True,
     apps = all_plugins(
         rabbitmq_workspace = "",
     ) + [

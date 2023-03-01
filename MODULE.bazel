@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.5",
+    version = "3.9.9",
 )
 
 erlang_config = use_extension(
@@ -160,12 +160,6 @@ erlang_package.hex_package(
     version = "3.2.0",
 )
 
-erlang_package.git_package(
-    branch = "master",
-    build_file = "@//:bazel/BUILD.ct_helper",
-    repository = "extend/ct_helper",
-)
-
 erlang_package.hex_package(
     name = "cuttlefish",
     build_file = "@rabbitmq-server//bazel:BUILD.cuttlefish",
@@ -178,13 +172,6 @@ erlang_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.eetcd",
     sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
     version = "0.3.6",
-)
-
-erlang_package.git_package(
-    name = "emqtt",
-    build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
-    repository = "emqx/emqtt",
-    tag = "1.8.2",
 )
 
 erlang_package.hex_package(
@@ -216,12 +203,6 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-    name = "inet_tcp_proxy_dist",
-    branch = "master",
-    repository = "rabbitmq/inet_tcp_proxy",
-)
-
-erlang_package.git_package(
     name = "jose",
     build_file = "@//bazel:BUILD.jose",
     commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
@@ -233,12 +214,6 @@ erlang_package.hex_package(
     build_file = "@//bazel:BUILD.jsx",
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
     version = "3.1.0",
-)
-
-erlang_package.git_package(
-    branch = "master",
-    build_file = "@rabbitmq-server//bazel:BUILD.meck",
-    repository = "eproxus/meck",
 )
 
 erlang_package.hex_package(
@@ -266,12 +241,6 @@ erlang_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
     sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
     version = "4.10.0",
-)
-
-erlang_package.git_package(
-    branch = "master",
-    build_file = "@rabbitmq-server//bazel:BUILD.proper",
-    repository = "manopapad/proper",
 )
 
 erlang_package.hex_package(
@@ -350,21 +319,16 @@ use_repo(
     "cowboy",
     "cowlib",
     "credentials_obfuscation",
-    "ct_helper",
     "cuttlefish",
     "eetcd",
-    "emqtt",
     "gen_batch_server",
     "getopt",
     "gun",
-    "inet_tcp_proxy_dist",
     "jose",
     "jsx",
-    "meck",
     "observer_cli",
     "osiris",
     "prometheus",
-    "proper",
     "ra",
     "ranch",
     "recon",
@@ -374,6 +338,53 @@ use_repo(
     "syslog",
     "sysmon_handler",
     "systemd",
+)
+
+erlang_dev_package = use_extension(
+    "@rules_erlang//bzlmod:extensions.bzl",
+    "erlang_package",
+    dev_dependency = True,
+)
+
+erlang_dev_package.git_package(
+    branch = "master",
+    build_file = "@//:bazel/BUILD.ct_helper",
+    repository = "extend/ct_helper",
+)
+
+erlang_dev_package.git_package(
+    name = "emqtt",
+    build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
+    repository = "emqx/emqtt",
+    tag = "1.8.2",
+)
+
+erlang_dev_package.git_package(
+    name = "inet_tcp_proxy_dist",
+    branch = "master",
+    repository = "rabbitmq/inet_tcp_proxy",
+    testonly = True,
+)
+
+erlang_dev_package.git_package(
+    branch = "master",
+    build_file = "@rabbitmq-server//bazel:BUILD.meck",
+    repository = "eproxus/meck",
+)
+
+erlang_dev_package.git_package(
+    branch = "master",
+    build_file = "@rabbitmq-server//bazel:BUILD.proper",
+    repository = "manopapad/proper",
+)
+
+use_repo(
+    erlang_dev_package,
+    "ct_helper",
+    "emqtt",
+    "inet_tcp_proxy_dist",
+    "meck",
+    "proper",
 )
 
 rbe = use_extension(

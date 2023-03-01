@@ -30,16 +30,17 @@ gazelle(
     gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
 )
 
-# gazelle(
-#     name = "gazelle-update-repos",
-#     extra_args = [
-#         "--verbose",
-#         "--build_files_dir=bazel",
-#     ],
-#     command = "update-repos",
-#     data = GAZELLE_ERLANG_RUNTIME_DEPS,
-#     gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
-# )
+gazelle(
+    name = "gazelle-update-repos",
+    command = "update-repos",
+    data = GAZELLE_ERLANG_RUNTIME_DEPS,
+    extra_args = [
+        "--verbose",
+        "--build_files_dir=bazel",
+        "--recurse_with=gazelle-update-repos",
+    ],
+    gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
+)
 
 bool_flag(
     name = "enable_test_build",
