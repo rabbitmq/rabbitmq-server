@@ -297,21 +297,23 @@ process_request(?PUBLISH,
                 #mqtt_packet{
                    fixed = #mqtt_packet_fixed{qos = Qos,
                                               retain = Retain,
-                                              dup = Dup },
+                                              dup = Dup},
                    variable = #mqtt_packet_publish{topic_name = Topic,
-                                                   packet_id = PacketId },
+                                                   packet_id = PacketId,
+                                                   props = Props},
                    payload = Payload},
                 State0 = #state{unacked_client_pubs = U,
                                 cfg = #cfg{proto_ver = ProtoVer}}) ->
     EffectiveQos = maybe_downgrade_qos(Qos),
     rabbit_global_counters:messages_received(ProtoVer, 1),
     State = maybe_increment_publisher(State0),
-    Msg = #mqtt_msg{retain     = Retain,
-                    qos        = EffectiveQos,
-                    topic      = Topic,
-                    dup        = Dup,
+    Msg = #mqtt_msg{retain = Retain,
+                    qos = EffectiveQos,
+                    topic = Topic,
+                    dup = Dup,
                     packet_id  = PacketId,
-                    payload    = Payload},
+                    payload = Payload,
+                    props = Props},
     case EffectiveQos of
         ?QOS_0 ->
             publish_to_queues_with_checks(Msg, State);
@@ -696,6 +698,7 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                                    will_retain = Retain,
                                    will_qos = Qos,
                                    will_topic = Topic,
+                                   will_props = Props,
                                    will_msg = Msg}) ->
     EffectiveQos = maybe_downgrade_qos(Qos),
     Correlation = case EffectiveQos of
@@ -707,6 +710,7 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
               packet_id = Correlation,
               topic = Topic,
               dup = false,
+              props = Props,
               payload = Msg}.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
@@ -1116,10 +1120,11 @@ binding_action(ExchangeName, TopicName, QName, BindingFun, #auth_state{user = #u
     BindingFun(Binding, Username).
 
 publish_to_queues(
-  #mqtt_msg{qos        = Qos,
-            topic      = Topic,
-            packet_id  = PacketId,
-            payload    = Payload},
+  #mqtt_msg{qos = Qos,
+            topic = Topic,
+            packet_id = PacketId,
+            payload = Payload,
+            props = Props},
   #state{cfg = #cfg{exchange = ExchangeName,
                     delivery_flow = Flow,
                     conn_name = ConnName,
@@ -1128,13 +1133,22 @@ publish_to_queues(
         } = State) ->
     RoutingKey = mqtt_to_amqp(Topic),
     Confirm = Qos > ?QOS_0,
-    Props = #'P_basic'{
-               headers = [{<<"x-mqtt-publish-qos">>, byte, Qos}],
-               delivery_mode = delivery_mode(Qos)},
+    {Expiration, Timestamp} = case Props of
+                                  #{'Message-Expiry-Interval' := ExpirySeconds} ->
+                                      {integer_to_binary(ExpirySeconds * 1000),
+                                       os:system_time(seconds)};
+                                  _ ->
+                                      {undefined, undefined}
+                              end,
+    PBasic = #'P_basic'{
+                headers = [{<<"x-mqtt-publish-qos">>, byte, Qos}],
+                delivery_mode = delivery_mode(Qos),
+                expiration = Expiration,
+                timestamp = Timestamp},
     {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     Content0 = #content{
                   class_id = ClassId,
-                  properties = Props,
+                  properties = PBasic,
                   properties_bin = none,
                   protocol = none,
                   payload_fragments_rev = [Payload]
@@ -1527,11 +1541,13 @@ maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     {complete, State};
 maybe_publish_to_client(
-  {QNameOrType, _QPid, QMsgId, Redelivered,
-   #basic_message{
-      routing_keys = [RoutingKey | _CcRoutes],
-      content = #content{payload_fragments_rev = FragmentsRev}}} = Msg,
+  Msg = {QNameOrType, _QPid, QMsgId, Redelivered,
+         #basic_message{
+            routing_keys = [RoutingKey | _CcRoutes],
+            content = #content{payload_fragments_rev = FragmentsRev,
+                               properties = PBasic}}},
   QoS, State0) ->
+    Props = p_basic_to_publish_properties(PBasic),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
     Packet =
     #mqtt_packet{
@@ -1541,7 +1557,8 @@ maybe_publish_to_client(
                   dup = Redelivered},
        variable = #mqtt_packet_publish{
                      packet_id = PacketId,
-                     topic_name = amqp_to_mqtt(RoutingKey)},
+                     topic_name = amqp_to_mqtt(RoutingKey),
+                     props = Props},
        payload = lists:reverse(FragmentsRev)},
     SettleOp = case send(Packet, State) of
                    ok ->
@@ -1552,6 +1569,32 @@ maybe_publish_to_client(
                        discard
                end,
     {SettleOp, State}.
+
+%% Converts AMQP 0.9.1 properties to MQTT v5 properties.
+%% TODO map more properties such as content_encoding, content_type, correlation_id, headers, etc.
+-spec p_basic_to_publish_properties(#'P_basic'{}) -> properties().
+p_basic_to_publish_properties(#'P_basic'{headers = Headers,
+                                         expiration = Expiration,
+                                         timestamp = TimestampSeconds
+                                        })
+  when is_binary(Expiration) andalso
+       is_integer(TimestampSeconds) ->
+    %% Check whether source protocol is MQTT
+    case lists:keymember(<<"x-mqtt-publish-qos">>, 1, Headers) of
+        true ->
+            ExpirationMs = binary_to_integer(Expiration),
+            ExpirationSeconds = ExpirationMs div 1000,
+            %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
+            %% Expiry Interval set to the received value minus the time that the
+            %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
+            WaitingSeconds = os:system_time(seconds) - TimestampSeconds,
+            Expiry = max(0, ExpirationSeconds - WaitingSeconds),
+            #{'Message-Expiry-Interval' => Expiry};
+        false ->
+            #{}
+    end;
+p_basic_to_publish_properties(#'P_basic'{}) ->
+    #{}.
 
 msg_id_to_packet_id(_, ?QOS_0, State) ->
     %% "A PUBLISH packet MUST NOT contain a Packet Identifier if its QoS value is set to 0 [MQTT-2.2.1-2]."

@@ -216,13 +216,19 @@
                                  props = #{} :: properties()
                                 }).
 
+%% TODO Add compatibility for old #mqtt_msg{} record that could still be stored on disk
+%% in retained message stores (both ETS and DETS): Could either migrate or do the conversion
+%% lazily in rabbit_mqtt_retained_msg_store:lookup/2.
+%%
 %% MQTT application message.
 -record(mqtt_msg, {retain :: boolean(),
                    qos :: qos(),
                    topic :: binary(),
                    dup :: boolean(),
                    packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
-                   payload :: binary()
+                   payload :: binary(),
+                   %% PUBLISH or Will properties
+                   props :: properties()
                   }).
 
 -type mqtt_msg() :: #mqtt_msg{}.
