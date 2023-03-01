@@ -37,7 +37,9 @@ cluster_size_1_tests() ->
     [
      client_set_max_packet_size_publish,
      client_set_max_packet_size_connack,
-     client_set_max_packet_size_invalid
+     client_set_max_packet_size_invalid,
+     message_expiry_interval,
+     message_expiry_interval_will_message
     ].
 
 cluster_size_3_tests() ->
@@ -116,12 +118,8 @@ client_set_max_packet_size_publish(Config) ->
     ?assertMatch({ok, _}, emqtt:publish(C, Topic, PayloadTooLarge, [{qos, 1}])),
     %% We expect the server to drop the PUBLISH packet prior to sending to the client
     %% because the packet is larger than what the client is able to receive.
-    receive Unexpected -> ct:fail("Unexpected message: ~p", [Unexpected])
-    after 500 -> ok
-    end,
-    Counters = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
-    M = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}], Counters),
-    ?assertEqual(1, maps:get(messages_dead_lettered_rejected_total, M)),
+    assert_nothing_received(),
+    ?assertEqual(1, dead_letter_metric(messages_dead_lettered_rejected_total, Config)),
     ok = emqtt:disconnect(C).
 
 client_set_max_packet_size_connack(Config) ->
@@ -139,5 +137,83 @@ client_set_max_packet_size_invalid(Config) ->
     unlink(C),
     ?assertMatch({error, _}, Connect(C)).
 
+message_expiry_interval(Config) ->
+    NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config),
+    Sub1 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
+    ok = emqtt:disconnect(Sub1),
+
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 1}, <<"m1">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, Topic, #{}, <<"m2">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 10}, <<"m3">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 2}, <<"m4">>, [{qos, 1}]),
+    timer:sleep(2001),
+    Sub2 = connect(ClientId, Config, [{clean_start, false}]),
+    receive {publish, #{client_pid := Sub2,
+                        topic := Topic,
+                        payload := <<"m2">>,
+                        properties := Props}}
+              when map_size(Props) =:= 0 -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+
+    receive {publish, #{client_pid := Sub2,
+                        topic := Topic,
+                        payload := <<"m3">>,
+                        %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
+                        %% Expiry Interval set to the received value minus the time that the
+                        %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
+                        properties := #{'Message-Expiry-Interval' := 10-2}}} -> ok
+    after 100 -> ct:fail("did not receive m3")
+    end,
+    assert_nothing_received(),
+    NumExpired = dead_letter_metric(messages_dead_lettered_expired_total, Config) - NumExpiredBefore,
+    ?assertEqual(2, NumExpired),
+
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(Sub2),
+    Sub3 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(Sub3).
+
+message_expiry_interval_will_message(Config) ->
+    NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Opts = [{will_topic, Topic},
+            {will_payload, <<"will payload">>},
+            {will_qos, 1},
+            {will_props, #{'Message-Expiry-Interval' => 1}}
+           ],
+    Pub = connect(<<"will-publisher">>, Config, Opts),
+    timer:sleep(100),
+    [ServerPublisherPid] = util:all_connection_pids(Config),
+
+    Sub1 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
+    ok = emqtt:disconnect(Sub1),
+
+    unlink(Pub),
+    %% Trigger sending of will message.
+    erlang:exit(ServerPublisherPid, test_will),
+    %% Wait for will message to expire.
+    timer:sleep(1100),
+    NumExpired = dead_letter_metric(messages_dead_lettered_expired_total, Config) - NumExpiredBefore,
+    ?assertEqual(1, NumExpired),
+
+    Sub2 = connect(ClientId, Config, [{clean_start, true}]),
+    assert_nothing_received(),
+    ok = emqtt:disconnect(Sub2).
+
 satisfy_bazel(_Config) ->
     ok.
+
+dead_letter_metric(Metric, Config) ->
+    Counters = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
+    Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}], Counters),
+    maps:get(Metric, Map).
+
+assert_nothing_received() ->
+    receive Unexpected -> ct:fail("Received unexpected message: ~p", [Unexpected])
+    after 500 -> ok
+    end.
