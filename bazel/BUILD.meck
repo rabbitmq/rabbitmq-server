@@ -17,6 +17,7 @@ erlc_opts(
 
 erlang_bytecode(
     name = "other_beam",
+    testonly = True,
     srcs = [
         "src/meck.erl",
         "src/meck_args_matcher.erl",
@@ -43,19 +44,22 @@ erlang_bytecode(
         "ebin/meck_ret_spec.beam",
         "ebin/meck_util.beam",
     ],
-    hdrs = ["src/meck.hrl"],
+    hdrs = [
+        "src/meck.hrl",
+    ],
     app_name = "meck",
-    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
 filegroup(
     name = "beam_files",
+    testonly = True,
     srcs = [":other_beam"],
 )
 
 filegroup(
     name = "srcs",
+    testonly = True,
     srcs = [
         "src/meck.app.src",
         "src/meck.erl",
@@ -74,26 +78,33 @@ filegroup(
 
 filegroup(
     name = "private_hdrs",
-    srcs = ["src/meck.hrl"],
+    testonly = True,
+    srcs = [
+        "src/meck.hrl",
+    ],
 )
 
 filegroup(
     name = "public_hdrs",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "priv",
-    srcs = [],
+    testonly = True,
 )
 
 filegroup(
     name = "licenses",
-    srcs = ["LICENSE"],
+    testonly = True,
+    srcs = [
+        "LICENSE",
+    ],
 )
 
 filegroup(
     name = "public_and_private_hdrs",
+    testonly = True,
     srcs = [
         ":private_hdrs",
         ":public_hdrs",
@@ -102,6 +113,7 @@ filegroup(
 
 filegroup(
     name = "all_srcs",
+    testonly = True,
     srcs = [
         ":public_and_private_hdrs",
         ":srcs",
@@ -110,6 +122,7 @@ filegroup(
 
 erlang_app(
     name = "erlang_app",
+    testonly = True,
     srcs = [":all_srcs"],
     app_name = "meck",
     beam_files = [":beam_files"],
