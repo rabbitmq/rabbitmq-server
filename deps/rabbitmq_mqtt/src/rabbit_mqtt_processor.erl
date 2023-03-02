@@ -255,39 +255,24 @@ process_request(?PUBLISH,
                                                    packet_id = PacketId },
                    payload = Payload},
                 State0 = #state{unacked_client_pubs = U,
-                                cfg = #cfg{retainer_pid = RPid,
-                                           proto_ver = ProtoVer}}) ->
+                                cfg = #cfg{proto_ver = ProtoVer}}) ->
     EffectiveQos = maybe_downgrade_qos(Qos),
     rabbit_global_counters:messages_received(ProtoVer, 1),
     State = maybe_increment_publisher(State0),
-    Publish = fun() ->
-                      Msg = #mqtt_msg{retain     = Retain,
-                                      qos        = EffectiveQos,
-                                      topic      = Topic,
-                                      dup        = Dup,
-                                      packet_id  = PacketId,
-                                      payload    = Payload},
-                      case publish_to_queues(Msg, State) of
-                          {ok, _} = Ok ->
-                              case Retain of
-                                  false ->
-                                      ok;
-                                  true ->
-                                      hand_off_to_retainer(RPid, Topic, Msg)
-                              end,
-                              Ok;
-                          Error ->
-                              Error
-                      end
-              end,
+    Msg = #mqtt_msg{retain     = Retain,
+                    qos        = EffectiveQos,
+                    topic      = Topic,
+                    dup        = Dup,
+                    packet_id  = PacketId,
+                    payload    = Payload},
     case EffectiveQos of
         ?QOS_0 ->
-            publish_to_queues_with_checks(Topic, Publish, State);
+            publish_to_queues_with_checks(Msg, State);
         ?QOS_1 ->
             rabbit_global_counters:messages_received_confirm(ProtoVer, 1),
             case rabbit_mqtt_confirms:contains(PacketId, U) of
                 false ->
-                    publish_to_queues_with_checks(Topic, Publish, State);
+                    publish_to_queues_with_checks(Msg, State);
                 true ->
                     %% Client re-sent this PUBLISH packet.
                     %% We already sent this message to target queues awaiting confirmations.
@@ -1226,25 +1211,16 @@ terminate(SendWill, ConnName, ProtoFamily,
     maybe_decrement_publisher(State),
     maybe_delete_mqtt_qos0_queue(State).
 
-maybe_send_will(
-  true, ConnStr,
-  #state{cfg = #cfg{retainer_pid = RPid,
-                    will_msg = WillMsg = #mqtt_msg{retain = Retain,
-                                                   topic = Topic}}
-        } = State) ->
-    ?LOG_DEBUG("sending MQTT will message to topic ~s on connection ~s",
-               [Topic, ConnStr]),
-    case check_topic_access(Topic, write, State) of
-        ok ->
-            _ = publish_to_queues(WillMsg, State),
-            case Retain of
-                false ->
-                    ok;
-                true ->
-                    hand_off_to_retainer(RPid, Topic, WillMsg)
-            end;
-        {error, access_refused = Reason}  ->
-            ?LOG_ERROR("failed to send will message: ~p", [Reason])
+-spec maybe_send_will(boolean(), binary(), state()) -> ok.
+maybe_send_will(true, ConnStr,
+                State = #state{cfg = #cfg{will_msg = WillMsg = #mqtt_msg{topic = Topic}}}) ->
+    case publish_to_queues_with_checks(WillMsg, State) of
+        {ok, _} ->
+            ?LOG_DEBUG("sent MQTT will message to topic ~s on connection ~s",
+                       [Topic, ConnStr]);
+        {error, Reason, _} ->
+            ?LOG_DEBUG("failed to send MQTT will message to topic ~s on connection ~s: ~p",
+                       [Topic, ConnStr, Reason])
     end;
 maybe_send_will(_, _, _) ->
     ok.
@@ -1546,17 +1522,31 @@ trace_tap_out(Msg0 = {?QUEUE_TYPE_QOS_0, _, _, _, _},
             trace_tap_out(Msg, State)
     end.
 
+-spec publish_to_queues_with_checks(mqtt_msg(), state()) ->
+    {ok, state()} | {error, any(), state()}.
 publish_to_queues_with_checks(
-  TopicName, PublishFun,
-  #state{cfg = #cfg{exchange = Exchange},
-         auth_state = #auth_state{user = User,
-                                  authz_ctx = AuthzCtx}
-        } = State) ->
+  Msg = #mqtt_msg{topic = Topic,
+                  retain = Retain},
+  State = #state{cfg = #cfg{exchange = Exchange,
+                            retainer_pid = RPid},
+                 auth_state = #auth_state{user = User,
+                                          authz_ctx = AuthzCtx}}) ->
     case check_resource_access(User, Exchange, write, AuthzCtx) of
         ok ->
-            case check_topic_access(TopicName, write, State) of
+            case check_topic_access(Topic, write, State) of
                 ok ->
-                    PublishFun();
+                    case publish_to_queues(Msg, State) of
+                        {ok, _} = Ok ->
+                            case Retain of
+                                false ->
+                                    ok;
+                                true ->
+                                    hand_off_to_retainer(RPid, Topic, Msg)
+                            end,
+                            Ok;
+                        Error ->
+                            Error
+                    end;
                 {error, access_refused} ->
                     {error, unauthorized, State}
             end;
