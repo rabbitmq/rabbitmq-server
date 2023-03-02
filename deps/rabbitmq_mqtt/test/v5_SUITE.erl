@@ -39,7 +39,8 @@ cluster_size_1_tests() ->
      client_set_max_packet_size_connack,
      client_set_max_packet_size_invalid,
      message_expiry_interval,
-     message_expiry_interval_will_message
+     message_expiry_interval_will_message,
+     client_publish_qos2
     ].
 
 cluster_size_3_tests() ->
@@ -204,6 +205,14 @@ message_expiry_interval_will_message(Config) ->
     Sub2 = connect(ClientId, Config, [{clean_start, true}]),
     assert_nothing_received(),
     ok = emqtt:disconnect(Sub2).
+
+client_publish_qos2(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    {C, Connect} = start_client(ClientId, Config, 0, []),
+    {ok, Props} = Connect(C),
+    ?assertEqual(1, maps:get('Maximum-QoS', Props)),
+    {error, Response} = emqtt:publish(C, Topic, #{}, <<"msg">>, [{qos, 2}]),
+    ?assertEqual({disconnected, 155, #{}}, Response).
 
 satisfy_bazel(_Config) ->
     ok.

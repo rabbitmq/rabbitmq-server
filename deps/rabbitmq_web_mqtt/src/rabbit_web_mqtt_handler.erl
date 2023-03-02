@@ -285,7 +285,10 @@ handle_data1(Data, State = #state{socket = Socket,
                                           proc_state = ProcState1});
                         {error, Reason, _} ->
                             stop_mqtt_protocol_error(State, Reason, ConnName);
-                        {stop, disconnect, ProcState1} ->
+                        {stop, {disconnect, server_initiated}, _} ->
+                            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+                            {[], State};
+                        {stop, {disconnect, client_initiated}, ProcState1} ->
                             stop({_SendWill = false, State#state{proc_state = ProcState1}})
                     end
             end;
