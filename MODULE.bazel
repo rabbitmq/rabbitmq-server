@@ -353,9 +353,9 @@ erlang_dev_package.git_package(
 
 erlang_dev_package.git_package(
     name = "inet_tcp_proxy_dist",
+    testonly = True,
     branch = "master",
     repository = "rabbitmq/inet_tcp_proxy",
-    testonly = True,
 )
 
 erlang_dev_package.git_package(
