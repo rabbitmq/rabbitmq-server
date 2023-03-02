@@ -263,7 +263,7 @@ process_connect(State0) ->
 
 -spec process_packet(mqtt_packet(), state()) ->
     {ok, state()} |
-    {stop, disconnect, state()} |
+    {stop, {disconnect, client_initiated | server_initiated}, state()} |
     {error, Reason :: term(), state()}.
 process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
                State = #state{auth_state = #auth_state{}})
@@ -272,7 +272,7 @@ process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
 
 -spec process_request(packet_type(), mqtt_packet(), state()) ->
     {ok, state()} |
-    {stop, disconnect, state()} |
+    {stop, {disconnect, client_initiated | server_initiated}, state()} |
     {error, Reason :: term(), state()}.
 process_request(?PUBACK,
                 #mqtt_packet{variable = #mqtt_packet_puback{packet_id = PacketId}},
@@ -293,6 +293,20 @@ process_request(?PUBACK,
             {ok, State}
     end;
 
+%% MQTT 5 spec 3.3.1.2 QoS
+%% If the Server included a Maximum QoS in its CONNACK response
+%% to a Client and it receives a PUBLISH packet with a QoS greater than this
+%% then it uses DISCONNECT with Reason Code 0x9B (QoS not supported).
+process_request(?PUBLISH,
+                #mqtt_packet{fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
+                State = #state{cfg = #cfg{
+                                        proto_ver = ?MQTT_PROTO_V5,
+                                        client_id = ClientID}}) ->
+    ?LOG_INFO("Terminating MQTT connection. QoS not supported, client ID: ~s, "
+               "protocol version: ~p, QoS: ~p",
+               [ClientID, ?MQTT_PROTO_V5, ?QOS_2]),
+    send_disconnect(?RC_QOS_NOT_SUPPORTED, State),
+    {stop, {disconnect, server_initiated}, State};
 process_request(?PUBLISH,
                 #mqtt_packet{
                    fixed = #mqtt_packet_fixed{qos = Qos,
@@ -424,7 +438,7 @@ process_request(?PINGREQ, #mqtt_packet{}, State = #state{cfg = #cfg{client_id = 
 
 process_request(?DISCONNECT, #mqtt_packet{}, State) ->
     ?LOG_DEBUG("Received a DISCONNECT"),
-    {stop, disconnect, State}.
+    {stop, {disconnect, client_initiated}, State}.
 
 check_protocol_version(ProtoVersion) ->
     case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
