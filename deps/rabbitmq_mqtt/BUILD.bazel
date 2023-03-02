@@ -131,6 +131,7 @@ rabbitmq_integration_suite(
     name = "auth_SUITE",
     additional_beam = [
         ":rabbit_auth_backend_mqtt_mock",
+        ":util",
     ],
     runtime_deps = [
         "@emqtt//:erlang_app",
