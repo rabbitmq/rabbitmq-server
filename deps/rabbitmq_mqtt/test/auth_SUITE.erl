@@ -77,6 +77,7 @@ groups() ->
        no_queue_delete_permission,
        no_queue_declare_permission,
        no_publish_permission,
+       no_publish_permission_will_message,
        no_topic_read_permission,
        no_topic_write_permission,
        topic_write_permission_variable_expansion,
@@ -339,6 +340,7 @@ end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
                                         Testcase == no_queue_delete_permission;
                                         Testcase == no_queue_declare_permission;
                                         Testcase == no_publish_permission;
+                                        Testcase == no_publish_permission_will_message;
                                         Testcase == no_topic_read_permission;
                                         Testcase == no_topic_write_permission;
                                         Testcase == topic_write_permission_variable_expansion;
@@ -698,6 +700,43 @@ no_publish_permission(Config) ->
                 fun () -> stop end}
              ]),
     ok.
+
+%% Test that publish permission checks are performed for the will message.
+no_publish_permission_will_message(Config) ->
+    %% Allow write access to queue.
+    %% Disallow write access to exchange.
+    set_permissions(".*", "^mqtt-subscription.*qos1$", ".*", Config),
+    Topic = <<"will/topic">>,
+    Opts = [{will_topic, Topic},
+            {will_payload, <<"will payload">>},
+            {will_qos, 0}],
+    {ok, C} = connect_user(?config(mqtt_user, Config),
+                           ?config(mqtt_password, Config),
+                           Config,
+                           <<"client-with-will">>,
+                           Opts),
+    {ok, _} = emqtt:connect(C),
+    timer:sleep(100),
+    [ServerPublisherPid] = util:all_connection_pids(Config),
+
+    Sub = open_mqtt_connection(Config),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+
+    unlink(C),
+    %% Trigger sending of will message.
+    erlang:exit(ServerPublisherPid, test_will),
+
+    %% We expect to not receive a will message because of missing publish permission.
+    receive Unexpected -> ct:fail("Received unexpectedly: ~p", [Unexpected])
+    after 300 -> ok
+    end,
+
+    wait_log(Config,
+             [{["MQTT resource access refused: write access to exchange "
+                "'amq.topic' in vhost 'mqtt-vhost' refused for user 'mqtt-user'"],
+               fun () -> stop end}
+             ]),
+    ok = emqtt:disconnect(Sub).
 
 no_topic_read_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),
