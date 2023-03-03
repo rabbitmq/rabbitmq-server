@@ -42,7 +42,8 @@ cluster_size_1_tests() ->
      message_expiry_interval,
      message_expiry_interval_will_message,
      message_expiry_interval_retained_message,
-     client_publish_qos2
+     client_publish_qos2,
+     client_rejects_publish
     ].
 
 cluster_size_3_tests() ->
@@ -112,6 +113,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 client_set_max_packet_size_publish(Config) ->
+    NumRejectedBefore = dead_letter_metric(messages_dead_lettered_rejected_total, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     MaxPacketSize = 500,
     C = connect(ClientId, Config, [{properties, #{'Maximum-Packet-Size' => MaxPacketSize}}]),
@@ -122,7 +124,8 @@ client_set_max_packet_size_publish(Config) ->
     %% We expect the server to drop the PUBLISH packet prior to sending to the client
     %% because the packet is larger than what the client is able to receive.
     assert_nothing_received(),
-    ?assertEqual(1, dead_letter_metric(messages_dead_lettered_rejected_total, Config)),
+    NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
+    ?assertEqual(1, NumRejected),
     ok = emqtt:disconnect(C).
 
 client_set_max_packet_size_connack(Config) ->
@@ -266,6 +269,28 @@ client_publish_qos2(Config) ->
     ?assertMatch({ok, #{'Maximum-QoS' := 1}}, Connect(C)),
     ?assertEqual({error, {disconnected, _RcQosNotSupported = 155, #{}}},
                  emqtt:publish(C, Topic, <<"msg">>, [{qos, 2}])).
+
+client_rejects_publish(Config) ->
+    NumRejectedBefore = dead_letter_metric(messages_dead_lettered_rejected_total, Config),
+    Payload = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config, [{auto_ack, false}]),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, Payload, [{qos, 1}]),
+    receive {publish, #{payload := Payload,
+                        packet_id := PacketId}} ->
+                %% Negatively ack the PUBLISH.
+                emqtt:puback(C, PacketId, _UnspecifiedError = 16#80)
+    after 1000 ->
+              ct:fail("did not receive PUBLISH")
+    end,
+    %% Even though we nacked the PUBLISH, we expect the server to not re-send the same message:
+    %% "If PUBACK [...] is received containing a Reason Code of 0x80 or greater the corresponding
+    %% PUBLISH packet is treated as acknowledged, and MUST NOT be retransmitted" [MQTT-4.4.0-2].
+    assert_nothing_received(),
+    %% However, we expect RabbitMQ to dead letter negatively acknowledged messages.
+    NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
+    ?assertEqual(1, NumRejected),
+    ok = emqtt:disconnect(C).
 
 satisfy_bazel(_Config) ->
     ok.
