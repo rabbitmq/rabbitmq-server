@@ -67,7 +67,7 @@
          port :: inet:port_number(),
          peer_ip_addr :: inet:ip_address(),
          peer_port :: inet:port_number(),
-         connected_at = os:system_time(milli_seconds) :: pos_integer(),
+         connected_at = os:system_time(millisecond) :: pos_integer(),
          send_fun :: send_fun(),
          %% Maximum MQTT packet size in bytes for packets sent from server to client.
          max_packet_size :: max_packet_size()
@@ -683,7 +683,8 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
             State0;
         #mqtt_msg{qos = MsgQos,
                   retain = Retain,
-                  payload = Payload} ->
+                  payload = Payload,
+                  props = Props} ->
             Qos = effective_qos(MsgQos, SubscribeQos),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->
@@ -699,7 +700,8 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
                                             },
                                   variable = #mqtt_packet_publish{
                                                 packet_id = PacketId,
-                                                topic_name = Topic
+                                                topic_name = Topic,
+                                                props = Props
                                                },
                                   payload = Payload},
             _ = send(Packet, State),
@@ -1150,7 +1152,7 @@ publish_to_queues(
     {Expiration, Timestamp} = case Props of
                                   #{'Message-Expiry-Interval' := ExpirySeconds} ->
                                       {integer_to_binary(ExpirySeconds * 1000),
-                                       os:system_time(seconds)};
+                                       os:system_time(second)};
                                   _ ->
                                       {undefined, undefined}
                               end,
@@ -1601,7 +1603,7 @@ p_basic_to_publish_properties(#'P_basic'{headers = Headers,
             %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
             %% Expiry Interval set to the received value minus the time that the
             %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-            WaitingSeconds = os:system_time(seconds) - TimestampSeconds,
+            WaitingSeconds = os:system_time(second) - TimestampSeconds,
             Expiry = max(0, ExpirationSeconds - WaitingSeconds),
             #{'Message-Expiry-Interval' => Expiry};
         false ->

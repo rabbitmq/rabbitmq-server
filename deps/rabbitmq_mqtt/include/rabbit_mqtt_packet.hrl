@@ -228,7 +228,8 @@
                    packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
                    payload :: binary(),
                    %% PUBLISH or Will properties
-                   props :: properties()
+                   props :: properties(),
+                   timestamp :: option(integer())
                   }).
 
 -type mqtt_msg() :: #mqtt_msg{}.

@@ -44,7 +44,7 @@ make_msg(Msg = #basic_message{content       = Content,
             _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = atom_to_binary(Reason),
-    TimeSec = os:system_time(seconds),
+    TimeSec = os:system_time(second),
     PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =
         fun (Headers) ->

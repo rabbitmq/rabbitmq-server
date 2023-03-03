@@ -21,6 +21,7 @@
          get_events/1,
          assert_event_type/2,
          assert_event_prop/2,
+         assert_message_expiry_interval/2,
          await_exit/1,
          await_exit/2,
          maybe_skip_v5/1
@@ -112,6 +113,12 @@ assert_event_prop(ExpectedProps, Event)
     lists:foreach(fun(P) ->
                           assert_event_prop(P, Event)
                   end, ExpectedProps).
+
+assert_message_expiry_interval(Expected, Actual)
+  when is_integer(Expected),
+       is_integer(Actual) ->
+    ?assert(Expected >= Actual - 1),
+    ?assert(Expected =< Actual + 1).
 
 await_exit(Pid) ->
     receive

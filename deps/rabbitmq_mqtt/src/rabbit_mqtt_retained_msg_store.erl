@@ -22,18 +22,24 @@
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
 -export([start/1, insert/3, lookup/2, delete/2, terminate/1]).
--export_type([state/0]).
+-export([expire/2]).
+-export_type([state/0, expire/0]).
 
 -define(STATE, ?MODULE).
 -record(?STATE, {store_mod :: module(),
                  store_state :: term()}).
 -opaque state() :: #?STATE{}.
 
+-type expire() :: #{Topic :: binary() :=
+                    {InsertionTimestamp :: integer(),
+                     MessageExpiryInterval :: pos_integer()}}.
+
 -callback new(Directory :: file:name_all(), rabbit_types:vhost()) ->
     State :: any().
 
 -callback recover(Directory :: file:name_all(), rabbit_types:vhost()) ->
-    {ok, State :: any()} | {error, uninitialized}.
+    {ok, State :: any(), expire()} |
+    {error, uninitialized}.
 
 -callback insert(Topic :: binary(), mqtt_msg(), State :: any()) ->
     ok.
@@ -47,25 +53,25 @@
 -callback terminate(State :: any()) ->
     ok.
 
--spec start(rabbit_types:vhost()) -> state().
+-spec start(rabbit_types:vhost()) -> {state(), expire()}.
 start(VHost) ->
     {ok, Mod} = application:get_env(?APP_NAME, retained_message_store),
     Dir = rabbit:data_dir(),
     ?LOG_INFO("Starting MQTT retained message store ~s for vhost '~ts'",
               [Mod, VHost]),
-    S = case Mod:recover(Dir, VHost) of
-            {ok, StoreState} ->
-                ?LOG_INFO("Recovered MQTT retained message store ~s for vhost '~ts'",
-                          [Mod, VHost]),
-                StoreState;
-            {error, uninitialized} ->
-                StoreState = Mod:new(Dir, VHost),
-                ?LOG_INFO("Initialized MQTT retained message store ~s for vhost '~ts'",
-                          [Mod, VHost]),
-                StoreState
-        end,
-    #?STATE{store_mod = Mod,
-            store_state = S}.
+    {S, Expire} = case Mod:recover(Dir, VHost) of
+                      {ok, StoreState, Expire0} ->
+                          ?LOG_INFO("Recovered MQTT retained message store ~s for vhost '~ts'",
+                                    [Mod, VHost]),
+                          {StoreState, Expire0};
+                      {error, uninitialized} ->
+                          StoreState = Mod:new(Dir, VHost),
+                          ?LOG_INFO("Initialized MQTT retained message store ~s for vhost '~ts'",
+                                    [Mod, VHost]),
+                          {StoreState, #{}}
+                  end,
+    {#?STATE{store_mod = Mod,
+             store_state = S}, Expire}.
 
 -spec insert(Topic :: binary(), mqtt_msg(), state()) -> ok.
 insert(Topic, Msg, #?STATE{store_mod = Mod,
@@ -87,3 +93,22 @@ delete(Topic, #?STATE{store_mod = Mod,
 terminate(#?STATE{store_mod = Mod,
                   store_state = StoreState}) ->
     ok = Mod:terminate(StoreState).
+
+-spec expire(ets | dets, ets:tid() | dets:tab_name()) -> expire().
+expire(Mod, Tab) ->
+    Now = os:system_time(second),
+    Mod:foldl(
+      fun(#retained_message{topic = Topic,
+                            mqtt_msg = #mqtt_msg{props = #{'Message-Expiry-Interval' := Expiry},
+                                                 timestamp = Timestamp}}, Acc)
+            when is_integer(Expiry) andalso
+                 is_integer(Timestamp) ->
+              if Now - Timestamp >= Expiry ->
+                     Mod:delete(Tab, Topic),
+                     Acc;
+                 true ->
+                     maps:put(Topic, {Timestamp, Expiry}, Acc)
+              end;
+         (_, Acc) ->
+              Acc
+      end, #{}, Tab).
