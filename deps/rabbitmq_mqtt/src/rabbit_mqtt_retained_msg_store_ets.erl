@@ -8,6 +8,7 @@
 -module(rabbit_mqtt_retained_msg_store_ets).
 
 -behaviour(rabbit_mqtt_retained_msg_store).
+
 -include("rabbit_mqtt_packet.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
@@ -28,14 +29,19 @@ new(Dir, VHost) ->
   #store_state{table = Tid, filename = Path}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
-  {error, uninitialized} | {ok, store_state()}.
+    {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
+    {error, uninitialized}.
 recover(Dir, VHost) ->
-  Path = rabbit_mqtt_util:path_for(Dir, VHost),
-  case ets:file2tab(Path) of
-    {ok, Tid}  -> _ = file:delete(Path),
-                  {ok, #store_state{table = Tid, filename = Path}};
-    {error, _} -> {error, uninitialized}
-  end.
+    Path = rabbit_mqtt_util:path_for(Dir, VHost),
+    case ets:file2tab(Path) of
+        {ok, Tid} ->
+            _ = file:delete(Path),
+            {ok,
+             #store_state{table = Tid, filename = Path},
+             rabbit_mqtt_retained_msg_store:expire(ets, Tid)};
+        {error, _} ->
+            {error, uninitialized}
+    end.
 
 -spec insert(binary(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{table = T}) ->

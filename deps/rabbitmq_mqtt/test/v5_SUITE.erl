@@ -16,7 +16,8 @@
 -import(util,
         [
          start_client/4,
-         connect/2, connect/3, connect/4
+         connect/2, connect/3, connect/4,
+         assert_message_expiry_interval/2
         ]).
 
 all() ->
@@ -40,6 +41,7 @@ cluster_size_1_tests() ->
      client_set_max_packet_size_invalid,
      message_expiry_interval,
      message_expiry_interval_will_message,
+     message_expiry_interval_retained_message,
      client_publish_qos2
     ].
 
@@ -166,7 +168,8 @@ message_expiry_interval(Config) ->
                         %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
                         %% Expiry Interval set to the received value minus the time that the
                         %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-                        properties := #{'Message-Expiry-Interval' := 10-2}}} -> ok
+                        properties := #{'Message-Expiry-Interval' := MEI}}} ->
+                assert_message_expiry_interval(10 - 2, MEI)
     after 100 -> ct:fail("did not receive m3")
     end,
     assert_nothing_received(),
@@ -206,13 +209,63 @@ message_expiry_interval_will_message(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(Sub2).
 
+message_expiry_interval_retained_message(Config) ->
+    Pub = connect(<<"publisher">>, Config),
+
+    {ok, _} = emqtt:publish(Pub, <<"topic1">>, #{'Message-Expiry-Interval' => 100},
+                            <<"m1.1">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"topic2">>, #{'Message-Expiry-Interval' => 2},
+                            <<"m2">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{'Message-Expiry-Interval' => 100},
+                            <<"m3.1">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"topic4">>, #{'Message-Expiry-Interval' => 100},
+                            <<"m4">>, [{retain, true}, {qos, 1}]),
+
+    {ok, _} = emqtt:publish(Pub, <<"topic1">>, #{'Message-Expiry-Interval' => 2},
+                            <<"m1.2">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"topic2">>, #{'Message-Expiry-Interval' => 2},
+                            <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{},
+                            <<"m3.2">>, [{retain, true}, {qos, 1}]),
+    timer:sleep(2001),
+    %% Expectations:
+    %% topic1 expired because 2 seconds elapsed
+    %% topic2 is not retained because it got deleted
+    %% topic3 is retained because its new message does not have an Expiry-Interval set
+    %% topic4 is retained because 100 seconds have not elapsed
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [1,1,1,1]} = emqtt:subscribe(Sub, [{<<"topic1">>, qos1},
+                                               {<<"topic2">>, qos1},
+                                               {<<"topic3">>, qos1},
+                                               {<<"topic4">>, qos1}]),
+    receive {publish, #{client_pid := Sub,
+                        retain := true,
+                        topic := <<"topic3">>,
+                        payload := <<"m3.2">>,
+                        properties := Props}}
+              when map_size(Props) =:= 0 -> ok
+    after 100 -> ct:fail("did not topic3")
+    end,
+
+    receive {publish, #{client_pid := Sub,
+                        retain := true,
+                        topic := <<"topic4">>,
+                        payload := <<"m4">>,
+                        properties := #{'Message-Expiry-Interval' := MEI}}} ->
+                assert_message_expiry_interval(100 - 2, MEI)
+    after 100 -> ct:fail("did not receive topic4")
+    end,
+    assert_nothing_received(),
+
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(Sub).
+
 client_publish_qos2(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     {C, Connect} = start_client(ClientId, Config, 0, []),
-    {ok, Props} = Connect(C),
-    ?assertEqual(1, maps:get('Maximum-QoS', Props)),
-    {error, Response} = emqtt:publish(C, Topic, #{}, <<"msg">>, [{qos, 2}]),
-    ?assertEqual({disconnected, 155, #{}}, Response).
+    ?assertMatch({ok, #{'Maximum-QoS' := 1}}, Connect(C)),
+    ?assertEqual({error, {disconnected, _RcQosNotSupported = 155, #{}}},
+                 emqtt:publish(C, Topic, <<"msg">>, [{qos, 2}])).
 
 satisfy_bazel(_Config) ->
     ok.

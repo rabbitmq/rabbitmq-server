@@ -15,7 +15,7 @@ new(_Dir, _VHost) ->
   ok.
 
 recover(_Dir, _VHost) ->
-  {ok, ok}.
+  {ok, ok, #{}}.
 
 insert(_Topic, _Msg, _State) ->
   ok.

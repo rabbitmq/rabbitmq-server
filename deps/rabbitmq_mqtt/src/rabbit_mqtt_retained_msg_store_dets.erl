@@ -8,7 +8,9 @@
 -module(rabbit_mqtt_retained_msg_store_dets).
 
 -behaviour(rabbit_mqtt_retained_msg_store).
+
 -include("rabbit_mqtt_packet.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
@@ -18,16 +20,22 @@
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-  Tid = open_table(Dir, VHost),
-  #store_state{table = Tid}.
+    {ok, TabName} = open_table(Dir, VHost),
+    #store_state{table = TabName}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
-  {error, uninitialized} | {ok, store_state()}.
+    {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
+    {error, uninitialized}.
 recover(Dir, VHost) ->
-  case open_table(Dir, VHost) of
-    {error, _} -> {error, uninitialized};
-    {ok, Tid}  -> {ok, #store_state{table = Tid}}
-  end.
+    case open_table(Dir, VHost) of
+        {ok, TabName}  ->
+            {ok,
+             #store_state{table = TabName},
+             rabbit_mqtt_retained_msg_store:expire(dets, TabName)};
+        {error, Reason} ->
+            ?LOG_ERROR("~s failed to open table: ~p", [?MODULE, Reason]),
+            {error, uninitialized}
+    end.
 
 -spec insert(binary(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{table = T}) ->

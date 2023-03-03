@@ -8,9 +8,11 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
--import(util, [expect_publishes/3,
-               connect/2,
-               connect/3]).
+-include_lib("eunit/include/eunit.hrl").
+-import(util, [connect/2, connect/3,
+               expect_publishes/3,
+               assert_message_expiry_interval/2
+              ]).
 
 all() ->
     [
@@ -37,7 +39,8 @@ tests() ->
      should_translate_amqp2mqtt_on_publish,
      should_translate_amqp2mqtt_on_retention,
      should_translate_amqp2mqtt_on_retention_search,
-     recover
+     recover,
+     recover_with_message_expiry_interval
     ].
 
 suite() ->
@@ -91,6 +94,13 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(recover_with_message_expiry_interval = T, Config) ->
+    case ?config(mqtt_version, Config) of
+        v4 ->
+            {skip, "Message Expiry Interval not supported in MQTT v4"};
+        v5 ->
+            rabbit_ct_helpers:testcase_started(Config, T)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -171,4 +181,57 @@ recover(Config) ->
     C2 = connect(ClientId, Config),
     {ok, _, _} = emqtt:subscribe(C2, Topic, qos1),
     ok = expect_publishes(C2, Topic, [Payload]),
+    ok = emqtt:disconnect(C2).
+
+recover_with_message_expiry_interval(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config),
+    Start = os:system_time(second),
+    {ok, _} = emqtt:publish(C1, <<"topic/1">>,
+                            <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"topic/2">>, #{'Message-Expiry-Interval' => 100},
+                            <<"m2">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"topic/3">>, #{'Message-Expiry-Interval' => 3},
+                            <<"m3">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"topic/4">>, #{'Message-Expiry-Interval' => 15},
+                            <<"m4">>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(C1),
+    %% Takes around 9 seconds on Linux.
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    C2 = connect(ClientId, Config),
+
+    %% Retained message for topic/3 should have expired during node restart.
+    %% Wait for retained message for topic/4 to expire.
+    ElapsedSeconds1 = os:system_time(second) - Start,
+    SleepMs = max(0, timer:seconds(15 - ElapsedSeconds1 + 1)),
+    ct:pal("Sleeping for ~b ms", [SleepMs]),
+    timer:sleep(SleepMs),
+
+    ElapsedSeconds2 = os:system_time(second) - Start,
+    {ok, _, [1,1,1,1]} = emqtt:subscribe(C2, [{<<"topic/1">>, qos1},
+                                              {<<"topic/2">>, qos1},
+                                              {<<"topic/3">>, qos1},
+                                              {<<"topic/4">>, qos1}]),
+    receive {publish, #{client_pid := C2,
+                        retain := true,
+                        topic := <<"topic/1">>,
+                        payload := <<"m1">>,
+                        properties := Props}}
+              when map_size(Props) =:= 0 -> ok
+    after 100 -> ct:fail("did not topic/1")
+    end,
+
+    receive {publish, #{client_pid := C2,
+                        retain := true,
+                        topic := <<"topic/2">>,
+                        payload := <<"m2">>,
+                        properties :=  #{'Message-Expiry-Interval' := MEI}}} ->
+                assert_message_expiry_interval(100 - ElapsedSeconds2, MEI)
+    after 100 -> ct:fail("did not topic/2")
+    end,
+
+    receive Unexpected -> ct:fail("Received unexpectedly: ~p", [Unexpected])
+    after 0 -> ok
+    end,
+
     ok = emqtt:disconnect(C2).
