@@ -936,8 +936,11 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                       ignore  -> {Removed, State2}
                   end
           end, {[], State}, MsgIds),
-    noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
-                                         ignored, State1)));
+    case RemovedMsgIds of
+        [] -> noreply(State1);
+        _  -> noreply(maybe_compact(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
+                                         ignored, State1)))
+    end;
 
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
