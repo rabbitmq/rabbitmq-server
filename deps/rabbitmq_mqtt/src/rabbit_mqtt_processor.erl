@@ -275,13 +275,24 @@ process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
     {stop, {disconnect, client_initiated | server_initiated}, state()} |
     {error, Reason :: term(), state()}.
 process_request(?PUBACK,
-                #mqtt_packet{variable = #mqtt_packet_puback{packet_id = PacketId}},
+                #mqtt_packet{variable = #mqtt_packet_puback{packet_id = PacketId,
+                                                            reason_code = ReasonCode}},
                 #state{unacked_server_pubs = U0,
                        queue_states = QStates0,
                        cfg = #cfg{queue_qos1 = QName}} = State) ->
     case maps:take(PacketId, U0) of
         {QMsgId, U} ->
-            case rabbit_queue_type:settle(QName, complete, ?CONSUMER_TAG, [QMsgId], QStates0) of
+            SettleOp = case is_success(ReasonCode) of
+                           true ->
+                               complete;
+                           false ->
+                               %% 'discard' instead of 'requeue' due to v5 spec:
+                               %% "If PUBACK or PUBREC is received containing a Reason Code of 0x80
+                               %% or greater the corresponding PUBLISH packet is treated as
+                               %% acknowledged, and MUST NOT be retransmitted [MQTT-4.4.0-2]."
+                               discard
+                       end,
+            case rabbit_queue_type:settle(QName, SettleOp, ?CONSUMER_TAG, [QMsgId], QStates0) of
                 {ok, QStates, Actions} ->
                     message_acknowledged(QName, State),
                     {ok, handle_queue_actions(Actions, State#state{unacked_server_pubs = U,
@@ -1945,6 +1956,12 @@ message_redelivered(_, _, _) ->
 collector_register(ClientIdBin) ->
     ClientId = rabbit_data_coercion:to_list(ClientIdBin),
     rabbit_mqtt_collector:register(ClientId, self()).
+
+%% "Reason Codes less than 0x80 indicate successful completion of an operation.
+%% Reason Code values of 0x80 or greater indicate failure."
+-spec is_success(reason_code()) -> boolean().
+is_success(ReasonCode) ->
+    ReasonCode < 16#80.
 
 -spec format_status(state()) -> map().
 format_status(
