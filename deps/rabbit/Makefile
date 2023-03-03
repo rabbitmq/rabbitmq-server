@@ -125,7 +125,7 @@ define PROJECT_ENV
       {track_auth_attempt_source, false},
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
 			%% EOL date for the current release series, if known/announced
-			{release_series_eol_date, none}
+			{release_series_eol_date, {2023, 1, 31}}
 	  ]
 endef
 
