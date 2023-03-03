@@ -3,7 +3,7 @@ load(
     "bool_flag",
     "string_flag",
 )
-load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_pkg//:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
@@ -161,36 +161,36 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-pkg_tar(
-    name = "scripts-tar",
+pkg_files(
+    name = "scripts-files",
     srcs = [
         "scripts/bash_autocomplete.sh",
         "scripts/rabbitmq-script-wrapper",
         "scripts/rabbitmqctl-autocomplete.sh",
         "scripts/zsh_autocomplete.sh",
     ],
-    package_dir = "scripts",
+    prefix = "scripts",
     visibility = ["//visibility:public"],
 )
 
-pkg_tar(
-    name = "release-notes-tar",
+pkg_files(
+    name = "release-notes-files",
     srcs = glob([
         "release-notes/*.md",
         "release-notes/*.txt",
     ]),
-    package_dir = "release-notes",
+    prefix = "release-notes",
     visibility = ["//visibility:public"],
 )
 
 package_generic_unix(
+    name = "package-generic-unix",
     plugins = PLUGINS,
-    rabbitmq_workspace = "@",
 )
 
 source_archive(
+    name = "source_archive",
     plugins = PLUGINS,
-    rabbitmq_workspace = "@",
 )
 
 alias(
