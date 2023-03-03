@@ -1,3 +1,4 @@
+load("@rules_pkg//:mappings.bzl", "pkg_attributes", "pkg_filegroup", "pkg_files", "pkg_mkdirs", "strip_prefix")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
@@ -229,23 +230,23 @@ def versioned_plugins_dir(**kwargs):
     )
 
 def package_generic_unix(
+        name = "package-generic-unix",
         plugins = None,
-        rabbitmq_workspace = "@rabbitmq-server",
         extra_licenses = [],
         package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
     collect_licenses(
         name = "licenses",
         srcs = [
-            Label(rabbitmq_workspace + "//:root-licenses"),
+            Label("@rabbitmq-server//:root-licenses"),
         ] + extra_licenses,
         deps = plugins,
     )
 
-    pkg_tar(
-        name = "license-files-tar",
+    pkg_files(
+        name = "license-files",
         srcs = [
             ":licenses",
-            Label(rabbitmq_workspace + "//deps/rabbit:INSTALL"),
+            Label("@rabbitmq-server//deps/rabbit:INSTALL"),
         ],
         visibility = ["//visibility:public"],
     )
@@ -254,24 +255,24 @@ def package_generic_unix(
         name = "sbin-dir",
     )
 
-    pkg_tar(
-        name = "sbin-tar",
+    pkg_files(
+        name = "sbin-files",
         srcs = [
             ":sbin-dir",
         ],
-        package_dir = "sbin",
+        prefix = "sbin",
     )
 
     escript_dir(
         name = "escript-dir",
     )
 
-    pkg_tar(
-        name = "escripts-tar",
+    pkg_files(
+        name = "escript-files",
         srcs = [
             ":escript-dir",
         ],
-        package_dir = "escript",
+        prefix = "escript",
     )
 
     versioned_plugins_dir(
@@ -279,65 +280,66 @@ def package_generic_unix(
         plugins = plugins,
     )
 
-    pkg_tar(
-        name = "plugins-tar",
+    pkg_files(
+        name = "plugins-files",
         srcs = [
             ":plugins-dir",
         ],
-        package_dir = "plugins",
     )
 
     pkg_tar(
-        name = "package-generic-unix",
+        name = name,
         extension = "tar.xz",
         package_dir = package_dir,
         visibility = ["//visibility:public"],
+        srcs = [
+            ":escript-files",
+            ":sbin-files",
+            ":plugins-files",
+            ":license-files",
+            Label("@rabbitmq-server//:release-notes-files"),
+            Label("@rabbitmq-server//:scripts-files"),
+        ],
         deps = [
-            ":escripts-tar",
-            ":sbin-tar",
-            ":plugins-tar",
-            ":license-files-tar",
-            Label(rabbitmq_workspace + "//:release-notes-tar"),
-            Label(rabbitmq_workspace + "//:scripts-tar"),
-            Label(rabbitmq_workspace + "//deps/rabbit:manpages-dir"),
+            Label("@rabbitmq-server//deps/rabbit:manpages-dir"),
         ],
     )
 
 def source_archive(
-        plugins = None,
-        rabbitmq_workspace = "@rabbitmq-server"):
+        name = "source_archive",
+        plugins = None):
     source_tree(
         name = "source-tree",
         deps = plugins + [
-            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:erlang_app"),
+            Label("@rabbitmq-server//deps/rabbitmq_cli:erlang_app"),
         ],
     )
 
-    pkg_tar(
-        name = "deps-archive",
+    pkg_files(
+        name = "deps-files",
         srcs = [
             ":source-tree",
         ],
-        package_dir = "deps",
         strip_prefix = "source-tree",
+        prefix = "deps",
     )
 
     pkg_tar(
         name = "cli-deps-archive",
         deps = [
-            Label(rabbitmq_workspace + "//deps/rabbitmq_cli:fetched_srcs"),
+            Label("@rabbitmq-server//deps/rabbitmq_cli:fetched_srcs"),
         ],
         package_dir = "deps/rabbitmq_cli",
     )
 
     pkg_tar(
-        name = "source_archive",
+        name = name,
         extension = "tar.xz",
         srcs = [
-            Label(rabbitmq_workspace + "//:root-licenses"),
+            ":deps-files",
+            Label("@rabbitmq-server//:root-licenses"),
         ],
         deps = [
-            ":deps-archive",
             ":cli-deps-archive",
         ],
         visibility = ["//visibility:public"],
