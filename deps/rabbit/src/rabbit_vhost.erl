@@ -175,7 +175,7 @@ do_add(Name, Metadata, ActingUser) ->
                 _ ->
                     ok
             catch _:_ ->
-                      throw({error, invalid_queue_type})
+                        throw({error, invalid_queue_type})
             end;
         _ ->
             ok
@@ -188,6 +188,7 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)",
                             [Name, Description, Tags])
     end,
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -231,31 +232,37 @@ do_add(Name, Metadata, ActingUser) ->
 =======
     DefaultLimits = rabbit_vhost_defaults:list_limits(Name),
 =======
+=======
+>>>>>>> 1731ba9b11 (Resolve a conflict)
     DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
->>>>>>> 32124ef323 (Naming)
-    {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
-    case NewOrNot of
-        new ->
-            rabbit_log:info("Inserted a virtual host record ~tp", [VHost]);
-        existing ->
-            ok
-    end,
+    VHost = rabbit_misc:execute_mnesia_transaction(
+        fun () ->
+            case mnesia:wread({rabbit_vhost, Name}) of
+                [] ->
+                    Row = vhost:new(Name, DefaultLimits, Metadata),
+                    rabbit_log:debug("Inserting a virtual host record ~tp", [Row]),
+                    ok = mnesia:write(rabbit_vhost, Row, write),
+                    Row;
+                %% the vhost already exists
+                [Row] ->
+                    Row
+            end
+        end),
     rabbit_db_vhost_defaults:apply(Name, ActingUser),
     _ = [begin
-         Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-         rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
-         _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
-     end || {ExchangeName, Type, Internal} <-
+            Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+            rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+            _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
+        end || {ExchangeName, Type, Internal} <-
             [{<<"">>,                   direct,  false},
-             {<<"amq.direct">>,         direct,  false},
-             {<<"amq.topic">>,          topic,   false},
-             %% per 0-9-1 pdf
-             {<<"amq.match">>,          headers, false},
-             %% per 0-9-1 xml
-             {<<"amq.headers">>,        headers, false},
-             {<<"amq.fanout">>,         fanout,  false},
-             {<<"amq.rabbitmq.trace">>, topic,   true}]],
->>>>>>> 5ded435d49 (Add default_users per #7208)
+                {<<"amq.direct">>,         direct,  false},
+                {<<"amq.topic">>,          topic,   false},
+                %% per 0-9-1 pdf
+                {<<"amq.match">>,          headers, false},
+                %% per 0-9-1 xml
+                {<<"amq.headers">>,        headers, false},
+                {<<"amq.fanout">>,         fanout,  false},
+                {<<"amq.rabbitmq.trace">>, topic,   true}]],
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
@@ -264,8 +271,13 @@ do_add(Name, Metadata, ActingUser) ->
                                     {tags, Tags}]),
             ok;
         {error, Reason} ->
+<<<<<<< HEAD
             Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
                                      [Name, Reason]),
+=======
+            Msg = rabbit_misc:format("failed to set up vhost '~ts': ~tp",
+                                        [Name, Reason]),
+>>>>>>> 1731ba9b11 (Resolve a conflict)
             {error, Msg}
     end.
 
