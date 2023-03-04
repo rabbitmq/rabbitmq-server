@@ -140,40 +140,6 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
     end.
 
--spec default_limits(vhost:name()) -> proplists:proplist().
-default_limits(Name) ->
-    AllLimits = application:get_env(rabbit, default_limits, []),
-    VHostLimits = proplists:get_value(vhosts, AllLimits, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, VHostLimits),
-    case Match of
-        {value, {_, Ss}} ->
-            proplists:delete(<<"pattern">>, Ss);
-        _ ->
-            []
-    end.
-
--spec default_operator_policies(vhost:name()) ->
-    {binary(), binary(), proplists:proplist()} | not_found.
-default_operator_policies(Name) ->
-    AllPolicies = application:get_env(rabbit, default_policies, []),
-    OpPolicies = proplists:get_value(operator, AllPolicies, []),
-    Match = lists:search(fun({_, Ss}) ->
-                                 RE = proplists:get_value(<<"vhost-pattern">>, Ss, ".*"),
-                                 re:run(Name, RE, [{capture, none}]) =:= match
-                         end, OpPolicies),
-    case Match of
-        {value, {PolicyName, Ss}} ->
-            QPattern = proplists:get_value(<<"queue-pattern">>, Ss, ".*"),
-            Ss1 = proplists:delete(<<"queue-pattern">>, Ss),
-            Ss2 = proplists:delete(<<"vhost-pattern">>, Ss1),
-            {PolicyName, list_to_binary(QPattern), Ss2};
-        _ ->
-            not_found
-    end.
-
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
@@ -213,7 +179,7 @@ do_add(Name, Metadata, ActingUser) ->
                             end
                     end
             catch _:_ ->
-                      throw({error, invalid_queue_type})
+                        throw({error, invalid_queue_type})
             end;
         _ ->
             ok
@@ -226,53 +192,35 @@ do_add(Name, Metadata, ActingUser) ->
             rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
-    DefaultLimits = default_limits(Name),
+    DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
     VHost = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_vhost, Name}) of
-                      [] ->
-                        Row = vhost:new(Name, DefaultLimits, Metadata),
-                        rabbit_log:debug("Inserting a virtual host record ~tp", [Row]),
-                        ok = mnesia:write(rabbit_vhost, Row, write),
-                        Row;
-                      %% the vhost already exists
-                      [Row] ->
-                        Row
-                  end
-          end,
-          fun (VHost1, true) ->
-                  VHost1;
-              (VHost1, false) ->
-                  rabbit_log:info("Applying default limits to vhost '~tp': ~tp", [Name, DefaultLimits]),
-                  ok = case DefaultLimits of
-                      [] -> ok;
-                      _  -> rabbit_vhost_limit:set(Name, DefaultLimits, ActingUser)
-                  end,
-                  ok = case default_operator_policies(Name) of
-                    not_found ->
-                        ok;
-                    {PolicyName, QPattern, Definition} = Policy ->
-                        ok = rabbit_policy:set_op(Name, PolicyName, QPattern, Definition,
-                                            undefined, undefined, ActingUser),
-                        rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp",
-                                        [Name, Policy])
-                  end,
-                  _ = [begin
-                    Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-                    rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
-                    _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
-                  end || {ExchangeName, Type, Internal} <-
-                          [{<<"">>,                   direct,  false},
-                           {<<"amq.direct">>,         direct,  false},
-                           {<<"amq.topic">>,          topic,   false},
-                           %% per 0-9-1 pdf
-                           {<<"amq.match">>,          headers, false},
-                           %% per 0-9-1 xml
-                           {<<"amq.headers">>,        headers, false},
-                           {<<"amq.fanout">>,         fanout,  false},
-                           {<<"amq.rabbitmq.trace">>, topic,   true}]],
-                  VHost1
-          end),
+        fun () ->
+            case mnesia:wread({rabbit_vhost, Name}) of
+                [] ->
+                    Row = vhost:new(Name, DefaultLimits, Metadata),
+                    rabbit_log:debug("Inserting a virtual host record ~tp", [Row]),
+                    ok = mnesia:write(rabbit_vhost, Row, write),
+                    Row;
+                %% the vhost already exists
+                [Row] ->
+                    Row
+            end
+        end),
+    rabbit_db_vhost_defaults:apply(Name, ActingUser),
+    _ = [begin
+            Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+            rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+            _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
+        end || {ExchangeName, Type, Internal} <-
+            [{<<"">>,                   direct,  false},
+                {<<"amq.direct">>,         direct,  false},
+                {<<"amq.topic">>,          topic,   false},
+                %% per 0-9-1 pdf
+                {<<"amq.match">>,          headers, false},
+                %% per 0-9-1 xml
+                {<<"amq.headers">>,        headers, false},
+                {<<"amq.fanout">>,         fanout,  false},
+                {<<"amq.rabbitmq.trace">>, topic,   true}]],
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
@@ -282,7 +230,7 @@ do_add(Name, Metadata, ActingUser) ->
             ok;
         {error, Reason} ->
             Msg = rabbit_misc:format("failed to set up vhost '~ts': ~tp",
-                                     [Name, Reason]),
+                                        [Name, Reason]),
             {error, Msg}
     end.
 
