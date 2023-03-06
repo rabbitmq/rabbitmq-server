@@ -1375,7 +1375,7 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
               case maps:find(CRef, CTM) of
                   {ok, Gs} -> MsgOnDiskFun(sets:intersection(Gs, MsgIds),
                                            ActionTaken),
-                              MsgIds1 = sets:subtract(Gs, MsgIds),
+                              MsgIds1 = sets_subtract(Gs, MsgIds),
                               case sets:is_empty(MsgIds1) of
                                   true  -> maps:remove(CRef, CTM);
                                   false -> maps:put(CRef, MsgIds1, CTM)
@@ -1383,6 +1383,13 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
                   error    -> CTM
               end
       end, CRef, State).
+
+%% Function defined in both rabbit_msg_store and rabbit_variable_queue.
+sets_subtract(Set1, Set2) ->
+    case sets:size(Set2) of
+        1 -> sets:del_element(hd(sets:to_list(Set2)), Set1);
+        _ -> sets:subtract(Set1, Set2)
+    end.
 
 blind_confirm(CRef, MsgIds, ActionTaken, State) ->
     update_pending_confirms(
