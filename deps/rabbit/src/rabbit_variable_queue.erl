@@ -2355,10 +2355,17 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
     State #vqstate {
-      msgs_on_disk        = sets:subtract(MOD,  MsgIdSet),
-      msg_indices_on_disk = sets:subtract(MIOD, MsgIdSet),
-      unconfirmed         = sets:subtract(UC,   MsgIdSet),
+      msgs_on_disk        = sets_subtract(MOD,  MsgIdSet),
+      msg_indices_on_disk = sets_subtract(MIOD, MsgIdSet),
+      unconfirmed         = sets_subtract(UC,   MsgIdSet),
       confirmed           = sets:union(C, MsgIdSet) }.
+
+%% Function defined in both rabbit_msg_store and rabbit_variable_queue.
+sets_subtract(Set1, Set2) ->
+    case sets:size(Set2) of
+        1 -> sets:del_element(hd(sets:to_list(Set2)), Set1);
+        _ -> sets:subtract(Set1, Set2)
+    end.
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
     Callback(?MODULE,
