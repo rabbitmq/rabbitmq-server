@@ -150,6 +150,7 @@ process_connect(
         ok ?= check_user_loopback(Username, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
         {ok, RaRegisterState} ?= register_client_id(VHost, ClientId),
+        {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
         {ok,
@@ -171,7 +172,7 @@ process_connect(
                        retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                        vhost = VHost,
                        client_id = ClientId,
-                       will_msg = make_will_msg(Packet),
+                       will_msg = WillMsg,
                        max_packet_size = MaxPacketSize},
             auth_state = #auth_state{
                             user = User,
@@ -720,7 +721,11 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
     end.
 
 make_will_msg(#mqtt_packet_connect{will_flag = false}) ->
-    undefined;
+    {ok, undefined};
+make_will_msg(#mqtt_packet_connect{proto_ver = 5,
+                                   will_flag = true,
+                                   will_qos = ?QOS_2}) ->
+    {error, ?RC_QOS_NOT_SUPPORTED};
 make_will_msg(#mqtt_packet_connect{will_flag = true,
                                    will_retain = Retain,
                                    will_qos = Qos,
@@ -732,13 +737,13 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                       ?QOS_0 -> undefined;
                       ?QOS_1 -> ?WILL_MSG_QOS_1_CORRELATION
                   end,
-    #mqtt_msg{retain = Retain,
-              qos = EffectiveQos,
-              packet_id = Correlation,
-              topic = Topic,
-              dup = false,
-              props = Props,
-              payload = Msg}.
+    {ok, #mqtt_msg{retain = Retain,
+                   qos = EffectiveQos,
+                   packet_id = Correlation,
+                   topic = Topic,
+                   dup = false,
+                   props = Props,
+                   payload = Msg}}.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
     case rabbit_vhost:exists(VHost) of

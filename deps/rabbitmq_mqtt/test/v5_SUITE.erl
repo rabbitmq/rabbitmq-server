@@ -43,7 +43,8 @@ cluster_size_1_tests() ->
      message_expiry_interval_will_message,
      message_expiry_interval_retained_message,
      client_publish_qos2,
-     client_rejects_publish
+     client_rejects_publish,
+     will_qos2
     ].
 
 cluster_size_3_tests() ->
@@ -291,6 +292,15 @@ client_rejects_publish(Config) ->
     NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
     ?assertEqual(1, NumRejected),
     ok = emqtt:disconnect(C).
+
+will_qos2(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Opts = [{will_topic, Topic},
+            {will_payload, <<"msg">>},
+            {will_qos, 2}],
+    {C, Connect} = start_client(ClientId, Config, 0, Opts),
+    unlink(C),
+    ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
 
 satisfy_bazel(_Config) ->
     ok.
