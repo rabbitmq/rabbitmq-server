@@ -15,7 +15,8 @@
    mqtt.tcp_listen_options.backlog = 128
    mqtt.tcp_listen_options.nodelay = true
    mqtt.durable_queue_type = classic
-   mqtt.proxy_protocol = false",
+   mqtt.proxy_protocol = false
+   mqtt.mailbox_soft_limit = 200",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
        [{default_user,<<"guest">>},
@@ -30,7 +31,8 @@
         {tcp_listeners,[1883]},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
         {durable_queue_type,classic},
-        {proxy_protocol,false}]}],
+        {proxy_protocol,false},
+        {mailbox_soft_limit,200}]}],
   [rabbitmq_mqtt]},
 
  {listener_tcp_options,
@@ -143,4 +145,11 @@
         {retained_message_store_dets_sync_interval,2000},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]}]}],
-  [rabbitmq_mqtt]}].
+  [rabbitmq_mqtt]},
+
+ {mailbox_soft_limit,
+  "mqtt.mailbox_soft_limit = 30",
+  [{rabbitmq_mqtt,[
+      {mailbox_soft_limit, 30}]}],
+   [rabbitmq_mqtt]}
+].
