@@ -156,7 +156,7 @@ jobs:
           - image_tag_suffix: otp-min-bazel
             otp_version_id: 24
           - image_tag_suffix: otp-max-bazel
-            otp_version_id: 25_2
+            otp_version_id: 25_3
     steps:
       - name: Checkout
         uses: actions/checkout@v3

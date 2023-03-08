@@ -16,7 +16,7 @@ jobs:
         include:
         - erlang_version: "24"
           elixir_version: 1.13.4
-        - erlang_version: "25.2"
+        - erlang_version: "25.3"
           elixir_version: 1.14.0
     timeout-minutes: 120
     steps:
