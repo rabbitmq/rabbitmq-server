@@ -665,8 +665,7 @@ auth_phase_1_0(Response,
             rabbit_core_metrics:auth_attempt_succeeded(<<>>, <<>>, amqp10),
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
-            State#v1{connection = Connection =
-                         #v1_connection{auth_state = AuthState1}};
+            State#v1{connection = Connection#v1_connection{auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
