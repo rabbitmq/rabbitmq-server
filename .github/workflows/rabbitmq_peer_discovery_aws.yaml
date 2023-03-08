@@ -9,12 +9,8 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-max-bazel
-<<<<<<< HEAD
-            otp_version_id: 25_2
-            otp_major: 25
-=======
             otp_version_id: 25_3
->>>>>>> 8a82109fcf (Add OTP 25.3 to the build and CI matrix as otp-max)
+            otp_major: 25
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
