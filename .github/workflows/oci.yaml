@@ -161,10 +161,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Inject RabbitMQ Version
-        run: |
-          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
-
       - name: Mount Bazel Cache
         uses: actions/cache@v3.2.6
         with:
