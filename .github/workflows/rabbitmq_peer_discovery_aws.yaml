@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-max-bazel
-            otp_version_id: 25_2
+            otp_version_id: 25_3
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
