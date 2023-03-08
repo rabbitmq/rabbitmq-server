@@ -45,8 +45,23 @@ build:rbe-24 --config=rbe
 build:rbe-24 --platforms=//bazel/platforms:erlang_linux_24_platform
 
 build:rbe-25 --config=rbe
-build:rbe-25 --platforms=//bazel/platforms:erlang_linux_25_2_platform
+build:rbe-25 --platforms=//bazel/platforms:erlang_linux_25_3_platform
 
+<<<<<<< HEAD
+=======
+build:rbe-25_0 --config=rbe
+build:rbe-25_0 --platforms=//bazel/platforms:erlang_linux_25_0_platform
+
+build:rbe-25_1 --config=rbe
+build:rbe-25_1 --platforms=//bazel/platforms:erlang_linux_25_1_platform
+
+build:rbe-25_2 --config=rbe
+build:rbe-25_2 --platforms=//bazel/platforms:erlang_linux_25_2_platform
+
+build:rbe-25_3 --config=rbe
+build:rbe-25_3 --platforms=//bazel/platforms:erlang_linux_25_3_platform
+
+>>>>>>> 8a82109fcf (Add OTP 25.3 to the build and CI matrix as otp-max)
 # no-op config so that --config=local does not error
 build:local --color=auto
 

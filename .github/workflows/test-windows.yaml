@@ -14,9 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+<<<<<<< HEAD
         - erlang_version: "24"
           elixir_version: 1.13.4
         - erlang_version: "25.2"
+=======
+        - erlang_version: "25.3"
+>>>>>>> 8a82109fcf (Add OTP 25.3 to the build and CI matrix as otp-max)
           elixir_version: 1.14.0
     timeout-minutes: 120
     steps:
