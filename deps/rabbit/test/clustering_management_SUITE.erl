@@ -526,7 +526,8 @@ change_cluster_when_node_offline(Config) ->
     assert_cluster_status({[Bunny], [Bunny], []}, [Bunny]),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]}, [Hare]),
     assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny], [Hare, Bunny]}, [Rabbit]),
+      {[Rabbit, Hare, Bunny], [Hare], [Rabbit, Hare, Bunny],
+       [Rabbit, Hare, Bunny], [Hare, Bunny]}, [Rabbit]),
 
     %% Bring Rabbit back up
     ok = start_app(Rabbit),
@@ -756,8 +757,17 @@ pid_from_file(PidFile) ->
 cluster_members(Config) ->
     rabbit_ct_broker_helpers:get_node_configs(Config, nodename).
 
+assert_cluster_status({All, Disc, Running}, Nodes) ->
+    assert_cluster_status({All, Running, All, Disc, Running}, Nodes);
 assert_cluster_status(Status0, Nodes) ->
-    Status = {AllNodes, _, _} = sort_cluster_status(Status0),
+    Status = sort_cluster_status(Status0),
+    AllNodes = case Status of
+                   {undef, undef, All, _, _} ->
+                       %% Support mixed-version clusters
+                       All;
+                   {All, _, _, _, _} ->
+                       All
+               end,
     wait_for_cluster_status(Status, AllNodes, Nodes).
 
 wait_for_cluster_status(Status, AllNodes, Nodes) ->
@@ -768,7 +778,8 @@ wait_for_cluster_status(N, Max, Status, _AllNodes, Nodes) when N >= Max ->
     erlang:error({cluster_status_max_tries_failed,
                   [{nodes, Nodes},
                    {expected_status, Status},
-                   {max_tried, Max}]});
+                   {max_tried, Max},
+                   {status, sort_cluster_status(cluster_status(hd(Nodes)))}]});
 wait_for_cluster_status(N, Max, Status, AllNodes, Nodes) ->
     case lists:all(fun (Node) ->
                             verify_status_equal(Node, Status, AllNodes)
@@ -781,21 +792,32 @@ wait_for_cluster_status(N, Max, Status, AllNodes, Nodes) ->
 verify_status_equal(Node, Status, AllNodes) ->
     NodeStatus = sort_cluster_status(cluster_status(Node)),
     (AllNodes =/= [Node]) =:= rpc:call(Node, rabbit_mnesia, is_clustered, [])
-        andalso NodeStatus =:= Status.
+        andalso equal(Status, NodeStatus).
+
+equal({_, _, A, B, C}, {undef, undef, A, B, C}) ->
+    true;
+equal({_, _, _, _, _}, {undef, undef, _, _, _}) ->
+    false;
+equal(Status0, Status1) ->
+    Status0 == Status1.
 
 cluster_status(Node) ->
-    {rpc:call(Node, rabbit_mnesia, cluster_nodes, [all]),
+    {rpc:call(Node, rabbit_nodes, list_members, []),
+     rpc:call(Node, rabbit_nodes, list_running, []),
+     rpc:call(Node, rabbit_mnesia, cluster_nodes, [all]),
      rpc:call(Node, rabbit_mnesia, cluster_nodes, [disc]),
      rpc:call(Node, rabbit_mnesia, cluster_nodes, [running])}.
 
-sort_cluster_status({All, Disc, Running}) ->
-    {lists:sort(All), lists:sort(Disc), lists:sort(Running)}.
+sort_cluster_status({{badrpc, {'EXIT', {undef, _}}}, {badrpc, {'EXIT', {undef, _}}}, AllM, DiscM, RunningM}) ->
+    {undef, undef, lists:sort(AllM), lists:sort(DiscM), lists:sort(RunningM)};
+sort_cluster_status({All, Running, AllM, DiscM, RunningM}) ->
+    {lists:sort(All), lists:sort(Running), lists:sort(AllM), lists:sort(DiscM), lists:sort(RunningM)}.
 
 assert_clustered(Nodes) ->
-    assert_cluster_status({Nodes, Nodes, Nodes}, Nodes).
+    assert_cluster_status({Nodes, Nodes, Nodes, Nodes, Nodes}, Nodes).
 
 assert_not_clustered(Node) ->
-    assert_cluster_status({[Node], [Node], [Node]}, [Node]).
+    assert_cluster_status({[Node], [Node], [Node], [Node], [Node]}, [Node]).
 
 assert_failure(Fun) ->
     case catch Fun() of
