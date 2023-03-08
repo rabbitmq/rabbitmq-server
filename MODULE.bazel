@@ -63,6 +63,12 @@ erlang_config.internal_erlang_from_github_release(
     version = "25.2.3",
 )
 
+erlang_config.internal_erlang_from_github_release(
+    name = "25_3",
+    sha256 = "85c447efc1746740df4089d75bc0e47b88d5161d7c44e9fc4c20fa33ea5d19d7",
+    version = "25.3",
+)
+
 erlang_config.internal_erlang_from_http_archive(
     name = "git_master",
     strip_prefix = "otp-master",
@@ -106,6 +112,8 @@ register_toolchains(
     "@erlang_config//25_1:toolchain2",
     "@erlang_config//25_2:toolchain",
     "@erlang_config//25_2:toolchain2",
+    "@erlang_config//25_3:toolchain",
+    "@erlang_config//25_3:toolchain2",
     "@erlang_config//git_master:toolchain",
     "@erlang_config//git_master:toolchain2",
     "@elixir_config//external:toolchain",
