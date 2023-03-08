@@ -407,18 +407,25 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         sequential_for_all(policies,           ActingUser, Map, fun add_policy/2),
         sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
 
-        rabbit_nodes:if_reached_target_cluster_size(
-            fun() ->
+        TargetClusterSizeHint = rabbit_nodes:target_cluster_size_hint(),
+        if
+            TargetClusterSizeHint =:= 1 ->
                 concurrent_for_all(queues,   ActingUser, Map, fun add_queue/2),
-                concurrent_for_all(bindings, ActingUser, Map, fun add_binding/2)
-            end,
+                concurrent_for_all(bindings, ActingUser, Map, fun add_binding/2);
+            true ->
+                rabbit_nodes:if_reached_target_cluster_size(
+                    fun() ->
+                            concurrent_for_all(queues,   ActingUser, Map, fun add_queue/2),
+                            concurrent_for_all(bindings, ActingUser, Map, fun add_binding/2)
+                    end,
 
-            fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
-                                " skipping queue and binding import from definitions",
-                                [rabbit_nodes:target_cluster_size_hint()])
-            end
-        ),
+                    fun() ->
+                            rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
+                                            " skipping queue and binding import from definitions",
+                                            [TargetClusterSizeHint])
+                    end
+                    )
+        end,
 
         SuccessFun(),
         ok
@@ -445,18 +452,25 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
 
-        rabbit_nodes:if_reached_target_cluster_size(
-            fun() ->
-                concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-                concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3)
-            end,
+        TargetClusterSizeHint = rabbit_nodes:target_cluster_size_hint(),
+        if
+            TargetClusterSizeHint =:= 1 ->
+                concurrent_for_all(queues,   ActingUser, Map, VHost, fun add_queue/3),
+                concurrent_for_all(bindings, ActingUser, Map, VHost, fun add_binding/3);
+            true ->
+                rabbit_nodes:if_reached_target_cluster_size(
+                    fun() ->
+                            concurrent_for_all(queues,   ActingUser, Map, VHost, fun add_queue/3),
+                            concurrent_for_all(bindings, ActingUser, Map, VHost, fun add_binding/3)
+                    end,
 
-            fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
-                                " skipping queue and binding import from definitions",
-                                [rabbit_nodes:target_cluster_size_hint()])
-            end
-        ),
+                    fun() ->
+                            rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
+                                            " skipping queue and binding import from definitions",
+                                            [TargetClusterSizeHint])
+                    end
+                    )
+        end,
 
         SuccessFun()
     catch {error, E} -> {error, format(E)};
