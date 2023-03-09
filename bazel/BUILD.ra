@@ -49,11 +49,13 @@ erlang_bytecode(
         "src/ra_dbg.erl",
         "src/ra_directory.erl",
         "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
         "src/ra_file_handle.erl",
         "src/ra_flru.erl",
         "src/ra_leaderboard.erl",
         "src/ra_lib.erl",
         "src/ra_log.erl",
+        "src/ra_log_cache.erl",
         "src/ra_log_ets.erl",
         "src/ra_log_meta.erl",
         "src/ra_log_pre_init.erl",
@@ -85,11 +87,13 @@ erlang_bytecode(
         "ebin/ra_dbg.beam",
         "ebin/ra_directory.beam",
         "ebin/ra_env.beam",
+        "ebin/ra_ets_queue.beam",
         "ebin/ra_file_handle.beam",
         "ebin/ra_flru.beam",
         "ebin/ra_leaderboard.beam",
         "ebin/ra_lib.beam",
         "ebin/ra_log.beam",
+        "ebin/ra_log_cache.beam",
         "ebin/ra_log_ets.beam",
         "ebin/ra_log_meta.beam",
         "ebin/ra_log_pre_init.beam",
@@ -142,11 +146,13 @@ filegroup(
         "src/ra_dbg.erl",
         "src/ra_directory.erl",
         "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
         "src/ra_file_handle.erl",
         "src/ra_flru.erl",
         "src/ra_leaderboard.erl",
         "src/ra_lib.erl",
         "src/ra_log.erl",
+        "src/ra_log_cache.erl",
         "src/ra_log_ets.erl",
         "src/ra_log_meta.erl",
         "src/ra_log_pre_init.erl",
@@ -182,15 +188,9 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
