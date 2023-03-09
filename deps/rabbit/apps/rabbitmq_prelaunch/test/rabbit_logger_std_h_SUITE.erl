@@ -80,7 +80,17 @@ every_day_rotation_is_detected(_) ->
       rabbit_logger_std_h:is_date_based_rotation_needed(
         #{every => day, hour => 12},
         {{2020, 11, 15}, {12, 00, 00}},
-        {{2021, 01, 15}, {12, 00, 00}})).
+        {{2021, 01, 15}, {12, 00, 00}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => day, hour => 0},
+        {{2021, 01, 15}, {23, 59, 59}},
+        {{2021, 01, 16}, {00, 00, 01}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => day, hour => 0},
+        {{2021, 01, 15}, {00, 00, 00}},
+        {{2021, 01, 16}, {00, 00, 00}})).
 
 every_week_rotation_is_detected(_) ->
     ?assertNot(
