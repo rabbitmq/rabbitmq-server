@@ -652,7 +652,7 @@ ack([SeqId], State) ->
                               false -> {[], IndexState}
                           end,
             StoreState1 = case MsgLocation of
-                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
+                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
                 ?IN_QUEUE_STORE   -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
                 ?IN_QUEUE_INDEX   -> StoreState0;
                 ?IN_MEMORY        -> StoreState0
@@ -1349,11 +1349,11 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, VHost) ->
     rabbit_vhost_msg_store:client_init(VHost, MsgStore,
                                        Ref, MsgOnDiskFun).
 
-msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
+msg_store_write(MSCState, IsPersistent, SeqId, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) ->
-              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+              rabbit_msg_store:write_flow(SeqId, MsgId, Msg, MSCState1)
       end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
@@ -1707,7 +1707,7 @@ remove(false, MsgStatus = #msg_status {
 
     %% Remove from msg_store and queue index, if necessary
     StoreState1 = case MsgLocation of
-        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
+        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
         ?IN_QUEUE_STORE  -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
         ?IN_QUEUE_INDEX  -> StoreState0;
         ?IN_MEMORY       -> StoreState0
@@ -1899,7 +1899,7 @@ remove_queue_entries1(
                 is_persistent = IsPersistent} = MsgStatus,
   {MsgIdsByStore, NextDeliverSeqId, Acks, State}) ->
     {case MsgLocation of
-         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
+         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, {SeqId, MsgId}, MsgIdsByStore);
          _ -> MsgIdsByStore
      end,
      next_deliver_seq_id(SeqId, NextDeliverSeqId),
@@ -2039,7 +2039,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                           disk_write_count  = Count})
   when Force orelse IsPersistent ->
     case persist_to(MsgStatus) of
-        msg_store   -> ok = msg_store_write(MSCState, IsPersistent, MsgId,
+        msg_store   -> ok = msg_store_write(MSCState, IsPersistent, SeqId, MsgId,
                                             prepare_to_store(Msg)),
                        {MsgStatus#msg_status{msg_location = ?IN_SHARED_STORE},
                         State#vqstate{disk_write_count = Count + 1}};
@@ -2319,7 +2319,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
                {IndexOnDiskSeqIdsAcc, MsgIdsByStore, SeqIdsInStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgLocation of
-         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
+         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, {SeqId, MsgId}, MsgIdsByStore);
          _                -> MsgIdsByStore
      end,
      case MsgLocation of
@@ -2351,6 +2351,8 @@ sets_subtract(Set1, Set2) ->
     end.
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
+    %% @todo Why does this behave like when msgs AND indices are written? indices may not be written yet here?
+    %% Right that's because the queue already acked it so it doesn't matter whether it's written to index.
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
