@@ -385,11 +385,13 @@ ra:
 - ra_dbg
 - ra_directory
 - ra_env
+- ra_ets_queue
 - ra_file_handle
 - ra_flru
 - ra_leaderboard
 - ra_lib
 - ra_log
+- ra_log_cache
 - ra_log_ets
 - ra_log_meta
 - ra_log_pre_init
