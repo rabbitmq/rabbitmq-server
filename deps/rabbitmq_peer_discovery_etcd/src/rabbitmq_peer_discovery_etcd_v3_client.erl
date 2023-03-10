@@ -34,9 +34,9 @@
 
 -define(ETCD_CONN_NAME, ?MODULE).
 %% 60s by default matches the default heartbeat timeout.
-%% We add 1s for state machine bookkeeping and
+%% We add 1s for state machine bookkeeping and...
 -define(DEFAULT_NODE_KEY_LEASE_TTL, 61).
-%% don't allow node lease key TTL to be lower than this
+%% ...don't allow node lease key TTL to be lower than this
 %% as overly low values can cause annoying timeouts in etcd client operations
 -define(MINIMUM_NODE_KEY_LEASE_TTL, 15).
 %% default randomized delay range was 5s to 60s, so this value
@@ -426,7 +426,7 @@ normalize_settings(Map) when is_map(Map) ->
     end,
 
     AllEndpoints = Endpoints ++ LegacyEndpoints,
-    maps:merge(maps:without([etcd_prefix, etcd_node_ttl, lock_wait_time], Map),
+    maps:merge(maps:without([etcd_prefix, lock_wait_time], Map),
                #{endpoints => AllEndpoints}).
 
 pick_transport(#statem_data{tls_options = []}) ->
