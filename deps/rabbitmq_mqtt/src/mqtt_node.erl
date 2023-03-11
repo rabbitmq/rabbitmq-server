@@ -59,7 +59,7 @@ start(Delay, AttemptsLeft) ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
-                      rabbit_log:info("MQTT: discovered ~tp cluster peers that support client ID tracking", [length(Peers)]),
+                      rabbit_log:info("MQTT: discovered cluster peers that support client ID tracking: ~p", [Peers]),
                       ok = start_server(),
                       _ = join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
@@ -86,7 +86,8 @@ start_server() ->
              log_init_args => #{uid => UId},
              tick_timeout => Timeout,
              machine => {module, mqtt_machine, #{}}
-    },
+            },
+    rabbit_log:info("MQTT: starting Ra server with initial members: ~p", [Nodes]),
     ra:start_server(?RA_SYSTEM, Conf).
 
 trigger_election() ->
@@ -147,14 +148,23 @@ delete(_) ->
             ok;
         _ ->
             rabbit_log:info("Deleting Ra cluster ~s ...", [?ID_NAME]),
-            try ra:delete_cluster(RaNodes, ?RA_OPERATION_TIMEOUT) of
+            try ra:delete_cluster(RaNodes, 15_000) of
                 {ok, _Leader} ->
                     rabbit_log:info("Successfully deleted Ra cluster ~s", [?ID_NAME]),
                     ok;
-                {error, _}  = Err ->
-                    rabbit_log:info("Failed to delete Ra cluster ~s: ~p", [?ID_NAME, Err]),
-                    Err
-            catch exit:{{shutdown, delete}, _Stacktrace} ->
+                {error, Reason} ->
+                    rabbit_log:info("Failed to delete Ra cluster ~s: ~p", [?ID_NAME, Reason]),
+                    ServerId = server_id(),
+                    case ra:force_delete_server(?RA_SYSTEM, ServerId) of
+                        ok ->
+                            rabbit_log:info("Successfully force deleted Ra server ~p", [ServerId]),
+                            ok;
+                        Error ->
+                            rabbit_log:error("Failed to force delete Ra server ~p: ~p",
+                                             [ServerId, Error]),
+                            {error, Error}
+                    end
+            catch exit:{{shutdown, delete}, _StackTrace} ->
                       rabbit_log:info("Ra cluster ~s already being deleted", [?ID_NAME]),
                       ok
             end
