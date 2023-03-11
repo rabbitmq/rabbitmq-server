@@ -186,7 +186,7 @@ process_connect(
             send_conn_ack(?CONNACK_ACCEPT, SessPresent, ProtoVerAtom, SendFun),
             {ok, State};
         {error, ReturnErrCode} = Err
-          when is_number(ReturnErrCode) ->
+          when is_integer(ReturnErrCode) ->
             %% If a server sends a CONNACK packet containing a non-zero return
             %% code it MUST set Session Present to 0 [MQTT-3.2.2-4].
             SessPresent = false,
@@ -1637,7 +1637,7 @@ mailbox_soft_limit_exceeded() ->
 is_socket_busy(Socket) ->
     case rabbit_net:getstat(Socket, [send_pend]) of
         {ok, [{send_pend, NumBytes}]}
-          when is_number(NumBytes) andalso NumBytes > 0 ->
+          when is_integer(NumBytes) andalso NumBytes > 0 ->
             true;
         _ ->
             false
