@@ -23,6 +23,10 @@ rabbitmqctl(
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
     ],
+    source_deps = {
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+    },
 )
 
 select_file(
@@ -124,6 +128,10 @@ rabbitmqctl_test(
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
     ],
+    source_deps = {
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+    },
 )
 
 test_suite(

@@ -138,8 +138,14 @@ defmodule RabbitMQCtl.MixfileBase do
     is_bazel = System.get_env("IS_BAZEL") != nil
 
     [
-      {:json, "1.4.1"},
-      {:csv, "2.4.1"},
+      {
+        :json,
+        path: Path.join(deps_dir, "json")
+      },
+      {
+        :csv,
+        path: Path.join(deps_dir, "csv")
+      },
       {
         :stdout_formatter,
         path: Path.join(deps_dir, "stdout_formatter"),
