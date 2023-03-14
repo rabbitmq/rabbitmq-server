@@ -9,7 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
-
+-include_lib("stdlib/include/assert.hrl").
 
 -compile(export_all).
 
@@ -25,7 +25,8 @@ groups() ->
                            policy_ttl,
                            operator_policy_ttl,
                            operator_retroactive_policy_ttl,
-                           operator_retroactive_policy_publish_ttl
+                           operator_retroactive_policy_publish_ttl,
+                           queue_type_specific_policies
                           ]}
     ].
 
@@ -203,6 +204,43 @@ target_count_policy(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+queue_type_specific_policies(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ClassicQ = <<"policy_ttl-classic_queue">>,
+    QuorumQ = <<"policy_ttl-quorum_queue">>,
+    StreamQ = <<"policy_ttl-stream_queue">>,
+
+    %% all policies match ".*" but different values should be applied based on queue type
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ttl-policy-classic">>,
+        <<".*">>, <<"classic_queues">>, [{<<"message-ttl">>, 20}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ttl-policy-quorum">>,
+        <<".*">>, <<"quorum_queues">>, [{<<"message-ttl">>, 40}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ttl-policy-stream">>,
+        <<".*">>, <<"streams">>, [{<<"max-age">>, "1h"}]),
+
+    declare(Ch, ClassicQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    declare(Ch, QuorumQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    declare(Ch, StreamQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+    timer:sleep(1),
+
+    ?assertMatch(20, check_policy_value(Server, ClassicQ, <<"message-ttl">>)),
+    ?assertMatch(40, check_policy_value(Server, QuorumQ, <<"message-ttl">>)),
+    ?assertMatch("1h", check_policy_value(Server, StreamQ, <<"max-age">>)),
+
+    delete(Ch, ClassicQ),
+    delete(Ch, QuorumQ),
+    delete(Ch, StreamQ),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl-policy-classic">>),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl-policy-quorum">>),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl-policy-stream">>),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 
 %%----------------------------------------------------------------------------
 
@@ -210,6 +248,11 @@ target_count_policy(Config) ->
 declare(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true}).
+
+declare(Ch, Q, Args) ->
+    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
+                                           durable   = true,
+                                           arguments = Args}).
 
 delete(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
