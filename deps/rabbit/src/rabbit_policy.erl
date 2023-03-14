@@ -193,8 +193,8 @@ match_all(NameOrQueue, Policies) ->
    lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(NameOrQueue, P)]).
 
 matches(Q, Policy) when ?is_amqqueue(Q) ->
-    #resource{name = Name, kind = Kind, virtual_host = VHost} = amqqueue:get_name(Q),
-    matches_type(Kind, pget('apply-to', Policy)) andalso
+    #resource{name = Name, virtual_host = VHost} = amqqueue:get_name(Q),
+    matches_queue_type(queue, amqqueue:get_type(Q), pget('apply-to', Policy)) andalso
         is_applicable(Q, pget(definition, Policy)) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy);
@@ -517,10 +517,15 @@ maybe_notify_of_policy_change({Q1, Q2}, PolicyDef, ActingUser) when ?is_amqqueue
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
 matches_type(exchange, <<"exchanges">>) -> true;
-matches_type(queue,    <<"queues">>)    -> true;
 matches_type(exchange, <<"all">>)       -> true;
-matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
+
+matches_queue_type(queue, _, <<"all">>)    -> true;
+matches_queue_type(queue, _, <<"queues">>) -> true;
+matches_queue_type(queue, rabbit_classic_queue, <<"classic_queues">>) -> true;
+matches_queue_type(queue, rabbit_quorum_queue,  <<"quorum_queues">>)  -> true;
+matches_queue_type(queue, rabbit_stream_queue,  <<"streams">>)        -> true;
+matches_queue_type(queue, _, _) -> false.
 
 priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
@@ -602,6 +607,9 @@ is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
 apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
+apply_to_validation(_Name, <<"classic_queues">>)    -> ok;
+apply_to_validation(_Name, <<"quorum_queues">>)    -> ok;
+apply_to_validation(_Name, <<"streams">>)    -> ok;
 apply_to_validation(_Name, Term) ->
-    {error, "apply-to '~ts' unrecognised; should be 'queues', 'exchanges' "
-     "or 'all'", [Term]}.
+    {error, "apply-to '~ts' unrecognised; should be one of: 'queues', 'classic_queues', "
+     " 'quorum_queues', 'streams', 'exchanges', or 'all'", [Term]}.
