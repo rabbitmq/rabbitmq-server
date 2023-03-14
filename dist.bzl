@@ -326,12 +326,22 @@ def source_archive(
         prefix = "deps",
     )
 
-    pkg_tar(
-        name = "cli-deps-archive",
-        deps = [
-            Label("@rabbitmq-server//deps/rabbitmq_cli:fetched_srcs"),
+    pkg_files(
+        name = "json-files",
+        srcs = [
+            "@json//:sources",
         ],
-        package_dir = "deps/rabbitmq_cli",
+        strip_prefix = "",
+        prefix = "deps/json",
+    )
+
+    pkg_files(
+        name = "csv-files",
+        srcs = [
+            "@csv//:sources",
+        ],
+        strip_prefix = "",
+        prefix = "deps/csv",
     )
 
     pkg_tar(
@@ -339,10 +349,9 @@ def source_archive(
         extension = "tar.xz",
         srcs = [
             ":deps-files",
+            ":json-files",
+            ":csv-files",
             Label("@rabbitmq-server//:root-licenses"),
-        ],
-        deps = [
-            ":cli-deps-archive",
         ],
         visibility = ["//visibility:public"],
     )
