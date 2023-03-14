@@ -292,6 +292,9 @@ build_argument(?HEADER_X_MESSAGE_TTL, Val) ->
 build_argument(?HEADER_X_MAX_AGE, Val) ->
     {list_to_binary(?HEADER_X_MAX_AGE), longstr,
      list_to_binary(string:strip(Val))};
+build_argument(?HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES, Val) ->
+    {list_to_binary(?HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES), long,
+     list_to_integer(string:strip(Val))};
 build_argument(?HEADER_X_QUEUE_TYPE, Val) ->
   {list_to_binary(?HEADER_X_QUEUE_TYPE), longstr,
     list_to_binary(string:strip(Val))}.
