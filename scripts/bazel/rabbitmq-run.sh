@@ -28,7 +28,7 @@ write_config_file() {
     local rabbitmq_stream_fragment=
     local rabbitmq_prometheus_fragment=
 
-    if [[ -n $RABBITMQ_NODE_PORT ]]; then
+    if [[ -n ${RABBITMQ_NODE_PORT+x} ]]; then
         rabbit_fragment="{tcp_listeners, [$RABBITMQ_NODE_PORT]}"
         rabbitmq_management_fragment="{listener, [{port, $(($RABBITMQ_NODE_PORT + 10000))}]}"
         rabbitmq_mqtt_fragment="{tcp_listeners, [$((1883 + $RABBITMQ_NODE_PORT - 5672))]}"
@@ -45,7 +45,7 @@ write_config_file() {
 
 [
   {rabbit, [
-      ${rabbit_fragment}${rabbit_fragment+,}
+      ${rabbit_fragment}${rabbit_fragment:+,}
       {loopback_users, []}
     ]},
   {rabbitmq_management, [
