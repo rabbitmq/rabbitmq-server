@@ -121,7 +121,7 @@ export MIX_ENV=prod
 export ERL_COMPILER_OPTIONS=deterministic
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
-"${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
+"${{ABS_ELIXIR_HOME}}"/bin/mix deps.get --only prod
 if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
     cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
 fi
