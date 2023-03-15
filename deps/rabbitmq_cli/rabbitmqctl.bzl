@@ -68,6 +68,21 @@ def _impl(ctx):
 
     deps_dir_files = deps_dir_contents(ctx, deps, deps_dir)
 
+    for dep, app_name in ctx.attr.source_deps.items():
+        for src in dep.files.to_list():
+            if not src.is_directory:
+                rp = additional_file_dest_relative_path(dep.label, src)
+                f = ctx.actions.declare_file(path_join(
+                    deps_dir,
+                    app_name,
+                    rp,
+                ))
+                ctx.actions.symlink(
+                    output = f,
+                    target_file = src,
+                )
+                deps_dir_files.append(f)
+
     package_dir = path_join(
         ctx.label.workspace_root,
         ctx.label.package,
@@ -203,6 +218,7 @@ rabbitmqctl_private = rule(
         "deps": attr.label_list(
             providers = [ErlangAppInfo],
         ),
+        "source_deps": attr.label_keyed_string_dict(),
     },
     toolchains = [
         "//bazel/elixir:toolchain_type",

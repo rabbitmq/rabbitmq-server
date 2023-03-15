@@ -169,6 +169,13 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
+    name = "csv",
+    build_file = "@rabbitmq-server//bazel:BUILD.csv",
+    sha256 = "54508938ac67e27966b10ef49606e3ad5995d665d7fc2688efb3eab1307c9079",
+    version = "2.4.1",
+)
+
+erlang_package.hex_package(
     name = "cuttlefish",
     build_file = "@rabbitmq-server//bazel:BUILD.cuttlefish",
     sha256 = "d3ef90bd2f5923477ab772fbda5cd5ad088438e4fd56801b455b87ada9f46fa3",
@@ -215,6 +222,13 @@ erlang_package.git_package(
     build_file = "@rabbitmq-server//bazel:BUILD.jose",
     commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
     repository = "michaelklishin/erlang-jose",
+)
+
+erlang_package.hex_package(
+    name = "json",
+    build_file = "@rabbitmq-server//bazel:BUILD.json",
+    sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
+    version = "1.4.1",
 )
 
 erlang_package.hex_package(
@@ -319,12 +333,14 @@ use_repo(
     "cowboy",
     "cowlib",
     "credentials_obfuscation",
+    "csv",
     "cuttlefish",
     "eetcd",
     "gen_batch_server",
     "getopt",
     "gun",
     "jose",
+    "json",
     "observer_cli",
     "osiris",
     "prometheus",
