@@ -351,7 +351,6 @@ use_repo(
 erlang_dev_package = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_package",
-    dev_dependency = True,
 )
 
 erlang_dev_package.git_package(
