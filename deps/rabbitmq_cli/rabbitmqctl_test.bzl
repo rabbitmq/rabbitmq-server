@@ -8,6 +8,10 @@ load(
     "windows_path",
 )
 load(
+    "@rules_erlang//private:util.bzl",
+    "additional_file_dest_relative_path",
+)
+load(
     "//bazel/elixir:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
@@ -29,6 +33,21 @@ def _impl(ctx):
         ctx.attr.deps,
         deps_dir,
     )
+
+    for dep, app_name in ctx.attr.source_deps.items():
+        for src in dep.files.to_list():
+            if not src.is_directory:
+                rp = additional_file_dest_relative_path(dep.label, src)
+                f = ctx.actions.declare_file(path_join(
+                    deps_dir,
+                    app_name,
+                    rp,
+                ))
+                ctx.actions.symlink(
+                    output = f,
+                    target_file = src,
+                )
+                deps_dir_files.append(f)
 
     package_dir = path_join(
         ctx.label.workspace_root,
@@ -189,6 +208,7 @@ rabbitmqctl_private_test = rule(
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangAppInfo]),
+        "source_deps": attr.label_keyed_string_dict(),
         "rabbitmq_run": attr.label(
             executable = True,
             cfg = "target",
