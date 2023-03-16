@@ -286,7 +286,7 @@ handle_data1(Data, State = #state{socket = Socket,
                         {error, Reason, _} ->
                             stop_mqtt_protocol_error(State, Reason, ConnName);
                         {stop, {disconnect, server_initiated}, _} ->
-                            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+                            defer_close(),
                             {[], State};
                         {stop, {disconnect, client_initiated}, ProcState1} ->
                             stop({_SendWill = false, State#state{proc_state = ProcState1}})
@@ -294,8 +294,7 @@ handle_data1(Data, State = #state{socket = Socket,
             end;
         {error, {disconnect_reason_code, ReasonCode}} ->
             rabbit_mqtt_processor:send_disconnect(ReasonCode, ProcState),
-            %% Instead of closing immediately, first send the DISCONNECT packet to the client.
-            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+            defer_close(),
             {[], State};
         {error, Reason} ->
             stop_mqtt_protocol_error(State, Reason, ConnName)
@@ -305,6 +304,11 @@ handle_data1(Data, State = #state{socket = Socket,
                          [Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Data, 100)]),
               stop_mqtt_protocol_error(State, cannot_parse, ConnName)
     end.
+
+%% Allow DISCONNECT packet to be sent to client before closing the connection.
+defer_close() ->
+    self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+    ok.
 
 stop_mqtt_protocol_error(State, Reason, ConnName) ->
     ?LOG_WARNING("Web MQTT protocol error ~tp for connection ~tp", [Reason, ConnName]),
