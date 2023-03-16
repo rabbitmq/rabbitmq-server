@@ -63,3 +63,11 @@ jobs:
           --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
           --build_tests_only ^
           --verbose_failures
+  summary:
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"
