@@ -103,7 +103,7 @@ jobs:
           logs/*
           screens/*
 
-  summary:
+  summary-selenium:
     needs:
     - selenium
     runs-on: ubuntu-latest

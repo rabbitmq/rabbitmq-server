@@ -254,7 +254,7 @@ jobs:
           docker push pivotalrabbitmq/rabbitmq:${TAG_1}
           docker push pivotalrabbitmq/rabbitmq:${TAG_2}
 
-  summary:
+  summary-oci:
     needs:
     - build-publish-dev-bazel
     runs-on: ubuntu-latest
