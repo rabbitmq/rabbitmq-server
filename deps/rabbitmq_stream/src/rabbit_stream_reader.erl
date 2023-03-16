@@ -2022,14 +2022,9 @@ handle_frame_post_auth(Transport,
     case Consumers of
         #{SubscriptionId := #consumer{log = undefined} = Consumer} ->
             %% the consumer is not active, it's likely to be credit leftovers
-<<<<<<< HEAD
-            %% from a formerly active consumer, just logging and send an error
-            rabbit_log:debug("Giving credit to an inactive consumer: ~p",
-=======
             %% from a formerly active consumer. Taking the credits,
             %% logging and sending an error
             rabbit_log:debug("Giving credit to an inactive consumer: ~tp",
->>>>>>> 986e72ead4 (Take credits for inactive stream subscription)
                              [SubscriptionId]),
             #consumer{credit = AvailableCredit} = Consumer,
             Consumer1 = Consumer#consumer{credit = AvailableCredit + Credit},
@@ -2541,16 +2536,10 @@ handle_frame_post_auth(Transport,
                                     ROS
                             end,
 
-<<<<<<< HEAD
-                        rabbit_log:debug("Initializing reader for active consumer, offset "
-                                         "spec is ~p",
-                                         [OffsetSpec]),
-=======
                         rabbit_log:debug("Initializing reader for active consumer "
                                          "(subscription ~tp, stream ~tp), offset "
                                          "spec is ~tp",
                                          [SubscriptionId, Stream, OffsetSpec]),
->>>>>>> 986e72ead4 (Take credits for inactive stream subscription)
                         QueueResource =
                             #resource{name = Stream,
                                       kind = queue,
