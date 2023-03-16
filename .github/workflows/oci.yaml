@@ -133,3 +133,12 @@ jobs:
 
           docker push pivotalrabbitmq/rabbitmq:${TAG_1}
           docker push pivotalrabbitmq/rabbitmq:${TAG_2}
+
+  summary:
+    needs:
+    - build-publish-dev-bazel
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"
