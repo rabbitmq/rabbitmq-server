@@ -63,7 +63,7 @@ jobs:
           --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
           --build_tests_only ^
           --verbose_failures
-  summary:
+  summary-windows:
     needs:
     - test
     runs-on: ubuntu-latest
