@@ -22,7 +22,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  selenimum:
+  selenium:
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -102,3 +102,12 @@ jobs:
         path: |
           logs/*
           screens/*
+
+  summary:
+    needs:
+    - selenium
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"
