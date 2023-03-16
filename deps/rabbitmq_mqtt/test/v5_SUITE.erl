@@ -269,7 +269,7 @@ client_publish_qos2(Config) ->
     {C, Connect} = start_client(ClientId, Config, 0, []),
     ?assertMatch({ok, #{'Maximum-QoS' := 1}}, Connect(C)),
     ?assertEqual({error, {disconnected, _RcQosNotSupported = 155, #{}}},
-                 emqtt:publish(C, Topic, <<"msg">>, [{qos, 2}])).
+                 emqtt:publish(C, Topic, <<"msg">>, qos2)).
 
 client_rejects_publish(Config) ->
     NumRejectedBefore = dead_letter_metric(messages_dead_lettered_rejected_total, Config),

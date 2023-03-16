@@ -305,18 +305,15 @@ process_request(?PUBACK,
             {ok, State}
     end;
 
-%% MQTT 5 spec 3.3.1.2 QoS
-%% If the Server included a Maximum QoS in its CONNACK response
-%% to a Client and it receives a PUBLISH packet with a QoS greater than this
-%% then it uses DISCONNECT with Reason Code 0x9B (QoS not supported).
 process_request(?PUBLISH,
                 #mqtt_packet{fixed = #mqtt_packet_fixed{qos = ?QOS_2}},
-                State = #state{cfg = #cfg{
-                                        proto_ver = ?MQTT_PROTO_V5,
-                                        client_id = ClientID}}) ->
-    ?LOG_INFO("Terminating MQTT connection. QoS not supported, client ID: ~s, "
-               "protocol version: ~p, QoS: ~p",
-               [ClientID, ?MQTT_PROTO_V5, ?QOS_2]),
+                State = #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5,
+                                          client_id = ClientId}}) ->
+    %% MQTT 5 spec 3.3.1.2 QoS
+    %% "If the Server included a Maximum QoS in its CONNACK response
+    %% to a Client and it receives a PUBLISH packet with a QoS greater than this
+    %% then it uses DISCONNECT with Reason Code 0x9B (QoS not supported)."
+    ?LOG_WARNING("Received PUBLISH with QoS2. Disconnecting MQTT client ~ts", [ClientId]),
     send_disconnect(?RC_QOS_NOT_SUPPORTED, State),
     {stop, {disconnect, server_initiated}, State};
 process_request(?PUBLISH,
@@ -722,9 +719,9 @@ maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQo
 
 make_will_msg(#mqtt_packet_connect{will_flag = false}) ->
     {ok, undefined};
-make_will_msg(#mqtt_packet_connect{proto_ver = 5,
-                                   will_flag = true,
-                                   will_qos = ?QOS_2}) ->
+make_will_msg(#mqtt_packet_connect{will_flag = true,
+                                   will_qos = ?QOS_2,
+                                   proto_ver = 5}) ->
     {error, ?RC_QOS_NOT_SUPPORTED};
 make_will_msg(#mqtt_packet_connect{will_flag = true,
                                    will_retain = Retain,
