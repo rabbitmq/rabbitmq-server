@@ -198,6 +198,9 @@ matches(Q, Policy) when ?is_amqqueue(Q) ->
         is_applicable(Q, pget(definition, Policy)) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy);
+matches(#resource{kind = queue} = Resource, Policy) ->
+    {ok, Q} = rabbit_amqqueue:lookup(Resource),
+    matches(Q, Policy);
 matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
         is_applicable(Resource, pget(definition, Policy)) andalso
