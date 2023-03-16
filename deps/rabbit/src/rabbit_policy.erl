@@ -517,7 +517,9 @@ maybe_notify_of_policy_change({Q1, Q2}, PolicyDef, ActingUser) when ?is_amqqueue
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
 matches_type(exchange, <<"exchanges">>) -> true;
+matches_type(queue,    <<"queues">>)    -> true;
 matches_type(exchange, <<"all">>)       -> true;
+matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
 
 matches_queue_type(queue, _, <<"all">>)    -> true;
