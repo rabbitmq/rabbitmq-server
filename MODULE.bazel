@@ -225,12 +225,6 @@ erlang_package.git_package(
 )
 
 erlang_package.hex_package(
-<<<<<<< HEAD
-    name = "jsx",
-    build_file = "@//bazel:BUILD.jsx",
-    sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
-    version = "3.1.0",
-=======
     name = "json",
     build_file = "@rabbitmq-server//bazel:BUILD.json",
     sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
@@ -238,11 +232,10 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
-    name = "thoas",
-    build_file = "@rabbitmq-server//bazel:BUILD.thoas",
-    sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
-    version = "1.0.0",
->>>>>>> 12a09ad249 (Fetch cli prod deps via bazel or erlang.mk instead of mix)
+    name = "jsx",
+    build_file = "@//bazel:BUILD.jsx",
+    sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+    version = "3.1.0",
 )
 
 erlang_package.hex_package(
@@ -355,11 +348,8 @@ use_repo(
     "getopt",
     "gun",
     "jose",
-<<<<<<< HEAD
-    "jsx",
-=======
     "json",
->>>>>>> 12a09ad249 (Fetch cli prod deps via bazel or erlang.mk instead of mix)
+    "jsx",
     "observer_cli",
     "osiris",
     "prometheus",
