@@ -11,7 +11,7 @@ define PROJECT_ENV
 	    {allow_anonymous, true},
 	    {vhost, <<"/">>},
 	    {exchange, <<"amq.topic">>},
-	    {subscription_ttl, 86400000}, %% 24 hours
+	    {max_session_expiry_interval_secs, 86400}, %% 1 day
 	    {retained_message_store, rabbit_mqtt_retained_msg_store_dets},
 	    %% only used by DETS store
 	    {retained_message_store_dets_sync_interval, 2000},

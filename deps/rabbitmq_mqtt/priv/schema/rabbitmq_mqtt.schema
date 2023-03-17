@@ -65,19 +65,34 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("mqtt.exchange", Conf))
 end}.
 
-%% Specify TTL (time to live) to control the lifetime of non-clean sessions.
-%%
-%% {subscription_ttl, 1800000},
 {mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl", [
     {datatype, [{enum, [undefined, infinity]}, integer]}
 ]}.
 
 {translation, "rabbitmq_mqtt.subscription_ttl",
 fun(Conf) ->
-    case cuttlefish:conf_get("mqtt.subscription_ttl", Conf, undefined) of
-        undefined -> undefined;
-        infinity  -> undefined;
-        Ms        -> Ms
+    cuttlefish:warn(
+            "Since 3.13 mqtt.subscription_ttl (in milliseconds) is deprecated and "
+            "has no effect anymore. Use mqtt.max_session_expiry_interval_secs (in "
+            "seconds) instead."),
+    cuttlefish:unset()
+end}.
+
+%% Defines the maximum Session Expiry Interval in seconds allowed by the server.
+%% 'infinity' means the session does not expire.
+%% An MQTT 5.0 client can choose a lower value.
+
+{mapping, "mqtt.max_session_expiry_interval_secs", "rabbitmq_mqtt.max_session_expiry_interval_secs", [
+    {datatype, [integer, {atom, infinity}]}
+]}.
+
+{translation, "rabbitmq_mqtt.max_session_expiry_interval_secs",
+fun(Conf) ->
+    case cuttlefish:conf_get("mqtt.max_session_expiry_interval_secs", Conf) of
+        N when is_integer(N) andalso N < 0 ->
+            cuttlefish:invalid("negative integer not allowed");
+        Valid ->
+            Valid
     end
 end}.
 

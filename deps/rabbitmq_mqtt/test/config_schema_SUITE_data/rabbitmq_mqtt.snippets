@@ -5,7 +5,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = 1800000
+   mqtt.max_session_expiry_interval_secs = 1800
    mqtt.prefetch         = 10
    mqtt.sparkplug      = true
    mqtt.listeners.ssl    = none
@@ -24,7 +24,7 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,1800000},
+        {max_session_expiry_interval_secs,1800},
         {prefetch,10},
         {sparkplug,true},
         {ssl_listeners,[]},
@@ -104,7 +104,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = undefined
+   mqtt.max_session_expiry_interval_secs = infinity
    mqtt.prefetch         = 10
    mqtt.proxy_protocol = true",
   [{rabbit,[{tcp_listeners,[5672]}]},
@@ -114,7 +114,7 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,undefined},
+        {max_session_expiry_interval_secs,infinity},
         {prefetch,10},
         {proxy_protocol,true}]}],
   [rabbitmq_mqtt]},
@@ -124,7 +124,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = 1800000
+   mqtt.max_session_expiry_interval_secs = 1800
    mqtt.prefetch         = 10
 ## use DETS (disk-based) store for retained messages
    mqtt.retained_message_store = rabbit_mqtt_retained_msg_store_dets
@@ -139,7 +139,7 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,1800000},
+        {max_session_expiry_interval_secs,1800},
         {prefetch,10},
         {retained_message_store,rabbit_mqtt_retained_msg_store_dets},
         {retained_message_store_dets_sync_interval,2000},

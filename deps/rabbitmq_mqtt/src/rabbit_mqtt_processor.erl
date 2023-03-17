@@ -37,8 +37,10 @@
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, <<"mqtt">>).
+-define(QUEUE_TTL_KEY, <<"x-expires">>).
 
 -type send_fun() :: fun((iodata()) -> ok).
+-type session_expiry_interval() :: non_neg_integer() | infinity.
 
 -record(auth_state,
         {user :: #user{},
@@ -48,7 +50,8 @@
 -record(cfg,
         {socket :: rabbit_net:socket(),
          proto_ver :: protocol_version_atom(),
-         clean_sess :: boolean(),
+         clean_start :: boolean(),
+         session_expiry_interval_secs :: session_expiry_interval(),
          will_msg :: option(mqtt_msg()),
          exchange :: rabbit_exchange:name(),
          %% Set if client has at least one subscription with QoS 1.
@@ -118,24 +121,52 @@ process_connect(
      username   = Username0,
      password   = Password0,
      proto_ver  = ProtoVer,
-     clean_sess = CleanSess,
+     clean_start = CleanStart,
      client_id  = ClientId0,
      keep_alive = KeepaliveSecs,
      props = ConnectProps} = Packet,
   Socket, ConnName0, SendFun, {PeerIp, PeerPort, Ip, Port}) ->
-    ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, clean session: ~s, "
+    ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, clean start: ~s, "
                "protocol version: ~p, keepalive: ~p, property names: ~p",
-               [ClientId0, Username0, CleanSess, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
+               [ClientId0, Username0, CleanStart, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
     SslLoginName = ssl_login_name(Socket),
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
                true   -> flow;
                false  -> noflow
            end,
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
+    {ok, MaxSessionExpiry} = application:get_env(?APP_NAME, max_session_expiry_interval_secs),
+    SessionExpiry =
+    case {ProtoVer, CleanStart} of
+        {5, _} ->
+            %% "If the Session Expiry Interval is absent the value 0 is used."
+            case maps:get('Session-Expiry-Interval', ConnectProps, 0) of
+                ?UINT_MAX ->
+                    %% "If the Session Expiry Interval is 0xFFFFFFFF (UINT_MAX),
+                    %% the Session does not expire."
+                    min(infinity, MaxSessionExpiry);
+                Seconds ->
+                    min(Seconds, MaxSessionExpiry)
+            end;
+        {_, _CleanSession = true} ->
+            %% "Setting Clean Start to 1 and a Session Expiry Interval of 0, is equivalent
+            %% to setting CleanSession to 1 in the MQTT Specification Version 3.1.1."
+            0;
+        {_, _CleanSession = false} ->
+            %% The following sentence of the MQTT 5 spec 3.1.2.11.2 is wrong:
+            %% "Setting Clean Start to 0 and no Session Expiry Interval, is equivalent to
+            %% setting CleanSession to 0 in the MQTT Specification Version 3.1.1."
+            %% Correct is:
+            %% "CleanStart=0 and SessionExpiry=0xFFFFFFFF (UINT_MAX) for MQTT 5.0 would
+            %% provide the same as CleanSession=0 for 3.1.1."
+            %% see https://issues.oasis-open.org/projects/MQTT/issues/MQTT-538
+            %% Therefore, we use the maximum allowed session expiry interval.
+            MaxSessionExpiry
+    end,
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
-        {ok, ClientId} ?= ensure_client_id(ClientId0, CleanSess, ProtoVer),
+        {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
         {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
 
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
@@ -157,7 +188,8 @@ process_connect(
          #state{
             cfg = #cfg{socket = Socket,
                        proto_ver = proto_integer_to_atom(ProtoVer),
-                       clean_sess = CleanSess,
+                       clean_start = CleanStart,
+                       session_expiry_interval_secs = SessionExpiry,
                        ssl_login_name = SslLoginName,
                        delivery_flow = Flow,
                        trace_state = TraceState,
@@ -191,7 +223,11 @@ process_connect(
                        'Maximum-Packet-Size' => persistent_term:get(
                                                   ?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED),
                        'Subscription-Identifier-Available' => 0,
-                       'Shared-Subscription-Available' => 0
+                       'Shared-Subscription-Available' => 0,
+                       'Session-Expiry-Interval' => case SessionExpiry of
+                                                        infinity -> ?UINT_MAX;
+                                                        Secs -> Secs
+                                                    end
                       },
             Props = case {ClientId0, ProtoVer} of
                         {<<>>, 5} ->
@@ -250,8 +286,8 @@ connect_reason_code_to_return_code(_) ->
 
 process_connect(State0) ->
     maybe
-        {ok, QoS0SessPresent, State1} ?= handle_clean_sess_qos0(State0),
-        {ok, SessPresent, State2} ?= handle_clean_sess_qos1(QoS0SessPresent, State1),
+        {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
+        {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
         State = cache_subscriptions(SessPresent, State2),
         rabbit_networking:register_non_amqp_connection(self()),
         self() ! connection_created,
@@ -313,7 +349,7 @@ process_request(?PUBLISH,
     %% "If the Server included a Maximum QoS in its CONNACK response
     %% to a Client and it receives a PUBLISH packet with a QoS greater than this
     %% then it uses DISCONNECT with Reason Code 0x9B (QoS not supported)."
-    ?LOG_WARNING("Received PUBLISH with QoS2. Disconnecting MQTT client ~ts", [ClientId]),
+    ?LOG_WARNING("Received a PUBLISH with QoS2. Disconnecting MQTT client ~ts", [ClientId]),
     send_disconnect(?RC_QOS_NOT_SUPPORTED, State),
     {stop, {disconnect, server_initiated}, State};
 process_request(?PUBLISH,
@@ -445,9 +481,72 @@ process_request(?PINGREQ, #mqtt_packet{}, State = #state{cfg = #cfg{client_id = 
     ?LOG_DEBUG("Sent a PINGRESP to client ID ~s", [ClientId]),
     {ok, State};
 
-process_request(?DISCONNECT, #mqtt_packet{}, State) ->
-    ?LOG_DEBUG("Received a DISCONNECT"),
+%%TODO Check ReasonCode whether to publish a will message:
+%% "If the Network Connection is closed without the Client first sending a DISCONNECT packet with Reason
+%% Code 0x00 (Normal disconnection) and the Connection has a Will Message, the Will Message is published."
+process_request(?DISCONNECT,
+                #mqtt_packet{variable = #mqtt_packet_disconnect{reason_code = Rc,
+                                                                props = Props}},
+                #state{cfg = #cfg{session_expiry_interval_secs = CurrentSEI} = Cfg} = State0) ->
+    ?LOG_DEBUG("Received a DISCONNECT with reason code ~b and properties ~p", [Rc, Props]),
+    RequestedSEI = case maps:find('Session-Expiry-Interval', Props) of
+                       {ok, ?UINT_MAX} ->
+                           %% "If the Session Expiry Interval is 0xFFFFFFFF (UINT_MAX),
+                           %% the Session does not expire."
+                           infinity;
+                       {ok, Secs} ->
+                           Secs;
+                       error ->
+                           %% "If the Session Expiry Interval is absent, the Session
+                           %% Expiry Interval in the CONNECT packet is used."
+                           CurrentSEI
+                   end,
+    State =
+    case CurrentSEI of
+        RequestedSEI ->
+            State0;
+        0 when RequestedSEI > 0 ->
+            %% "If the Session Expiry Interval in the CONNECT packet was zero, then it is a Protocol
+            %% Error to set a non-zero Session Expiry Interval in the DISCONNECT packet sent by the
+            %% Client. If such a non-zero Session Expiry Interval is received by the Server, it does
+            %% not treat it as a valid DISCONNECT packet. The Server uses DISCONNECT with Reason
+            %% Code 0x82 (Protocol Error) as described in section 4.13."
+            %% The last sentence does not make sense because the client already closed the network
+            %% connection after it sent us the DISCONNECT. Hence, we do not reply with another
+            %% DISCONNECT.
+            ?LOG_WARNING("MQTT protocol error: Ignoring requested Session Expiry "
+                         "Interval ~p in DISCONNECT because it was 0 in CONNECT.",
+                         [RequestedSEI, Props]),
+            State0;
+        _ ->
+            %% "The session expiry interval can be modified at disconnect."
+            {ok, MaxSEI} = application:get_env(?APP_NAME, max_session_expiry_interval_secs),
+            NewSEI = min(RequestedSEI, MaxSEI),
+            lists:foreach(fun(QName) ->
+                                  update_session_expiry_interval(QName, NewSEI)
+                          end, existing_queue_names(State0)),
+            State0#state{cfg = Cfg#cfg{session_expiry_interval_secs = NewSEI}}
+    end,
     {stop, {disconnect, client_initiated}, State}.
+
+-spec update_session_expiry_interval(rabbit_amqqueue:name(), session_expiry_interval()) -> ok.
+update_session_expiry_interval(QName, Expiry) ->
+    Fun = fun(Q) ->
+                  Args0 = amqqueue:get_arguments(Q),
+                  Args = if Expiry =:= infinity ->
+                                proplists:delete(?QUEUE_TTL_KEY, Args0);
+                            true ->
+                                rabbit_misc:set_table_value(
+                                  Args0, ?QUEUE_TTL_KEY, long, timer:seconds(Expiry))
+                         end,
+                  amqqueue:set_arguments(Q, Args)
+          end,
+    case rabbit_amqqueue:update(QName, Fun) of
+        not_found ->
+            ok;
+        Q ->
+            ok = rabbit_queue_type:policy_changed(Q) % respects queue args
+    end.
 
 check_protocol_version(ProtoVersion) ->
     case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
@@ -478,7 +577,7 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
 
 -spec ensure_client_id(binary(), boolean(), protocol_version()) ->
     {ok, binary()} | {error, reason_code()}.
-ensure_client_id(<<>>, _CleanSess = false, ProtoVer)
+ensure_client_id(<<>>, _CleanStart = false, ProtoVer)
   when ProtoVer < 5 ->
     ?LOG_ERROR("MQTT client ID must be provided for non-clean session in MQTT v~b", [ProtoVer]),
     {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID};
@@ -564,16 +663,17 @@ self_consumes(Queue) ->
                       end, rabbit_amqqueue:consumers(Queue))
     end.
 
-handle_clean_sess_qos0(State) ->
-    handle_clean_sess(false, ?QOS_0, State).
+handle_clean_start_qos0(State) ->
+    handle_clean_start(false, ?QOS_0, State).
 
-handle_clean_sess_qos1(QoS0SessPresent, State) ->
-    handle_clean_sess(QoS0SessPresent, ?QOS_1, State).
+handle_clean_start_qos1(QoS0SessPresent, State) ->
+    handle_clean_start(QoS0SessPresent, ?QOS_1, State).
 
-handle_clean_sess(_, QoS,
-                  State = #state{cfg = #cfg{clean_sess = true},
-                                 auth_state = #auth_state{user = User = #user{username = Username},
-                                                          authz_ctx = AuthzCtx}}) ->
+handle_clean_start(
+  _, QoS,
+  State = #state{cfg = #cfg{clean_start = true},
+                 auth_state = #auth_state{user = User = #user{username = Username},
+                                          authz_ctx = AuthzCtx}}) ->
     %% "If the Server accepts a connection with CleanSession set to 1, the Server
     %% MUST set Session Present to 0 in the CONNACK packet [MQTT-3.2.2-1].
     SessPresent = false,
@@ -591,13 +691,15 @@ handle_clean_sess(_, QoS,
                     {error, ?RC_NOT_AUTHORIZED}
             end
     end;
-handle_clean_sess(SessPresent, QoS,
-                  State0 = #state{cfg = #cfg{clean_sess = false}}) ->
+handle_clean_start(SessPresent, QoS,
+                   State0 = #state{cfg = #cfg{clean_start = false}}) ->
     case get_queue(QoS, State0) of
         {error, _} ->
             %% Queue will be created later when client subscribes.
             {ok, SessPresent, State0};
         {ok, Q} ->
+            %%TODO modify Queue TTL if Session-Expiry-Interval is different
+            %% see update_session_expiry_interval/2
             case consume(Q, QoS, State0) of
                 {ok, State} ->
                     {ok, _SessionPresent = true, State};
@@ -628,12 +730,26 @@ get_queue(QoS, State) ->
             Err
     end.
 
+-spec queue_name(qos(), state()) -> rabbit_amqqueue:name().
 queue_name(?QOS_1, #state{cfg = #cfg{queue_qos1 = #resource{kind = queue} = Name}}) ->
     Name;
 queue_name(QoS, #state{cfg = #cfg{client_id = ClientId,
                                   vhost = VHost}}) ->
     QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
     rabbit_misc:r(VHost, queue, QNameBin).
+
+%% Returns names of queues that exist in the database.
+-spec existing_queue_names(state()) -> [rabbit_amqqueue:name()].
+existing_queue_names(State) ->
+    QNames = [queue_name(QoS, State) || QoS <- [?QOS_0, ?QOS_1]],
+    lists:filter(fun rabbit_amqqueue:exists/1, QNames).
+
+%% To save memory, we only store the queue_qos1 value in process state if there is a QoS 1 subscription.
+%% We store it in the process state such that we don't have to build the binary on every PUBACK we receive.
+maybe_set_queue_qos1(?QOS_1, State = #state{cfg = Cfg = #cfg{queue_qos1 = undefined}}) ->
+    State#state{cfg = Cfg#cfg{queue_qos1 = queue_name(?QOS_1, State)}};
+maybe_set_queue_qos1(_, State) ->
+    State.
 
 %% Query subscriptions from the database and hold them in process state
 %% to avoid future mnesia:match_object/3 queries.
@@ -978,7 +1094,7 @@ create_queue(
   QoS, #state{cfg = #cfg{
                        vhost = VHost,
                        client_id = ClientId,
-                       clean_sess = CleanSess},
+                       session_expiry_interval_secs = SessionExpiry},
               auth_state = #auth_state{
                               user = User = #user{username = Username},
                               authz_ctx = AuthzCtx}
@@ -991,16 +1107,16 @@ create_queue(
             case rabbit_vhost_limit:is_over_queue_limit(VHost) of
                 false ->
                     rabbit_core_metrics:queue_declared(QName),
-                    QArgs = queue_args(QoS, CleanSess),
+                    QArgs = queue_args(QoS, SessionExpiry),
                     Q0 = amqqueue:new(QName,
                                       self(),
                                       _Durable = true,
                                       _AutoDelete = false,
-                                      queue_owner(CleanSess),
+                                      queue_owner(SessionExpiry),
                                       QArgs,
                                       VHost,
                                       #{user => Username},
-                                      queue_type(QoS, CleanSess, QArgs)
+                                      queue_type(QoS, SessionExpiry, QArgs)
                                      ),
                     case rabbit_queue_type:declare(Q0, node()) of
                         {new, Q} when ?is_amqqueue(Q) ->
@@ -1021,32 +1137,32 @@ create_queue(
             E
     end.
 
--spec queue_owner(CleanSession :: boolean()) ->
+-spec queue_owner(SessionExpiryInterval :: non_neg_integer()) ->
     pid() | none.
-queue_owner(true) ->
-    %% Exclusive queues are auto-deleted after node restart while auto-delete queues are not.
-    %% Therefore make durable queue exclusive.
+queue_owner(0) ->
+    %% Session Expiry Interval set to 0 means that the Session ends when the Network
+    %% Connection is closed. Therefore we want the queue to be auto deleted.
+    %% Exclusive queues are auto deleted after node restart while auto-delete queues are not.
+    %% Therefore make the durable queue exclusive.
     self();
-queue_owner(false) ->
+queue_owner(_) ->
     none.
 
-queue_args(QoS, false) ->
-    Args = case rabbit_mqtt_util:env(subscription_ttl) of
-               Ms when is_integer(Ms) ->
-                   [{<<"x-expires">>, long, Ms}];
-               _ ->
-                   []
+queue_args(_, 0) ->
+    [];
+queue_args(QoS, SessionExpiry) ->
+    Args = case SessionExpiry of
+               infinity -> [];
+               Secs -> [{?QUEUE_TTL_KEY, long, timer:seconds(Secs)}]
            end,
     case {QoS, rabbit_mqtt_util:env(durable_queue_type)} of
         {?QOS_1, quorum} ->
             [{<<"x-queue-type">>, longstr, <<"quorum">>} | Args];
         _ ->
             Args
-    end;
-queue_args(_, _) ->
-    [].
+    end.
 
-queue_type(?QOS_0, true, QArgs) ->
+queue_type(?QOS_0, 0, QArgs) ->
     case rabbit_queue_type:is_enabled(?QUEUE_TYPE_QOS_0) of
         true ->
             ?QUEUE_TYPE_QOS_0;
@@ -1102,13 +1218,6 @@ consume(Q, QoS, #state{
             Err
     end.
 
-%% To save memory, we only store the queue_qos1 value in process state if there is a QoS 1 subscription.
-%% We store it in the process state such that we don't have to build the binary on every PUBACK we receive.
-maybe_set_queue_qos1(?QOS_1, State = #state{cfg = Cfg = #cfg{queue_qos1 = undefined}}) ->
-    State#state{cfg = Cfg#cfg{queue_qos1 = queue_name(?QOS_1, State)}};
-maybe_set_queue_qos1(_, State) ->
-    State.
-
 bind(QName, TopicName, State) ->
     binding_action_with_checks(QName, TopicName, add, State).
 
@@ -1163,8 +1272,8 @@ publish_to_queues(
     RoutingKey = mqtt_to_amqp(Topic),
     Confirm = Qos > ?QOS_0,
     {Expiration, Timestamp} = case Props of
-                                  #{'Message-Expiry-Interval' := ExpirySeconds} ->
-                                      {integer_to_binary(ExpirySeconds * 1000),
+                                  #{'Message-Expiry-Interval' := ExpirySecs} ->
+                                      {integer_to_binary(timer:seconds(ExpirySecs)),
                                        os:system_time(second)};
                                   _ ->
                                       {undefined, undefined}
@@ -1349,7 +1458,7 @@ unregister_client(#state{cfg = #cfg{client_id = ClientIdBin}}) ->
     end.
 
 maybe_delete_mqtt_qos0_queue(
-  State = #state{cfg = #cfg{clean_sess = true},
+  State = #state{cfg = #cfg{clean_start = true},
                  auth_state = #auth_state{user = #user{username = Username}}}) ->
     case get_queue(?QOS_0, State) of
         {ok, Q} ->
@@ -1818,7 +1927,11 @@ info(ssl_login_name, #state{cfg = #cfg{ssl_login_name = Val}}) -> Val;
 info(user_who_performed_action, S) ->
     info(user, S);
 info(user, #state{auth_state = #auth_state{user = #user{username = Val}}}) -> Val;
-info(clean_sess, #state{cfg = #cfg{clean_sess = Val}}) -> Val;
+info(clean_sess, #state{cfg = #cfg{clean_start = CleanStart,
+                                   session_expiry_interval_secs = SEI}}) ->
+    %% "Setting Clean Start to 1 and a Session Expiry Interval of 0, is equivalent
+    %% to setting CleanSession to 1 in the MQTT Specification Version 3.1.1."
+    CleanStart andalso SEI =:= 0;
 info(will_msg, #state{cfg = #cfg{will_msg = Val}}) -> Val;
 info(retainer_pid, #state{cfg = #cfg{retainer_pid = Val}}) -> Val;
 info(exchange, #state{cfg = #cfg{exchange = #resource{name = Val}}}) -> Val;
@@ -1979,7 +2092,8 @@ format_status(
          cfg = #cfg{
                   socket = Socket,
                   proto_ver = ProtoVersion,
-                  clean_sess = CleanSess,
+                  clean_start = CleanStart,
+                  session_expiry_interval_secs = SessionExpiryInterval,
                   will_msg = WillMsg,
                   exchange = Exchange,
                   queue_qos1 = _,
@@ -2000,7 +2114,8 @@ format_status(
                  }}) ->
     Cfg = #{socket => Socket,
             proto_ver => ProtoVersion,
-            clean_sess => CleanSess,
+            clean_start => CleanStart,
+            session_expiry_interval_secs => SessionExpiryInterval,
             will_msg_defined => WillMsg =/= undefined,
             exchange => Exchange,
             published => Published,

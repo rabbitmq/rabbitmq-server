@@ -17,6 +17,7 @@
 -define(FAIL_IF_CRASH_LOG, {["Generic server.*terminating"],
                             fun () -> ct:fail(crash_detected) end}).
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(util, [non_clean_sess_opts/0]).
 
 all() ->
     [
@@ -564,7 +565,7 @@ no_queue_unbind_permission(Config) ->
             {clientid, User},
             {username, User},
             {password, ?config(mqtt_password, Config)}],
-    {ok, C1} = emqtt:start_link([{clean_start, false} | Opts]),
+    {ok, C1} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
     {ok, _} = emqtt:connect(C1),
     Topic = <<"my/topic">>,
     ?assertMatch({ok, _Properties, [1]},
@@ -573,7 +574,7 @@ no_queue_unbind_permission(Config) ->
 
     %% Revoke read access to amq.topic exchange.
     rabbit_ct_broker_helpers:set_permissions(Config, User, Vhost, <<".*">>, <<".*">>, <<"^(?!amq\.topic$)">>),
-    {ok, C2} = emqtt:start_link([{clean_start, false} | Opts]),
+    {ok, C2} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
     {ok, _} = emqtt:connect(C2),
     process_flag(trap_exit, true),
     %% We subscribe with the same client ID to the same topic again, but this time with QoS 0.
@@ -610,7 +611,7 @@ no_queue_delete_permission(Config) ->
                  ?config(mqtt_password, Config),
                  Config,
                  ClientId,
-                 [{clean_start, false}]),
+                 non_clean_sess_opts()),
     {ok, _} = emqtt:connect(C1),
     {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
     ok = emqtt:disconnect(C1),
@@ -646,7 +647,7 @@ no_queue_consume_permission_on_connect(Config) ->
                  ?config(mqtt_password, Config),
                  Config,
                  ClientId,
-                 [{clean_start, false}]),
+                 non_clean_sess_opts()),
     {ok, _} = emqtt:connect(C1),
     {ok, _, _} = emqtt:subscribe(C1, {<<"test/topic">>, qos1}),
     ok = emqtt:disconnect(C1),
@@ -657,7 +658,7 @@ no_queue_consume_permission_on_connect(Config) ->
                  ?config(mqtt_password, Config),
                  Config,
                  ClientId,
-                 [{clean_start, false}]),
+                 non_clean_sess_opts()),
     unlink(C2),
     ?assertMatch({error, _},
                  emqtt:connect(C2)),

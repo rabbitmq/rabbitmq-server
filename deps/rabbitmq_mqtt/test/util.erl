@@ -24,7 +24,8 @@
          assert_message_expiry_interval/2,
          await_exit/1,
          await_exit/2,
-         maybe_skip_v5/1
+         maybe_skip_v5/1,
+         non_clean_sess_opts/0
         ]).
 
 all_connection_pids(Config) ->
@@ -161,6 +162,13 @@ maybe_skip_v5(Config) ->
         _ ->
             Config
     end.
+
+%% "CleanStart=0 and SessionExpiry=0xFFFFFFFF (UINT_MAX) for
+%% MQTT 5.0 would provide the same as CleanSession=0 for 3.1.1."
+%% https://issues.oasis-open.org/projects/MQTT/issues/MQTT-538
+non_clean_sess_opts() ->
+    [{clean_start, false},
+     {properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}}].
 
 connect(ClientId, Config) ->
     connect(ClientId, Config, []).

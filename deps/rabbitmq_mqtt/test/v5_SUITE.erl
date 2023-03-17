@@ -17,8 +17,15 @@
         [
          start_client/4,
          connect/2, connect/3, connect/4,
-         assert_message_expiry_interval/2
+         assert_message_expiry_interval/2,
+         non_clean_sess_opts/0
         ]).
+-import(rabbit_ct_broker_helpers,
+        [rpc/4]).
+-import(rabbit_ct_helpers,
+        [eventually/1]).
+
+-define(QUEUE_TTL_KEY, <<"x-expires">>).
 
 all() ->
     [{group, mqtt},
@@ -27,11 +34,13 @@ all() ->
 groups() ->
     [
      {mqtt, [],
-      [{cluster_size_1, [shuffle], cluster_size_1_tests()},
-       {cluster_size_3, [shuffle], cluster_size_3_tests()}]},
+      [{cluster_size_1, [shuffle], cluster_size_1_tests()}
+       % {cluster_size_3, [shuffle], cluster_size_3_tests()}
+      ]},
      {web_mqtt, [],
-      [{cluster_size_1, [shuffle], cluster_size_1_tests()},
-       {cluster_size_3, [shuffle], cluster_size_3_tests()}]}
+      [{cluster_size_1, [shuffle], cluster_size_1_tests()}
+       % {cluster_size_3, [shuffle], cluster_size_3_tests()}
+      ]}
     ].
 
 cluster_size_1_tests() ->
@@ -42,15 +51,19 @@ cluster_size_1_tests() ->
      message_expiry_interval,
      message_expiry_interval_will_message,
      message_expiry_interval_retained_message,
+     session_expiry_interval_classic_queue_disconnect_decrease,
+     session_expiry_interval_quorum_queue_disconnect_decrease,
+     session_expiry_interval_disconnect_zero_to_non_zero,
+     session_expiry_interval_disconnect_non_zero_to_zero,
+     session_expiry_interval_disconnect_infinity_to_zero,
+     session_expiry_interval_disconnect_to_infinity,
      client_publish_qos2,
      client_rejects_publish,
      will_qos2
     ].
 
-cluster_size_3_tests() ->
-    [
-     satisfy_bazel
-    ].
+% cluster_size_3_tests() ->
+%     [].
 
 suite() ->
     [{timetrap, {minutes, 1}}].
@@ -86,7 +99,8 @@ init_per_group(Group, Config0) ->
                                         tcp_port_mqtt_tls_extra]}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
-                {rabbit, [{classic_queue_default_version, 2}]}),
+                {rabbit, [{classic_queue_default_version, 2},
+                          {quorum_tick_interval, 200}]}),
     Config = rabbit_ct_helpers:run_steps(
                Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
@@ -148,7 +162,7 @@ message_expiry_interval(Config) ->
     NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     Pub = connect(<<"publisher">>, Config),
-    Sub1 = connect(ClientId, Config, [{clean_start, false}]),
+    Sub1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
     ok = emqtt:disconnect(Sub1),
 
@@ -157,7 +171,7 @@ message_expiry_interval(Config) ->
     {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 10}, <<"m3">>, [{qos, 1}]),
     {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 2}, <<"m4">>, [{qos, 1}]),
     timer:sleep(2001),
-    Sub2 = connect(ClientId, Config, [{clean_start, false}]),
+    Sub2 = connect(ClientId, Config, non_clean_sess_opts()),
     receive {publish, #{client_pid := Sub2,
                         topic := Topic,
                         payload := <<"m2">>,
@@ -197,7 +211,7 @@ message_expiry_interval_will_message(Config) ->
     timer:sleep(100),
     [ServerPublisherPid] = util:all_connection_pids(Config),
 
-    Sub1 = connect(ClientId, Config, [{clean_start, false}]),
+    Sub1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
     ok = emqtt:disconnect(Sub1),
 
@@ -264,6 +278,117 @@ message_expiry_interval_retained_message(Config) ->
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(Sub).
 
+session_expiry_interval_classic_queue_disconnect_decrease(Config) ->
+    ok = session_expiry_interval_disconnect_decrease(rabbit_classic_queue, Config).
+
+session_expiry_interval_quorum_queue_disconnect_decrease(Config) ->
+    ok = rpc(Config, application, set_env, [rabbitmq_mqtt, durable_queue_type, quorum]),
+    ok = session_expiry_interval_disconnect_decrease(rabbit_quorum_queue, Config),
+    ok = rpc(Config, application, unset_env, [rabbitmq_mqtt, durable_queue_type]).
+
+session_expiry_interval_disconnect_decrease(QueueType, Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 100}}]),
+    {ok, _, [1]} = emqtt:subscribe(C1, <<"t/1">>, qos1),
+
+    [Q1] = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(QueueType,
+                 amqqueue:get_type(Q1)),
+    ?assertEqual({long, 100_000},
+                 rabbit_misc:table_lookup(amqqueue:get_arguments(Q1), ?QUEUE_TTL_KEY)),
+
+    %% DISCONNECT decreases Session Expiry Interval from 100 seconds to 1 second.
+    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 1}),
+    [Q2] = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual({long, 1_000},
+                 rabbit_misc:table_lookup(amqqueue:get_arguments(Q2), ?QUEUE_TTL_KEY)),
+
+    timer:sleep(1500),
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    %% Server should reply in CONNACK that it does not have session state for our client ID.
+    ?assertEqual({session_present, 0},
+                 proplists:lookup(session_present, emqtt:info(C2))),
+    ok = emqtt:disconnect(C2).
+
+session_expiry_interval_disconnect_zero_to_non_zero(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 0}}]),
+    {ok, _, [1]} = emqtt:subscribe(C1, <<"t/1">>, qos1),
+    %% "If the Session Expiry Interval in the CONNECT packet was zero, then it is a Protocol
+    %% Error to set a non-zero Session Expiry Interval in the DISCONNECT packet sent by the Client.
+    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 60}),
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    %% Due to the prior protocol error, we expect the requested session expiry interval of
+    %% 60 seconds not to be applied. Therefore, the server should reply in CONNACK that
+    %% it does not have session state for our client ID.
+    ?assertEqual({session_present, 0},
+                 proplists:lookup(session_present, emqtt:info(C2))),
+    ok = emqtt:disconnect(C2).
+
+session_expiry_interval_disconnect_non_zero_to_zero(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
+    {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
+                                           {<<"t/1">>, qos1}]),
+    ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
+    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 0}),
+    eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))),
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    ?assertEqual({session_present, 0},
+                 proplists:lookup(session_present, emqtt:info(C2))),
+    ok = emqtt:disconnect(C2).
+
+session_expiry_interval_disconnect_infinity_to_zero(Config) ->
+    App = rabbitmq_mqtt,
+    Par = max_session_expiry_interval_secs,
+    Default = rpc(Config, application, get_env, [App, Par]),
+    ok = rpc(Config, application, set_env, [App, Par, infinity]),
+    ClientId = ?FUNCTION_NAME,
+
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}}]),
+    {ok, _, [1, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, qos1},
+                                           {<<"t/0">>, qos0}]),
+    Qs = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(2, length(Qs)),
+    ?assertNot(lists:any(fun(Q) ->
+                                 proplists:is_defined(?QUEUE_TTL_KEY, amqqueue:get_arguments(Q))
+                         end, Qs)),
+
+    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 0}),
+    eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))),
+    ok = rpc(Config, application, set_env, [App, Par, Default]).
+
+session_expiry_interval_disconnect_to_infinity(Config) ->
+    App = rabbitmq_mqtt,
+    Par = max_session_expiry_interval_secs,
+    Default = rpc(Config, application, get_env, [App, Par]),
+    ok = rpc(Config, application, set_env, [App, Par, infinity]),
+    ClientId = ?FUNCTION_NAME,
+
+    %% Connect with a non-zero and non-infinity Session Expiry Interval.
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 1}}]),
+    {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
+                                           {<<"t/1">>, qos1}]),
+    Qs1 = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(2, length(Qs1)),
+    ?assert(lists:all(fun(Q) ->
+                              {long, 1000} =:= rabbit_misc:table_lookup(
+                                                 amqqueue:get_arguments(Q), ?QUEUE_TTL_KEY)
+                      end, Qs1)),
+
+    %% Disconnect with infinity should remove queue TTL from both queues.
+    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 16#FFFFFFFF}),
+    timer:sleep(100),
+    Qs2 = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(2, length(Qs2)),
+    ?assertNot(lists:any(fun(Q) ->
+                                 proplists:is_defined(?QUEUE_TTL_KEY, amqqueue:get_arguments(Q))
+                         end, Qs2)),
+
+    C2 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C2),
+    ok = rpc(Config, application, set_env, [App, Par, Default]).
+
 client_publish_qos2(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     {C, Connect} = start_client(ClientId, Config, 0, []),
@@ -302,11 +427,8 @@ will_qos2(Config) ->
     unlink(C),
     ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
 
-satisfy_bazel(_Config) ->
-    ok.
-
 dead_letter_metric(Metric, Config) ->
-    Counters = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
+    Counters = rpc(Config, rabbit_global_counters, overview, []),
     Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}], Counters),
     maps:get(Metric, Map).
 

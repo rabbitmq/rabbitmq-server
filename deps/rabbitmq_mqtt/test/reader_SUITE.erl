@@ -16,9 +16,10 @@
 -import(util, [all_connection_pids/1,
                publish_qos1_timeout/4,
                expect_publishes/3,
-               connect/2,
-               connect/3,
-               await_exit/1]).
+               connect/2, connect/3,
+               await_exit/1,
+               non_clean_sess_opts/0
+              ]).
 
 all() ->
     [
@@ -186,9 +187,9 @@ set_env(QueueType) ->
 get_env() ->
     rabbit_mqtt_util:env(durable_queue_type).
 
-validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType) ->
+validate_durable_queue_type(Config, ClientName, Opts, ExpectedQueueType) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    C = connect(ClientName, Config, [{clean_start, CleanSession}]),
+    C = connect(ClientName, Config, Opts),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicB">>, qos1),
     ok = emqtt:publish(C, <<"TopicB">>, <<"Payload">>),
     ok = expect_publishes(C, <<"TopicB">>, [<<"Payload">>]),
@@ -202,7 +203,8 @@ validate_durable_queue_type(Config, ClientName, CleanSession, ExpectedQueueType)
 quorum_clean_session_false(Config) ->
     Default = rpc(Config, reader_SUITE, get_env, []),
     rpc(Config, reader_SUITE, set_env, [quorum]),
-    validate_durable_queue_type(Config, <<"quorumCleanSessionFalse">>, false, rabbit_quorum_queue),
+    validate_durable_queue_type(
+      Config, <<"quorumCleanSessionFalse">>, non_clean_sess_opts(), rabbit_quorum_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
 quorum_clean_session_true(Config) ->
@@ -210,14 +212,17 @@ quorum_clean_session_true(Config) ->
     rpc(Config, reader_SUITE, set_env, [quorum]),
     %% Since we use a clean session and quorum queues cannot be auto-delete or exclusive,
     %% we expect a classic queue.
-    validate_durable_queue_type(Config, <<"quorumCleanSessionTrue">>, true, rabbit_classic_queue),
+    validate_durable_queue_type(
+      Config, <<"quorumCleanSessionTrue">>, [{clean_start, true}], rabbit_classic_queue),
     rpc(Config, reader_SUITE, set_env, [Default]).
 
 classic_clean_session_true(Config) ->
-    validate_durable_queue_type(Config, <<"classicCleanSessionTrue">>, true, rabbit_classic_queue).
+    validate_durable_queue_type(
+      Config, <<"classicCleanSessionTrue">>, [{clean_start, true}], rabbit_classic_queue).
 
 classic_clean_session_false(Config) ->
-    validate_durable_queue_type(Config, <<"classicCleanSessionFalse">>, false, rabbit_classic_queue).
+    validate_durable_queue_type(
+      Config, <<"classicCleanSessionFalse">>, non_clean_sess_opts(), rabbit_classic_queue).
 
 event_authentication_failure(Config) ->
     {ok, C} = emqtt:start_link(
