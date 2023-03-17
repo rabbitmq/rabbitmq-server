@@ -20,7 +20,7 @@
          restart_server/1,
          stop_server/1,
          delete/4,
-         delete_immediately/2]).
+         delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
 -export([credit/5]).
@@ -223,20 +223,20 @@ start_cluster(Q) ->
                                           ActingUser}]),
                     {new, NewQ};
                 {error, Error} ->
-                    declare_queue_error(Error, QName, Leader, ActingUser)
+                    declare_queue_error(Error, NewQ, Leader, ActingUser)
             catch
                 error:Error ->
-                    declare_queue_error(Error, QName, Leader, ActingUser)
+                    declare_queue_error(Error, NewQ, Leader, ActingUser)
             end;
         {existing, _} = Ex ->
             Ex
     end.
 
-declare_queue_error(Error, QName, Leader, ActingUser) ->
-    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+declare_queue_error(Error, Queue, Leader, ActingUser) ->
+    _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
     {protocol_error, internal_error,
      "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
-     [rabbit_misc:rs(QName), node(), Leader, Error]}.
+     [rabbit_misc:rs(amqqueue:get_name(Queue)), node(), Leader, Error]}.
 
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
@@ -660,7 +660,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     ok = force_delete_queue(Servers)
             end,
             notify_decorators(QName, shutdown),
-            ok = delete_queue_data(QName, ActingUser),
+            ok = delete_queue_data(Q, ActingUser),
             _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
                           ?RPC_TIMEOUT),
             {ok, ReadyMsgs};
@@ -671,7 +671,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 true ->
                     %% If all ra nodes were already down, the delete
                     %% has succeed
-                    delete_queue_data(QName, ActingUser),
+                    delete_queue_data(Q, ActingUser),
                     {ok, ReadyMsgs};
                 false ->
                     %% attempt forced deletion of all servers
@@ -682,7 +682,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                       [rabbit_misc:rs(QName), Errs]),
                     ok = force_delete_queue(Servers),
                     notify_decorators(QName, shutdown),
-                    delete_queue_data(QName, ActingUser),
+                    delete_queue_data(Q, ActingUser),
                     {ok, ReadyMsgs}
             end
     end.
@@ -701,15 +701,15 @@ force_delete_queue(Servers) ->
      end || S <- Servers],
     ok.
 
-delete_queue_data(QName, ActingUser) ->
-    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+delete_queue_data(Queue, ActingUser) ->
+    _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
     ok.
 
 
-delete_immediately(Resource, {_Name, _} = QPid) ->
-    _ = rabbit_amqqueue:internal_delete(Resource, ?INTERNAL_USER),
-    {ok, _} = ra:delete_cluster([QPid]),
-    rabbit_core_metrics:queue_deleted(Resource),
+delete_immediately(Queue) ->
+    _ = rabbit_amqqueue:internal_delete(Queue, ?INTERNAL_USER),
+    {ok, _} = ra:delete_cluster([amqqueue:get_pid(Queue)]),
+    rabbit_core_metrics:queue_deleted(amqqueue:get_name(Queue)),
     ok.
 
 settle(_QName, complete, CTag, MsgIds, QState) ->
