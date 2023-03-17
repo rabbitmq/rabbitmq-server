@@ -911,7 +911,7 @@ bq_queue_recover1(Config) ->
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              ok = rabbit_amqqueue:internal_delete(QName, <<"acting-user">>)
+              ok = rabbit_amqqueue:internal_delete(Q1, <<"acting-user">>)
       end),
     passed.
 
