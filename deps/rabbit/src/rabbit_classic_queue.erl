@@ -466,10 +466,9 @@ delete_crashed(Q, ActingUser) ->
                   [Q, ActingUser]).
 
 delete_crashed_internal(Q, ActingUser) ->
-    QName = amqqueue:get_name(Q),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     BQ:delete_crashed(Q),
-    ok = rabbit_amqqueue:internal_delete(QName, ActingUser).
+    ok = rabbit_amqqueue:internal_delete(Q, ActingUser).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
     {Results, Failures} =

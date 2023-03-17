@@ -314,7 +314,6 @@ terminate_delete(EmitStats, Reason0,
                  State = #q{q = Q,
                             backing_queue = BQ,
                             status = Status}) ->
-    QName = amqqueue:get_name(Q),
     ActingUser = terminated_by(Status),
     fun (BQS) ->
         Reason = case Reason0 of
@@ -330,7 +329,7 @@ terminate_delete(EmitStats, Reason0,
         %% logged.
         try
             %% don't care if the internal delete doesn't return 'ok'.
-            rabbit_amqqueue:internal_delete(QName, ActingUser, Reason0)
+            rabbit_amqqueue:internal_delete(Q, ActingUser, Reason0)
         catch
             {error, ReasonE} -> error(ReasonE)
         end,
