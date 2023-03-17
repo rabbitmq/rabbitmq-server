@@ -1874,7 +1874,7 @@ on_node_down(Node) ->
             end,
             notify_queue_binding_deletions(Deletions),
             rabbit_core_metrics:queues_deleted(QueueNames),
-            notify_queues_deleted(QueueNames),
+            notify_transient_queues_deleted(QueueNames),
             ok
     end.
 
@@ -1897,11 +1897,12 @@ notify_queue_binding_deletions(QueueDeletions) ->
     Deletions = rabbit_binding:process_deletions(QueueDeletions),
     rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER).
 
-notify_queues_deleted(QueueDeletions) ->
+notify_transient_queues_deleted(QueueDeletions) ->
     lists:foreach(
       fun(Queue) ->
               ok = rabbit_event:notify(queue_deleted,
                                        [{name, Queue},
+                                        {kind, rabbit_classic_queue},
                                         {user, ?INTERNAL_USER}])
       end,
       QueueDeletions).
