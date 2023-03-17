@@ -247,7 +247,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
 
     Topic = atom_to_binary(?FUNCTION_NAME),
-    Msg = binary:copy(<<"x">>, 1000),
+    Msg = binary:copy(<<"x">>, 2000),
     NumMsgs = 10_000,
 
     %% Provoke TCP back-pressure from client to server by using very small buffers.
@@ -269,7 +269,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
                   end, lists:seq(1, NumMsgs)),
 
     %% Give the server some time to process (either send or drop) the messages.
-    timer:sleep(2000),
+    timer:sleep(2500),
 
     %% Let's resume the receiving client to receive any remaining messages that did
     %% not get dropped.
