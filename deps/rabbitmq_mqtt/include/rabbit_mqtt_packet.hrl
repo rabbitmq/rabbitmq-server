@@ -157,8 +157,7 @@
                               will_retain :: boolean(),
                               will_qos :: qos(),
                               will_flag :: boolean(),
-                              %% corresponds to Clean Start in MQTT 5.0
-                              clean_sess :: boolean(),
+                              clean_start :: boolean(),
                               keep_alive :: non_neg_integer(),
                               props :: properties(),
                               client_id :: binary(),

@@ -41,7 +41,8 @@
          connect/2, connect/3, connect/4,
          get_events/1, assert_event_type/2, assert_event_prop/2,
          await_exit/1, await_exit/2,
-         publish_qos1_timeout/4]).
+         publish_qos1_timeout/4,
+         non_clean_sess_opts/0]).
 -import(rabbit_mgmt_test_util,
         [http_get/2,
          http_delete/3]).
@@ -81,7 +82,7 @@ cluster_size_1_tests() ->
      global_counters %% must be the 1st test case
      ,block_only_publisher
      ,many_qos1_messages
-     ,subscription_ttl
+     ,session_expiry
      ,management_plugin_connection
      ,management_plugin_enable
      ,disconnect
@@ -672,12 +673,12 @@ consuming_classic_mirrored_queue_down(Config) ->
             {<<"queue-master-locator">>, <<"client-local">>}]),
 
     %% Declare queue leader on Server1.
-    C1 = connect(ClientId, Config, Server1, [{clean_start, false}]),
+    C1 = connect(ClientId, Config, Server1, non_clean_sess_opts()),
     {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
     ok = emqtt:disconnect(C1),
 
     %% Consume from Server2.
-    C2 = connect(ClientId, Config, Server2, [{clean_start, false}]),
+    C2 = connect(ClientId, Config, Server2, non_clean_sess_opts()),
 
     %% Sanity check that consumption works.
     {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
@@ -707,12 +708,12 @@ consuming_classic_queue_down(Config) ->
     ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
 
     %% Declare classic queue on Server1.
-    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
     ok = emqtt:disconnect(C1),
 
     %% Consume from Server3.
-    C2 = connect(ClientId, Config, Server3, [{clean_start, false}]),
+    C2 = connect(ClientId, Config, Server3, non_clean_sess_opts()),
 
     ProtoVer = ?config(mqtt_version, Config),
     ?assertMatch(#{consumers := 1},
@@ -798,20 +799,20 @@ delete_create_queue(Config) ->
     delete_queue(Ch, [CQ1, CQ2, QQ]),
     ok = emqtt:disconnect(C).
 
-subscription_ttl(Config) ->
-    TTL = 1000,
+session_expiry(Config) ->
     App = rabbitmq_mqtt,
-    Par = ClientId = ?FUNCTION_NAME,
+    Par = max_session_expiry_interval_secs,
+    Seconds = 1,
     {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
-    ok = rpc(Config, application, set_env, [App, Par, TTL]),
+    ok = rpc(Config, application, set_env, [App, Par, Seconds]),
 
-    C = connect(ClientId, Config, [{clean_start, false}]),
+    C = connect(?FUNCTION_NAME, Config, non_clean_sess_opts()),
     {ok, _, [0, 1]} = emqtt:subscribe(C, [{<<"topic0">>, qos0},
                                           {<<"topic1">>, qos1}]),
     ok = emqtt:disconnect(C),
 
     ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
-    timer:sleep(TTL + 100),
+    timer:sleep(timer:seconds(Seconds) + 100),
     ?assertEqual(0,  rpc(Config, rabbit_amqqueue, count, [])),
 
     ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
@@ -826,7 +827,7 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
     Pub = connect(<<"publisher">>, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
 
-    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, _} = emqtt:subscribe(C1, Topic, SubscriptionQoS),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config)),
@@ -839,7 +840,10 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
     ok = emqtt:publish(Pub, Topic, <<"msg-3-qos0">>, qos0),
     {ok, _} = emqtt:publish(Pub, Topic, <<"msg-4-qos1">>, qos1),
 
-    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    C2 = connect(ClientId, Config, non_clean_sess_opts()),
+    %% Server should reply in CONNACK that it has session state.
+    ?assertEqual({session_present, 1},
+                 proplists:lookup(session_present, emqtt:info(C2))),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config)),
 
@@ -873,7 +877,7 @@ non_clean_sess_reconnect_qos0_and_qos1(Config) ->
     Topic1 = <<"t/1">>,
     ClientId = ?FUNCTION_NAME,
 
-    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, [1, 0]} = emqtt:subscribe(C1, [{Topic1, qos1}, {Topic0, qos0}]),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config)),
@@ -885,7 +889,7 @@ non_clean_sess_reconnect_qos0_and_qos1(Config) ->
     {ok, _} = emqtt:publish(Pub, Topic0, <<"msg-0">>, qos1),
     {ok, _} = emqtt:publish(Pub, Topic1, <<"msg-1">>, qos1),
 
-    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    C2 = connect(ClientId, Config, non_clean_sess_opts()),
     ?assertMatch(#{consumers := 1},
                  get_global_counters(Config)),
 
@@ -898,7 +902,7 @@ non_clean_sess_reconnect_qos0_and_qos1(Config) ->
     ok = emqtt:disconnect(C3).
 
 non_clean_sess_empty_client_id(Config) ->
-    {C, Connect} = util:start_client(<<>>, Config, 0, [{clean_start, false}]),
+    {C, Connect} = util:start_client(<<>>, Config, 0, non_clean_sess_opts()),
     case ?config(mqtt_version, Config) of
         V when V =:= v3;
                V =:= v4 ->
@@ -940,7 +944,7 @@ subscribe_same_topic_same_qos(Config) ->
     ok = emqtt:disconnect(C).
 
 subscribe_same_topic_different_qos(Config) ->
-    C = connect(?FUNCTION_NAME, Config, [{clean_start, false}]),
+    C = connect(?FUNCTION_NAME, Config, non_clean_sess_opts()),
     Topic = <<"b/c">>,
 
     {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true},
@@ -1488,7 +1492,7 @@ default_queue_type(Config) ->
     %% Test that the configured default queue type does not apply to MQTT.
     Creds = [{username, <<Vhost/binary, ":guest">>},
              {password, <<"guest">>}],
-    C1 = connect(ClientId, Config, [{clean_start, false} | Creds]),
+    C1 = connect(ClientId, Config, Creds ++ non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     ClassicQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
     ?assertEqual(1, length(ClassicQueues)),

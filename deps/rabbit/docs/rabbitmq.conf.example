@@ -909,9 +909,11 @@
 ##
 # mqtt.exchange = amq.topic
 
-## Specify TTL (time to live) to control the lifetime of non-clean sessions.
+## Define the maximum Session Expiry Interval in seconds allowed by the server.
+## 'infinity' means the session does not expire.
+## An MQTT 5.0 client can choose a lower value.
 ##
-# mqtt.subscription_ttl = 1800000
+# mqtt.max_session_expiry_interval_secs = 1800
 
 ## Set the prefetch count (governing the maximum number of unacknowledged
 ## messages that will be delivered).
