@@ -549,10 +549,12 @@ start(VHost, DurableQueueNames) ->
                    sets:add_element(DirName, ValidDirectories)}
           end, {[], sets:new()}, DurableQueueNames),
     %% Any queue directory we've not been asked to recover is considered garbage
-    _ = rabbit_file:recursive_delete(
-      [DirName ||
-        DirName <- all_queue_directory_names(VHost),
-        not sets:is_element(filename:basename(DirName), DurableDirectories)]),
+    ToDelete = [filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues", Dir])
+                || Dir <- lists:subtract(all_queue_directory_names(VHost),
+                                         sets:to_list(DurableDirectories))],
+    rabbit_log:debug("Deleting unknown files/folders: ~p", [ToDelete]),
+    _ = rabbit_file:recursive_delete(ToDelete),
+
     rabbit_recovery_terms:clear(VHost),
 
     %% The backing queue interface requires that the queue recovery terms
@@ -564,8 +566,13 @@ start(VHost, DurableQueueNames) ->
 stop(VHost) -> rabbit_recovery_terms:stop(VHost).
 
 all_queue_directory_names(VHost) ->
-    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_path(VHost),
-                                    "queues", "*"])).
+    VHostQueuesPath = filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues"]),
+    case filelib:is_dir(VHostQueuesPath) of
+        true  ->
+                    {ok, Dirs} = file:list_dir(VHostQueuesPath),
+                    Dirs;
+        false -> []
+    end.
 
 %%----------------------------------------------------------------------------
 %% startup and shutdown
