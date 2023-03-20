@@ -24,8 +24,8 @@ start_link() ->
 
 init([]) ->
     SupFlags = #{strategy => simple_one_for_one,
-                 intensity => 1,
-                 period => 5},
+                 intensity => 100,
+                 period => 1},
     Worker = rabbit_fifo_dlx_worker,
     ChildSpec = #{id => Worker,
                   start => {Worker, start_link, []},
