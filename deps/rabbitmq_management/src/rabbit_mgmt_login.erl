@@ -35,6 +35,6 @@ login(<<"POST">>, Req0, State) ->
       {ok, ReqData2, State}
   end;
 
-login(_, Req0, _) ->
-  %% Method not allowed.
-	cowboy_req:reply(405, Req0).
+login(_, Req0, State) ->
+    %% Method not allowed.
+    {ok, cowboy_req:reply(405, Req0), State}.
