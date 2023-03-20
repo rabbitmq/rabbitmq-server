@@ -30,5 +30,6 @@ init([]) ->
     ChildSpec = #{id => Worker,
                   start => {Worker, start_link, []},
                   type => worker,
+                  restart => transient,
                   modules => [Worker]},
     {ok, {SupFlags, [ChildSpec]}}.
