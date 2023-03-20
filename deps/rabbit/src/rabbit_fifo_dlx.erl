@@ -114,11 +114,20 @@ apply(_, {dlx, #checkout{consumer = Pid,
 apply(_, {dlx, #checkout{consumer = ConsumerPid,
                          prefetch = Prefetch}},
       at_least_once,
-      #?MODULE{consumer = #dlx_consumer{checked_out = CheckedOutOldConsumer},
+      #?MODULE{consumer = #dlx_consumer{pid = OldConsumerPid,
+                                        checked_out = CheckedOutOldConsumer},
                discards = Discards0,
                msg_bytes = Bytes,
                msg_bytes_checkout = BytesCheckout} = State0) ->
     %% Since we allow only a single consumer, the new consumer replaces the old consumer.
+    case ConsumerPid of
+        OldConsumerPid ->
+            ok;
+        _ ->
+            rabbit_log:debug("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
+                             [OldConsumerPid, ConsumerPid]),
+            ensure_worker_terminated(State0)
+    end,
     %% All checked out messages to the old consumer need to be returned to the discards queue
     %% such that these messages will be re-delivered to the new consumer.
     %% When inserting back into the discards queue, we respect the original order in which messages
