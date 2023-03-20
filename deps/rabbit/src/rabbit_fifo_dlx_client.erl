@@ -32,7 +32,7 @@ settle(MsgIds, #state{leader = Leader} = State)
     {ok, State}.
 
 -spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
-    {ok, state()} | {error, ra_command_failed}.
+    {ok, state()} | {error, non_local_leader | ra_command_failed}.
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
     State = #state{queue_resource = QResource,
@@ -46,10 +46,10 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
     case ra:process_command(Leader, Cmd, 60_000) of
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
-        {ok, ok, L} ->
+        {ok, ok, NonLocalLeader} ->
             rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
-                               [Cmd, Leader, L]),
-            {error, ra_command_failed};
+                               [Cmd, Leader, NonLocalLeader]),
+            {error, non_local_leader};
         Err ->
             rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",
