@@ -11,15 +11,34 @@ To run the tests we need:
 
 All test cases and their configuration files are under the `test` folder and grouped into subfolders based on the area of functionality they are testing. For instance, under `oauth` folder, we have test cases about OAuth 2.0.
 Furthermore, within an area of functionality like OAuth 2.0 we want to test under different configuration.
-For instance under `test/oauth/with-uaa` we group all test cases which run against UAA. Whereas
-under `test/oauth/with-uaa-down` we group all test cases which run against a UAA which is down.
+For instance under `test/oauth/with-sp-initiated` we group all test cases which run against an Authorization server via the Authorization Code Flow. Whereas under `test/oauth/with-idp-down` we group all test cases which run against an Authorization server which is down.
 
-And under `suites` folder we have the test suites where we literally script the following:
-  - the suite's **setup**, e.g. start RabbitMQ and UAA with a specific configuration
-  - the path to the test cases
-  - the path to the test case configuration
-  - the suite's **teardown**, e.g. stop RabbitMQ and UAA
-  - and save all logs and screen captures if any
+And under `suites` folder we have the test suites. A test suite is a script which executes all test cases
+under a folder and using a given configuration and launching a number of components the test suite depends on.
+
+Some test cases only depend on RabbitMQ such as the `basic-auth.sh`. In this test suite, we specify the location of the test case relative to the `test` folder.
+And we call the function `run`. We always have to source the file under `bin/suite_template`.
+
+```
+TEST_CASES_PATH=/basic-auth
+
+source $SCRIPT/../bin/suite_template
+run
+````
+
+When our test suite requires of other components such as UAA, we use the function call `runWith` as we see below for the test case `oauth-with-uaa.sh`. In this test case, in addition to declaring the location of the test case, we also specify the location of the configuration files required to launch the components this suite
+depends on. We also specify which profiles are activated which in turn defines the settings and configuration files used in the suite. And said earlier, the suite runs via the function `runWith` specifying the components that should be started and stopped and its logs captured too.
+
+```
+TEST_CASES_PATH=/oauth/with-sp-initiated
+TEST_CONFIG_PATH=/oauth
+PROFILES="uaa uaa-oauth-provider"
+
+source $SCRIPT/../bin/suite_template
+runWith uaa
+
+```
+
 
 # How to run the tests
 

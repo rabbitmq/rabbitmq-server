@@ -17,7 +17,7 @@ describe('A user which accesses any protected URL without a session', function (
   })
 
   it('should be presented with a login button to log in', async function () {
-    await homePage.isLoaded()
+    await homePage.isLoaded()    
     const value = await homePage.getLoginButton()
     assert.equal(value, 'Click here to log in')
   })
