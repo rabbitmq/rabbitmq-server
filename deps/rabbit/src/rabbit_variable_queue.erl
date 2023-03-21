@@ -492,9 +492,8 @@ process_recovery_terms(Terms) ->
 
 queue_version(Q) ->
     Resolve = fun(_, ArgVal) -> ArgVal end,
-    %% If queue-version is undefined, we assume v2 starting with RabbitMQ 3.12.0.
     case rabbit_queue_type_util:args_policy_lookup(<<"queue-version">>, Resolve, Q) of
-        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 2);
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
         Vsn when is_integer(Vsn) -> Vsn;
         Vsn -> binary_to_integer(Vsn)
     end.
