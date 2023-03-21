@@ -2,7 +2,7 @@ const fs = require('fs')
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 const fsp = fs.promises
 const path = require('path')
-const { By, Key, until, Builder } = require('selenium-webdriver')
+const { By, Key, until, Builder, logging } = require('selenium-webdriver')
 require('chromedriver')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
@@ -82,6 +82,11 @@ module.exports = {
   },
 
   teardown: async (driver, test, captureScreen = null) => {
+    driver.manage().logs().get(logging.Type.BROWSER).then(function(entries) {
+        entries.forEach(function(entry) {
+          console.log('[%s] %s', entry.level.name, entry.message);
+        })
+     })
     if (test.currentTest) {
       if (test.currentTest.isPassed()) {
         driver.executeScript('lambda-status=passed')
