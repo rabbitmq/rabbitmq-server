@@ -4,10 +4,12 @@ SHELL = bash# we depend on bash expansion for e.g. queue patterns
 .DEFAULT_GOAL = help
 RABBITMQ_SERVER_ROOT = ../../../../../
 SCREENSHOTS_DIR = ${PWD}/../../screens
-RABBITMQ_CONFIG_FILE = rabbitmq-localhost.config
+RABBITMQ_CONFIG_FILES ?= rabbitmq.tmpl.conf
 
 username := rabbit_admin
 password := rabbit_admin
+
+
 
 ### TARGETS ###
 
@@ -16,12 +18,22 @@ help:
 
 start-rabbitmq: ## Start RabbitMQ
 	@(docker kill rabbitmq >/dev/null 2>&1  && docker rm rabbitmq)
+	@(mkdir -p /tmp/rabbitmq)
+	@(../gen-env-file ${PWD} /tmp/rabbitmq/.env)
+	@(../template-config ${PWD} /tmp/rabbitmq/.env ${RABBITMQ_CONFIG_FILES} /tmp/rabbitmq/generated.conf)
+	@(echo "Templated ${RABBITMQ_CONFIG_FILES} into /tmp/rabbitmq/generated.conf ")
 	@(gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
 		RABBITMQ_ENABLED_PLUGINS="rabbitmq_auth_backend_oauth2,rabbitmq_management" \
-		RABBITMQ_CONFIG_FILE=deps/rabbitmq_management/selenium/test/oauth/${RABBITMQ_CONFIG_FILE})
+		RABBITMQ_CONFIG_FILE="/tmp/rabbitmq/generated.conf")
 
 start-uaa: ## Start UAA
-	@(UAA_CONFIG=${PWD}/uaa-localhost ./start-uaa.sh)
+	@(echo "Templating ...")
+	@(mkdir -p /tmp/rabbitmq)
+	@(../gen-env-file ${PWD} /tmp/rabbitmq/.env)
+	@(../template-config ${PWD} /tmp/rabbitmq/.env uaa/uaa.tmpl.yml uaa/uaa.yml)
+	@(echo "Templated uaa/uaa.tmpl.yml into uaa/uaa.yml ")
+	@(UAA_CONFIG=${PWD}/uaa ./start-uaa.sh)
+
 stop-uaa: ## Stop UAA
 	@(./stop-uaa.sh)
 
