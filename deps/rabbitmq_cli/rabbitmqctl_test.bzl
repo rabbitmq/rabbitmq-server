@@ -54,6 +54,11 @@ def _impl(ctx):
         ctx.label.package,
     )
 
+    precompiled_deps = " ".join([
+        dep[ErlangAppInfo].app_name
+        for dep in ctx.attr.deps
+    ])
+
     if not ctx.attr.is_windows:
         output = ctx.actions.declare_file(ctx.label.name)
         script = """set -euo pipefail
@@ -94,9 +99,11 @@ export ERL_COMPILER_OPTIONS=deterministic
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
-if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
-    cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
-fi
+for d in {precompiled_deps}; do
+    mkdir _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/ebin _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/include _build/${{MIX_ENV}}/lib/$d
+done
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
 
@@ -131,6 +138,7 @@ set -x
             elixir_home = elixir_home,
             package_dir = package_dir,
             deps_dir = deps_dir,
+            precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
     else:
@@ -162,6 +170,11 @@ set MIX_ENV=test
 echo y | "{elixir_home}\\bin\\mix" local.hex --force || goto :error
 echo y | "{elixir_home}\\bin\\mix" local.rebar --force || goto :error
 "{elixir_home}\\bin\\mix" deps.get || goto :error
+for %%d in ({precompiled_deps}) do (
+    mkdir _build\\%MIX_ENV%\\lib\\%%d
+    robocopy %DEPS_DIR%\\%%d\\ebin _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
+    robocopy %DEPS_DIR%\\%%d\\include _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
+)
 "{elixir_home}\\bin\\mix" deps.compile || goto :error
 "{elixir_home}\\bin\\mix" compile || goto :error
 
@@ -179,6 +192,7 @@ exit /b 1
             elixir_home = windows_path(elixir_home),
             package_dir = windows_path(ctx.label.package),
             deps_dir = deps_dir,
+            precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
 
