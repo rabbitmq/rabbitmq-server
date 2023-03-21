@@ -393,27 +393,27 @@ process_request(?SUBSCRIBE,
                 #mqtt_packet{
                    variable = #mqtt_packet_subscribe{
                                  packet_id  = SubscribePktId,
-                                 topics = Topics},
+                                 subscriptions = Subscriptions},
                    payload = undefined},
                 #state{cfg = #cfg{retainer_pid = RPid}} = State0) ->
-    ?LOG_DEBUG("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
+    ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
     {ReasonCodes, State1} =
     lists:foldl(
-      fun(_Topic, {[?SUBACK_FAILURE | _] = L, S}) ->
+      fun(_Subscription, {[?SUBACK_FAILURE | _] = L, S}) ->
               %% Once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
               {[?SUBACK_FAILURE | L], S};
-         (#mqtt_topic{filter = TopicName,
-                      qos = TopicQos},
+         (#mqtt_subscription{topic_filter = Topic,
+                             qos = TopicQos},
           {L, S0}) ->
               QoS = maybe_downgrade_qos(TopicQos),
               maybe
-                  ok ?= maybe_replace_old_sub(TopicName, QoS, S0),
+                  ok ?= maybe_replace_old_sub(Topic, QoS, S0),
                   {ok, Q} ?= ensure_queue(QoS, S0),
                   QName = amqqueue:get_name(Q),
-                  ok ?= bind(QName, TopicName, S0),
-                  Subs = maps:put(TopicName, QoS, S0#state.subscriptions),
+                  ok ?= bind(QName, Topic, S0),
+                  Subs = maps:put(Topic, QoS, S0#state.subscriptions),
                   S1 = S0#state{subscriptions = Subs},
                   maybe_increment_consumer(S0, S1),
                   case self_consumes(Q) of
@@ -430,7 +430,7 @@ process_request(?SUBSCRIBE,
               else
                   {error, _} -> {[?SUBACK_FAILURE | L], S0}
               end
-      end, {[], State0}, Topics),
+      end, {[], State0}, Subscriptions),
     Reply = #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
                          variable = #mqtt_packet_suback{
                                        packet_id = SubscribePktId,
@@ -440,15 +440,15 @@ process_request(?SUBSCRIBE,
         [?SUBACK_FAILURE | _] ->
             {error, subscribe_error, State1};
         _ ->
-            State = lists:foldl(fun(Topic, S) ->
-                                        maybe_send_retained_message(RPid, Topic, S)
-                                end, State1, Topics),
+            State = lists:foldl(fun(Sub, S) ->
+                                        maybe_send_retained_message(RPid, Sub, S)
+                                end, State1, Subscriptions),
             {ok, State}
     end;
 
 process_request(?UNSUBSCRIBE,
                 #mqtt_packet{variable = #mqtt_packet_unsubscribe{packet_id  = PacketId,
-                                                                 topics = Topics},
+                                                                 topic_filters = Topics},
                              payload = undefined},
                 State0) ->
     ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
@@ -800,7 +800,8 @@ hand_off_to_retainer(RetainerPid, Topic0, Msg = #mqtt_msg{payload = Payload}) ->
            rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg)
     end.
 
-maybe_send_retained_message(RPid, #mqtt_topic{filter = Topic0, qos = SubscribeQos},
+maybe_send_retained_message(RPid, #mqtt_subscription{topic_filter = Topic0,
+                                                     qos = SubscribeQos},
                             State0 = #state{packet_id = PacketId0}) ->
     Topic = amqp_to_mqtt(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic) of

@@ -184,16 +184,17 @@
                              props = #{} :: properties()
                             }).
 
--record(mqtt_topic, {filter :: binary(),
-                     qos :: qos(),
-                     no_local :: boolean(),
-                     retain_as_published :: boolean(),
-                     retain_handling :: 0..2
-                    }).
+-record(mqtt_subscription, {topic_filter :: binary(),
+                            %% subscription options
+                            qos :: qos(), % maximum QoS
+                            no_local :: boolean(),
+                            retain_as_published :: boolean(),
+                            retain_handling :: 0..2
+                           }).
 
 -record(mqtt_packet_subscribe, {packet_id :: packet_id(),
                                 props :: properties(),
-                                topics :: [#mqtt_topic{}, ...]
+                                subscriptions :: [#mqtt_subscription{}, ...]
                                }).
 
 -record(mqtt_packet_suback, {packet_id :: packet_id(),
@@ -203,7 +204,7 @@
 
 -record(mqtt_packet_unsubscribe, {packet_id :: packet_id(),
                                   props :: properties(),
-                                  topics :: [binary(), ...]
+                                  topic_filters :: [binary(), ...]
                                  }).
 
 -record(mqtt_packet_unsuback, {packet_id :: packet_id(),
