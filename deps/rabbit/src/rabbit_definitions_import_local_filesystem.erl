@@ -50,6 +50,7 @@ load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
         Path      ->
+<<<<<<< HEAD
             rabbit_log:debug("Asked to import definitions from a local file or directory at '~s'", [Path]),
             case file:read_file_info(Path, [raw]) of
                 {ok, FileInfo} ->
@@ -65,6 +66,15 @@ load(Proplist) when is_list(Proplist) ->
                 _ ->
                     Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
                     {error, {could_not_read_defs, Msg}}
+=======
+            rabbit_log:debug("Asked to import definitions from a local file or directory at '~ts'", [Path]),
+            IsDir = filelib:is_dir(Path),
+            case IsDir of
+                true ->
+                    load_from_local_path(true, Path);
+                false ->
+                    load_from_single_file(Path)
+>>>>>>> 975dced74c (Closes #7685)
             end
     end;
 load(Map) when is_map(Map) ->
@@ -112,6 +122,7 @@ load_from_local_path(true, Dir) ->
     rabbit_log:info("Applying definitions from directory ~s", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
 load_from_local_path(false, File) ->
+    rabbit_log:info("Applying definitions from regular file at ~ts", [File]),
     load_from_single_file(File).
 
 %%
@@ -206,6 +217,7 @@ load_from_multiple_files([File|Rest]) ->
     end.
 
 load_from_single_file(Path) ->
+<<<<<<< HEAD
     rabbit_log:debug("Will try to load definitions from a local file or directory at '~s'", [Path]),
     case rabbit_misc:raw_read_file(Path) of
         {ok, Body} ->
@@ -214,4 +226,29 @@ load_from_single_file(Path) ->
         {error, E} ->
             rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
             {error, {could_not_read_defs, {Path, E}}}
+=======
+    rabbit_log:debug("Will try to load definitions from a local file or directory at '~ts'", [Path]),
+
+    case file:read_file_info(Path, [raw]) of
+        {ok, FileInfo} ->
+            %% same check is used by Cuttlefish validation, this is to be extra defensive
+            IsReadable = (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write),
+            case IsReadable of
+                true ->
+                    case rabbit_misc:raw_read_file(Path) of
+                        {ok, Body} ->
+                            rabbit_log:info("Applying definitions from file at '~ts'", [Path]),
+                            import_raw(Body);
+                        {error, E} ->
+                            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
+                            {error, {could_not_read_defs, {Path, E}}}
+                    end;
+                false ->
+                    Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
+                    {error, Msg}
+            end;
+        _ ->
+            Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
+            {error, {could_not_read_defs, Msg}}
+>>>>>>> 975dced74c (Closes #7685)
     end.
