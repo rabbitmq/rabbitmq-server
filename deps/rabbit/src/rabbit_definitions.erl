@@ -268,19 +268,11 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
 
             case should_skip_if_unchanged() of
                 false ->
-<<<<<<< HEAD
-                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
-                    Mod:load(IsDir, Path);
-                true ->
-                    Algo = rabbit_definitions_hashing:hashing_algorithm(),
-                    rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory has changed, hashing algo: ~s)", [Mod, Algo]),
-=======
                     rabbit_log:debug("Will re-import definitions even if they have not changed"),
                     Mod:load(IsDir, Path);
                 true ->
                     Algo = rabbit_definitions_hashing:hashing_algorithm(),
                     rabbit_log:debug("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
->>>>>>> 975dced74c (Closes #7685)
                     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
                     rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
