@@ -264,14 +264,15 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
         {ok, Path} ->
             IsDir = filelib:is_dir(Path),
             Mod = rabbit_definitions_import_local_filesystem,
+            rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
 
             case should_skip_if_unchanged() of
                 false ->
-                    rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
+                    rabbit_log:debug("Will re-import definitions even if they have not changed"),
                     Mod:load(IsDir, Path);
                 true ->
                     Algo = rabbit_definitions_hashing:hashing_algorithm(),
-                    rabbit_log:debug("Will use module ~ts to import definitions (if definition file/directory has changed, hashing algo: ~ts)", [Mod, Algo]),
+                    rabbit_log:debug("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
                     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
                     rabbit_log:debug("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
