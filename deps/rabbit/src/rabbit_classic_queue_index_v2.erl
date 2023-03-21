@@ -205,8 +205,7 @@ init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
 
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
-    ok = filelib:ensure_dir(QueueNameFile),
-    ok = file:write_file(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
+    ok = write_file_and_ensure_dir(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
                                           "QUEUE: ", QName/binary, "\n",
                                           "INDEX: v2\n">>).
 
@@ -1292,3 +1291,14 @@ highest_continuous_seq_id([SeqId1, SeqId2|Tail], EndSeqId)
     highest_continuous_seq_id([SeqId2|Tail], EndSeqId);
 highest_continuous_seq_id([SeqId|Tail], _) ->
     {SeqId, Tail}.
+
+write_file_and_ensure_dir(Name, IOData) ->
+    case file:write_file(Name, IOData, [raw]) of
+        ok -> ok;
+        {error, enoent} ->
+            case filelib:ensure_dir(Name) of
+                ok -> file:write_file(Name, IOData, [raw]);
+                Err -> Err
+            end;
+         Err -> Err
+    end.
