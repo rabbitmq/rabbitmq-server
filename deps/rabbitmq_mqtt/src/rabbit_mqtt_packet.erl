@@ -131,15 +131,16 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "SUBSCRIBE messages use QoS level 1 to acknowledge multiple subscription requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer),
-            Topics = [#mqtt_topic{filter = Topic,
-                                  qos = QoS,
-                                  no_local = int_to_bool(Nl),
-                                  retain_as_published = int_to_bool(Rap),
-                                  retain_handling = Rh} ||
-                      <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
+            Subscriptions = [#mqtt_subscription{
+                                topic_filter = Topic,
+                                qos = QoS,
+                                no_local = int_to_bool(Nl),
+                                retain_as_published = int_to_bool(Rap),
+                                retain_handling = Rh} ||
+                             <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
-                                               topics = Topics},
+                                               subscriptions = Subscriptions},
             wrap(Fixed, Subscribe, Rest, ProtoVer);
         {?UNSUBSCRIBE, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
@@ -148,7 +149,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
-                                                   topics = Topics},
+                                                   topic_filters = Topics},
             wrap(Fixed, Unsubscribe, Rest, ProtoVer);
         {?PINGREQ, Rest} ->
             0 = Length,
