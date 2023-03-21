@@ -1,7 +1,6 @@
 = RabbitMQ Streams Protocol Reference
 
-This is the reference of the RabbitMQ Streams protocol. Note the protocol
-is still under development and is subject to change.
+This is the reference of the RabbitMQ Streams protocol.
 
 The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ Stream Java client]
 is currently the reference implementation.
