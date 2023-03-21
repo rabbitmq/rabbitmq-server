@@ -470,7 +470,7 @@ handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
 handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
-    case lists:member(Node, rabbit_nodes:list_reachable()) andalso
+    case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
         maps:find(Node, GUIDs) =:= {ok, NodeGUID} of
         true  -> spawn_link( %%[1]
                    fun () ->
@@ -623,7 +623,7 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
     _ = case maps:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = rabbit_nodes:list_reachable()
+        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
                               -- [node(), Node],
                           [case maps:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
