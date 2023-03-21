@@ -21,6 +21,8 @@ app.get('/', function(req, res){
     access_token: access_token(id, secret)
   });
 });
+app.get('/favicon.ico', (req, res) => res.status(204));
+
 
 app.listen(3000);
 console.log('Express started on port 3000');
