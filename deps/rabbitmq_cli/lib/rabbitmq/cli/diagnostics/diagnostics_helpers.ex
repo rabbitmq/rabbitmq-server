@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     check_port_connectivity(port, node_name, hostname, timeout)
   end
 
-  def check_port_connectivity(port, node_name, hostname_or_ip, timeout) do
+  def check_port_connectivity(port, _node_name, hostname_or_ip, timeout) do
     try do
       IO.puts("Will connect to #{hostname_or_ip}:#{port}")
 
