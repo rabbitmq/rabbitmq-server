@@ -1056,14 +1056,13 @@ recover() ->
 -spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
-    NoDefsToImport = not rabbit_definitions:has_configured_definitions_to_load(),
-    case rabbit_table:needs_default_data() andalso NoDefsToImport of
+    case rabbit_table:needs_default_data() of
         true  ->
             ?LOG_INFO("Will seed default virtual host and user...",
                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             insert_default_data();
         false ->
-            ?LOG_INFO("Will not seed default virtual host and user: have definitions to load...",
+            ?LOG_INFO("Will NOT seed default virtual host and user...",
                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok
     end.
