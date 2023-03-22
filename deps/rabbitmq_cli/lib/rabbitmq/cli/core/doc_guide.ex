@@ -62,6 +62,6 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("runtime_tuning", path_segment: "runtime")
   Macros.defguide("tls", path_segment: "ssl")
   Macros.defguide("troubleshooting")
-  Macros.defguide("virtual_hosts", path_segments: "vhosts")
+  Macros.defguide("virtual_hosts", path_segment: "vhosts")
   Macros.defguide("upgrade")
 end
