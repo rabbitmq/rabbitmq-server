@@ -87,7 +87,7 @@
          %% (Not to be confused with packet IDs sent from client to server which can be the
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
-         subscriptions = #{} :: #{Topic :: binary() => QoS :: ?QOS_0..?QOS_1},
+         subscriptions = #{} :: #{TopicFilter :: binary() => QoS :: ?QOS_0..?QOS_1},
          auth_state = #auth_state{},
          ra_register_state :: option(registered | {pending, reference()}),
          %% quorum queues and streams whose soft limit has been exceeded
@@ -532,11 +532,11 @@ process_request(?DISCONNECT,
 -spec maybe_update_session_expiry_interval(amqqueue:amqqueue(), session_expiry_interval()) -> ok.
 maybe_update_session_expiry_interval(Queue, Expiry) ->
     OldExpiry = case rabbit_misc:table_lookup(amqqueue:get_arguments(Queue), ?QUEUE_TTL_KEY) of
-                undefined ->
-                    infinity;
-                {long, Millis} ->
-                    Millis div 1000
-            end,
+                    undefined ->
+                        infinity;
+                    {long, Millis} ->
+                        Millis div 1000
+                end,
     case OldExpiry of
         Expiry ->
             ok;
