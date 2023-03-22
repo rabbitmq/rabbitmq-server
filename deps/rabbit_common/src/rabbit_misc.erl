@@ -135,7 +135,7 @@
         (any(), any(), rabbit_types:r(any()), atom() | binary()) ->
             rabbit_types:connection_exit().
 -spec table_lookup(rabbit_framing:amqp_table(), binary()) ->
-          'undefined' | {rabbit_framing:amqp_field_type(), any()}.
+    'undefined' | {rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value()}.
 -spec set_table_value
         (rabbit_framing:amqp_table(), binary(), rabbit_framing:amqp_field_type(),
          rabbit_framing:amqp_value()) ->
@@ -349,8 +349,8 @@ val(Value) ->
 
 table_lookup(Table, Key) ->
     case lists:keysearch(Key, 1, Table) of
-        {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
-        false                           -> undefined
+        {value, {_, Type, Value}} -> {Type, Value};
+        false -> undefined
     end.
 
 set_table_value(Table, Key, Type, Value) ->
