@@ -57,6 +57,8 @@ cluster_size_1_tests() ->
      session_expiry_interval_disconnect_non_zero_to_zero,
      session_expiry_interval_disconnect_infinity_to_zero,
      session_expiry_interval_disconnect_to_infinity,
+     session_expiry_interval_reconnect_non_zero,
+     session_expiry_interval_reconnect_zero,
      client_publish_qos2,
      client_rejects_publish,
      will_qos2
@@ -299,9 +301,7 @@ session_expiry_interval_disconnect_decrease(QueueType, Config) ->
 
     %% DISCONNECT decreases Session Expiry Interval from 100 seconds to 1 second.
     ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 1}),
-    [Q2] = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual({long, 1_000},
-                 rabbit_misc:table_lookup(amqqueue:get_arguments(Q2), ?QUEUE_TTL_KEY)),
+    assert_queue_ttl(1, 1, Config),
 
     timer:sleep(1500),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
@@ -348,11 +348,7 @@ session_expiry_interval_disconnect_infinity_to_zero(Config) ->
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}}]),
     {ok, _, [1, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, qos1},
                                            {<<"t/0">>, qos0}]),
-    Qs = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual(2, length(Qs)),
-    ?assertNot(lists:any(fun(Q) ->
-                                 proplists:is_defined(?QUEUE_TTL_KEY, amqqueue:get_arguments(Q))
-                         end, Qs)),
+    assert_no_queue_ttl(2, Config),
 
     ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 0}),
     eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))),
@@ -369,25 +365,48 @@ session_expiry_interval_disconnect_to_infinity(Config) ->
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 1}}]),
     {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
                                            {<<"t/1">>, qos1}]),
-    Qs1 = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual(2, length(Qs1)),
-    ?assert(lists:all(fun(Q) ->
-                              {long, 1000} =:= rabbit_misc:table_lookup(
-                                                 amqqueue:get_arguments(Q), ?QUEUE_TTL_KEY)
-                      end, Qs1)),
+    assert_queue_ttl(1, 2, Config),
 
     %% Disconnect with infinity should remove queue TTL from both queues.
     ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 16#FFFFFFFF}),
     timer:sleep(100),
-    Qs2 = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual(2, length(Qs2)),
-    ?assertNot(lists:any(fun(Q) ->
-                                 proplists:is_defined(?QUEUE_TTL_KEY, amqqueue:get_arguments(Q))
-                         end, Qs2)),
+    assert_no_queue_ttl(2, Config),
 
     C2 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C2),
     ok = rpc(Config, application, set_env, [App, Par, Default]).
+
+session_expiry_interval_reconnect_non_zero(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
+    {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
+                                           {<<"t/1">>, qos1}]),
+    assert_queue_ttl(60, 2, Config),
+    ok = emqtt:disconnect(C1),
+
+    C2 = connect(ClientId, Config, [{clean_start, false},
+                                    {properties, #{'Session-Expiry-Interval' => 1}}]),
+    ?assertEqual({session_present, 1},
+                 proplists:lookup(session_present, emqtt:info(C2))),
+    assert_queue_ttl(1, 2, Config),
+    ok = emqtt:disconnect(C2),
+    C3 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C3).
+
+session_expiry_interval_reconnect_zero(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
+    {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
+                                           {<<"t/1">>, qos1}]),
+    assert_queue_ttl(60, 2, Config),
+    ok = emqtt:disconnect(C1),
+
+    C2 = connect(ClientId, Config, [{clean_start, false},
+                                    {properties, #{'Session-Expiry-Interval' => 0}}]),
+    ?assertEqual({session_present, 1},
+                 proplists:lookup(session_present, emqtt:info(C2))),
+    assert_queue_ttl(0, 2, Config),
+    ok = emqtt:disconnect(C2).
 
 client_publish_qos2(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
@@ -426,6 +445,25 @@ will_qos2(Config) ->
     {C, Connect} = start_client(ClientId, Config, 0, Opts),
     unlink(C),
     ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
+
+%% -------------------------------------------------------------------
+%% Helpers
+%% -------------------------------------------------------------------
+
+assert_no_queue_ttl(NumQ, Config) ->
+    Qs = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(NumQ, length(Qs)),
+    ?assertNot(lists:any(fun(Q) ->
+                                 proplists:is_defined(?QUEUE_TTL_KEY, amqqueue:get_arguments(Q))
+                         end, Qs)).
+
+assert_queue_ttl(TTL, NumQ, Config) ->
+    Qs = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(NumQ, length(Qs)),
+    ?assert(lists:all(fun(Q) ->
+                              {long, timer:seconds(TTL)} =:= rabbit_misc:table_lookup(
+                                                 amqqueue:get_arguments(Q), ?QUEUE_TTL_KEY)
+                      end, Qs)).
 
 dead_letter_metric(Metric, Config) ->
     Counters = rpc(Config, rabbit_global_counters, overview, []),

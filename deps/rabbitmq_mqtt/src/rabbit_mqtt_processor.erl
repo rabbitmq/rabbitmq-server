@@ -529,6 +529,21 @@ process_request(?DISCONNECT,
     end,
     {stop, {disconnect, client_initiated}, State}.
 
+-spec maybe_update_session_expiry_interval(amqqueue:amqqueue(), session_expiry_interval()) -> ok.
+maybe_update_session_expiry_interval(Queue, Expiry) ->
+    OldExpiry = case rabbit_misc:table_lookup(amqqueue:get_arguments(Queue), ?QUEUE_TTL_KEY) of
+                undefined ->
+                    infinity;
+                {long, Millis} ->
+                    Millis div 1000
+            end,
+    case OldExpiry of
+        Expiry ->
+            ok;
+        _ ->
+            update_session_expiry_interval(amqqueue:get_name(Queue), Expiry)
+    end.
+
 -spec update_session_expiry_interval(rabbit_amqqueue:name(), session_expiry_interval()) -> ok.
 update_session_expiry_interval(QName, Expiry) ->
     Fun = fun(Q) ->
@@ -692,16 +707,16 @@ handle_clean_start(
             end
     end;
 handle_clean_start(SessPresent, QoS,
-                   State0 = #state{cfg = #cfg{clean_start = false}}) ->
+                   State0 = #state{cfg = #cfg{clean_start = false,
+                                              session_expiry_interval_secs = Expiry}}) ->
     case get_queue(QoS, State0) of
         {error, _} ->
             %% Queue will be created later when client subscribes.
             {ok, SessPresent, State0};
         {ok, Q} ->
-            %%TODO modify Queue TTL if Session-Expiry-Interval is different
-            %% see update_session_expiry_interval/2
             case consume(Q, QoS, State0) of
                 {ok, State} ->
+                    maybe_update_session_expiry_interval(Q, Expiry),
                     {ok, _SessionPresent = true, State};
                 {error, access_refused} ->
                     {error, ?RC_NOT_AUTHORIZED};
