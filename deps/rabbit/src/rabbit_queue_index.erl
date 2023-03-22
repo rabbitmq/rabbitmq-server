@@ -333,8 +333,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
 
 terminate(VHost, Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    _ = rabbit_recovery_terms:store(VHost, filename:basename(Dir),
-                                    [{segments, SegmentCounts} | Terms]),
+    _ = rabbit_recovery_terms:store(VHost, Dir, [{segments, SegmentCounts} | Terms]),
     State1.
 
 -spec delete_and_terminate(qistate()) -> qistate().
@@ -537,25 +536,28 @@ bounds(State = #qistate { segments = Segments }) ->
 
 start(VHost, DurableQueueNames) ->
     ok = rabbit_recovery_terms:start(VHost),
+    QueuesFolder = filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues"]),
     {DurableTerms, DurableDirectories} =
-        lists:foldl(
-          fun(QName, {RecoveryTerms, ValidDirectories}) ->
-                  DirName = queue_name_to_dir_name(QName),
-                  RecoveryInfo = case rabbit_recovery_terms:read(VHost, DirName) of
-                                     {error, _}  -> non_clean_shutdown;
-                                     {ok, Terms} -> Terms
-                                 end,
-                  {[RecoveryInfo | RecoveryTerms],
-                   sets:add_element(DirName, ValidDirectories)}
-          end, {[], sets:new()}, DurableQueueNames),
+    lists:foldl(
+      fun(QName, {RecoveryTerms, ValidDirectories}) ->
+              DirName = queue_name_to_dir_name(QName),
+              QueueDir = filename:join([QueuesFolder, DirName]),
+              RecoveryInfo = case rabbit_recovery_terms:read(VHost, QueueDir) of
+                                 {ok, Terms} -> Terms;
+                                 {error, _}  -> non_clean_shutdown
+                             end,
+              {[RecoveryInfo | RecoveryTerms],
+               sets:add_element(DirName, ValidDirectories)}
+      end, {[], sets:new()}, DurableQueueNames),
     %% Any queue directory we've not been asked to recover is considered garbage
-    ToDelete = [filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues", Dir])
-                || Dir <- lists:subtract(all_queue_directory_names(VHost),
-                                         sets:to_list(DurableDirectories))],
-    rabbit_log:debug("Deleting unknown files/folders: ~p", [ToDelete]),
-    _ = rabbit_file:recursive_delete(ToDelete),
-
-    rabbit_recovery_terms:clear(VHost),
+    _ = case [filename:join([QueuesFolder, Dir])
+          || Dir <- lists:subtract(all_queue_directory_names(VHost),
+                                   sets:to_list(DurableDirectories))] of
+        [] -> ok;
+        ToDelete ->
+            rabbit_log:debug("Deleting unknown files/folders: ~p", [ToDelete]),
+            _ = rabbit_file:recursive_delete(ToDelete)
+    end,
 
     %% The backing queue interface requires that the queue recovery terms
     %% which come back from start/1 are in the same order as DurableQueueNames
@@ -796,7 +798,7 @@ recover_message( true, false,    del, _RelSeq, SegmentAndDirtyCount, _MaxJournal
     SegmentAndDirtyCount;
 recover_message( true, false, no_del,  RelSeq, {Segment, _DirtyCount}, MaxJournal) ->
     %% force to flush the segment
-    {add_to_journal(RelSeq, del, Segment), MaxJournal + 1}; 
+    {add_to_journal(RelSeq, del, Segment), MaxJournal + 1};
 recover_message(false,     _,    del,  RelSeq, {Segment, DirtyCount}, _MaxJournal) ->
     {add_to_journal(RelSeq, ack, Segment), DirtyCount + 1};
 recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}, _MaxJournal) ->

@@ -61,12 +61,23 @@ stop(VHost) ->
 
 -spec store(rabbit_types:vhost(), file:filename(), term()) -> rabbit_types:ok_or_error(term()).
 
-store(VHost, DirBaseName, Terms) ->
-    dets:insert(VHost, {DirBaseName, Terms}).
+store(_VHost, QueueDir, Terms) ->
+    RecoveryFile = filename:join([QueueDir, ".recovery"]),
+    _ = rabbit_file:write_file_and_ensure_dir(RecoveryFile, term_to_iovec(Terms)).
 
 -spec read(rabbit_types:vhost(), file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
 
-read(VHost, DirBaseName) ->
+read(VHost, QueueDir) ->
+    RecoveryFile = filename:join([rabbit_vhost:msg_store_dir_path(VHost), QueueDir, ".recovery"]),
+    case file:read_file(RecoveryFile) of
+        {ok, TermsBin} ->
+            _ = prim_file:delete(RecoveryFile),
+            {ok, binary_to_term(TermsBin)};
+        {error, _} ->
+            read_legacy(VHost, QueueDir)
+    end.
+
+read_legacy(VHost, DirBaseName) ->
     case dets:lookup(VHost, DirBaseName) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}

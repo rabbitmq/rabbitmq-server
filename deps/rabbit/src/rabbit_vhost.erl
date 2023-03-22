@@ -56,7 +56,7 @@ recover(VHost) ->
     rabbit_log:info("Making sure data directory '~ts' for vhost '~ts' exists",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
-    ok = rabbit_file:ensure_dir(VHostStubFile),
+    ok = filelib:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
     ok = ensure_config_file(VHost),
     {Recovered, Failed} = rabbit_amqqueue:recover(VHost),

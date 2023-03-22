@@ -1589,7 +1589,7 @@ variable_queue_read_terms(QName) ->
                 virtual_host = VHost,
                 name = Name } = QName,
     <<Num:128>> = erlang:md5(<<"queue", VHost/binary, Name/binary>>),
-    DirName = rabbit_misc:format("~.36B", [Num]),
+    DirName = filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues", rabbit_misc:format("~.36B", [Num])]),
     {ok, Terms} = rabbit_recovery_terms:read(VHost, DirName),
     Terms.
 

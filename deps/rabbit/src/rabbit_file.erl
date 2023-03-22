@@ -17,6 +17,7 @@
 -export([read_file_info/1]).
 -export([filename_as_a_directory/1]).
 -export([filename_to_binary/1, binary_to_filename/1]).
+-export([write_file_and_ensure_dir/2]).
 
 -import(file_handle_cache, [with_handle/1, with_handle/2]).
 
@@ -348,4 +349,19 @@ binary_to_filename(Bin) when is_binary(Bin) ->
             Name;
         Other ->
             erlang:error(Other)
+    end.
+
+%% Try to write a file and if it fails, ensure_dir and try again.
+%% This is an optimisation since ensuring dir takes time and often
+%% we can assume the folder exists already.
+-spec write_file_and_ensure_dir(file:filename(), iodata()) -> ok_or_error().
+write_file_and_ensure_dir(Name, IOData) ->
+    case file:write_file(Name, IOData, [raw]) of
+        ok -> ok;
+        {error, enoent} ->
+            case filelib:ensure_dir(Name) of
+                ok -> file:write_file(Name, IOData, [raw]);
+                Err -> Err
+            end;
+         Err -> Err
     end.

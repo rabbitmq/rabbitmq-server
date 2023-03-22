@@ -205,9 +205,10 @@ init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
 
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
-    ok = write_file_and_ensure_dir(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
-                                          "QUEUE: ", QName/binary, "\n",
-                                          "INDEX: v2\n">>).
+    ok = rabbit_file:write_file_and_ensure_dir(QueueNameFile,
+                                               <<"VHOST: ", VHost/binary, "\n",
+                                                 "QUEUE: ", QName/binary, "\n",
+                                                 "INDEX: v2\n">>).
 
 -spec reset_state(State) -> State when State::state().
 
@@ -542,7 +543,7 @@ terminate(VHost, Terms, State0 = #qi { dir = Dir,
     file_handle_cache:release_reservation(),
     %% Write recovery terms for faster recovery.
     _ = rabbit_recovery_terms:store(VHost,
-                                filename:basename(rabbit_file:binary_to_filename(Dir)),
+                                rabbit_file:binary_to_filename(Dir),
                                 [{v2_index_state, {?VERSION, Segments}} | Terms]),
     State#qi{ segments = #{},
               fds = #{} }.
@@ -1291,14 +1292,3 @@ highest_continuous_seq_id([SeqId1, SeqId2|Tail], EndSeqId)
     highest_continuous_seq_id([SeqId2|Tail], EndSeqId);
 highest_continuous_seq_id([SeqId|Tail], _) ->
     {SeqId, Tail}.
-
-write_file_and_ensure_dir(Name, IOData) ->
-    case file:write_file(Name, IOData, [raw]) of
-        ok -> ok;
-        {error, enoent} ->
-            case filelib:ensure_dir(Name) of
-                ok -> file:write_file(Name, IOData, [raw]);
-                Err -> Err
-            end;
-         Err -> Err
-    end.
