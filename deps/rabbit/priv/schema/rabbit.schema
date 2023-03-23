@@ -2088,6 +2088,32 @@ end}.
     {datatype, integer}
 ]}.
 
+%%
+%% Feature flags and deprecated features
+%% =====================================
+%%
+
+%% NOTE: `true` is intentionally omitted - add it back when mirrored
+%% queue deprecation is converted to use deprecated features system.
+{mapping,
+ "permit_deprecated_features.$name", "rabbit.permit_deprecated_features",
+    [{datatype, {enum, [false]}}]
+}.
+
+%% This converts:
+%%     permit_deprecated_features.my_feature = true
+%% to:
+%%     {rabbit, [{permit_deprecated_features, #{my_feature => true}}]}.
+{translation, "rabbit.permit_deprecated_features",
+ fun(Conf) ->
+         Settings = cuttlefish_variable:filter_by_prefix(
+                      "permit_deprecated_features", Conf),
+         maps:from_list(
+           [{list_to_atom(FeatureName), State}
+            || {["permit_deprecated_features", FeatureName], State}
+               <- Settings])
+ end}.
+
 % ==========================
 % Kernel section
 % ==========================

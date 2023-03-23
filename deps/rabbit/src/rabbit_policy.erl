@@ -41,7 +41,7 @@
 -export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1, list_op/2,
          list_formatted_op/1, list_formatted_op/3,
          match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
-         list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/1
+         list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/0, list_op_as_maps/1
         ]).
 -export([sort_by_priority/1]).
 
@@ -125,6 +125,9 @@ list_as_maps() ->
 
 list_as_maps(VHost) ->
     [maps:from_list(PL) || PL <- sort_by_priority(list0(VHost, fun maps:from_list/1))].
+
+list_op_as_maps() ->
+    list_op_as_maps('_').
 
 list_op_as_maps(VHost) ->
     [maps:from_list(PL) || PL <- sort_by_priority(list0_op(VHost, fun maps:from_list/1))].
