@@ -164,7 +164,7 @@ recover(_VHost, Queues) ->
               true = is_recoverable(Q),
               QName = amqqueue:get_name(Q),
               log_delete(QName, amqqueue:get_exclusive_owner(Q)),
-              rabbit_amqqueue:internal_delete(Q, ?INTERNAL_USER)
+              rabbit_amqqueue:internal_delete(Q, ?INTERNAL_USER, missing_owner)
       end, Queues),
     %% We mark the queue recovery as failed because these queues are not really
     %% recovered, but deleted.

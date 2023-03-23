@@ -279,7 +279,11 @@ delete_in_mnesia(QueueName, Reason) ->
                   {[], []} ->
                       ok;
                   _ ->
-                      internal_delete_in_mnesia(QueueName, false, Reason)
+                      OnlyDurable = case Reason of
+                                        missing_owner -> true;
+                                        _ -> false
+                                    end,
+                      internal_delete_in_mnesia(QueueName, OnlyDurable, Reason)
               end
       end).
 
