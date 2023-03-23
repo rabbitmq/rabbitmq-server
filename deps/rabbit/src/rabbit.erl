@@ -1049,7 +1049,6 @@ boot_delegate() ->
 -spec recover() -> 'ok'.
 
 recover() ->
-    ok = rabbit_policy:recover(),
     ok = rabbit_vhost:recover(),
     ok.
 
