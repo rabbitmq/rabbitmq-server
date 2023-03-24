@@ -513,7 +513,8 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator,
             master_state().
 
 promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
-    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    ok = gm:broadcast(GM, {requeue, MsgIds}),
     Len   = BQ:len(BQS1),
     Depth = BQ:depth(BQS1),
     true = Len == Depth, %% ASSERTION: everything must have been requeued
