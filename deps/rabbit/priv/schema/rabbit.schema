@@ -2110,7 +2110,7 @@ end}.
                       "deprecated_features.permit", Conf),
          maps:from_list(
            [{list_to_atom(FeatureName), State}
-            || {["permitted_deprecated_features", FeatureName], State}
+            || {["deprecated_features", "permit", FeatureName], State}
                <- Settings])
  end}.
 
