@@ -1701,7 +1701,7 @@ defs_default_queue_type_vhost(Config, QueueType) ->
     register_parameters_and_policy_validator(Config),
 
     %% Create a test vhost
-    http_put(Config, "/vhosts/test-vhost", #{defaultqueuetype => QueueType}, {group, '2xx'}),
+    http_put(Config, "/vhosts/test-vhost", #{default_queue_type => QueueType}, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
 
