@@ -797,7 +797,7 @@ validate_policy(KeyList) ->
         {_, none, none, none, none, none, none} ->
             ok;
         {false, _, _, _, _, _, _} ->
-            {error, "Mirrored queues disabled via configuration", []};
+            {error, "Classic queue mirroring is disabled via node configuration", []};
         {_, none, _, _, _, _, _} ->
             {error, "ha-mode must be specified to specify ha-params, "
              "ha-sync-mode or ha-promote-on-shutdown", []};
