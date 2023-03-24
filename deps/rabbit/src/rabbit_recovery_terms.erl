@@ -121,7 +121,7 @@ open_table(VHost, RetriesLeft) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     File = filename:join(VHostDir, "recovery.dets"),
     Opts = [{file,      File},
-            {ram_file,  true},
+            {ram_file,  false},
             {auto_save, infinity}],
     case dets:open_file(VHost, Opts) of
         {ok, _}        -> ok;
