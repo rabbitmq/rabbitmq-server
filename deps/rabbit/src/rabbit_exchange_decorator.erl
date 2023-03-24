@@ -73,7 +73,8 @@ removed_from_rabbit_registry(_Type) ->
 %% select a subset of active decorators
 select(all,   {Route, NoRoute})  -> filter(Route ++ NoRoute);
 select(route, {Route, _NoRoute}) -> filter(Route);
-select(raw,   {Route, NoRoute})  -> Route ++ NoRoute.
+select(raw,   {Route, NoRoute})  -> Route ++ NoRoute;
+select(_, undefined) -> [].
 
 filter(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].

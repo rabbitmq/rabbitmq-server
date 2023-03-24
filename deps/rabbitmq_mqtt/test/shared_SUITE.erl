@@ -91,7 +91,8 @@ subgroups() ->
          ,block
          ,amqp_to_mqtt_qos0
          ,clean_session_disconnect_client
-         ,clean_session_kill_node
+         ,clean_session_node_restart
+         ,clean_session_node_kill
          ,rabbit_status_connection_count
          ,trace
          ,max_packet_size_unauthenticated
@@ -1245,7 +1246,13 @@ clean_session_disconnect_client(Config) ->
     L = rpc(Config, rabbit_amqqueue, list, []),
     ?assertEqual(0, length(L)).
 
-clean_session_kill_node(Config) ->
+clean_session_node_restart(Config) ->
+    clean_session_node_down(stop_node, Config).
+
+clean_session_node_kill(Config) ->
+    clean_session_node_down(kill_node, Config).
+
+clean_session_node_down(NodeDown, Config) ->
     C = connect(?FUNCTION_NAME, Config),
     {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
@@ -1259,15 +1266,24 @@ clean_session_kill_node(Config) ->
             ?assertEqual(0, length(QsQos0)),
             ?assertEqual(2, length(QsClassic))
     end,
-    ?assertEqual(2, rpc(Config, ets, info, [rabbit_durable_queue, size])),
+    Tables = [rabbit_durable_queue,
+              rabbit_queue,
+              rabbit_durable_route,
+              rabbit_semi_durable_route,
+              rabbit_route,
+              rabbit_reverse_route,
+              rabbit_topic_trie_node,
+              rabbit_topic_trie_edge,
+              rabbit_topic_trie_binding],
+    [?assertNotEqual(0, rpc(Config, ets, info, [T, size])) || T <- Tables],
 
     unlink(C),
-    ok = rabbit_ct_broker_helpers:kill_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:NodeDown(Config, 0),
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
 
-    %% After terminating a clean session by a node crash, we expect any session
-    %% state to be cleaned up on the server once the server comes back up.
-    ?assertEqual(0, rpc(Config, ets, info, [rabbit_durable_queue, size])).
+    %% After terminating a clean session by either node crash or graceful node shutdown, we
+    %% expect any session state to be cleaned up on the server once the server finished booting.
+    [?assertEqual(0, rpc(Config, ets, info, [T, size])) || T <- Tables].
 
 rabbit_status_connection_count(Config) ->
     _Pid = rabbit_ct_client_helpers:open_connection(Config, 0),
