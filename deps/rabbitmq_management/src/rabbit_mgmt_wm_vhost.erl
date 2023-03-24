@@ -63,7 +63,10 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
         Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
         Description = maps:get(description, BodyMap, <<"">>),
         Tags = maps:get(tags, BodyMap, <<"">>),
-        DefaultQT = maps:get(defaultqueuetype, BodyMap, undefined),
+        %% defaultqueuetype was an unfortunate name picked originally for 3.11.0,
+        %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
+        FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
+        DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
         case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
             ok ->
                 {true, ReqData, Context};
