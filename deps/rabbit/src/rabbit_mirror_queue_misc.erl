@@ -777,7 +777,7 @@ prevent_startup_when_mirroring_is_disabled_but_configured() ->
 are_cmqs_permitted() ->
     %% FeatureName = classic_mirrored_queues,
     %% rabbit_deprecated_features:is_permitted(FeatureName).
-    case application:get_env(rabbit, permit_deprecated_features) of
+    case application:get_env(rabbit, permitted_deprecated_features) of
         {ok, #{classic_mirrored_queues := false}} ->
             false;
         _ -> true

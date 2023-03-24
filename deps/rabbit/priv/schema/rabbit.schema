@@ -2096,21 +2096,21 @@ end}.
 %% NOTE: `true` is intentionally omitted - add it back when mirrored
 %% queue deprecation is converted to use deprecated features system.
 {mapping,
- "permit_deprecated_features.$name", "rabbit.permit_deprecated_features",
+ "deprecated_features.permit.$name", "rabbit.permitted_deprecated_features",
     [{datatype, {enum, [false]}}]
 }.
 
 %% This converts:
-%%     permit_deprecated_features.my_feature = true
+%%     deprecated_features.permit.my_feature = false
 %% to:
-%%     {rabbit, [{permit_deprecated_features, #{my_feature => true}}]}.
-{translation, "rabbit.permit_deprecated_features",
+%%     {rabbit, [{permitted_deprecated_features, #{my_feature => false}}]}.
+{translation, "rabbit.permitted_deprecated_features",
  fun(Conf) ->
          Settings = cuttlefish_variable:filter_by_prefix(
-                      "permit_deprecated_features", Conf),
+                      "deprecated_features.permit", Conf),
          maps:from_list(
            [{list_to_atom(FeatureName), State}
-            || {["permit_deprecated_features", FeatureName], State}
+            || {["permitted_deprecated_features", FeatureName], State}
                <- Settings])
  end}.
 
