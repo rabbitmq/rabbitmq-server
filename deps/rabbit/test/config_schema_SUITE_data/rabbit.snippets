@@ -896,5 +896,17 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
+   []},
+
+  %%
+  %% Deprecated features
+  %%
+
+  {deprecated_features_cmq,
+   "deprecated_features.permit.classic_mirrored_queues = false",
+   [{rabbit, [
+      {permitted_deprecated_features, #{classic_mirrored_queues => false}}
+     ]}],
    []}
+
 ].
