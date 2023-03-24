@@ -2329,7 +2329,7 @@ consume_redelivery_count(Config) ->
      #amqp_msg{props = #'P_basic'{headers = H0}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                            no_ack = false}),
-    ?assertMatch({DCHeader, _, 0}, rabbit_basic:header(DCHeader, H0)),
+    ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),

@@ -239,7 +239,8 @@ dequeue(QueueName, ConsumerTag, Settlement,
     end.
 
 add_delivery_count_header(#basic_message{} = Msg0, Count)
-  when is_integer(Count) ->
+  when is_integer(Count) andalso
+       Count > 0 ->
     rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0);
 add_delivery_count_header(Msg, _Count) ->
     Msg.
