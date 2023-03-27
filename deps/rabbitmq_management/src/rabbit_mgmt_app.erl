@@ -27,10 +27,10 @@
                     {mfa,         {rabbit_mgmt_load_definitions, boot, []}}]}).
 
 start(_Type, _StartArgs) ->
-    case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
-        false ->
-            start();
+    case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
         true ->
+            start();
+        false ->
             rabbit_log:warning("Metrics collection disabled in management agent, "
                                "management only interface started", []),
             start()

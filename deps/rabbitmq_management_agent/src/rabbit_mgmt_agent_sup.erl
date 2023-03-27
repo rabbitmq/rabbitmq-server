@@ -34,8 +34,8 @@ start_link() ->
 
 
 maybe_enable_metrics_collector() ->
-    case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
-        false ->
+    case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
+        true ->
             ok = pg:join(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP, self()),
             ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
                   permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
@@ -52,6 +52,6 @@ maybe_enable_metrics_collector() ->
             GC = {rabbit_mgmt_gc, {rabbit_mgmt_gc, start_link, []},
           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_gc]},
             [ST, MD, GC | MC ++ MGC];
-        true ->
+        false ->
             []
     end.

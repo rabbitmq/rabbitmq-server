@@ -135,8 +135,9 @@ disable_stats(ReqData) ->
                    <<"true">> -> true;
                    _ -> false
                end,
-    MgmtOnly orelse get_bool_env(rabbitmq_management, disable_management_stats, false)
-        orelse get_bool_env(rabbitmq_management_agent, disable_metrics_collector, false).
+    MgmtOnly orelse
+    not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse
+    not rabbit_mgmt_features:are_stats_enabled().
 
 enable_queue_totals(ReqData) ->
     EnableTotals = case qs_val(<<"enable_queue_totals">>, ReqData) of
