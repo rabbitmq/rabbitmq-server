@@ -53,7 +53,7 @@ RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq
  * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
  * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
- * `#rabbitmq` on Freenode
+ * `#rabbitmq` on [Libera Chat](https://libera.chat/)
 
 
 ## Contributing
