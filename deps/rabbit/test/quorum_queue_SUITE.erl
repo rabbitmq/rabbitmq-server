@@ -148,6 +148,7 @@ all_tests() ->
      peek,
      peek_with_wrong_queue_type,
      message_ttl,
+     message_ttl_policy,
      per_message_ttl,
      per_message_ttl_mixed_expiry,
      per_message_ttl_expiration_too_high,
@@ -2611,6 +2612,41 @@ message_ttl(Config) ->
     publish(Ch, QQ, Msg2),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     timer:sleep(2000),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
+message_ttl_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, <<"msg-ttl">>,
+                                             QQ, <<"queues">>,
+                                             [{<<"message-ttl">>, 1000}]),
+    VHost = <<"%2F">>,
+    RaName = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+
+    QueryFun = fun rabbit_fifo:overview/1,
+    {ok, {_, Overview}, _} = rpc:call(Server, ra, local_query, [RaName, QueryFun]),
+    ?assertMatch(#{config := #{msg_ttl := 1000}}, Overview),
+    %% wait for policy?
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg11">>,
+
+    publish(Ch, QQ, Msg1),
+    publish(Ch, QQ, Msg2),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, <<"msg-ttl">>,
+                                             QQ, <<"queues">>,
+                                             [{<<"message-ttl">>, 3000}]),
+    {ok, {_, Overview2}, _} = rpc:call(Server, ra, local_query, [RaName, QueryFun]),
+    ?assertMatch(#{config := #{msg_ttl := 3000}}, Overview2),
+    publish(Ch, QQ, Msg1),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
 
