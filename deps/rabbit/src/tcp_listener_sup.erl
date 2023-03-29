@@ -35,7 +35,7 @@ start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartu
 init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
       ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
-    MaxConnections = max_conn(rabbit_misc:get_env(rabbit, connection_max, infinity),
+    MaxConnections = max_conn(rabbit_misc:get_env(rabbit, ranch_connection_max, infinity),
                               ConcurrentConnsSups),
     RanchListenerOpts = #{
       num_acceptors => ConcurrentAcceptorCount,
