@@ -883,6 +883,20 @@ end}.
  end
 }.
 
+{mapping, "ranch_connection_max", "rabbit.ranch_connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.ranch_connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("ranch_connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
+
 
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
