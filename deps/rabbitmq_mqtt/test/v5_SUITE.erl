@@ -18,7 +18,8 @@
          start_client/4,
          connect/2, connect/3, connect/4,
          assert_message_expiry_interval/2,
-         non_clean_sess_opts/0
+         non_clean_sess_opts/0,
+         expect_publishes/3
         ]).
 -import(rabbit_ct_broker_helpers,
         [rpc/4]).
@@ -63,7 +64,8 @@ cluster_size_1_tests() ->
      session_expiry_interval_reconnect_infinity_to_zero,
      client_publish_qos2,
      client_rejects_publish,
-     will_qos2
+     will_qos2,
+     client_receive_maximum
     ].
 
 % cluster_size_3_tests() ->
@@ -469,6 +471,23 @@ will_qos2(Config) ->
     {C, Connect} = start_client(ClientId, Config, 0, Opts),
     unlink(C),
     ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
+
+client_receive_maximum(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config, [{auto_ack, false}, {properties, #{'Receive-Maximum' => 1}}]),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m0">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, <<"m1">>, [{qos, 1}]),
+    receive {publish, #{payload := <<"m0">>}} ->
+                %% receives publish but does not ack.
+                ok
+    after 1000 ->
+              ct:fail("did not receive PUBLISH")
+    end,
+    %% Should never receive the second msg since the first msg was not acked and receive maximun is set to 1.
+    ?assertEqual({publish_not_received, <<"m1">>},
+        expect_publishes(C, Topic, [<<"m1">>])),
+    ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
 %% Helpers
