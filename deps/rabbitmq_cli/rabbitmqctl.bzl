@@ -122,9 +122,11 @@ export ERL_COMPILER_OPTIONS=deterministic
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.get --only prod
-if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
-    cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
-fi
+for d in {precompiled_deps}; do
+    mkdir _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/ebin _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/include _build/${{MIX_ENV}}/lib/$d
+done
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix escript.build
@@ -151,6 +153,10 @@ find . -type l -delete
         ebin_dir = ebin.path,
         consolidated_dir = consolidated.path,
         fetched_srcs = fetched_srcs.path,
+        precompiled_deps = " ".join([
+            dep[ErlangAppInfo].app_name
+            for dep in ctx.attr.deps
+        ]),
     )
 
     inputs = depset(
