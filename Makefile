@@ -441,7 +441,6 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-queues \
 	  rabbitmq-upgrade \
 	  rabbitmq-streams \
-	  rabbitmq-tanzu \
 	  vmware-rabbitmq
 
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
@@ -456,7 +455,6 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-service.bat \
 		  rabbitmq-upgrade.bat \
 		  rabbitmq-streams.bat \
-		  rabbitmq-tanzu.bat \
 		  vmware-rabbitmq.bat \
 		  rabbitmqctl.bat
 
