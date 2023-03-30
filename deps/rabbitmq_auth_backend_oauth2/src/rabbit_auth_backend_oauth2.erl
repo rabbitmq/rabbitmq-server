@@ -541,18 +541,22 @@ get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 %% However, there are scenarios where the same user (on the same connection) is authenticated
 %% more than once. When this scenario occurs, we extract the token from the credential
 %% called rabbit_auth_backend_oauth2 whose value is the Decoded token returned during the
-%% first authentication. 
+%% first authentication.
 
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
     case maps:get(password, AuthProps, undefined) of
-        undefined ->
-            case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
-                undefined -> undefined;
-                Impl -> Impl()
-            end;
+        undefined -> token_from_rabbit_auth_backend_oauth2(AuthProps);
+        none -> token_from_rabbit_auth_backend_oauth2(AuthProps);
         Token -> Token
     end.
+
+-spec token_from_rabbit_auth_backend_oauth2(map()) -> binary() | undefined.
+token_from_rabbit_auth_backend_oauth2(AuthProps) ->
+  case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
+      undefined -> undefined;
+      Impl -> Impl()
+  end.
 
 %% Decoded tokens look like this:
 %%
