@@ -62,6 +62,7 @@ defmodule RabbitMQCtl.MixfileBase do
           "rabbitmq-queues": :queues,
           "rabbitmq-streams": :streams,
           "rabbitmq-upgrade": :upgrade,
+          "rabbitmq-tanzu": :tanzu,
           "vmware-rabbitmq": :vmware
         ]
       ]
