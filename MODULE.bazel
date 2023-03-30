@@ -140,8 +140,8 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
-    repository = "extend/ct_helper",
-    branch = "master",
+    repository = "ninenines/ct_helper",
+    commit = "478aa272708ed4ad282ca02bed41a5320330e8af",
 )
 
 erlang_package.hex_package(
