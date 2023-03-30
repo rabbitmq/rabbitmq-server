@@ -53,8 +53,7 @@ auth_fun({none, _}, _VHost, _ExtraAuthProps) ->
     fun () -> {ok, rabbit_auth_backend_dummy:user()} end;
 
 auth_fun({Username, none}, _VHost, ExtraAuthProps) ->
-    fun () ->
-      rabbit_access_control:check_user_login(Username, [{password, none}] ++ ExtraAuthProps) end;
+    fun () -> rabbit_access_control:check_user_login(Username, [{password, none}] ++ ExtraAuthProps) end;
 
 auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
     fun () ->
