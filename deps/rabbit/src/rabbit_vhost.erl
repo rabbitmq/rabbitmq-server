@@ -161,6 +161,7 @@ add(Name, Metadata, ActingUser) ->
     end.
 
 do_add(Name, Metadata, ActingUser) ->
+    ok = is_over_vhost_limit(Name),
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
@@ -332,6 +333,23 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
         undefined -> ok
     end,
     Result.
+
+is_over_vhost_limit(Name) ->
+    Limit = rabbit_misc:get_env(rabbit, vhost_max, infinity),
+    is_over_vhost_limit(Name, Limit).
+
+is_over_vhost_limit(_Name, infinity) ->
+    ok;
+is_over_vhost_limit(Name, Limit) when is_integer(Limit) ->
+    case length(list_names()) >= Limit of
+        false ->
+            ok;
+        true ->
+            ErrorMsg = rabbit_misc:format("cannot create vhost '~ts': "
+                                          "vhost limit '~tp' is reached",
+                                          [Name, Limit]),
+            exit({vhost_precondition_failed, ErrorMsg})
+    end.
 
 %% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
 %% which does not actually exist
