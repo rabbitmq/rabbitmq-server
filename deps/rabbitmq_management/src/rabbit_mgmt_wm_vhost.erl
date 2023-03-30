@@ -60,25 +60,28 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun(_, BodyMap, ReqData) ->
-        Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
-        Description = maps:get(description, BodyMap, <<"">>),
-        Tags = maps:get(tags, BodyMap, <<"">>),
-        %% defaultqueuetype was an unfortunate name picked originally for 3.11.0,
-        %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
-        FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
-        DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
-        case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
-            ok ->
-                {true, ReqData, Context};
-            {error, timeout} = E ->
-                rabbit_mgmt_util:internal_server_error(
-                  "Timed out while waiting for the vhost to initialise", E,
-                  ReqData0, Context);
-            {error, E} ->
-                rabbit_mgmt_util:internal_server_error(
-                  "Error occured while adding vhost", E,
-                  ReqData0, Context)
-        end
+              Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
+              Description = maps:get(description, BodyMap, <<"">>),
+              Tags = maps:get(tags, BodyMap, <<"">>),
+              %% defaultqueuetype was an unfortunate name picked originally for 3.11.0,
+              %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
+              FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
+              DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
+              case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
+                  ok ->
+                      {true, ReqData, Context};
+                  {'EXIT', {vhost_precondition_failed,
+                            Explanation}} ->
+                      rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
+                  {error, timeout} = E ->
+                      rabbit_mgmt_util:internal_server_error(
+                        "Timed out while waiting for the vhost to initialise", E,
+                        ReqData0, Context);
+                  {error, E} ->
+                      rabbit_mgmt_util:internal_server_error(
+                        "Error occured while adding vhost", E,
+                        ReqData0, Context)
+              end
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
