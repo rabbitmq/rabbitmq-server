@@ -29,7 +29,7 @@
 
 %%----------------------------------------------------------------------------
 start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
-            Username, VHost, Collector, ProxySocket}) ->
+            User, VHost, Collector, ProxySocket}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
@@ -45,8 +45,8 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
     case supervisor2:start_child(
            SupPid,
            {channel, {rabbit_amqp1_0_session_process, start_link,
-                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                        adapter_info(SocketForAdapterInfo), Collector}]},
+                      [{Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
+                        adapter_info(User, SocketForAdapterInfo), Collector}]},
             intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}) of
         {ok, ChannelPid} ->
             {ok, SupPid, ChannelPid};
@@ -59,5 +59,7 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
 
-adapter_info(Sock) ->
-    amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).
+adapter_info(User, Sock) ->
+    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}),
+    AdapterInfo#amqp_adapter_info{additional_info =
+        AdapterInfo#amqp_adapter_info.additional_info ++ [{authz_backends, User#user.authz_backends}]}.

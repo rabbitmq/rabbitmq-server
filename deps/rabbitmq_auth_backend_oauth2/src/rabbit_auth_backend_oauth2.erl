@@ -174,7 +174,10 @@ validate_token_expiry(#{}) -> ok.
            'signature_invalid' |
            {'error', term()} |
            {'invalid_aud', term()}}.
-         
+
+check_token(DecodedToken) when is_map(DecodedToken) ->
+    {ok, DecodedToken};
+
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
     case uaa_jwt:decode_and_verify(Token) of
@@ -535,7 +538,18 @@ get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
-    maps:get(password, AuthProps, undefined).
+    case maps:get(password, AuthProps, undefined) of
+        undefined -> token_from_rabbit_auth_backend_oauth2(AuthProps);
+        none -> token_from_rabbit_auth_backend_oauth2(AuthProps);
+        Token -> Token
+    end.
+
+-spec token_from_rabbit_auth_backend_oauth2(map()) -> binary() | undefined.
+token_from_rabbit_auth_backend_oauth2(AuthProps) ->
+  case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
+      undefined -> undefined;
+      Impl -> Impl()
+  end.
 
 %% Decoded tokens look like this:
 %%
