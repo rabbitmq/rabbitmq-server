@@ -2959,11 +2959,11 @@ maybe_unregister_consumer(VirtualHost,
                           Acc#{K => V}
                   end, maps:new(), Requests),
 
-    rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
-                                                      Stream,
-                                                      ConsumerName,
-                                                      self(),
-                                                      SubscriptionId),
+    _ = rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
+                                                          Stream,
+                                                          ConsumerName,
+                                                          self(),
+                                                          SubscriptionId),
     Requests1.
 
 partition_index(VirtualHost, Stream, Properties) ->
