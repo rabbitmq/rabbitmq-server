@@ -2,7 +2,8 @@
 var mgr;
 var _management_logger;
 
-function oauth_initialize_if_required() {
+/*
+function oauth_initialize_if_required_deprecated() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
     rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
     rabbit_base_uri = window.location.protocol + "//" + window.location.hostname
@@ -18,10 +19,16 @@ function oauth_initialize_if_required() {
     }
 
 }
+*/
 
+function rabbit_base_uri() {
+  rabbit_port = window.location.port ? ":" +  window.location.port : ""
+  rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
+  return window.location.protocol + "//" + window.location.hostname + rabbit_port + rabbit_path_prefix
+}
 
 function auth_settings_apply_defaults(authSettings) {
-  if (authSettings.enable_uaa == "true") {
+  if (authSettings.enable_uaa) {
 
     if (!authSettings.oauth_provider_url) {
       authSettings.oauth_provider_url = authSettings.uaa_location
@@ -73,8 +80,8 @@ function oauth_initialize(authSettings) {
         response_type: authSettings.oauth_response_type,
         scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
-        redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri + "/",
+        redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
+        post_logout_redirect_uri: rabbit_base_uri() + "/",
 
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,

@@ -9,14 +9,43 @@ UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
 KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
 HTTPD_DOCKER_IMAGE=httpd:latest
 PADDING=""
-ENV_FILE=/tmp/rabbitmq/.env
 declare -a REQUIRED_COMPONENTS
+
+BIN_DIR=$(realpath ${SCRIPT}/../bin)
+LOGS=${SCRIPT}/../logs/${SUITE}
+SCREENS=${SCRIPT}/../screens/${SUITE}
+CONF_DIR=/tmp/selenium/${SUITE}
+ENV_FILE=$CONF_DIR/.env
+
+parse_arguments() {
+  if [[ "$#" -gt 0 ]]
+  then
+    if [[ "$1" == "start-rabbitmq" ]]
+    then
+      echo "start-rabbitmq"
+    elif [[ "$1" == "start-others" ]]
+      then
+      echo "start-others"
+    elif [[ "$1" == "stop-others" ]]
+      then
+      echo "stop-others"
+    elif [[ "$1" == "test" ]]
+      then
+      echo "test $2"
+    fi
+  else
+    echo "run"
+  fi
+}
+
+COMMAND=$(parse_arguments $@)
 
 tabs 4
 
 print() {
   echo -e "${PADDING}$1"
 }
+
 begin() {
   print "\n$@"
   PADDING="${PADDING}\t"
@@ -24,6 +53,14 @@ begin() {
 end() {
   PADDING=`echo $PADDING | rev | cut -c 4- | rev`
   print "$@"
+}
+ensure_docker_network() {
+  begin "Ensuring $DOCKER_NETWORK network ..."
+  if [ ! "$(docker network ls | grep $DOCKER_NETWORK)" ]; then
+    print "> DOCKER_NETWORK: $DOCKER_NETWORK created"
+    docker network create $DOCKER_NETWORK
+  fi
+  end "$DOCKER_NETWORK network exists"
 }
 init_suite() {
   TEST_DIR=$(realpath ${SCRIPT}/../test)
@@ -40,21 +77,17 @@ init_suite() {
   print "> DOCKER_NETWORK: ${DOCKER_NETWORK} "
   print "> PROFILES: ${PROFILES} "
   print "> ENV_FILE: ${ENV_FILE} "
+  print "> COMMAND: ${COMMAND}"
   end "Initialized suite ..."
 }
 
-BIN_DIR=${SCRIPT}/../bin
-LOGS=$PWD/logs/${SUITE}
-SCREENS=$PWD/screens/${SUITE}
-
 build_mocha_image() {
+  begin "Ensuring mocha-test image ..."
   if [[ "$(docker images -q mocha-test 2> /dev/null)" == "" ]]; then
     docker build -t mocha-test  --target test $SCRIPT/..
+    print "> Built docker image"
   fi
-}
-
-requires() {
-  REQUIRED_COMPONENTS=$@
+  end "mocha-test image exists"
 }
 
 start_selenium() {
@@ -95,24 +128,46 @@ wait_for_message() {
 init_rabbitmq() {
   RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
   RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
-  RABBITMQ_URL=${RABBITMQ_URL:-http://rabbitmq:15672}
 
   print "> RABBITMQ_CONFIG_DIR: ${RABBITMQ_CONFIG_DIR}"
   print "> RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
-  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
-  [[ -z "${OAUTH_SIGNING_KEY_DIR}" ]] || print "> OAUTH_SIGNING_KEY_DIR: ${OAUTH_SIGNING_KEY_DIR} relative to ${TEST_DIR}"
+  [[ -z "${OAUTH_SIGNING_KEY_PATH}" ]] || print "> OAUTH_SIGNING_KEY_PATH: ${OAUTH_SIGNING_KEY_PATH}"
 
 }
-
 start_rabbitmq() {
+  if [[ "$PROFILES" == *"docker"* ]]; then
+    start_docker_rabbitmq
+  else
+    start_local_rabbitmq
+  fi
+}
+
+start_local_rabbitmq() {
   begin "Starting rabbitmq ..."
+
+  init_rabbitmq
+
+
+  RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+
+	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
+		RABBITMQ_ENABLED_PLUGINS="rabbitmq_management" \
+		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
+
+}
+start_docker_rabbitmq() {
+  begin "Starting rabbitmq in docker ..."
 
   init_rabbitmq
   kill_container_if_exist rabbitmq
 
+  mkdir -p $CONF_DIR/rabbitmq
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
-  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
 
   docker run \
     --detach \
@@ -120,9 +175,9 @@ start_rabbitmq() {
     --net ${DOCKER_NETWORK} \
     -p 15672:15672 -p 5672:5672 \
     -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-    -v /tmp$MOUNT_RABBITMQ_CONF:${MOUNT_RABBITMQ_CONF}:ro \
+    -v $CONF_DIR/rabbitmq/rabbitmq.conf:${MOUNT_RABBITMQ_CONF}:ro \
     -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
-    -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_DIR}:/config \
+    -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
 
   wait_for_message rabbitmq "Server startup complete"
@@ -142,7 +197,7 @@ start_uaa() {
   init_uaa
   kill_container_if_exist uaa
 
-  MOUNT_UAA_CONF_DIR=/tmp/uaa
+  MOUNT_UAA_CONF_DIR=$CONF_DIR/uaa
 
   mkdir -p $MOUNT_UAA_CONF_DIR
   cp ${UAA_CONFIG_DIR}/* $MOUNT_UAA_CONF_DIR
@@ -177,7 +232,7 @@ start_keycloak() {
   init_keycloak
   kill_container_if_exist keycloak
 
-  MOUNT_KEYCLOAK_CONF_DIR=/tmp/keycloak
+  MOUNT_KEYCLOAK_CONF_DIR=$CONF_DIR/keycloak
 
   mkdir -p $MOUNT_KEYCLOAK_CONF_DIR
   ${BIN_DIR}/gen-keycloak-json ${KEYCLOAK_CONFIG_DIR} $ENV_FILE $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json
@@ -190,13 +245,38 @@ start_keycloak() {
 		--publish 8080:8080 \
 		--env KEYCLOAK_ADMIN=admin \
 		--env KEYCLOAK_ADMIN_PASSWORD=admin \
-		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR}/,target=/opt/keycloak/data/import/ \
+		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm
 
   wait_for_oidc_endpoint keycloak $KEYCLOAK_URL
   end "Keycloak is ready"
 }
 wait_for_oidc_endpoint() {
+  NAME=$1
+  BASE_URL=$2
+  if [[ $BASE_URL == *"localhost"** ]]; then
+    wait_for_oidc_endpoint_local $NAME $BASE_URL
+  else
+    wait_for_oidc_endpoint_docker $NAME $BASE_URL
+  fi
+}
+wait_for_oidc_endpoint_local() {
+  NAME=$1
+  BASE_URL=$2
+
+  max_retry=10
+  counter=0
+  print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
+  until (curl -L --fail ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
+  do
+    sleep 5
+    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    print "Trying again. Try #$counter"
+    ((counter++))
+  done
+  sleep 20
+}
+wait_for_oidc_endpoint_docker() {
   NAME=$1
   BASE_URL=$2
 
@@ -212,18 +292,27 @@ wait_for_oidc_endpoint() {
   done
   sleep 20
 }
-
+calculate_rabbitmq_url() {
+  echo "${RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
+}
 init_fakeportal() {
-  FAKE_PORTAL_URL=${FAKE_PORTAL_URL:-http://fakeportal:3000}
-  FAKE_PORTAL_DIR=${SCRIPT}/../fakeportal
+  FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
+  FAKEPORTAL_DIR=${SCRIPT}/../fakeportal
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
+  RABBITMQ_HOST=${RABBITMQ_HOST:-proxy:9090}
+  RABBITMQ_HOST_FOR_FAKEPORTAL=${RABBITMQ_HOST_FOR_FAKEPORTAL:-rabbitmq:15672}
 
-  print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
-  print "> UAA_URL: ${UAA_URL}"
-  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  RABBITMQ_URL=$(calculate_rabbitmq_url $RABBITMQ_HOST)
+  RABBITMQ_URL_FOR_FAKEPORTAL=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPORTAL)
+
+  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
+  print "> UAA_URL_FOR_FAKEPORTAL: ${UAA_URL_FOR_FAKEPORTAL}"
+  print "> RABBITMQ_HOST_FOR_FAKEPORTAL: ${RABBITMQ_HOST_FOR_FAKEPORTAL}"
+  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
   print "> CLIENT_ID: ${CLIENT_ID}"
   print "> CLIENT_SECRET: ${CLIENT_SECRET}"
+  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
 }
 start_fakeportal() {
   begin "Starting fakeportal ..."
@@ -236,27 +325,36 @@ start_fakeportal() {
     --name fakeportal \
     --net ${DOCKER_NETWORK} \
     --publish 3000:3000 \
-    --env RABBITMQ_URL="${RABBITMQ_URL}" \
-    --env UAA_URL="${UAA_URL}" \
+    --env PORT=3000 \
+    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPORTAL}" \
+    --env PROXIED_RABBITMQ_URL="${RABBITMQ_URL}" \
+    --env UAA_URL="${UAA_URL_FOR_FAKEPORTAL}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    -v ${FAKE_PORTAL_DIR}:/code/fakeportal \
+    -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test run fakeportal
 
-  wait_for_url $FAKE_PORTAL_URL
+  wait_for_url $FAKEPORTAL_URL
   end "Fakeportal is ready"
 }
 
 init_fakeproxy() {
-  FAKE_PROXY_URL=${FAKE_PROXY_URL:-http://fakeproxy:3000}
-  FAKE_PROXY_DIR=${SCRIPT}/../fakeportal
+  FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
+  FAKEPROXY_DIR=${SCRIPT}/../fakeportal
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
-  print "> FAKE_PROXY_URL: ${FAKE_PROXY_URL}"
-  print "> UAA_BASE_URL: ${UAA_BASE_URL}"
-  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  RABBITMQ_HOST_FOR_FAKEPROXY=${RABBITMQ_HOST_FOR_FAKEPROXY:-rabbitmq:15672}
+  UAA_URL_FOR_FAKEPROXY=${UAA_URL_FOR_FAKEPROXY:-http://uaa:8080}
+
+  RABBITMQ_URL_FOR_FAKEPROXY=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPROXY)
+
+  print "> FAKEPROXY_URL: ${FAKEPROXY_URL}"
+  print "> UAA_URL: ${UAA_URL_FOR_FAKEPROXY}"
+  print "> RABBITMQ_HOST_FOR_FAKEPROXY: ${RABBITMQ_HOST_FOR_FAKEPROXY}"
   print "> CLIENT_ID: ${CLIENT_ID}"
   print "> CLIENT_SECRET: ${CLIENT_SECRET}"
+  print "> RABBITMQ_URL_FOR_FAKEPROXY: ${RABBITMQ_URL_FOR_FAKEPROXY}"
+
 }
 start_fakeproxy() {
   begin "Starting fakeproxy ..."
@@ -268,22 +366,42 @@ start_fakeproxy() {
     --detach \
     --name fakeproxy \
     --net ${DOCKER_NETWORK} \
-    --publish 3000:3000 \
-    --env RABBITMQ_URL="${RABBITMQ_URL}" \
-    --env UAA_URL="${UAA_BASE_URL}" \
+    --publish 9090:9090 \
+    --env PORT=9090 \
+    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
+    --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    -v ${FAKE_PROXY_DIR}:/code/fakeportal \
+    -v ${FAKEPROXY_DIR}:/code/fakeportal \
     mocha-test run fakeproxy
 
-  RABBITMQ_URL="$FAKE_PROXY_URL"
-
-  wait_for_url $FAKE_PROXY_URL
+  wait_for_url $FAKEPROXY_URL
   end "Fakeproxy is ready"
 
 }
 
 wait_for_url() {
+  BASE_URL=$1
+  if [[ $BASE_URL == *"localhost"** ]]; then
+    wait_for_url_local $BASE_URL
+  else
+    wait_for_url_docker $BASE_URL
+  fi
+}
+wait_for_url_local() {
+  url=$1
+  max_retry=10
+  counter=0
+  until (curl -L -f -v $url >/dev/null 2>&1)
+  do
+    print "Waiting for $url to start"
+    sleep 5
+    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    print "Trying again. Try #$counter"
+    ((counter++))
+  done
+}
+wait_for_url_docker() {
   url=$1
   max_retry=10
   counter=0
@@ -298,12 +416,14 @@ wait_for_url() {
 }
 
 init_proxy() {
-  HTTPD_CONFIG_PATH=${HTTPD_CONFIG_PATH:?"missing HTTPD_CONFIG_PATH"}
-  HTTPD_CONFIG_DIR=${TEST_DIR}${HTTPD_CONFIG_PATH}
-  PROXIED_RABBITMQ_URL=${PROXIED_RABBITMQ_URL:?"missing PROXIED_RABBITMQ_URL"}
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/httpd-proxy
+  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-proxy:9090}
+  PROXIED_RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
 
   print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
   print "> PROXIED_RABBITMQ_URL: ${PROXIED_RABBITMQ_URL}"
+  print "> RABBITMQ_HOST_FOR_PROXY: ${RABBITMQ_HOST_FOR_PROXY}"
   print "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
 }
 start_proxy() {
@@ -312,12 +432,18 @@ start_proxy() {
   init_proxy
   kill_container_if_exist proxy
 
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+
   docker run \
     --detach \
     --name proxy \
     --net ${DOCKER_NETWORK} \
-    --publish 8080:8080 \
-    --mount "type=bind,source=${HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    --publish 9090:9090 \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
   wait_for_url $PROXIED_RABBITMQ_URL
@@ -325,13 +451,20 @@ start_proxy() {
 }
 
 
-test () {
+test() {
   kill_container_if_exist mocha
   begin "Running tests with env variables:"
 
+  RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
+  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
+  RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
+
+  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
+  print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
   print "> UAA_URL: ${UAA_URL}"
-  print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
 
   docker run \
     --rm \
@@ -339,13 +472,15 @@ test () {
     --net ${DOCKER_NETWORK} \
     --env RABBITMQ_URL=${RABBITMQ_URL} \
     --env UAA_URL=${UAA_URL} \
-    --env FAKE_PORTAL_URL=${FAKE_PORTAL_URL} \
+    --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
     --env RUN_LOCAL=false \
     -v ${TEST_DIR}:/code/test \
     -v ${SCREENS}:/screens \
     mocha-test test /code/test${TEST_CASES_PATH}
 
-  end "Finishing running test"
+  TEST_RESULT=$?
+  end "Finishing running test ($TEST_RESULT)"
+  return $TEST_RESULT
 }
 
 save_logs() {
@@ -364,7 +499,7 @@ profiles_with_local_or_docker() {
   fi
 }
 generate_env_file() {
-    mkdir -p /tmp/rabbitmq
+    mkdir -p $CONF_DIR
     ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE
     source $ENV_FILE
 }
@@ -372,46 +507,116 @@ run() {
   runWith rabbitmq
 }
 runWith() {
+  if [[ "$COMMAND" == "run" ]]
+  then
+    run_on_docker_with $@
+  else
+    run_local_with $@
+  fi
+}
+
+run_local_with() {
+  export PROFILES="local ${PROFILES}"
+  determine_required_components_excluding_rabbitmq $@
+  init_suite
+  ensure_docker_network
+  generate_env_file
+  build_mocha_image
+
+  if [[ "$COMMAND" == "start-rabbitmq" ]]
+  then
+    start_local_rabbitmq
+  elif [[ "$COMMAND" == "start-others" ]]
+  then
+    start_local_others
+  elif [[ "$COMMAND" == "stop-others" ]]
+  then
+    teardown_local_others
+  elif [[ "$COMMAND" =~ test[[:space:]]*([^[:space:]]*) ]]
+  then
+    test_local ${BASH_REMATCH[1]}
+  fi
+}
+determine_required_components_including_rabbitmq() {
   if [[ "$@" != *"rabbitmq"* ]]; then
     REQUIRED_COMPONENTS+=("rabbitmq")
   fi
-
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     REQUIRED_COMPONENTS+=( "$val" )
   }
-
+}
+determine_required_components_excluding_rabbitmq() {
+  for (( i=1; i<=$#; i++)) {
+    if [[ $i != "rabbitmq" ]]; then
+      eval val='$'$i
+      REQUIRED_COMPONENTS+=( "$val" )
+    fi
+  }
+}
+run_on_docker_with() {
+  determine_required_components_including_rabbitmq $@
   export PROFILES=`profiles_with_local_or_docker`
   init_suite
+  ensure_docker_network
   generate_env_file
   build_mocha_image
   start_selenium
 
-  trap _teardown EXIT
+  trap teardown_components EXIT
 
-  [[ $(type -t _setup) == function ]] &&  _setup
-
+  start_components
   test
   TEST_RESULT=$?
-
   save_logs
-  [[ $(type -t _save_logs) == function ]] &&  _save_logs
-
-  #[[ $(type -t _teardown) == function ]] &&  _teardown
+  save_components_logs
 
   kill_container_if_exist selenium
 
   exit $TEST_RESULT
+}
+start_local_others() {
+  if [[ $REQUIRED_COMPONENTS == "" ]]; then
+    print "There are no other components"
+  else
+    start_components
+  fi
+}
+teardown_local_others() {
+  if [[ $REQUIRED_COMPONENTS == "" ]]; then
+    print "There are no other components"
+  else
+    teardown_components
+  fi
+}
+test_local() {
+  begin "Running local test $1"
+
+  RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
+  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
+  export RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
+
+  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
+  print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
+  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  print "> UAA_URL: ${UAA_URL}"
+  print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+
+  export RUN_LOCAL=true
+  export SCREENSHOTS_DIR=${SCREENS}
+  npm test $TEST_CASES_DIR/$1
 
 }
-_setup() {
+
+start_components() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     start="start_$i"
     $start
   done
 }
-_teardown() {
+teardown_components() {
   begin "Tear down ..."
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
@@ -420,7 +625,7 @@ _teardown() {
   done
   end "Finished teardown"
 }
-_save_logs() {
+save_components_logs() {
   begin "Saving Logs to $LOGS ..."
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
