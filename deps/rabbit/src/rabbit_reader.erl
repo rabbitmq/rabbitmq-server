@@ -1216,13 +1216,14 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                State = #v1{connection_state = opening,
                            connection       = Connection = #connection{
                                                 log_name = ConnName,
+                                                host = Addr,
                                                 port = Port,
                                                 user = User = #user{username = Username},
                                                 protocol = Protocol},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-    ok = is_over_node_connection_limit(Port),
+    ok = is_over_node_connection_limit(Addr, Port),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
@@ -1323,8 +1324,7 @@ is_vhost_alive(VHostPath, User) ->
                             [VHostPath, User#user.username, VHostPath])
     end.
 
-is_over_node_connection_limit(Port) ->
-    {Addr, _, _} = hd(rabbit_networking:tcp_listener_addresses(Port)),
+is_over_node_connection_limit(Addr, Port) ->
     Ref = rabbit_networking:ranch_ref(Addr, Port),
     #{active_connections := ActiveConns} = ranch:info(Ref),
     Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
