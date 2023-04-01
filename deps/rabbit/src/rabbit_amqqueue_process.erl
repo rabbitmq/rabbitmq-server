@@ -641,12 +641,13 @@ send_mandatory(#delivery{mandatory  = true,
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
                   flow    = Flow,
-                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC, QName) ->
+                  message = Message}, BQ, BQS, MTC, QName) ->
+    #basic_message{id = MsgId} = Message,
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC, QName);
                false -> MTC
            end,
-    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
+    BQS1 = BQ:discard(Message, SenderPid, Flow, BQS),
     {BQS1, MTC1}.
 
 run_message_queue(State) -> run_message_queue(false, State).
@@ -809,7 +810,7 @@ send_reject_publish(#delivery{confirm = true,
                               sender = SenderPid,
                               flow = Flow,
                               msg_seq_no = MsgSeqNo,
-                              message = #basic_message{id = MsgId}},
+                              message = Message},
                       _Delivered,
                       State = #q{ q = Q,
                                   backing_queue = BQ,
@@ -818,8 +819,9 @@ send_reject_publish(#delivery{confirm = true,
     ok = rabbit_classic_queue:send_rejection(SenderPid,
                                              amqqueue:get_name(Q), MsgSeqNo),
 
+    #basic_message{id = MsgId} = Message,
     MTC1 = maps:remove(MsgId, MTC),
-    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
+    BQS1 = BQ:discard(Message, SenderPid, Flow, BQS),
     State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
 send_reject_publish(#delivery{confirm = false},
                       _Delivered, State) ->
