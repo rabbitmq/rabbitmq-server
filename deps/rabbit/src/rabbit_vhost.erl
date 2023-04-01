@@ -361,7 +361,7 @@ is_over_vhost_limit(Name, Limit) when is_integer(Limit) ->
             ok;
         true ->
             ErrorMsg = rabbit_misc:format("cannot create vhost '~ts': "
-                                          "vhost limit '~tp' is reached",
+                                          "vhost limit of ~tp is reached",
                                           [Name, Limit]),
             exit({vhost_limit_exceeded, ErrorMsg})
     end.
