@@ -88,11 +88,11 @@ node_connection_limit(Config) ->
 
 vhost_limit(Config) ->
     set_vhost_limit(Config, 0),
-    {'EXIT',{vhost_precondition_failed, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"foo">>),
+    {'EXIT',{vhost_limit_exceeded, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"foo">>),
 
     set_vhost_limit(Config, 5),
     [ok = rabbit_ct_broker_helpers:add_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
-    {'EXIT',{vhost_precondition_failed, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"5">>),
+    {'EXIT',{vhost_limit_exceeded, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"5">>),
     [rabbit_ct_broker_helpers:delete_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
 
     set_vhost_limit(Config, infinity),
