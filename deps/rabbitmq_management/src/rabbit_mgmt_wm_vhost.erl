@@ -10,13 +10,15 @@
 -export([init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, id/1, put_vhost/6]).
+         delete_resource/2, id/1]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-dialyzer({nowarn_function, accept_content/2}).
 
 %%--------------------------------------------------------------------
 
@@ -67,12 +69,9 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
               FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
               DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
-              case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
+              case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
                   ok ->
                       {true, ReqData, Context};
-                  {'EXIT', {vhost_limit_exceeded,
-                            Explanation}} ->
-                      rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
                   {error, timeout} = E ->
                       rabbit_mgmt_util:internal_server_error(
                         "Timed out while waiting for the vhost to initialise", E,
@@ -80,7 +79,10 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                   {error, E} ->
                       rabbit_mgmt_util:internal_server_error(
                         "Error occured while adding vhost", E,
-                        ReqData0, Context)
+                        ReqData0, Context);
+                  {'EXIT', {vhost_limit_exceeded,
+                      Explanation}} ->
+                      rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
               end
       end).
 
@@ -104,5 +106,3 @@ id(ReqData) ->
       Value   -> Value
     end.
 
-put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) ->
-    rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username).

@@ -46,6 +46,8 @@
 
 -type(description() :: binary()).
 -type(tag() :: atom()).
+-type(tags() :: [tag()]).
+-type(unparsed_tags() :: binary() | string() | atom()).
 
 -type vhost() :: vhost_v2().
 
@@ -76,6 +78,8 @@
               metadata/0,
               description/0,
               tag/0,
+              unparsed_tags/0,
+              tags/0,
               vhost/0,
               vhost_v2/0,
               vhost_pattern/0,
