@@ -21,7 +21,8 @@ all() ->
 groups() ->
     [
      {parallel_tests, [parallel], [
-                                   node_connection_limit
+                                   node_connection_limit,
+                                   vhost_limit
                                   ]}
     ].
 
@@ -58,6 +59,9 @@ end_per_group(_Group, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(vhost_limit = Testcase, Config) ->
+    [rabbit_ct_broker_helpers:delete_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -78,7 +82,25 @@ node_connection_limit(Config) ->
 
     set_node_limit(Config, infinity),
     C = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
-    true = is_pid(C).
+    true = is_pid(C),
+    close_all_connections([C]),
+    ok.
+
+vhost_limit(Config) ->
+    set_vhost_limit(Config, 0),
+    {'EXIT',{vhost_limit_exceeded, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"foo">>),
+
+    set_vhost_limit(Config, 5),
+    [ok = rabbit_ct_broker_helpers:add_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
+    {'EXIT',{vhost_limit_exceeded, _}} = rabbit_ct_broker_helpers:add_vhost(Config, <<"5">>),
+    [rabbit_ct_broker_helpers:delete_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
+
+    set_vhost_limit(Config, infinity),
+    [ok = rabbit_ct_broker_helpers:add_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, <<"5">>),
+    [rabbit_ct_broker_helpers:delete_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,5)],
+    ok.
+
 
 %% -------------------------------------------------------------------
 %% Implementation
@@ -97,3 +119,8 @@ set_node_limit(Config, Limit) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  application,
                                  set_env, [rabbit, connection_max, Limit]).
+
+set_vhost_limit(Config, Limit) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application,
+                                 set_env, [rabbit, vhost_max, Limit]).
