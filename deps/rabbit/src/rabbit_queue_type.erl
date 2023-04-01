@@ -55,6 +55,8 @@
 -type arguments() :: queue_arguments | consumer_arguments.
 -type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
 
+-export_type([queue_type/0]).
+
 -define(STATE, ?MODULE).
 
 %% Recoverable mirrors shouldn't really be a generic one, but let's keep it here until
