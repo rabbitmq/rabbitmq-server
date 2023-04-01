@@ -897,6 +897,19 @@ end}.
  end
 }.
 
+{mapping, "vhost_max", "rabbit.vhost_max",
+  [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.vhost_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("vhost_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
 
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
