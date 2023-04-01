@@ -298,7 +298,7 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
 -spec put_vhost(vhost:name(),
     binary(),
     vhost:unparsed_tags() | vhost:tags(),
-    rabbit_queue_type:queue_type(),
+    rabbit_queue_type:queue_type() | 'undefined',
     boolean(),
     rabbit_types:username()) ->
     'ok' | {'error', any()} | {'EXIT', any()}.
