@@ -70,7 +70,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
                   ok ->
                       {true, ReqData, Context};
-                  {'EXIT', {vhost_precondition_failed,
+                  {'EXIT', {vhost_limit_exceeded,
                             Explanation}} ->
                       rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
                   {error, timeout} = E ->
