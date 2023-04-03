@@ -2984,7 +2984,7 @@ ensure_outstanding_requests_timer(#stream_connection{
                                      outstanding_requests = Requests,
                                      outstanding_requests_timer = TRef
                                     } = C) when map_size(Requests) =:= 0 ->
-    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    _ = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
     C#stream_connection{outstanding_requests_timer = undefined};
 ensure_outstanding_requests_timer(#stream_connection{
                                      outstanding_requests = Requests,
