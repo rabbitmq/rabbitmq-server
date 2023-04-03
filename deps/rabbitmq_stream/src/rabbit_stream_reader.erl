@@ -95,7 +95,7 @@
          outstanding_requests :: #{integer() => #request{}},
          deliver_version :: rabbit_stream_core:command_version(),
          request_timeout :: pos_integer(),
-         outstanding_requests_timer :: undefined | timer:tref()}).
+         outstanding_requests_timer :: undefined | erlang:reference()}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
