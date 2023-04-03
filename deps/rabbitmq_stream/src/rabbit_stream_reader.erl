@@ -47,6 +47,9 @@
          send_limit :: non_neg_integer(),
          log :: undefined | osiris_log:state(),
          last_listener_offset = undefined :: undefined | osiris:offset()}).
+-record(request,
+        {start :: integer(),
+         content :: term()}).
 -record(stream_connection_state,
         {data :: rabbit_stream_core:state(), blocked :: boolean(),
          consumers :: #{subscription_id() => #consumer{}}}).
@@ -89,8 +92,10 @@
          transport :: tcp | ssl,
          proxy_socket :: undefined | ranch_transport:socket(),
          correlation_id_sequence :: integer(),
-         outstanding_requests :: #{integer() => term()},
-         deliver_version :: rabbit_stream_core:command_version()}).
+         outstanding_requests :: #{integer() => #request{}},
+         deliver_version :: rabbit_stream_core:command_version(),
+         request_timeout :: pos_integer(),
+         outstanding_requests_timer :: undefined | timer:tref()}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -223,6 +228,8 @@ init([KeepaliveSup,
                 socket_op(Sock,
                           fun(S) -> rabbit_net:socket_ends(S, inbound) end),
             DeliverVersion = ?VERSION_1,
+            RequestTimeout = application:get_env(rabbitmq_stream,
+                                                 request_timeout, 60_000),
             Connection =
                 #stream_connection{name =
                                        rabbit_data_coercion:to_binary(ConnStr),
@@ -249,6 +256,7 @@ init([KeepaliveSup,
                                        rabbit_net:maybe_get_proxy_socket(Sock),
                                    correlation_id_sequence = 0,
                                    outstanding_requests = #{},
+                                   request_timeout = RequestTimeout,
                                    deliver_version = DeliverVersion},
             State =
                 #stream_connection_state{consumers = #{},
@@ -962,6 +970,37 @@ open(info, emit_stats,
          StatemData) ->
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
+open(info, check_outstanding_requests,
+     #statem_data{connection = #stream_connection{outstanding_requests = Requests,
+                                                  request_timeout = Timeout} = Connection0} =
+         StatemData) ->
+    Time = erlang:monotonic_time(millisecond),
+    rabbit_log:debug("Checking outstanding requests at ~tp: ~tp", [Time, Requests]),
+    HasTimedOut = maps:fold(fun(_, #request{}, true) ->
+                                    true;
+                               (K, #request{content = Ctnt, start = Start}, false) ->
+                                    case (Time - Start) > Timeout of
+                                        true ->
+                                            rabbit_log:debug("Request ~tp with content ~tp has timed out",
+                                                             [K, Ctnt]),
+
+                                            true;
+                                        false ->
+                                            false
+                                    end
+                            end, false, Requests),
+    case HasTimedOut of
+        true ->
+            rabbit_log_connection:info("Forcing stream connection ~tp closing: request to client timed out",
+                                       [self()]),
+            _ = demonitor_all_streams(Connection0),
+            {stop, {request_timeout, <<"Request timeout">>}};
+        false ->
+            Connection1 = ensure_outstanding_requests_timer(
+                            Connection0#stream_connection{outstanding_requests_timer = undefined}
+                           ),
+            {keep_state, StatemData#statem_data{connection = Connection1}}
+    end;
 open(info, {shutdown, Explanation} = Reason,
      #statem_data{connection = Connection}) ->
     %% rabbitmq_management or rabbitmq_stream_management plugin
@@ -2531,7 +2570,7 @@ handle_frame_post_auth(Transport,
                             [RC])
     end,
     case maps:take(CorrelationId, Requests0) of
-        {#{subscription_id := SubscriptionId} = Msg, Rs} ->
+        {#request{content = #{subscription_id := SubscriptionId} = Msg}, Rs} ->
             Stream = stream_from_consumers(SubscriptionId, Consumers),
             rabbit_log:debug("Received consumer update response for subscription "
                              "~tp on stream ~tp, correlation ID ~tp",
@@ -2904,31 +2943,58 @@ maybe_register_consumer(VirtualHost,
     Active.
 
 maybe_send_consumer_update(Transport,
-                           Connection =
-                           #stream_connection{socket = S,
-                                              correlation_id_sequence = CorrIdSeq,
-                                              outstanding_requests = OutstandingRequests0},
+                           Connection = #stream_connection{
+                                           socket = S,
+                                           correlation_id_sequence = CorrIdSeq},
                            Consumer,
                            Active,
                            Msg) ->
-    #consumer{configuration = #consumer_configuration{
-                                            stream = Stream,
-                                            subscription_id = SubscriptionId
-                                           }} = Consumer,
-    rabbit_log:debug("SAC subscription ~tp on ~tp, active = ~tp, " ++
-                     "sending consumer update with correlation ID ~tp",
-                     [SubscriptionId, Stream, Active, CorrIdSeq]),
-    Frame =
-        rabbit_stream_core:frame({request, CorrIdSeq,
-                                  {consumer_update, SubscriptionId, Active}}),
+    #consumer{configuration =
+              #consumer_configuration{subscription_id = SubscriptionId}} = Consumer,
+    Frame = rabbit_stream_core:frame({request, CorrIdSeq,
+                                      {consumer_update, SubscriptionId, Active}}),
 
-    OutstandingRequests1 =
-        maps:put(CorrIdSeq,
-                 Msg,
-                 OutstandingRequests0),
+    Connection1 = register_request(Connection, Msg),
+
     send(Transport, S, Frame),
-    Connection#stream_connection{correlation_id_sequence = CorrIdSeq + 1,
-                                 outstanding_requests = OutstandingRequests1}.
+    Connection1.
+
+register_request(#stream_connection{outstanding_requests = Requests0,
+                                    correlation_id_sequence = CorrIdSeq} = C,
+                 RequestContent) ->
+    rabbit_log:debug("Registering RPC request ~tp with correlation ID ~tp",
+                     [RequestContent, CorrIdSeq]),
+
+    Requests1 = maps:put(CorrIdSeq, request(RequestContent), Requests0),
+
+    ensure_outstanding_requests_timer(
+      C#stream_connection{correlation_id_sequence = CorrIdSeq + 1,
+                          outstanding_requests = Requests1}).
+
+request(Content) ->
+    #request{start = erlang:monotonic_time(millisecond),
+             content = Content}.
+
+ensure_outstanding_requests_timer(#stream_connection{
+                                     outstanding_requests = Requests,
+                                     outstanding_requests_timer = undefined
+                                    } = C) when map_size(Requests) =:= 0 ->
+    C;
+ensure_outstanding_requests_timer(#stream_connection{
+                                     outstanding_requests = Requests,
+                                     outstanding_requests_timer = TRef
+                                    } = C) when map_size(Requests) =:= 0 ->
+    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    C#stream_connection{outstanding_requests_timer = undefined};
+ensure_outstanding_requests_timer(#stream_connection{
+                                     outstanding_requests = Requests,
+                                     outstanding_requests_timer = undefined,
+                                     request_timeout = Timeout
+                                    } = C) when map_size(Requests) > 0 ->
+    TRef = erlang:send_after(Timeout, self(), check_outstanding_requests),
+    C#stream_connection{outstanding_requests_timer = TRef};
+ensure_outstanding_requests_timer(C) ->
+    C.
 
 maybe_unregister_consumer(_, _, false = _Sac, Requests) ->
     Requests;
@@ -2945,9 +3011,10 @@ maybe_unregister_consumer(VirtualHost,
     ConsumerName = consumer_name(Properties),
 
     Requests1 = maps:fold(
-                  fun(_, #{active := false,
-                           subscription_id := SubId,
-                           stepping_down := true}, Acc) when SubId =:= SubscriptionId ->
+                  fun(_, #request{content =
+                                  #{active := false,
+                                    subscription_id := SubId,
+                                    stepping_down := true}}, Acc) when SubId =:= SubscriptionId ->
                           _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
                                                                               Stream,
                                                                               ConsumerName),
