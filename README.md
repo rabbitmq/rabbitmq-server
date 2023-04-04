@@ -25,6 +25,7 @@ multi-protocol messaging and streaming broker. It supports:
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
+ * [RabbitMQ blog](https://blog.rabbitmq.com/)
 
 Some key doc guides include
 
@@ -49,10 +50,11 @@ RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq
 
 ## Getting Help from the Community
 
+ * [Community Discord server](https://rabbitmq.com/discord/)
+ * [Community Slack](https://rabbitmq.com/slack/)
  * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
- * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
- * `#rabbitmq` on Freenode
+ * `#rabbitmq` on [Libera Chat](https://libera.chat/)
 
 
 ## Contributing
@@ -69,6 +71,7 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Building From Source and Packaging
 
+ * [Contributor resources](https://github.com/rabbitmq/contribute)
  * [Building RabbitMQ from Source](https://rabbitmq.com/build-server.html)
  * [Building RabbitMQ Distribution Packages](https://rabbitmq.com/build-server.html)
 
