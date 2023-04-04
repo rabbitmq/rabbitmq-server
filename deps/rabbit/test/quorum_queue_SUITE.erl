@@ -69,6 +69,7 @@ groups() ->
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
+                                            reject_after_leader_transfer,
                                             shrink_all,
                                             rebalance,
                                             file_handle_reservations,
@@ -905,6 +906,36 @@ consume_in_minority(Config) ->
                                                    no_ack = false})),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok.
+
+reject_after_leader_transfer(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = binary_to_atom(<<"%2F_", QQ/binary>>, utf8),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    {#'basic.get_ok'{delivery_tag = Tag}, #amqp_msg{}} =
+        amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = false}),
+
+    ServerId1 = {RaName, Server1},
+    ct:pal("transfser leadership ~p",
+           [rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                         transfer_leadership, [ServerId1, ServerId1])]),
+    ok = amqp_channel:call(Ch2, #'basic.reject'{delivery_tag = Tag,
+                                                requeue = true}),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+
+    {#'basic.get_ok'{delivery_tag = Tag2}, #amqp_msg{}} =
+        amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = false}),
+
+    ok = amqp_channel:call(Ch2, #'basic.reject'{delivery_tag = Tag2,
+                                                requeue = true}),
     ok.
 
 shrink_all(Config) ->

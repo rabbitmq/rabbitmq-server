@@ -275,8 +275,13 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
+<<<<<<< HEAD
     sha256 = "e5b6c3fa434c357a2b5e6d53198871721a8a9da6fa20b7e639e8540ba72f7ae7",
     version = "2.4.9",
+=======
+    sha256 = "f5479a68c66bfee4ce96dcca81e4457cc99e4ab06bd350b83a0e5ac2ff29c78a",
+    version = "2.5.1-pre.1",
+>>>>>>> a93f20d912 (Quorum queues: avoid potential crash when returning message.)
 )
 
 erlang_package.hex_package(

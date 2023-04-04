@@ -115,7 +115,11 @@ dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.12.1
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git master
 dep_prometheus = hex 4.10.0
+<<<<<<< HEAD
 dep_ra = hex 2.4.9
+=======
+dep_ra = hex 2.5.1-pre.1
+>>>>>>> a93f20d912 (Quorum queues: avoid potential crash when returning message.)
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
 dep_redbug = hex 2.0.7
