@@ -3429,8 +3429,7 @@ login_test(Config) ->
     ?assertEqual(200, CodeAct),
 
     %% Extract the authorization header
-    [Cookie, _Version] = binary:split(list_to_binary(proplists:get_value("set-cookie", Headers)),
-                                      <<";">>, [global]),
+    Cookie = list_to_binary(proplists:get_value("set-cookie", Headers)),
     [_, Auth] = binary:split(Cookie, <<"=">>, []),
 
     %% Request the overview with the auth obtained
