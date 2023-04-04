@@ -332,15 +332,15 @@ validate_longer_chain1(Config) ->
 
     TestDataTrusted = public_key:pkix_test_data(#{
         root => [],
-        intermediaries => [[{key, KeyInter}]],
+        intermediates => [[{key, KeyInterDec}]],
         peer => []
     }),
     CertTrusted = proplists:get_value(cert, TestDataTrusted),
     KeyTrusted = proplists:get_value(key, TestDataTrusted),
-    [CertInter, RootCA] = proplists:get_value(cacerts, TestDataTrusted),
+    [RootCA, CertInter, RootCA] = proplists:get_value(cacerts, TestDataTrusted),
 
     TestDataUntrusted = public_key:pkix_test_data(#{
-        root => [#{cert => CertInter, key => KeyInter}],
+        root => #{cert => CertInter, key => KeyInterDec},
         peer => []
     }),
     CertUntrusted = proplists:get_value(cert, TestDataUntrusted),
