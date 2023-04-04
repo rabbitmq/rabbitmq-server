@@ -1077,13 +1077,16 @@ list_local_names_down() ->
                               is_down(Q)].
 
 is_down(Q) ->
-    try
-        info(Q, [state]) == [{state, down}]
-    catch
-        _:_ ->
-            true
+    case rabbit_process:is_process_hibernated(amqqueue:get_pid(Q)) of
+        true -> false;
+        false ->
+            try
+                    info(Q, [state]) == [{state, down}]
+            catch
+                _:_ ->
+                    true
+            end
     end.
-
 
 -spec sample_local_queues() -> [amqqueue:amqqueue()].
 sample_local_queues() -> sample_n_by_name(list_local_names(), 300).
