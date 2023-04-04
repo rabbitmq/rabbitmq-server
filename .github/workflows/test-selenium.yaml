@@ -101,6 +101,7 @@ jobs:
         path: |
           logs/*
           screens/*
+          /tmp/selenium/*
 
   summary-selenium:
     needs:

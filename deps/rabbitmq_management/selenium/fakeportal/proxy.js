@@ -1,34 +1,38 @@
-const express = require("express");
-const app = express();
-var path = require('path');
+var http = require('http'),
+    httpProxy = require('http-proxy');
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
-const rabbitmq_url = process.env.RABBITMQ_URL;
-const proxied_rabbitmq_url = process.env.PROXIED_RABBITMQ_URL;
+const rabbitmq_url = process.env.RABBITMQ_URL || 'http://0.0.0.0:15672/';
 const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
 const uaa_url = process.env.UAA_URL;
-const port = process.env.PORT || 3000;
+const port = process.env.PORT;
 
-app.engine('.html', require('ejs').__express);
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'html');
+//
+// Create a proxy server with custom application logic
+//
+var proxy = httpProxy.createProxyServer({});
 
-app.get('/', function(req, res){
-  let id =  default_if_blank(req.query.client_id, client_id);
-  let secret =  default_if_blank(req.query.client_secret, client_secret);
-  res.render('rabbitmq', {
-    proxied_url: proxied_rabbitmq_url,
-    url: rabbitmq_url.replace(/\/?$/, '/') + "login",
-    name: rabbitmq_url + " for " + id,
-    access_token: access_token(id, secret)
+proxy.on('proxyReq', function(proxyReq, req, res, options) {
+  console.log("proxing " + req.url)
+  if (req.url.endsWith("bootstrap.js")) {
+    proxyReq.setHeader('Authorization', 'Bearer ' + access_token(client_id, client_secret));
+  }
+  proxyReq.setHeader('origin', req.url)
+  proxyReq.setHeader('Access-Control-Allow-Origin', '*');
+  proxyReq.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+
+});
+var server = http.createServer(function(req, res) {
+  // You can define here your custom logic to handle the request
+  // and then proxy the request.
+  proxy.web(req, res, {
+    target: rabbitmq_url
   });
 });
-app.get('/favicon.ico', (req, res) => res.status(204));
+console.log("fakeproxy listening on port " + port + ".  RABBITMQ_URL=" + rabbitmq_url)
+server.listen(port);
 
-
-app.listen(port);
-console.log('Express started on port ' + port);
 
 function default_if_blank(value, defaultValue) {
   if (typeof value === "undefined" || value === null || value == "") {
@@ -53,6 +57,7 @@ function access_token(id, secret) {
   req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
   req.setRequestHeader('Accept', 'application/json');
   req.send(params);
+  console.log("Ret " + req.status)
   if (req.status == 200) {
     const token = JSON.parse(req.responseText).access_token;
     console.log("Token => " + token)
