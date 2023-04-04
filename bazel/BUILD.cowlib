@@ -68,7 +68,6 @@ erlang_bytecode(
         "src/cow_spdy.hrl",
     ],
     app_name = "cowlib",
-    beam = [],
     erlc_opts = "//:erlc_opts",
 )
 
@@ -119,14 +118,13 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
-    srcs = ["LICENSE"],
+    srcs = [
+        "LICENSE",
+    ],
 )
 
 filegroup(
