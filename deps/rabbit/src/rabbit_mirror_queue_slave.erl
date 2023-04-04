@@ -957,11 +957,12 @@ process_instruction({batch_publish_delivered, ChPid, Flow, Publishes}, State) ->
                end, State1 #state { backing_queue_state = BQS1 },
                MsgIdsAndAcks),
     {ok, State2};
-process_instruction({discard, ChPid, Flow, MsgId}, State) ->
+process_instruction({discard, ChPid, Flow,
+                     Msg = #basic_message { id = MsgId }}, State) ->
     maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(discarded, ChPid, MsgId, State),
-    BQS1 = BQ:discard(MsgId, ChPid, Flow, BQS),
+    BQS1 = BQ:discard(Msg, ChPid, Flow, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
