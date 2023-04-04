@@ -69,7 +69,6 @@ credentials_obfuscation:
 ct_helper:
 - ct_helper
 - ct_helper_error_h
-- erl_make_certs
 cuttlefish:
 - conf_parse
 - cuttlefish
