@@ -20,13 +20,11 @@ erlang_bytecode(
     testonly = True,
     srcs = [
         "src/ct_helper.erl",
-        "src/ct_helper_error_h.erl",
-        "src/erl_make_certs.erl",
+        "src/ct_helper_error_h.erl"
     ],
     outs = [
         "ebin/ct_helper.beam",
-        "ebin/ct_helper_error_h.beam",
-        "ebin/erl_make_certs.beam",
+        "ebin/ct_helper_error_h.beam"
     ],
     app_name = "ct_helper",
     erlc_opts = "//:erlc_opts",
@@ -44,8 +42,7 @@ filegroup(
     srcs = [
         "src/ct_helper.app.src",
         "src/ct_helper.erl",
-        "src/ct_helper_error_h.erl",
-        "src/erl_make_certs.erl",
+        "src/ct_helper_error_h.erl"
     ],
 )
 
