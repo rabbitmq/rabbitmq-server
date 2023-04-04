@@ -362,7 +362,7 @@ erlang_dev_package = use_extension(
 )
 
 erlang_dev_package.git_package(
-    commit = "478aa272708ed4ad282ca02bed41a5320330e8af",
+    branch = "master",
     build_file = "@//:bazel/BUILD.ct_helper",
     repository = "ninenines/ct_helper",
 )
