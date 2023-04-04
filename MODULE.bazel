@@ -157,8 +157,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "cowlib",
     build_file = "@rabbitmq-server//bazel:BUILD.cowlib",
-    sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
-    version = "2.9.1",
+    sha256 = "163b73f6367a7341b33c794c4e88e7dbfe6498ac42dcd69ef44c5bc5507c8db0",
+    version = "2.12.1",
 )
 
 erlang_package.hex_package(
