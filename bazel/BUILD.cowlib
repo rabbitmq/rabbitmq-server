@@ -100,7 +100,6 @@ filegroup(
         "src/cow_uri.erl",
         "src/cow_uri_template.erl",
         "src/cow_ws.erl",
-        "src/cowlib.app.src",
     ],
 )
 
