@@ -124,7 +124,8 @@ all_tests() ->
      update_retention_policy,
      queue_info,
      tracking_status,
-     restart_stream
+     restart_stream,
+     dead_letter_target
     ].
 
 %% -------------------------------------------------------------------
@@ -2329,6 +2330,45 @@ purge(Config) ->
                 amqp_channel:call(Ch, #'queue.purge'{queue = Q})),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+dead_letter_target(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    SourceQ = <<Q/binary, "_source">>,
+    ?assertEqual({'queue.declare_ok', SourceQ, 0, 0},
+                 declare(Ch, SourceQ, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                                       {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                       {<<"x-dead-letter-routing-key">>, longstr, Q}
+                                      ])),
+
+    publish_confirm(Ch, SourceQ, [<<"msg">>]),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch1, 1, false),
+    CTag = <<"ctag">>,
+    amqp_channel:subscribe(Ch1,
+                           #'basic.consume'{queue = SourceQ,
+                                            no_ack = false,
+                                            consumer_tag = CTag},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = CTag} ->
+             ok
+    after 5000 ->
+              exit(basic_consume_ok_timeout)
+    end,
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            ok = amqp_channel:cast(Ch1, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                      requeue =false,
+                                                      multiple     = false}),
+            quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
+    after 5000 ->
+            exit(timeout)
+    end,
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 %%----------------------------------------------------------------------------
 
 delete_queues(Qs) when is_list(Qs) ->
