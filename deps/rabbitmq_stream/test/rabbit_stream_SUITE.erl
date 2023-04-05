@@ -45,7 +45,8 @@ groups() ->
        unauthenticated_client_rejected_authenticating,
        timeout_authenticating,
        timeout_close_sent,
-       max_segment_size_bytes_validation]},
+       max_segment_size_bytes_validation,
+       close_connection_on_consumer_update_timeout]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
@@ -130,18 +131,35 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(_TestCase, Config) ->
-    Config.
+init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config,
+                                      0,
+                                      application,
+                                      set_env,
+                                      [rabbitmq_stream, request_timeout, 2000]),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
+init_per_testcase(TestCase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, TestCase).
 
-end_per_testcase(sac_ff, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_feature_flags,
-                                 enable,
-                                 [stream_single_active_consumer]),
-    ok;
-end_per_testcase(_Test, _Config) ->
-    ok.
+end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config,
+                                      0,
+                                      application,
+                                      set_env,
+                                      [rabbitmq_stream, request_timeout, 60000]),
+    _ = rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     rabbit_feature_flags,
+                                     enable,
+                                     [stream_single_active_consumer]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(TestCase, Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     rabbit_feature_flags,
+                                     enable,
+                                     [stream_single_active_consumer]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase).
 
 test_global_counters(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
@@ -418,6 +436,37 @@ max_segment_size_bytes_validation(Config) ->
     test_close(Transport, S, C3),
     ok.
 
+close_connection_on_consumer_update_timeout(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    {ok, S} =
+    Transport:connect("localhost", Port,
+                      [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    C3 = test_create_stream(Transport, S, Stream, C2),
+
+    SubId = 42,
+    C4 = test_subscribe(Transport, S, SubId, Stream,
+                        #{<<"single-active-consumer">> => <<"true">>,
+                          <<"name">> => <<"foo">>},
+                        C3),
+    {Cmd, _C5} = receive_commands(Transport, S, C4),
+    ?assertMatch({request, _, {consumer_update, SubId, true}}, Cmd),
+    closed = wait_for_socket_close(Transport, S, 10),
+    {ok, Sb} =
+    Transport:connect("localhost", Port,
+                      [{active, false}, {mode, binary}]),
+    Cb0 = rabbit_stream_core:init(0),
+    Cb1 = test_peer_properties(Transport, Sb, Cb0),
+    Cb2 = test_authenticate(Transport, Sb, Cb1),
+    Cb3 = test_delete_stream(Transport, Sb, Stream, Cb2, false),
+    _Cb4 = test_close(Transport, Sb, Cb3),
+    closed = wait_for_socket_close(Transport, Sb, 10),
+    ok.
+
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).
 
@@ -593,12 +642,21 @@ test_create_stream(Transport, S, Stream, C0) ->
     C.
 
 test_delete_stream(Transport, S, Stream, C0) ->
+    test_delete_stream(Transport, S, Stream, C0, true).
+
+test_delete_stream(Transport, S, Stream, C0, false) ->
+    do_test_delete_stream(Transport, S, Stream, C0);
+test_delete_stream(Transport, S, Stream, C0, true) ->
+    C1 = do_test_delete_stream(Transport, S, Stream, C0),
+    test_metadata_update_stream_deleted(Transport, S, Stream, C1).
+
+do_test_delete_stream(Transport, S, Stream, C0) ->
     DeleteStreamFrame =
         rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
     ok = Transport:send(S, DeleteStreamFrame),
     {Cmd, C1} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
-    test_metadata_update_stream_deleted(Transport, S, Stream, C1).
+    C1.
 
 test_metadata_update_stream_deleted(Transport, S, Stream, C0) ->
     {Meta, C1} = receive_commands(Transport, S, C0),

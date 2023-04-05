@@ -800,6 +800,9 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
     ],
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(
