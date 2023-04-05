@@ -247,7 +247,7 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/osiris",
-    tag = "v1.4.3",
+    tag = "v1.5.0",
 )
 
 erlang_package.hex_package(
