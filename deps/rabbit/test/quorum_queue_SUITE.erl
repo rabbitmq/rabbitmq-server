@@ -921,10 +921,10 @@ reject_after_leader_transfer(Config) ->
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     {#'basic.get_ok'{delivery_tag = Tag}, #amqp_msg{}} =
-        amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = false}),
+        basic_get(Ch2, QQ, false, 10),
 
     ServerId1 = {RaName, Server1},
-    ct:pal("transfser leadership ~p",
+    ct:pal("transfer leadership ~p",
            [rabbit_ct_broker_helpers:rpc(Config, 0, ra,
                                          transfer_leadership, [ServerId1, ServerId1])]),
     ok = amqp_channel:call(Ch2, #'basic.reject'{delivery_tag = Tag,
@@ -932,7 +932,7 @@ reject_after_leader_transfer(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
 
     {#'basic.get_ok'{delivery_tag = Tag2}, #amqp_msg{}} =
-        amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = false}),
+        basic_get(Ch2, QQ, false, 10),
 
     ok = amqp_channel:call(Ch2, #'basic.reject'{delivery_tag = Tag2,
                                                 requeue = true}),
@@ -3371,3 +3371,14 @@ validate_queue(Ch, Queue, ExpectedMsgs) ->
          end
      end || M <- ExpectedMsgs],
     ok.
+
+basic_get(_, _, _, 0) ->
+    empty;
+basic_get(Ch, Q, NoAck, Attempt) ->
+    case amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = NoAck}) of
+        {#'basic.get_ok'{}, #amqp_msg{}} = R ->
+            R;
+        _ ->
+            timer:sleep(100),
+            basic_get(Ch, Q, NoAck, Attempt - 1)
+    end.
