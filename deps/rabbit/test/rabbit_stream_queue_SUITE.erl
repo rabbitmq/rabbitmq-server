@@ -121,13 +121,8 @@ all_tests() ->
      purge,
      update_retention_policy,
      queue_info,
-<<<<<<< HEAD
-     tracking_status
-=======
      tracking_status,
-     restart_stream,
      dead_letter_target
->>>>>>> 4f15ecaed5 (Streams: make at-most-once dead lettering to work)
     ].
 
 %% -------------------------------------------------------------------
