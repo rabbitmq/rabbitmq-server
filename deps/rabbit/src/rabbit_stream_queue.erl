@@ -365,13 +365,11 @@ credit(QName, CTag, Credit, Drain, #stream_client{readers = Readers0,
     {State#stream_client{readers = Readers}, [{send_credit_reply, length(Msgs)},
                                               {deliver, CTag, true, Msgs}] ++ Actions}.
 
-deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
+deliver(QSs, #delivery{message = Msg, confirm = Confirm} = Delivery) ->
     lists:foldl(
-      fun({_Q, stateless}, {Qs, Actions}) ->
-              %% TODO what do we do with stateless?
-              %% QRef = amqqueue:get_pid(Q),
-              %% ok = rabbit_fifo_client:untracked_enqueue(
-              %%        [QRef], Delivery#delivery.message),
+      fun({Q, stateless}, {Qs, Actions}) ->
+              LeaderPid = amqqueue:get_pid(Q),
+              ok = osiris:write(LeaderPid, msg_to_iodata(Msg)),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
               {S, As} = deliver(Confirm, Delivery, S0),
