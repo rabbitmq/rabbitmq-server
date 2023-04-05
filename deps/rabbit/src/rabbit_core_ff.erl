@@ -111,7 +111,14 @@
       depends_on    => [stream_queue]
      }}).
 
-<<<<<<< HEAD
+-rabbit_feature_flag(
+   {stream_sac_coordinator_unblock_group,
+    #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/7743",
+      stability     => stable,
+      depends_on    => [stream_single_active_consumer]
+     }}).
+
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------
@@ -231,13 +238,3 @@ delete_table(FeatureName, Tab) ->
             %% adheres to the callback interface
             ok
     end.
-=======
-
--rabbit_feature_flag(
-   {stream_sac_coordinator_unblock_group,
-    #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
-      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/7743",
-      stability     => stable,
-      depends_on    => [stream_single_active_consumer]
-     }}).
->>>>>>> 221f10d2d9 (Unblock group of consumers on super stream partition)

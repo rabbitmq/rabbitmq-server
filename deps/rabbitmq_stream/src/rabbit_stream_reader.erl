@@ -971,8 +971,6 @@ open(info, emit_stats,
          StatemData) ->
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
-<<<<<<< HEAD
-=======
 open(info, check_outstanding_requests,
      #statem_data{connection = #stream_connection{outstanding_requests = Requests,
                                                   request_timeout = Timeout} = Connection0} =
@@ -1012,7 +1010,6 @@ open(info, {shutdown, Explanation} = Reason,
                                [self(), Explanation]),
     _ = demonitor_all_streams(Connection),
     {stop, Reason};
->>>>>>> 62d016d3c5 (Introduce timeout for stream server-side requests)
 open(info, Unknown, _StatemData) ->
     rabbit_log_connection:warning("Received unknown message ~p in state ~s",
                                   [Unknown, ?FUNCTION_NAME]),
@@ -2971,14 +2968,7 @@ maybe_send_consumer_update(Transport,
                                            correlation_id_sequence = CorrIdSeq},
                            Consumer,
                            Active,
-<<<<<<< HEAD
-                           true = _Sac,
-                           Extra) ->
-    rabbit_log:debug("SAC subscription ~p, active = ~p",
-                     [SubscriptionId, Active]),
-=======
                            Msg) ->
-<<<<<<< HEAD
     #consumer{configuration = #consumer_configuration{
                                             stream = Stream,
                                             subscription_id = SubscriptionId
@@ -2986,18 +2976,12 @@ maybe_send_consumer_update(Transport,
     rabbit_log:debug("SAC subscription ~tp on ~tp, active = ~tp, " ++
                      "sending consumer update with correlation ID ~tp",
                      [SubscriptionId, Stream, Active, CorrIdSeq]),
->>>>>>> 221f10d2d9 (Unblock group of consumers on super stream partition)
-    Frame =
-        rabbit_stream_core:frame({request, CorrIdSeq,
-                                  {consumer_update, SubscriptionId, Active}}),
-=======
     #consumer{configuration =
               #consumer_configuration{subscription_id = SubscriptionId}} = Consumer,
     Frame = rabbit_stream_core:frame({request, CorrIdSeq,
                                       {consumer_update, SubscriptionId, Active}}),
 
     Connection1 = register_request(Connection, Msg),
->>>>>>> 62d016d3c5 (Introduce timeout for stream server-side requests)
 
     send(Transport, S, Frame),
     Connection1.

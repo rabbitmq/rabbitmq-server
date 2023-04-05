@@ -131,20 +131,6 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-<<<<<<< HEAD
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(sac_ff, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_feature_flags,
-                                 enable,
-                                 [stream_single_active_consumer]),
-    ok;
-end_per_testcase(_Test, _Config) ->
-    ok.
-=======
 init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config,
                                       0,
@@ -161,10 +147,19 @@ end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config)
                                       application,
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 60000]),
+    _ = rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     rabbit_feature_flags,
+                                     enable,
+                                     [stream_single_active_consumer]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     rabbit_feature_flags,
+                                     enable,
+                                     [stream_single_active_consumer]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
->>>>>>> 62d016d3c5 (Introduce timeout for stream server-side requests)
 
 test_global_counters(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),

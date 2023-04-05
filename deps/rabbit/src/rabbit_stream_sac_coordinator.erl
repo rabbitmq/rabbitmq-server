@@ -274,11 +274,7 @@ apply(#command_activate_consumer{vhost = VirtualHost,
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
-<<<<<<< HEAD
-                rabbit_log:warning("trying to activate consumer in group ~p, but "
-=======
                 rabbit_log:warning("Trying to activate consumer in group ~tp, but "
->>>>>>> 221f10d2d9 (Unblock group of consumers on super stream partition)
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};
@@ -828,10 +824,8 @@ send_message(ConnectionPid, Msg) ->
     ConnectionPid ! Msg,
     ok.
 
-<<<<<<< HEAD
 is_ff_enabled() ->
     rabbit_feature_flags:is_enabled(stream_single_active_consumer).
-=======
+
 has_unblock_group_support() ->
     rabbit_feature_flags:is_enabled(stream_sac_coordinator_unblock_group).
->>>>>>> 221f10d2d9 (Unblock group of consumers on super stream partition)
