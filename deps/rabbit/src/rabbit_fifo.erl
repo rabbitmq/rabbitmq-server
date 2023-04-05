@@ -1003,8 +1003,8 @@ handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
 handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
-handle_aux(leader, cast, {#return{msg_ids = MsgIds,
-                                  consumer_id = ConsumerId}, Corr, Pid},
+handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
+                                      consumer_id = ConsumerId}, Corr, Pid},
            Aux0, Log0, #?MODULE{cfg = #cfg{delivery_limit = undefined},
                                 consumers = Consumers}) ->
     case Consumers of
