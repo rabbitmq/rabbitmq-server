@@ -1,10 +1,21 @@
 # RabbitMQ Local Exchange Type
 
-TODO
+This exchange type favours local bound queues (local to the producer's connection). It's basically
+a direct exchange, with the exception that, only one queue and in particular, a queue local to the
+producer's connection receives the message. If there are no local queues, the exchange behaves like
+the random exchange, i.e. it randomly picks the target queue.
+
 
 ## Installation
 
-TODO
+Install the corresponding .ez files from our
+[GitHub releases](https://github.com/rabbitmq/rabbitmq-local-exchange/releases)
+Then run the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_local_exchange
+```
+
 
 ## Building from Source
 
@@ -24,7 +35,15 @@ and enable the plugin:
 
 ## Usage
 
-TODO
+To create a _local_, just declare an exchange providing the type `"x-local"`.
+
+```java
+channel.exchangeDeclare("cache-updates", "x-local");
+```
+
+and bind several queues to it preferably if each queue is created on a different node.
+Routing keys will be ignored.
+
 
 
 ## License
