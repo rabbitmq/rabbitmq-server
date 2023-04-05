@@ -1,0 +1,53 @@
+load("@rules_erlang//:xref2.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+)
+
+APP_NAME = "rabbitmq_local_exchange"
+
+APP_DESCRIPTION = "RabbitMQ Local Exchange"
+
+BUILD_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
+DEPS = [
+    "//deps/rabbit_common:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:erlang_app",
+]
+
+rabbitmq_app(
+    app_description = APP_DESCRIPTION,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref()
+
+plt(
+    name = "base_plt",
+    deps = BUILD_DEPS + DEPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
+)
+
+alias(
+    name = "rabbitmq_local_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()

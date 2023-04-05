@@ -38,6 +38,7 @@
 !/deps/rabbitmq_peer_discovery_k8s/
 !/deps/rabbitmq_prometheus/
 !/deps/rabbitmq_random_exchange/
+!/deps/rabbitmq_local_exchange/
 !/deps/rabbitmq_recent_history_exchange/
 !/deps/rabbitmq_sharding/
 !/deps/rabbitmq_shovel/
