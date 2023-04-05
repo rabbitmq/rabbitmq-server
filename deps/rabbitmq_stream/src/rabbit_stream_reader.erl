@@ -886,7 +886,8 @@ open(info,
                                          "on stream ~tp, group ~tp", [St, ConsumerName]),
                         _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
                                                                             St,
-                                                                            ConsumerName);
+                                                                            ConsumerName),
+                        ok;
                     _ ->
                         ok
                 end,
