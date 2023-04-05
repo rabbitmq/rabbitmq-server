@@ -269,8 +269,6 @@ apply(#command_activate_consumer{vhost = VirtualHost,
                                  stream = Stream,
                                  consumer_name = ConsumerName},
       #?MODULE{groups = StreamGroups0} = State0) ->
-    rabbit_log:debug("Activating consumer on ~tp, group ~p",
-                     [Stream, ConsumerName]),
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
@@ -281,11 +279,7 @@ apply(#command_activate_consumer{vhost = VirtualHost,
             Group ->
                 #consumer{pid = Pid, subscription_id = SubId} =
                     evaluate_active_consumer(Group),
-                rabbit_log:debug("New active consumer on ~tp, group ~tp " ++
-                                 "is ~tp from ~tp",
-                                 [Stream, ConsumerName, SubId, Pid]),
-                Group1 =
-                    update_consumer_state_in_group(Group, Pid, SubId, true),
+                    Group1 = update_consumer_state_in_group(Group, Pid, SubId, true),
                 {Group1, [notify_consumer_effect(Pid, SubId, Stream, ConsumerName, true)]}
         end,
     StreamGroups1 =
@@ -575,10 +569,6 @@ do_register_consumer(VirtualHost,
                                 %% the current active stays the same
                                 {G1, []};
                             _ ->
-                                rabbit_log:debug("SAC consumer registration: " ++
-                                                 "active consumer change on stream ~tp, group ~tp. " ++
-                                                 "Notifying ~tp from ~tp it is no longer active.",
-                                                 [Stream, ConsumerName, ActSubId, ActPid]),
                                 %% there's a change, telling the active it's not longer active
                                 {update_consumer_state_in_group(G1,
                                                                 ActPid,
@@ -592,9 +582,6 @@ do_register_consumer(VirtualHost,
                                                          true)]}
                         end;
                     false ->
-                        rabbit_log:debug("SAC consumer registration: no active consumer on stream ~tp, group ~tp. " ++
-                                         "Likely waiting for a response from former active consumer.",
-                                         [Stream, ConsumerName]),
                         %% no active consumer in the (non-empty) group,
                         %% we are waiting for the reply of a former active
                         {G1, []}
@@ -640,11 +627,6 @@ handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
                     %% the current active stays the same
                     {Group0, []};
                 _ ->
-                    rabbit_log:debug("SAC consumer removal: " ++
-                                     "active consumer change on stream ~tp, group ~tp. " ++
-                                     "Notifying ~tp from ~tp it is no longer active.",
-                                     [Stream, ConsumerName, ActSubId, ActPid]),
-
                     %% there's a change, telling the active it's not longer active
                     {update_consumer_state_in_group(Group0,
                                                     ActPid,
@@ -659,17 +641,10 @@ handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
                     %% the active one is going away, picking a new one
                     #consumer{pid = P, subscription_id = SID} =
                         evaluate_active_consumer(Group0),
-                    rabbit_log:debug("SAC consumer removal: " ++
-                                     "active consumer change on stream ~tp, group ~tp. " ++
-                                     "Notifying ~tp from ~tp it is the new active consumer.",
-                                     [Stream, ConsumerName, SID, P]),
                     {update_consumer_state_in_group(Group0, P, SID, true),
                      [notify_consumer_effect(P, SID,
                                              Stream, ConsumerName, true)]};
                 false ->
-                    rabbit_log:debug("SAC consumer removal: no active consumer on stream ~tp, group ~tp. " ++
-                                     "Likely waiting for a response from former active consumer.",
-                                     [Stream, ConsumerName]),
                     %% no active consumer in the (non-empty) group,
                     %% we are waiting for the reply of a former active
                     {Group0, []}
