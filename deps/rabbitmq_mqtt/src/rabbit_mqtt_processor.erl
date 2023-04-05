@@ -396,11 +396,11 @@ process_request(?SUBSCRIBE,
                                  packet_id  = SubscribePktId,
                                  subscriptions = Subscriptions},
                    payload = undefined},
-                #state{cfg = #cfg{retainer_pid = RPid}} = State0) ->
+                #state{cfg = #cfg{retainer_pid = RPid, proto_ver = ProtoVer}} = State0) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
     {ReasonCodes, State1} =
     lists:foldl(
-      fun(_Subscription, {[?SUBACK_FAILURE | _] = L, S}) ->
+      fun(_Subscription, {[RC | _] = L, S}) when RC >= ?SUBACK_FAILURE ->
               %% Once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
@@ -419,9 +419,11 @@ process_request(?SUBSCRIBE,
                   maybe_increment_consumer(S0, S1),
                   case self_consumes(Q) of
                       false ->
-                          case consume(Q, QoS, S1) of
+                          case consume(Q, QoS, S1) of % failed to consume, could be permission or other errors
                               {ok, S2} ->
                                   {[QoS | L], S2};
+                              {error, access_refused} ->
+                                  {[?RC_NOT_AUTHORIZED | L], S1};
                               {error, _} ->
                                   {[?SUBACK_FAILURE | L], S1}
                           end;
@@ -429,18 +431,28 @@ process_request(?SUBSCRIBE,
                           {[QoS | L], S1}
                   end
               else
+                  {error, limit_exceeded} -> {[?RC_QUOTA_EXCEEDED | L], S0};
+                  {error, access_refused} -> {[?RC_NOT_AUTHORIZED | L], S0};
                   {error, _} -> {[?SUBACK_FAILURE | L], S0}
               end
       end, {[], State0}, Subscriptions),
+    ReasonCode1 = case ProtoVer of
+        ?MQTT_PROTO_V5 ->
+            ReasonCodes;
+        _ ->
+            [suback_reason_code_to_return_code(RC) || RC <- ReasonCodes]
+    end,
     Reply = #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
                          variable = #mqtt_packet_suback{
                                        packet_id = SubscribePktId,
-                                       reason_codes = lists:reverse(ReasonCodes)}},
+                                       reason_codes = lists:reverse(ReasonCode1)}},
     _ = send(Reply, State1),
-    case ReasonCodes of
-        [?SUBACK_FAILURE | _] ->
+    %% TODO: is there a better way to check if the subscription failed, does it have to take 2 lines to do so.
+    [H | _] = ReasonCodes,
+    case H >= ?SUBACK_FAILURE of
+        true ->
             {error, subscribe_error, State1};
-        _ ->
+        false ->
             State = lists:foldl(fun(Sub, S) ->
                                         maybe_send_retained_message(RPid, Sub, S)
                                 end, State1, Subscriptions),
@@ -745,6 +757,12 @@ get_queue(QoS, State) ->
         {error, not_found} = Err ->
             Err
     end.
+
+suback_reason_code_to_return_code(RC) when RC =:= ?RC_NOT_AUTHORIZED orelse
+                                            RC =:= ?RC_QUOTA_EXCEEDED ->
+    ?SUBACK_FAILURE;
+suback_reason_code_to_return_code(RC) ->
+    RC.
 
 -spec queue_name(qos(), state()) -> rabbit_amqqueue:name().
 queue_name(?QOS_1, #state{cfg = #cfg{queue_qos1 = #resource{kind = queue} = Name}}) ->
@@ -1148,7 +1166,7 @@ create_queue(
                     ?LOG_ERROR("cannot declare ~s because "
                                "queue limit ~p in vhost '~s' is reached",
                                [rabbit_misc:rs(QName), Limit, VHost]),
-                    {error, access_refused}
+                    {error, limit_exceeded}
             end;
         {error, access_refused} = E ->
             E
@@ -1206,7 +1224,6 @@ consume(Q, QoS, #state{
                     %% explicitly calling rabbit_queue_type:consume/3.
                     {ok, State0};
                 _ ->
-                    ?LOG_INFO("consume Receive-Maximum ~p", [RecvMax]),
                     Spec = #{no_ack => QoS =:= ?QOS_0,
                              channel_pid => self(),
                              limiter_pid => none,
