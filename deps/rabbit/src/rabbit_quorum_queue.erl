@@ -984,8 +984,15 @@ maybe_delete_data_dir(UId) ->
 
 policy_changed(Q) ->
     QPid = amqqueue:get_pid(Q),
-    _ = rabbit_fifo_client:update_machine_state(QPid, ra_machine_config(Q)),
-    ok.
+    case rabbit_fifo_client:update_machine_state(QPid, ra_machine_config(Q)) of
+        ok ->
+            ok;
+        Err ->
+            FormattedQueueName = rabbit_misc:rs(amqqueue:get_name(Q)),
+            rabbit_log:warning("~s: policy may not have been successfully applied. Error: ~p",
+                               [FormattedQueueName, Err]),
+            ok
+    end.
 
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
 
