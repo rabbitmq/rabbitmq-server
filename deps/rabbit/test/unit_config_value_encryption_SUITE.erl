@@ -15,6 +15,7 @@
 %% This cipher is listed as supported, but doesn't actually work.
 %% OTP bug: https://bugs.erlang.org/browse/ERL-1478
 -define(SKIPPED_CIPHERS, [aes_ige256]).
+-define(SKIPPED_HASHES, [shake128, shake256]).
 
 all() ->
     [
@@ -51,7 +52,7 @@ end_per_testcase(_TC, _Config) ->
 
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
-    Hashes = rabbit_pbe:supported_hashes(),
+    Hashes = rabbit_pbe:supported_hashes() -- ?SKIPPED_HASHES,
     Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     Iterations = [1, 10, 100, 1000],
     %% Loop through all hashes, ciphers and iterations.
