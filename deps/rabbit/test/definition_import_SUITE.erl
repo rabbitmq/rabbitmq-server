@@ -145,6 +145,7 @@ init_per_group(boot_time_import_using_public_https_source = Group, Config) ->
                    {log_level, error},
                    {secure_renegotiate, true},
                    {versions, ['tlsv1.2']},
+                   {verify, verify_none},
                    {ciphers, [
                     "ECDHE-ECDSA-AES256-GCM-SHA384",
                     "ECDHE-RSA-AES256-GCM-SHA384",
