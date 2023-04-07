@@ -18,7 +18,6 @@
 
 all() ->
     [
-        ensure_term_to_binary_defaults_to_version_1,
         term_to_binary_latin_atom,
         queue_name_to_binary
     ].
@@ -38,6 +37,7 @@ end_per_suite(Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+<<<<<<< HEAD
 %% R16B03 defaults term_to_binary version to 0, this test would always fail
 ensure_term_to_binary_defaults_to_version_1(Config) ->
     CurrentERTS = erlang:system_info(version),
@@ -66,6 +66,8 @@ prop_ensure_term_to_binary_defaults_to_version_1(_Config) ->
             Current =:= Compat
         end).
 
+=======
+>>>>>>> 07b8f1b686 (Remove a test that can't pass on OTP-26)
 term_to_binary_latin_atom(Config) ->
     Property = fun () -> prop_term_to_binary_latin_atom(Config) end,
     rabbit_ct_proper_helpers:run_proper(Property, [],
