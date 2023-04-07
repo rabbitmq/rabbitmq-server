@@ -594,8 +594,8 @@ create_or_get_in_mnesia(Q) ->
                           {error, not_found} ->
                               set_in_mnesia_tx(DurableQ, Q),
                               {created, Q};
-                          {ok, Q} ->
-                              {absent, Q, nodedown}
+                          {ok, QRecord} ->
+                              {absent, QRecord, nodedown}
                       end;
                   [ExistingQ] ->
                       {existing, ExistingQ}
