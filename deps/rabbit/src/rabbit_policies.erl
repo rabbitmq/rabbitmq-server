@@ -28,6 +28,7 @@ register() ->
     %% such as rabbit_mirror_queue_misc
     [rabbit_registry:register(Class, Name, ?MODULE) ||
         {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
+                          {policy_validator, <<"consumer-timeout">>},
                           {policy_validator, <<"dead-letter-exchange">>},
                           {policy_validator, <<"dead-letter-routing-key">>},
                           {policy_validator, <<"dead-letter-strategy">>},
@@ -73,6 +74,12 @@ validate_policy0(<<"alternate-exchange">>, Value)
     ok;
 validate_policy0(<<"alternate-exchange">>, Value) ->
     {error, "~tp is not a valid alternate exchange name", [Value]};
+
+validate_policy0(<<"consumer-timeout">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"consumer-timeout">>, Value) ->
+    {error, "~tp is not a valid consumer timeout", [Value]};
 
 validate_policy0(<<"dead-letter-exchange">>, Value)
   when is_binary(Value) ->
