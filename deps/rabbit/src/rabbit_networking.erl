@@ -523,7 +523,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
-      connections_local()).
+      connections_local() ++ rabbit_networking:local_non_amqp_connections()).
 
 -spec close_connection(pid(), string()) -> 'ok'.
 
