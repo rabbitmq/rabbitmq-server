@@ -29,6 +29,10 @@
 -define(APP, rabbitmq_mqtt).
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 
+%% defined in MQTT v5 (not in v4 or v3)
+-define(RC_SUCCESS, 16#00).
+-define(RC_NO_SUBSCRIPTION_EXISTED, 16#11).
+
 all() ->
     [{group, mqtt},
      {group, web_mqtt}].
@@ -65,7 +69,9 @@ cluster_size_1_tests() ->
      client_publish_qos2,
      client_rejects_publish,
      will_qos2,
-     client_receive_maximum
+     client_receive_maximum,
+     unsub_success,
+     unsub_topic_not_found
     ].
 
 % cluster_size_3_tests() ->
@@ -487,6 +493,23 @@ client_receive_maximum(Config) ->
     %% Should never receive the second msg since the first msg was not acked and receive maximun is set to 1.
     ?assertEqual({publish_not_received, <<"m1">>},
         expect_publishes(C, Topic, [<<"m1">>])),
+    ok = emqtt:disconnect(C).
+
+unsub_success(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
+    {ok, _, [0]} = emqtt:subscribe(C, <<"topic/0">>, qos0),
+    {ok, _, Response} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
+    ?assertEqual([?RC_SUCCESS, ?RC_SUCCESS], Response),
+    ok = emqtt:disconnect(C).
+
+unsub_topic_not_found(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
+    {ok, _, Response} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
+    ?assertEqual([?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED], Response),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
