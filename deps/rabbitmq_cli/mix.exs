@@ -171,10 +171,23 @@ defmodule RabbitMQCtl.MixfileBase do
       case env do
         :test ->
           [
-            {:amqp, "~> 2.1.0"},
-            {:dialyxir, "~> 0.5", runtime: false},
-            {:temp, "~> 0.4"},
-            {:x509, "~> 0.7"},
+            {
+              :amqp,
+              path: Path.join(deps_dir, "amqp"),
+            },
+            {
+              :dialyxir,
+              path: Path.join(deps_dir, "dialyxir"),
+              runtime: false
+            },
+            {
+              :temp,
+              path: Path.join(deps_dir, "temp")
+            },
+            {
+              :x509,
+              path: Path.join(deps_dir, "x509")
+            },
             {
               :amqp_client,
               path: Path.join(deps_dir, "amqp_client"),

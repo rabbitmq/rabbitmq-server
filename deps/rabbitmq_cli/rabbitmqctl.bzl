@@ -49,7 +49,7 @@ def deps_dir_contents(ctx, deps, dir):
                     output = f,
                     target_file = src,
                 )
-                files.append(f)
+                files.extend([src, f])
     return files
 
 def _impl(ctx):
