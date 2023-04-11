@@ -148,8 +148,7 @@ defmodule RabbitMQCtl.MixfileBase do
       },
       {
         :parallel_stream,
-        path: Path.join(deps_dir, "parallel_stream"),
-        override: true
+        path: Path.join(deps_dir, "parallel_stream"), override: true
       },
       {
         :stdout_formatter,
@@ -173,12 +172,11 @@ defmodule RabbitMQCtl.MixfileBase do
           [
             {
               :amqp,
-              path: Path.join(deps_dir, "amqp"),
+              path: Path.join(deps_dir, "amqp")
             },
             {
               :dialyxir,
-              path: Path.join(deps_dir, "dialyxir"),
-              runtime: false
+              path: Path.join(deps_dir, "dialyxir"), runtime: false
             },
             {
               :temp,
@@ -192,7 +190,7 @@ defmodule RabbitMQCtl.MixfileBase do
               :amqp_client,
               path: Path.join(deps_dir, "amqp_client"),
               compile: if(is_bazel, do: false, else: make_cmd),
-              override: true,
+              override: true
             }
           ]
 
