@@ -463,10 +463,10 @@ process_request(?UNSUBSCRIBE,
                 #mqtt_packet{variable = #mqtt_packet_unsubscribe{packet_id  = PacketId,
                                                                  topic_filters = Topics},
                              payload = undefined},
-                State0) ->
+                #state{cfg = #cfg{proto_ver = ProtoVer}} = State0) ->
     ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
-    State = lists:foldl(
-              fun(TopicName, #state{subscriptions = Subs0} = S0) ->
+    {ReasonCodes, State} = lists:foldl(
+              fun(TopicName, {L, #state{subscriptions = Subs0} = S0}) ->
                       case maps:take(TopicName, Subs0) of
                           {QoS, Subs} ->
                               QName = queue_name(QoS, S0),
@@ -474,16 +474,17 @@ process_request(?UNSUBSCRIBE,
                                   ok ->
                                       S = S0#state{subscriptions = Subs},
                                       maybe_decrement_consumer(S0, S),
-                                      S;
+                                      {[?RC_SUCCESS | L], S};
+                                  {error, access_refused} ->
+                                      {[?RC_NOT_AUTHORIZED | L], S0};
                                   {error, _} ->
-                                      S0
+                                      {[?RC_UNSPECIFIED_ERROR | L], S0}
                               end;
-                          error ->
-                              S0
+                          error -> %% TopicName not found
+                              {[?RC_NO_SUBSCRIPTION_EXISTED | L], S0}
                       end
-              end, State0, Topics),
-    Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
-                         variable = #mqtt_packet_unsuback{packet_id = PacketId}},
+              end, {[], State0}, Topics),
+    Reply = unsuback_reply(ProtoVer, PacketId, lists:reverse(ReasonCodes)),
     _ = send(Reply, State),
     {ok, State};
 
@@ -541,6 +542,18 @@ process_request(?DISCONNECT,
             State0#state{cfg = Cfg#cfg{session_expiry_interval_secs = NewSEI}}
     end,
     {stop, {disconnect, client_initiated}, State}.
+
+%% V5 3.11.3 UNSUBACK payload contains a list of Reason Codes.
+%% Each Reason Code corresponds to a Topic Filter in the UNSUBSCRIBE packet being acknowledged.
+%% The order of Reason Codes in the UNSUBACK packet MUST match the order of Topic Filters in the UNSUBSCRIBE packet
+unsuback_reply(?MQTT_PROTO_V5, PacketId, Reasoncodes) ->
+    #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
+                         variable = #mqtt_packet_unsuback{packet_id = PacketId,
+                                                          reason_codes = Reasoncodes}};
+%% V4, 3.11.3 The UNSUBACK Packet has no payload.
+unsuback_reply(_, PacketId, _) ->
+    #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
+                         variable = #mqtt_packet_unsuback{packet_id = PacketId}}.
 
 -spec maybe_update_session_expiry_interval(amqqueue:amqqueue(), session_expiry_interval()) -> ok.
 maybe_update_session_expiry_interval(Queue, Expiry) ->
