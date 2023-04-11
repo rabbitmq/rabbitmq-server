@@ -90,12 +90,10 @@ get_listeners_config() ->
     maybe_disable_sendfile(Listeners).
 
 maybe_disable_sendfile(Listeners) ->
-    DisableSendfile = #{sendfile => false},
+    DisableSendfile = [{sendfile, false}],
     F = fun(L0) ->
                 CowboyOptsL0 = proplists:get_value(cowboy_opts, L0, []),
-                CowboyOptsM0 = maps:from_list(CowboyOptsL0),
-                CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
-                CowboyOptsL1 = maps:to_list(CowboyOptsM1),
+                CowboyOptsL1 = rabbit_misc:plmerge(DisableSendfile, CowboyOptsL0),
                 L1 = lists:keydelete(cowboy_opts, 1, L0),
                 [{cowboy_opts, CowboyOptsL1}|L1]
         end,
@@ -177,9 +175,7 @@ ensure_port(tcp, Listener) ->
 do_ensure_port(Port, Listener) ->
     %% include default port if it's not provided in the config
     %% as Cowboy won't start if the port is missing
-    M0 = maps:from_list(Listener),
-    M1 = maps:merge(#{port => Port}, M0),
-    {ok, maps:to_list(M1)}.
+    {ok, rabbit_misc:plmerge([{port, Port}], Listener)}.
 
 log_startup(tcp, Listener) ->
     rabbit_log:info("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
