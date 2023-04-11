@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.9",
+    version = "3.9.11",
 )
 
 erlang_config = use_extension(
@@ -251,6 +251,13 @@ erlang_package.git_package(
 )
 
 erlang_package.hex_package(
+    name = "parallel_stream",
+    build_file = "@rabbitmq-server//bazel:BUILD.parallel_stream",
+    sha256 = "639b2e8749e11b87b9eb42f2ad325d161c170b39b288ac8d04c4f31f8f0823eb",
+    version = "1.0.6",
+)
+
+erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
     sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
@@ -343,6 +350,7 @@ use_repo(
     "json",
     "observer_cli",
     "osiris",
+    "parallel_stream",
     "prometheus",
     "ra",
     "ranch",

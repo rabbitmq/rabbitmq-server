@@ -23,9 +23,13 @@ rabbitmqctl(
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
     ],
+    archives = [
+        "@hex//:archive",
+    ],
     source_deps = {
         "@csv//:sources": "csv",
         "@json//:sources": "json",
+        "@parallel_stream//:sources": "parallel_stream", # transitive dep of csv 2.x
     },
 )
 

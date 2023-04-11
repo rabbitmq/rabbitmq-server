@@ -1,10 +1,11 @@
 PROJECT = rabbitmq_cli
 
 BUILD_DEPS = rabbit_common
-DEPS = csv json observer_cli stdout_formatter
+DEPS = csv json observer_cli parallel_stream stdout_formatter
 TEST_DEPS = amqp_client rabbit
 
 dep_csv = hex 2.4.1
+dep_parallel_stream = hex 1.0.6
 dep_json = hex 1.4.1
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
