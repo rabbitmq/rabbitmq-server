@@ -37,8 +37,8 @@ pmerge(_Config) ->
     passed.
 
 plmerge(_Config) ->
-    P1 = [{a, 1}, {b, 2}, {c, 3}],
-    P2 = [{a, 2}, {d, 4}],
+    P1 = [{a, 2}, {d, 4}],
+    P2 = [{a, 1}, {b, 2}, {c, 3}],
     [{a, 1}, {b, 2}, {c, 3}, {d, 4}] = rabbit_misc:plmerge(P1, P2),
     passed.
 
