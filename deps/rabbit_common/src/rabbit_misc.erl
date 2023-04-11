@@ -960,9 +960,9 @@ pmerge(Key, Val, List) ->
 
 %% proplists merge
 plmerge(P1, P2) ->
-    %% Value from P1 suppresses value from P2
-    lists:sort(maps:to_list(maps:merge(maps:from_list(P2),
-                                       maps:from_list(P1)))).
+    %% Value from P2 supersedes value from P1
+    lists:sort(maps:to_list(maps:merge(maps:from_list(P1),
+                                       maps:from_list(P2)))).
 
 %% groups a list of proplists by a key function
 group_proplists_by(KeyFun, ListOfPropLists) ->
