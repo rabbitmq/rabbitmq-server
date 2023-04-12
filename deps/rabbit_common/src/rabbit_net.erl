@@ -168,7 +168,11 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
         {error, Reason} -> erlang:error(Reason)
     end;
 port_command(Sock, Data) when is_port(Sock) ->
-    erlang:port_command(Sock, Data).
+    case gen_tcp:send(Sock, Data) of
+        ok -> self() ! {inet_reply, Sock, ok},
+              true;
+        {error, Reason} -> erlang:error(Reason)
+    end.
 
 getopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:getopts(Sock, Options);
