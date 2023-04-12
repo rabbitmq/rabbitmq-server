@@ -6,7 +6,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_r
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.9.9",
+    tag = "3.9.11",
 )
 
 load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
@@ -205,4 +205,11 @@ git_repository(
     name = "rbe",
     branch = "linux-rbe",
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
+)
+
+http_archive(
+    name = "hex",
+    strip_prefix = "hex-2.0.5",
+    urls = ["https://github.com/hexpm/hex/archive/refs/tags/v2.0.5.zip"],
+    build_file = "@rabbitmq-server//bazel:BUILD.hex",
 )
