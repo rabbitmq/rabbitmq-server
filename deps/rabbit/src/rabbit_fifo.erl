@@ -26,6 +26,8 @@
          tick/2,
          overview/1,
 
+         eval_members/3,
+
          get_checked_out/4,
          %% versioning
          version/0,
@@ -898,6 +900,10 @@ tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
         false ->
             [{aux, {handle_tick, [QName, overview(State), all_nodes(State)]}}]
     end.
+
+eval_members({ClusterName, _} = _Leader, Cluster,
+             #?MODULE{cfg = #cfg{resource = QName}} = _State) ->
+    rabbit_quorum_queue:eval_members(ClusterName, Cluster, QName).
 
 -spec overview(state()) -> map().
 overview(#?MODULE{consumers = Cons,

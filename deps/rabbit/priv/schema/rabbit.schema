@@ -776,6 +776,13 @@ end}.
     {datatype, [integer, {list, string}]}
 ]}.
 
+{mapping, "default_policies.operator.$id.target_group_size", "rabbit.default_policies.operator", [
+    {include_default, 1},
+    {commented, 1},
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
 {translation, "rabbit.default_policies.operator", fun(Conf) ->
     Props = rabbit_cuttlefish:aggregate_props(
                 Conf,

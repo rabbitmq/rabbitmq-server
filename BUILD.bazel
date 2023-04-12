@@ -76,6 +76,12 @@ rabbitmq_home(
     plugins = PLUGINS,
 )
 
+rabbitmq_run_command(
+    name = "add-node",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "add-node",
+)
+
 rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
