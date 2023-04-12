@@ -1,0 +1,15 @@
+load(
+    "@rabbitmq-server//bazel/elixir:mix_archive_build.bzl",
+    "mix_archive_build",
+)
+
+mix_archive_build(
+    name = "archive",
+    srcs = [
+        "mix.exs",
+    ] + glob([
+        "lib/**/*",
+    ]),
+    out = "hex.ez",
+    visibility = ["//visibility:public"],
+)
