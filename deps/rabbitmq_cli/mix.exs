@@ -15,7 +15,7 @@ defmodule RabbitMQCtl.MixfileBase do
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
-      deps: deps(),
+      deps: deps(Mix.env()),
       aliases: aliases(),
       xref: [
         exclude: [
@@ -123,7 +123,7 @@ defmodule RabbitMQCtl.MixfileBase do
   # from Hex.pm in RabbitMQ source archive (the source archive must be
   # self-contained and RabbitMQ must be buildable offline). However, we
   # don't have the equivalent for other methods.
-  defp deps() do
+  defp deps(env) do
     deps_dir = System.get_env("DEPS_DIR", "deps")
 
     # Mix is confused by any `rebar.{config,lock}` we might have left in
@@ -148,6 +148,10 @@ defmodule RabbitMQCtl.MixfileBase do
         path: Path.join(deps_dir, "csv")
       },
       {
+        :parallel_stream,
+        path: Path.join(deps_dir, "parallel_stream"), override: true
+      },
+      {
         :stdout_formatter,
         path: Path.join(deps_dir, "stdout_formatter"),
         compile: if(is_bazel, do: false, else: make_cmd)
@@ -157,24 +161,43 @@ defmodule RabbitMQCtl.MixfileBase do
         path: Path.join(deps_dir, "observer_cli"),
         compile: if(is_bazel, do: false, else: make_cmd)
       },
-      {:amqp, "~> 2.1.0", only: :test},
-      {:dialyxir, "~> 0.5", only: :test, runtime: false},
-      {:temp, "~> 0.4", only: :test},
-      {:x509, "~> 0.7", only: :test},
       {
         :rabbit_common,
         path: Path.join(deps_dir, "rabbit_common"),
         compile: if(is_bazel, do: false, else: make_cmd),
         override: true
-      },
-      {
-        :amqp_client,
-        path: Path.join(deps_dir, "amqp_client"),
-        compile: if(is_bazel, do: false, else: make_cmd),
-        override: true,
-        only: :test
       }
-    ]
+    ] ++
+      case env do
+        :test ->
+          [
+            {
+              :amqp,
+              path: Path.join(deps_dir, "amqp")
+            },
+            {
+              :dialyxir,
+              path: Path.join(deps_dir, "dialyxir"), runtime: false
+            },
+            {
+              :temp,
+              path: Path.join(deps_dir, "temp")
+            },
+            {
+              :x509,
+              path: Path.join(deps_dir, "x509")
+            },
+            {
+              :amqp_client,
+              path: Path.join(deps_dir, "amqp_client"),
+              compile: if(is_bazel, do: false, else: make_cmd),
+              override: true
+            }
+          ]
+
+        _ ->
+          []
+      end
   end
 
   defp aliases do
