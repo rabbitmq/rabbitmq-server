@@ -211,10 +211,3 @@ git_repository(
     branch = "linux-rbe",
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
-
-http_archive(
-    name = "hex",
-    strip_prefix = "hex-2.0.5",
-    urls = ["https://github.com/hexpm/hex/archive/refs/tags/v2.0.5.zip"],
-    build_file = "@rabbitmq-server//bazel:BUILD.hex",
-)
