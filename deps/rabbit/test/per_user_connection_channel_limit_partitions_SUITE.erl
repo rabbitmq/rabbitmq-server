@@ -32,7 +32,7 @@ groups() ->
 suite() ->
     [
       %% If a test hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 8}}
+      {timetrap, {minutes, 5}}
     ].
 
 %% see partitions_SUITE
