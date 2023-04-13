@@ -467,3 +467,13 @@ use_repo(
     secondary_umbrella,
     "rabbitmq-server-generic-unix-3.11",
 )
+
+hex = use_extension(
+    "//bazel/bzlmod:extensions.bzl",
+    "hex",
+)
+
+use_repo(
+    hex,
+    "hex",
+)
