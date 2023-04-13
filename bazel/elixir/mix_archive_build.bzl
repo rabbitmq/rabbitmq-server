@@ -29,10 +29,10 @@ def _impl(ctx):
     for src in ctx.files.srcs:
         dest = additional_file_dest_relative_path(ctx.label, src)
         copy_srcs_commands.extend([
-            "mkdir -p $(dirname ${{MIX_INVOCATION_DIR}}/{dest})".format(
+            'mkdir -p "$(dirname ${{MIX_INVOCATION_DIR}}/{dest})"'.format(
                 dest = dest,
             ),
-            "cp {flags}{src} ${{MIX_INVOCATION_DIR}}/{dest}".format(
+            'cp {flags}"{src}" "${{MIX_INVOCATION_DIR}}/{dest}"'.format(
                 flags = "-r " if src.is_directory else "",
                 src = src.path,
                 dest = dest,
@@ -49,7 +49,7 @@ else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
 
-ABS_OUT_PATH=$PWD/{out}
+ABS_OUT_PATH="$PWD/{out}"
 
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
@@ -60,11 +60,11 @@ MIX_INVOCATION_DIR="{mix_invocation_dir}"
 
 {copy_srcs_commands}
 
-cd ${{MIX_INVOCATION_DIR}}
-export HOME=${{PWD}}
+cd "${{MIX_INVOCATION_DIR}}"
+export HOME="${{PWD}}"
 export MIX_ENV=prod
 export ERL_COMPILER_OPTIONS=deterministic
-"${{ABS_ELIXIR_HOME}}"/bin/mix archive.build -o ${{ABS_OUT_PATH}}
+"${{ABS_ELIXIR_HOME}}"/bin/mix archive.build -o "${{ABS_OUT_PATH}}"
 
 # remove symlinks from the _build directory since it
 # is an unused output, and bazel does not allow them

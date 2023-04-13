@@ -1,3 +1,4 @@
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
     "@rules_erlang//:erlang_app_info.bzl",
     "ErlangAppInfo",
@@ -138,7 +139,7 @@ set -x
             elixir_home = elixir_home,
             package_dir = package_dir,
             deps_dir = deps_dir,
-            archives = "".join([a.short_path for a in ctx.files.archives]),
+            archives = "".join([shell.quote(a.short_path) for a in ctx.files.archives]),
             precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
@@ -195,7 +196,7 @@ exit /b 1
             elixir_home = windows_path(elixir_home),
             package_dir = windows_path(ctx.label.package),
             deps_dir = deps_dir,
-            archives = "".join([a.short_path for a in ctx.files.archives]),
+            archives = "".join([shell.quote(a.short_path) for a in ctx.files.archives]),
             precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
