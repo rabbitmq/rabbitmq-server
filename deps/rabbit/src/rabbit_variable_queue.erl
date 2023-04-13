@@ -588,7 +588,7 @@ batch_publish_delivered(Publishes, ChPid, Flow, State) ->
     State2 = ui(State1),
     {lists:reverse(SeqIds), a(maybe_update_rates(State2))}.
 
-discard(_Msg, _ChPid, _Flow, State) -> State.
+discard(_MsgId, _ChPid, _Flow, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case sets:is_empty(C) of
