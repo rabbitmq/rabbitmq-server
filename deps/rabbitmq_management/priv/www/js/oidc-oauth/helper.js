@@ -28,21 +28,7 @@ function rabbit_base_uri() {
 }
 
 function auth_settings_apply_defaults(authSettings) {
-  if (authSettings.enable_uaa) {
 
-    if (!authSettings.oauth_provider_url) {
-      authSettings.oauth_provider_url = authSettings.uaa_location
-    }
-    if (!authSettings.oauth_client_id) {
-      authSettings.oauth_client_id = authSettings.uaa_client_id
-    }
-    if (!authSettings.oauth_client_secret) {
-      authSettings.oauth_client_secret = authSettings.uaa_client_secret
-    }
-    if (!authSettings.oauth_scopes) {
-      authSettings.oauth_scopes = "openid profile " + authSettings.oauth_resource_id + ".*";
-    }
-  }
   if (!authSettings.oauth_response_type) {
     authSettings.oauth_response_type = "code"; // although the default value in oidc client
   }
@@ -78,7 +64,7 @@ function oauth_initialize(authSettings) {
         authority: authSettings.oauth_provider_url,
         client_id: authSettings.oauth_client_id,
         response_type: authSettings.oauth_response_type,
-        scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
+        scope: authSettings.oauth_scopes,
         resource: authSettings.oauth_resource_id,
         redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri() + "/",
@@ -96,13 +82,6 @@ function oauth_initialize(authSettings) {
       oidcSettings.metadataUrl = authSettings.oauth_metadata_url;
     }
 
-    if (authSettings.enable_uaa == true) {
-      // This is required for old versions of UAA because the newer ones do expose
-      // the end_session_endpoint on the oidc discovery endpoint, .a.k.a. metadataUrl
-      oidcSettings.metadataSeed = {
-        end_session_endpoint: authSettings.oauth_provider_url + "/logout.do"
-      }
-    }
     oidc.Log.setLevel(oidc.Log.DEBUG);
     oidc.Log.setLogger(console);
 
