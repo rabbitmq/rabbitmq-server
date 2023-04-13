@@ -1,3 +1,4 @@
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
     "@rules_erlang//:erlang_app_info.bzl",
     "ErlangAppInfo",
@@ -148,7 +149,7 @@ find . -type l -delete
         escript_path = escript.path,
         ebin_dir = ebin.path,
         consolidated_dir = consolidated.path,
-        archives = "".join([a.path for a in ctx.files.archives]),
+        archives = "".join([shell.quote(a.path) for a in ctx.files.archives]),
         precompiled_deps = " ".join([
             dep[ErlangAppInfo].app_name
             for dep in ctx.attr.deps
