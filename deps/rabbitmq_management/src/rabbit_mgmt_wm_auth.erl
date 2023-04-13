@@ -25,7 +25,6 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 authSettings() ->
-  EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
   EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
   case EnableOAUTH of
     true ->
@@ -48,7 +47,6 @@ authSettings() ->
                     false ->
                         append_oauth_optional_secret([
                          {oauth_enabled, true},
-                         {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
                          {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
                          {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
                          {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},

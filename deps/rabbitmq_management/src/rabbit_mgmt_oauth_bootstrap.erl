@@ -23,7 +23,6 @@ bootstrap_oauth(Req0, State) ->
   {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>}, JSContent, Req0), State}.
 
 authSettings() ->
-  EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
   EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
   Data = case EnableOAUTH of
     true ->
@@ -45,7 +44,6 @@ authSettings() ->
                     json_field(oauth_enabled, false, true);
                   false ->
                     json_field(oauth_enabled, true) ++
-                    json_field(enable_uaa, EnableUAA) ++
                     json_field(oauth_client_id, OAuthClientId) ++
                     json_field(oauth_client_secret, OAuthClientSecret) ++
                     json_field(oauth_provider_url, OAuthProviderUrl) ++
