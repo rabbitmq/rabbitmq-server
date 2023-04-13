@@ -550,6 +550,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "per_user_connection_channel_limit_partitions_SUITE",
     size = "large",
+    flaky = True,
 )
 
 rabbitmq_integration_suite(
@@ -797,11 +798,11 @@ rabbitmq_suite(
 
 rabbitmq_suite(
     name = "rabbit_stream_sac_coordinator_SUITE",
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-    ],
     runtime_deps = [
         "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
     ],
 )
 
@@ -1052,10 +1053,10 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "vhost_SUITE",
     size = "medium",
-    flaky = True,
     additional_srcs = [
         "test/test_rabbit_event_handler.erl",
     ],
+    flaky = True,
 )
 
 rabbitmq_suite(
