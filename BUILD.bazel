@@ -63,6 +63,11 @@ string_flag(
 
 plt(
     name = "base_plt",
+    dialyzer_opts = select({
+        "@erlang_config//:erlang_26": ["-Wno_unknown"],
+        "@erlang_config//:erlang_26_0-rc2": ["-Wno_unknown"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
 )
 
