@@ -117,6 +117,7 @@ plt(
     apps = EXTRA_APPS + ["mnesia"],
     plt = "//:base_plt",
     deps = RUNTIME_DEPS,
+    ignore_warnings = True,
 )
 
 dialyze(

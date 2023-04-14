@@ -80,6 +80,7 @@ plt(
     plt = "//:base_plt",
     apps = EXTRA_APPS,
     deps = DEPS + RUNTIME_DEPS,
+    ignore_warnings = True,
 )
 
 dialyze(

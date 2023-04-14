@@ -46,6 +46,7 @@ plt(
         "@eetcd//:erlang_app",
         RUNTIME_DEPS,
     ),
+    ignore_warnings = True,
 )
 
 dialyze(
