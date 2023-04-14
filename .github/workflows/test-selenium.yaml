@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - v3.12.x
       - v3.11.x
       - bump-otp-for-oci
       - bump-rbe-*
