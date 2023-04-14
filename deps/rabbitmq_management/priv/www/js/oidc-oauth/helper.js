@@ -21,10 +21,6 @@ function oauth_initialize_if_required() {
 
 
 function auth_settings_apply_defaults(authSettings) {
-<<<<<<< HEAD
-  if (authSettings.enable_uaa == "true") {
-=======
->>>>>>> 1c1e4515f7 (Deprecate uaa settings from management plugin)
 
   if (!authSettings.oauth_response_type) {
     authSettings.oauth_response_type = "code"; // although the default value in oidc client

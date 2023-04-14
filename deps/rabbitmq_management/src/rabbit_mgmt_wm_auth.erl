@@ -24,8 +24,6 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-<<<<<<< HEAD
-=======
 authSettings() ->
   EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
   case EnableOAUTH of
@@ -67,7 +65,6 @@ authSettings() ->
         [{oauth_enabled, false}]
   end.
 
->>>>>>> 1c1e4515f7 (Deprecate uaa settings from management plugin)
 to_json(ReqData, Context) ->
     EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
     EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
