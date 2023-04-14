@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 -define(SERVER_REJECT_CLIENT_NEW, {tls_alert, {unknown_ca, _}}).
@@ -218,7 +219,7 @@ validation_success_for_AMQP_client1(Config) ->
     %% authority connects successfully.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{verify, verify_none},
+                                                           ssl_options = [{cacerts, [Root]},
                                                                           {cert, Certificate},
                                                                           {key, Key},
                                                                           {versions, ['tlsv1.2']}]}),
@@ -962,7 +963,14 @@ cfg() ->
 
 chain(Issuer) ->
     %% These are DER encoded.
-    TestData = public_key:pkix_test_data(#{root => Issuer, peer => [{key, {rsa, 2048, 17}}]}),
+    TestData = public_key:pkix_test_data(#{
+        root => Issuer,
+        peer => [{digest, sha256}, {key, {rsa, 2048, 17}}, {extensions, [
+            #'Extension'{
+                extnID = ?'id-ce-subjectAltName',
+                extnValue = [{dNSName, "localhost"}],
+                critical = true}
+        ]}]}),
     {proplists:get_value(cert, TestData), proplists:get_value(key, TestData)}.
 
 change_configuration(App, Props) ->
