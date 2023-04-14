@@ -80,6 +80,7 @@ plt(
     apps = EXTRA_APPS,
     libs = ["//deps/rabbitmq_cli:elixir"],
     deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
+    ignore_warnings = True,
 )
 
 dialyze(

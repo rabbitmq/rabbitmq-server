@@ -46,6 +46,7 @@ plt(
     libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
     deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
+    ignore_warnings = True,
 )
 
 dialyze(

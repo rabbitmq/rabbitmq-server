@@ -50,6 +50,7 @@ plt(
         "@systemd//:erlang_app",
         "@osiris//:erlang_app",
     ],
+    ignore_warnings = True,
 )
 
 dialyze(
