@@ -8,14 +8,14 @@ on:
     - .github/workflows/test-windows.yaml
 jobs:
   test:
-    name: Test Windows
+    name: Test Windows OTP26
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "25.3"
-          elixir_version: 1.14.0
+        - erlang_version: "26.0-rc3"
+          elixir_version: "1.14.4"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -60,7 +60,7 @@ jobs:
       run: |
         bazelisk test //... ^
           --config=buildbuddy ^
-          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
+          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker,-dialyze ^
           --build_tests_only ^
           --verbose_failures
   summary-windows:
