@@ -4,7 +4,7 @@ load(
     "string_flag",
 )
 load("@rules_pkg//:mappings.bzl", "pkg_files", "strip_prefix")
-load("@rules_erlang//:dialyze.bzl", "plt")
+load("@rules_erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
 load("@bazel_gazelle//:def.bzl", "gazelle")
@@ -63,11 +63,7 @@ string_flag(
 
 plt(
     name = "base_plt",
-    dialyzer_opts = select({
-        "@erlang_config//:erlang_26": ["-Wno_unknown"],
-        "@erlang_config//:erlang_26_0-rc2": ["-Wno_unknown"],
-        "//conditions:default": [],
-    }),
+    apps = DEFAULT_PLT_APPS + ["compiler", "crypto"],
     visibility = ["//visibility:public"],
 )
 
