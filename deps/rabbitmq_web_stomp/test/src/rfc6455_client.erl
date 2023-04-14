@@ -97,7 +97,7 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPrefac
             gen_tcp:send(Socket0, TcpPreface),
             case Transport of
                 gen_tcp -> {ok, Socket0};
-                ssl -> Transport:connect(Socket0, [])
+                ssl -> Transport:connect(Socket0, [{verify, verify_none}])
             end
     end,
 
