@@ -36,7 +36,16 @@ maybe_add_sni_1(false, _Host, Options) ->
 maybe_add_sni_1(true, Host, Options) ->
     [{server_name_indication, Host} | Options].
 
+%% This check is no longer necessary starting with OTP-26.
+%% @todo Remove the check once we support only OTP-26 and above.
 maybe_add_verify(Options) ->
+    %% This function is only defined starting in OTP-26.
+    case erlang:function_exported(user_drv, whereis_group, 0) of
+        true -> Options;
+        false -> maybe_add_verify1(Options)
+    end.
+
+maybe_add_verify1(Options) ->
     case lists:keymember(verify, 1, Options) of
         true ->
             % NB: user has explicitly set 'verify'
