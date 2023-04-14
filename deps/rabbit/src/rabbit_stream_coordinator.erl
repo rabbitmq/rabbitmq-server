@@ -751,7 +751,7 @@ handle_aux(leader, _, fail_active_actions,
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
     Exclude = maps:from_list([{S, ok}
-                              || {P, {S, _, _}} <- maps:to_list(Actions),
+                              || {P, {S, _, _}} <- maps_to_list(Actions),
                              is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
     fail_active_actions(Streams, Exclude),
@@ -862,7 +862,7 @@ send_action_failed(StreamId, Action, Arg) ->
   send_self_command({action_failed, StreamId, Arg#{action => Action}}).
 
 send_self_command(Cmd) ->
-    ra:pipeline_command({?MODULE, node()}, Cmd),
+    ra:pipeline_command({?MODULE, node()}, Cmd, no_correlation, normal),
     ok.
 
 
@@ -1824,7 +1824,11 @@ find_leader(Members) ->
                    false;
                (#member{role = {Role, _}}) ->
                    Role == writer
+<<<<<<< HEAD
            end, maps:values(Members)) of
+=======
+           end, maps_to_list(Members)) of
+>>>>>>> c8b4742333 (Restore maps:to_list/1 ordering in stream coordinator)
         {[Writer], Replicas} ->
             {Writer, Replicas};
         {[], Replicas} ->
@@ -1855,7 +1859,64 @@ select_leader(_Version, EpochOffsets) ->
                            (_, {_, empty}) ->
                                 true
                         end, EpochOffsets),
+<<<<<<< HEAD
     Node.
+=======
+    Node;
+select_leader(#{system_time := Ts,
+                machine_version := MacVer,
+                index := Idx},
+              Stopped)
+  when is_map(Stopped) andalso MacVer >= 4 ->
+    %% this logic gets all potential nodes and does a selection with some
+    %% degree of random
+    [{_, #member{state = MState}} | _] = Sorted =
+        lists:sort(fun({_, #member{state = {stopped, _, {Epoch, OffsetA}}}},
+                       {_, #member{state = {stopped, _, {Epoch, OffsetB}}}}) ->
+                           %% same epoch, compare last chunk ids
+                           OffsetA >= OffsetB;
+                      ({_, #member{state = {stopped, _, {EpochA, _}}}},
+                       {_, #member{state = {stopped, _, {EpochB, _}}}}) ->
+                           EpochA >= EpochB;
+                      ({_, #member{state = {stopped, _, empty}}}, _) ->
+                           false;
+                      (_, {_, #member{state = {stopped, _, empty}}}) ->
+                           true
+                   end, maps_to_list(Stopped)),
+    Potential = lists:takewhile(fun ({_N, #member{state = S}}) ->
+                                        S == MState
+                                end, Sorted),
+    case Potential of
+        [{Node, _}] ->
+            Node;
+        _ ->
+            case preferred_leader(Potential) of
+                undefined ->
+                    % there are more than one and no preferred leader
+                    % use modulo to select
+                    Nth = ((Ts + Idx) rem length(Potential)) + 1,
+                    {Node, _} = lists:nth(Nth, Potential),
+                    Node;
+                N ->
+                    N
+            end
+    end;
+select_leader(Meta, Stopped) ->
+    %% recurse with old format
+    select_leader(Meta,
+                  maps_to_list(
+                    maps:map(
+                      fun (_N, #member{state = {stopped, _, Tail}}) ->
+                              Tail
+                      end, Stopped))).
+
+preferred_leader([]) ->
+    undefined;
+preferred_leader([{N, #member{preferred = true}} | _Rem]) ->
+    N;
+preferred_leader([{_N, #member{}} | Rem]) ->
+    preferred_leader(Rem).
+>>>>>>> c8b4742333 (Restore maps:to_list/1 ordering in stream coordinator)
 
 maybe_sleep({{nodedown, _}, _}) ->
     timer:sleep(10000);
@@ -1921,3 +1982,34 @@ machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
                     [From, To]),
     {State, []}.
+<<<<<<< HEAD
+=======
+
+-spec transfer_leadership([node()]) -> {ok, in_progress | undefined | node()} | {error, any()}.
+transfer_leadership([Destination | _] = _TransferCandidates) ->
+    case ra_leaderboard:lookup_leader(?MODULE) of
+        {Name, Node} = Id when Node == node() ->
+            case ra:transfer_leadership(Id, {Name, Destination}) of
+                ok ->
+                    case ra:members(Id) of
+                        {_, _, {_, NewNode}} ->
+                            {ok, NewNode};
+                        {timeout, _} ->
+                            {error, not_migrated}
+                    end;
+                already_leader ->
+                    {ok, Destination};
+                {error, _} = Error ->
+                    Error;
+                {timeout, _} ->
+                    {error, timeout}
+            end;
+        {_, Node} ->
+            {ok, Node};
+        undefined ->
+            {ok, undefined}
+    end.
+
+maps_to_list(M) ->
+    lists:sort(maps:to_list(M)).
+>>>>>>> c8b4742333 (Restore maps:to_list/1 ordering in stream coordinator)
