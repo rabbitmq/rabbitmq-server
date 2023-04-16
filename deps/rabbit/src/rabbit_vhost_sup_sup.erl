@@ -18,7 +18,10 @@
          start_vhost/1, start_vhost/2,
          get_vhost_sup/1, get_vhost_sup/2,
          save_vhost_sup/3,
-         save_vhost_process/2]).
+         save_vhost_process/2,
+         save_vhost_recovery_terms/2,
+         lookup_vhost_sup_record/1,
+         lookup_vhost_recovery_terms/1]).
 -export([delete_on_all_nodes/1, start_on_all_nodes/1]).
 -export([is_vhost_alive/1]).
 -export([check/0]).
@@ -26,7 +29,7 @@
 %% Internal
 -export([stop_and_delete_vhost/1]).
 
--record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid, vhost_process_pid}).
+-record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid, vhost_process_pid, recovery_terms_pid}).
 
 start() ->
     case supervisor:start_child(rabbit_sup, {?MODULE,
@@ -209,13 +212,20 @@ is_vhost_alive(VHost) ->
 save_vhost_sup(VHost, WrapperPid, VHostPid) ->
     true = ets:insert(?MODULE, #vhost_sup{vhost = VHost,
                                           vhost_sup_pid = VHostPid,
-                                          wrapper_pid = WrapperPid}),
+                                          wrapper_pid = WrapperPid,
+                                          recovery_terms_pid = no_pid}),
+    ok.
+
+-spec save_vhost_recovery_terms(rabbit_types:vhost(), pid()) -> ok.
+save_vhost_recovery_terms(VHost, RecoveryTermsPid) ->
+    true = ets:update_element(?MODULE, VHost,
+                              [{#vhost_sup.recovery_terms_pid, RecoveryTermsPid}]),
     ok.
 
 -spec save_vhost_process(rabbit_types:vhost(), pid()) -> ok.
 save_vhost_process(VHost, VHostProcessPid) ->
     true = ets:update_element(?MODULE, VHost,
-                              {#vhost_sup.vhost_process_pid, VHostProcessPid}),
+                              [{#vhost_sup.vhost_process_pid, VHostProcessPid}]),
     ok.
 
 -spec lookup_vhost_sup_record(rabbit_types:vhost()) -> #vhost_sup{} | not_found.
@@ -225,6 +235,17 @@ lookup_vhost_sup_record(VHost) ->
             case ets:lookup(?MODULE, VHost) of
                 [] -> not_found;
                 [#vhost_sup{} = VHostSup] -> VHostSup
+            end;
+        undefined -> not_found
+    end.
+
+-spec lookup_vhost_recovery_terms(rabbit_types:vhost()) -> pid() | not_found.
+lookup_vhost_recovery_terms(VHost) ->
+    case ets:info(?MODULE, name) of
+        ?MODULE ->
+            case ets:lookup(?MODULE, VHost) of
+                [] -> not_found;
+                [#vhost_sup{} = VHostSup] -> VHostSup#vhost_sup.recovery_terms_pid
             end;
         undefined -> not_found
     end.
