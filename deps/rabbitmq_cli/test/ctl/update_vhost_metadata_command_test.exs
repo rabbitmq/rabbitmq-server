@@ -90,7 +90,7 @@ defmodule UpdateVhostMetadataCommandTest do
     assert vh[:tags] == [:a1, :b2, :c3]
   end
 
-  test "run: attempt to use a non-existent virtual host fails" do
+  test "run: attempt to use a non-existent virtual host fails", context do
     vh = "a-non-existent-3882-vhost"
 
     assert match?(
