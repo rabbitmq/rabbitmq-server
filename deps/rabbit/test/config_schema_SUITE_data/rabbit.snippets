@@ -896,5 +896,34 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
+<<<<<<< HEAD
+=======
+   []},
+
+  %%
+  %% Runtime parameters
+  %%
+
+  {runtime_parameters_limits,
+  "
+   runtime_parameters.limits.b = 2
+   runtime_parameters.limits.a = 1
+  ",
+   [{rabbit, [{runtime_parameters, [{limits, [
+       {<<"a">>, 1},
+       {<<"b">>, 2}
+     ]}]}]}],
+   []},
+
+  %%
+  %% Deprecated features
+  %%
+
+  {deprecated_features_cmq,
+   "deprecated_features.permit.classic_mirrored_queues = false",
+   [{rabbit, [
+      {permitted_deprecated_features, #{classic_mirrored_queues => false}}
+     ]}],
+>>>>>>> 13a37f512b (add config fields)
    []}
 ].
