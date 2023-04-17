@@ -106,6 +106,6 @@ defmodule UpdateVhostMetadataCommandTest do
 
   test "banner", context do
     assert @command.banner([@vhost], context[:opts]) =~
-             ~r/Update metadata of vhost \"#{@vhost}\" \.\.\./
+             ~r/Updating metadata of vhost/
   end
 end

@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
 
           other ->
             {:validation_failure,
-             {:bad_arguments,
+             {:bad_argument,
               "Default queue type must be one of: quorum, stream, classic. Provided: #{other}"}}
         end
     end
