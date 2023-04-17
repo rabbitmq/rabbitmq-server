@@ -59,24 +59,23 @@ defmodule UpdateVhostMetadataCommandTest do
                "Default queue type must be one of: quorum, stream, classic. Provided: unknown"}}
   end
 
-  @tag vhost: @vhost
   test "run: passing a valid vhost name and description succeeds", context do
-    add_vhost(context[:vhost])
+    add_vhost(@vhost)
     desc = "desc 2"
 
-    assert @command.run([context[:vhost]], Map.merge(context[:opts], %{desciption: desc})) == :ok
-    vh = find_vhost(context[:vhost])
+    assert @command.run([@vhost], Map.merge(context[:opts], %{desciption: desc})) == :ok
+    vh = find_vhost(@vhost)
 
     assert vh
     assert vh[:description] == desc
   end
 
   test "run: passing a valid vhost name and a set of tags succeeds", context do
-    add_vhost(context[:vhost])
+    add_vhost(@vhost)
     tags = "a1,b2,c3"
 
-    assert @command.run([context[:vhost]], Map.merge(context[:opts], %{tags: tags})) == :ok
-    vh = find_vhost(context[:vhost])
+    assert @command.run([@vhost], Map.merge(context[:opts], %{tags: tags})) == :ok
+    vh = find_vhost(@vhost)
 
     assert vh
     assert vh[:tags] == [:a1, :b2, :c3]
@@ -96,19 +95,17 @@ defmodule UpdateVhostMetadataCommandTest do
     assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
 
-  @tag vhost: @vhost
   test "run: vhost tags are coerced to a list", context do
-    add_vhost(context[:vhost])
+    add_vhost(@vhost)
 
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
-    assert @command.run([context[:vhost]], opts) == :ok
-    record = list_vhosts() |> Enum.find(fn record -> record[:name] == context[:vhost] end)
-    assert record[:tags] == [:my_tag]
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert vh[:tags] == [:my_tag]
   end
 
-  @tag vhost: @vhost
   test "banner", context do
-    assert @command.banner([context[:vhost]], context[:opts]) =~
-             ~r/Update metadata of vhost \"#{context[:vhost]}\" \.\.\./
+    assert @command.banner([@vhost], context[:opts]) =~
+             ~r/Update metadata of vhost \"#{@vhost}\" \.\.\./
   end
 end
