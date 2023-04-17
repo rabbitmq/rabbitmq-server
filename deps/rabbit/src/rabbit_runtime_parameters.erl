@@ -130,10 +130,9 @@ set_any0(VHost, Component, Name, Term, User) ->
                      [Name, VHost, Component, Term]),
     case lookup_component(Component) of
         {ok, Mod} ->
-            case flatten_errors(
-                   Mod:validate(VHost, Component, Name, Term, get_user(User))) of
+            case is_within_limit(Component) of
                 ok ->
-                    case is_within_limit(Component) of
+                    case flatten_errors(Mod:validate(VHost, Component, Name, Term, get_user(User)))  of
                         ok ->
                             case rabbit_db_rtparams:set(VHost, Component, Name, Term) of
                                 {old, Term} ->
@@ -161,9 +160,10 @@ set_any0(VHost, Component, Name, Term, User) ->
 -spec is_within_limit(binary()) -> rabbit_types:ok_or_error(binary()).
 
 is_within_limit(Component) ->
-    Limits = application:get_env(rabbit, runtime_parameter_limits, []),
+    Params = application:get_env(rabbit, runtime_parameters, []),
+    Limits = proplists:get_value(limits, Params, []),
     Limit = proplists:get_value(Component, Limits, -1),
-    case Limit =< 0 orelse count_component(Component) < Limit of
+    case Limit < 0 orelse count_component(Component) < Limit of
        true -> ok;
        false -> {errors, [{"component ~ts is limited to ~tp per host", [Component, Limit]}]}
     end.
