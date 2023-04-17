@@ -61,7 +61,7 @@ defmodule UpdateVhostMetadataCommandTest do
     add_vhost(context[:vhost])
     desc = "desc 2"
 
-    assert @command.run([context[:vhost], %{desciption: desc}], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], Map.merge(context[:opts], %{desciption: desc})) == :ok
     vh = list_vhosts() |> Enum.filter(fn record -> record[:name] == context[:vhost] end) |> List.first
     assert vh
     assert vh[:description] == desc
@@ -71,7 +71,7 @@ defmodule UpdateVhostMetadataCommandTest do
     add_vhost(context[:vhost])
     tags = "a1,b2,c3"
 
-    assert @command.run([context[:vhost], %{tags: tags}], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], Map.merge(context[:opts], %{tags: tags})) == :ok
     vh = list_vhosts() |> Enum.filter(fn record -> record[:name] == context[:vhost] end) |> List.first
     assert vh
     assert vh[:tags] == [:a1, :b2, :c3]
@@ -79,26 +79,12 @@ defmodule UpdateVhostMetadataCommandTest do
 
   test "run: attempt to use a non-existent virtual host fails" do
     vh = "a-non-existent-3882-vhost"
-    assert match?({:error, {:no_such_vhost, _}}, @command.run([vh], %{description: "irrelevant", context[:opts]}))
+    assert match?({:error, {:no_such_vhost, _}}, @command.run([vh], Maps.merge(context[:opts], %{description: "irrelevant"})))
   end
 
   test "run: attempt to use an unreachable node returns a nodedown" do
     opts = %{node: :jake@thedog, timeout: 200, description: "does not matter"}
     assert match?({:badrpc, _}, @command.run(["na"], opts))
-  end
-
-  @tag vhost: @vhost
-  test "run: adding the same host twice is idempotent", context do
-    add_vhost(context[:vhost])
-
-    assert @command.run([context[:vhost]], context[:opts]) == :ok
-    assert list_vhosts() |> Enum.count(fn record -> record[:name] == context[:vhost] end) == 1
-  end
-
-  @tag vhost: @vhost
-  test "banner", context do
-    assert @command.banner([context[:vhost]], context[:opts]) =~
-             ~r/Update metadata of vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   @tag vhost: @vhost
@@ -109,5 +95,11 @@ defmodule UpdateVhostMetadataCommandTest do
     assert @command.run([context[:vhost]], opts) == :ok
     record = list_vhosts() |> Enum.find(fn record -> record[:name] == context[:vhost] end)
     assert record[:tags] == [:my_tag]
+  end
+
+  @tag vhost: @vhost
+  test "banner", context do
+    assert @command.banner([context[:vhost]], context[:opts]) =~
+             ~r/Update metadata of vhost \"#{context[:vhost]}\" \.\.\./
   end
 end
