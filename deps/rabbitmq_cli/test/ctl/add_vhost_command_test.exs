@@ -77,7 +77,7 @@ defmodule AddVhostCommandTest do
   end
 
   @tag vhost: @vhost
-  test "run: vhost tags are conformed to a list", context do
+  test "run: vhost tags are coerced to a list", context do
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
     assert @command.run([context[:vhost]], opts) == :ok
     record = list_vhosts() |> Enum.find(fn record -> record[:name] == context[:vhost] end)
