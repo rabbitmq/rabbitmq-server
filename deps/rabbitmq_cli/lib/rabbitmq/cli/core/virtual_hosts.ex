@@ -10,7 +10,7 @@ defmodule RabbitMQ.CLI.Core.VirtualHosts do
         nil
 
       val ->
-        String.split(tags, ",", trim: true)
+        String.split(val, ",", trim: true)
         |> Enum.map(&String.trim/1)
         |> Enum.map(&String.to_atom/1)
     end
