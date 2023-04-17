@@ -65,12 +65,7 @@ defmodule UpdateVhostMetadataCommandTest do
     desc = "desc 2"
 
     assert @command.run([context[:vhost]], Map.merge(context[:opts], %{desciption: desc})) == :ok
-    IO.inspect(list_vhosts())
-
-    vh =
-      list_vhosts()
-      |> Enum.filter(fn record -> record[:name] == context[:vhost] end)
-      |> List.first()
+    vh = find_vhost(context[:vhost])
 
     assert vh
     assert vh[:description] == desc
@@ -81,11 +76,7 @@ defmodule UpdateVhostMetadataCommandTest do
     tags = "a1,b2,c3"
 
     assert @command.run([context[:vhost]], Map.merge(context[:opts], %{tags: tags})) == :ok
-
-    vh =
-      list_vhosts()
-      |> Enum.filter(fn record -> record[:name] == context[:vhost] end)
-      |> List.first()
+    vh = find_vhost(context[:vhost])
 
     assert vh
     assert vh[:tags] == [:a1, :b2, :c3]
