@@ -16,6 +16,7 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_tags/3]).
+-export([update_metadata/3]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
@@ -28,8 +29,8 @@
 %% API
 %%
 
+%% this module deals with user inputs, so accepts more than just atoms
 -type vhost_tag() :: atom() | string() | binary().
--export_type([vhost_tag/0]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -231,20 +232,30 @@ do_add(Name, Metadata, ActingUser) ->
             {error, Msg}
     end.
 
--spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-update(Name, Description, Tags, ActingUser) ->
-    Metadata = #{description => Description, tags => Tags},
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, Metadata0, ActingUser) ->
+    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
+
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
+            Description = vhost:get_description(VHost),
+            Tags = vhost:get_tags(VHost),
+            DefaultQueueType = vhost:get_default_queue_type(VHost),
             rabbit_event:notify(
               vhost_updated,
               info(VHost) ++ [{user_who_performed_action, ActingUser},
                               {description, Description},
-                              {tags, Tags}]),
+                              {tags, Tags},
+                              {default_queue_type, DefaultQueueType}]),
             ok;
         {error, _} = Error ->
             Error
     end.
+
+-spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update(Name, Description, Tags, ActingUser) ->
+    Metadata = #{description => Description, tags => Tags},
+    update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
