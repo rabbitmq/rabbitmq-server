@@ -11,30 +11,12 @@ interested.
 
 ## Installation
 
-Install the corresponding .ez files from our
-[GitHub releases](https://github.com/rabbitmq/rabbitmq-random-exchange/releases) or [Community Plugins page](https://www.rabbitmq.com/community-plugins.html).
-
-Then run the following command:
+This plugin ships with RabbitMQ. Like all other plugins, it must be enabled
+before it can be used:
 
 ```bash
-rabbitmq-plugins enable rabbitmq_random_exchange
+[sudo] rabbitmq-plugins enable rabbitmq_random_exchange
 ```
-
-## Building from Source
-
-Please see [RabbitMQ Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
-
-To build the plugin:
-
-    git clone git://github.com/rabbitmq/rabbitmq-random-exchange.git
-    cd rabbitmq-random-exchange
-    make
-
-Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](https://www.rabbitmq.com/relocate.html)
-and enable the plugin:
-
-    [sudo] rabbitmq-plugins enable rabbitmq_random_exchange
-
 
 ## Usage
 

@@ -37,6 +37,7 @@ plt(
     name = "base_plt",
     deps = BUILD_DEPS + DEPS,
     plt = "//:base_plt",
+    ignore_warnings = True,
 )
 
 dialyze(

@@ -5,7 +5,7 @@
 %%
 %% ----------------------------------------------------------------------------
 
-%% A prefix used for scopes in UAA to avoid scope collisions (or unintended overlap). It is an empty string by default.
+%% A prefix used for scopes to avoid scope collisions (or unintended overlap). It is an empty string by default.
 %%
 %% {resource_server_id, <<"my_rabbit_server">>},
 
