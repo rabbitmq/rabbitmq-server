@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.9",
+    version = "3.9.11",
 )
 
 erlang_config = use_extension(
@@ -259,6 +259,13 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 )
 
 erlang_package.hex_package(
+    name = "parallel_stream",
+    build_file = "@rabbitmq-server//bazel:BUILD.parallel_stream",
+    sha256 = "639b2e8749e11b87b9eb42f2ad325d161c170b39b288ac8d04c4f31f8f0823eb",
+    version = "1.0.6",
+)
+
+erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
     sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
@@ -352,6 +359,7 @@ use_repo(
     "jsx",
     "observer_cli",
     "osiris",
+    "parallel_stream",
     "prometheus",
     "ra",
     "ranch",
@@ -369,10 +377,24 @@ erlang_dev_package = use_extension(
     "erlang_package",
 )
 
+erlang_dev_package.hex_package(
+    name = "amqp",
+    build_file = "@rabbitmq-server//bazel:BUILD.amqp",
+    sha256 = "b6d926770e4508e30e3e9e476c57b6c8aeda44f7715663bdc38935620ce5be6f",
+    version = "2.1.1",
+)
+
 erlang_dev_package.git_package(
-    commit = "478aa272708ed4ad282ca02bed41a5320330e8af",
+    branch = "master",
     build_file = "@//:bazel/BUILD.ct_helper",
     repository = "ninenines/ct_helper",
+)
+
+erlang_dev_package.hex_package(
+    name = "dialyxir",
+    build_file = "@rabbitmq-server//bazel:BUILD.dialyxir",
+    sha256 = "6c32a70ed5d452c6650916555b1f96c79af5fc4bf286997f8b15f213de786f73",
+    version = "0.5.1",
 )
 
 erlang_dev_package.git_package(
@@ -401,13 +423,31 @@ erlang_dev_package.git_package(
     repository = "manopapad/proper",
 )
 
+erlang_dev_package.hex_package(
+    name = "temp",
+    build_file = "@rabbitmq-server//bazel:BUILD.temp",
+    sha256 = "6af19e7d6a85a427478be1021574d1ae2a1e1b90882586f06bde76c63cd03e0d",
+    version = "0.4.7",
+)
+
+erlang_dev_package.hex_package(
+    name = "x509",
+    build_file = "@rabbitmq-server//bazel:BUILD.x509",
+    sha256 = "5ff9c79e77d64a62ccffd90aaeb23e8f5b6e47844ef7bc8fed931ecf238662e0",
+    version = "0.7.0",
+)
+
 use_repo(
     erlang_dev_package,
+    "amqp",
     "ct_helper",
+    "dialyxir",
     "emqtt",
     "inet_tcp_proxy_dist",
     "meck",
     "proper",
+    "temp",
+    "x509",
 )
 
 rbe = use_extension(
@@ -434,4 +474,14 @@ secondary_umbrella = use_extension(
 use_repo(
     secondary_umbrella,
     "rabbitmq-server-generic-unix-3.9",
+)
+
+hex = use_extension(
+    "//bazel/bzlmod:extensions.bzl",
+    "hex",
+)
+
+use_repo(
+    hex,
+    "hex",
 )
