@@ -63,7 +63,7 @@ defmodule UpdateVhostMetadataCommandTest do
     add_vhost(@vhost)
     desc = "desc 2"
 
-    assert @command.run([@vhost], Map.merge(context[:opts], %{desciption: desc})) == :ok
+    assert @command.run([@vhost], Map.merge(context[:opts], %{description: desc})) == :ok
     vh = find_vhost(@vhost)
 
     assert vh

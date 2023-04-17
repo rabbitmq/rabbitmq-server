@@ -51,8 +51,8 @@ defmodule TestHelper do
         err
 
       vhost_rec ->
-        {:vhost, ^name, _limits, meta} = vhost_rec
-        %{meta | name: name}
+        {:vhost, _name, limits, meta} = vhost_rec
+        Map.merge(meta, %{name: name, limits: limits})
     end
   end
 
