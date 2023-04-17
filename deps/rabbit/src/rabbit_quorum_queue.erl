@@ -615,7 +615,7 @@ add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
 create_add_member_effects(ClusterName, Cluster, Q, QName, New) ->
     rabbit_log:debug("CALLED: WILL ADD ~p~n",[New]),
     NewMembers = [make_add_member_effect(Q, QName, {ClusterName, N}) || N <- New],
-    {add_member, NewMembers, Cluster}.
+    {add_members, NewMembers, Cluster}.
 
 make_add_member_effect(Q, QName, {_ClusterName, Node} = ServerId) ->
     Conf = make_ra_conf(Q, ServerId),
@@ -647,17 +647,19 @@ grow_order_sort(Nodes) ->
 
 remove_member_effects(ClusterName, Cluster, QName, RemovedFromCluster) ->
     rabbit_log:debug("CALLED: WILL REMOVE ~p~n",[RemovedFromCluster]),
-    RemoveMembers = [make_remove_member_effect(QName, {ClusterName, N}) || N <- RemovedFromCluster],
-    {remove_member, RemoveMembers, Cluster}.
+    RemoveMembers = [make_remove_member_effect(QName, {ClusterName, N}) ||
+                        N <- RemovedFromCluster],
+    {remove_members, RemoveMembers, Cluster}.
 
 make_remove_member_effect(QName, {_ClusterName, Node} = ServerId) ->
     ResultFun = fun({ok, _, _}) ->
                         Fun = fun(Q1) ->
-                                      update_type_state(
-                                        Q1,
-                                        fun(#{nodes := Nodes} = Ts) ->
-                                                Ts#{nodes => lists:delete(Node, Nodes)}
-                                        end)
+                                  update_type_state(
+                                    Q1,
+                                    fun(#{nodes := Nodes} = Ts) ->
+                                            Ts#{nodes => lists:delete(Node,
+                                                                      Nodes)}
+                                    end)
                               end,
                         _ = rabbit_amqqueue:update(QName, Fun)
                 end,
