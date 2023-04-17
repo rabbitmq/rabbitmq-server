@@ -41,8 +41,19 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_nodes, :cluster_name, [])
   end
 
-  def add_vhost(name) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :add, [name, "acting-user"])
+  def add_vhost(name, meta \\ %{}) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :add, [name, meta, "acting-user"])
+  end
+
+  def find_vhost(name) do
+    case :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :lookup, [name]) do
+      {:error, _} = err ->
+        err
+
+      vhost_rec ->
+        {:vhost, _name, limits, meta} = vhost_rec
+        Map.merge(meta, %{name: name, limits: limits})
+    end
   end
 
   def delete_vhost(name) do
