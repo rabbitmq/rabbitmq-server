@@ -168,7 +168,22 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
         {error, Reason} -> erlang:error(Reason)
     end;
 port_command(Sock, Data) when is_port(Sock) ->
+    port_command_tcp(Sock, Data).
+
+%% gen_tcp:send/2 does a selective receive of {inet_reply, Sock, Status}
+-if(?OTP_RELEASE < 26).
+%% Avoid costly selective receive.
+port_command_tcp(Sock, Data) ->
     erlang:port_command(Sock, Data).
+-else.
+%% Selective receive is optimised: https://github.com/erlang/otp/issues/6455
+port_command_tcp(Sock, Data) ->
+    case gen_tcp:send(Sock, Data) of
+        ok -> self() ! {inet_reply, Sock, ok},
+              true;
+        {error, Reason} -> erlang:error(Reason)
+    end.
+-endif.
 
 getopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:getopts(Sock, Options);

@@ -308,7 +308,7 @@ build_params(EndPoint, Headers) ->
                          end,
                          [],
                          Headers),
-    rabbit_misc:plmerge(Params, default_params(EndPoint)).
+    rabbit_misc:plmerge(default_params(EndPoint), Params).
 
 build_param(?HEADER_PERSISTENT, Val) ->
     {durable, string_to_boolean(Val)};
