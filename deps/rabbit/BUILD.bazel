@@ -211,6 +211,7 @@ plt(
     apps = plt_apps,
     plt = "//:base_plt",
     deps = DEPS + RUNTIME_DEPS,
+    ignore_warnings = True,
 )
 
 dialyze(

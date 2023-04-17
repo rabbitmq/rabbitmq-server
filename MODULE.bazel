@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.11",
+    version = "3.9.12",
 )
 
 erlang_config = use_extension(
@@ -67,6 +67,12 @@ erlang_config.internal_erlang_from_github_release(
     name = "25_3",
     sha256 = "85c447efc1746740df4089d75bc0e47b88d5161d7c44e9fc4c20fa33ea5d19d7",
     version = "25.3",
+)
+
+erlang_config.internal_erlang_from_github_release(
+    name = "26",
+    sha256 = "ce962175c4d90161a7247d8e2e4ae36f9d8cc0214c8f52dba8ba84a82afc096f",
+    version = "26.0-rc3",
 )
 
 erlang_config.internal_erlang_from_http_archive(
@@ -114,6 +120,8 @@ register_toolchains(
     "@erlang_config//25_2:toolchain2",
     "@erlang_config//25_3:toolchain",
     "@erlang_config//25_3:toolchain2",
+    "@erlang_config//26:toolchain",
+    "@erlang_config//26:toolchain2",
     "@erlang_config//git_master:toolchain",
     "@erlang_config//git_master:toolchain2",
     "@elixir_config//external:toolchain",

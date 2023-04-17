@@ -87,4 +87,7 @@ is_registered_process_alive(Name) ->
 %% false otherwise.
 
 is_process_hibernated(Pid) when is_pid(Pid) ->
-    {current_function,{erlang,hibernate,3}} == erlang:process_info(Pid, current_function).
+    {current_function,{erlang,hibernate,3}} == erlang:process_info(Pid, current_function);
+is_process_hibernated(_) ->
+    %% some queue types, eg QQs, have a tuple as a Pid, but they are never hibernated
+    false.
