@@ -53,7 +53,10 @@ defmodule UpdateVhostMetadataCommandTest do
              description: "Used by team A for QA purposes",
              tags: "qa,team-a",
              default_queue_type: "unknown"
-           }) == {:validation_failure, {:bad_argument, "Default queue type must be one of: quorum, stream, classic. Provided: unknown"}}
+           }) ==
+             {:validation_failure,
+              {:bad_argument,
+               "Default queue type must be one of: quorum, stream, classic. Provided: unknown"}}
   end
 
   @tag vhost: @vhost
@@ -62,7 +65,12 @@ defmodule UpdateVhostMetadataCommandTest do
     desc = "desc 2"
 
     assert @command.run([context[:vhost]], Map.merge(context[:opts], %{desciption: desc})) == :ok
-    vh = list_vhosts() |> Enum.filter(fn record -> record[:name] == context[:vhost] end) |> List.first
+
+    vh =
+      list_vhosts()
+      |> Enum.filter(fn record -> record[:name] == context[:vhost] end)
+      |> List.first()
+
     assert vh
     assert vh[:description] == desc
   end
@@ -72,14 +80,23 @@ defmodule UpdateVhostMetadataCommandTest do
     tags = "a1,b2,c3"
 
     assert @command.run([context[:vhost]], Map.merge(context[:opts], %{tags: tags})) == :ok
-    vh = list_vhosts() |> Enum.filter(fn record -> record[:name] == context[:vhost] end) |> List.first
+
+    vh =
+      list_vhosts()
+      |> Enum.filter(fn record -> record[:name] == context[:vhost] end)
+      |> List.first()
+
     assert vh
     assert vh[:tags] == [:a1, :b2, :c3]
   end
 
   test "run: attempt to use a non-existent virtual host fails" do
     vh = "a-non-existent-3882-vhost"
-    assert match?({:error, {:no_such_vhost, _}}, @command.run([vh], Maps.merge(context[:opts], %{description: "irrelevant"})))
+
+    assert match?(
+             {:error, {:no_such_vhost, _}},
+             @command.run([vh], Maps.merge(context[:opts], %{description: "irrelevant"}))
+           )
   end
 
   test "run: attempt to use an unreachable node returns a nodedown" do

@@ -25,7 +25,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
         tags: tags,
         default_queue_type: default_qt
       }) do
-    meta = %{description: desc, tags: VirtualHosts.parse_tags(tags), default_queue_type: default_qt}
+    meta = %{
+      description: desc,
+      tags: VirtualHosts.parse_tags(tags),
+      default_queue_type: default_qt
+    }
 
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
       vhost,
@@ -84,5 +88,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   def description(), do: "Creates a virtual host"
 
   def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
-
 end

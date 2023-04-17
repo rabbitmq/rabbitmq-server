@@ -6,7 +6,9 @@
 defmodule RabbitMQ.CLI.Core.VirtualHosts do
   def parse_tags(tags) do
     case tags do
-      nil -> nil
+      nil ->
+        nil
+
       val ->
         String.split(tags, ",", trim: true)
         |> Enum.map(&String.trim/1)
