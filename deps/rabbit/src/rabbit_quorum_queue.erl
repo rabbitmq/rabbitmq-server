@@ -631,6 +631,8 @@ make_add_member_effect(Q, QName, {_ClusterName, Node} = ServerId) ->
                 end,
     {{ServerId, Conf}, ResultFun}.
 
+%% Just an idea to pick the 'right' node. In the future maybe a have availabilty
+%% zone filters etc for picking a node.
 grow_order_sort(Nodes) ->
     QueueLenFun =
         fun(Node) ->
