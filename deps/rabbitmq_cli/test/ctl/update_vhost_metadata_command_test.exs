@@ -65,6 +65,7 @@ defmodule UpdateVhostMetadataCommandTest do
     desc = "desc 2"
 
     assert @command.run([context[:vhost]], Map.merge(context[:opts], %{desciption: desc})) == :ok
+    IO.inspect(list_vhosts())
 
     vh =
       list_vhosts()
@@ -95,7 +96,7 @@ defmodule UpdateVhostMetadataCommandTest do
 
     assert match?(
              {:error, {:no_such_vhost, _}},
-             @command.run([vh], Maps.merge(context[:opts], %{description: "irrelevant"}))
+             @command.run([vh], Map.merge(context[:opts], %{description: "irrelevant"}))
            )
   end
 
