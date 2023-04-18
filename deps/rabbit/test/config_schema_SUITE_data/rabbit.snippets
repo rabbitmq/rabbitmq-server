@@ -904,12 +904,12 @@ credential_validator.regexp = ^abc\\d+",
 
   {runtime_parameters_limits,
   "
-   runtime_parameters.limits.b = 2
-   runtime_parameters.limits.a = 1
+   runtime_parameters.limits.federation = 2
+   runtime_parameters.limits.shovel = 1
   ",
    [{rabbit, [{runtime_parameters, [{limits, [
-       {<<"a">>, 1},
-       {<<"b">>, 2}
+       {<<"shovel">>, 1},
+       {<<"federation">>, 2}
      ]}]}]}],
    []},
 
