@@ -657,6 +657,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 {'DOWN', MRef, process, _, _} ->
                     ok
             after Timeout ->
+                    erlang:demonitor(MRef, [flush]),
                     ok = force_delete_queue(Servers)
             end,
             notify_decorators(QName, shutdown),
