@@ -236,29 +236,6 @@ do_add(Name, Metadata, ActingUser) ->
             {error, Msg}
     end.
 
--spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-update_metadata(Name, Metadata0, ActingUser) ->
-    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
-    rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-                case mnesia:wread({rabbit_vhost, Name}) of
-                    [] ->
-                        {error, {no_such_vhost, Name}};
-                    [VHost0] ->
-                        VHost = vhost:merge_metadata(VHost0, Metadata),
-
-                        Description = vhost:get_description(VHost),
-                        Tags = vhost:get_tags(VHost),
-                        DefaultQueueType = vhost:get_default_queue_type(VHost),
-                        rabbit_event:notify(vhost_updated, info(VHost)
-                                ++ [{user_who_performed_action, ActingUser},
-                                    {description, Description},
-                                    {tags, Tags},
-                                    {default_queue_type, DefaultQueueType}]),
-                        ok
-                end
-        end).
-
 
 -spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update(Name, Description, Tags, ActingUser) ->
@@ -556,6 +533,13 @@ update_metadata(VHostName, Fun) ->
     update(VHostName, fun(Record) ->
         Meta = Fun(vhost:get_metadata(Record)),
         vhost:set_metadata(Record, Meta)
+    end).
+
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, Metadata0, _ActingUser) ->
+    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
+    update_metadata(Name, fun(CurrentMetadata) ->
+        maps:merge(CurrentMetadata, Metadata)
     end).
 
 are_different0([], []) ->
