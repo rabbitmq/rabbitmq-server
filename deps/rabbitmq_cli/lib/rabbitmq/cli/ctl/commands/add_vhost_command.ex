@@ -5,11 +5,7 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
-<<<<<<< HEAD
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, FeatureFlags, Helpers}
-=======
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers, VirtualHosts}
->>>>>>> a003602d97 (Introduce a way to update virtual host metadata using CLI tools (#7914))
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, FeatureFlags, Helpers, VirtualHosts}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -29,8 +25,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
         tags: tags,
         default_queue_type: default_qt
       }) do
-<<<<<<< HEAD
-    meta = %{description: desc, tags: parse_tags(tags), default_queue_type: default_qt}
+    meta = %{
+      description: desc,
+      tags: VirtualHosts.parse_tags(tags),
+      default_queue_type: default_qt
+    }
     # check if the respective feature flag is enabled
     case default_qt do
       "quorum" ->
@@ -41,13 +40,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
             Helpers.cli_acting_user()
           ])
         end)
-=======
-    meta = %{
-      description: desc,
-      tags: VirtualHosts.parse_tags(tags),
-      default_queue_type: default_qt
-    }
->>>>>>> a003602d97 (Introduce a way to update virtual host metadata using CLI tools (#7914))
 
       "stream" ->
         FeatureFlags.assert_feature_flag_enabled(node_name, :stream_queue, fn ->
