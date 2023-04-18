@@ -593,7 +593,7 @@ add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
     case lists:sort(Running) == lists:sort([node() | nodes()]) of
         true ->
             {ok, Q} = rabbit_amqqueue:lookup(QName),
-            New = thRunning -- MemberNodes,
+            New = Running -- MemberNodes,
             Arguments = amqqueue:get_arguments(Q),
             Size = get_default_quorum_initial_group_size(Arguments, Q),
             CurrentSize = length(MemberNodes),
