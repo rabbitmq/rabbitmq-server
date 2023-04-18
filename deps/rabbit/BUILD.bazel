@@ -1153,6 +1153,14 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
+rabbitmq_integration_suite(
+    name = "runtime_parameters_SUITE",
+    size = "small",
+    additional_srcs = [
+        "test/dummy_runtime_parameters.erl",
+    ],
+)
+
 assert_suites()
 
 filegroup(
