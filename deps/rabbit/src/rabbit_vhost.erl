@@ -15,6 +15,7 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
+-export([update_metadata/3]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
@@ -27,8 +28,8 @@
 %% API
 %%
 
+%% this module deals with user inputs, so accepts more than just atoms
 -type vhost_tag() :: atom() | string() | binary().
--export_type([vhost_tag/0]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -235,28 +236,14 @@ do_add(Name, Metadata, ActingUser) ->
             {error, Msg}
     end.
 
+
 -spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update(Name, Description, Tags, ActingUser) ->
-    rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_vhost, Name}) of
-                      [] ->
-                          {error, {no_such_vhost, Name}};
-                      [VHost0] ->
-                          VHost = vhost:merge_metadata(VHost0, #{description => Description, tags => Tags}),
-                          rabbit_log:debug("Updating a virtual host record ~tp", [VHost]),
-                          ok = mnesia:write(rabbit_vhost, VHost, write),
-                          rabbit_event:notify(vhost_updated, info(VHost)
-                                ++ [{user_who_performed_action, ActingUser},
-                                    {description, Description},
-                                    {tags, Tags}]),
-                          ok
-                  end
-          end).
+    Metadata = #{description => Description, tags => Tags},
+    update_metadata(Name, Metadata, ActingUser).
 
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-
 delete(VHost, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
     %% the TX below. Queue deletion involves sending messages to the queue
@@ -547,6 +534,16 @@ update_metadata(VHostName, Fun) ->
         Meta = Fun(vhost:get_metadata(Record)),
         vhost:set_metadata(Record, Meta)
     end).
+
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, Metadata0, _ActingUser) ->
+    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
+    rabbit_misc:execute_mnesia_transaction(fun() ->
+        update_metadata(Name, fun(CurrentMetadata) ->
+            maps:merge(CurrentMetadata, Metadata)
+        end)
+    end),
+    ok.
 
 are_different0([], []) ->
     false;

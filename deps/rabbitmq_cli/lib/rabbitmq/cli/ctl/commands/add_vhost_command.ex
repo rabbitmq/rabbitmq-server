@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, FeatureFlags, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, FeatureFlags, Helpers, VirtualHosts}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -25,7 +25,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
         tags: tags,
         default_queue_type: default_qt
       }) do
-    meta = %{description: desc, tags: parse_tags(tags), default_queue_type: default_qt}
+    meta = %{
+      description: desc,
+      tags: VirtualHosts.parse_tags(tags),
+      default_queue_type: default_qt
+    }
+
     # check if the respective feature flag is enabled
     case default_qt do
       "quorum" ->
@@ -59,7 +64,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [
       vhost,
       desc,
-      parse_tags(tags),
+      VirtualHosts.parse_tags(tags),
       Helpers.cli_acting_user()
     ])
   end
@@ -105,14 +110,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   def description(), do: "Creates a virtual host"
 
   def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
-
-  #
-  # Implementation
-  #
-
-  def parse_tags(tags) do
-    String.split(tags, ",", trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.map(&String.to_atom/1)
-  end
 end
