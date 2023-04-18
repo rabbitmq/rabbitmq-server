@@ -538,9 +538,12 @@ update_metadata(VHostName, Fun) ->
 -spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update_metadata(Name, Metadata0, _ActingUser) ->
     Metadata = maps:with([description, tags, default_queue_type], Metadata0),
-    update_metadata(Name, fun(CurrentMetadata) ->
-        maps:merge(CurrentMetadata, Metadata)
-    end).
+    rabbit_misc:execute_mnesia_transaction(fun() ->
+        update_metadata(Name, fun(CurrentMetadata) ->
+            maps:merge(CurrentMetadata, Metadata)
+        end)
+    end),
+    ok.
 
 are_different0([], []) ->
     false;
