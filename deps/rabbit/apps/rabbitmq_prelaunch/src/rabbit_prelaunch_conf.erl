@@ -16,6 +16,12 @@
 -export([decrypt_config/2]).
 -endif.
 
+%% These can be removed when we only support OTP-26+.
+-ignore_xref([{user_drv, whereis_group, 0},
+              {group, interfaces, 1},
+              {user_drv, interfaces, 1}]).
+-dialyzer({nowarn_function, [get_input_iodevice/0]}).
+
 setup(Context) ->
     ?LOG_DEBUG(
        "\n== Configuration ==",
@@ -565,17 +571,26 @@ get_passphrase(ConfigEntryDecoder) ->
 %% This function will not work when either -oldshell or -noinput
 %% options are passed to erl.
 get_input_iodevice() ->
-    case whereis(user) of
-        undefined ->
-            user;
-        User ->
-            case group:interfaces(User) of
-                [] ->
+    case erlang:function_exported(user_drv, whereis_group, 0) of
+        true ->
+            case user_drv:whereis_group() of
+                undefined -> user;
+                IoDevice -> IoDevice
+            end;
+        %% Necessary for OTP versions before OTP-26.
+        false ->
+            case whereis(user) of
+                undefined ->
                     user;
-                [{user_drv, Drv}] ->
-                    case user_drv:interfaces(Drv) of
-                        []                          -> user;
-                        [{current_group, IoDevice}] -> IoDevice
+                User ->
+                    case group:interfaces(User) of
+                        [] ->
+                            user;
+                        [{user_drv, Drv}] ->
+                            case user_drv:interfaces(Drv) of
+                                []                          -> user;
+                                [{current_group, IoDevice}] -> IoDevice
+                            end
                     end
             end
     end.

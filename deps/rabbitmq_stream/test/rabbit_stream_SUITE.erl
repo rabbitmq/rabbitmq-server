@@ -468,9 +468,15 @@ test_server(Transport, Stream, Config) ->
                 application:ensure_all_started(ssl),
                 get_stream_port_tls(Config)
         end,
+    Opts =
+        case Transport of
+            gen_tcp ->
+                [{active, false}, {mode, binary}];
+            ssl ->
+                [{active, false}, {mode, binary}, {verify, verify_none}]
+        end,
     {ok, S} =
-        Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
+        Transport:connect("localhost", Port, Opts),
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),
