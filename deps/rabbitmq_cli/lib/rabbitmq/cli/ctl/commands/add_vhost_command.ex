@@ -30,6 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
       tags: VirtualHosts.parse_tags(tags),
       default_queue_type: default_qt
     }
+
     # check if the respective feature flag is enabled
     case default_qt do
       "quorum" ->
