@@ -4,7 +4,6 @@
 %%
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
-
 -module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -18,7 +17,7 @@
          check_topic_access/4, check_token/1, state_can_expire/0, update_state/2]).
 
 % for testing
--export([post_process_payload/1]).
+-export([post_process_payload/1, get_expanded_scopes/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 
@@ -80,7 +79,7 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
-        fun() ->
+        fun(_Token) ->
             Scopes      = get_scopes(DecodedTokenFun()),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
@@ -90,16 +89,16 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
 check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
-        fun() ->
-            Scopes = get_scopes(DecodedTokenFun()),
+        fun(Token) ->
+            Scopes = get_scopes(Token),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
 check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedTokenFun(),
-        fun() ->
-            Scopes = get_scopes(DecodedTokenFun()),
+        fun(Token) ->
+            Scopes = get_expanded_scopes(Token, Resource),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
@@ -133,15 +132,15 @@ authenticate(_, AuthProps0) ->
         {refused, Err} ->
           {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
-            Func = fun() ->
+            Func = fun(Token0) ->
                         Username = username_from(
                           application:get_env(?APP, ?PREFERRED_USERNAME_CLAIMS, []),
-                          DecodedToken),
-                        Tags     = tags_from(DecodedToken),
+                          Token0),
+                        Tags     = tags_from(Token0),
 
                         {ok, #auth_user{username = Username,
                                         tags = Tags,
-                                        impl = fun() -> DecodedToken end}}
+                                        impl = fun() -> Token0 end}}
                    end,
             case with_decoded_token(DecodedToken, Func) of
                 {error, Err} ->
@@ -153,7 +152,7 @@ authenticate(_, AuthProps0) ->
 
 with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
-        ok               -> Fun();
+        ok               -> Fun(DecodedToken);
         {error, Msg} = Err ->
             rabbit_log:error(Msg),
             Err
@@ -533,6 +532,56 @@ check_aud(Aud, ResourceServerId) ->
 
 get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
 
+<<<<<<< HEAD
+=======
+-spec get_expanded_scopes(map(), #resource{}) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
+  Context = #{ token => Token , vhost => VHost},
+  case maps:get(?SCOPE_JWT_FIELD, Token, []) of
+    [] -> [];
+    Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
+  end.
+
+parse_scope(Scope, Context) ->
+  { Acc0, _} = lists:foldl(fun(Elem, { Acc, Stage }) -> parse_scope_part(Elem, Acc, Stage, Context) end,
+    { [], undefined }, re:split(Scope,"([\{.*\}])",[{return,list},trim])),
+  Acc0.
+
+parse_scope_part(Elem, Acc, Stage, Context) ->
+  case Stage of
+    error -> {Acc, error};
+    undefined ->
+      case Elem of
+        "{" -> { Acc, fun capture_var_name/3};
+        Value -> { Acc ++ Value, Stage}
+      end;
+    _ -> Stage(Elem, Acc, Context)
+  end.
+
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
+  { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+
+expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
+expect_closing_var(_ , _Acc, _Context) -> {"", error}.
+
+resolve_scope_var(Elem, Token, Vhost) ->
+  ElemAsBinary = list_to_binary(Elem),
+  case Elem of
+    "vhost" -> binary_to_list(Vhost);
+    _ -> binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                          Value when is_binary(Value) -> Value;
+                          _ -> ElemAsBinary
+                        end)
+  end.
+
+%% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
+%% credential.  The former is the most common scenario for the first time authentication.
+%% However, there are scenarios where the same user (on the same connection) is authenticated
+%% more than once. When this scenario occurs, we extract the token from the credential
+%% called rabbit_auth_backend_oauth2 whose value is the Decoded token returned during the
+%% first authentication.
+
+>>>>>>> 947df15d30 (Fix issue #7178)
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
     maps:get(password, AuthProps, undefined).

@@ -89,6 +89,8 @@ fixture_token() ->
 
 token_with_sub(TokenFixture, Sub) ->
     maps:put(<<"sub">>, Sub, TokenFixture).
+token_with_scopes(TokenFixture, Scopes) ->
+    maps:put(<<"scope">>, Scopes, TokenFixture).
 
 fixture_token(ExtraScopes) ->
     Scopes = [<<"rabbitmq.configure:vhost/foo">>,
