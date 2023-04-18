@@ -1103,56 +1103,6 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
-<<<<<<< HEAD
-=======
-rabbitmq_integration_suite(
-    name = "exchanges_SUITE",
-    size = "small",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-)
-
-rabbitmq_integration_suite(
-    name = "bindings_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_queue_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_maintenance_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_topic_exchange_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_exchange_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_binding_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_msup_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_policy_SUITE",
-    size = "small",
-)
-
 rabbitmq_integration_suite(
     name = "runtime_parameters_SUITE",
     size = "small",
@@ -1161,7 +1111,6 @@ rabbitmq_integration_suite(
     ],
 )
 
->>>>>>> bd39db4c4d (add runtime_parameters_SUITE)
 assert_suites()
 
 filegroup(
