@@ -62,7 +62,7 @@
          retainer_pid :: pid(),
          delivery_flow :: flow | noflow,
          trace_state :: rabbit_trace:state(),
-         receive_maximum :: non_neg_integer(),
+         prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
          client_id :: binary(),
          conn_name :: option(binary()),
@@ -163,7 +163,12 @@ process_connect(
             %% Therefore, we use the maximum allowed session expiry interval.
             MaxSessionExpiry
     end,
-    ReceiveMax = maps:get('Receive-Maximum', ConnectProps, rabbit_mqtt_util:env(prefetch)),
+    %% "If the Receive Maximum value is absent then its value defaults to 65,535. v5 3.1.2.11.3"
+    %% "The Server might choose to send fewer than Receive Maximum messages to the Client
+    %% without receiving acknowledgement, even if it has more than this number of messages
+    %% available to send. v5 3.3.4"
+    ReceiveMax = maps:get('Receive-Maximum', ConnectProps, 65_535),
+    Prefetch = min(rabbit_mqtt_util:env(prefetch), ReceiveMax),
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
@@ -194,7 +199,7 @@ process_connect(
                        ssl_login_name = SslLoginName,
                        delivery_flow = Flow,
                        trace_state = TraceState,
-                       receive_maximum = ReceiveMax,
+                       prefetch = Prefetch,
                        conn_name = ConnName,
                        ip_addr = Ip,
                        port = Port,
@@ -1222,7 +1227,7 @@ queue_type(_, _, QArgs) ->
 
 consume(Q, QoS, #state{
                    queue_states = QStates0,
-                   cfg = #cfg{receive_maximum = RecvMax},
+                   cfg = #cfg{prefetch = Prefetch},
                    auth_state = #auth_state{
                                    authz_ctx = AuthzCtx,
                                    user = User = #user{username = Username}}
@@ -1241,7 +1246,7 @@ consume(Q, QoS, #state{
                              channel_pid => self(),
                              limiter_pid => none,
                              limiter_active => false,
-                             prefetch_count => RecvMax,
+                             prefetch_count => Prefetch,
                              consumer_tag => ?CONSUMER_TAG,
                              exclusive_consume => false,
                              args => [],
@@ -1983,7 +1988,7 @@ info(clean_sess, #state{cfg = #cfg{clean_start = CleanStart,
 info(will_msg, #state{cfg = #cfg{will_msg = Val}}) -> Val;
 info(retainer_pid, #state{cfg = #cfg{retainer_pid = Val}}) -> Val;
 info(exchange, #state{cfg = #cfg{exchange = #resource{name = Val}}}) -> Val;
-info(prefetch, #state{cfg = #cfg{receive_maximum = Val}}) -> Val;
+info(prefetch, #state{cfg = #cfg{prefetch = Val}}) -> Val;
 info(messages_unconfirmed, #state{unacked_client_pubs = Val}) ->
     rabbit_mqtt_confirms:size(Val);
 info(messages_unacknowledged, #state{unacked_server_pubs = Val}) ->
@@ -2150,7 +2155,7 @@ format_status(
                   retainer_pid = RetainerPid,
                   delivery_flow = DeliveryFlow,
                   trace_state = TraceState,
-                  receive_maximum = ReceiveMaximum,
+                  prefetch = Prefetch,
                   client_id = ClientID,
                   conn_name = ConnName,
                   ip_addr = IpAddr,
@@ -2172,7 +2177,7 @@ format_status(
 
             delivery_flow => DeliveryFlow,
             trace_state => TraceState,
-            prefetch => ReceiveMaximum,
+            prefetch => Prefetch,
             client_id => ClientID,
             conn_name => ConnName,
             ip_addr => IpAddr,
