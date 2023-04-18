@@ -157,7 +157,7 @@ set_any0(VHost, Component, Name, Term, User) ->
             E
     end.
 
--spec is_within_limit(binary()) -> rabbit_types:ok_or_error(binary()).
+-spec is_within_limit(binary()) -> ok | {errors, list()}.
 
 is_within_limit(Component) ->
     Params = application:get_env(rabbit, runtime_parameters, []),
