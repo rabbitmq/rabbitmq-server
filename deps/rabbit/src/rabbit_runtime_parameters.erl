@@ -123,34 +123,52 @@ set_any(VHost, Component, Name, Term, User) ->
         {errors, L} -> format_error(L)
     end.
 
-set_any0(VHost, Component, Name, Term, User) ->
-    rabbit_log:debug("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
-                     "for component '~ts', value: ~tp",
-                     [Name, VHost, Component, Term]),
-    case lookup_component(Component) of
-        {ok, Mod} ->
-            case flatten_errors(
-                   Mod:validate(VHost, Component, Name, Term, get_user(User))) of
-                ok ->
-                    case mnesia_update(VHost, Component, Name, Term) of
-                        {old, Term} ->
-                            ok;
-                        _           ->
-                            ActingUser = get_username(User),
-                            event_notify(
-                              parameter_set, VHost, Component,
-                              [{name,  Name},
-                               {value, Term},
-                               {user_who_performed_action, ActingUser}]),
-                            Mod:notify(VHost, Component, Name, Term, ActingUser)
-                    end,
-                    ok;
-                E ->
-                    E
-            end;
-        E ->
-            E
+    set_any0(VHost, Component, Name, Term, User) ->
+        rabbit_log:debug("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
+                         "for component '~ts', value: ~tp",
+                         [Name, VHost, Component, Term]),
+        case lookup_component(Component) of
+            {ok, Mod} ->
+                case is_within_limit(Component) of
+                    ok ->
+                        case flatten_errors(
+                            Mod:validate(VHost, Component, Name, Term, get_user(User))) of
+                            ok ->
+                                case mnesia_update(VHost, Component, Name, Term) of
+                                    {old, Term} ->
+                                        ok;
+                                    _           ->
+                                        ActingUser = get_username(User),
+                                        event_notify(
+                                        parameter_set, VHost, Component,
+                                        [{name,  Name},
+                                            {value, Term},
+                                            {user_who_performed_action, ActingUser}]),
+                                        Mod:notify(VHost, Component, Name, Term, ActingUser)
+                                end,
+                                ok;
+                            E ->
+                                E
+                        end;
+                    E ->
+                        E
+                end;
+            E ->
+                E
+        end.
+
+-spec is_within_limit(binary()) -> ok | {errors, list()}.
+
+is_within_limit(Component) ->
+    Params = application:get_env(rabbit, runtime_parameters, []),
+    Limits = proplists:get_value(limits, Params, []),
+    Limit = proplists:get_value(Component, Limits, -1),
+    case Limit < 0 orelse count_component(Component) < Limit of
+       true -> ok;
+       false -> {errors, [{"component ~ts is limited to ~tp per node", [Component, Limit]}]}
     end.
+
+count_component(Component) -> length(list_component(Component)).
 
 %% Validate only an user record as expected by the API before #rabbitmq-event-exchange-10
 get_user(#user{} = User) ->

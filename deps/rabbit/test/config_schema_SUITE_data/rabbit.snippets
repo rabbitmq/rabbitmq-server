@@ -896,5 +896,20 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
+   []},
+
+  %%
+  %% Runtime parameters
+  %%
+
+  {runtime_parameters_limits,
+  "
+   runtime_parameters.limits.federation = 2
+   runtime_parameters.limits.shovel = 1
+  ",
+   [{rabbit, [{runtime_parameters, [{limits, [
+       {<<"shovel">>, 1},
+       {<<"federation">>, 2}
+     ]}]}]}],
    []}
 ].
