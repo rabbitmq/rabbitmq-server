@@ -896,8 +896,6 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
-<<<<<<< HEAD
-=======
    []},
 
   %%
@@ -913,17 +911,5 @@ credential_validator.regexp = ^abc\\d+",
        {<<"shovel">>, 1},
        {<<"federation">>, 2}
      ]}]}]}],
-   []},
-
-  %%
-  %% Deprecated features
-  %%
-
-  {deprecated_features_cmq,
-   "deprecated_features.permit.classic_mirrored_queues = false",
-   [{rabbit, [
-      {permitted_deprecated_features, #{classic_mirrored_queues => false}}
-     ]}],
->>>>>>> 13a37f512b (add config fields)
    []}
 ].
