@@ -593,7 +593,7 @@ add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
     case lists:sort(Running) == lists:sort([node() | nodes()]) of
         true ->
             {ok, Q} = rabbit_amqqueue:lookup(QName),
-            New = Running -- MemberNodes,
+            New = thRunning -- MemberNodes,
             Arguments = amqqueue:get_arguments(Q),
             Size = get_default_quorum_initial_group_size(Arguments, Q),
             CurrentSize = length(MemberNodes),
@@ -633,6 +633,7 @@ make_add_member_effect(Q, QName, {_ClusterName, Node} = ServerId) ->
 
 %% Just an idea to pick the 'right' node. In the future maybe a have availabilty
 %% zone filters etc for picking a node.
+%% TODO Reuse logic from `rabbit_queue_location:select_leader_and_followers` instead
 grow_order_sort(Nodes) ->
     QueueLenFun =
         fun(Node) ->
