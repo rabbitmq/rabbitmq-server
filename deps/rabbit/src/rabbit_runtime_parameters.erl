@@ -173,7 +173,7 @@ is_within_limit(Component) ->
     Limit = proplists:get_value(Component, Limits, -1),
     case Limit < 0 orelse count_component(Component) < Limit of
        true -> ok;
-       false -> {errors, [{"component ~ts is limited to ~tp per host", [Component, Limit]}]}
+       false -> {errors, [{"component ~ts is limited to ~tp per node", [Component, Limit]}]}
     end.
 
 count_component(Component) -> length(list_component(Component)).
