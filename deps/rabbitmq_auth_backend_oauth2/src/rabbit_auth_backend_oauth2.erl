@@ -566,10 +566,11 @@ expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
 resolve_scope_var(Elem, Token, Vhost) ->
-  ElemAsBinary = list_to_binary(Elem),
   case Elem of
     "vhost" -> binary_to_list(Vhost);
-    _ -> binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+    _ ->
+      ElemAsBinary = list_to_binary(Elem),
+      binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
                           Value when is_binary(Value) -> Value;
                           _ -> ElemAsBinary
                         end)
