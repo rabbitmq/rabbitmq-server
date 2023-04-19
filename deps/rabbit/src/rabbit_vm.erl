@@ -177,7 +177,8 @@ bytes(Words) ->  try
                  end.
 
 interesting_sups() ->
-    [queue_sups(), quorum_sups(), dlx_sups(), stream_server_sups(), stream_reader_sups(),
+    [queue_sups(), quorum_sups(), dlx_sups(),
+     stream_server_sups(), stream_reader_sups(), stream_coordinator(),
      conn_sups() | interesting_sups0()].
 
 queue_sups() ->
@@ -188,6 +189,7 @@ quorum_sups() -> [ra_server_sup_sup].
 dlx_sups() -> [rabbit_fifo_dlx_sup].
 stream_server_sups() -> [osiris_server_sup].
 stream_reader_sups() -> [osiris_replica_reader_sup].
+stream_coordinator() -> [rabbit_stream_coordinator].
 
 msg_stores() ->
     all_vhosts_children(msg_store_transient)
@@ -234,18 +236,17 @@ ranch_server_sups() ->
 with(Sups, With) -> [{Sup, With} || Sup <- Sups].
 
 distinguishers() -> with(queue_sups(), fun queue_type/1) ++
-                    with(conn_sups(), fun conn_type/1) ++
-                    with(quorum_sups(), fun ra_type/1).
+                    with(conn_sups(), fun conn_type/1).
 
 distinguished_interesting_sups() ->
     [
      with(queue_sups(), master),
      with(queue_sups(), slave),
-     with(quorum_sups(), quorum),
+     quorum_sups(),
      dlx_sups(),
      stream_server_sups(),
      stream_reader_sups(),
-     with(quorum_sups(), stream),
+     stream_coordinator(),
      with(conn_sups(), reader),
      with(conn_sups(), writer),
      with(conn_sups(), channel),
@@ -300,12 +301,6 @@ conn_type(PDict) ->
         {value, {rabbit_writer,  _}} -> writer;
         {value, {rabbit_channel, _}} -> channel;
         _                            -> other
-    end.
-
-ra_type(PDict) ->
-    case keyfind('$rabbit_vm_category', PDict) of
-        {value, rabbit_stream_coordinator} -> stream;
-        _                                  -> quorum
     end.
 
 %%----------------------------------------------------------------------------

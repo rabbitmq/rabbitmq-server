@@ -266,3 +266,21 @@ end}.
 
 {mapping, "mqtt.durable_queue_type", "rabbitmq_mqtt.durable_queue_type",
     [{datatype, {enum, [classic, quorum]}}]}.
+
+%% If feature flag rabbit_mqtt_qos0_queue is enabled, a pseudo queue of type rabbit_mqtt_qos0_queue is
+%% created for an MQTT "Clean Session" that subscribes with QoS 0. This queue type holds MQTT messages
+%% directly in the MQTT connection process mailbox. This queue type has no flow control which
+%% means MQTT messages might arrive faster in the Erlang mailbox than being sent to the subscribing MQTT
+%% client. To protect against high memory usage, RabbitMQ intentionally drops QoS 0 messages if both
+%% 1.) the number of messages in the MQTT connection process mailbox exceeds mailbox_soft_limit, and
+%% 2.) the socket sending to the MQTT client is busy (i.e. not sending fast enough).
+%% Note that there can be other messages in the mailbox (e.g. MQTT messages sent from the MQTT client to
+%% RabbitMQ or confirmations from another queue type to the MQTT connection process) which are
+%% obviously not dropped. However, these other messages also contribute to the `mailbox_soft_limit`.
+%% Setting mailbox_soft_limit to 0 disables the overload protection mechanism to drop QoS 0 messages.
+%% Setting mailbox_soft_limit to a very high value decreases the likelihood of intentionally dropping
+%% QoS 0 messages while increasing the risk of causing a cluster wide memory alarm.
+%%
+%% {mailbox_soft_limit, 30},
+{mapping, "mqtt.mailbox_soft_limit", "rabbitmq_mqtt.mailbox_soft_limit",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.

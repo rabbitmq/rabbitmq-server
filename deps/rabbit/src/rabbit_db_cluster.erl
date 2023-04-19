@@ -8,7 +8,6 @@
 -module(rabbit_db_cluster).
 
 -include_lib("kernel/include/logger.hrl").
--include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -103,7 +102,25 @@ members() ->
     members_using_mnesia().
 
 members_using_mnesia() ->
-    mnesia:system_info(db_nodes).
+    case rabbit_mnesia:is_running() andalso rabbit_table:is_present() of
+        true ->
+            %% If Mnesia is running locally and some tables exist, we can know
+            %% the database was initialized and we can query the list of
+            %% members.
+            mnesia:system_info(db_nodes);
+        false ->
+            try
+                %% When Mnesia is not running, we fall back to reading the
+                %% cluster status files stored on disk, if they exist.
+                {Members, _, _} = rabbit_node_monitor:read_cluster_status(),
+                Members
+            catch
+                throw:{error, _Reason}:_Stacktrace ->
+                    %% If we couldn't read those files, we consider that only
+                    %% this node is part of the "cluster".
+                    [node()]
+            end
+    end.
 
 -spec disc_members() -> Members when
       Members :: [node()].

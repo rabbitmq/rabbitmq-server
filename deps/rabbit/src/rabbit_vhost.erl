@@ -16,6 +16,7 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_tags/3]).
+-export([update_metadata/3]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
@@ -28,8 +29,8 @@
 %% API
 %%
 
+%% this module deals with user inputs, so accepts more than just atoms
 -type vhost_tag() :: atom() | string() | binary().
--export_type([vhost_tag/0]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -162,6 +163,7 @@ add(Name, Metadata, ActingUser) ->
     end.
 
 do_add(Name, Metadata, ActingUser) ->
+    ok = is_over_vhost_limit(Name),
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
@@ -194,6 +196,7 @@ do_add(Name, Metadata, ActingUser) ->
                             [Name, Description, Tags])
     end,
     DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
+
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
@@ -229,20 +232,30 @@ do_add(Name, Metadata, ActingUser) ->
             {error, Msg}
     end.
 
--spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-update(Name, Description, Tags, ActingUser) ->
-    Metadata = #{description => Description, tags => Tags},
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, Metadata0, ActingUser) ->
+    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
+
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
+            Description = vhost:get_description(VHost),
+            Tags = vhost:get_tags(VHost),
+            DefaultQueueType = vhost:get_default_queue_type(VHost),
             rabbit_event:notify(
               vhost_updated,
               info(VHost) ++ [{user_who_performed_action, ActingUser},
                               {description, Description},
-                              {tags, Tags}]),
+                              {tags, Tags},
+                              {default_queue_type, DefaultQueueType}]),
             ok;
         {error, _} = Error ->
             Error
     end.
+
+-spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update(Name, Description, Tags, ActingUser) ->
+    Metadata = #{description => Description, tags => Tags},
+    update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
@@ -284,9 +297,22 @@ delete(VHost, ActingUser) ->
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     ok.
 
+-spec put_vhost(vhost:name(),
+    binary(),
+    vhost:tags(),
+    boolean(),
+    rabbit_types:username()) ->
+    'ok' | {'error', any()} | {'EXIT', any()}.
 put_vhost(Name, Description, Tags0, Trace, Username) ->
     put_vhost(Name, Description, Tags0, undefined, Trace, Username).
 
+-spec put_vhost(vhost:name(),
+    binary(),
+    vhost:unparsed_tags() | vhost:tags(),
+    rabbit_queue_type:queue_type() | 'undefined',
+    boolean(),
+    rabbit_types:username()) ->
+    'ok' | {'error', any()} | {'EXIT', any()}.
 put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
@@ -330,6 +356,26 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
         undefined -> ok
     end,
     Result.
+
+-spec is_over_vhost_limit(vhost:name()) -> 'ok' | no_return().
+is_over_vhost_limit(Name) ->
+    Limit = rabbit_misc:get_env(rabbit, vhost_max, infinity),
+    is_over_vhost_limit(Name, Limit).
+
+-spec is_over_vhost_limit(vhost:name(), 'infinity' | non_neg_integer())
+        -> 'ok' | no_return().
+is_over_vhost_limit(_Name, infinity) ->
+    ok;
+is_over_vhost_limit(Name, Limit) when is_integer(Limit) ->
+    case length(rabbit_db_vhost:list()) >= Limit of
+        false ->
+            ok;
+        true ->
+            ErrorMsg = rabbit_misc:format("cannot create vhost '~ts': "
+                                          "vhost limit of ~tp is reached",
+                                          [Name, Limit]),
+            exit({vhost_limit_exceeded, ErrorMsg})
+    end.
 
 %% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
 %% which does not actually exist
@@ -413,8 +459,7 @@ assert_benign({error, not_found}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
-    QName = amqqueue:get_name(Q),
-    rabbit_amqqueue:internal_delete(QName, ActingUser).
+    rabbit_amqqueue:internal_delete(Q, ActingUser).
 
 -spec exists(vhost:name()) -> boolean().
 

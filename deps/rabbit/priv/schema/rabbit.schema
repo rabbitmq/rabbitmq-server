@@ -883,6 +883,33 @@ end}.
  end
 }.
 
+{mapping, "ranch_connection_max", "rabbit.ranch_connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.ranch_connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("ranch_connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
+
+{mapping, "vhost_max", "rabbit.vhost_max",
+  [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.vhost_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("vhost_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
 
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
@@ -2088,6 +2115,32 @@ end}.
     {datatype, integer}
 ]}.
 
+%%
+%% Feature flags and deprecated features
+%% =====================================
+%%
+
+%% NOTE: `true` is intentionally omitted - add it back when mirrored
+%% queue deprecation is converted to use deprecated features system.
+{mapping,
+ "deprecated_features.permit.$name", "rabbit.permitted_deprecated_features",
+    [{datatype, {enum, [false]}}]
+}.
+
+%% This converts:
+%%     deprecated_features.permit.my_feature = false
+%% to:
+%%     {rabbit, [{permitted_deprecated_features, #{my_feature => false}}]}.
+{translation, "rabbit.permitted_deprecated_features",
+ fun(Conf) ->
+         Settings = cuttlefish_variable:filter_by_prefix(
+                      "deprecated_features.permit", Conf),
+         maps:from_list(
+           [{list_to_atom(FeatureName), State}
+            || {["deprecated_features", "permit", FeatureName], State}
+               <- Settings])
+ end}.
+
 % ==========================
 % Kernel section
 % ==========================
@@ -2418,6 +2471,25 @@ end}.
 
 {mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
     {datatype, {enum, [true, false]}}]}.
+
+
+%%
+%% Runtime parameters
+%%
+
+{mapping, "runtime_parameters.limits.$category", "rabbit.runtime_parameters.limits", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.runtime_parameters.limits",
+    fun(Conf) ->
+        case cuttlefish_variable:filter_by_prefix("runtime_parameters.limits", Conf) of
+            [] -> cuttlefish:unset();
+            Ss -> [ {list_to_binary(Category), Limit} || {[_, _, Category], Limit} <- Ss ]
+        end
+    end
+}.
 
 % ===============================
 % Validators

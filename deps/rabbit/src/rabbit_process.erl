@@ -9,6 +9,7 @@
 
 -export([on_running_node/1,
          is_process_alive/1,
+         is_process_hibernated/1,
          is_registered_process_alive/1]).
 
 -spec on_running_node(Pid) -> OnRunningNode when
@@ -75,3 +76,18 @@ is_process_alive({Name, Node}) when is_atom(Name) andalso is_atom(Node) ->
 
 is_registered_process_alive(Name) ->
     is_pid(whereis(Name)).
+
+-spec is_process_hibernated(Pid) -> IsHibernated when
+      Pid :: pid(),
+      IsHibernated :: boolean().
+%% @doc Indicates if the specified process is hibernated.
+%%
+%% @param Pid the PID or name of the process to check
+%% @returns true if the process is hibernated on one of the cluster members,
+%% false otherwise.
+
+is_process_hibernated(Pid) when is_pid(Pid) ->
+    {current_function,{erlang,hibernate,3}} == erlang:process_info(Pid, current_function);
+is_process_hibernated(_) ->
+    %% some queue types, eg QQs, have a tuple as a Pid, but they are never hibernated
+    false.

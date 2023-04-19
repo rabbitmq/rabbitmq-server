@@ -1,3 +1,4 @@
+load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
     "@rules_erlang//:erlang_app_info.bzl",
     "ErlangAppInfo",
@@ -6,6 +7,10 @@ load(
     "@rules_erlang//:util.bzl",
     "path_join",
     "windows_path",
+)
+load(
+    "@rules_erlang//private:util.bzl",
+    "additional_file_dest_relative_path",
 )
 load(
     "//bazel/elixir:elixir_toolchain.bzl",
@@ -30,10 +35,30 @@ def _impl(ctx):
         deps_dir,
     )
 
+    for dep, app_name in ctx.attr.source_deps.items():
+        for src in dep.files.to_list():
+            if not src.is_directory:
+                rp = additional_file_dest_relative_path(dep.label, src)
+                f = ctx.actions.declare_file(path_join(
+                    deps_dir,
+                    app_name,
+                    rp,
+                ))
+                ctx.actions.symlink(
+                    output = f,
+                    target_file = src,
+                )
+                deps_dir_files.append(f)
+
     package_dir = path_join(
         ctx.label.workspace_root,
         ctx.label.package,
     )
+
+    precompiled_deps = " ".join([
+        dep[ErlangAppInfo].app_name
+        for dep in ctx.attr.deps
+    ])
 
     if not ctx.attr.is_windows:
         output = ctx.actions.declare_file(ctx.label.name)
@@ -72,12 +97,14 @@ export HOME=${{PWD}}
 export DEPS_DIR=$TEST_SRCDIR/$TEST_WORKSPACE/{package_dir}/{deps_dir}
 export MIX_ENV=test
 export ERL_COMPILER_OPTIONS=deterministic
-"${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
-"${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
-"${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
-if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
-    cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
-fi
+for archive in {archives}; do
+    "${{ABS_ELIXIR_HOME}}"/bin/mix archive.install --force $INITIAL_DIR/$archive
+done
+for d in {precompiled_deps}; do
+    mkdir -p _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/ebin _build/${{MIX_ENV}}/lib/$d
+    ln -s ${{DEPS_DIR}}/$d/include _build/${{MIX_ENV}}/lib/$d
+done
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
 
@@ -112,6 +139,8 @@ set -x
             elixir_home = elixir_home,
             package_dir = package_dir,
             deps_dir = deps_dir,
+            archives = "".join([shell.quote(a.short_path) for a in ctx.files.archives]),
+            precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
     else:
@@ -140,9 +169,16 @@ set DEPS_DIR=%TEST_SRCDIR%/%TEST_WORKSPACE%/{package_dir}/{deps_dir}
 set DEPS_DIR=%DEPS_DIR:/=\\%
 set ERL_COMPILER_OPTIONS=deterministic
 set MIX_ENV=test
-echo y | "{elixir_home}\\bin\\mix" local.hex --force || goto :error
-echo y | "{elixir_home}\\bin\\mix" local.rebar --force || goto :error
-"{elixir_home}\\bin\\mix" deps.get || goto :error
+for %%a in ({archives}) do (
+    set ARCH=%TEST_SRCDIR%/%TEST_WORKSPACE%/%%a
+    set ARCH=%ARCH:/=\\%
+    "{elixir_home}\\bin\\mix" archive.install --force %ARCH% || goto :error
+)
+for %%d in ({precompiled_deps}) do (
+    mkdir _build\\%MIX_ENV%\\lib\\%%d
+    robocopy %DEPS_DIR%\\%%d\\ebin _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
+    robocopy %DEPS_DIR%\\%%d\\include _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
+)
 "{elixir_home}\\bin\\mix" deps.compile || goto :error
 "{elixir_home}\\bin\\mix" compile || goto :error
 
@@ -160,6 +196,8 @@ exit /b 1
             elixir_home = windows_path(elixir_home),
             package_dir = windows_path(ctx.label.package),
             deps_dir = deps_dir,
+            archives = "".join([shell.quote(a.short_path) for a in ctx.files.archives]),
+            precompiled_deps = precompiled_deps,
             rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
         )
 
@@ -169,7 +207,7 @@ exit /b 1
     )
 
     runfiles = ctx.runfiles(
-        files = ctx.files.srcs + ctx.files.data,
+        files = ctx.files.srcs + ctx.files.data + ctx.files.archives,
         transitive_files = depset(deps_dir_files),
     ).merge_all([
         erlang_runfiles,
@@ -189,6 +227,10 @@ rabbitmqctl_private_test = rule(
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangAppInfo]),
+        "archives": attr.label_list(
+            allow_files = [".ez"],
+        ),
+        "source_deps": attr.label_keyed_string_dict(),
         "rabbitmq_run": attr.label(
             executable = True,
             cfg = "target",

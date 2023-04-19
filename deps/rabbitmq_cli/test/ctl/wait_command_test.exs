@@ -53,7 +53,7 @@ defmodule WaitCommandTest do
   end
 
   test "run: times out if unable to communicate with the node", context do
-    pid = String.to_integer(System.get_pid())
+    pid = String.to_integer(System.pid())
 
     {:error, {:timeout, _}} =
       @command.run([], Map.merge(context[:opts], %{pid: pid, node: :nonode@nohost}))

@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 -define(SERVER_REJECT_CLIENT_NEW, {tls_alert, {unknown_ca, _}}).
@@ -201,9 +202,9 @@ validation_success_for_AMQP_client1(Config) ->
     %% Note that when this test is executed together with the HTTP provider group
     %% it runs into unexpected interference and fails, even if TLS app PEM cache is force
     %% cleared. That's why originally each group was made to use a separate node.
-    AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([]),
-    {Certificate, Key} = chain(AuthorityInfo),
-    {Certificate2, Key2} = chain(AuthorityInfo),
+    RootCert = #{cert := Root} = public_key:pkix_test_root_cert("RootCA", []),
+    {Certificate, Key} = chain(RootCert),
+    {Certificate2, Key2} = chain(RootCert),
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     %% When: Rabbit accepts just this one authority's certificate
@@ -218,7 +219,7 @@ validation_success_for_AMQP_client1(Config) ->
     %% authority connects successfully.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{verify, verify_none},
+                                                           ssl_options = [{cacerts, [Root]},
                                                                           {cert, Certificate},
                                                                           {key, Key},
                                                                           {versions, ['tlsv1.2']}]}),
@@ -293,7 +294,7 @@ validate_chain1(Config) ->
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
-    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "alice", CertTrusted),
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
@@ -326,18 +327,30 @@ validate_longer_chain1(Config) ->
     %% AND a certificate `CertUntrusted` that is not whitelisted with the same root as `CertTrusted`
     %% AND `CertInter` intermediate CA
     %% AND `RootTrusted` CA
-    AuthorityInfo = {RootCA, _AuthorityKey} = erl_make_certs:make_cert([]),
-    Inter = {CertInter, {KindInter, KeyDataInter, _}} = erl_make_certs:make_cert([{issuer, AuthorityInfo}]),
-    KeyInter = {KindInter, KeyDataInter},
-    {CertUntrusted, {KindUntrusted, KeyDataUntrusted, _}} = erl_make_certs:make_cert([{issuer, Inter}]),
-    KeyUntrusted = {KindUntrusted, KeyDataUntrusted},
-    {CertTrusted, {Kind, KeyData, _}} = erl_make_certs:make_cert([{issuer, Inter}]),
-    KeyTrusted = {Kind, KeyData},
+
+    KeyInterDec = public_key:generate_key({rsa, 2048, 17}),
+    KeyInter = {'RSAPrivateKey', public_key:der_encode('RSAPrivateKey', KeyInterDec)},
+
+    TestDataTrusted = public_key:pkix_test_data(#{
+        root => [],
+        intermediates => [[{key, KeyInterDec}]],
+        peer => []
+    }),
+    CertTrusted = proplists:get_value(cert, TestDataTrusted),
+    KeyTrusted = proplists:get_value(key, TestDataTrusted),
+    [RootCA, CertInter, RootCA] = proplists:get_value(cacerts, TestDataTrusted),
+
+    TestDataUntrusted = public_key:pkix_test_data(#{
+        root => #{cert => CertInter, key => KeyInterDec},
+        peer => []
+    }),
+    CertUntrusted = proplists:get_value(cert, TestDataUntrusted),
+    KeyUntrusted = proplists:get_value(key, TestDataUntrusted),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
-    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "alice", CertTrusted),
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
@@ -486,7 +499,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
-    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "alice", CertTrusted),
     rabbit_trust_store:refresh(),
 
     %% When: Rabbit validates paths with a different root `R` than
@@ -520,7 +533,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
-    ok = whitelist(Config, "bob", CertOther,  KeyOther),
+    ok = whitelist(Config, "bob", CertOther),
     rabbit_trust_store:refresh(),
 
     %% When: we wait for at least one second (the accuracy of the
@@ -584,7 +597,7 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
                                                       {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
-    ok = whitelist(Config, "charlie", CertOther,  KeyOther),
+    ok = whitelist(Config, "charlie", CertOther),
     wait_for_trust_store_refresh(),
 
     %% Then: a client presenting the whitelisted certificate `CertOther`
@@ -618,8 +631,8 @@ whitelist_directory_DELTA1(Config) ->
     {_,  CertRevoked, KeyRevoked} = ct_helper:make_certs(),
     {_,  CertListed2, KeyListed2} = ct_helper:make_certs(),
 
-    ok = whitelist(Config, "foo", CertListed1,  KeyListed1),
-    ok = whitelist(Config, "bar", CertRevoked,  KeyRevoked),
+    ok = whitelist(Config, "foo", CertListed1),
+    ok = whitelist(Config, "bar", CertRevoked),
     rabbit_trust_store:refresh(),
 
     %% When: we wait for at least one second (the accuracy
@@ -633,7 +646,7 @@ whitelist_directory_DELTA1(Config) ->
 
     wait_for_file_system_time(),
     ok = delete("bar.pem", Config),
-    ok = whitelist(Config, "baz", CertListed2,  KeyListed2),
+    ok = whitelist(Config, "baz", CertListed2),
     wait_for_trust_store_refresh(),
 
     %% Then: connectivity to Rabbit is as it should be.
@@ -695,7 +708,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                     {cert, Cert},
                                                     {key, Key} | cfg()], 1, 1),
     %% And: the first certificate has been whitelisted
-    ok = whitelist(Config, "bart", CertFirst,  KeyFirst),
+    ok = whitelist(Config, "bart", CertFirst),
     rabbit_trust_store:refresh(),
 
     wait_for_trust_store_refresh(),
@@ -732,7 +745,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     ok = amqp_connection:close(Con),
 
     %% When: a whitelisted certicate is replaced with one with the same name
-    ok = whitelist(Config, "bart", CertUpdated,  KeyUpdated),
+    ok = whitelist(Config, "bart", CertUpdated),
 
     wait_for_trust_store_refresh(),
 
@@ -797,10 +810,10 @@ ignore_corrupt_cert1(Config) ->
     {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     rabbit_trust_store:refresh(),
-    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "alice", CertTrusted),
 
     %% When: Rabbit tries to whitelist the corrupt certificate.
-    ok = whitelist(Config, "corrupt", <<48>>,  KeyTrusted),
+    ok = whitelist(Config, "corrupt", <<48>>),
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
@@ -835,9 +848,9 @@ ignore_same_cert_with_different_name1(Config) ->
     {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     rabbit_trust_store:refresh(),
-    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "alice", CertTrusted),
     %% When: Rabbit tries to insert the duplicate certificate
-    ok = whitelist(Config, "malice", CertTrusted,  KeyTrusted),
+    ok = whitelist(Config, "malice", CertTrusted),
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
@@ -872,8 +885,8 @@ list(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
     timer:sleep(2000),
 
-    {_Root,  Cert, Key}    = ct_helper:make_certs(),
-    ok = whitelist(Config, "alice", Cert,  Key),
+    {_Root,  Cert, _Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert),
     % wait_for_trust_store_refresh(),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
     Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -882,8 +895,8 @@ list(Config) ->
     {match, _} = re:run(Certs, ".*alice\.pem.*").
 
 disabled_provider_removes_certificates(Config) ->
-    {_Root,  Cert, Key}    = ct_helper:make_certs(),
-    ok = whitelist(Config, "alice", Cert,  Key),
+    {_Root,  Cert, _Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
 
     %% Certificate is there
@@ -902,8 +915,8 @@ disabled_provider_removes_certificates(Config) ->
     nomatch = re:run(CertsAfterDelete, ".*alice\.pem.*").
 
 enabled_provider_adds_cerificates(Config) ->
-    {_Root,  Cert, Key}    = ct_helper:make_certs(),
-    ok = whitelist(Config, "alice", Cert,  Key),
+    {_Root,  Cert, _Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
            ?MODULE,  change_configuration,
            [rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
@@ -949,9 +962,16 @@ cfg() ->
 %% Ancillary
 
 chain(Issuer) ->
-    %% Theses are DER encoded.
-    {Certificate, {Kind, Key, _}} = erl_make_certs:make_cert([{issuer, Issuer}]),
-    {Certificate, {Kind, Key}}.
+    %% These are DER encoded.
+    TestData = public_key:pkix_test_data(#{
+        root => Issuer,
+        peer => [{digest, sha256}, {key, {rsa, 2048, 17}}, {extensions, [
+            #'Extension'{
+                extnID = ?'id-ce-subjectAltName',
+                extnValue = [{dNSName, "localhost"}],
+                critical = true}
+        ]}]}),
+    {proplists:get_value(cert, TestData), proplists:get_value(key, TestData)}.
 
 change_configuration(App, Props) ->
     ok = application:stop(App),
@@ -964,10 +984,10 @@ change_cfg(App, [{Name,Value}|Rest]) ->
     ok = application:set_env(App, Name, Value),
     change_cfg(App, Rest).
 
-whitelist(Config, Filename, Certificate, {A, B} = _Key) ->
+whitelist(Config, Filename, Certificate) ->
     Path = whitelist_dir(Config),
-    ok = erl_make_certs:write_pem(Path, Filename, {Certificate, {A, B, not_encrypted}}),
-    [file:delete(filename:join(Path, K)) || K <- filelib:wildcard("*_key.pem", Path)],
+    ok = file:write_file(filename:join(Path, Filename ++ ".pem"),
+                         public_key:pem_encode([{'Certificate', Certificate, not_encrypted}])),
     ok.
 
 delete(Name, Config) ->

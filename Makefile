@@ -144,6 +144,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.bazelrc'			\
 	       --exclude 'moduleindex.yaml'		\
 	       --exclude 'BUILD.*'			\
+	       --exclude 'erlang_ls.config'		\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '_build/'			\
 	       --exclude '__pycache__/'			\

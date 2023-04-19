@@ -35,13 +35,13 @@ jobs:
       matrix:
         otp_version_id:
         - 25_0
-        - 25_2
+        - 25_3
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -81,7 +81,7 @@ jobs:
         include:
         - erlang_version: "25.0"
           elixir_version: 1.14.0
-        - erlang_version: "25.2"
+        - erlang_version: "25.3"
           elixir_version: 1.14.0
     timeout-minutes: 60
     steps:
@@ -93,7 +93,7 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -127,3 +127,12 @@ jobs:
           --build_tests_only \
           --test_env RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES=true \
           --verbose_failures
+  summary-test:
+    needs:
+    - test
+    - test-exclusive
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

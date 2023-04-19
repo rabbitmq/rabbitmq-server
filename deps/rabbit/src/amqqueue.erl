@@ -98,16 +98,16 @@
           slave_pids = [] :: [pid()] | none | '_',    %% transient
           sync_slave_pids = [] :: [pid()] | none| '_',%% transient
           recoverable_slaves = [] :: [atom()] | none | '_', %% durable
-          policy :: binary() | none | undefined | '_', %% durable, implicit
-                                                       %% update as above
-          operator_policy :: binary() | none | undefined | '_', %% durable,
-                                                                %% implicit
-                                                                %% update
-                                                                %% as above
+          policy :: proplists:proplist() |
+                    none | undefined | '_', %% durable, implicit update as
+                                            %% above
+          operator_policy :: proplists:proplist() |
+                             none | undefined | '_', %% durable, implicit
+                                                     %% update as above
           gm_pids = [] :: [{pid(), pid()}] | none | '_', %% transient
           decorators :: [atom()] | none | undefined | '_', %% transient,
-                                                          %% recalculated
-                                                          %% as above
+                                                           %% recalculated
+                                                           %% as above
           state = live :: atom() | none | '_', %% durable (have we crashed?)
           policy_version = 0 :: non_neg_integer() | '_',
           slave_pids_pending_shutdown = [] :: [pid()] | '_',
@@ -128,8 +128,9 @@
                           slave_pids :: [pid()] | none,
                           sync_slave_pids :: [pid()] | none,
                           recoverable_slaves :: [atom()] | none,
-                          policy :: binary() | none | undefined,
-                          operator_policy :: binary() | none | undefined,
+                          policy :: proplists:proplist() | none | undefined,
+                          operator_policy :: proplists:proplist() |
+                                             none | undefined,
                           gm_pids :: [{pid(), pid()}] | none,
                           decorators :: [atom()] | none | undefined,
                           state :: atom() | none,

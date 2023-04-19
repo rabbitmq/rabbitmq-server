@@ -19,6 +19,7 @@
 
          %% Various queries to get the status of the db
          status/0,
+         is_running/0,
          is_clustered/0,
          on_running_node/1,
          is_process_alive/1,

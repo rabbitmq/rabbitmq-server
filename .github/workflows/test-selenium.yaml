@@ -21,17 +21,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  selenimum:
+  selenium:
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
         erlang_version:
-        - "25.2"
+        - "25.3"
         browser:
         - chrome
         include:
-        - erlang_version: "25.2"
+        - erlang_version: "25.3"
           elixir_version: 1.13.4
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
@@ -47,7 +47,7 @@ jobs:
         elixir-version: ${{ matrix.elixir_version }}
 
     - name: Mount Bazel Cache
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -101,3 +101,13 @@ jobs:
         path: |
           logs/*
           screens/*
+          /tmp/selenium/*
+
+  summary-selenium:
+    needs:
+    - selenium
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

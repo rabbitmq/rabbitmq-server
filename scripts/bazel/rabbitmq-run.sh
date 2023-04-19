@@ -17,18 +17,63 @@ rmq_realpath() {
 }
 
 write_config_file() {
+    local rabbit_fragment=
+    local rabbitmq_management_fragment=
+    local rabbitmq_mqtt_fragment=
+    local rabbitmq_web_mqtt_fragment=
+    local rabbitmq_web_mqtt_examples_fragment=
+    local rabbitmq_stomp_fragment=
+    local rabbitmq_web_stomp_fragment=
+    local rabbitmq_web_stomp_examples_fragment=
+    local rabbitmq_stream_fragment=
+    local rabbitmq_prometheus_fragment=
+
+    if [[ -n ${RABBITMQ_NODE_PORT+x} ]]; then
+        rabbit_fragment="{tcp_listeners, [$RABBITMQ_NODE_PORT]}"
+        rabbitmq_management_fragment="{listener, [{port, $(($RABBITMQ_NODE_PORT + 10000))}]}"
+        rabbitmq_mqtt_fragment="{tcp_listeners, [$((1883 + $RABBITMQ_NODE_PORT - 5672))]}"
+        rabbitmq_web_mqtt_fragment="{tcp_config, [{port, $((15675 + $RABBITMQ_NODE_PORT - 5672))}]}"
+        rabbitmq_web_mqtt_examples_fragment="{listener, [{port, $((15670 + $RABBITMQ_NODE_PORT - 5672))}]}"
+        rabbitmq_stomp_fragment="{tcp_listeners, [$((61613 + $RABBITMQ_NODE_PORT - 5672))]}"
+        rabbitmq_web_stomp_fragment="{tcp_config, [{port, $((15674 + $RABBITMQ_NODE_PORT - 5672))}]}"
+        rabbitmq_web_stomp_examples_fragment="{listener, [{port, $((15670 + $RABBITMQ_NODE_PORT - 5672))}]}"
+        rabbitmq_stream_fragment="{tcp_listeners, [$((5552 + $RABBITMQ_NODE_PORT - 5672))]}"
+        rabbitmq_prometheus_fragment="{tcp_config, [{port, $((15692 + $RABBITMQ_NODE_PORT - 5672))}]}"
+    fi
     cat << EOF > "$RABBITMQ_CONFIG_FILE"
 %% vim:ft=erlang:
 
 [
   {rabbit, [
+      ${rabbit_fragment}${rabbit_fragment:+,}
       {loopback_users, []}
     ]},
   {rabbitmq_management, [
+      ${rabbitmq_management_fragment}
     ]},
   {rabbitmq_mqtt, [
+      ${rabbitmq_mqtt_fragment}
+    ]},
+  {rabbitmq_web_mqtt, [
+      ${rabbitmq_web_mqtt_fragment}
+    ]},
+  {rabbitmq_web_mqtt_examples, [
+      ${rabbitmq_web_mqtt_examples_fragment}
     ]},
   {rabbitmq_stomp, [
+      ${rabbitmq_stomp_fragment}
+    ]},
+  {rabbitmq_web_stomp, [
+      ${rabbitmq_web_stomp_fragment}
+    ]},
+  {rabbitmq_web_stomp_examples, [
+      ${rabbitmq_web_stomp_examples_fragment}
+    ]},
+  {rabbitmq_stream, [
+      ${rabbitmq_stream_fragment}
+    ]},
+  {rabbitmq_prometheus, [
+      ${rabbitmq_prometheus_fragment}
     ]},
   {ra, [
       {data_dir, "${RABBITMQ_QUORUM_DIR}"},

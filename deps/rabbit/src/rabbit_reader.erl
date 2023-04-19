@@ -66,6 +66,8 @@
 -record(v1, {
           %% parent process
           parent,
+          %% Ranch ref
+          ranch_ref,
           %% socket
           sock,
           %% connection state, see connection record
@@ -162,7 +164,7 @@ init(Parent, HelperSup, Ref) ->
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbit, proxy_protocol, false)),
     Deb = sys:debug_options([]),
-    start_connection(Parent, HelperSup, Deb, Sock).
+    start_connection(Parent, HelperSup, Ref, Deb, Sock).
 
 -spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
 
@@ -289,10 +291,10 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
--spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
+-spec start_connection(pid(), pid(), ranch:ref(), any(), rabbit_net:socket()) ->
           no_return().
 
-start_connection(Parent, HelperSup, Deb, Sock) ->
+start_connection(Parent, HelperSup, RanchRef, Deb, Sock) ->
     process_flag(trap_exit, true),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
@@ -310,6 +312,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
     State = #v1{parent              = Parent,
+                ranch_ref           = RanchRef,
                 sock                = RealSocket,
                 connection          = #connection{
                   name               = Name,
@@ -1209,7 +1212,8 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
              heartbeater = Heartbeater};
 
 handle_method0(#'connection.open'{virtual_host = VHost},
-               State = #v1{connection_state = opening,
+               State = #v1{ranch_ref        = RanchRef,
+                           connection_state = opening,
                            connection       = Connection = #connection{
                                                 log_name = ConnName,
                                                 user = User = #user{username = Username},
@@ -1217,7 +1221,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-
+    ok = is_over_node_connection_limit(RanchRef),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
@@ -1316,6 +1320,23 @@ is_vhost_alive(VHostPath, User) ->
                             "access to vhost '~ts' refused for user '~ts': "
                             "vhost '~ts' is down",
                             [VHostPath, User#user.username, VHostPath])
+    end.
+
+is_over_node_connection_limit(RanchRef) ->
+    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    case Limit of
+        infinity -> ok;
+        N when is_integer(N) ->
+            #{active_connections := ActiveConns} = ranch:info(RanchRef),
+
+            case ActiveConns > Limit of
+                false -> ok;
+                true ->
+                    rabbit_misc:protocol_error(not_allowed,
+                                            "connection refused: "
+                                            "node connection limit (~tp) is reached",
+                                            [Limit])
+            end
     end.
 
 is_over_vhost_connection_limit(VHostPath, User) ->

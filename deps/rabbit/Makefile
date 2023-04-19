@@ -26,7 +26,7 @@ define PROJECT_ENV
 	    {frame_max, 131072},
 	    %% see rabbitmq-server#1593
 	    {channel_max, 2047},
-	    {connection_max, infinity},
+	    {ranch_connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {msg_store_shutdown_timeout, 600000},
@@ -148,7 +148,7 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.4.3
+dep_osiris = git https://github.com/rabbitmq/osiris v1.5.0
 dep_systemd = hex 0.6.1
 dep_seshat = hex 0.4.0
 

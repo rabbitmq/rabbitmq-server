@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+#set -x
+
+TEST_PATH=${1:?First parameter is the directory env and config files are relative to}
+ENV_FILE=${2:?Second parameter is a comma-separated list of .env file which has exported template variables}
+FINAL_CONFIG_FILE=${3:?Forth parameter is the name of the final config file. It is relative to where this script is run from}
+
+source $ENV_FILE
+
+parentdir="$(dirname "$FINAL_CONFIG_FILE")"
+mkdir -p $parentdir
+
+echo "" > $FINAL_CONFIG_FILE
+
+for f in $($SCRIPT/find-template-files $TEST_PATH "rabbitmq" "conf")
+do
+  envsubst < $f  >> $FINAL_CONFIG_FILE
+done

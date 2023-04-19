@@ -896,8 +896,7 @@ tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
         false ->
-            [{mod_call, rabbit_quorum_queue,
-              handle_tick, [QName, overview(State), all_nodes(State)]}]
+            [{aux, {handle_tick, [QName, overview(State), all_nodes(State)]}}]
     end.
 
 -spec overview(state()) -> map().
@@ -980,7 +979,7 @@ which_module(3) -> ?MODULE.
                last_decorators_state :: term(),
                capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
-               unused,
+               tick_pid,
                unused2}).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1004,8 +1003,8 @@ handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
 handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
-handle_aux(leader, cast, {#return{msg_ids = MsgIds,
-                                  consumer_id = ConsumerId}, Corr, Pid},
+handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
+                                      consumer_id = ConsumerId}, Corr, Pid},
            Aux0, Log0, #?MODULE{cfg = #cfg{delivery_limit = undefined},
                                 consumers = Consumers}) ->
     case Consumers of
@@ -1030,6 +1029,18 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
         _ ->
             {no_reply, Aux0, Log0}
     end;
+handle_aux(leader, _, {handle_tick, Args},
+           #?AUX{tick_pid = Pid} = Aux, Log, _) ->
+    NewPid =
+        case process_is_alive(Pid) of
+            false ->
+                %% No active TICK pid
+                spawn(rabbit_quorum_queue, handle_tick, Args);
+            true ->
+                %% Active TICK pid, do nothing
+                Pid
+        end,
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, Log};
 handle_aux(_, _, {get_checked_out, ConsumerId, MsgIds},
            Aux0, Log0, #?MODULE{cfg = #cfg{},
                                 consumers = Consumers}) ->
@@ -1152,6 +1163,10 @@ force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
             AuxState
     end.
 
+process_is_alive(Pid) when is_pid(Pid) ->
+    is_process_alive(Pid);
+process_is_alive(_) ->
+    false.
 %%% Queries
 
 query_messages_ready(State) ->

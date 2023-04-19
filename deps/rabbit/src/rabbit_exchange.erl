@@ -428,7 +428,13 @@ delete(XName, IfUnused, Username) ->
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
         Deletions = process_deletions(rabbit_db_exchange:delete(XName, IfUnused)),
-        rabbit_binding:notify_deletions(Deletions, Username)
+        case Deletions of
+            {error, _} ->
+                Deletions;
+            _ ->
+                rabbit_binding:notify_deletions(Deletions, Username),
+                ok
+        end
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
                                         ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,

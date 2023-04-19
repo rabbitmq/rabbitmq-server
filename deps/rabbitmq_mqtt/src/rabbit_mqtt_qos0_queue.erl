@@ -97,7 +97,7 @@ declare(Q0, _Node) ->
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     QName = amqqueue:get_name(Q),
     log_delete(QName, amqqueue:get_exclusive_owner(Q)),
-    ok = rabbit_amqqueue:internal_delete(QName, ActingUser),
+    ok = rabbit_amqqueue:internal_delete(Q, ActingUser),
     {ok, 0}.
 
 -spec deliver([{amqqueue:amqqueue(), stateless}], Delivery :: term()) ->
@@ -164,7 +164,7 @@ recover(_VHost, Queues) ->
               true = is_recoverable(Q),
               QName = amqqueue:get_name(Q),
               log_delete(QName, amqqueue:get_exclusive_owner(Q)),
-              rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER)
+              rabbit_amqqueue:internal_delete(Q, ?INTERNAL_USER, missing_owner)
       end, Queues),
     %% We mark the queue recovery as failed because these queues are not really
     %% recovered, but deleted.

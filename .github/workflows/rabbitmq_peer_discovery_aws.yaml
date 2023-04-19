@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-max-bazel
-            otp_version_id: 25_2
+            otp_version_id: 25_3
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -22,7 +22,7 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache

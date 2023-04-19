@@ -287,13 +287,13 @@ tcp_listen_options.exit_on_close = false",
   "total_memory_available_override_value = 1024MB",
   [{rabbit,[{total_memory_available_override_value, "1024MB"}]}],
   []},
- {connection_max,
-  "connection_max = 999",
-  [{rabbit,[{connection_max, 999}]}],
+ {ranch_connection_max,
+  "ranch_connection_max = 999",
+  [{rabbit,[{ranch_connection_max, 999}]}],
   []},
- {connection_max,
-  "connection_max = infinity",
-  [{rabbit,[{connection_max, infinity}]}],
+ {ranch_connection_max,
+  "ranch_connection_max = infinity",
+  [{rabbit,[{ranch_connection_max, infinity}]}],
   []},
  {channel_max,
   "channel_max = 16",
@@ -896,5 +896,32 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
+   []},
+
+  %%
+  %% Runtime parameters
+  %%
+
+  {runtime_parameters_limits,
+  "
+   runtime_parameters.limits.federation = 2
+   runtime_parameters.limits.shovel = 1
+  ",
+   [{rabbit, [{runtime_parameters, [{limits, [
+       {<<"shovel">>, 1},
+       {<<"federation">>, 2}
+     ]}]}]}],
+   []},
+
+  %%
+  %% Deprecated features
+  %%
+
+  {deprecated_features_cmq,
+   "deprecated_features.permit.classic_mirrored_queues = false",
+   [{rabbit, [
+      {permitted_deprecated_features, #{classic_mirrored_queues => false}}
+     ]}],
    []}
+
 ].

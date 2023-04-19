@@ -177,8 +177,7 @@ delete_stream(Q, ActingUser)
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case process_command({delete_stream, StreamId, #{}}) of
         {ok, ok, _} ->
-            QName = amqqueue:get_name(Q),
-              _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+            _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
             {ok, {ok, 0}};
         Err ->
             Err
@@ -810,7 +809,7 @@ handle_aux(leader, _, fail_active_actions,
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
     Exclude = maps:from_list([{S, ok}
-                              || {P, {S, _, _}} <- maps:to_list(Actions),
+                              || {P, {S, _, _}} <- maps_to_list(Actions),
                              is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
     fail_active_actions(Streams, Exclude),
@@ -923,7 +922,7 @@ send_action_failed(StreamId, Action, Arg) ->
   send_self_command({action_failed, StreamId, Arg#{action => Action}}).
 
 send_self_command(Cmd) ->
-    ra:pipeline_command({?MODULE, node()}, Cmd),
+    ra:pipeline_command({?MODULE, node()}, Cmd, no_correlation, normal),
     ok.
 
 
@@ -1897,7 +1896,7 @@ find_leader(Members) ->
                    false;
                ({_, #member{role = {Role, _}}}) ->
                    Role == writer
-           end, maps:to_list(Members)) of
+           end, maps_to_list(Members)) of
         {[Writer], Replicas} ->
             {Writer, maps:from_list(Replicas)};
         {[], Replicas} ->
@@ -1952,7 +1951,7 @@ select_leader(#{system_time := Ts,
                            false;
                       (_, {_, #member{state = {stopped, _, empty}}}) ->
                            true
-                   end, maps:to_list(Stopped)),
+                   end, maps_to_list(Stopped)),
     Potential = lists:takewhile(fun ({_N, #member{state = S}}) ->
                                         S == MState
                                 end, Sorted),
@@ -1974,7 +1973,7 @@ select_leader(#{system_time := Ts,
 select_leader(Meta, Stopped) ->
     %% recurse with old format
     select_leader(Meta,
-                  maps:to_list(
+                  maps_to_list(
                     maps:map(
                       fun (_N, #member{state = {stopped, _, Tail}}) ->
                               Tail
@@ -2089,3 +2088,6 @@ transfer_leadership([Destination | _] = _TransferCandidates) ->
         undefined ->
             {ok, undefined}
     end.
+
+maps_to_list(M) ->
+    lists:sort(maps:to_list(M)).

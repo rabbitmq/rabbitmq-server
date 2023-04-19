@@ -922,6 +922,32 @@ and write and read permissions on all resources:
 .sp
 .Dl rabbitmqctl set_permissions -p my-vhost janeway Qo ^janeway-.* Qc Qo .* Qc Qq .*
 .\" ------------------------------------------------------------------
+.It Cm set_permissions_globally Ar username Ar conf Ar write Ar read
+.Bl -tag -width Ds
+.It Ar username
+The name of the user to grant access to the specified virtual host.
+.It Ar conf
+A regular expression matching resource names for which the user is
+granted configure permissions.
+.It Ar write
+A regular expression matching resource names for which the user is
+granted write permissions.
+.It Ar read
+A regular expression matching resource names for which the user is
+granted read permissions.
+.El
+.Pp
+Sets user permissions in all vhosts.
+.Pp
+For example, this command instructs the RabbitMQ broker to grant the
+user named
+.Qq janeway
+access to all virtual hosts with configure permissions on all resources whose names starts with
+.Qq janeway- ,
+and write and read permissions on all resources:
+.sp
+.Dl rabbitmqctl set_permissions_globally janeway Qo ^janeway-.* Qc Qo .* Qc Qq .*
+.\" ------------------------------------------------------------------
 .It Cm set_topic_permissions Oo Fl p Ar vhost Oc Ar user Ar exchange Ar write Ar read
 .Bl -tag -width Ds
 .It Ar vhost
@@ -1698,7 +1724,13 @@ Which types of object this policy should apply to.
 Possible values are:
 .Bl -bullet -compact
 .It
-queues
+queues (all queue types, including streams)
+.It
+classic_queues (classic queues only)
+.It
+quorum_queues (quorum queues only)
+.It
+streams (streams only)
 .It
 exchanges
 .It

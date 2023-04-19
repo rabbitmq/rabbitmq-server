@@ -33,7 +33,6 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -export([register/0]).
--export([invalidate/0, recover/0]).
 -export([name/1, name_op/1, effective_definition/1, merge_operator_definitions/2, get/2, get_arg/3, set/1]).
 -export([validate/5, notify/5, notify_clear/4]).
 -export([parse_set/7, set/7, delete/3, lookup/2, list/0, list/1,
@@ -41,7 +40,7 @@
 -export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1, list_op/2,
          list_formatted_op/1, list_formatted_op/3,
          match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
-         list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/1
+         list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/0, list_op_as_maps/1
         ]).
 -export([sort_by_priority/1]).
 
@@ -126,6 +125,9 @@ list_as_maps() ->
 list_as_maps(VHost) ->
     [maps:from_list(PL) || PL <- sort_by_priority(list0(VHost, fun maps:from_list/1))].
 
+list_op_as_maps() ->
+    list_op_as_maps('_').
+
 list_op_as_maps(VHost) ->
     [maps:from_list(PL) || PL <- sort_by_priority(list0_op(VHost, fun maps:from_list/1))].
 
@@ -193,11 +195,14 @@ match_all(NameOrQueue, Policies) ->
    lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(NameOrQueue, P)]).
 
 matches(Q, Policy) when ?is_amqqueue(Q) ->
-    #resource{name = Name, kind = Kind, virtual_host = VHost} = amqqueue:get_name(Q),
-    matches_type(Kind, pget('apply-to', Policy)) andalso
+    #resource{name = Name, virtual_host = VHost} = amqqueue:get_name(Q),
+    matches_queue_type(queue, amqqueue:get_type(Q), pget('apply-to', Policy)) andalso
         is_applicable(Q, pget(definition, Policy)) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy);
+matches(#resource{kind = queue} = Resource, Policy) ->
+    {ok, Q} = rabbit_amqqueue:lookup(Resource),
+    matches(Q, Policy);
 matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
         is_applicable(Resource, pget(definition, Policy)) andalso
@@ -241,50 +246,6 @@ get_arg(AName,   PName, X = #exchange{arguments = Args}) ->
         undefined    -> get(PName, X);
         {_Type, Arg} -> Arg
     end.
-
-%%----------------------------------------------------------------------------
-
-%% Gets called during upgrades - therefore must not assume anything about the
-%% state of Mnesia
-invalidate() ->
-    rabbit_file:write_file(invalid_file(), <<"">>).
-
-recover() ->
-    case rabbit_file:is_file(invalid_file()) of
-        true  -> recover0(),
-                 rabbit_file:delete(invalid_file());
-        false -> ok
-    end.
-
-%% To get here we have to have just completed an Mnesia upgrade - i.e. we are
-%% the first node starting. So we can rewrite the whole database.  Note that
-%% recovery has not yet happened; we must work with the rabbit_durable_<thing>
-%% variants.
-recover0() ->
-    Xs0 = rabbit_db_exchange:get_all_durable(),
-    Policies = list(),
-    OpPolicies = list_op(),
-    Xs = [rabbit_exchange_decorator:set(
-            X#exchange{policy = match(Name, Policies),
-                       operator_policy = match(Name, OpPolicies)})
-          || X = #exchange{name = Name} <- Xs0],
-    Qs = rabbit_amqqueue:list_durable(),
-    _ = rabbit_db_exchange:set(Xs),
-    Qs0 = [begin
-               QName = amqqueue:get_name(Q0),
-               Policy1 = match(QName, Policies),
-               Q1 = amqqueue:set_policy(Q0, Policy1),
-               OpPolicy1 = match(QName, OpPolicies),
-               Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
-               rabbit_queue_decorator:set(Q2)
-           end || Q0 <- Qs],
-    %% This function is just used to recover policies, thus no transient entities
-    %% are considered for this process as there is none to recover on boot.
-    _ = rabbit_db_queue:set_many(Qs0),
-    ok.
-
-invalid_file() ->
-    filename:join(rabbit:data_dir(), "policies_are_invalid").
 
 %%----------------------------------------------------------------------------
 
@@ -517,10 +478,15 @@ maybe_notify_of_policy_change({Q1, Q2}, PolicyDef, ActingUser) when ?is_amqqueue
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
 matches_type(exchange, <<"exchanges">>) -> true;
-matches_type(queue,    <<"queues">>)    -> true;
 matches_type(exchange, <<"all">>)       -> true;
-matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
+
+matches_queue_type(queue, _, <<"all">>)    -> true;
+matches_queue_type(queue, _, <<"queues">>) -> true;
+matches_queue_type(queue, rabbit_classic_queue, <<"classic_queues">>) -> true;
+matches_queue_type(queue, rabbit_quorum_queue,  <<"quorum_queues">>)  -> true;
+matches_queue_type(queue, rabbit_stream_queue,  <<"streams">>)        -> true;
+matches_queue_type(queue, _, _) -> false.
 
 priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
@@ -602,6 +568,9 @@ is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
 apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
+apply_to_validation(_Name, <<"classic_queues">>)    -> ok;
+apply_to_validation(_Name, <<"quorum_queues">>)    -> ok;
+apply_to_validation(_Name, <<"streams">>)    -> ok;
 apply_to_validation(_Name, Term) ->
-    {error, "apply-to '~ts' unrecognised; should be 'queues', 'exchanges' "
-     "or 'all'", [Term]}.
+    {error, "apply-to '~ts' unrecognised; should be one of: 'queues', 'classic_queues', "
+     " 'quorum_queues', 'streams', 'exchanges', or 'all'", [Term]}.

@@ -39,8 +39,10 @@ defmodule SchemaInfoCommandTest do
   end
 
   test "validate: returns multiple bad args return a list of bad info key values", context do
-    assert @command.validate(["quack", "oink"], context[:opts]) ==
-             {:validation_failure, {:bad_info_key, [:oink, :quack]}}
+    result = @command.validate(["quack", "oink"], context[:opts])
+    assert match?({:validation_failure, {:bad_info_key, _}}, result)
+    {_, {_, keys}} = result
+    assert :lists.sort(keys) == [:oink, :quack]
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do

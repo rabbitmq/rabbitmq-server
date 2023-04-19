@@ -169,26 +169,23 @@ init_it(Recover, From, State = #q{q = Q})
   when ?amqqueue_exclusive_owner_is(Q, none) ->
     init_it2(Recover, From, State);
 
-%% You used to be able to declare an exclusive durable queue. Sadly we
-%% need to still tidy up after that case, there could be the remnants
-%% of one left over from an upgrade. So that's why we don't enforce
-%% Recover = new here.
 init_it(Recover, From, State = #q{q = Q0}) ->
     Owner = amqqueue:get_exclusive_owner(Q0),
     case rabbit_misc:is_process_alive(Owner) of
         true  -> erlang:monitor(process, Owner),
                  init_it2(Recover, From, State);
-        false -> #q{backing_queue       = undefined,
+        false -> %% Tidy up exclusive durable queue.
+                 #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
                     q                   = Q} = State,
-                 send_reply(From, {owner_died, Q}),
                  BQ = backing_queue_module(Q),
                  {_, Terms} = recovery_status(Recover),
                  BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
                  log_delete_exclusive(Owner, State),
                  {stop, {shutdown, missing_owner},
-                  State#q{backing_queue = BQ, backing_queue_state = BQS}}
+                  {{reply_to, From},
+                   State#q{backing_queue = BQ, backing_queue_state = BQS}}}
     end.
 
 init_it2(Recover, From, State = #q{q                   = Q,
@@ -286,9 +283,11 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
         _ = update_state(stopped, Q0),
         BQ:terminate(R, BQS)
     end, State);
-terminate({shutdown, missing_owner} = Reason, State) ->
+terminate({shutdown, missing_owner = Reason}, {{reply_to, From}, #q{q = Q} = State}) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
-    terminate_shutdown(terminate_delete(false, Reason, State), State);
+    State1 = terminate_shutdown(terminate_delete(false, Reason, State), State),
+    send_reply(From, {owner_died, Q}),
+    State1;
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
@@ -314,11 +313,11 @@ terminate_delete(EmitStats, Reason0,
                  State = #q{q = Q,
                             backing_queue = BQ,
                             status = Status}) ->
-    QName = amqqueue:get_name(Q),
     ActingUser = terminated_by(Status),
     fun (BQS) ->
         Reason = case Reason0 of
                      auto_delete -> normal;
+                     missing_owner -> normal;
                      Any -> Any
                  end,
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
@@ -330,7 +329,7 @@ terminate_delete(EmitStats, Reason0,
         %% logged.
         try
             %% don't care if the internal delete doesn't return 'ok'.
-            rabbit_amqqueue:internal_delete(QName, ActingUser, Reason0)
+            rabbit_amqqueue:internal_delete(Q, ActingUser, Reason0)
         catch
             {error, ReasonE} -> error(ReasonE)
         end,

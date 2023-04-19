@@ -12,7 +12,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -42,6 +42,6 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe \
-          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws,-docker \
+          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws,-docker,-dialyze \
           --build_tests_only \
           --verbose_failures

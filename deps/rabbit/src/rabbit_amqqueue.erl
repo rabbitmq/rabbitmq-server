@@ -133,14 +133,6 @@ recover(VHost) ->
 filter_pid_per_type(QPids) ->
     lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
 
-filter_resource_per_type(Resources) ->
-    Queues = [begin
-                  {ok, Q} = lookup(Resource),
-                  QPid = amqqueue:get_pid(Q),
-                  {Resource, QPid}
-              end || Resource <- Resources],
-    lists:partition(fun({_Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
-
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 stop(VHost) ->
     %% Classic queues
@@ -1085,13 +1077,16 @@ list_local_names_down() ->
                               is_down(Q)].
 
 is_down(Q) ->
-    try
-        info(Q, [state]) == [{state, down}]
-    catch
-        _:_ ->
-            true
+    case rabbit_process:is_process_hibernated(amqqueue:get_pid(Q)) of
+        true -> false;
+        false ->
+            try
+                    info(Q, [state]) == [{state, down}]
+            catch
+                _:_ ->
+                    true
+            end
     end.
-
 
 -spec sample_local_queues() -> [amqqueue:amqqueue()].
 sample_local_queues() -> sample_n_by_name(list_local_names(), 300).
@@ -1506,11 +1501,17 @@ delete_immediately(QPids) ->
     end.
 
 delete_immediately_by_resource(Resources) ->
-    {Classic, Quorum} = filter_resource_per_type(Resources),
-    [gen_server2:cast(QPid, delete_immediately) || {_, QPid} <- Classic],
-    [rabbit_quorum_queue:delete_immediately(Resource, QPid)
-     || {Resource, QPid} <- Quorum],
-    ok.
+    lists:foreach(
+      fun(Resource) ->
+              {ok, Q} = lookup(Resource),
+              QPid = amqqueue:get_pid(Q),
+              case ?IS_CLASSIC(QPid) of
+                  true ->
+                      gen_server2:cast(QPid, delete_immediately);
+                  _ ->
+                      rabbit_quorum_queue:delete_immediately(Q)
+              end
+      end, Resources).
 
 -spec delete
         (amqqueue:amqqueue(), 'false', 'false', rabbit_types:username()) ->
@@ -1676,12 +1677,13 @@ notify_sent_queue_down(QPid) ->
 resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast,
                                                         [{resume, ChPid}]}).
 
--spec internal_delete(name(), rabbit_types:username()) -> 'ok'.
+-spec internal_delete(amqqueue:amqqueue(), rabbit_types:username()) -> 'ok'.
 
-internal_delete(QueueName, ActingUser) ->
-    internal_delete(QueueName, ActingUser, normal).
+internal_delete(Queue, ActingUser) ->
+    internal_delete(Queue, ActingUser, normal).
 
-internal_delete(QueueName, ActingUser, Reason) ->
+internal_delete(Queue, ActingUser, Reason) ->
+    QueueName = amqqueue:get_name(Queue),
     case rabbit_db_queue:delete(QueueName, Reason) of
         ok ->
             ok;
@@ -1691,6 +1693,7 @@ internal_delete(QueueName, ActingUser, Reason) ->
             rabbit_core_metrics:queue_deleted(QueueName),
             ok = rabbit_event:notify(queue_deleted,
                                      [{name, QueueName},
+                                      {type, amqqueue:get_type(Queue)},
                                       {user_who_performed_action, ActingUser}])
     end.
 
@@ -1874,7 +1877,7 @@ on_node_down(Node) ->
             end,
             notify_queue_binding_deletions(Deletions),
             rabbit_core_metrics:queues_deleted(QueueNames),
-            notify_queues_deleted(QueueNames),
+            notify_transient_queues_deleted(QueueNames),
             ok
     end.
 
@@ -1897,11 +1900,12 @@ notify_queue_binding_deletions(QueueDeletions) ->
     Deletions = rabbit_binding:process_deletions(QueueDeletions),
     rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER).
 
-notify_queues_deleted(QueueDeletions) ->
+notify_transient_queues_deleted(QueueDeletions) ->
     lists:foreach(
       fun(Queue) ->
               ok = rabbit_event:notify(queue_deleted,
                                        [{name, Queue},
+                                        {kind, rabbit_classic_queue},
                                         {user, ?INTERNAL_USER}])
       end,
       QueueDeletions).

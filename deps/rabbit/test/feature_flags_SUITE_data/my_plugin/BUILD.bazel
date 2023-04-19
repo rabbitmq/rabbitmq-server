@@ -1,15 +1,115 @@
-load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-load("//:rabbitmq.bzl", "BROKER_VERSION_REQUIREMENTS_ANY")
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
+load(
+    "//:rabbitmq.bzl",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
+    "rabbitmq_app",
+)
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-]
+# gazelle:erlang_generate_beam_files_macro false
+# gazelle:erlang_always_generate_test_beam_files
+# gazelle:erlang_skip_rules assert_suites2,xref,plt,dialyze
 
-erlang_app(
+# gazelle:erlang_app_dep rabbit_common
+# gazelle:erlang_app_dep rabbit
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/my_plugin.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "my_plugin",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "test_other_beam",
+    testonly = True,
+    srcs = [
+        "src/my_plugin.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "my_plugin",
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "test_beam_files",
+    testonly = True,
+    srcs = [":test_other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/my_plugin.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = glob(["src/**/*.hrl"]),
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = glob(["include/**/*.hrl"]),
+)
+
+filegroup(
+    name = "priv",
+    srcs = glob(["priv/**/*"]),
+)
+
+filegroup(name = "licenses")
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "Plugin to test feature flags",
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = "my_plugin",
     app_version = "1.0.0",
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+alias(
+    name = "my_plugin",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = glob(["LICENSE*"]),
 )
