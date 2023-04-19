@@ -1207,3 +1207,10 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
+    erlang_bytecode(
+        name = "runtime_parameters_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/runtime_parameters_SUITE.erl"],
+        outs = ["test/runtime_parameters_SUITE.beam"],
+        erlc_opts = "//:test_erlc_opts",
+    )

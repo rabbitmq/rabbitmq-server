@@ -512,7 +512,6 @@ rabbit:
 - rabbit_cuttlefish
 - rabbit_db
 - rabbit_db_binding
-- rabbit_db_cluster
 - rabbit_db_exchange
 - rabbit_db_maintenance
 - rabbit_db_msup
