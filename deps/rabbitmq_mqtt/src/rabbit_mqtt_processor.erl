@@ -163,12 +163,6 @@ process_connect(
             %% Therefore, we use the maximum allowed session expiry interval.
             MaxSessionExpiry
     end,
-    %% "If the Receive Maximum value is absent then its value defaults to 65,535. v5 3.1.2.11.3"
-    %% "The Server might choose to send fewer than Receive Maximum messages to the Client
-    %% without receiving acknowledgement, even if it has more than this number of messages
-    %% available to send. v5 3.3.4"
-    ReceiveMax = maps:get('Receive-Maximum', ConnectProps, 65_535),
-    Prefetch = min(rabbit_mqtt_util:env(prefetch), ReceiveMax),
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
@@ -199,7 +193,7 @@ process_connect(
                        ssl_login_name = SslLoginName,
                        delivery_flow = Flow,
                        trace_state = TraceState,
-                       prefetch = Prefetch,
+                       prefetch = prefetch(ConnectProps),
                        conn_name = ConnName,
                        ip_addr = Ip,
                        port = Port,
@@ -253,6 +247,15 @@ process_connect(
             send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize, #{}),
             Err
     end.
+
+-spec prefetch(ConnectProperties :: properties()) -> pos_integer().
+prefetch(Props) ->
+    %% "If the Receive Maximum value is absent then its value defaults to 65,535" [v5 3.1.2.11.3]
+    ReceiveMax = maps:get('Receive-Maximum', Props, ?TWO_BYTE_INTEGER_MAX),
+    %% "The Server might choose to send fewer than Receive Maximum messages to the Client
+    %% without receiving acknowledgement, even if it has more than this number of messages
+    %% available to send." [v5 3.3.4]
+    min(rabbit_mqtt_util:env(prefetch), ReceiveMax).
 
 -spec send_conn_ack(reason_code(), boolean(), protocol_version(), send_fun(),
                     max_packet_size(), properties()) -> ok.
@@ -2129,7 +2132,7 @@ collector_register(ClientIdBin) ->
 %% Reason Code values of 0x80 or greater indicate failure."
 -spec is_success(reason_code()) -> boolean().
 is_success(ReasonCode) ->
-    ReasonCode < 16#80.
+    ReasonCode < ?RC_UNSPECIFIED_ERROR.
 
 -spec format_status(state()) -> map().
 format_status(

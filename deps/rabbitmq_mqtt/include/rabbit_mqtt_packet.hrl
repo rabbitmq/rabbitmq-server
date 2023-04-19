@@ -14,8 +14,9 @@
 -type property_value() :: any().
 -type properties() :: #{property_name() := property_value()}.
 
+-define(TWO_BYTE_INTEGER_MAX, 16#FFFF).
 %% Packet identifier is a non zero two byte integer.
--define(MAX_PACKET_ID, 16#FFFF).
+-define(MAX_PACKET_ID, ?TWO_BYTE_INTEGER_MAX).
 -type packet_id() :: 1..?MAX_PACKET_ID.
 
 %% Defining a single correlation term (sequence number) for the will message is
