@@ -15,8 +15,8 @@
 -define(SUBACK_FAILURE, 16#80).
 
 %% defined in MQTT v5 (not in v4 or v3)
--define(RC_QUOTA_EXCEEDED, 16#97).
 -define(RC_NOT_AUTHORIZED, 16#87).
+-define(RC_QUOTA_EXCEEDED, 16#97).
 
 -define(FAIL_IF_CRASH_LOG, {["Generic server.*terminating"],
                             fun () -> ct:fail(crash_detected) end}).
@@ -584,8 +584,8 @@ no_queue_unbind_permission(Config) ->
     %% We subscribe with the same client ID to the same topic again, but this time with QoS 0.
     %% Therefore we trigger the qos1 queue to be unbound (and the qos0 queue to be bound).
     %% However, unbinding requires read access to the exchange, which we don't have anymore.
-    ExpectedError = expected_sub_auth_error(Config),
-    ?assertMatch({ok, _Properties, [ExpectedError]},
+    ExpectedReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+    ?assertMatch({ok, _Properties, [ExpectedReasonCode]},
                  emqtt:subscribe(C2, Topic, qos0)),
     ok = assert_connection_closed(C2),
     ExpectedLogs =
@@ -691,8 +691,8 @@ no_queue_declare_permission(Config) ->
 
     process_flag(trap_exit, true),
 
-    ExpectedError = expected_sub_auth_error(Config),
-    {ok, _, [ExpectedError]} = emqtt:subscribe(C, <<"test/topic">>, qos0),
+    ExpectedReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+    {ok, _, [ExpectedReasonCode]} = emqtt:subscribe(C, <<"test/topic">>, qos0),
     ok = assert_connection_closed(C),
     wait_log(
       Config,
@@ -767,8 +767,8 @@ no_topic_read_permission(Config) ->
 
     process_flag(trap_exit, true),
 
-    ExpectedError = expected_sub_auth_error(Config),
-    {ok, _, [ExpectedError]} = emqtt:subscribe(C, <<"test/topic">>),
+    ExpectedReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+    {ok, _, [ExpectedReasonCode]} = emqtt:subscribe(C, <<"test/topic">>),
     ok = assert_connection_closed(C),
     wait_log(Config,
              [?FAIL_IF_CRASH_LOG,
@@ -887,8 +887,8 @@ test_subscribe_permissions_combination(PermConf, PermWrite, PermRead, Config, Ex
     {ok, _} = emqtt:connect(C1),
     process_flag(trap_exit, true),
     %% In v4 and v5, we expect to receive a failure return code for our subscription in the SUBACK packet.
-    ExpectedError = expected_sub_auth_error(Config),
-    ?assertMatch({ok, _Properties, [ExpectedError]},
+    ExpectedReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+    ?assertMatch({ok, _Properties, [ExpectedReasonCode]},
                  emqtt:subscribe(C1, <<"test/topic">>)),
     ok = assert_connection_closed(C1),
     wait_log(Config,
@@ -970,8 +970,8 @@ vhost_queue_limit(Config) ->
     {ok, _} = emqtt:connect(C),
     process_flag(trap_exit, true),
     %% qos0 queue can be created, qos1 queue fails to be created.
-    ExpectedFirstErr = expected_sub_limit_error(Config),
-    ?assertMatch({ok, _Properties, [0, ExpectedFirstErr, ?SUBACK_FAILURE]},
+    ExpectedRc = suback_error_code(?RC_QUOTA_EXCEEDED, Config),
+    ?assertMatch({ok, _Properties, [0, ExpectedRc, ExpectedRc]},
                  emqtt:subscribe(C, [{<<"topic1">>, qos0},
                                      {<<"topic2">>, qos1},
                                      {<<"topic3">>, qos1}])),
@@ -998,22 +998,12 @@ expected_connection_limit_error(Config) ->
             quota_exceeded
     end.
 
-expected_sub_limit_error(Config) ->
+suback_error_code(ReasonCode, Config) ->
     case ?config(mqtt_version, Config) of
         v4 ->
             ?SUBACK_FAILURE;
         v5 ->
-            %% MQTT 5.0 has more specific error codes.
-            ?RC_QUOTA_EXCEEDED
-    end.
-
-expected_sub_auth_error(Config) ->
-    case ?config(mqtt_version, Config) of
-        v4 ->
-            ?SUBACK_FAILURE;
-        v5 ->
-            %% MQTT 5.0 has more specific error codes.
-            ?RC_NOT_AUTHORIZED
+            ReasonCode
     end.
 
 wait_log(Config, Clauses) ->
