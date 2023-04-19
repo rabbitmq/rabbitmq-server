@@ -12,9 +12,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(util,
-        [
+        [all_connection_pids/1,
          start_client/4,
          connect/2, connect/3, connect/4,
          assert_message_expiry_interval/2,
@@ -32,6 +33,7 @@
 %% defined in MQTT v5 (not in v4 or v3)
 -define(RC_SUCCESS, 16#00).
 -define(RC_NO_SUBSCRIPTION_EXISTED, 16#11).
+-define(RC_UNSPECIFIED_ERROR, 16#80).
 
 all() ->
     [{group, mqtt},
@@ -40,12 +42,12 @@ all() ->
 groups() ->
     [
      {mqtt, [],
-      [{cluster_size_1, [shuffle], cluster_size_1_tests()}
-       % {cluster_size_3, [shuffle], cluster_size_3_tests()}
+      [{cluster_size_1, [shuffle], cluster_size_1_tests()},
+       {cluster_size_3, [shuffle], cluster_size_3_tests()}
       ]},
      {web_mqtt, [],
-      [{cluster_size_1, [shuffle], cluster_size_1_tests()}
-       % {cluster_size_3, [shuffle], cluster_size_3_tests()}
+      [{cluster_size_1, [shuffle], cluster_size_1_tests()},
+       {cluster_size_3, [shuffle], cluster_size_3_tests()}
       ]}
     ].
 
@@ -72,14 +74,34 @@ cluster_size_1_tests() ->
      client_receive_maximum_min,
      client_receive_maximum_large,
      unsubscribe_success,
-     unsubscribe_topic_not_found
+     unsubscribe_topic_not_found,
+     subscription_option_no_local,
+     subscription_option_no_local_wildcards,
+     subscription_option_retain_as_published,
+     subscription_option_retain_as_published_wildcards,
+     subscription_identifier,
+     subscription_identifier_amqp091,
+     subscription_identifier_at_most_once_dead_letter,
+     at_most_once_dead_letter_detect_cycle,
+     subscription_options_persisted,
+     subscription_options_modify,
+     subscription_options_modify_qos1,
+     subscription_options_modify_qos0,
+     session_upgrade_v3_v5_qos1,
+     session_upgrade_v3_v5_qos0,
+     compatibility_v3_v5,
+     session_upgrade_v3_v5_unsubscribe,
+     session_upgrade_v4_v5_no_queue_bind_permission,
+     amqp091_cc_header
     ].
 
-% cluster_size_3_tests() ->
-%     [].
+cluster_size_3_tests() ->
+    [session_migrate_v3_v5,
+     session_takeover_v3_v5
+    ].
 
 suite() ->
-    [{timetrap, {minutes, 1}}].
+    [{timetrap, {minutes, 10}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -118,7 +140,13 @@ init_per_group(Group, Config0) ->
                Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config).
+    case Group of
+        cluster_size_1 ->
+            ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5);
+        cluster_size_3 ->
+            ok
+    end,
+    Config.
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
@@ -138,9 +166,13 @@ init_per_testcase(T, Config)
     {ok, Default} = rpc(Config, application, get_env, [?APP, Par]),
     ok = rpc(Config, application, set_env, [?APP, Par, infinity]),
     Config1 = rabbit_ct_helpers:set_config(Config, {Par, Default}),
-    rabbit_ct_helpers:testcase_started(Config1, T);
+    init_per_testcase0(T, Config1);
+init_per_testcase(T, Config) ->
+    init_per_testcase0(T, Config).
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase0(Testcase, Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [ok = rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_web_mqtt) || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(T, Config)
@@ -179,6 +211,7 @@ client_set_max_packet_size_connack(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
                                 [{properties, #{'Maximum-Packet-Size' => 2}},
                                  {connect_timeout, 1}]),
+    unlink(C),
     %% We expect the server to drop the CONNACK packet because it's larger than 2 bytes.
     ?assertEqual({error, connack_timeout}, Connect(C)).
 
@@ -457,7 +490,7 @@ client_rejects_publish(Config) ->
     receive {publish, #{payload := Payload,
                         packet_id := PacketId}} ->
                 %% Negatively ack the PUBLISH.
-                emqtt:puback(C, PacketId, _UnspecifiedError = 16#80)
+                emqtt:puback(C, PacketId, ?RC_UNSPECIFIED_ERROR)
     after 1000 ->
               ct:fail("did not receive PUBLISH")
     end,
@@ -519,21 +552,650 @@ client_receive_maximum_large(Config) ->
     ok = emqtt:disconnect(C).
 
 unsubscribe_success(Config) ->
-    ClientId = atom_to_binary(?FUNCTION_NAME),
-    C = connect(ClientId, Config),
+    C = connect(?FUNCTION_NAME, Config),
     {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
     {ok, _, [0]} = emqtt:subscribe(C, <<"topic/0">>, qos0),
-    {ok, _, ReasonCodes} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
-    ?assertEqual([?RC_SUCCESS, ?RC_SUCCESS], ReasonCodes),
+    ?assertMatch({ok, _, [?RC_SUCCESS, ?RC_SUCCESS]},
+                 emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>])),
     ok = emqtt:disconnect(C).
 
 unsubscribe_topic_not_found(Config) ->
-    ClientId = atom_to_binary(?FUNCTION_NAME),
-    C = connect(ClientId, Config),
+    C = connect(?FUNCTION_NAME, Config),
     {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
-    {ok, _, ReasonCodes} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
-    ?assertEqual([?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED], ReasonCodes),
+    ?assertMatch({ok, _, [?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED]},
+                 emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>])),
     ok = emqtt:disconnect(C).
+
+subscription_option_no_local(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    Other = connect(<<"other">>, Config),
+    {ok, _, [0, 0]} = emqtt:subscribe(C, [{<<"t/1">>, [{nl, true}]},
+                                          {<<"t/2">>, [{nl, false}]}]),
+    {ok, _, [0]} = emqtt:subscribe(Other, [{<<"t/1">>, [{nl, true}]}]),
+    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>),
+    ok = emqtt:publish(C, <<"t/2">>, <<"m2">>),
+    ok = expect_publishes(Other, <<"t/1">>, [<<"m1">>]),
+    ok = expect_publishes(C, <<"t/2">>, [<<"m2">>]),
+    %% We expect C to not receive m1.
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Other).
+
+subscription_option_no_local_wildcards(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0, 0, 0, 0]} =
+    emqtt:subscribe(C, [{<<"+/1">>, [{nl, true}]},
+                        {<<"t/1/#">>, [{nl, true}]},
+                        {<<"+/2">>, [{nl, true}]},
+                        {<<"t/2/#">>, [{nl, false}]}]),
+    %% Matches the first two subscriptions.
+    %% All matching subscriptions have the No Local option set.
+    %% Therefore, we should not receive m1.
+    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>),
+    %% Matches the last two subscriptions.
+    %% Not all matching subscriptions have the No Local option set.
+    %% Therefore, we should receive m2.
+    ok = emqtt:publish(C, <<"t/2">>, <<"m2">>),
+    ok = expect_publishes(C, <<"t/2">>, [<<"m2">>]),
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C).
+
+subscription_option_retain_as_published(Config) ->
+    C1 = connect(<<"c1">>, Config),
+    C2 = connect(<<"c2">>, Config),
+    {ok, _, [0, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, [{rap, true}]},
+                                           {<<"t/2">>, [{rap, false}]}]),
+    {ok, _, [0]} = emqtt:subscribe(C2, [{<<"t/1">>, [{rap, true}]}]),
+    ok = emqtt:publish(C1, <<"t/1">>, <<"m1">>, [{retain, true}]),
+    ok = emqtt:publish(C1, <<"t/2">>, <<"m2">>, [{retain, true}]),
+    receive {publish, #{client_pid := C1,
+                        topic := <<"t/1">>,
+                        payload := <<"m1">>,
+                        retain := true}} -> ok
+    after 1000 -> ct:fail("did not receive m1")
+    end,
+    receive {publish, #{client_pid := C1,
+                        topic := <<"t/2">>,
+                        payload := <<"m2">>,
+                        retain := false}} -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+    receive {publish, #{client_pid := C2,
+                        topic := <<"t/1">>,
+                        payload := <<"m1">>,
+                        retain := true}} -> ok
+    after 1000 -> ct:fail("did not receive m1")
+    end,
+    ok = emqtt:publish(C1, <<"t/1">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C1, <<"t/2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
+
+subscription_option_retain_as_published_wildcards(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0, 0, 0, 0]} = emqtt:subscribe(C, [{<<"+/1">>, [{rap, false}]},
+                                                {<<"t/1/#">>, [{rap, false}]},
+                                                {<<"+/2">>, [{rap, false}]},
+                                                {<<"t/2/#">>, [{rap, true}]}]),
+    %% Matches the first two subscriptions.
+    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>, [{retain, true}]),
+    %% Matches the last two subscriptions.
+    ok = emqtt:publish(C, <<"t/2">>, <<"m2">>, [{retain, true}]),
+    receive {publish, #{topic := <<"t/1">>,
+                        payload := <<"m1">>,
+                        %% No matching subscription has the
+                        %% Retain As Published option set.
+                        retain := false}} -> ok
+    after 1000 -> ct:fail("did not receive m1")
+    end,
+    receive {publish, #{topic := <<"t/2">>,
+                        payload := <<"m2">>,
+                        %% (At least) one matching subscription has the
+                        %% Retain As Published option set.
+                        retain := true}} -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+    ok = emqtt:publish(C, <<"t/1">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C, <<"t/2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(C).
+
+subscription_identifier(Config) ->
+    C1 = connect(<<"c1">>, Config),
+    C2 = connect(<<"c2">>, Config),
+    {ok, _, [0, 0]} = emqtt:subscribe(C1, #{'Subscription-Identifier' => 1}, [{<<"t/1">>, []},
+                                                                              {<<"+/1">>, []}]),
+    {ok, _, [0]} = emqtt:subscribe(C2, #{'Subscription-Identifier' => 1}, [{<<"t/2">>, []}]),
+    {ok, _, [0, 0]} = emqtt:subscribe(C2, #{'Subscription-Identifier' => 16#fffffff}, [{<<"+/2">>, []},
+                                                                                       {<<"t/3">>, []}]),
+    {ok, _, [0]} = emqtt:subscribe(C2, #{}, [{<<"t/2/#">>, []}]),
+    ok = emqtt:publish(C1, <<"t/1">>, <<"m1">>),
+    ok = emqtt:publish(C1, <<"t/2">>, <<"m2">>),
+    ok = emqtt:publish(C1, <<"t/3">>, <<"m3">>),
+    ok = emqtt:publish(C1, <<"t/2/xyz">>, <<"m4">>),
+    receive {publish,
+             #{client_pid := C1,
+               topic := <<"t/1">>,
+               payload := <<"m1">>,
+               %% "It is possible that the Client made several subscriptions which match a publication
+               %% and that it used the same identifier for more than one of them. In this case the
+               %% PUBLISH packet will carry multiple identical Subscription Identifiers." [v5 3.3.4]
+               properties := #{'Subscription-Identifier' := [1, 1]}}} -> ok
+    after 1000 -> ct:fail("did not receive m1")
+    end,
+    receive {publish,
+             #{client_pid := C2,
+               topic := <<"t/2">>,
+               payload := <<"m2">>,
+               properties := #{'Subscription-Identifier' := Ids}}} ->
+                %% "If the Server sends a single copy of the message it MUST include in the PUBLISH
+                %% packet the Subscription Identifiers for all matching subscriptions which have a
+                %% Subscription Identifiers, their order is not significant [MQTT-3.3.4-4]." [v5 3.3.4]
+                ?assertEqual([1, 16#fffffff], lists:sort(Ids))
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+    receive {publish,
+             #{client_pid := C2,
+               topic := <<"t/3">>,
+               payload := <<"m3">>,
+               properties := #{'Subscription-Identifier' := 16#fffffff}}} -> ok
+    after 1000 -> ct:fail("did not receive m3")
+    end,
+    receive {publish,
+             #{client_pid := C2,
+               topic := <<"t/2/xyz">>,
+               payload := <<"m4">>,
+               properties := Props}} ->
+                ?assertNot(maps:is_key('Subscription-Identifier', Props))
+    after 1000 -> ct:fail("did not receive m4")
+    end,
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
+
+subscription_identifier_amqp091(Config) ->
+    C1 = connect(<<"sub 1">>, Config),
+    C2 = connect(<<"sub 2">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(C1, #{'Subscription-Identifier' => 1}, [{<<"a/+">>, [{qos, 1}]}]),
+    {ok, _, [1]} = emqtt:subscribe(C2, #{'Subscription-Identifier' => 16#fffffff}, [{<<"a/b">>, [{qos, 1}]}]),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+
+    %% Test routing to a single queue.
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
+                                           routing_key = <<"a.a">>},
+                      #amqp_msg{payload = <<"m1">>}),
+    receive {publish,
+             #{client_pid := C1,
+               topic := <<"a/a">>,
+               payload := <<"m1">>,
+               properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive message m1")
+    end,
+
+    %% Test routing to multiple queues.
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
+                                           routing_key = <<"a.b">>},
+                      #amqp_msg{payload = <<"m2">>}),
+    receive {publish,
+             #{client_pid := C1,
+               topic := <<"a/b">>,
+               payload := <<"m2">>,
+               properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive message m2")
+    end,
+    receive {publish,
+             #{client_pid := C2,
+               topic := <<"a/b">>,
+               payload := <<"m2">>,
+               properties := #{'Subscription-Identifier' := 16#fffffff}}} -> ok
+    after 1000 -> ct:fail("did not receive message m2")
+    end,
+
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+subscription_identifier_at_most_once_dead_letter(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{<<"dead letter/#">>, [{qos, 1}]}]),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    QArgs = [{<<"x-dead-letter-exchange">>, longstr, <<"amq.topic">>},
+             {<<"x-dead-letter-routing-key">>, longstr, <<"dead letter.a">>}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"source queue">>,
+                                                                   durable = true,
+                                                                   exclusive = true,
+                                                                   arguments = QArgs}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"source queue">>},
+                      #amqp_msg{payload = <<"msg">>,
+                                props = #'P_basic'{expiration = <<"0">>}}),
+    receive {publish,
+             #{client_pid := C,
+               topic := <<"dead letter/a">>,
+               payload := <<"msg">>,
+               properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive msg")
+    end,
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+at_most_once_dead_letter_detect_cycle(Config) ->
+    NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config, at_most_once),
+    SubClientId = Payload = PolicyName = atom_to_binary(?FUNCTION_NAME),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, <<"mqtt-subscription-", SubClientId/binary, "qos1">>, <<"queues">>,
+           %% Create dead letter cycle: qos1 queue -> topic exchange -> qos1 queue
+           [{<<"dead-letter-exchange">>, <<"amq.topic">>},
+            {<<"message-ttl">>, 1}]),
+    Sub1 = connect(SubClientId, Config, non_clean_sess_opts()),
+    {ok, _, [1]} = emqtt:subscribe(Sub1, #{'Subscription-Identifier' => 10}, [{<<"+/b">>, [{qos, 1}]}]),
+    ok = emqtt:disconnect(Sub1),
+
+    Pub = connect(<<"publisher">>, Config),
+    {ok, _} = emqtt:publish(Pub, <<"a/b">>, Payload, qos1),
+    ok = emqtt:disconnect(Pub),
+    %% Given our subscribing client is disconnected, the message should be dead lettered after 1 ms.
+    %% However, due to the dead letter cycle, we expect the message to be dropped.
+    timer:sleep(5),
+    Sub2 = connect(SubClientId, Config, [{clean_start, false}]),
+    assert_nothing_received(),
+    %% Double check that the message was indeed (exactly once) dead lettered.
+    NumExpired = dead_letter_metric(messages_dead_lettered_expired_total,
+                                    Config, at_most_once) - NumExpiredBefore,
+    ?assertEqual(1, NumExpired),
+    ok = emqtt:disconnect(Sub2),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
+
+%% Tests that the session state in the server includes subscription options
+%% and subscription identifiers and that this session state is persisted.
+subscription_options_persisted(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
+    {ok, _, [0, 1]} = emqtt:subscribe(C1, #{'Subscription-Identifier' => 99},
+                                      [{<<"t1">>, [{nl, true}, {rap, false}, {qos, 0}]},
+                                       {<<"t2">>, [{nl, false}, {rap, true}, {qos, 1}]}]),
+    unlink(C1),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    ok = emqtt:publish(C2, <<"t1">>, <<"m1">>),
+    ok = emqtt:publish(C2, <<"t2">>, <<"m2">>, [{retain, true}]),
+    receive {publish,
+             #{client_pid := C2,
+               payload := <<"m2">>,
+               retain := true,
+               qos := 0,
+               properties := #{'Subscription-Identifier' := 99}}} -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+    assert_nothing_received(),
+    ok = emqtt:publish(C2, <<"t2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(C2).
+
+%% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a Non‑shared
+%% Subscription’s Topic Filter for the current Session, then it MUST replace that existing Subscription
+%% with a new Subscription [MQTT-3.8.4-3]. The Topic Filter in the new Subscription will be identical
+%% to that in the previous Subscription, although its Subscription Options could be different."
+%%
+%% "The Subscription Identifiers are part of the Session State in the Server and are returned to the
+%% Client receiving a matching PUBLISH packet. They are removed from the Server’s Session State when the
+%% Server receives an UNSUBSCRIBE packet, when the Server receives a SUBSCRIBE packet from the Client for
+%% the same Topic Filter but with a different Subscription Identifier or with no Subscription Identifier,
+%% or when the Server sends Session Present 0 in a CONNACK packet" [v5 3.8.4]
+subscription_options_modify(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, Topic, [{nl, true}]),
+    {ok, _} = emqtt:publish(C, Topic, <<"m1">>, qos1),
+    assert_nothing_received(),
+
+    %% modify No Local
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, Topic, [{nl, false}]),
+    {ok, _} = emqtt:publish(C, Topic, <<"m2">>, qos1),
+    receive {publish, #{payload := <<"m2">>,
+                        qos := 0 }} -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+
+    %% modify QoS
+    {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m3">>, qos1),
+    receive {publish, #{payload := <<"m3">>,
+                        qos := 1,
+                        properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive m3")
+    end,
+
+    %% modify Subscription Identifier
+    {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 2}, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m4">>, qos1),
+    receive {publish, #{payload := <<"m4">>,
+                        properties := #{'Subscription-Identifier' := 2}}} -> ok
+    after 1000 -> ct:fail("did not receive m4")
+    end,
+
+    %% remove Subscription Identifier
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m5">>, [{retain, true}, {qos, 1}]),
+    receive {publish, #{payload := <<"m5">>,
+                        retain := false,
+                        properties := Props}} when map_size(Props) =:= 0 -> ok
+    after 1000 -> ct:fail("did not receive m5")
+    end,
+
+    %% modify Retain As Published
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, [{rap, true}, {qos, 1}]),
+    receive {publish, #{payload := <<"m5">>,
+                        retain := true}} -> ok
+    after 1000 -> ct:fail("did not receive retained m5")
+    end,
+    {ok, _} = emqtt:publish(C, Topic, <<"m6">>, [{retain, true}, {qos, 1}]),
+    receive {publish, #{payload := <<"m6">>,
+                        retain := true}} -> ok
+    after 1000 -> ct:fail("did not receive m6")
+    end,
+
+    assert_nothing_received(),
+    ok = emqtt:publish(C, Topic, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(C).
+
+%% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a
+%% Non‑shared Subscription’s Topic Filter for the current Session, then it MUST replace that
+%% existing Subscription with a new Subscription [MQTT-3.8.4-3]. The Topic Filter in the new
+%% Subscription will be identical to that in the previous Subscription, although its
+%% Subscription Options could be different. [...] Applicaton Messages MUST NOT be lost due
+%% to replacing the Subscription [MQTT-3.8.4-4]." [v5 3.8.4]
+%%
+%% This test ensures that messages are not lost when replacing a QoS 1 subscription.
+subscription_options_modify_qos1(Config) ->
+    subscription_options_modify_qos(1, Config).
+
+%% This test ensures that messages are received at most once
+%% when replacing a QoS 0 subscription.
+subscription_options_modify_qos0(Config) ->
+    subscription_options_modify_qos(0, Config).
+
+subscription_options_modify_qos(Qos, Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [Qos]} = emqtt:subscribe(Sub, Topic, Qos),
+    Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
+    receive {publish, #{payload := <<"1">>,
+                        properties := Props}} ->
+                ?assertEqual(0, maps:size(Props))
+    after 1000 -> ct:fail("did not receive 1")
+    end,
+    %% Replace subscription while another client is sending messages.
+    {ok, _, [Qos]} = emqtt:subscribe(Sub, #{'Subscription-Identifier' => 1}, Topic, Qos),
+    Sender ! stop,
+    NumSent = receive {N, Sender} -> N
+              after 1000 -> ct:fail("could not stop publisher")
+              end,
+    ct:pal("Publisher sent ~b messages", [NumSent]),
+    LastExpectedPayload = integer_to_binary(NumSent),
+    receive {publish, #{payload := LastExpectedPayload,
+                        qos := Qos,
+                        client_pid := Sub,
+                        properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive ~s", [LastExpectedPayload])
+    end,
+    case Qos of
+        0 ->
+            assert_received_no_duplicates();
+        1 ->
+            ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
+            ok = util:expect_publishes(Sub, Topic, ExpectedPayloads)
+    end,
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(Sub).
+
+%% Tests that no message is lost when upgrading a session
+%% with QoS 1 subscription from v3 to v5.
+session_upgrade_v3_v5_qos1(Config) ->
+    session_upgrade_v3_v5_qos(1, Config).
+
+%% Tests that each message is received at most once
+%% when upgrading a session with QoS 0 subscription from v3 to v5.
+session_upgrade_v3_v5_qos0(Config) ->
+    session_upgrade_v3_v5_qos(0, Config).
+
+session_upgrade_v3_v5_qos(Qos, Config) ->
+    ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config),
+    Subv3 = connect(ClientId, Config, [{proto_ver, v3} | non_clean_sess_opts()]),
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(Subv3))),
+    {ok, _, [Qos]} = emqtt:subscribe(Subv3, Topic, Qos),
+    Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
+    receive {publish, #{payload := <<"1">>,
+                        client_pid := Subv3}} -> ok
+    after 1000 -> ct:fail("did not receive 1")
+    end,
+    %% Upgrade session from v3 to v5 while another client is sending messages.
+    ok = emqtt:disconnect(Subv3),
+    Subv5 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
+    ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
+    Sender ! stop,
+    NumSent = receive {N, Sender} -> N
+              after 1000 -> ct:fail("could not stop publisher")
+              end,
+    ct:pal("Publisher sent ~b messages", [NumSent]),
+    LastExpectedPayload = integer_to_binary(NumSent),
+    receive {publish, #{payload := LastExpectedPayload,
+                        qos := Qos,
+                        client_pid := Subv5}} -> ok
+    after 1000 -> ct:fail("did not receive ~s", [LastExpectedPayload])
+    end,
+    case Qos of
+        0 ->
+            assert_received_no_duplicates();
+        1 ->
+            ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
+            ok = util:expect_publishes(Subv5, Topic, ExpectedPayloads)
+    end,
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(Subv5).
+
+send(Parent, Client, Topic, NumSent) ->
+    receive stop ->
+                Parent ! {NumSent, self()}
+    after 0 ->
+              N = NumSent + 1,
+              {ok, _} = emqtt:publish(Client, Topic, integer_to_binary(N), qos1),
+              send(Parent, Client, Topic, N)
+    end.
+
+assert_received_no_duplicates() ->
+    assert_received_no_duplicates0(#{}).
+
+assert_received_no_duplicates0(Received) ->
+    receive {publish, #{payload := P}} ->
+                case maps:is_key(P, Received) of
+                    true -> ct:fail("Received ~p twice", [P]);
+                    false -> assert_received_no_duplicates0(maps:put(P, ok, Received))
+                end
+    after 500 ->
+              %% Check that we received at least one message.
+              ?assertNotEqual(0, maps:size(Received))
+    end.
+
+compatibility_v3_v5(Config) ->
+    Cv3 = connect(<<"client v3">>, Config, [{proto_ver, v3}]),
+    Cv5 = connect(<<"client v5">>, Config, [{proto_ver, v5}]),
+    %% Sanity check that versions were set correctly.
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(Cv3))),
+    ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Cv5))),
+    {ok, _, [1]} = emqtt:subscribe(Cv3, <<"v3/#">>, qos1),
+    {ok, _, [1]} = emqtt:subscribe(Cv5, #{'Subscription-Identifier' => 99},
+                                   [{<<"v5/#">>, [{rap, true}, {qos, 1}]}]),
+    %% Send message in either direction.
+    {ok, _} = emqtt:publish(Cv5, <<"v3">>, <<"from v5">>, qos1),
+    {ok, _} = emqtt:publish(Cv3, <<"v5">>, <<"from v3">>, [{retain, true}, {qos, 1}]),
+    ok = expect_publishes(Cv3, <<"v3">>, [<<"from v5">>]),
+    receive {publish,
+             #{client_pid := Cv5,
+               topic := <<"v5">>,
+               payload := <<"from v3">>,
+               %% v5 features should work even when message comes from a v3 client.
+               retain := true,
+               properties := #{'Subscription-Identifier' := 99}}} -> ok
+    after 1000 -> ct:fail("did not receive from v3")
+    end,
+    ok = emqtt:publish(Cv3, <<"v5">>, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(Cv3),
+    ok = emqtt:disconnect(Cv5).
+
+session_upgrade_v3_v5_unsubscribe(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config, [{proto_ver, v3} | non_clean_sess_opts()]),
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(C1))),
+    {ok, _, [0]} = emqtt:subscribe(C1, Topic),
+    ok = emqtt:disconnect(C1),
+    %% Upgrade the session from v3 to v5.
+    C2 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
+    ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(C2))),
+    ok = emqtt:publish(C2, Topic, <<"m1">>),
+    ok = expect_publishes(C2, Topic, [<<"m1">>]),
+    %% Unsubscribing in v5 should work.
+    ?assertMatch({ok, _, [?RC_SUCCESS]}, emqtt:unsubscribe(C2, Topic)),
+    ok = emqtt:publish(C2, Topic, <<"m2">>),
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C2).
+
+session_upgrade_v4_v5_no_queue_bind_permission(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config, [{proto_ver, v4} | non_clean_sess_opts()]),
+    ?assertEqual(4, proplists:get_value(proto_ver, emqtt:info(C1))),
+    {ok, _, [0]} = emqtt:subscribe(C1, Topic),
+    ok = emqtt:disconnect(C1),
+
+    %% Revoking write access to queue will cause queue.bind to fail.
+    rabbit_ct_broker_helpers:set_permissions(Config, <<"guest">>, <<"/">>, <<".*">>, <<"">>, <<".*">>),
+    %% Upgrading the session from v4 to v5 should fail because it causes
+    %% queue.bind and queue.unbind (to change the binding arguments).
+    {C2, Connect} = start_client(ClientId, Config, 0, [{proto_ver, v5}, {clean_start, false}]),
+    unlink(C2),
+    ?assertEqual({error, {not_authorized, #{}}}, Connect(C2)),
+
+    %% Cleanup
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"/">>),
+    C3 = connect(ClientId, Config),
+    ok = emqtt:disconnect(C3).
+
+amqp091_cc_header(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{<<"#">>, [{qos, 1}]}]),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(
+      Ch, #'basic.publish'{exchange = <<"amq.topic">>,
+                           routing_key = <<"first.key">>},
+      #amqp_msg{payload = <<"msg">>,
+                props = #'P_basic'{
+                           headers = [{<<"CC">>, array,
+                                       [{longstr, <<"second.key">>}]}]}}),
+    %% Even though both routing key and CC header match the topic filter,
+    %% we expect to receive a single message (because only one message is sent)
+    %% and a single subscription identifier (because we created only one subscription).
+    receive {publish,
+             #{topic := <<"first/key">>,
+               payload := <<"msg">>,
+               properties := #{'Subscription-Identifier' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive msg")
+    end,
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C).
+
+session_migrate_v3_v5(Config) ->
+    session_switch_v3_v5(Config, true).
+
+session_takeover_v3_v5(Config) ->
+    session_switch_v3_v5(Config, false).
+
+session_switch_v3_v5(Config, Disconnect) ->
+    V5Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, mqtt_v5),
+    [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    %% Connect to old node in mixed version cluster.
+    C1 = connect(ClientId, Config, Server2, [{proto_ver, v3} | non_clean_sess_opts()]),
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(C1))),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    case Disconnect of
+        true -> ok = emqtt:disconnect(C1);
+        false -> unlink(C1)
+    end,
+    monitor(process, C1),
+
+    case V5Enabled of
+        true ->
+            %% Upgrade session from v3 to v5.
+            C2 = connect(ClientId, Config, Server1, [{proto_ver, v5} | non_clean_sess_opts()]),
+            ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(C2))),
+            %% Subscription created with old v3 client should work.
+            {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
+            receive {publish,
+                     #{client_pid := C2,
+                       payload := <<"m1">>,
+                       qos := 1}} -> ok
+            after 1000 -> ct:fail("did not receive from m1")
+            end,
+            %% Modifying subscription with v5 specific feature should work.
+            {ok, _, [1]} = emqtt:subscribe(C2, Topic, [{nl, true}, {qos, 1}]),
+            {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
+            receive {publish, P} -> ct:fail("Unexpected local PUBLISH: ~p", [P])
+            after 500 -> ok
+            end,
+            case Disconnect of
+                true -> ok = emqtt:disconnect(C2);
+                false -> unlink(C2)
+            end;
+        false ->
+            ok
+    end,
+
+    %% If feature flag mqtt_v5 is
+    %% * enabled: downgrade session from v5 to v3
+    %% * disabled: in mixed version cluster connect to new node using v3
+    C3 = connect(ClientId, Config, Server1, [{proto_ver, v3} | non_clean_sess_opts()]),
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(C3))),
+    receive {'DOWN', _, _, C1, _} -> ok
+    after 1000 -> ct:fail("C1 did not exit")
+    end,
+    case {Disconnect, V5Enabled} of
+        {false, true} ->
+            receive {disconnected, _RcSessionTakenOver = 142, #{}} -> ok
+            after 1000 -> ct:fail("missing DISCONNECT packet for C2")
+            end;
+        _ ->
+            ok
+    end,
+    %% We expect that v5 specific subscription feature does not apply
+    %% anymore when downgrading the session.
+    {ok, _} = emqtt:publish(C3, Topic, <<"m3">>, qos1),
+    receive {publish,
+             #{client_pid := C3,
+               payload := <<"m3">>,
+               qos := 1}} -> ok
+    after 1000 -> ct:fail("did not receive m3 with QoS 1")
+    end,
+    %% Modifying the subscription once more with v3 client should work.
+    {ok, _, [0]} = emqtt:subscribe(C3, Topic, qos0),
+    {ok, _} = emqtt:publish(C3, Topic, <<"m4">>, qos1),
+    receive {publish,
+             #{client_pid := C3,
+               payload := <<"m4">>,
+               qos := 0}} -> ok
+    after 1000 -> ct:fail("did not receive m3 with QoS 0")
+    end,
+
+    %% Unsubscribing in v3 should work.
+    ?assertMatch({ok, _, _}, emqtt:unsubscribe(C3, Topic)),
+    {ok, _} = emqtt:publish(C3, Topic, <<"m5">>, qos1),
+    assert_nothing_received(),
+
+    ok = emqtt:disconnect(C3),
+    C4 = connect(ClientId, Config, Server1, [{proto_ver, v3}, {clean_start, true}]),
+    ok = emqtt:disconnect(C4),
+    eventually(?_assertEqual([], all_connection_pids(Config))).
 
 %% -------------------------------------------------------------------
 %% Helpers
@@ -555,8 +1217,11 @@ assert_queue_ttl(TTLSecs, NumQs, Config) ->
                       end, Qs)).
 
 dead_letter_metric(Metric, Config) ->
+    dead_letter_metric(Metric, Config, disabled).
+
+dead_letter_metric(Metric, Config, Strategy) ->
     Counters = rpc(Config, rabbit_global_counters, overview, []),
-    Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}], Counters),
+    Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, Strategy}], Counters),
     maps:get(Metric, Map).
 
 assert_nothing_received() ->

@@ -24,6 +24,14 @@
       callbacks     => #{enable => {mqtt_node, delete}}
      }}).
 
+%% This feature flag is needed to prevent clients from downgrading an MQTT v5 session to v3 or v4 on
+%% a lower version node. Such a session downgrade (or upgrade) requires changing binding arguments.
+-rabbit_feature_flag(
+   {mqtt_v5,
+    #{desc          => "Support MQTT 5.0",
+      stability     => stable
+     }}).
+
 -spec track_client_id_in_ra() -> boolean().
 track_client_id_in_ra() ->
     rabbit_feature_flags:is_disabled(delete_ra_cluster_mqtt_node).

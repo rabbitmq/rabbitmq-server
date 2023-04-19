@@ -11,7 +11,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/2, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
@@ -34,10 +34,32 @@ description() ->
 
 serialise_events() -> false.
 
-%% NB: This may return duplicate results in some situations (that's ok)
+route(Exchange, Delivery) ->
+    route(Exchange, Delivery, []).
+
+%% This function can return duplicate destinations or duplicate binding keys.
+%% The caller of this function is responsible for filtering out duplicates.
+-spec route(rabbit_types:exchange(), rabbit_types:delivery(), rabbit_exchange:route_opts()) ->
+    [rabbit_types:binding_destination() |
+     {rabbit_amqqueue:name(), [rabbit_types:binding_key(), ...]}].
 route(#exchange{name = XName},
-      #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    lists:append([rabbit_db_topic_exchange:match(XName, RKey) || RKey <- Routes]).
+      #delivery{message = #basic_message{routing_keys = Routes}},
+      Opts) ->
+    {Destinations, QNamesWithBindings} =
+    lists:foldl(fun(RKey, {L0, M0}) ->
+                        {L1, M1} = rabbit_db_topic_exchange:match(XName, RKey, Opts),
+                        L = L0 ++ L1,
+                        M = maps:merge_with(fun(_QName, BindingKeys0, BindingKeys1) ->
+                                                    BindingKeys0 ++ BindingKeys1
+                                            end, M0, M1),
+                        {L, M}
+                end, {[], #{}}, Routes),
+    if map_size(QNamesWithBindings) =:= 0 ->
+           %% optimisation
+           Destinations;
+       true ->
+           Destinations ++ maps:to_list(QNamesWithBindings)
+    end.
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.

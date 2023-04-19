@@ -67,10 +67,13 @@ init_per_suite(Config) ->
         {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
                                tcp_port_mqtt_tls_extra]}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      [ fun merge_app_env/1 ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                [fun merge_app_env/1] ++
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, mqtt_v5),
+    Config2.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

@@ -358,7 +358,7 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                               Rest,
                               State #state{parse_state = ParseState1,
                                            proc_state = ProcState1});
-                        {error, unauthorized = Reason, ProcState1} ->
+                        {error, access_refused = Reason, ProcState1} ->
                             ?LOG_ERROR("MQTT connection ~ts is closing due to an authorization failure", [ConnName]),
                             {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                         {error, Reason, ProcState1} ->

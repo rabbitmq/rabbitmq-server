@@ -47,12 +47,12 @@ enabled(none) ->
 enabled(#exchange{}) ->
     true.
 
--spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
+-spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_v2_destinations(),
              binary(), rabbit_types:username(), state()) -> 'ok'.
 tap_in(Msg, QNames, ConnName, Username, State) ->
     tap_in(Msg, QNames, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
--spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
+-spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_v2_destinations(),
                    binary(), rabbit_channel:channel_number(),
                    rabbit_types:username(), state()) -> 'ok'.
 
@@ -60,13 +60,17 @@ tap_in(_Msg, _QNames, _ConnName, _ChannelNum, _Username, none) -> ok;
 tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
                                                       virtual_host = VHost}},
        QNames, ConnName, ChannelNum, Username, TraceX) ->
+    RoutedQs = lists:map(fun(#resource{kind = queue, name = Name}) ->
+                                 {longstr, Name};
+                            ({#resource{kind = queue, name = Name}, _BindingKeys}) ->
+                                 {longstr, Name}
+                         end, QNames),
     trace(TraceX, Msg, <<"publish">>, XName,
           [{<<"vhost">>,         longstr,   VHost},
            {<<"connection">>,    longstr,   ConnName},
            {<<"channel">>,       signedint, ChannelNum},
            {<<"user">>,          longstr,   Username},
-           {<<"routed_queues">>, array,
-            [{longstr, QName#resource.name} || QName <- QNames]}]).
+           {<<"routed_queues">>, array,     RoutedQs}]).
 
 -spec tap_out(rabbit_amqqueue:qmsg(), binary(),
               rabbit_types:username(), state()) -> 'ok'.

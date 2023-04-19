@@ -138,7 +138,6 @@ publish_properties() ->
                         {'Response-Topic', utf8_string()},
                         {'Correlation-Data', binary_data()},
                         user_property(),
-                        {'Subscription-Identifier', non_zero_variable_byte_integer()},
                         {'Content-Type', utf8_string()}])),
          maps:from_list(L)).
 
