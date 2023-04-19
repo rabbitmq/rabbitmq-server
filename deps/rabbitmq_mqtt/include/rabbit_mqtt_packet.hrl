@@ -32,6 +32,9 @@
 -define(MAX_PACKET_SIZE, ?VARIABLE_BYTE_INTEGER_MAX).
 -type max_packet_size() :: 1..?MAX_PACKET_SIZE.
 
+%% "The Subscription Identifier can have the value of 1 to 268,435,455." [v5 3.8.2.1.2]
+-type subscription_identifier() :: 1..?VARIABLE_BYTE_INTEGER_MAX.
+
 -define(UINT_MAX, 16#FFFFFFFF).
 
 %% MQTT Control Packet types
@@ -185,12 +188,15 @@
                              props = #{} :: properties()
                             }).
 
+-record(mqtt_subscription_opts, {qos :: qos(), % maximum QoS
+                                 no_local = false :: boolean(),
+                                 retain_as_published = false :: boolean(),
+                                 retain_handling = 0 :: 0..2,
+                                 id :: option(subscription_identifier())
+                                }).
+
 -record(mqtt_subscription, {topic_filter :: binary(),
-                            %% subscription options
-                            qos :: qos(), % maximum QoS
-                            no_local :: boolean(),
-                            retain_as_published :: boolean(),
-                            retain_handling :: 0..2
+                            options :: #mqtt_subscription_opts{}
                            }).
 
 -record(mqtt_packet_subscribe, {packet_id :: packet_id(),

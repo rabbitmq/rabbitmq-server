@@ -41,6 +41,7 @@
 
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
+-type subscriptions() :: #{TopicFilter :: binary() => #mqtt_subscription_opts{}}.
 
 -record(auth_state,
         {user :: #user{},
@@ -87,7 +88,7 @@
          %% (Not to be confused with packet IDs sent from client to server which can be the
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
-         subscriptions = #{} :: #{TopicFilter :: binary() => QoS :: ?QOS_0..?QOS_1},
+         subscriptions = #{} :: subscriptions(),
          auth_state = #auth_state{},
          ra_register_state :: option(registered | {pending, reference()}),
          %% quorum queues and streams whose soft limit has been exceeded
@@ -222,7 +223,6 @@ process_connect(
             Props0 = #{'Maximum-QoS' => ?QOS_1,
                        'Maximum-Packet-Size' => persistent_term:get(
                                                   ?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED),
-                       'Subscription-Identifier-Available' => 0,
                        'Shared-Subscription-Available' => 0,
                        'Session-Expiry-Interval' => case SessionExpiry of
                                                         infinity -> ?UINT_MAX;
@@ -297,7 +297,7 @@ process_connect(State0) ->
     maybe
         {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
         {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
-        State = cache_subscriptions(SessPresent, State2),
+        {ok, State} ?= init_subscriptions(SessPresent, State2),
         rabbit_networking:register_non_amqp_connection(self()),
         self() ! connection_created,
         {ok, SessPresent, State}
@@ -415,15 +415,17 @@ process_request(?SUBSCRIBE,
               %% to close the client connection anyway.
               {[E | L], S};
          (#mqtt_subscription{topic_filter = Topic,
-                             qos = TopicQos},
+                             options = Opts0},
           {L, S0}) ->
-              QoS = maybe_downgrade_qos(TopicQos),
+              QoS = maybe_downgrade_qos(Opts0#mqtt_subscription_opts.qos),
+              Opts = Opts0#mqtt_subscription_opts{qos = QoS},
               maybe
-                  ok ?= maybe_replace_old_sub(Topic, QoS, S0),
                   {ok, Q} ?= ensure_queue(QoS, S0),
                   QName = amqqueue:get_name(Q),
-                  ok ?= bind(QName, Topic, S0),
-                  Subs = maps:put(Topic, QoS, S0#state.subscriptions),
+                  BindingArgs = binding_args_for_proto_ver(ProtoVer, Opts),
+                  ok ?= add_subscription(Topic, BindingArgs, QName, S0),
+                  ok ?= maybe_delete_old_subscription(Topic, Opts, S0),
+                  Subs = maps:put(Topic, Opts, S0#state.subscriptions),
                   S1 = S0#state{subscriptions = Subs},
                   maybe_increment_consumer(S0, S1),
                   case self_consumes(Q) of
@@ -462,14 +464,16 @@ process_request(?UNSUBSCRIBE,
                                                                  topic_filters = Topics},
                              payload = undefined},
                 State0) ->
-    ?LOG_DEBUG("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
+    ?LOG_DEBUG("Received an UNSUBSCRIBE for topic filter(s) ~p", [Topics]),
     {ReasonCodes, State} =
     lists:foldl(
-      fun(Topic, {L, #state{subscriptions = Subs0} = S0}) ->
+      fun(Topic, {L, #state{subscriptions = Subs0,
+                            cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
               case maps:take(Topic, Subs0) of
-                  {QoS, Subs} ->
-                      QName = queue_name(QoS, S0),
-                      case unbind(QName, Topic, S0) of
+                  {Opts, Subs} ->
+                      BindingArgs = binding_args_for_proto_ver(ProtoVer, Opts),
+                      case delete_subscription(
+                             Topic, BindingArgs, Opts#mqtt_subscription_opts.qos, S0) of
                           ok ->
                               S = S0#state{subscriptions = Subs},
                               maybe_decrement_consumer(S0, S),
@@ -579,12 +583,15 @@ update_session_expiry_interval(QName, Expiry) ->
             ok = rabbit_queue_type:policy_changed(Q) % respects queue args
     end.
 
-check_protocol_version(ProtoVersion) ->
-    case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
+check_protocol_version(V)
+  when V =:= 3 orelse V =:= 4 ->
+    ok;
+check_protocol_version(5) ->
+    case rabbit_feature_flags:is_enabled(mqtt_v5) of
         true ->
             ok;
         false ->
-            ?LOG_ERROR("unsupported MQTT protocol version: ~p", [ProtoVersion]),
+            ?LOG_ERROR("Rejecting MQTT 5.0 connection because feature flag mqtt_v5 is disabled"),
             {error, ?RC_UNSUPPORTED_PROTOCOL_VERSION}
     end.
 
@@ -798,44 +805,84 @@ maybe_set_queue_qos1(?QOS_1, State = #state{cfg = Cfg = #cfg{queue_qos1 = undefi
 maybe_set_queue_qos1(_, State) ->
     State.
 
-%% Query subscriptions from the database and hold them in process state
-%% to avoid future mnesia:match_object/3 queries.
-cache_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
-                    State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
-    SubsQos0 = topic_names(?QOS_0, State),
-    SubsQos1 = topic_names(?QOS_1, State),
-    Subs = maps:merge(maps:from_keys(SubsQos0, ?QOS_0),
-                      maps:from_keys(SubsQos1, ?QOS_1)),
-    rabbit_global_counters:consumer_created(ProtoVer),
-    State#state{subscriptions = Subs};
-cache_subscriptions(_, State) ->
-    State.
+-spec init_subscriptions(boolean(), state()) ->
+    {ok, state()} | {error, reason_code()}.
+init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
+                   State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+    maybe
+        {ok, SubsQos0} ?= init_subscriptions0(?QOS_0, State),
+        {ok, SubsQos1} ?= init_subscriptions0(?QOS_1, State),
+        Subs = maps:merge(SubsQos0, SubsQos1),
+        rabbit_global_counters:consumer_created(ProtoVer),
+        %% Cache subscriptions in process state to avoid future mnesia:match_object/3 queries.
+        {ok, State#state{subscriptions = Subs}}
+    end;
+init_subscriptions(_, State) ->
+    {ok, State}.
 
-topic_names(QoS, State = #state{cfg = #cfg{exchange = Exchange}}) ->
+-spec init_subscriptions0(qos(), state()) ->
+    {ok, subscriptions()} | {error, reason_code()}.
+init_subscriptions0(QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
+                                                    exchange = Exchange}}) ->
     Bindings =
     rabbit_binding:list_for_source_and_destination(
       Exchange,
-      queue_name(QoS, State),
+      queue_name(QoS, State0),
       %% Querying table rabbit_route is catastrophic for CPU usage.
       %% Querying table rabbit_reverse_route is acceptable because
       %% the source exchange is always the same in the MQTT plugin whereas
       %% the destination queue is different for each MQTT client and
       %% rabbit_reverse_route is sorted by destination queue.
       _Reverse = true),
-    lists:map(fun(B) -> amqp_to_mqtt(B#binding.key) end, Bindings).
+    try
+        Subs = lists:foldl(
+                 fun(#binding{key = Key,
+                              args = Args = [Opts0 = #mqtt_subscription_opts{}]},
+                     Acc) ->
+                         TopicFilter = amqp_to_mqtt(Key),
+                         Opts = case ProtoVer of
+                                    ?MQTT_PROTO_V5 ->
+                                        Opts0;
+                                    _ ->
+                                        %% session downgrade
+                                        ok = recreate_subscription(TopicFilter, Args, [], QoS, State0),
+                                        #mqtt_subscription_opts{qos = QoS}
+                                end,
+                         maps:put(TopicFilter, Opts, Acc);
+                    (#binding{key = Key,
+                              args = Args = []},
+                     Acc) ->
+                         Opts = #mqtt_subscription_opts{qos = QoS},
+                         TopicFilter = amqp_to_mqtt(Key),
+                         case ProtoVer of
+                             ?MQTT_PROTO_V5 ->
+                                 %% session upgrade
+                                 ok = recreate_subscription(TopicFilter, Args, [Opts], QoS, State0);
+                             _ ->
+                                 ok
+                         end,
+                         maps:put(TopicFilter, Opts, Acc)
+                 end, #{}, Bindings),
+        {ok, Subs}
+    catch throw:{error, Reason} ->
+              Rc = case Reason of
+                       access_refused -> ?RC_NOT_AUTHORIZED;
+                       _Other -> ?RC_IMPLEMENTATION_SPECIFIC_ERROR
+                   end,
+              {error, Rc}
+    end.
 
-%% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
-%% to an existing Subscription’s Topic Filter then it MUST completely replace that
-%% existing Subscription with a new Subscription. The Topic Filter in the new Subscription
-%% will be identical to that in the previous Subscription, although its maximum QoS value
-%% could be different." [MQTT-3.8.4-3].
-maybe_replace_old_sub(TopicName, QoS, State = #state{subscriptions = Subs}) ->
-    case Subs of
-        #{TopicName := OldQoS} when OldQoS =/= QoS ->
-            QName = queue_name(OldQoS, State),
-            unbind(QName, TopicName, State);
-        _ ->
-            ok
+recreate_subscription(TopicFilter, OldBindingArgs, NewBindingArgs, Qos, State) ->
+    case add_subscription(TopicFilter, NewBindingArgs, Qos, State) of
+        ok ->
+            case delete_subscription(TopicFilter, OldBindingArgs, Qos, State) of
+                ok ->
+                    ok;
+                {error, _} = Err ->
+                    throw(Err)
+            end;
+        {error, _} = Err ->
+            throw(Err)
     end.
 
 -spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
@@ -847,9 +894,12 @@ hand_off_to_retainer(RetainerPid, Topic0, Msg = #mqtt_msg{payload = Payload}) ->
            rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg)
     end.
 
-maybe_send_retained_message(RPid, #mqtt_subscription{topic_filter = Topic0,
-                                                     qos = SubscribeQos},
-                            State0 = #state{packet_id = PacketId0}) ->
+maybe_send_retained_message(
+  RPid,
+  #mqtt_subscription{topic_filter = Topic0,
+                     options = #mqtt_subscription_opts{
+                                  qos = SubscribeQos}},
+  State0 = #state{packet_id = PacketId0}) ->
     Topic = amqp_to_mqtt(Topic0),
     case rabbit_mqtt_retainer:fetch(RPid, Topic) of
         undefined ->
@@ -1266,25 +1316,53 @@ consume(Q, QoS, #state{
             Err
     end.
 
-bind(QName, TopicName, State) ->
-    binding_action_with_checks(QName, TopicName, add, State).
+binding_args_for_proto_ver(?MQTT_PROTO_V5, SubOpts) ->
+    [SubOpts];
+binding_args_for_proto_ver(_, _) ->
+    [].
 
-unbind(QName, TopicName, State) ->
-    binding_action_with_checks(QName, TopicName, remove, State).
+add_subscription(TopicFilter, BindingArgs, Qos, State)
+  when is_integer(Qos) ->
+    add_subscription(TopicFilter, BindingArgs, queue_name(Qos, State), State);
+add_subscription(TopicFilter, BindingArgs, QName, State) ->
+    binding_action_with_checks(QName, TopicFilter, BindingArgs, add, State).
 
-binding_action_with_checks(QName, TopicName, Action,
+delete_subscription(TopicFilter, BindingArgs, Qos, State) ->
+    binding_action_with_checks(
+      queue_name(Qos, State), TopicFilter, BindingArgs, remove, State).
+
+%% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a
+%% Non‑shared Subscription’s Topic Filter for the current Session, then it MUST replace that
+%% existing Subscription with a new Subscription [MQTT-3.8.4-3]. The Topic Filter in the new
+%% Subscription will be identical to that in the previous Subscription, although its
+%% Subscription Options could be different." [v5 3.8.4]
+maybe_delete_old_subscription(TopicFilter, Opts, State = #state{subscriptions = Subs,
+                                                                cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case Subs of
+        #{TopicFilter := OldOpts}
+          when OldOpts =/= Opts ->
+            delete_subscription(TopicFilter,
+                                binding_args_for_proto_ver(ProtoVer, OldOpts),
+                                OldOpts#mqtt_subscription_opts.qos,
+                                State);
+        _ ->
+            ok
+    end.
+
+binding_action_with_checks(QName, TopicFilter, BindingArgs, Action,
                            State = #state{cfg = #cfg{exchange = ExchangeName},
                                           auth_state = AuthState}) ->
     %% Same permissions required for binding or unbinding queue to/from topic exchange.
     maybe
         ok ?= check_queue_write_access(QName, AuthState),
         ok ?= check_exchange_read_access(ExchangeName, AuthState),
-        ok ?= check_topic_access(TopicName, read, State),
-        ok ?= binding_action(ExchangeName, TopicName, QName, fun rabbit_binding:Action/2, AuthState)
+        ok ?= check_topic_access(TopicFilter, read, State),
+        ok ?= binding_action(ExchangeName, TopicFilter, QName, BindingArgs,
+                             fun rabbit_binding:Action/2, AuthState)
     else
         {error, Reason} = Err ->
-            ?LOG_ERROR("Failed to ~s binding between ~s and ~s for topic ~s: ~p",
-                       [Action, rabbit_misc:rs(ExchangeName), rabbit_misc:rs(QName), TopicName, Reason]),
+            ?LOG_ERROR("Failed to ~s binding between ~s and ~s for topic filter ~s: ~p",
+                       [Action, rabbit_misc:rs(ExchangeName), rabbit_misc:rs(QName), TopicFilter, Reason]),
             Err
     end.
 
@@ -1298,15 +1376,18 @@ check_exchange_read_access(ExchangeName, #auth_state{user = User,
     %% read access to exchange required for queue.(un)bind
     check_resource_access(User, ExchangeName, read, AuthzCtx).
 
-binding_action(ExchangeName, TopicName, QName, BindingFun, #auth_state{user = #user{username = Username}}) ->
-    RoutingKey = mqtt_to_amqp(TopicName),
+binding_action(ExchangeName, TopicFilter, QName, BindingArgs,
+               BindingFun, #auth_state{user = #user{username = Username}}) ->
+    RoutingKey = mqtt_to_amqp(TopicFilter),
     Binding = #binding{source = ExchangeName,
                        destination = QName,
-                       key = RoutingKey},
+                       key = RoutingKey,
+                       args = BindingArgs},
     BindingFun(Binding, Username).
 
 publish_to_queues(
-  #mqtt_msg{qos = Qos,
+  #mqtt_msg{retain = Retain,
+            qos = Qos,
             topic = Topic,
             packet_id = PacketId,
             payload = Payload,
@@ -1327,7 +1408,8 @@ publish_to_queues(
                                       {undefined, undefined}
                               end,
     PBasic = #'P_basic'{
-                headers = [{<<"x-mqtt-publish-qos">>, byte, Qos}],
+                headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
+                           {<<"x-mqtt-retain">>, bool, Retain}],
                 delivery_mode = delivery_mode(Qos),
                 expiration = Expiration,
                 timestamp = Timestamp},
@@ -1357,13 +1439,47 @@ publish_to_queues(
                  },
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            QNames = rabbit_exchange:route(Exchange, Delivery),
+            QNames0 = rabbit_exchange:route(Exchange, Delivery, [v2]),
+            QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(BasicMessage, QNames, ConnName, Username, TraceState),
             deliver_to_queues(Delivery, QNames, State);
         {error, not_found} ->
             ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
             {error, exchange_not_found, State}
     end.
+
+%% "Bit 2 of the Subscription Options represents the No Local option.
+%% If the value is 1, Application Messages MUST NOT be forwarded to a connection with a ClientID
+%% equal to the ClientID of the publishing connection [MQTT-3.8.3-3]." [v5 3.8.3.1]
+drop_local(QNames, #state{subscriptions = Subs,
+                          cfg = #cfg{proto_ver = ?MQTT_PROTO_V5,
+                                     vhost = Vhost,
+                                     client_id = ClientId}}) ->
+    ClientIdSize = byte_size(ClientId),
+    lists:filter(
+      fun({#resource{virtual_host = Vhost0,
+                     name = <<"mqtt-subscription-",
+                              ClientId0:ClientIdSize/binary,
+                              "qos", _:1/binary >>},
+           BindingKeys})
+            when Vhost0 =:= Vhost andalso
+                 ClientId0 =:= ClientId ->
+              lists:any(
+                fun(BKey) ->
+                        TopicFilter = amqp_to_mqtt(BKey),
+                        case Subs of
+                            #{TopicFilter := #mqtt_subscription_opts{
+                                                no_local = NoLocal}} ->
+                                not NoLocal;
+                            _ ->
+                                true
+                        end
+                end, BindingKeys);
+         (_) ->
+              true
+      end, QNames);
+drop_local(QNames, _) ->
+    QNames.
 
 deliver_to_queues(Delivery,
                   RoutedToQNames,
@@ -1399,9 +1515,10 @@ process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = PktId},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_unroutable_returned(ProtoVer, 1),
-    %% MQTT 5 spec:
+    %% TODO MQTT 5 spec:
     %% If the Server knows that there are no matching subscribers, it MAY use
     %% Reason Code 0x10 (No matching subscribers) instead of 0x00 (Success).
+    %% Also return "No matching subscribers" if message dropped due to NoLocal flag?
     send_puback(PktId, State),
     State;
 process_routing_confirm(#delivery{confirm = false}, _, State) ->
@@ -1413,7 +1530,7 @@ process_routing_confirm(#delivery{confirm = true,
 process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = PktId},
                         Qs, State = #state{unacked_client_pubs = U0}) ->
-    QNames = lists:map(fun amqqueue:get_name/1, Qs),
+    QNames = rabbit_amqqueue:queue_names(Qs),
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
     State#state{unacked_client_pubs = U}.
 
@@ -1731,16 +1848,19 @@ maybe_publish_to_client(
          #basic_message{
             routing_keys = [RoutingKey | _CcRoutes],
             content = #content{payload_fragments_rev = FragmentsRev,
-                               properties = PBasic}}},
+                               properties = PBasic = #'P_basic'{headers = Headers}}}},
   QoS, State0) ->
-    Props = p_basic_to_publish_properties(PBasic),
+    MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
+    Props0 = p_basic_to_publish_properties(PBasic),
+    Props = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
     Packet =
     #mqtt_packet{
        fixed = #mqtt_packet_fixed{
                   type = ?PUBLISH,
                   qos = QoS,
-                  dup = Redelivered},
+                  dup = Redelivered,
+                  retain = retain(Headers, MatchedTopicFilters, State)},
        variable = #mqtt_packet_publish{
                      packet_id = PacketId,
                      topic_name = amqp_to_mqtt(RoutingKey),
@@ -1781,6 +1901,46 @@ p_basic_to_publish_properties(#'P_basic'{headers = Headers,
     end;
 p_basic_to_publish_properties(#'P_basic'{}) ->
     #{}.
+
+matched_topic_filters_v5(Headers, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+    case rabbit_mqtt_util:table_lookup(Headers, <<"x-binding-keys">>) of
+        {array, BindingKeys} ->
+            [amqp_to_mqtt(BKey) || {longstr, BKey} <- BindingKeys];
+        undefined ->
+            []
+    end;
+matched_topic_filters_v5(_, _) ->
+    [].
+
+maybe_add_subscription_ids(TopicFilters, Props, #state{subscriptions = Subs}) ->
+    Ids = lists:filtermap(fun(T) -> case maps:get(T, Subs, undefined) of
+                                        #mqtt_subscription_opts{id = Id}
+                                          when is_integer(Id) ->
+                                            {true, Id};
+                                        _ ->
+                                            false
+                                    end
+                          end, TopicFilters),
+    case Ids of
+        [] -> Props;
+        _ -> maps:put('Subscription-Identifier', Ids, Props)
+    end.
+
+%% "Bit 3 of the Subscription Options represents the Retain As Published option.
+%% If 1, Application Messages forwarded using this subscription keep the RETAIN
+%% flag they were published with. If 0, Application Messages forwarded using
+%% this subscription have the RETAIN flag set to 0." [v5 3.8.3.1]
+retain(Headers, TopicFilters, #state{subscriptions = Subs}) ->
+    case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-retain">>) of
+        {bool, true} ->
+            lists:any(fun(T) -> case maps:get(T, Subs, undefined) of
+                                    #mqtt_subscription_opts{retain_as_published = Rap} -> Rap;
+                                    undefined -> false
+                                end
+                      end, TopicFilters);
+        _ ->
+            false
+    end.
 
 msg_id_to_packet_id(_, ?QOS_0, State) ->
     %% "A PUBLISH packet MUST NOT contain a Packet Identifier if its QoS value is set to 0 [MQTT-2.2.1-2]."
@@ -1863,10 +2023,10 @@ publish_to_queues_with_checks(
                             Error
                     end;
                 {error, access_refused} ->
-                    {error, unauthorized, State}
+                    {error, access_refused, State}
             end;
         {error, access_refused} ->
-            {error, unauthorized, State}
+            {error, access_refused, State}
     end.
 
 check_resource_access(User, Resource, Perm, Context) ->

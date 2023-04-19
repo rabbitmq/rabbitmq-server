@@ -11,26 +11,22 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
--import(util, [connect/3]).
+-import(util, [connect/3, connect/4]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
 all() ->
     [
+     {group, unit},
      {group, v4},
      {group, v5}
     ].
 
 groups() ->
     [
-     {v4, [shuffle], tests()},
-     {v5, [shuffle], tests()}
-    ].
-
-tests() ->
-    [
-     merge_defaults,
-     run
+     {unit, [], [merge_defaults]},
+     {v4, [], [run]},
+     {v5, [], [run]}
     ].
 
 suite() ->
@@ -56,8 +52,11 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(unit, Config) ->
+    Config;
 init_per_group(Group, Config) ->
-    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
+    Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
+    util:maybe_skip_v5(Config1).
 
 end_per_group(_, Config) ->
     Config.
@@ -129,8 +128,18 @@ run(Config) ->
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos1Con1))),
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos2Con1))),
 
+    %% CLI command should list MQTT connections from all nodes.
+    C3 = connect(<<"simpleClient2">>, Config, 1, [{ack_timeout, 1}]),
+    rabbit_ct_helpers:eventually(
+      ?_assertEqual(
+         [[{client_id, <<"simpleClient">>}],
+          [{client_id, <<"simpleClient1">>}],
+          [{client_id, <<"simpleClient2">>}]],
+         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))))),
+
     ok = emqtt:disconnect(C1),
-    ok = emqtt:disconnect(C2).
+    ok = emqtt:disconnect(C2),
+    ok = emqtt:disconnect(C3).
 
 start_amqp_connection(Type, Node, Port) ->
     amqp_connection:start(amqp_params(Type, Node, Port)).

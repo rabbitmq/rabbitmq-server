@@ -69,6 +69,7 @@
 -export([deactivate_limit_all/2]).
 
 -export([prepend_extra_bcc/1]).
+-export([queue/1, queue_name/1, queue_names/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -102,6 +103,7 @@
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
+-type binding_keys() :: [rabbit_types:binding_key()].
 
 %%----------------------------------------------------------------------------
 
@@ -317,8 +319,8 @@ lookup(Name) when is_record(Name, resource) ->
 lookup_durable_queue(QName) ->
     rabbit_db_queue:get_durable(QName).
 
--spec lookup_many ([name()]) -> [amqqueue:amqqueue()].
-
+-spec lookup_many(rabbit_exchange:route_v2_destinations()) ->
+    [amqqueue:amqqueue() | {amqqueue:amqqueue(), binding_keys()}].
 lookup_many([])     -> [];                             %% optimisation
 lookup_many(Names) when is_list(Names) ->
     rabbit_db_queue:get_many(Names).
@@ -1999,11 +2001,13 @@ get_quorum_nodes(Q) ->
             []
     end.
 
--spec prepend_extra_bcc([amqqueue:amqqueue()]) ->
-    [amqqueue:amqqueue()].
+-spec prepend_extra_bcc(Qs) ->
+    Qs when Qs :: [amqqueue:amqqueue() |
+                   {amqqueue:amqqueue(), binding_keys()}].
 prepend_extra_bcc([]) ->
     [];
-prepend_extra_bcc([Q] = Qs) ->
+prepend_extra_bcc([Q0] = Qs) ->
+    Q = queue(Q0),
     case amqqueue:get_options(Q) of
         #{extra_bcc := BCCName} ->
             case get_bcc_queue(Q, BCCName) of
@@ -2018,7 +2022,8 @@ prepend_extra_bcc([Q] = Qs) ->
 prepend_extra_bcc(Qs) ->
     BCCQueues =
         lists:filtermap(
-          fun(Q) ->
+          fun(Q0) ->
+                  Q = queue(Q0),
                   case amqqueue:get_options(Q) of
                       #{extra_bcc := BCCName} ->
                           case get_bcc_queue(Q, BCCName) of
@@ -2032,6 +2037,34 @@ prepend_extra_bcc(Qs) ->
                   end
           end, Qs),
     lists:usort(BCCQueues) ++ Qs.
+
+-spec queue(Q | {Q, binding_keys()}) ->
+    Q when Q :: amqqueue:amqqueue().
+queue(Q)
+  when ?is_amqqueue(Q) ->
+    Q;
+queue({Q, BindingKeys})
+  when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+    Q.
+
+-spec queue_name(name() | {name(), binding_keys()}) ->
+    name().
+queue_name(QName = #resource{kind = queue}) ->
+    QName;
+queue_name({QName = #resource{kind = queue}, BindingKeys})
+  when is_list(BindingKeys) ->
+    QName.
+
+-spec queue_names([Q | {Q, binding_keys()}]) ->
+    [name()] when Q :: amqqueue:amqqueue().
+queue_names(Queues)
+  when is_list(Queues) ->
+    lists:map(fun({Q, BindingKeys})
+                    when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+                      amqqueue:get_name(Q);
+                 (Q) when ?is_amqqueue(Q) ->
+                      amqqueue:get_name(Q)
+              end, Queues).
 
 -spec get_bcc_queue(amqqueue:amqqueue(), binary()) ->
     {ok, amqqueue:amqqueue()} | {error, not_found}.

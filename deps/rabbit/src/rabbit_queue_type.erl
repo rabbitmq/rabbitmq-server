@@ -7,7 +7,7 @@
 
 -module(rabbit_queue_type).
 -include("amqqueue.hrl").
--include_lib("rabbit_common/include/resource.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
          init/0,
@@ -482,7 +482,9 @@ module(QRef, State) ->
             {error, not_found}
     end.
 
--spec deliver([amqqueue:amqqueue()], Delivery :: term(),
+-spec deliver([amqqueue:amqqueue() |
+               {amqqueue:amqqueue(), [rabbit_types:binding_key(), ...]}],
+              rabbit_types:delivery(),
               stateless | state()) ->
     {ok, state(), actions()} | {error, Reason :: term()}.
 deliver(Qs, Delivery, State) ->
@@ -493,47 +495,73 @@ deliver(Qs, Delivery, State) ->
             {error, Reason}
     end.
 
-deliver0(Qs, Delivery, stateless) ->
-    ByType = lists:foldl(fun(Q, Acc) ->
-                                 Mod = amqqueue:get_type(Q),
-                                 maps:update_with(
-                                   Mod, fun(A) ->
+deliver0(Qs, Delivery0, stateless) ->
+    ByTypeAndBindingKeys =
+    lists:foldl(fun(Elem, Acc) ->
+                        {Q, BKeys} = queue_and_binding_keys(Elem),
+                        Mod = amqqueue:get_type(Q),
+                        maps:update_with(
+                          {Mod, BKeys}, fun(A) ->
                                                 [{Q, stateless} | A]
                                         end, [{Q, stateless}], Acc)
-                         end, #{}, Qs),
-    maps:foreach(fun(Mod, QSs) ->
+                end, #{}, Qs),
+    maps:foreach(fun({Mod, BKeys}, QSs) ->
+                         Delivery = add_binding_keys(Delivery0, BKeys),
                          _ = Mod:deliver(QSs, Delivery)
-                 end, ByType),
+                 end, ByTypeAndBindingKeys),
     {ok, stateless, []};
-deliver0(Qs, Delivery, #?STATE{} = State0) ->
+deliver0(Qs, Delivery0, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
-    ByType = lists:foldl(
-               fun (Q, Acc) ->
-                       Mod = amqqueue:get_type(Q),
-                       QState = case Mod:is_stateful() of
-                                    true ->
-                                        #ctx{state = S} = get_ctx(Q, State0),
-                                        S;
-                                    false ->
-                                        stateless
-                                end,
-                       maps:update_with(
-                         Mod, fun (A) ->
+    ByTypeAndBindingKeys =
+    lists:foldl(
+      fun (Elem, Acc) ->
+              {Q, BKeys} = queue_and_binding_keys(Elem),
+              Mod = amqqueue:get_type(Q),
+              QState = case Mod:is_stateful() of
+                           true ->
+                               #ctx{state = S} = get_ctx(Q, State0),
+                               S;
+                           false ->
+                               stateless
+                       end,
+              maps:update_with(
+                {Mod, BKeys}, fun (A) ->
                                       [{Q, QState} | A]
                               end, [{Q, QState}], Acc)
-               end, #{}, Qs),
+      end, #{}, Qs),
     %%% dispatch each group to queue type interface?
-    {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->
-                                      {X, A} = Mod:deliver(QSs, Delivery),
-                                      {X0 ++ X, A0 ++ A}
-                              end, {[], []}, ByType),
+    {Xs, Actions} = maps:fold(
+                      fun({Mod, BKeys}, QSs, {X0, A0}) ->
+                              Delivery = add_binding_keys(Delivery0, BKeys),
+                              {X, A} = Mod:deliver(QSs, Delivery),
+                              {X0 ++ X, A0 ++ A}
+                      end, {[], []}, ByTypeAndBindingKeys),
     State = lists:foldl(
               fun({Q, S}, Acc) ->
                       Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
     {ok, State, Actions}.
+
+queue_and_binding_keys(Q)
+  when ?is_amqqueue(Q) ->
+    {Q, []};
+queue_and_binding_keys(T = {Q, BindingKeys})
+  when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+    T.
+
+-spec add_binding_keys(rabbit_types:delivery(), [rabbit_types:binding_key()]) ->
+    rabbit_types:delivery().
+add_binding_keys(Delivery, []) ->
+    Delivery;
+add_binding_keys(Delivery, BindingKeys) ->
+    L = [{longstr, B} || B <- BindingKeys],
+    BasicMsg = rabbit_basic:add_header(
+                 %% TODO avoid binary creation?
+                 <<"x-binding-keys">>, array, L,
+                 Delivery#delivery.message),
+    Delivery#delivery{message = BasicMsg}.
 
 -spec settle(queue_name(), settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->

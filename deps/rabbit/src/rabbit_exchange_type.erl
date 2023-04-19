@@ -26,6 +26,10 @@
 -callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
     rabbit_router:match_result().
 
+-callback route(rabbit_types:exchange(), rabbit_types:delivery(), rabbit_exchange:route_opts()) ->
+    [rabbit_types:binding_destination() |
+     {rabbit_amqqueue:name(), [rabbit_types:binding_key(), ...]}].
+
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.
 
@@ -62,6 +66,8 @@
 -callback info(rabbit_types:exchange()) -> [{atom(), term()}].
 
 -callback info(rabbit_types:exchange(), [atom()]) -> [{atom(), term()}].
+
+-optional_callbacks([route/3]).
 
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.

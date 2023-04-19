@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([set/1, delete_all_for_exchange/1, delete/1, match/2]).
+-export([set/1, delete_all_for_exchange/1, delete/1, match/3]).
 
 %% For testing
 -export([clear/0]).
@@ -17,6 +17,9 @@
 -define(MNESIA_NODE_TABLE, rabbit_topic_trie_node).
 -define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
 -define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
+
+-type match_ret() :: {[rabbit_types:binding_destination()],
+                      #{rabbit_amqqueue:name() => [rabbit_types:binding_key(), ...]}}.
 
 %% -------------------------------------------------------------------
 %% set().
@@ -67,21 +70,21 @@ delete(Bs) when is_list(Bs) ->
 %% match().
 %% -------------------------------------------------------------------
 
--spec match(ExchangeName, RoutingKey) -> ok when
-      ExchangeName :: rabbit_exchange:name(),
-      RoutingKey :: binary().
-%% @doc Finds the topic binding matching the given exchange and routing key and returns
-%% the destination of the binding
+-spec match(rabbit_exchange:name(),
+            rabbit_types:routing_key(),
+            rabbit_exchange:route_opts()) -> match_ret().
+%% @doc Finds the topic bindings matching the given exchange and routing key and returns
+%% the destination of the bindings (with the matched bindings in v2).
 %%
-%% @returns a list of resources
+%% @returns a list of resources (with matched bindings in v2).
 %%
 %% @private
 
-match(XName, RoutingKey) ->
+match(XName, RoutingKey, Opts) ->
     rabbit_db:run(
       #{mnesia =>
             fun() ->
-                    match_in_mnesia(XName, RoutingKey)
+                    match_in_mnesia(XName, RoutingKey, lists:member(v2, Opts))
             end
        }).
 
@@ -128,9 +131,9 @@ delete_all_for_exchange_in_mnesia(XName) ->
               ok
       end).
 
-match_in_mnesia(XName, RoutingKey) ->
+match_in_mnesia(XName, RoutingKey, V2) ->
     Words = split_topic_key(RoutingKey),
-    mnesia:async_dirty(fun trie_match/2, [XName, Words]).
+    mnesia:async_dirty(fun trie_match/3, [XName, Words, V2]).
 
 trie_remove_all_nodes(X) ->
     remove_all(?MNESIA_NODE_TABLE,
@@ -188,30 +191,32 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
 
-trie_match(X, Words) ->
-    trie_match(X, root, Words, []).
+trie_match(X, Words, V2) ->
+    trie_match(X, root, Words, V2, [], {[], #{}}).
 
-trie_match(X, Node, [], ResAcc) ->
-    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [],
-                    trie_bindings(X, Node) ++ ResAcc);
-trie_match(X, Node, [W | RestW] = Words, ResAcc) ->
+trie_match(X, Node, [], V2, Walked, ResAcc0) ->
+    Destinations = trie_bindings(X, Node),
+    ResAcc = maybe_add_binding_key(V2, Destinations, Walked, ResAcc0),
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/6, [],
+                    V2, Walked, ResAcc);
+trie_match(X, Node, [W | RestW] = Words, V2, Walked, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
-                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, Acc)
-                end, ResAcc, [{W, fun trie_match/4, RestW},
-                              {"*", fun trie_match/4, RestW},
-                              {"#", fun trie_match_skip_any/4, Words}]).
+                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, V2, Walked, Acc)
+                end, ResAcc, [{W, fun trie_match/6, RestW},
+                              {"*", fun trie_match/6, RestW},
+                              {"#", fun trie_match_skip_any/6, Words}]).
 
-trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
+trie_match_part(X, Node, Search, MatchFun, RestW, V2, Walked, ResAcc) ->
     case trie_child(X, Node, Search) of
-        {ok, NextNode} -> MatchFun(X, NextNode, RestW, ResAcc);
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, V2, [Search | Walked], ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any(X, Node, [], ResAcc) ->
-    trie_match(X, Node, [], ResAcc);
-trie_match_skip_any(X, Node, [_ | RestW] = Words, ResAcc) ->
-    trie_match_skip_any(X, Node, RestW,
-                        trie_match(X, Node, Words, ResAcc)).
+trie_match_skip_any(X, Node, [], V2, Walked, ResAcc) ->
+    trie_match(X, Node, [], V2, Walked, ResAcc);
+trie_match_skip_any(X, Node, [_ | RestW] = Words, V2, Walked, ResAcc) ->
+    trie_match_skip_any(X, Node, RestW, V2, Walked,
+                        trie_match(X, Node, Words, V2, Walked, ResAcc)).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of
@@ -323,3 +328,35 @@ trie_binding_op(X, Node, D, Args, Op) ->
                                            destination   = D,
                                            arguments     = Args}},
             write).
+
+-spec maybe_add_binding_key(boolean(), [rabbit_types:binding_destination()], [Word :: [byte()]], Acc) ->
+    Acc when Acc :: match_ret().
+maybe_add_binding_key(false, Destinations, _, {DestinationsAcc, QNamesToBindingsAcc}) ->
+    {Destinations ++ DestinationsAcc, QNamesToBindingsAcc};
+maybe_add_binding_key(true, Destinations, Walked, Acc = {DestinationsAcc, QNamesToBindingsAcc}) ->
+    %% This is the only place where app rabbit is aware of app rabbitmq_mqtt.
+    %% Ideally, such a dependency does not exist. In fact, removing MQTT specifics below
+    %% (i.e. feature flag and queue name prefix) works as well. Checking for MQTT
+    %% destination queues is just an optimisation to not unnecessarily add an AMQP 0.9.1
+    %% header for messages sent to other destinations.
+    case rabbit_feature_flags:is_enabled(mqtt_v5) of
+        false ->
+            {Destinations ++ DestinationsAcc, QNamesToBindingsAcc};
+        true ->
+            %% TODO Benchmark. If binary creation is too expensive, implement one of alternatives:
+            %% 1. Create binary lazily only if Destinations include at least one MQTT queue
+            %% 2. Return binding args in trie_bindings/2 and create binary lazily if binding args
+            %%    have Subscription Identifier or Retain As Published flag set.
+            %% 3. Store subscriptions by lists instead of by binary in rabbit_mqtt_processor.erl
+            BindingKey = list_to_binary(lists:join($., lists:reverse(Walked))),
+            lists:foldl(
+              fun(QName = #resource{kind = queue,
+                                    name = <<"mqtt-subscription-", _ClientIdQos/binary>>},
+                  {A0, A1}) ->
+                      {A0, maps:update_with(QName, fun(BindingKeys) ->
+                                                           [BindingKey | BindingKeys]
+                                                   end, [BindingKey], A1)};
+                 (Destination, {A0, A1}) ->
+                      {[Destination | A0], A1}
+              end, Acc, Destinations)
+    end.

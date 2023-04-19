@@ -44,7 +44,7 @@ tests() ->
     ].
 
 suite() ->
-    [{timetrap, {minutes, 1}}].
+    [{timetrap, {minutes, 2}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -63,7 +63,7 @@ init_per_group(G, Config)
     rabbit_ct_helpers:set_config(Config, {mqtt_version, G});
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-    Config = rabbit_ct_helpers:set_config(
+    Config1 = rabbit_ct_helpers:set_config(
                Config0,
                [
                 {rmq_nodename_suffix, Suffix},
@@ -78,11 +78,13 @@ init_per_group(Group, Config0) ->
                      {default_vhost, "/"},
                      {default_permissions, [".*", ".*", ".*"]}
                     ]}],
-    rabbit_ct_helpers:run_setup_steps(
-      Config,
-      [fun(Conf) -> rabbit_ct_helpers:merge_app_env(Conf, Env) end] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config = rabbit_ct_helpers:run_setup_steps(
+               Config1,
+               [fun(Conf) -> rabbit_ct_helpers:merge_app_env(Conf, Env) end] ++
+               rabbit_ct_broker_helpers:setup_steps() ++
+               rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
+    Config.
 
 end_per_group(G, Config)
   when G =:= v4;

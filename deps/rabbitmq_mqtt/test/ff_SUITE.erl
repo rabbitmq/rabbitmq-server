@@ -27,8 +27,9 @@ all() ->
 
 groups() ->
     [
-     {cluster_size_3, [], [delete_ra_cluster_mqtt_node,
-                           rabbit_mqtt_qos0_queue]}
+     {cluster_size_3, [shuffle], [delete_ra_cluster_mqtt_node,
+                                  rabbit_mqtt_qos0_queue,
+                                  mqtt_v5]}
     ].
 
 suite() ->
@@ -60,10 +61,10 @@ end_per_group(_Group, Config) ->
 init_per_testcase(TestCase, Config) ->
     case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, TestCase) of
         true ->
+            ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, TestCase)),
             Config;
         false ->
-            {skip, io_lib:format("feature flag ~s is unsupported",
-                                 [TestCase])}
+            {skip, io_lib:format("feature flag ~s is unsupported", [TestCase])}
     end.
 
 end_per_testcase(_TestCase, Config) ->
@@ -130,3 +131,15 @@ rabbit_mqtt_qos0_queue(Config) ->
                    messages_delivered_consume_auto_ack_total := 1},
                  get_global_counters(Config, ?PROTO_VER, 0, [{queue_type, FeatureFlag}])),
     ok = emqtt:disconnect(C2).
+
+mqtt_v5(Config) ->
+    FeatureFlag = ?FUNCTION_NAME,
+    {Client1, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
+    unlink(Client1),
+    ?assertEqual({error, {unsupported_protocol_version, #{}}}, Connect(Client1)),
+
+    ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
+
+    {Client2, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
+    ?assertMatch({ok, _}, Connect(Client2)),
+    ok = emqtt:disconnect(Client2).

@@ -131,12 +131,15 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "SUBSCRIBE messages use QoS level 1 to acknowledge multiple subscription requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer),
+            Id = maps:get('Subscription-Identifier', Props, undefined),
             Subscriptions = [#mqtt_subscription{
                                 topic_filter = Topic,
-                                qos = QoS,
-                                no_local = int_to_bool(Nl),
-                                retain_as_published = int_to_bool(Rap),
-                                retain_handling = Rh} ||
+                                options = #mqtt_subscription_opts{
+                                             qos = QoS,
+                                             no_local = int_to_bool(Nl),
+                                             retain_as_published = int_to_bool(Rap),
+                                             retain_handling = Rh,
+                                             id = Id}} ||
                              <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
@@ -311,6 +314,8 @@ parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Props) ->
     parse_prop(Bin, Props#{'Correlation-Data' => Val});
 parse_prop(<<16#0B, Bin/binary>>, Props) ->
     {Val, Rest} = parse_variable_byte_integer(Bin),
+    %% Client sends at most one Subscription-Identifier to the server (in SUBSCRIBE packet).
+    %% "It is a Protocol Error to include the Subscription Identifier more than once." [v5 3.8.2.1.2]
     parse_prop(Rest, Props#{'Subscription-Identifier' => Val});
 parse_prop(<<16#11, Val:32, Bin/binary>>, Props) ->
     parse_prop(Bin, Props#{'Session-Expiry-Interval' => Val});
@@ -552,12 +557,13 @@ serialise_prop('Response-Topic', Val) ->
     [16#08, serialise_binary(Val)];
 serialise_prop('Correlation-Data', Val) ->
     [16#09, serialise_binary(Val)];
-serialise_prop('Subscription-Identifier', Val) ->
-    %%TODO Allow for multiple subscription identifiers
-    %% "Multiple Subscription Identifiers will be included if the publication is the result
-    %% of a match to more than one subscription, in this case their order is not significant."
-    %% [v5 3.3.2.3.8]
-    [16#0B, serialise_variable_byte_integer(Val)];
+serialise_prop('Subscription-Identifier', Ids)
+%% Server can send multiple Subscription-Identifiers to the client (in PUBLISH packet).
+%% "Multiple Subscription Identifiers will be included if the publication is the result
+%% of a match to more than one subscription, in this case their order is not significant."
+%% [v5 3.3.2.3.8]
+  when is_list(Ids) ->
+    [[16#0B, serialise_variable_byte_integer(Id)] || Id <- Ids];
 serialise_prop('Session-Expiry-Interval', Val) ->
     <<16#11, Val:32>>;
 serialise_prop('Assigned-Client-Identifier', Val) ->

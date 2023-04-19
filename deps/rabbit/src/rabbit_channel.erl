@@ -1306,7 +1306,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         {ok, Message} ->
             Delivery = rabbit_basic:delivery(
                          Mandatory, DoConfirm, Message, MsgSeqNo),
-            QNames = rabbit_exchange:route(Exchange, Delivery),
+            QNames = rabbit_exchange:route(Exchange, Delivery, [v2]),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
             DQ = {Delivery#delivery{flow = Flow}, QNames},
@@ -2157,13 +2157,13 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                    RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQueueNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+            QueueNames = rabbit_amqqueue:queue_names(Qs),
             State1 = process_routing_confirm(Confirm, QueueNames, MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
@@ -2171,7 +2171,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             case rabbit_event:stats_level(State, #ch.stats_timer) of
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
-                    ?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish);
+                    ?INCR_STATS(queue_exchange_stats, {rabbit_amqqueue:queue_name(QName), XName}, 1, publish);
                 _ ->
                     ok
             end,
@@ -2194,13 +2194,13 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                    RoutedToQueueNames}, State0 = #ch{queue_states = QueueStates0}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQueueNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
             rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+            QueueNames = rabbit_amqqueue:queue_names(Qs),
             State1 = process_routing_confirm(Confirm, QueueNames,
                                              MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may

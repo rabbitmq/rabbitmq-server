@@ -26,8 +26,8 @@
 publish(Msg, Reason, X, RK, SourceQName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, SourceQName),
     Delivery = rabbit_basic:delivery(false, false, DLMsg, undefined),
-    {QNames, Cycles} = detect_cycles(Reason, DLMsg,
-                                     rabbit_exchange:route(X, Delivery)),
+    QNames0 = rabbit_exchange:route(X, Delivery, [v2]),
+    {QNames, Cycles} = detect_cycles(Reason, DLMsg, QNames0),
     lists:foreach(fun log_cycle_once/1, Cycles),
     Qs0 = rabbit_amqqueue:lookup_many(QNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
@@ -209,13 +209,19 @@ detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
                 {array, Deaths} ->
                     {Cycling, NotCycling} =
                         lists:partition(fun (#resource{name = Queue}) ->
+                                                is_cycle(Queue, Deaths);
+                                            ({#resource{name = Queue}, _BindingKeys}) ->
                                                 is_cycle(Queue, Deaths)
                                         end, Queues),
                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
                                     {table, D} <- Deaths],
                     OldQueues1 = [QName || {longstr, QName} <- OldQueues],
-                    {NotCycling, [[QName | OldQueues1] ||
-                                     #resource{name = QName} <- Cycling]};
+                    Cycling1 = lists:map(fun(#resource{name = QName}) ->
+                                                 [QName | OldQueues1];
+                                            ({#resource{name = QName}, _BindingKeys}) ->
+                                                 [QName | OldQueues1]
+                                         end, Cycling),
+                    {NotCycling, Cycling1};
                 _ ->
                     NoCycles
             end

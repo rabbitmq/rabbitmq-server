@@ -326,20 +326,36 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
 %% get_many().
 %% -------------------------------------------------------------------
 
--spec get_many([QName]) -> Ret when
-      QName :: rabbit_amqqueue:name(),
-      Ret :: [Queue :: amqqueue:amqqueue()].
+-spec get_many(rabbit_exchange:route_v2_destinations()) ->
+    [amqqueue:amqqueue() | {amqqueue:amqqueue(), [rabbit_types:binding_key(), ...]}].
 get_many(Names) when is_list(Names) ->
     rabbit_db:run(
       #{mnesia => fun() -> get_many_in_mnesia(?MNESIA_TABLE, Names) end
        }).
-
+get_many_in_mnesia(Table, [{Name, BindingKeys}])
+  when is_list(BindingKeys) ->
+    case ets:lookup(Table, Name) of
+        [] -> [];
+        [Q] -> [{Q, BindingKeys}]
+    end;
 get_many_in_mnesia(Table, [Name]) ->
     ets:lookup(Table, Name);
-get_many_in_mnesia(Table, Names) when is_list(Names) ->
+get_many_in_mnesia(Table, Names)
+  when is_list(Names) ->
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
     %% expensive for reasons explained in rabbit_mnesia:dirty_read/1.
-    lists:append([ets:lookup(Table, Name) || Name <- Names]).
+    lists:filtermap(fun({Name, BindingKeys})
+                          when is_list(BindingKeys) ->
+                            case ets:lookup(Table, Name) of
+                                [] -> false;
+                                [Q] -> {true, {Q, BindingKeys}}
+                            end;
+                       (Name) ->
+                            case ets:lookup(Table, Name) of
+                                [] -> false;
+                                [Q] -> {true, Q}
+                            end
+                    end, Names).
 
 %% -------------------------------------------------------------------
 %% get().
