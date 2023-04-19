@@ -22,25 +22,23 @@
 
 %%----------------------------------------------------------------------------
 
--spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
+-spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error2(term()).
 
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
       {ok, VHostSup} ->
-            {ok, _} = supervisor:start_child(
+            supervisor:start_child(
                         VHostSup,
                         {?MODULE,
                          {?MODULE, start_link, [VHost]},
                          transient, ?WORKER_WAIT, worker,
-                         [?MODULE]}),
-            ok;
+                         [?MODULE]});
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a recovery terms manager for vhost ~ts: vhost no longer exists!",
                              [VHost])
-    end,
-    ok.
+    end.
 
 -spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
 
@@ -77,6 +75,8 @@ read(VHost, DirBaseName) ->
 clear(VHost) ->
     try
         _ = dets:delete_all_objects(VHost),
+        VHostRecoveryTermsOwner = rabbit_vhost_sup_sup:lookup_vhost_recovery_terms(VHost),
+        ok = gen_server:call(VHostRecoveryTermsOwner, {reopen_for_writes, VHost}),
         ok
     %% see start/1
     catch _:badarg ->
@@ -93,9 +93,13 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    _ = open_table(VHost),
+    ok = open_table(VHost, true),
     {ok, VHost}.
 
+handle_call({reopen_for_writes, VHost}, _, State) ->
+    close_table(VHost),
+    ok = open_table(VHost, false),
+    {reply, ok, State};
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
 
 handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
@@ -110,18 +114,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
--spec open_table(vhost:name()) -> rabbit_types:ok_or_error(any()).
+-spec open_table(vhost:name(), boolean()) -> rabbit_types:ok_or_error(any()).
 
-open_table(VHost) ->
-    open_table(VHost, 10).
+open_table(VHost, RamFile) ->
+    open_table(VHost, RamFile, 10).
 
--spec open_table(vhost:name(), non_neg_integer()) -> rabbit_types:ok_or_error(any()).
+-spec open_table(vhost:name(), boolean(), non_neg_integer()) -> rabbit_types:ok_or_error(any()).
 
-open_table(VHost, RetriesLeft) ->
+open_table(VHost, RamFile, RetriesLeft) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     File = filename:join(VHostDir, "recovery.dets"),
     Opts = [{file,      File},
-            {ram_file,  true},
+            {ram_file,  RamFile},
             {auto_save, infinity}],
     case dets:open_file(VHost, Opts) of
         {ok, _}        -> ok;
@@ -136,7 +140,7 @@ open_table(VHost, RetriesLeft) ->
                     rabbit_log:warning("Failed to open a recovery terms DETS file at ~tp. Will delete it and retry in ~tp ms (~tp retries left)",
                                        [File, DelayInMs, RetriesLeft]),
                     timer:sleep(DelayInMs),
-                    open_table(VHost, RetriesLeft - 1)
+                    open_table(VHost, RamFile, RetriesLeft - 1)
           end
     end.
 

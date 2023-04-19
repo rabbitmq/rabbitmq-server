@@ -536,7 +536,8 @@ bounds(State = #qistate { segments = Segments }) ->
 -spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 start(VHost, DurableQueueNames) ->
-    ok = rabbit_recovery_terms:start(VHost),
+    {ok, RecoveryTermsPid} = rabbit_recovery_terms:start(VHost),
+    rabbit_vhost_sup_sup:save_vhost_recovery_terms(VHost, RecoveryTermsPid),
     {DurableTerms, DurableDirectories} =
         lists:foldl(
           fun(QName, {RecoveryTerms, ValidDirectories}) ->
