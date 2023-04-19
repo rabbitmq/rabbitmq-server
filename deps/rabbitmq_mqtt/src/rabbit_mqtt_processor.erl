@@ -404,15 +404,16 @@ process_request(?SUBSCRIBE,
                                  packet_id  = SubscribePktId,
                                  subscriptions = Subscriptions},
                    payload = undefined},
-                #state{cfg = #cfg{retainer_pid = RPid, proto_ver = ProtoVer}} = State0) ->
+                #state{cfg = #cfg{retainer_pid = RPid,
+                                  proto_ver = ProtoVer}} = State0) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
-    {ReasonCodes, State1} =
+    {Result, State1} =
     lists:foldl(
-      fun(_Subscription, {[RC | _] = L, S}) when RC >= ?SUBACK_FAILURE ->
+      fun(_Subscription, {[{error, _} = E | _] = L, S}) ->
               %% Once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
-              {[?SUBACK_FAILURE | L], S};
+              {[E | L], S};
          (#mqtt_subscription{topic_filter = Topic,
                              qos = TopicQos},
           {L, S0}) ->
@@ -427,40 +428,29 @@ process_request(?SUBSCRIBE,
                   maybe_increment_consumer(S0, S1),
                   case self_consumes(Q) of
                       false ->
-                          case consume(Q, QoS, S1) of % failed to consume, could be permission or other errors
+                          case consume(Q, QoS, S1) of
                               {ok, S2} ->
                                   {[QoS | L], S2};
-                              {error, access_refused} ->
-                                  {[?RC_NOT_AUTHORIZED | L], S1};
-                              {error, _} ->
-                                  {[?SUBACK_FAILURE | L], S1}
+                              {error, _} = E1 ->
+                                  {[E1 | L], S1}
                           end;
                       true ->
                           {[QoS | L], S1}
                   end
               else
-                  {error, limit_exceeded} -> {[?RC_QUOTA_EXCEEDED | L], S0};
-                  {error, access_refused} -> {[?RC_NOT_AUTHORIZED | L], S0};
-                  {error, _} -> {[?SUBACK_FAILURE | L], S0}
+                  {error, _} = E2 -> {[E2 | L], S0}
               end
       end, {[], State0}, Subscriptions),
-    ReasonCode1 = case ProtoVer of
-        ?MQTT_PROTO_V5 ->
-            ReasonCodes;
-        _ ->
-            [suback_reason_code_to_return_code(RC) || RC <- ReasonCodes]
-    end,
+    ReasonCodes = subscribe_result_to_reason_codes(Result, ProtoVer),
     Reply = #mqtt_packet{fixed    = #mqtt_packet_fixed{type = ?SUBACK},
                          variable = #mqtt_packet_suback{
                                        packet_id = SubscribePktId,
-                                       reason_codes = lists:reverse(ReasonCode1)}},
+                                       reason_codes = lists:reverse(ReasonCodes)}},
     _ = send(Reply, State1),
-    %% TODO: is there a better way to check if the subscription failed, does it have to take 2 lines to do so.
-    [H | _] = ReasonCodes,
-    case H >= ?SUBACK_FAILURE of
-        true ->
+    case Result of
+        [{error, _} | _] ->
             {error, subscribe_error, State1};
-        false ->
+        _ ->
             State = lists:foldl(fun(Sub, S) ->
                                         maybe_send_retained_message(RPid, Sub, S)
                                 end, State1, Subscriptions),
@@ -779,11 +769,21 @@ get_queue(QoS, State) ->
             Err
     end.
 
-suback_reason_code_to_return_code(RC) when RC =:= ?RC_NOT_AUTHORIZED orelse
-                                            RC =:= ?RC_QUOTA_EXCEEDED ->
-    ?SUBACK_FAILURE;
-suback_reason_code_to_return_code(RC) ->
-    RC.
+-spec subscribe_result_to_reason_codes(nonempty_list(qos() | {error, term()}),
+                                       protocol_version_atom()) ->
+    nonempty_list(reason_code()).
+subscribe_result_to_reason_codes(SubscribeResult, ProtoVer) ->
+    lists:map(fun(QoS) when is_integer(QoS) ->
+                      QoS;
+                 ({error, Reason}) when ProtoVer =:= ?MQTT_PROTO_V5 ->
+                      case Reason of
+                          access_refused -> ?RC_NOT_AUTHORIZED;
+                          queue_limit_exceeded -> ?RC_QUOTA_EXCEEDED;
+                          _ -> ?RC_UNSPECIFIED_ERROR
+                      end;
+                 ({error, _}) ->
+                      ?RC_UNSPECIFIED_ERROR
+              end, SubscribeResult).
 
 -spec queue_name(qos(), state()) -> rabbit_amqqueue:name().
 queue_name(?QOS_1, #state{cfg = #cfg{queue_qos1 = #resource{kind = queue} = Name}}) ->
@@ -1187,7 +1187,7 @@ create_queue(
                     ?LOG_ERROR("cannot declare ~s because "
                                "queue limit ~p in vhost '~s' is reached",
                                [rabbit_misc:rs(QName), Limit, VHost]),
-                    {error, limit_exceeded}
+                    {error, queue_limit_exceeded}
             end;
         {error, access_refused} = E ->
             E
