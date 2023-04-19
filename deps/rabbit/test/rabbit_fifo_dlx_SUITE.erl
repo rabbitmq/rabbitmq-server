@@ -10,8 +10,13 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+<<<<<<< HEAD
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 -include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
+=======
+-include("src/rabbit_fifo.hrl").
+-include("src/rabbit_fifo_dlx.hrl").
+>>>>>>> 2478159841 (Adjust -include in some tests to work with both bazel and make)
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%%===================================================================

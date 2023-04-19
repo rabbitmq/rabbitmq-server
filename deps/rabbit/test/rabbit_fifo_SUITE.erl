@@ -13,7 +13,11 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+<<<<<<< HEAD
 -include_lib("rabbit/src/rabbit_fifo.hrl").
+=======
+-include("src/rabbit_fifo.hrl").
+>>>>>>> 2478159841 (Adjust -include in some tests to work with both bazel and make)
 
 %%%===================================================================
 %%% Common Test callbacks

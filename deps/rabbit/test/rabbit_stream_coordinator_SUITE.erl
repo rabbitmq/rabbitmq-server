@@ -8,7 +8,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+<<<<<<< HEAD
 -include_lib("rabbit/src/rabbit_stream_coordinator.hrl").
+=======
+-include("src/rabbit_stream_coordinator.hrl").
+>>>>>>> 2478159841 (Adjust -include in some tests to work with both bazel and make)
 
 -define(STATE, rabbit_stream_coordinator).
 

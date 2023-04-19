@@ -9,8 +9,13 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+<<<<<<< HEAD
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 -include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
+=======
+-include("src/rabbit_fifo.hrl").
+-include("src/rabbit_fifo_dlx.hrl").
+>>>>>>> 2478159841 (Adjust -include in some tests to work with both bazel and make)
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(record_info(T,R),lists:zip(record_info(fields,T),tl(tuple_to_list(R)))).

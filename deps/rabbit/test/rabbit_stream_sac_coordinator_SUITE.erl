@@ -19,7 +19,11 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+<<<<<<< HEAD
 -include_lib("rabbit/src/rabbit_stream_sac_coordinator.hrl").
+=======
+-include("src/rabbit_stream_sac_coordinator.hrl").
+>>>>>>> 2478159841 (Adjust -include in some tests to work with both bazel and make)
 
 %%%===================================================================
 %%% Common Test callbacks
