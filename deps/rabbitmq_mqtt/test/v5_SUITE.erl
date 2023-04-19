@@ -71,8 +71,8 @@ cluster_size_1_tests() ->
      will_qos2,
      client_receive_maximum_min,
      client_receive_maximum_large,
-     unsub_success,
-     unsub_topic_not_found
+     unsubscribe_success,
+     unsubscribe_topic_not_found
     ].
 
 % cluster_size_3_tests() ->
@@ -518,21 +518,21 @@ client_receive_maximum_large(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
 
-unsub_success(Config) ->
+unsubscribe_success(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config),
     {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
     {ok, _, [0]} = emqtt:subscribe(C, <<"topic/0">>, qos0),
-    {ok, _, Response} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
-    ?assertEqual([?RC_SUCCESS, ?RC_SUCCESS], Response),
+    {ok, _, ReasonCodes} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
+    ?assertEqual([?RC_SUCCESS, ?RC_SUCCESS], ReasonCodes),
     ok = emqtt:disconnect(C).
 
-unsub_topic_not_found(Config) ->
+unsubscribe_topic_not_found(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config),
     {ok, _, [1]} = emqtt:subscribe(C, <<"topic/1">>, qos1),
-    {ok, _, Response} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
-    ?assertEqual([?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED], Response),
+    {ok, _, ReasonCodes} = emqtt:unsubscribe(C, [<<"topic/1">>, <<"topic/0">>]),
+    ?assertEqual([?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED], ReasonCodes),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------
