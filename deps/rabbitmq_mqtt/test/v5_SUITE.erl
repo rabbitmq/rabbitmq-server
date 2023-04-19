@@ -69,7 +69,8 @@ cluster_size_1_tests() ->
      client_publish_qos2,
      client_rejects_publish,
      will_qos2,
-     client_receive_maximum,
+     client_receive_maximum_min,
+     client_receive_maximum_large,
      unsub_success,
      unsub_topic_not_found
     ].
@@ -452,7 +453,7 @@ client_rejects_publish(Config) ->
     Payload = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config, [{auto_ack, false}]),
     {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
-    {ok, _} = emqtt:publish(C, Topic, Payload, [{qos, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, Payload, qos1),
     receive {publish, #{payload := Payload,
                         packet_id := PacketId}} ->
                 %% Negatively ack the PUBLISH.
@@ -478,21 +479,43 @@ will_qos2(Config) ->
     unlink(C),
     ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
 
-client_receive_maximum(Config) ->
+client_receive_maximum_min(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
-    C = connect(ClientId, Config, [{auto_ack, false}, {properties, #{'Receive-Maximum' => 1}}]),
+    C = connect(ClientId, Config, [{auto_ack, false},
+                                   %% Minimum allowed Receive Maximum is 1.
+                                   {properties, #{'Receive-Maximum' => 1}}]),
     {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
-    {ok, _} = emqtt:publish(C, Topic, <<"m0">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(C, Topic, <<"m1">>, [{qos, 1}]),
-    receive {publish, #{payload := <<"m0">>}} ->
-                %% receives publish but does not ack.
-                ok
-    after 1000 ->
-              ct:fail("did not receive PUBLISH")
-    end,
-    %% Should never receive the second msg since the first msg was not acked and receive maximun is set to 1.
-    ?assertEqual({publish_not_received, <<"m1">>},
-        expect_publishes(C, Topic, [<<"m1">>])),
+    {ok, _} = emqtt:publish(C, Topic, <<"m1">>, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m2">>, qos1),
+    %% Since client set Receive Maximum is 1, at most 1 QoS 1 message should be in
+    %% flight from server to client at any given point in time.
+    PacketId1 = receive {publish, #{payload := <<"m1">>,
+                                    packet_id := Id}} ->
+                            Id
+                after 1000 ->
+                          ct:fail("did not receive m1")
+                end,
+    assert_nothing_received(),
+    %% Only when we ack the 1st message, we expect to receive the 2nd message.
+    emqtt:puback(C, PacketId1),
+    ok = expect_publishes(C, Topic, [<<"m2">>]),
+    ok = emqtt:disconnect(C).
+
+client_receive_maximum_large(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config, [{auto_ack, false},
+                                   {properties, #{'Receive-Maximum' => 1_000}}]),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    %% We know that the configured mqtt.prefetch is 10.
+    Prefetch = 10,
+    Payloads = [integer_to_binary(N) || N <- lists:seq(1, Prefetch)],
+    [{ok, _} = emqtt:publish(C, Topic, P, qos1) || P <- Payloads],
+    {ok, _} = emqtt:publish(C, Topic, <<"I wait in the queue">>, qos1),
+    ok = expect_publishes(C, Topic, Payloads),
+    %% We expect the server to cap the number of in flight QoS 1 messages sent to the
+    %% client to the configured mqtt.prefetch value even though the client set a larger
+    %% Receive Maximum value.
+    assert_nothing_received(),
     ok = emqtt:disconnect(C).
 
 unsub_success(Config) ->
