@@ -437,7 +437,7 @@ setup_test_config_env_var() ->
 
 setup_test_file_with_env_var(EnvVar, Filename) ->
   os:putenv(EnvVar,
-            filename:join([filename:absname("."), "test", "src",
+            filename:join([filename:absname("."), "test",
                            Filename])).
 
 setup_test_credentials_env_var() ->

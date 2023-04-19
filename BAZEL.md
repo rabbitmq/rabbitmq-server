@@ -71,15 +71,23 @@ Note: This takes quite some time on a single machine.
 
 `bazel test //deps/rabbit:lazy_queue_SUITE`
 
-## Add/update an external dependency from hex.pm
+## Add/update an external dependency
+
+### from hex.pm
 
 1. `bazel run gazelle-update-repos -- -args hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
 1. `git checkout WORKSPACE` to reset the workspace file
 1. Add/update the entry in MODULE.bazel
 
-## Add/update an external dependency from github
+### from github 
 
-`bazel run gazelle-update-repos -- -args --testonly github.com/extend/ct_helper`
+1. `bazel run gazelle-update-repos -- -args --testonly github.com/extend/ct_helper@master`
+1. `git checkout WORKSPACE` to reset the workspace file
+1. Add/update the entry in MODULE.bazel
+
+## Update BUILD files
+
+`bazel run gazelle`
 
 ## Additional Useful Commands
 

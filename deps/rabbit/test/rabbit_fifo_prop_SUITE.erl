@@ -9,8 +9,8 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit/src/rabbit_fifo.hrl").
--include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
+-include("rabbit_fifo.hrl").
+-include("rabbit_fifo_dlx.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(record_info(T,R),lists:zip(record_info(fields,T),tl(tuple_to_list(R)))).

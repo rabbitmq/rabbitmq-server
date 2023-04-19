@@ -113,14 +113,13 @@ def escript_dir(**kwargs):
         **kwargs
     )
 
-def _extract_version(p):
-    return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + p + "\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
-
-def _app_file(plugin_lib_info):
-    for f in plugin_lib_info.beam:
+def _extract_version(lib_info):
+    for f in lib_info.beam:
         if f.basename.endswith(".app"):
-            return f
-    fail(".app file not found in {}".format(plugin_lib_info))
+            return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + f.path + "\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
+    if len(lib_info.beam) == 1 and lib_info.beam[0].is_directory:
+        return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + lib_info.beam[0].path + "/" + lib_info.app_name + ".app\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
+    fail("could not find .app file in", lib_info.beam)
 
 def _versioned_plugins_dir_impl(ctx):
     plugins = flat_deps(ctx.attr.plugins)
@@ -139,9 +138,11 @@ def _versioned_plugins_dir_impl(ctx):
 
     for plugin in plugins:
         lib_info = plugin[ErlangAppInfo]
-        app_file = _app_file(lib_info)
-        extract_version = _extract_version(app_file.path)
-        commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{extract_version})".format(erlang_home = erlang_home, extract_version = extract_version))
+        version = _extract_version(lib_info)
+        commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{version})".format(
+            erlang_home = erlang_home,
+            version = version,
+        ))
 
         commands.append(
             "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include".format(
