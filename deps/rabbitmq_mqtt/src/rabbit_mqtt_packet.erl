@@ -408,12 +408,11 @@ serialise(#mqtt_packet_fixed{type = ?SUBACK} = Fixed,
   when is_list(ReasonCodes) ->
     Variable = [<<PacketId:16>>,
                 serialise_props(Props, Vsn)],
-    Payload = case Vsn of
-                  3 ->
-                      %% Disallow error code (0x80) in the MQTT SUBACK message.
-                      << <<?RESERVED:6, QoS:2>> || QoS <- ReasonCodes >>;
-                  V when V >= 4 ->
-                      ReasonCodes
+    Payload = if Vsn =:= 3 ->
+                     %% Disallow error code (0x80) in the MQTT SUBACK message.
+                     << <<?RESERVED:6, QoS:2>> || QoS <- ReasonCodes >>;
+                 Vsn > 3 ->
+                     ReasonCodes
               end,
     serialise_fixed(Fixed, Variable, Payload);
 serialise(#mqtt_packet_fixed{type = ?UNSUBACK} = Fixed,
@@ -424,7 +423,13 @@ serialise(#mqtt_packet_fixed{type = ?UNSUBACK} = Fixed,
   when is_list(ReasonCodes) ->
     Variable = [<<PacketId:16>>,
                 serialise_props(Props, Vsn)],
-    serialise_fixed(Fixed, Variable, ReasonCodes);
+    Payload = if Vsn < 5 ->
+                     %% "The UNSUBACK Packet has no payload." [v4 3.11.3]
+                     [];
+                 Vsn =:= 5 ->
+                     ReasonCodes
+              end,
+    serialise_fixed(Fixed, Variable, Payload);
 serialise(#mqtt_packet_fixed{type = ?PUBLISH,
                              qos = Qos } = Fixed,
           #mqtt_packet_publish{topic_name = TopicName,
