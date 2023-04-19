@@ -1112,8 +1112,8 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "runtime_parameters_SUITE",
     size = "small",
-    additional_srcs = [
-        "test/dummy_runtime_parameters.erl",
+    additional_beam = [
+        "test/dummy_runtime_parameters.beam",
     ],
 )
 
