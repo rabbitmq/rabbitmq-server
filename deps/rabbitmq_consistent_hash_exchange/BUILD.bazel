@@ -61,13 +61,6 @@ xref(
 )
 
 plt(
-<<<<<<< HEAD
-    name = "base_plt",
-    apps = ["mnesia"],
-    libs = ["//deps/rabbitmq_cli:elixir"],
-    plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
-=======
     name = "deps_plt",
     apps = [
         "mnesia",  # keep
@@ -77,7 +70,6 @@ plt(
     libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
     deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 dialyze(

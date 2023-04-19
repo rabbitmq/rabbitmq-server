@@ -66,8 +66,6 @@ plt(
         "runtime_tools",  # keep
         "eunit",  # keep
     ],
-<<<<<<< HEAD
-=======
     for_target = ":erlang_app",
     ignore_warnings = True,
     plt = "//:base_plt",
@@ -75,7 +73,6 @@ plt(
         "@osiris//:erlang_app",  # keep
         "@systemd//:erlang_app",  # keep
     ],
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 dialyze(

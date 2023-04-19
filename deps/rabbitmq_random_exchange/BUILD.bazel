@@ -34,10 +34,6 @@ rabbitmq_app(
     hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-<<<<<<< HEAD
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-=======
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
@@ -45,7 +41,6 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 xref(
@@ -54,14 +49,9 @@ xref(
 )
 
 plt(
-<<<<<<< HEAD
-    name = "base_plt",
-    deps = BUILD_DEPS + DEPS,
-=======
     name = "deps_plt",
     for_target = ":erlang_app",
     ignore_warnings = True,
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
     plt = "//:base_plt",
 )
 

@@ -66,17 +66,11 @@ xref(
 )
 
 plt(
-<<<<<<< HEAD
-    name = "base_plt",
-    plt = "//:base_plt",
-    deps = BUILD_DEPS + DEPS,
-=======
     name = "deps_plt",
     for_target = ":erlang_app",
     ignore_warnings = True,
     libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 dialyze(

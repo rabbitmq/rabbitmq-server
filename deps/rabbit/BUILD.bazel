@@ -234,12 +234,6 @@ xref(
 )
 
 plt(
-<<<<<<< HEAD
-    name = "base_plt",
-    apps = plt_apps,
-    plt = "//:base_plt",
-    deps = DEPS + RUNTIME_DEPS,
-=======
     name = "deps_plt",
     apps = [
         "mnesia",  # keep
@@ -247,7 +241,6 @@ plt(
     for_target = ":erlang_app",
     ignore_warnings = True,
     plt = "//:base_plt",
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 dialyze(

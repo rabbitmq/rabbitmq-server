@@ -4,14 +4,10 @@ load(
     "string_flag",
 )
 load("@rules_pkg//:mappings.bzl", "pkg_files", "strip_prefix")
-<<<<<<< HEAD
-load("@rules_erlang//:dialyze.bzl", "plt")
-=======
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_erlang//gazelle:def.bzl", "GAZELLE_ERLANG_RUNTIME_DEPS")
 load("@rules_erlang//:erlang_bytecode2.bzl", "erlc_opts")
 load("@rules_erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "plt")
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
 load("@rules_erlang//gazelle:moduleindex.bzl", "moduleindex")
@@ -126,13 +122,6 @@ string_flag(
 
 plt(
     name = "base_plt",
-<<<<<<< HEAD
-=======
-    apps = DEFAULT_PLT_APPS + [
-        "compiler",
-        "crypto",
-    ],  # keep
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
     visibility = ["//visibility:public"],
 )
 

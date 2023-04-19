@@ -38,22 +38,12 @@ rabbitmq_app(
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_helpers",
-<<<<<<< HEAD
-    app_version = "master",
-    extra_priv = [
-        "tools/tls-certs/Makefile",
-        "tools/tls-certs/openssl.cnf.in",
-    ],
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-=======
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@meck//:erlang_app",
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
         "@proper//:erlang_app",
     ],
 )

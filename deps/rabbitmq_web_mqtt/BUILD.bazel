@@ -36,21 +36,9 @@ APP_ENV = """[
 
 all_beam_files(name = "all_beam_files")
 
-<<<<<<< HEAD
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "@cowboy//:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_mqtt:erlang_app",
-]
-=======
 all_test_beam_files(name = "all_test_beam_files")
 
 all_srcs(name = "all_srcs")
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 
 test_suite_beam_files(name = "test_suite_beam_files")
 
@@ -66,34 +54,6 @@ rabbitmq_app(
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-<<<<<<< HEAD
-    build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-    extra_apps = EXTRA_APPS,
-)
-
-xref()
-
-plt(
-    name = "base_plt",
-    plt = "//:base_plt",
-    apps = EXTRA_APPS,
-    deps = BUILD_DEPS + DEPS + RUNTIME_DEPS,
-)
-
-dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-)
-
-broker_for_integration_suites()
-
-rabbitmq_test_helper(
-    name = "test_utils",
-    srcs = glob(["test/src/*.erl"]),
-    hdrs = glob(["test/src/*.hrl"]),
-=======
     beam_files = [":beam_files"],
     extra_apps = ["ssl"],
     license_files = [":license_files"],
@@ -109,7 +69,6 @@ rabbitmq_test_helper(
 xref(
     name = "xref",
     target = ":erlang_app",
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 plt(
@@ -144,31 +103,18 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "proxy_protocol_SUITE",
-<<<<<<< HEAD
-    additional_beam = [":test_utils"],
-    additional_hdrs = glob(["test/src/*.hrl"]),
-    erlc_opts = [
-        "-I",
-        "deps/rabbitmq_web_mqtt/test",
-=======
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
     ],
 )
 
 rabbitmq_integration_suite(
     name = "system_SUITE",
-<<<<<<< HEAD
-    additional_beam = [":test_utils"],
-    additional_hdrs = glob(["test/src/*.hrl"]),
-=======
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
     ],
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 assert_suites()

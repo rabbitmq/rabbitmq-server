@@ -62,16 +62,6 @@ xref(
 )
 
 plt(
-<<<<<<< HEAD
-    name = "base_plt",
-    plt = "//:base_plt",
-    deps = DEPS + without(
-        # eetcd depends on gun, which still uses erlang:get_stacktrace/0
-        # and fails this rule if included
-        "@eetcd//:erlang_app",
-        RUNTIME_DEPS,
-    ),
-=======
     name = "deps_plt",
     # rather that setting for_target, which will include @gun
     # (via @eetcd) and fail, we produce the equivalent plt
@@ -84,7 +74,6 @@ plt(
         "//deps/rabbit_common:erlang_app",  # keep
         "//deps/rabbitmq_peer_discovery_common:erlang_app",  # keep
     ],
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 )
 
 dialyze(

@@ -135,25 +135,11 @@ def rabbitmq_app(
         app_env = app_env,
         app_extra_keys = app_extra_keys,
         extra_apps = extra_apps,
-<<<<<<< HEAD
-        extra_hdrs = extra_hdrs,
-        extra_srcs = extra_srcs,
-        extra_priv = extra_priv,
-        erlc_opts = select({
-            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
-            "//conditions:default": RABBITMQ_ERLC_OPTS,
-        }) + select({
-            Label("//:test_build"): ["-DTEST=1", "+nowarn_export_all"],
-            "//conditions:default": [],
-        }),
-        build_deps = build_deps,
-=======
         beam_files = beam_files,
         hdrs = [":public_hdrs"],
         srcs = srcs,
         priv = priv,
         license_files = license_files,
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
         deps = deps,
         testonly = testonly,
     )
@@ -176,11 +162,6 @@ def rabbitmq_app(
         deps = with_test_versions(deps),
     )
 
-<<<<<<< HEAD
-def rabbitmq_suite(erlc_opts = [], test_env = {}, **kwargs):
-    ct_suite(
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
-=======
 def rabbitmq_suite(
         name = None,
         suite_name = None,
@@ -199,7 +180,6 @@ def rabbitmq_suite(
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "LANG": "C.UTF-8",
@@ -258,18 +238,8 @@ def rabbitmq_integration_suite(
         suite_name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
-<<<<<<< HEAD
-        erlc_opts = select({
-            "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS + erlc_opts),
-            "//conditions:default": RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
-        }),
-        additional_hdrs = additional_hdrs,
-        additional_srcs = additional_srcs,
-        data = data,
-=======
         ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
@@ -291,12 +261,8 @@ def rabbitmq_integration_suite(
         suite_name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG, MIXED_VERSION_CLUSTER_TAG],
-<<<<<<< HEAD
-        data = data,
-=======
         ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             # The feature flags listed below are required. This means they must
