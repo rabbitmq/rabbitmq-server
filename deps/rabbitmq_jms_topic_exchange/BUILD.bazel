@@ -24,15 +24,9 @@ APP_DESCRIPTION = "RabbitMQ JMS topic selector exchange plugin"
 
 APP_MODULE = "rabbit_federation_app"
 
-<<<<<<< HEAD
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
-=======
 all_beam_files(name = "all_beam_files")
 
 all_test_beam_files(name = "all_test_beam_files")
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 
 all_srcs(name = "all_srcs")
 

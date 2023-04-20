@@ -12,7 +12,6 @@ def all_beam_files(name = "all_beam_files"):
             "src/gm.erl",
             "src/rabbit_backing_queue.erl",
             "src/rabbit_credential_validator.erl",
-            "src/rabbit_exchange_type.erl",
             "src/rabbit_mirror_queue_mode.erl",
             "src/rabbit_policy_merge_strategy.erl",
             "src/rabbit_queue_master_locator.erl",
@@ -33,7 +32,6 @@ def all_beam_files(name = "all_beam_files"):
                 "src/gm.erl",
                 "src/rabbit_backing_queue.erl",
                 "src/rabbit_credential_validator.erl",
-                "src/rabbit_exchange_type.erl",
                 "src/rabbit_mirror_queue_mode.erl",
                 "src/rabbit_policy_merge_strategy.erl",
                 "src/rabbit_queue_master_locator.erl",
@@ -68,7 +66,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/gm.erl",
             "src/rabbit_backing_queue.erl",
             "src/rabbit_credential_validator.erl",
-            "src/rabbit_exchange_type.erl",
             "src/rabbit_mirror_queue_mode.erl",
             "src/rabbit_policy_merge_strategy.erl",
             "src/rabbit_queue_master_locator.erl",
@@ -90,7 +87,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
                 "src/gm.erl",
                 "src/rabbit_backing_queue.erl",
                 "src/rabbit_credential_validator.erl",
-                "src/rabbit_exchange_type.erl",
                 "src/rabbit_mirror_queue_mode.erl",
                 "src/rabbit_policy_merge_strategy.erl",
                 "src/rabbit_queue_master_locator.erl",
@@ -1120,14 +1116,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
-        name = "bindings_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/bindings_SUITE.erl"],
-        outs = ["test/bindings_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
-    )
-    erlang_bytecode(
         name = "exchanges_SUITE_beam_files",
         testonly = True,
         srcs = ["test/exchanges_SUITE.erl"],
@@ -1159,14 +1147,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
-        name = "rabbit_db_msup_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_msup_SUITE.erl"],
-        outs = ["test/rabbit_db_msup_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
         name = "rabbit_db_policy_SUITE_beam_files",
         testonly = True,
         srcs = ["test/rabbit_db_policy_SUITE.erl"],
@@ -1180,14 +1160,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbit_db_queue_SUITE.erl"],
         outs = ["test/rabbit_db_queue_SUITE.beam"],
         hdrs = ["include/amqqueue.hrl", "include/amqqueue_v2.hrl"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_db_topic_exchange_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_topic_exchange_SUITE.erl"],
-        outs = ["test/rabbit_db_topic_exchange_SUITE.beam"],
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )

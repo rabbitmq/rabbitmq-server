@@ -22,13 +22,7 @@ APP_NAME = "rabbitmq_consistent_hash_exchange"
 
 APP_DESCRIPTION = "Consistent Hash Exchange Type"
 
-<<<<<<< HEAD
-BUILD_DEPS = [
-    "//deps/rabbitmq_cli:erlang_app",
-]
-=======
 all_beam_files(name = "all_beam_files")
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
 
 all_test_beam_files(name = "all_test_beam_files")
 

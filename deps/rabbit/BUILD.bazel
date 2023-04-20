@@ -1060,18 +1060,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-<<<<<<< HEAD
-=======
     name = "exchanges_SUITE",
     size = "medium",
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-)
-
-rabbitmq_integration_suite(
-    name = "bindings_SUITE",
-    size = "medium",
 )
 
 rabbitmq_integration_suite(
@@ -1081,11 +1074,6 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "rabbit_db_maintenance_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_db_topic_exchange_SUITE",
     size = "medium",
 )
 
@@ -1100,17 +1088,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "rabbit_db_msup_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
     name = "rabbit_db_policy_SUITE",
     size = "medium",
 )
 
 rabbitmq_integration_suite(
->>>>>>> 2aaf2176d4 (Use gazelle generated bazel files)
     name = "runtime_parameters_SUITE",
     size = "small",
     additional_beam = [

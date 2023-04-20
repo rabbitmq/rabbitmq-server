@@ -199,35 +199,3 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/config_SUITE.beam"],
         erlc_opts = "//:test_erlc_opts",
     )
-    erlang_bytecode(
-        name = "ff_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/ff_SUITE.erl"],
-        outs = ["test/ff_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-    )
-    erlang_bytecode(
-        name = "shared_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/shared_SUITE.erl"],
-        outs = ["test/shared_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "test_event_recorder_beam",
-        testonly = True,
-        srcs = ["test/event_recorder.erl"],
-        outs = ["test/event_recorder.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "test_util_beam",
-        testonly = True,
-        srcs = ["test/util.erl"],
-        outs = ["test/util.beam"],
-        hdrs = ["include/rabbit_mqtt.hrl"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
