@@ -144,10 +144,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "config_SUITE",
-)
-
-rabbitmq_integration_suite(
     name = "config_schema_SUITE",
 )
 
