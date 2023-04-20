@@ -1115,54 +1115,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
-    erlang_bytecode(
-        name = "exchanges_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/exchanges_SUITE.erl"],
-        outs = ["test/exchanges_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_db_binding_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_binding_SUITE.erl"],
-        outs = ["test/rabbit_db_binding_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_db_exchange_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_exchange_SUITE.erl"],
-        outs = ["test/rabbit_db_exchange_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_db_maintenance_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_maintenance_SUITE.erl"],
-        outs = ["test/rabbit_db_maintenance_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-    )
-    erlang_bytecode(
-        name = "rabbit_db_policy_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_policy_SUITE.erl"],
-        outs = ["test/rabbit_db_policy_SUITE.beam"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_db_queue_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_db_queue_SUITE.erl"],
-        outs = ["test/rabbit_db_queue_SUITE.beam"],
-        hdrs = ["include/amqqueue.hrl", "include/amqqueue_v2.hrl"],
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
+
     erlang_bytecode(
         name = "test_test_rabbit_event_handler_beam",
         testonly = True,

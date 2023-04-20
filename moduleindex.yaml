@@ -510,17 +510,6 @@ rabbit:
 - rabbit_credential_validator_min_password_length
 - rabbit_credential_validator_password_regexp
 - rabbit_cuttlefish
-- rabbit_db
-- rabbit_db_binding
-- rabbit_db_exchange
-- rabbit_db_maintenance
-- rabbit_db_msup
-- rabbit_db_policy
-- rabbit_db_queue
-- rabbit_db_rtparams
-- rabbit_db_topic_exchange
-- rabbit_db_user
-- rabbit_db_vhost
 - rabbit_db_vhost_defaults
 - rabbit_dead_letter
 - rabbit_definitions
@@ -536,7 +525,6 @@ rabbit:
 - rabbit_exchange
 - rabbit_exchange_decorator
 - rabbit_exchange_parameters
-- rabbit_exchange_type
 - rabbit_exchange_type_direct
 - rabbit_exchange_type_fanout
 - rabbit_exchange_type_headers
@@ -564,10 +552,12 @@ rabbit:
 - rabbit_limiter
 - rabbit_log_channel
 - rabbit_log_connection
+- rabbit_log_feature_flags
 - rabbit_log_mirroring
 - rabbit_log_prelaunch
 - rabbit_log_queue
 - rabbit_log_tail
+- rabbit_log_upgrade
 - rabbit_logger_exchange_h
 - rabbit_looking_glass
 - rabbit_maintenance
@@ -610,7 +600,6 @@ rabbit:
 - rabbit_prelaunch_logging
 - rabbit_prequeue
 - rabbit_priority_queue
-- rabbit_process
 - rabbit_queue_consumers
 - rabbit_queue_decorator
 - rabbit_queue_index
@@ -641,10 +630,11 @@ rabbit:
 - rabbit_sysmon_handler
 - rabbit_sysmon_minder
 - rabbit_table
-- rabbit_time_travel_dbg
 - rabbit_trace
 - rabbit_tracking
 - rabbit_tracking_store
+- rabbit_upgrade
+- rabbit_upgrade_functions
 - rabbit_upgrade_preparation
 - rabbit_variable_queue
 - rabbit_version
@@ -785,7 +775,6 @@ rabbitmq_aws:
 - rabbitmq_aws_xml
 rabbitmq_consistent_hash_exchange:
 - Elixir.RabbitMQ.CLI.Diagnostics.Commands.ConsistentHashExchangeRingStateCommand
-- rabbit_db_ch_exchange
 - rabbit_exchange_type_consistent_hash
 rabbitmq_ct_client_helpers:
 - rabbit_ct_client_helpers
@@ -826,7 +815,6 @@ rabbitmq_federation:
 rabbitmq_federation_management:
 - rabbit_federation_mgmt
 rabbitmq_jms_topic_exchange:
-- rabbit_db_jms_exchange
 - rabbit_jms_topic_exchange
 - sjx_evaluator
 rabbitmq_management:
@@ -948,13 +936,11 @@ rabbitmq_mqtt:
 - mqtt_node
 - rabbit_mqtt
 - rabbit_mqtt_collector
-- rabbit_mqtt_confirms
-- rabbit_mqtt_ff
+- rabbit_mqtt_connection_info
+- rabbit_mqtt_connection_sup
+- rabbit_mqtt_frame
 - rabbit_mqtt_internal_event_handler
-- rabbit_mqtt_keepalive
-- rabbit_mqtt_packet
 - rabbit_mqtt_processor
-- rabbit_mqtt_qos0_queue
 - rabbit_mqtt_reader
 - rabbit_mqtt_retained_msg_store
 - rabbit_mqtt_retained_msg_store_dets
