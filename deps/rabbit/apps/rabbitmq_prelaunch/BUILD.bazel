@@ -67,7 +67,6 @@ plt(
         "eunit",  # keep
     ],
     for_target = ":erlang_app",
-    ignore_warnings = True,
     plt = "//:base_plt",
     deps = [
         "@osiris//:erlang_app",  # keep

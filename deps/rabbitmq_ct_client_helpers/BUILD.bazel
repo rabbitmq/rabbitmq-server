@@ -58,7 +58,6 @@ plt(
         "common_test",  # keep
     ],
     for_target = ":erlang_app",
-    ignore_warnings = True,
     libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
 )

@@ -67,7 +67,6 @@ plt(
     # (via @eetcd) and fail, we produce the equivalent plt
     # without it
     for_target = None,  # keep
-    ignore_warnings = True,
     plt = "//:base_plt",
     deps = [
         "//deps/rabbit:erlang_app",  # keep

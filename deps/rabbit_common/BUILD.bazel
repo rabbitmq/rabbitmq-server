@@ -143,7 +143,6 @@ plt(
         "mnesia",  # keep
     ],
     for_target = ":erlang_app",
-    ignore_warnings = True,
     plt = "//:base_plt",
 )
 

@@ -78,7 +78,6 @@ xref(
 plt(
     name = "deps_plt",
     for_target = ":erlang_app",
-    ignore_warnings = True,
     libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
     deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
