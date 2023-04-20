@@ -590,26 +590,27 @@ eval_members(ClusterName, Cluster, QName) ->
 
 add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
     Running = rabbit_nodes:list_running(),
-    case lists:sort(Running) == lists:sort([node() | nodes()]) of
-        true ->
-            {ok, Q} = rabbit_amqqueue:lookup(QName),
-            New = Running -- MemberNodes,
-            Arguments = amqqueue:get_arguments(Q),
-            Size = get_default_quorum_initial_group_size(Arguments, Q),
-            CurrentSize = length(MemberNodes),
-            case {CurrentSize < Size, New} of
-                {true, NewNodes} when NewNodes =/= [] ->
-                    NodesToAdd = lists:sublist(grow_order_sort(NewNodes),
-                                               Size - CurrentSize),
-                    create_add_member_effects(ClusterName, Cluster,
-                                                  Q, QName, NodesToAdd);
-                {_,_} ->
-                    rabbit_log:debug("CALLED: NOOP ~n",[]),
-                    undefined
-            end;
-        false ->
-            rabbit_log:debug("CALLED: BACKOFF~n",[]),
-            eval_members_backoff
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    New = Running -- MemberNodes,
+    Size = get_target_size(Q),
+    CurrentSize = length(MemberNodes),
+    case {CurrentSize < Size, New} of
+        {true, NewNodes} when NewNodes =/= [] ->
+            NodesToAdd = lists:sublist(grow_order_sort(NewNodes),
+                                       Size - CurrentSize),
+            create_add_member_effects(ClusterName, Cluster,
+                                      Q, QName, NodesToAdd);
+        {_,_} ->
+            rabbit_log:debug("CALLED: NOOP ~n",[]),
+            undefined
+    end.
+
+get_target_size(Q) ->
+    case rabbit_policy:get(<<"target-group-size">>, Q) of
+        undefined ->
+            0;
+        N ->
+            N
     end.
 
 create_add_member_effects(ClusterName, Cluster, Q, QName, New) ->
