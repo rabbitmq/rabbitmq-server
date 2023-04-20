@@ -97,6 +97,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/binary_generator_SUITE.erl"],
         outs = ["test/binary_generator_SUITE.beam"],
+        app_name = "amqp10_common",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -104,5 +105,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/binary_parser_SUITE.erl"],
         outs = ["test/binary_parser_SUITE.beam"],
+        app_name = "amqp10_common",
         erlc_opts = "//:test_erlc_opts",
     )
