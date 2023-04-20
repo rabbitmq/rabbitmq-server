@@ -693,6 +693,7 @@ rabbit_common:
 - rabbit_env
 - rabbit_error_logger_handler
 - rabbit_event
+- rabbit_exchange_type
 - rabbit_framing
 - rabbit_framing_amqp_0_8
 - rabbit_framing_amqp_0_9_1
@@ -842,7 +843,6 @@ rabbitmq_management:
 - rabbit_mgmt_hsts
 - rabbit_mgmt_load_definitions
 - rabbit_mgmt_login
-- rabbit_mgmt_oauth_bootstrap
 - rabbit_mgmt_reset_handler
 - rabbit_mgmt_stats
 - rabbit_mgmt_sup
@@ -1022,7 +1022,6 @@ rabbitmq_prometheus:
 rabbitmq_random_exchange:
 - rabbit_exchange_type_random
 rabbitmq_recent_history_exchange:
-- rabbit_db_rh_exchange
 - rabbit_exchange_type_recent_history
 rabbitmq_sharding:
 - rabbit_sharding_exchange_decorator
@@ -1135,7 +1134,10 @@ rabbitmq_web_dispatch:
 - webmachine_log_handler
 rabbitmq_web_mqtt:
 - rabbit_web_mqtt_app
+- rabbit_web_mqtt_connection_info
+- rabbit_web_mqtt_connection_sup
 - rabbit_web_mqtt_handler
+- rabbit_web_mqtt_middleware
 - rabbit_web_mqtt_stream_handler
 rabbitmq_web_mqtt_examples:
 - rabbit_web_mqtt_examples_app

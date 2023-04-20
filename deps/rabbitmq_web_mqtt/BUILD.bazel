@@ -59,6 +59,7 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
+        "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_mqtt:erlang_app",
@@ -91,6 +92,8 @@ eunit(
     compiled_suites = [
         ":test_src_rabbit_ws_test_util_beam",
         ":test_src_rfc6455_client_beam",
+        ":test_src_emqttc_parser_beam",
+        ":test_src_emqttc_serialiser_beam",
     ],
     target = ":test_erlang_app",
 )
