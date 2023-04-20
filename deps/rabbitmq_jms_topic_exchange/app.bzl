@@ -75,6 +75,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rjms_topic_selector_SUITE.erl"],
         outs = ["test/rjms_topic_selector_SUITE.beam"],
         hdrs = ["include/rabbit_jms_topic_exchange.hrl"],
+        app_name = "rabbitmq_jms_topic_exchange",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -84,6 +85,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rjms_topic_selector_unit_SUITE.erl"],
         outs = ["test/rjms_topic_selector_unit_SUITE.beam"],
         hdrs = ["include/rabbit_jms_topic_exchange.hrl"],
+        app_name = "rabbitmq_jms_topic_exchange",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -92,5 +94,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/sjx_evaluation_SUITE.erl"],
         outs = ["test/sjx_evaluation_SUITE.beam"],
+        app_name = "rabbitmq_jms_topic_exchange",
         erlc_opts = "//:test_erlc_opts",
     )

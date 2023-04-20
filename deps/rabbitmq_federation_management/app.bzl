@@ -74,6 +74,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/federation_mgmt_SUITE.erl"],
         outs = ["test/federation_mgmt_SUITE.beam"],
+        app_name = "rabbitmq_federation_management",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )

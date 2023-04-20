@@ -80,6 +80,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_hash_exchange_SUITE.erl"],
         outs = ["test/rabbit_hash_exchange_SUITE.beam"],
+        app_name = "rabbitmq_sharding",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -88,6 +89,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_sharding_SUITE.erl"],
         outs = ["test/rabbit_sharding_SUITE.beam"],
+        app_name = "rabbitmq_sharding",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbit:erlang_app"],
     )

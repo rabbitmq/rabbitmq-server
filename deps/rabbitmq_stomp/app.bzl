@@ -84,6 +84,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/command_SUITE.erl"],
         outs = ["test/command_SUITE.beam"],
         hdrs = ["include/rabbit_stomp.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -92,6 +93,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -100,6 +102,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/connections_SUITE.erl"],
         outs = ["test/connections_SUITE.beam"],
         hdrs = ["include/rabbit_stomp_frame.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -109,6 +112,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/frame_SUITE.erl"],
         outs = ["test/frame_SUITE.beam"],
         hdrs = ["include/rabbit_stomp_frame.hrl", "include/rabbit_stomp_headers.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -117,6 +121,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/proxy_protocol_SUITE.erl"],
         outs = ["test/proxy_protocol_SUITE.beam"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -124,6 +129,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/python_SUITE.erl"],
         outs = ["test/python_SUITE.beam"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -132,6 +138,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
         hdrs = ["include/rabbit_stomp.hrl", "include/rabbit_stomp_frame.hrl", "include/rabbit_stomp_headers.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -141,6 +148,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/src/rabbit_stomp_client.erl"],
         outs = ["test/src/rabbit_stomp_client.beam"],
         hdrs = ["include/rabbit_stomp_frame.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -149,6 +157,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/src/rabbit_stomp_publish_test.erl"],
         outs = ["test/src/rabbit_stomp_publish_test.beam"],
         hdrs = ["include/rabbit_stomp_frame.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -157,6 +166,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/topic_SUITE.erl"],
         outs = ["test/topic_SUITE.beam"],
         hdrs = ["include/rabbit_stomp.hrl", "include/rabbit_stomp_frame.hrl", "include/rabbit_stomp_headers.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -166,6 +176,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/util_SUITE.erl"],
         outs = ["test/util_SUITE.beam"],
         hdrs = ["include/rabbit_stomp_frame.hrl"],
+        app_name = "rabbitmq_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )

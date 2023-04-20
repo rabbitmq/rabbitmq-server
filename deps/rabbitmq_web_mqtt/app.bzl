@@ -84,6 +84,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -92,6 +93,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/proxy_protocol_SUITE.erl"],
         outs = ["test/proxy_protocol_SUITE.beam"],
         hdrs = ["test/src/emqttc_packet.hrl"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -100,6 +102,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
         hdrs = ["test/src/emqttc_packet.hrl"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
 
@@ -108,6 +111,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/src/rabbit_ws_test_util.erl"],
         outs = ["test/src/rabbit_ws_test_util.beam"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -115,6 +119,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/src/rfc6455_client.erl"],
         outs = ["test/src/rfc6455_client.beam"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -123,6 +128,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/src/emqttc_parser.erl"],
         outs = ["test/src/emqttc_parser.beam"],
         hdrs = ["test/src/emqttc_packet.hrl"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -131,5 +137,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/src/emqttc_serialiser.erl"],
         outs = ["test/src/emqttc_serialiser.beam"],
         hdrs = ["test/src/emqttc_packet.hrl"],
+        app_name = "rabbitmq_web_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
