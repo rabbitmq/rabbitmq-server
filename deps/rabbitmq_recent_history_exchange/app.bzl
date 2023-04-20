@@ -13,10 +13,7 @@ def all_beam_files(name = "all_beam_files"):
         app_name = "rabbitmq_recent_history_exchange",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = [
-            "//deps/rabbit:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -33,10 +30,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbitmq_recent_history_exchange",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = [
-            "//deps/rabbit:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
 
 def all_srcs(name = "all_srcs"):
@@ -81,6 +75,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
         hdrs = ["include/rabbit_recent_history.hrl"],
+        app_name = "rabbitmq_recent_history_exchange",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )

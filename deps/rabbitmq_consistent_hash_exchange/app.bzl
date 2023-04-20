@@ -13,11 +13,7 @@ def all_beam_files(name = "all_beam_files"):
         app_name = "rabbitmq_consistent_hash_exchange",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = [
-            "//deps/rabbit:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_cli:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -34,11 +30,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbitmq_consistent_hash_exchange",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = [
-            "//deps/rabbit:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_cli:erlang_app",
-        ],
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app"],
     )
 
 def all_srcs(name = "all_srcs"):
@@ -83,6 +75,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbit_exchange_type_consistent_hash_SUITE.erl"],
         outs = ["test/rabbit_exchange_type_consistent_hash_SUITE.beam"],
         hdrs = ["include/rabbitmq_consistent_hash_exchange.hrl"],
+        app_name = "rabbitmq_consistent_hash_exchange",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )

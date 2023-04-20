@@ -27,7 +27,7 @@ def all_beam_files(name = "all_beam_files"):
         beam = [":behaviours"],
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ra//:erlang_app", "@ranch//:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ra//:erlang_app", "@ranch//:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -60,7 +60,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
         deps = [
-            "//deps/rabbit:erlang_app",
+            "//deps/amqp_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
             "@ra//:erlang_app",
@@ -108,6 +108,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/auth_SUITE.erl"],
         outs = ["test/auth_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -115,6 +116,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/cluster_SUITE.erl"],
         outs = ["test/cluster_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -123,6 +125,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/command_SUITE.erl"],
         outs = ["test/command_SUITE.beam"],
         hdrs = ["include/rabbit_mqtt.hrl"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -131,6 +134,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -138,6 +142,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/java_SUITE.erl"],
         outs = ["test/java_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -146,6 +151,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/mqtt_machine_SUITE.erl"],
         outs = ["test/mqtt_machine_SUITE.beam"],
         hdrs = ["include/mqtt_machine.hrl"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -153,6 +159,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/processor_SUITE.erl"],
         outs = ["test/processor_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -161,6 +168,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/proxy_protocol_SUITE.erl"],
         outs = ["test/proxy_protocol_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -168,6 +176,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/reader_SUITE.erl"],
         outs = ["test/reader_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -175,6 +184,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/retainer_SUITE.erl"],
         outs = ["test/retainer_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -182,6 +192,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_auth_backend_mqtt_mock.erl"],
         outs = ["test/rabbit_auth_backend_mqtt_mock.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
@@ -190,5 +201,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/util_SUITE.erl"],
         outs = ["test/util_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
