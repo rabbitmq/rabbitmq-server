@@ -86,7 +86,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/amqp_stomp_SUITE.erl"],
         outs = ["test/amqp_stomp_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -95,7 +94,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -103,7 +101,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/cowboy_websocket_SUITE.erl"],
         outs = ["test/cowboy_websocket_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -111,7 +108,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/proxy_protocol_SUITE.erl"],
         outs = ["test/proxy_protocol_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -119,7 +115,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/raw_websocket_SUITE.erl"],
         outs = ["test/raw_websocket_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -127,7 +122,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/src/rabbit_ws_test_util.erl"],
         outs = ["test/src/rabbit_ws_test_util.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -135,7 +129,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/src/rfc6455_client.erl"],
         outs = ["test/src/rfc6455_client.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -143,7 +136,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/src/stomp.erl"],
         outs = ["test/src/stomp.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -151,6 +143,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
-        app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )

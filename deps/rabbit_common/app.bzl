@@ -144,7 +144,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_env_SUITE.erl"],
         outs = ["test/rabbit_env_SUITE.beam"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -153,7 +152,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/supervisor2_SUITE.erl"],
         outs = ["test/supervisor2_SUITE.beam"],
         hdrs = ["include/rabbit.hrl", "include/resource.hrl"],
-        app_name = "rabbit_common",
         beam = ["ebin/supervisor2.beam"],
         erlc_opts = "//:test_erlc_opts",
     )
@@ -162,7 +160,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/gen_server2_test_server.erl"],
         outs = ["test/gen_server2_test_server.beam"],
-        app_name = "rabbit_common",
         beam = ["ebin/gen_server2.beam"],
         erlc_opts = "//:test_erlc_opts",
     )
@@ -172,7 +169,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/test_event_handler.erl"],
         outs = ["test/test_event_handler.beam"],
         hdrs = ["include/rabbit.hrl", "include/resource.hrl"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -181,7 +177,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
         hdrs = ["include/rabbit.hrl", "include/rabbit_memory.hrl", "include/resource.hrl"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
         deps = ["@proper//:erlang_app"],
     )
@@ -190,7 +185,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_priority_queue_SUITE.erl"],
         outs = ["test/unit_priority_queue_SUITE.beam"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -198,7 +192,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/worker_pool_SUITE.erl"],
         outs = ["test/worker_pool_SUITE.beam"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -206,6 +199,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_password_hashing_SUITE.erl"],
         outs = ["test/unit_password_hashing_SUITE.beam"],
-        app_name = "rabbit_common",
         erlc_opts = "//:test_erlc_opts",
     )

@@ -73,7 +73,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_logger_std_h_SUITE.erl"],
         outs = ["test/rabbit_logger_std_h_SUITE.beam"],
-        app_name = "rabbitmq_prelaunch",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -81,6 +80,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_prelaunch_file_SUITE.erl"],
         outs = ["test/rabbit_prelaunch_file_SUITE.beam"],
-        app_name = "rabbitmq_prelaunch",
         erlc_opts = "//:test_erlc_opts",
     )

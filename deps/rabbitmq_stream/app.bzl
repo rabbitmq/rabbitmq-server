@@ -85,7 +85,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/commands_SUITE.erl"],
         outs = ["test/commands_SUITE.beam"],
-        app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app", "//deps/rabbitmq_stream_common:erlang_app"],
     )
@@ -94,7 +93,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -103,7 +101,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbit_stream_SUITE.erl"],
         outs = ["test/rabbit_stream_SUITE.beam"],
         hdrs = ["include/rabbit_stream_metrics.hrl"],
-        app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app", "//deps/rabbitmq_stream_common:erlang_app"],
     )
@@ -112,7 +109,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_stream_manager_SUITE.erl"],
         outs = ["test/rabbit_stream_manager_SUITE.beam"],
-        app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -121,7 +117,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_stream_utils_SUITE.erl"],
         outs = ["test/rabbit_stream_utils_SUITE.beam"],
-        app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )

@@ -83,7 +83,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/amqp10_client_SUITE.erl"],
         outs = ["test/amqp10_client_SUITE.beam"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -93,7 +92,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/command_SUITE.erl"],
         outs = ["test/command_SUITE.beam"],
         hdrs = ["include/rabbit_amqp1_0.hrl"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
     )
@@ -102,7 +100,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -110,7 +107,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/proxy_protocol_SUITE.erl"],
         outs = ["test/proxy_protocol_SUITE.beam"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -118,7 +114,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
@@ -128,7 +123,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
         hdrs = ["include/rabbit_amqp1_0.hrl"],
-        app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app"],
     )

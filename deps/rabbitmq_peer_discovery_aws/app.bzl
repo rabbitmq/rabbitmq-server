@@ -74,7 +74,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_peer_discovery_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -82,7 +81,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/integration_SUITE.erl"],
         outs = ["test/integration_SUITE.beam"],
-        app_name = "rabbitmq_peer_discovery_aws",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbitmq_ct_helpers:erlang_app"],
     )
@@ -91,7 +89,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/aws_ecs_util.erl"],
         outs = ["test/aws_ecs_util.beam"],
-        app_name = "rabbitmq_peer_discovery_aws",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbitmq_ct_helpers:erlang_app"],
     )
@@ -100,6 +97,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
-        app_name = "rabbitmq_peer_discovery_aws",
         erlc_opts = "//:test_erlc_opts",
     )

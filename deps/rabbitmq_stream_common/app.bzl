@@ -73,6 +73,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbit_stream_core_SUITE.erl"],
         outs = ["test/rabbit_stream_core_SUITE.beam"],
         hdrs = ["include/rabbit_stream.hrl"],
-        app_name = "rabbitmq_stream_common",
         erlc_opts = "//:test_erlc_opts",
     )

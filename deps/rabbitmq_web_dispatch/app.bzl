@@ -73,7 +73,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_web_dispatch_SUITE.erl"],
         outs = ["test/rabbit_web_dispatch_SUITE.beam"],
-        app_name = "rabbitmq_web_dispatch",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -81,6 +80,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_web_dispatch_unit_SUITE.erl"],
         outs = ["test/rabbit_web_dispatch_unit_SUITE.beam"],
-        app_name = "rabbitmq_web_dispatch",
         erlc_opts = "//:test_erlc_opts",
     )

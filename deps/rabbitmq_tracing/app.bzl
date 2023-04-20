@@ -84,7 +84,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_tracing_SUITE.erl"],
         outs = ["test/rabbit_tracing_SUITE.beam"],
-        app_name = "rabbitmq_tracing",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )

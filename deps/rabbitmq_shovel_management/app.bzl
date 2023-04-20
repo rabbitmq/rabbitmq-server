@@ -81,7 +81,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/http_SUITE.erl"],
         outs = ["test/http_SUITE.beam"],
-        app_name = "rabbitmq_shovel_management",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
@@ -90,7 +89,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_shovel_mgmt_SUITE.erl"],
         outs = ["test/rabbit_shovel_mgmt_SUITE.beam"],
-        app_name = "rabbitmq_shovel_management",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_management_agent:erlang_app"],
     )
@@ -99,6 +97,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_shovel_mgmt_util_SUITE.erl"],
         outs = ["test/rabbit_shovel_mgmt_util_SUITE.beam"],
-        app_name = "rabbitmq_shovel_management",
         erlc_opts = "//:test_erlc_opts",
     )

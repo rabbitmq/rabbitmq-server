@@ -79,7 +79,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_schema_SUITE.erl"],
         outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_peer_discovery_consul",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -87,6 +86,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_peer_discovery_consul_SUITE.erl"],
         outs = ["test/rabbitmq_peer_discovery_consul_SUITE.beam"],
-        app_name = "rabbitmq_peer_discovery_consul",
         erlc_opts = "//:test_erlc_opts",
     )

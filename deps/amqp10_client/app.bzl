@@ -73,7 +73,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/msg_SUITE.erl"],
         outs = ["test/msg_SUITE.beam"],
-        app_name = "amqp10_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app"],
     )
@@ -83,7 +82,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
         hdrs = ["src/amqp10_client.hrl"],
-        app_name = "amqp10_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app"],
     )
@@ -92,7 +90,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/activemq_ct_helpers.erl"],
         outs = ["test/activemq_ct_helpers.beam"],
-        app_name = "amqp10_client",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -101,6 +98,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/mock_server.erl"],
         outs = ["test/mock_server.beam"],
         hdrs = ["src/amqp10_client.hrl"],
-        app_name = "amqp10_client",
         erlc_opts = "//:test_erlc_opts",
     )

@@ -86,7 +86,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/http_SUITE.erl"],
         outs = ["test/http_SUITE.beam"],
-        app_name = "rabbitmq_stream_management",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )

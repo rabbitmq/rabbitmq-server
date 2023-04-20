@@ -93,6 +93,5 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/terraform_SUITE.erl"],
         outs = ["test/terraform_SUITE.beam"],
-        app_name = "rabbitmq_ct_helpers",
         erlc_opts = "//:test_erlc_opts",
     )
