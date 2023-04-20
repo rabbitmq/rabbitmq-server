@@ -71,6 +71,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_aws_all_tests.erl"],
         outs = ["test/rabbitmq_aws_all_tests.beam"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -78,6 +79,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_aws_app_tests.erl"],
         outs = ["test/rabbitmq_aws_app_tests.beam"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -86,6 +88,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_config_tests.erl"],
         outs = ["test/rabbitmq_aws_config_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -94,6 +97,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_json_tests.erl"],
         outs = ["test/rabbitmq_aws_json_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -102,6 +106,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_sign_tests.erl"],
         outs = ["test/rabbitmq_aws_sign_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -109,6 +114,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_aws_sup_tests.erl"],
         outs = ["test/rabbitmq_aws_sup_tests.beam"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -117,6 +123,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_tests.erl"],
         outs = ["test/rabbitmq_aws_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -125,6 +132,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_urilib_tests.erl"],
         outs = ["test/rabbitmq_aws_urilib_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -133,5 +141,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbitmq_aws_xml_tests.erl"],
         outs = ["test/rabbitmq_aws_xml_tests.beam"],
         hdrs = ["include/rabbitmq_aws.hrl"],
+        app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
