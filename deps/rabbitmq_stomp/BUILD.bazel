@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,8 +10,16 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "rabbitmq_test_helper",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
+
+# gazelle:exclude test/src
 
 APP_NAME = "rabbitmq_stomp"
 
@@ -40,68 +49,73 @@ APP_ENV = """[
 	    {proxy_protocol, false}
 	  ]"""
 
-BUILD_DEPS = [
-    "//deps/rabbitmq_cli:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "@ranch//:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@ranch//:erlang_app",
+    ],
 )
 
 xref(
-    additional_libs = BUILD_DEPS,
+    name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
 )
 
 plt(
-    name = "base_plt",
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
-    libs = ["//deps/rabbitmq_cli:elixir"],
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
+    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [
+        ":test_src_rabbit_stomp_client_beam",
+        ":test_src_rabbit_stomp_publish_test_beam",
+    ],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
-
-rabbitmq_test_helper(
-    name = "rabbit_stomp_client",
-    srcs = [
-        "test/src/rabbit_stomp_client.erl",
-    ],
-    hdrs = glob([
-        "include/**/*.hrl",
-        "src/**/*.hrl",
-    ]),
-    deps = [
-        ":test_erlang_app",
-    ],
-)
 
 rabbitmq_integration_suite(
     name = "command_SUITE",
     size = "medium",
     additional_beam = [
-        ":rabbit_stomp_client",
+        "test/src/rabbit_stomp_client.beam",
     ],
 )
 
@@ -114,7 +128,7 @@ rabbitmq_integration_suite(
     name = "connections_SUITE",
     size = "medium",
     additional_beam = [
-        ":rabbit_stomp_client",
+        "test/src/rabbit_stomp_client.beam",
     ],
 )
 
@@ -142,7 +156,7 @@ rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "medium",
     additional_beam = [
-        ":rabbit_stomp_client",
+        "test/src/rabbit_stomp_client.beam",
     ],
 )
 
@@ -150,7 +164,7 @@ rabbitmq_integration_suite(
     name = "topic_SUITE",
     size = "medium",
     additional_beam = [
-        ":rabbit_stomp_client",
+        "test/src/rabbit_stomp_client.beam",
     ],
 )
 
