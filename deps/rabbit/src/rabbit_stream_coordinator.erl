@@ -425,8 +425,9 @@ ensure_coordinator_started() ->
     end.
 
 start_coordinator_cluster() ->
-    Nodes = rabbit_nodes:list_running(),
+    Nodes = rabbit_nodes:list_reachable(),
     rabbit_log:debug("Starting stream coordinator on nodes: ~w", [Nodes]),
+    true = Nodes =/= [],
     case ra:start_cluster(?RA_SYSTEM, [make_ra_conf(Node, Nodes) || Node <-  Nodes]) of
         {ok, Started, _} ->
             rabbit_log:debug("Started stream coordinator on ~w", [Started]),
