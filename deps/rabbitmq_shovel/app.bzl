@@ -113,6 +113,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/amqp10_SUITE.erl"],
         outs = ["test/amqp10_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -121,6 +122,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/amqp10_dynamic_SUITE.erl"],
         outs = ["test/amqp10_dynamic_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -129,6 +131,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/amqp10_shovel_SUITE.erl"],
         outs = ["test/amqp10_shovel_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app"],
     )
@@ -137,6 +140,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/config_SUITE.erl"],
         outs = ["test/config_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
@@ -144,6 +148,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/configuration_SUITE.erl"],
         outs = ["test/configuration_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -152,6 +157,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/delete_shovel_command_SUITE.erl"],
         outs = ["test/delete_shovel_command_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -160,6 +166,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/dynamic_SUITE.erl"],
         outs = ["test/dynamic_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -168,6 +175,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/parameters_SUITE.erl"],
         outs = ["test/parameters_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
@@ -176,6 +184,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/shovel_status_command_SUITE.erl"],
         outs = ["test/shovel_status_command_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -184,5 +193,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/shovel_test_utils.erl"],
         outs = ["test/shovel_test_utils.beam"],
+        app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
     )
