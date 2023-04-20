@@ -108,6 +108,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
+        "test/src/emqttc_serialiser.beam",
     ],
 )
 
@@ -116,6 +117,8 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
+        "test/src/emqttc_parser.beam",
+        "test/src/emqttc_serialiser.beam",
     ],
 )
 
