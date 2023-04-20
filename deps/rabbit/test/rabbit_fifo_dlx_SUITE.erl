@@ -10,8 +10,8 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
--include("rabbit_fifo.hrl").
--include("rabbit_fifo_dlx.hrl").
+-include("src/rabbit_fifo.hrl").
+-include("src/rabbit_fifo_dlx.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%%===================================================================
