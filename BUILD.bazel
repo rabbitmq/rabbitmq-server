@@ -4,17 +4,25 @@ load(
     "string_flag",
 )
 load("@rules_pkg//:mappings.bzl", "pkg_files", "strip_prefix")
-load("@rules_erlang//:dialyze.bzl", "plt")
-load("@rules_erlang//:shell.bzl", "shell")
-load("@rules_erlang//:erl_eval.bzl", "erl_eval")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_erlang//gazelle:def.bzl", "GAZELLE_ERLANG_RUNTIME_DEPS")
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlc_opts")
+load("@rules_erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "plt")
+load("@rules_erlang//:shell.bzl", "shell")
+load("@rules_erlang//:erl_eval.bzl", "erl_eval")
+load("@rules_erlang//gazelle:moduleindex.bzl", "moduleindex")
 load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":dist.bzl", "package_generic_unix", "source_archive")
-load(":rabbitmq.bzl", "all_plugins")
+load(
+    ":rabbitmq.bzl",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "all_plugins",
+    "without",
+)
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
@@ -22,11 +30,62 @@ exports_files([
     "release-notes",
 ])
 
-# gazelle:prefix github.com/rabbitmq/rabbitmq-server
+# gazelle:exclude .github
+# gazelle:exclude .elixir_ls
+# gazelle:exclude bazel
+# gazelle:exclude bazel-out
+# gazelle:exclude deps/*/priv
+# gazelle:exclude deps/accept
+# gazelle:exclude deps/aten
+# gazelle:exclude deps/base64url
+# gazelle:exclude deps/cowboy
+# gazelle:exclude deps/cowlib
+# gazelle:exclude deps/credentials_obfuscation
+# gazelle:exclude deps/csv
+# gazelle:exclude deps/cuttlefish
+# gazelle:exclude deps/eetcd
+# gazelle:exclude deps/elvis_mk
+# gazelle:exclude deps/enough
+# gazelle:exclude deps/gen_batch_server
+# gazelle:exclude deps/getopt
+# gazelle:exclude deps/gun
+# gazelle:exclude deps/jose
+# gazelle:exclude deps/json
+# gazelle:exclude deps/observer_cli
+# gazelle:exclude deps/osiris
+# gazelle:exclude deps/prometheus
+# gazelle:exclude deps/quantile_estimator
+# gazelle:exclude deps/ra
+# gazelle:exclude deps/ranch
+# gazelle:exclude deps/recon
+# gazelle:exclude deps/redbug
+# gazelle:exclude deps/seshat
+# gazelle:exclude deps/stdout_formatter
+# gazelle:exclude deps/syslog
+# gazelle:exclude deps/sysmon_handler
+# gazelle:exclude deps/systemd
+# gazelle:exclude deps/thoas
+# gazelle:exclude packaging
+# gazelle:exclude plugins
+# gazelle:exclude PACKAGES
+# gazelle:exclude logs
+# gazelle:erlang_apps_dirs deps
+# gazelle:erlang_skip_rules test_erlang_app
+# gazelle:erlang_skip_rules ct_test
+# gazelle:erlang_generate_beam_files_macro
+# gazelle:erlang_generate_fewer_bytecode_rules
+# gazelle:erlang_app_dep_exclude rabbitmq_cli
+# gazelle:map_kind erlang_app rabbitmq_app //:rabbitmq.bzl
+# gazelle:map_kind assert_suites2 assert_suites //:rabbitmq.bzl
+
+# gazelle:erlang_module_source_lib Elixir.RabbitMQ.CLI.CommandBehaviour:rabbitmq_cli
 
 gazelle(
     name = "gazelle",
     data = GAZELLE_ERLANG_RUNTIME_DEPS,
+    extra_args = [
+        "--verbose",
+    ],
     gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
 )
 
@@ -193,6 +252,22 @@ source_archive(
     plugins = PLUGINS,
 )
 
+moduleindex(
+    name = "moduleindex",
+    testonly = True,
+    apps = PLUGINS + [
+        "@ct_helper//:erlang_app",
+        "@emqtt//:erlang_app",
+        "@inet_tcp_proxy_dist//:erlang_app",
+        "@meck//:erlang_app",
+        "@proper//:erlang_app",
+        "//deps/rabbitmq_ct_client_helpers:erlang_app",
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+        "//deps/trust_store_http:erlang_app",
+    ],
+    tags = ["manual"],
+)
+
 alias(
     name = "test-logs",
     actual = "//bazel/util:test-logs",
@@ -211,4 +286,28 @@ alias(
 alias(
     name = "remote-test-node-data",
     actual = "//bazel/util:remote-test-node-data",
+)
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
+        "//conditions:default": RABBITMQ_ERLC_OPTS,
+    }) + select({
+        ":test_build": [
+            "-DTEST=1",
+            "+nowarn_export_all",
+        ],
+        "//conditions:default": [],
+    }),  # keep
+    visibility = [":__subpackages__"],
+)
+
+erlc_opts(
+    name = "test_erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS),
+        "//conditions:default": RABBITMQ_TEST_ERLC_OPTS,
+    }),  # keep
+    visibility = [":__subpackages__"],
 )

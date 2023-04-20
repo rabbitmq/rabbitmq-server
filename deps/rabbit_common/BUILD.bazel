@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -6,6 +7,13 @@ load(
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 py_binary(
@@ -52,6 +60,7 @@ genrule(
     tools = [":codegen"],
 )
 
+<<<<<<< HEAD
 RUNTIME_DEPS = [
     "@jsx//:erlang_app",
     "@recon//:erlang_app",
@@ -61,6 +70,8 @@ RUNTIME_DEPS = [
 
 APP_NAME = "rabbit_common"
 
+=======
+>>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 APP_EXTRA_KEYS = """
 %% Hex.pm package informations.
 	{licenses, ["MPL-2.0"]},
@@ -82,46 +93,76 @@ APP_EXTRA_KEYS = """
 	  ]}
 """
 
-EXTRA_APPS = [
-    "compiler",
-    "crypto",
-    "public_key",
-    "sasl",
-    "ssl",
-    "syntax_tools",
-    "tools",
-    "xmerl",
-    "runtime_tools",
-    "os_mon",
-]
+# gazelle:erlang_app_extra_app compiler
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+# gazelle:erlang_app_extra_app sasl
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app syntax_tools
+# gazelle:erlang_app_extra_app tools
+# gazelle:erlang_app_extra_app xmerl
+# gazelle:erlang_app_extra_app runtime_tools
+# gazelle:erlang_app_extra_app os_mon
+
+# gazelle:erlang_app_dep_exclude ranch
+
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
     app_extra_keys = APP_EXTRA_KEYS,
-    app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    extra_hdrs = [
-        "include/rabbit_framing.hrl",
+    app_name = "rabbit_common",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "compiler",
+        "crypto",
+        "public_key",
+        "sasl",
+        "ssl",
+        "syntax_tools",
+        "tools",
+        "xmerl",
+        "os_mon",
+        "runtime_tools",
     ],
-    extra_srcs = [
-        "src/rabbit_framing_amqp_0_8.erl",
-        "src/rabbit_framing_amqp_0_9_1.erl",
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "@credentials_obfuscation//:erlang_app",
+        "@ranch//:erlang_app",  # keep
+        "@recon//:erlang_app",
+        "@thoas//:erlang_app",
     ],
-    runtime_deps = RUNTIME_DEPS,
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS + ["mnesia"],
+    name = "deps_plt",
+    apps = [
+        "mnesia",  # keep
+    ],
+    for_target = ":erlang_app",
     plt = "//:base_plt",
-    deps = RUNTIME_DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
 
 rabbitmq_suite(
@@ -135,8 +176,8 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "supervisor2_SUITE",
     size = "small",
-    additional_srcs = [
-        "test/test_event_handler.erl",
+    additional_beam = [
+        "test/test_event_handler.beam",
     ],
 )
 
@@ -153,8 +194,8 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/gen_server2_test_server.erl",
+    additional_beam = [
+        "test/gen_server2_test_server.beam",
     ],
     deps = [
         "@credentials_obfuscation//:erlang_app",
@@ -173,4 +214,13 @@ alias(
     name = "rabbit_common",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [
+        ":test_gen_server2_test_server_beam",
+        ":test_test_event_handler_beam",
+    ],
+    target = ":test_erlang_app",
 )

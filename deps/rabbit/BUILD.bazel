@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -9,8 +10,14 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "rabbitmq_test_helper",
     "without",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 load(":bats.bzl", "bats")
 
@@ -142,6 +149,7 @@ _APP_ENV = """[
 	  ]
 """
 
+<<<<<<< HEAD
 DEPS = [
     "//deps/amqp10_common:erlang_app",
     "//deps/rabbit_common:erlang_app",
@@ -162,6 +170,8 @@ RUNTIME_DEPS = [
     "@systemd//:erlang_app",
 ]
 
+=======
+>>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 APP_MODULE = "rabbit"
 
 APP_REGISTERED = [
@@ -172,50 +182,95 @@ APP_REGISTERED = [
     "rabbit_router",
 ]
 
-EXTRA_APPS = [
-    "sasl",
-    "rabbitmq_prelaunch",
-    "os_mon",
-    "inets",
-    "compiler",
-    "public_key",
-    "crypto",
-    "ssl",
-    "syntax_tools",
-    "xmerl",
-]
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_apps_dirs apps
+
+# gazelle:erlang_app_extra_app sasl
+# gazelle:erlang_app_extra_app os_mon
+# gazelle:erlang_app_extra_app inets
+# gazelle:erlang_app_extra_app compiler
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app syntax_tools
+# gazelle:erlang_app_extra_app xmerl
+
+# gazelle:erlang_app_dep cuttlefish
+# gazelle:erlang_app_dep syslog
+# gazelle:erlang_app_dep observer_cli
+# gazelle:erlang_app_dep redbug
+# gazelle:erlang_app_dep sysmon_handler
+# gazelle:erlang_app_dep systemd
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
     app_module = APP_MODULE,
     app_name = "rabbit",
     app_registered = APP_REGISTERED,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "compiler",
+        "inets",
+        "os_mon",
+        "public_key",
+        "sasl",
+        "ssl",
+        "syntax_tools",
+        "xmerl",
+        "crypto",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp10_common:erlang_app",
+        "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@cuttlefish//:erlang_app",
+        "@observer_cli//:erlang_app",
+        "@osiris//:erlang_app",
+        "@ra//:erlang_app",
+        "@ranch//:erlang_app",
+        "@recon//:erlang_app",
+        "@redbug//:erlang_app",
+        "@seshat//:erlang_app",
+        "@stdout_formatter//:erlang_app",
+        "@syslog//:erlang_app",
+        "@sysmon_handler//:erlang_app",
+        "@systemd//:erlang_app",
+    ],
 )
 
-xref()
-
-plt_apps = [
-    "mnesia",
-    "runtime_tools",
-] + EXTRA_APPS
-
-plt_apps.remove("rabbitmq_prelaunch")
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = plt_apps,
+    name = "deps_plt",
+    apps = [
+        "mnesia",  # keep
+    ],
+    for_target = ":erlang_app",
     plt = "//:base_plt",
-    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     # A few `lg` functions are unknown
     dialyzer_opts = without("-Wunknown", RABBITMQ_DIALYZER_OPTS),
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
 
 bats(
@@ -244,42 +299,6 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-rabbitmq_test_helper(
-    name = "quorum_queue_utils",
-    srcs = [
-        "test/quorum_queue_utils.erl",
-    ],
-)
-
-rabbitmq_test_helper(
-    name = "rabbit_ha_test_consumer",
-    srcs = [
-        "test/rabbit_ha_test_consumer.erl",
-    ],
-    deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-    ],
-)
-
-rabbitmq_test_helper(
-    name = "rabbit_ha_test_producer",
-    srcs = [
-        "test/rabbit_ha_test_producer.erl",
-    ],
-    deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-    ],
-)
-
-rabbitmq_test_helper(
-    name = "test_util",
-    srcs = [
-        "test/test_util.erl",
-    ],
-)
-
 rabbitmq_suite(
     name = "amqqueue_backward_compatibility_SUITE",
     size = "small",
@@ -293,17 +312,17 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "channel_interceptor_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/dummy_interceptor.erl",
-        "test/failing_dummy_interceptor.erl",
+    additional_beam = [
+        "test/dummy_interceptor.beam",
+        "test/failing_dummy_interceptor.beam",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "channel_operation_timeout_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/channel_operation_timeout_test_queue.erl",
+    additional_beam = [
+        "test/channel_operation_timeout_test_queue.beam",
     ],
 )
 
@@ -354,7 +373,7 @@ rabbitmq_integration_suite(
     name = "consumer_timeout_SUITE",
     size = "medium",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
 )
 
@@ -367,7 +386,7 @@ rabbitmq_integration_suite(
     name = "dead_lettering_SUITE",
     size = "large",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
     flaky = True,
     shard_count = 7,
@@ -403,7 +422,7 @@ rabbitmq_integration_suite(
     name = "dynamic_qq_SUITE",
     size = "large",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
     flaky = True,
     deps = [
@@ -483,7 +502,7 @@ rabbitmq_integration_suite(
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
 )
 
@@ -491,8 +510,8 @@ rabbitmq_integration_suite(
     name = "many_node_ha_SUITE",
     size = "medium",
     additional_beam = [
-        ":rabbit_ha_test_consumer",
-        ":rabbit_ha_test_producer",
+        ":test_rabbit_ha_test_consumer_beam",
+        ":test_rabbit_ha_test_producer_beam",
     ],
 )
 
@@ -512,8 +531,8 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "mirrored_supervisor_SUITE",
     size = "small",
-    additional_srcs = [
-        "test/mirrored_supervisor_SUITE_gs.erl",
+    additional_beam = [
+        "test/mirrored_supervisor_SUITE_gs.beam",
     ],
 )
 
@@ -606,7 +625,7 @@ rabbitmq_integration_suite(
     name = "publisher_confirms_parallel_SUITE",
     size = "medium",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
 )
 
@@ -625,7 +644,7 @@ rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
     flaky = True,
     shard_count = 6,
@@ -640,7 +659,7 @@ rabbitmq_integration_suite(
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
     flaky = True,
     shard_count = 6,
@@ -660,16 +679,18 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_suite(
+    name = "rabbit_cuttlefish_SUITE",
+)
+
+rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
-    runtime_deps = [
+    deps = [
+        "//deps/rabbit_common:erlang_app",
         "@aten//:erlang_app",
         "@gen_batch_server//:erlang_app",
         "@meck//:erlang_app",
         "@ra//:erlang_app",
-    ],
-    deps = [
-        "//deps/rabbit_common:erlang_app",
     ],
 )
 
@@ -677,31 +698,18 @@ rabbitmq_suite(
     name = "rabbit_fifo_prop_SUITE",
     size = "large",
     additional_beam = [
-        ":test_util",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
-    erlc_opts = [
-        "-I",
-        "deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    runtime_deps = [
-        "@ra//:erlang_app",
+        ":test_test_util_beam",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@proper//:erlang_app",
+        "@ra//:erlang_app",
     ],
 )
 
 rabbitmq_suite(
     name = "rabbit_fifo_dlx_SUITE",
     size = "small",
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-        "src/rabbit_fifo_dlx.hrl",
-    ],
     deps = [
         "//deps/rabbit_common:erlang_app",
     ],
@@ -711,19 +719,13 @@ rabbitmq_integration_suite(
     name = "rabbit_fifo_dlx_integration_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_util",
-        ":quorum_queue_utils",
+        ":test_test_util_beam",
+        ":test_quorum_queue_utils_beam",
         ":quorum_queue_SUITE_beam_files",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-        "src/rabbit_fifo_dlx.hrl",
-    ],
-    runtime_deps = [
-        "@ra//:erlang_app",
     ],
     deps = [
         "@proper//:erlang_app",
+        "@ra//:erlang_app",
     ],
 )
 
@@ -731,18 +733,13 @@ rabbitmq_suite(
     name = "rabbit_fifo_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_util",
+        ":test_test_util_beam",
         ":rabbit_fifo_v0_SUITE_beam_files",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
-    runtime_deps = [
-        "@meck//:erlang_app",
-        "@ra//:erlang_app",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@meck//:erlang_app",
+        "@ra//:erlang_app",
     ],
 )
 
@@ -750,21 +747,12 @@ rabbitmq_suite(
     name = "rabbit_fifo_v0_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_util",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo_v0.hrl",
-    ],
-    erlc_opts = [
-        "-I",
-        "deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    runtime_deps = [
-        "@meck//:erlang_app",
-        "@ra//:erlang_app",
+        ":test_test_util_beam",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@meck//:erlang_app",
+        "@ra//:erlang_app",
     ],
 )
 
@@ -784,11 +772,24 @@ rabbitmq_suite(
     ],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmq_suite(
+    name = "rabbit_stream_sac_coordinator_SUITE",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+>>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
     flaky = True,
     shard_count = 12,
@@ -822,8 +823,8 @@ rabbitmq_integration_suite(
     name = "simple_ha_SUITE",
     size = "large",
     additional_beam = [
-        ":rabbit_ha_test_consumer",
-        ":rabbit_ha_test_producer",
+        ":test_rabbit_ha_test_consumer_beam",
+        ":test_rabbit_ha_test_producer_beam",
     ],
     shard_count = 4,
 )
@@ -832,7 +833,7 @@ rabbitmq_integration_suite(
     name = "single_active_consumer_SUITE",
     size = "medium",
     additional_beam = [
-        ":quorum_queue_utils",
+        ":test_quorum_queue_utils_beam",
     ],
 )
 
@@ -856,9 +857,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "unit_access_control_authn_authz_context_propagation_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/rabbit_auth_backend_context_propagation_mock.erl",
-        "test/rabbit_foo_protocol_connection_info.erl",
+    additional_beam = [
+        "test/rabbit_auth_backend_context_propagation_mock.beam",
+        "test/rabbit_foo_protocol_connection_info.beam",
     ],
 )
 
@@ -873,8 +874,8 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "unit_access_control_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/rabbit_dummy_protocol_connection_info.erl",
+    additional_beam = [
+        "test/rabbit_dummy_protocol_connection_info.beam",
     ],
 )
 
@@ -899,7 +900,7 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "unit_cluster_formation_locking_mocks_SUITE",
     size = "small",
-    runtime_deps = [
+    deps = [
         "@meck//:erlang_app",
     ],
 )
@@ -907,7 +908,7 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_collections_SUITE",
     size = "small",
-    runtime_deps = [
+    deps = [
         "//deps/rabbit_common:erlang_app",
     ],
 )
@@ -915,7 +916,7 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_config_value_encryption_SUITE",
     size = "medium",
-    runtime_deps = [
+    deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_erlang_app",
         "//deps/rabbit_common:test_erlang_app",
         "@credentials_obfuscation//:erlang_app",
@@ -950,7 +951,7 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "unit_gm_SUITE",
     size = "small",
-    runtime_deps = [
+    deps = [
         "//deps/rabbitmq_ct_helpers:erlang_app",
         "@meck//:erlang_app",
     ],
@@ -1005,16 +1006,16 @@ rabbitmq_suite(
 rabbitmq_integration_suite(
     name = "unit_stats_and_metrics_SUITE",
     size = "medium",
-    additional_srcs = [
-        "test/dummy_event_receiver.erl",
+    additional_beam = [
+        "test/dummy_event_receiver.beam",
     ],
 )
 
 rabbitmq_suite(
     name = "unit_supervisor2_SUITE",
     size = "small",
-    additional_srcs = [
-        "test/dummy_supervisor2.erl",
+    additional_beam = [
+        "test/dummy_supervisor2.beam",
     ],
 )
 
@@ -1031,10 +1032,10 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "vhost_SUITE",
     size = "medium",
-    flaky = True,
-    additional_srcs = [
-        "test/test_rabbit_event_handler.erl",
+    additional_beam = [
+        "test/test_rabbit_event_handler.beam",
     ],
+    flaky = True,
 )
 
 rabbitmq_suite(
@@ -1053,14 +1054,41 @@ rabbitmq_suite(
     ],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmq_integration_suite(
+    name = "direct_exchange_routing_v2_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_quorum_queue_utils_beam",
+    ],
+)
+
+>>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 rabbitmq_integration_suite(
     name = "rabbit_direct_reply_to_prop_SUITE",
-    size = "small",
+    size = "medium",
     deps = [
         "@proper//:erlang_app",
     ],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmq_integration_suite(
+    name = "unicode_SUITE",
+    size = "medium",
+)
+
+rabbitmq_integration_suite(
+    name = "runtime_parameters_SUITE",
+    size = "small",
+    additional_beam = [
+        "test/dummy_runtime_parameters.beam",
+    ],
+)
+
+>>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 assert_suites()
 
 filegroup(
@@ -1130,4 +1158,32 @@ tar --strip-components 1 -cf $@ web-manpages-tmp/*
 rm -dr web-manpages-tmp
 """,
     visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "rabbit",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [
+        ":test_channel_operation_timeout_test_queue_beam",
+        ":test_dummy_event_receiver_beam",
+        ":test_dummy_interceptor_beam",
+        ":test_dummy_runtime_parameters_beam",
+        ":test_dummy_supervisor2_beam",
+        ":test_failing_dummy_interceptor_beam",
+        ":test_mirrored_supervisor_SUITE_gs_beam",
+        ":test_quorum_queue_utils_beam",
+        ":test_rabbit_auth_backend_context_propagation_mock_beam",
+        ":test_rabbit_dummy_protocol_connection_info_beam",
+        ":test_rabbit_foo_protocol_connection_info_beam",
+        ":test_rabbit_ha_test_consumer_beam",
+        ":test_rabbit_ha_test_producer_beam",
+        ":test_test_util_beam",
+        ":test_test_rabbit_event_handler_beam",
+    ],
+    target = ":test_erlang_app",
 )

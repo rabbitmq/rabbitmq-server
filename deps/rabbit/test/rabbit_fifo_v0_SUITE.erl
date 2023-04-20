@@ -11,7 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("src/rabbit_fifo_v0.hrl").
+-include("rabbit_fifo_v0.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks

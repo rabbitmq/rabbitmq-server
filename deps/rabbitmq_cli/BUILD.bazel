@@ -15,21 +15,21 @@ rabbitmqctl(
     ] + glob([
         "lib/**/*.ex",
     ]),
+    archives = [
+        "@hex//:archive",
+    ],
     license_files = glob(["LICENSE*"]),
+    source_deps = {
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+        "@parallel_stream//:sources": "parallel_stream",  # transitive dep of csv 2.x
+    },
     visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
     ],
-    archives = [
-        "@hex//:archive",
-    ],
-    source_deps = {
-        "@csv//:sources": "csv",
-        "@json//:sources": "json",
-        "@parallel_stream//:sources": "parallel_stream", # transitive dep of csv 2.x
-    },
 )
 
 rabbitmq_home(
@@ -113,9 +113,21 @@ rabbitmqctl_test(
         "lib/**/*.ex",
         "test/**/*.exs",
     ]),
+    archives = [
+        "@hex//:archive",
+    ],
     data = glob(["test/fixtures/**/*"]),
     flaky = True,
     rabbitmq_run = ":rabbitmq-for-cli-tests-run",
+    source_deps = {
+        "@amqp//:sources": "amqp",
+        "@csv//:sources": "csv",
+        "@dialyxir//:sources": "dialyxir",
+        "@json//:sources": "json",
+        "@parallel_stream//:sources": "parallel_stream",  # transitive dep of csv 2.x
+        "@temp//:sources": "temp",
+        "@x509//:sources": "x509",
+    },
     tags = [STARTS_BACKGROUND_BROKER_TAG],
     deps = [
         "//deps/amqp_client:erlang_app",
@@ -124,18 +136,6 @@ rabbitmqctl_test(
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
     ],
-    archives = [
-        "@hex//:archive",
-    ],
-    source_deps = {
-        "@amqp//:sources": "amqp",
-        "@csv//:sources": "csv",
-        "@dialyxir//:sources": "dialyxir",
-        "@json//:sources": "json",
-        "@parallel_stream//:sources": "parallel_stream", # transitive dep of csv 2.x
-        "@temp//:sources": "temp",
-        "@x509//:sources": "x509",
-    },
 )
 
 test_suite(

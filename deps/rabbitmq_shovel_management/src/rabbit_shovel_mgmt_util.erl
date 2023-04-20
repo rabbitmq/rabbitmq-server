@@ -13,7 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("rabbit_shovel_mgmt.hrl").
+-include("rabbit_shovel_mgmt.hrl").
 
 %% Allow users to see things in the vhosts they are authorised. But
 %% static shovels do not have a vhost, so only allow admins (not
