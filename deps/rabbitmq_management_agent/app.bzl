@@ -81,6 +81,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/exometer_slide_SUITE.erl"],
         outs = ["test/exometer_slide_SUITE.beam"],
+        app_name = "rabbitmq_management_agent",
         erlc_opts = "//:test_erlc_opts",
         deps = ["@proper//:erlang_app"],
     )
@@ -89,6 +90,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/metrics_SUITE.erl"],
         outs = ["test/metrics_SUITE.beam"],
+        app_name = "rabbitmq_management_agent",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -98,6 +100,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/rabbit_mgmt_gc_SUITE.erl"],
         outs = ["test/rabbit_mgmt_gc_SUITE.beam"],
         hdrs = ["include/rabbit_mgmt_metrics.hrl"],
+        app_name = "rabbitmq_management_agent",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
@@ -106,6 +109,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_mgmt_slide_SUITE.erl"],
         outs = ["test/rabbit_mgmt_slide_SUITE.beam"],
+        app_name = "rabbitmq_management_agent",
         erlc_opts = "//:test_erlc_opts",
         deps = ["@proper//:erlang_app"],
     )

@@ -114,6 +114,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
         hdrs = ["include/amqp_client.hrl", "include/amqp_client_internal.hrl"],
+        app_name = "amqp_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
@@ -123,6 +124,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
         hdrs = ["include/amqp_client.hrl"],
+        app_name = "amqp_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
