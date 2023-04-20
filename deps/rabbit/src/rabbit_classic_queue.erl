@@ -354,19 +354,19 @@ deliver(Qs0, #delivery{flow = Flow,
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
     {Qs, []}.
 
-
 -spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(),
               LimiterPid :: pid(), rabbit_types:ctag(), state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
     {empty, state()}.
-dequeue(_QName, NoAck, LimiterPid, _CTag, State) ->
-    QPid = State#?STATE.pid,
+dequeue(QName, NoAck, LimiterPid, _CTag, State0) ->
+    QPid = State0#?STATE.pid,
+    State1 = ensure_monitor(QPid, QName, State0),
     case delegate:invoke(QPid, {gen_server2, call,
                                 [{basic_get, self(), NoAck, LimiterPid}, infinity]}) of
         empty ->
-            {empty, State};
+            {empty, State1};
         {ok, Count, Msg} ->
-            {ok, Count, Msg, State}
+            {ok, Count, Msg, State1}
     end.
 
 -spec state_info(state()) -> #{atom() := term()}.
