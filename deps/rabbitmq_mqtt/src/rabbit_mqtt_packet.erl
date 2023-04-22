@@ -431,14 +431,13 @@ serialise(#mqtt_packet_fixed{type = ?UNSUBACK} = Fixed,
               end,
     serialise_fixed(Fixed, Variable, Payload);
 serialise(#mqtt_packet_fixed{type = ?PUBLISH,
-                             qos = Qos } = Fixed,
+                             qos = Qos} = Fixed,
           #mqtt_packet_publish{topic_name = TopicName,
                                packet_id = PacketId,
                                props = Props},
           Payload, Vsn) ->
-    PacketIdIoData = case Qos of
-                         0 -> [];
-                         1 -> <<PacketId:16>>
+    PacketIdIoData = if Qos =:= 0 -> [];
+                        Qos > 0 -> <<PacketId:16>>
                      end,
     Variable = [serialise_binary(TopicName),
                 PacketIdIoData,
@@ -554,6 +553,10 @@ serialise_prop('Response-Topic', Val) ->
 serialise_prop('Correlation-Data', Val) ->
     [16#09, serialise_binary(Val)];
 serialise_prop('Subscription-Identifier', Val) ->
+    %%TODO Allow for multiple subscription identifiers
+    %% "Multiple Subscription Identifiers will be included if the publication is the result
+    %% of a match to more than one subscription, in this case their order is not significant."
+    %% [v5 3.3.2.3.8]
     [16#0B, serialise_variable_byte_integer(Val)];
 serialise_prop('Session-Expiry-Interval', Val) ->
     <<16#11, Val:32>>;
