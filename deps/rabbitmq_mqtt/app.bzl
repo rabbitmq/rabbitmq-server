@@ -312,3 +312,21 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
+    erlang_bytecode(
+        name = "packet_prop_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/packet_prop_SUITE.erl"],
+        outs = ["test/packet_prop_SUITE.beam"],
+        hdrs = ["include/rabbit_mqtt_packet.hrl"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["@proper//:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "v5_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/v5_SUITE.erl"],
+        outs = ["test/v5_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
+    )

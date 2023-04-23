@@ -134,11 +134,11 @@ broker_for_integration_suites(
 
 rabbitmq_integration_suite(
     name = "auth_SUITE",
-    shard_count = 14,
     additional_beam = [
         "test/rabbit_auth_backend_mqtt_mock.beam",
         "test/util.beam",
     ],
+    shard_count = 14,
     runtime_deps = [
         "@emqtt//:erlang_app",
         "@meck//:erlang_app",
@@ -255,16 +255,16 @@ rabbitmq_suite(
 )
 
 rabbitmq_integration_suite(
-   name = "v5_SUITE",
-   # shard_count = 4,
-   shard_count = 2,
-   runtime_deps = [
-       "@emqtt//:erlang_app",
-       "@gun//:erlang_app",
-   ],
-   additional_beam = [
+    name = "v5_SUITE",
+    additional_beam = [
         ":test_util_beam",
-   ],
+    ],
+    # shard_count = 4,
+    shard_count = 2,
+    runtime_deps = [
+        "@emqtt//:erlang_app",
+        "@gun//:erlang_app",
+    ],
 )
 
 rabbitmq_suite(
