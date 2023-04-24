@@ -74,7 +74,7 @@ proxy_protocol_tls(Config) ->
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-    {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
+    {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
     [ok = ssl:send(SslSocket, amqp_1_0_frame(FrameType))
         || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
