@@ -194,7 +194,7 @@ join_tags(Tags) ->
   Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
   string:join(Strings, " ").
 
--spec parse_peeraddr(inet:ip_address()) -> string().
+-spec parse_peeraddr(inet:ip_address() | unknown) -> string().
 parse_peeraddr(unknown) ->
     rabbit_data_coercion:to_list(unknown);
 parse_peeraddr(PeerAddr) ->
