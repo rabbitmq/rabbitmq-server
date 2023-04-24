@@ -34,25 +34,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
     "Starting an interactive Erlang shell on node #{node_name}... Press 'Ctrl+G' then 'q' to exit."
   end
 
-
   defp start_shell_on_otp_26_plus(node_name) do
     case :shell.start_interactive({node_name, {:shell, :start, []}}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
       {error, _} -> {:error, {:badrpc, :nodedown}}
     end
+
     :timer.sleep(:infinity)
   end
 
   defp start_shell_on_otp_25(node_name) do
     _ = Supervisor.terminate_child(:kernel_sup, :user)
-      Process.flag(:trap_exit, true)
-      user_drv = :user_drv.start(['tty_sl -c -e', {node_name, :shell, :start, []}])
-      Process.link(user_drv)
+    Process.flag(:trap_exit, true)
+    user_drv = :user_drv.start(['tty_sl -c -e', {node_name, :shell, :start, []}])
+    Process.link(user_drv)
 
-      receive do
-        {'EXIT', _user_drv, _} ->
-          {:ok, "Disconnected from #{node_name}."}
-      end
+    receive do
+      {'EXIT', _user_drv, _} ->
+        {:ok, "Disconnected from #{node_name}."}
+    end
   end
 end
