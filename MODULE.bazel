@@ -400,8 +400,8 @@ erlang_dev_package.hex_package(
 erlang_dev_package.git_package(
     name = "emqtt",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
-    repository = "emqx/emqtt",
-    tag = "1.8.2",
+    repository = "rabbitmq/emqtt",
+    tag = "otp-26-compatibility",
 )
 
 erlang_dev_package.git_package(
