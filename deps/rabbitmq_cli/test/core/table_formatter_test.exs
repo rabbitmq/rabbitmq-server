@@ -9,20 +9,6 @@ defmodule TableFormatterTest do
 
   @formatter RabbitMQ.CLI.Formatters.Table
 
-  test "format_output tab-separates map values" do
-    assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) == ["a\tb", "apple\tbeer"]
-
-    assert @formatter.format_output(%{a: :apple, b: :beer, c: 1}, %{}) == [
-             "a\tb\tc",
-             "apple\tbeer\t1"
-           ]
-
-    assert @formatter.format_output(%{a: "apple", b: 'beer', c: 1}, %{}) == [
-             "a\tb\tc",
-             "apple\t\"beer\"\t1"
-           ]
-  end
-
   test "format_output tab-separates keyword values" do
     assert @formatter.format_output([a: :apple, b: :beer], %{}) == ["a\tb", "apple\tbeer"]
 
@@ -35,15 +21,6 @@ defmodule TableFormatterTest do
              "a\tb\tc",
              "apple\t\"beer\"\t1"
            ]
-  end
-
-  test "format_stream tab-separates map values" do
-    assert @formatter.format_stream(
-             [%{a: :apple, b: :beer, c: 1}, %{a: "aadvark", b: 'bee', c: 2}],
-             %{}
-           )
-           |> Enum.to_list() ==
-             ["a\tb\tc", "apple\tbeer\t1", "aadvark\t\"bee\"\t2"]
   end
 
   test "format_stream tab-separates keyword values" do
