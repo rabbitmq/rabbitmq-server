@@ -60,18 +60,6 @@ genrule(
     tools = [":codegen"],
 )
 
-<<<<<<< HEAD
-RUNTIME_DEPS = [
-    "@jsx//:erlang_app",
-    "@recon//:erlang_app",
-    "@credentials_obfuscation//:erlang_app",
-    "@ranch//:erlang_app",
-]
-
-APP_NAME = "rabbit_common"
-
-=======
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 APP_EXTRA_KEYS = """
 %% Hex.pm package informations.
 	{licenses, ["MPL-2.0"]},
@@ -138,9 +126,9 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "@credentials_obfuscation//:erlang_app",
+        "@jsx//:erlang_app",
         "@ranch//:erlang_app",  # keep
         "@recon//:erlang_app",
-        "@thoas//:erlang_app",
     ],
 )
 

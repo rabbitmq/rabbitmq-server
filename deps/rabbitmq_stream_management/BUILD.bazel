@@ -69,10 +69,6 @@ plt(
 dialyze(
     name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-<<<<<<< HEAD
-    plt = ":base_plt",
-    warnings_as_errors = False,
-=======
     plt = ":deps_plt",
     target = ":erlang_app",
 )
@@ -80,7 +76,6 @@ dialyze(
 eunit(
     name = "eunit",
     target = ":test_erlang_app",
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 )
 
 rabbitmq_home(

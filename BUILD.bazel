@@ -51,6 +51,7 @@ exports_files([
 # gazelle:exclude deps/gun
 # gazelle:exclude deps/jose
 # gazelle:exclude deps/json
+# gazelle:exclude deps/jsx
 # gazelle:exclude deps/observer_cli
 # gazelle:exclude deps/osiris
 # gazelle:exclude deps/prometheus
@@ -64,7 +65,6 @@ exports_files([
 # gazelle:exclude deps/syslog
 # gazelle:exclude deps/sysmon_handler
 # gazelle:exclude deps/systemd
-# gazelle:exclude deps/thoas
 # gazelle:exclude packaging
 # gazelle:exclude plugins
 # gazelle:exclude PACKAGES

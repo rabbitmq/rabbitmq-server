@@ -97,14 +97,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
     )
-    erlang_bytecode(
-        name = "config_schema_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/config_schema_SUITE.erl"],
-        outs = ["test/config_schema_SUITE.beam"],
-        app_name = "rabbitmq_amqp1_0",
-        erlc_opts = "//:test_erlc_opts",
-    )
+
     erlang_bytecode(
         name = "proxy_protocol_SUITE_beam_files",
         testonly = True,

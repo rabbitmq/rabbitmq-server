@@ -149,29 +149,6 @@ _APP_ENV = """[
 	  ]
 """
 
-<<<<<<< HEAD
-DEPS = [
-    "//deps/amqp10_common:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "@ra//:erlang_app",
-    "@ranch//:erlang_app",
-    "@stdout_formatter//:erlang_app",
-    "@syslog//:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
-    "@cuttlefish//:erlang_app",
-    "@observer_cli//:erlang_app",
-    "@osiris//:erlang_app",
-    "@recon//:erlang_app",
-    "@seshat//:erlang_app",
-    "@sysmon_handler//:erlang_app",
-    "@systemd//:erlang_app",
-]
-
-=======
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 APP_MODULE = "rabbit"
 
 APP_REGISTERED = [
@@ -679,10 +656,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_suite(
-    name = "rabbit_cuttlefish_SUITE",
-)
-
-rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
     deps = [
@@ -772,19 +745,6 @@ rabbitmq_suite(
     ],
 )
 
-<<<<<<< HEAD
-=======
-rabbitmq_suite(
-    name = "rabbit_stream_sac_coordinator_SUITE",
-    runtime_deps = [
-        "@meck//:erlang_app",
-    ],
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-    ],
-)
-
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
@@ -1054,17 +1014,6 @@ rabbitmq_suite(
     ],
 )
 
-<<<<<<< HEAD
-=======
-rabbitmq_integration_suite(
-    name = "direct_exchange_routing_v2_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":test_quorum_queue_utils_beam",
-    ],
-)
-
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 rabbitmq_integration_suite(
     name = "rabbit_direct_reply_to_prop_SUITE",
     size = "medium",
@@ -1073,22 +1022,6 @@ rabbitmq_integration_suite(
     ],
 )
 
-<<<<<<< HEAD
-=======
-rabbitmq_integration_suite(
-    name = "unicode_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    name = "runtime_parameters_SUITE",
-    size = "small",
-    additional_beam = [
-        "test/dummy_runtime_parameters.beam",
-    ],
-)
-
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 assert_suites()
 
 filegroup(

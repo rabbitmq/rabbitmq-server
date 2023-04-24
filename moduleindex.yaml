@@ -468,13 +468,14 @@ ra:
 - ra_systems_sup
 rabbit:
 - amqqueue
+- amqqueue_v1
 - background_gc
 - code_server_cache
 - gatherer
 - gm
 - internal_user
+- internal_user_v1
 - lqueue
-- mirrored_supervisor
 - mirrored_supervisor_sups
 - pg_local
 - pid_recomposition
@@ -518,8 +519,6 @@ rabbit:
 - rabbit_credential_validator_accept_everything
 - rabbit_credential_validator_min_password_length
 - rabbit_credential_validator_password_regexp
-- rabbit_cuttlefish
-- rabbit_db_vhost_defaults
 - rabbit_dead_letter
 - rabbit_definitions
 - rabbit_definitions_hashing
@@ -540,10 +539,8 @@ rabbit:
 - rabbit_exchange_type_invalid
 - rabbit_exchange_type_topic
 - rabbit_feature_flags
-- rabbit_ff_controller
 - rabbit_ff_extra
 - rabbit_ff_registry
-- rabbit_ff_registry_factory
 - rabbit_fhc_helpers
 - rabbit_fifo
 - rabbit_fifo_client
@@ -589,7 +586,6 @@ rabbit:
 - rabbit_msg_store_ets_index
 - rabbit_msg_store_gc
 - rabbit_networking
-- rabbit_networking_store
 - rabbit_node_monitor
 - rabbit_nodes
 - rabbit_observer_cli
@@ -634,14 +630,12 @@ rabbit:
 - rabbit_ssl
 - rabbit_stream_coordinator
 - rabbit_stream_queue
-- rabbit_stream_sac_coordinator
 - rabbit_sup
 - rabbit_sysmon_handler
 - rabbit_sysmon_minder
 - rabbit_table
 - rabbit_trace
 - rabbit_tracking
-- rabbit_tracking_store
 - rabbit_upgrade
 - rabbit_upgrade_functions
 - rabbit_upgrade_preparation
@@ -660,6 +654,7 @@ rabbit:
 - tcp_listener_sup
 - term_to_binary_compat
 - vhost
+- vhost_v1
 rabbit_common:
 - app_utils
 - code_version
@@ -669,6 +664,7 @@ rabbit_common:
 - file_handle_cache
 - file_handle_cache_stats
 - gen_server2
+- mirrored_supervisor
 - mirrored_supervisor_locks
 - mnesia_sync
 - pmon
@@ -788,7 +784,6 @@ rabbitmq_consistent_hash_exchange:
 rabbitmq_ct_client_helpers:
 - rabbit_ct_client_helpers
 rabbitmq_ct_helpers:
-- cth_log_redirect_any_domains
 - rabbit_control_helper
 - rabbit_ct_broker_helpers
 - rabbit_ct_config_schema
@@ -835,7 +830,6 @@ rabbitmq_management:
 - rabbit_mgmt_db_cache_sup
 - rabbit_mgmt_dispatcher
 - rabbit_mgmt_extension
-- rabbit_mgmt_features
 - rabbit_mgmt_headers
 - rabbit_mgmt_hsts
 - rabbit_mgmt_load_definitions
@@ -1062,9 +1056,7 @@ rabbitmq_stream:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand
-- Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand
-- Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand
 - rabbit_stream
 - rabbit_stream_connection_sup
@@ -1204,16 +1196,9 @@ systemd:
 - systemd_socket
 - systemd_sup
 - systemd_watchdog
-<<<<<<< HEAD
-=======
-thoas:
-- thoas
-- thoas_decode
-- thoas_encode
 trust_store_http:
 - trust_store_http
 - trust_store_http_app
 - trust_store_http_sup
 - trust_store_invalid_handler
 - trust_store_list_handler
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))

@@ -97,12 +97,6 @@ eunit(
         ":test_rabbitmq_aws_urilib_tests_beam",
         ":test_rabbitmq_aws_xml_tests_beam",
     ],
-<<<<<<< HEAD
-    runtime_deps = [
-        "//deps/rabbit_common:erlang_app",
-        "@jsx//:erlang_app",
-        "@meck//:erlang_app",
-=======
     data = [
         "test/test_aws_config.ini",
         "test/test_aws_credentials.ini",
@@ -110,9 +104,8 @@ eunit(
     target = ":test_erlang_app",
     deps = [
         "//deps/rabbit_common:erlang_app",  # keep
+        "@jsx//:erlang_app",  # keep
         "@meck//:erlang_app",  # keep
-        "@thoas//:erlang_app",  # keep
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
     ],
 )
 

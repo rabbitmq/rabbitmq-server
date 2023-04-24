@@ -107,18 +107,6 @@ rabbitmq_suite(
     ],
 )
 
-<<<<<<< HEAD
-=======
-rabbitmq_suite(
-    name = "rabbit_shovel_mgmt_util_SUITE",
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-        "//deps/rabbitmq_shovel:erlang_app",
-        "@meck//:erlang_app",
-    ],
-)
-
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 assert_suites()
 
 alias(

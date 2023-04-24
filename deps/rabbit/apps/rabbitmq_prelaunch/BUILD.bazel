@@ -23,22 +23,13 @@ APP_DESCRIPTION = "RabbitMQ prelaunch setup"
 
 APP_MODULE = "rabbit_prelaunch_app"
 
-<<<<<<< HEAD
-RUNTIME_DEPS = [
-    "@cuttlefish//:erlang_app",
-    "@jsx//:erlang_app",
-]
-=======
 all_beam_files(name = "all_beam_files")
->>>>>>> e7f08dff5b (Use gazelle for some maintenance of bazel BUILD files (backport #6466) (backport #7931) (#7936))
 
 all_test_beam_files(name = "all_test_beam_files")
 
 all_srcs(name = "all_srcs")
 
 test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_dep thoas
 
 rabbitmq_app(
     name = "erlang_app",
@@ -54,7 +45,6 @@ rabbitmq_app(
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@cuttlefish//:erlang_app",
-        "@thoas//:erlang_app",
     ],
 )
 
