@@ -769,9 +769,13 @@ start_stream_tls_connection(Port) ->
     start_stream_connection(ssl, Port).
 
 start_stream_connection(Transport, Port) ->
+    TlsOpts = case Transport of
+        ssl -> [{verify, verify_none}];
+        _   -> []
+      end,
     {ok, S} =
         Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
+                          [{active, false}, {mode, binary}] ++ TlsOpts),
     C0 = rabbit_stream_core:init(0),
     C1 = rabbit_stream_SUITE:test_peer_properties(Transport, S, C0),
     C = rabbit_stream_SUITE:test_authenticate(Transport, S, C1),

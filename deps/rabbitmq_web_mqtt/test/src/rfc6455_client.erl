@@ -103,9 +103,12 @@ close(WS, WsReason) ->
 start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface) ->
     {ok, Socket} = case TcpPreface of
         <<>> ->
+            TlsOpts = case Transport of
+                ssl -> [{verify, verify_none}];
+                _   -> []
+              end,
             Transport:connect(State#state.host, State#state.port,
-                              [binary,
-                               {packet, 0}]);
+                              [binary, {packet, 0}] ++ TlsOpts);
         _ ->
             {ok, Socket0} = gen_tcp:connect(State#state.host, State#state.port,
                                             [binary,
