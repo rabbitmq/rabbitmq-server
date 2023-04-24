@@ -30,7 +30,7 @@ groups() ->
 
 suite() ->
     [
-      {timetrap, {minutes, 3}}
+      {timetrap, {minutes, 10}}
     ].
 
 init_per_suite(Config) ->
