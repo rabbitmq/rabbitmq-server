@@ -168,7 +168,32 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
         {error, Reason} -> erlang:error(Reason)
     end;
 port_command(Sock, Data) when is_port(Sock) ->
-    erlang:port_command(Sock, Data).
+    Fun = case persistent_term:get(rabbit_net_tcp_send, undefined) of
+              undefined ->
+                  Rel = list_to_integer(erlang:system_info(otp_release)),
+                  %% gen_tcp:send/2 does a selective receive of
+                  %% {inet_reply, Sock, Status[, CallerTag]}
+                  F = if Rel >= 26 ->
+                             %% Selective receive is optimised:
+                             %% https://github.com/erlang/otp/issues/6455
+                             fun gen_tcp_send/2;
+                         Rel < 26 ->
+                             %% Avoid costly selective receive.
+                             fun erlang:port_command/2
+                      end,
+                  ok = persistent_term:put(rabbit_net_tcp_send, F),
+                  F;
+              F ->
+                  F
+          end,
+    Fun(Sock, Data).
+
+gen_tcp_send(Sock, Data) ->
+    case gen_tcp:send(Sock, Data) of
+        ok -> self() ! {inet_reply, Sock, ok},
+              true;
+        {error, Reason} -> erlang:error(Reason)
+    end.
 
 getopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:getopts(Sock, Options);
