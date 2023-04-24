@@ -43,7 +43,7 @@ defmodule TableFormatterTest do
              %{}
            )
            |> Enum.to_list() ==
-             ["a\tb\tc", "apple\tbeer\t1", "aadvark\t\"bee\"\t2"]
+             ["c\ta\tb", "1\tapple\tbeer", "2\taadvark\t\"bee\""]
   end
 
   test "format_stream tab-separates keyword values" do

@@ -48,10 +48,12 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
   def format_info_item(item, escaped \\ true)
 
   def format_info_item(map, escaped) when is_map(map) do
+    kv = to_predictably_ordered_keyword_list(map)
+
     [
       "\#\{",
       Enum.map(
-        map,
+        kv,
         fn {k, v} ->
           ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
         end
@@ -123,6 +125,14 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
 
   def format_info_item(value, _escaped) do
     :io_lib.format("~1000000000000tp", [value])
+  end
+
+  @spec to_predictably_ordered_keyword_list(Enumerable.t()) :: Keyword.t()
+  def to_predictably_ordered_keyword_list(input0) do
+    case input0 do
+      m when is_map(m) -> Enum.sort(Keyword.new(m))
+      other -> other
+    end
   end
 
   defp prettify_amqp_table(table, escaped) do
