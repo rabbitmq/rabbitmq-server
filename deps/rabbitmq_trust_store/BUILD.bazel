@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -8,6 +9,13 @@ load(
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_trust_store"
@@ -21,43 +29,63 @@ APP_ENV = """[
 	    {providers, [rabbit_trust_store_file_provider]}
 	  ]"""
 
-EXTRA_APPS = [
-    "ssl",
-    "crypto",
-    "public_key",
-    "inets",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+# gazelle:erlang_app_extra_app inets
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "public_key",
+        "ssl",
+        "inets",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
     plt = "//:base_plt",
-    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 rabbitmq_home(

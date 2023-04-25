@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,7 +10,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "without",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_ENV = """[
@@ -22,48 +29,63 @@ APP_NAME = "rabbitmq_amqp1_0"
 
 APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
 
-BUILD_DEPS = [
-    "//deps/rabbitmq_cli:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/amqp_client:erlang_app",
-    "//deps/amqp10_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp10_common:erlang_app",
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
 xref(
-    additional_libs = BUILD_DEPS,
+    name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
 )
 
 plt(
-    name = "base_plt",
+    name = "deps_plt",
     apps = [
-        "ssl",
+        "ssl",  # keep
     ],
-    libs = ["//deps/rabbitmq_cli:elixir"],
+    for_target = ":erlang_app",
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS + RUNTIME_DEPS,
+    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
+    name = "dialyze",
     size = "medium",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()

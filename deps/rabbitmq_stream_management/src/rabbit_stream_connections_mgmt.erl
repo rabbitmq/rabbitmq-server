@@ -35,8 +35,8 @@ web_ui() ->
                                "The stream_queue feature flag is disabled. "
                                ++ "Enable stream_queue feature flag then disable "
                                   "and re-enable the rabbitmq_stream_management "
-                                  "plugin. ",
-                               "See https://www.rabbitmq.com/feature-flags.html "
+                                  "plugin. "
+                               ++ "See https://www.rabbitmq.com/feature-flags.html "
                                "to learn more",
                                []),
             []

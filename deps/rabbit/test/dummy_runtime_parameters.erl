@@ -9,7 +9,7 @@
 -behaviour(rabbit_runtime_parameter).
 -behaviour(rabbit_policy_validator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0]).

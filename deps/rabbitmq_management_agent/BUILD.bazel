@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,6 +10,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_ENV = """[
@@ -26,54 +34,74 @@ APP_DESCRIPTION = "RabbitMQ Management Agent"
 
 APP_MODULE = "rabbit_mgmt_agent_app"
 
-EXTRA_APPS = [
-    "xmerl",
-    "mnesia",
-    "ranch",
-    "ssl",
-    "crypto",
-    "public_key",
-]
+all_beam_files(name = "all_beam_files")
 
-BUILD_DEPS = [
-    "//deps/rabbitmq_cli:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app xmerl
+# gazelle:erlang_app_extra_app mnesia
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+
+# gazelle:erlang_app_dep ranch
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    extra_apps = EXTRA_APPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "mnesia",
+        "public_key",
+        "ssl",
+        "xmerl",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@ranch//:erlang_app",
+    ],
 )
 
 xref(
-    additional_libs = BUILD_DEPS,
+    name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
 )
 
-plt_apps = list(EXTRA_APPS)
-
-plt_apps.remove("ranch")
-
 plt(
-    name = "base_plt",
-    apps = plt_apps,
-    libs = ["//deps/rabbitmq_cli:elixir"],
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:elixir"] + BUILD_DEPS + DEPS,
+    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
@@ -99,10 +127,8 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "rabbit_mgmt_slide_SUITE",
     size = "small",
-    runtime_deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-    ],
     deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
         "@proper//:erlang_app",
     ],
 )

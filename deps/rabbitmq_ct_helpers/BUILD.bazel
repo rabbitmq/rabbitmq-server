@@ -1,15 +1,113 @@
-load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+load("@rules_erlang//:eunit2.bzl", "eunit")
+load("@rules_erlang//:xref2.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_app",
+    "rabbitmq_integration_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
-erlang_app(
+all_beam_files(name = "all_beam_files")
+
+all_srcs(name = "all_srcs")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_testonly
+
+# gazelle:erlang_app_dep meck
+# gazelle:erlang_app_dep_exclude rabbit
+# gazelle:erlang_app_dep_exclude rabbitmq_prelaunch
+# gazelle:erlang_app_dep_exclude rabbitmq_management_agent
+
+rabbitmq_app(
+    name = "erlang_app",
     testonly = True,
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_helpers",
-    app_version = "master",
-    extra_priv = [
-        "tools/tls-certs/Makefile",
-        "tools/tls-certs/openssl.cnf.in",
-    ],
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@meck//:erlang_app",
         "@proper//:erlang_app",
     ],
 )
+
+alias(
+    name = "rabbitmq_ct_helpers",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+xref(
+    name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:elixir",  # keep
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+        "//deps/rabbit:erlang_app",  # keep
+        "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",  # keep
+        "//deps/rabbitmq_management_agent:erlang_app",  # keep
+        "@proper//:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
+)
+
+plt(
+    name = "deps_plt",
+    apps = [
+        "common_test",  # keep
+        "eunit",  # keep
+        "inets",  # keep
+    ],
+    for_target = ":erlang_app",
+    libs = [
+        "//deps/rabbitmq_cli:elixir",  # keep
+    ],
+    plt = "//:base_plt",
+    deps = [
+        "//deps/rabbit:erlang_app",  # keep
+        "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",  # keep
+        "//deps/rabbitmq_cli:elixir",  # keep
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+        "//deps/rabbitmq_management_agent:erlang_app",  # keep
+        "@proper//:erlang_app",  # keep
+    ],
+)
+
+dialyze(
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+    warnings_as_errors = False,
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
+)
+
+broker_for_integration_suites()
+
+rabbitmq_integration_suite(
+    name = "terraform_SUITE",
+    # requires SSH_KEY to create vms, skip running as part of CI
+    tags = ["manual"],
+)
+
+assert_suites()

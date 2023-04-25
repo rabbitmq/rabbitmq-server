@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -9,6 +10,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_ENV = """[
@@ -37,17 +45,22 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
 	  ]}
 """
 
-EXTRA_APPS = [
-    "xmerl",
-    "ssl",
-    "public_key",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app xmerl
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app public_key
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "RabbitMQ AMQP Client",
     app_env = APP_ENV,
     app_extra_keys = APP_EXTRA_KEYS,
@@ -56,22 +69,36 @@ rabbitmq_app(
     app_registered = [
         "amqp_sup",
     ],
-    extra_apps = EXTRA_APPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "xmerl",
+        "public_key",
+        "ssl",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "@credentials_obfuscation//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
     plt = "//:base_plt",
-    deps = DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
 
 rabbitmq_home(
@@ -89,7 +116,7 @@ rabbitmq_run(
 rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "large",
-    runtime_deps = [
+    deps = [
         "@meck//:erlang_app",
     ],
 )
@@ -97,10 +124,8 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
-    runtime_deps = [
-        "//deps/rabbit:erlang_app",
-    ],
     deps = [
+        "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
 )
@@ -111,4 +136,9 @@ alias(
     name = "amqp_client",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )

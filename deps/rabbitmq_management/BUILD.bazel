@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -10,7 +11,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "rabbitmq_test_helper",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_management"
@@ -18,13 +25,6 @@ APP_NAME = "rabbitmq_management"
 APP_DESCRIPTION = "RabbitMQ Management Console"
 
 APP_MODULE = "rabbit_mgmt_app"
-
-EXTRA_APPS = [
-    "mnesia",
-    "ssl",
-    "crypto",
-    "public_key",
-]
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -38,19 +38,6 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_management_agent:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "//deps/rabbitmq_web_dispatch:erlang_app",
-    "@cowboy//:erlang_app",
-    "@cowlib//:erlang_app",
-]
-
 genrule(
     name = "rabbitmqadmin",
     srcs = ["bin/rabbitmqadmin"],
@@ -61,51 +48,82 @@ sed 's/%%VSN%%/{}/' $< > $@
 """.format(APP_VERSION),
 )
 
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app mnesia
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+
+# gazelle:erlang_app_dep_exclude ranch
+
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    extra_priv = [":rabbitmqadmin"],
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "mnesia",
+        "public_key",
+        "ssl",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "@cowboy//:erlang_app",
+        "@cowlib//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
-    apps = EXTRA_APPS,
-    deps = DEPS + RUNTIME_DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [":test_rabbit_mgmt_runtime_parameters_util_beam"],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-rabbitmq_test_helper(
-    name = "rabbit_mgmt_runtime_parameters_util",
-    srcs = [
-        "test/rabbit_mgmt_runtime_parameters_util.erl",
-    ],
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-    ],
-)
-
 rabbitmq_suite(
     name = "cache_SUITE",
     size = "small",
-    runtime_deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-    ],
     deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
         "@proper//:erlang_app",
     ],
 )
@@ -145,7 +163,7 @@ rabbitmq_integration_suite(
     name = "rabbit_mgmt_http_SUITE",
     size = "large",
     additional_beam = [
-        ":rabbit_mgmt_runtime_parameters_util",
+        "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
     shard_count = 3,
 )
@@ -157,7 +175,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "rabbit_mgmt_rabbitmqadmin_SUITE",
     additional_beam = [
-        ":rabbit_mgmt_runtime_parameters_util",
+        "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
     data = [
         ":bin/rabbitmqadmin",
@@ -167,10 +185,8 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "rabbit_mgmt_stats_SUITE",
     size = "small",
-    runtime_deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-    ],
     deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
         "@proper//:erlang_app",
     ],
