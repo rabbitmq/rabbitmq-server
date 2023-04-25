@@ -401,7 +401,7 @@ erlang_dev_package.git_package(
     name = "emqtt",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
     repository = "rabbitmq/emqtt",
-    tag = "otp-26-compatibility",
+    branch = "otp-26-compatibility",
 )
 
 erlang_dev_package.git_package(
