@@ -84,6 +84,7 @@ plt(
         "public_key",
         "runtime_tools",
     ],
+    ignore_warnings = True,
     libs = [":elixir"],
     deps = [
         ":elixir",

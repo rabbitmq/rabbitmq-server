@@ -8,7 +8,7 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = ["src/rabbit_web_stomp_examples_app.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_stomp_examples",
         dest = "ebin",
@@ -27,27 +27,35 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/bunny.html",
+            "priv/bunny.png",
+            "priv/echo.html",
+            "priv/index.html",
+            "priv/main.css",
+            "priv/pencil.cur",
+            "priv/stomp.js",
+            "priv/temp-queue.html",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = ["src/rabbit_web_stomp_examples_app.erl"],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-APL2-Stomp-Websocket",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -59,7 +67,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = ["src/rabbit_web_stomp_examples_app.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_stomp_examples",
         dest = "test",
