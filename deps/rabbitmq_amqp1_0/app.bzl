@@ -8,7 +8,22 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
+            "src/rabbit_amqp1_0.erl",
+            "src/rabbit_amqp1_0_channel.erl",
+            "src/rabbit_amqp1_0_incoming_link.erl",
+            "src/rabbit_amqp1_0_link_util.erl",
+            "src/rabbit_amqp1_0_message.erl",
+            "src/rabbit_amqp1_0_outgoing_link.erl",
+            "src/rabbit_amqp1_0_reader.erl",
+            "src/rabbit_amqp1_0_session.erl",
+            "src/rabbit_amqp1_0_session_process.erl",
+            "src/rabbit_amqp1_0_session_sup.erl",
+            "src/rabbit_amqp1_0_session_sup_sup.erl",
+            "src/rabbit_amqp1_0_util.erl",
+            "src/rabbit_amqp1_0_writer.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_amqp1_0",
         dest = "ebin",
@@ -30,7 +45,22 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
+            "src/rabbit_amqp1_0.erl",
+            "src/rabbit_amqp1_0_channel.erl",
+            "src/rabbit_amqp1_0_incoming_link.erl",
+            "src/rabbit_amqp1_0_link_util.erl",
+            "src/rabbit_amqp1_0_message.erl",
+            "src/rabbit_amqp1_0_outgoing_link.erl",
+            "src/rabbit_amqp1_0_reader.erl",
+            "src/rabbit_amqp1_0_session.erl",
+            "src/rabbit_amqp1_0_session_process.erl",
+            "src/rabbit_amqp1_0_session_sup.erl",
+            "src/rabbit_amqp1_0_session_sup_sup.erl",
+            "src/rabbit_amqp1_0_util.erl",
+            "src/rabbit_amqp1_0_writer.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_amqp1_0",
         dest = "test",
@@ -55,26 +85,40 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = ["priv/schema/rabbitmq_amqp1_0.schema"],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
+            "src/rabbit_amqp1_0.erl",
+            "src/rabbit_amqp1_0_channel.erl",
+            "src/rabbit_amqp1_0_incoming_link.erl",
+            "src/rabbit_amqp1_0_link_util.erl",
+            "src/rabbit_amqp1_0_message.erl",
+            "src/rabbit_amqp1_0_outgoing_link.erl",
+            "src/rabbit_amqp1_0_reader.erl",
+            "src/rabbit_amqp1_0_session.erl",
+            "src/rabbit_amqp1_0_session_process.erl",
+            "src/rabbit_amqp1_0_session_sup.erl",
+            "src/rabbit_amqp1_0_session_sup_sup.erl",
+            "src/rabbit_amqp1_0_util.erl",
+            "src/rabbit_amqp1_0_writer.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = ["include/rabbit_amqp1_0.hrl"],
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
