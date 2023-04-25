@@ -287,7 +287,6 @@ erlang_package.hex_package(
 #)
 
 erlang_package.git_package(
-    name = "ra"
     branch = "sunge/handle_status_callback",
     repository = "SimonUnge/ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
