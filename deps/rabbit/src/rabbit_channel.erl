@@ -2818,8 +2818,7 @@ get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
     end.
 
 get_consumer_timeout(PA = #pending_ack{tag  = CTag},
-                     State = #ch{consumer_mapping = CMap,
-                                 cfg = #conf{consumer_timeout = GCT}}) ->
+                     State = #ch{consumer_mapping = CMap}) ->
     case maps:find(CTag, CMap) of
         {ok, {_, {_, _, _, Args}}} ->
 	    case rabbit_misc:table_lookup(Args, <<"x-consumer-timeout">>) of
