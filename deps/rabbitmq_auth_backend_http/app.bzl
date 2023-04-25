@@ -51,9 +51,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_auth_backend_http.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_auth_backend_http.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -61,10 +59,10 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_auth_backend_http.erl",
+            "src/rabbit_auth_backend_http_app.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

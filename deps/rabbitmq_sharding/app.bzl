@@ -69,10 +69,14 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_sharding_exchange_decorator.erl",
+            "src/rabbit_sharding_exchange_type_modulus_hash.erl",
+            "src/rabbit_sharding_interceptor.erl",
+            "src/rabbit_sharding_policy_validator.erl",
+            "src/rabbit_sharding_shard.erl",
+            "src/rabbit_sharding_util.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

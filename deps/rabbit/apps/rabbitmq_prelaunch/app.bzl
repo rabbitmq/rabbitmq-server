@@ -83,10 +83,26 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_boot_state.erl",
+            "src/rabbit_boot_state_sup.erl",
+            "src/rabbit_boot_state_systemd.erl",
+            "src/rabbit_boot_state_xterm_titlebar.erl",
+            "src/rabbit_logger_fmt_helpers.erl",
+            "src/rabbit_logger_json_fmt.erl",
+            "src/rabbit_logger_std_h.erl",
+            "src/rabbit_logger_text_fmt.erl",
+            "src/rabbit_prelaunch.erl",
+            "src/rabbit_prelaunch_app.erl",
+            "src/rabbit_prelaunch_conf.erl",
+            "src/rabbit_prelaunch_dist.erl",
+            "src/rabbit_prelaunch_early_logging.erl",
+            "src/rabbit_prelaunch_erlang_compat.erl",
+            "src/rabbit_prelaunch_errors.erl",
+            "src/rabbit_prelaunch_file.erl",
+            "src/rabbit_prelaunch_sighandler.erl",
+            "src/rabbit_prelaunch_sup.erl",
+        ],
     )
     filegroup(
         name = "priv",

@@ -16,12 +16,14 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(
-            ["src/**/*.erl"],
-            exclude = [
-                "src/rabbit_auth_cache.erl",
-            ],
-        ),
+        srcs = [
+            "src/rabbit_auth_backend_cache.erl",
+            "src/rabbit_auth_backend_cache_app.erl",
+            "src/rabbit_auth_cache_dict.erl",
+            "src/rabbit_auth_cache_ets.erl",
+            "src/rabbit_auth_cache_ets_segmented.erl",
+            "src/rabbit_auth_cache_ets_segmented_stateless.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_auth_backend_cache",
         beam = [":behaviours"],
@@ -48,12 +50,14 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(
-            ["src/**/*.erl"],
-            exclude = [
-                "src/rabbit_auth_cache.erl",
-            ],
-        ),
+        srcs = [
+            "src/rabbit_auth_backend_cache.erl",
+            "src/rabbit_auth_backend_cache_app.erl",
+            "src/rabbit_auth_cache_dict.erl",
+            "src/rabbit_auth_cache_ets.erl",
+            "src/rabbit_auth_cache_ets_segmented.erl",
+            "src/rabbit_auth_cache_ets_segmented_stateless.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_auth_backend_cache",
         beam = [":test_behaviours"],
@@ -74,25 +78,26 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_auth_backend_cache.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_auth_backend_cache.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_auth_backend_cache.erl",
+            "src/rabbit_auth_backend_cache_app.erl",
+            "src/rabbit_auth_cache.erl",
+            "src/rabbit_auth_cache_dict.erl",
+            "src/rabbit_auth_cache_ets.erl",
+            "src/rabbit_auth_cache_ets_segmented.erl",
+            "src/rabbit_auth_cache_ets_segmented_stateless.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_auth_backend_cache.hrl",
-        ],
+        srcs = ["include/rabbit_auth_backend_cache.hrl"],
     )
     filegroup(
         name = "license_files",

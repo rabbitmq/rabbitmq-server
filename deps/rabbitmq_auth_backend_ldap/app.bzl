@@ -55,25 +55,23 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_auth_backend_ldap.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_auth_backend_ldap.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_auth_backend_ldap.erl",
+            "src/rabbit_auth_backend_ldap_app.erl",
+            "src/rabbit_auth_backend_ldap_util.erl",
+            "src/rabbit_log_ldap.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/logging.hrl",
-        ],
+        srcs = ["include/logging.hrl"],
     )
     filegroup(
         name = "license_files",

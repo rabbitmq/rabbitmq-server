@@ -71,16 +71,14 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_shovel_mgmt.erl",
+            "src/rabbit_shovel_mgmt_util.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = [
-            "src/rabbit_shovel_mgmt.hrl",
-        ],
+        srcs = ["src/rabbit_shovel_mgmt.hrl"],
     )
     filegroup(
         name = "license_files",

@@ -87,19 +87,31 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_management_agent.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_management_agent.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ResetStatsDbCommand.erl",
+            "src/exometer_slide.erl",
+            "src/rabbit_mgmt_agent_app.erl",
+            "src/rabbit_mgmt_agent_config.erl",
+            "src/rabbit_mgmt_agent_sup.erl",
+            "src/rabbit_mgmt_agent_sup_sup.erl",
+            "src/rabbit_mgmt_data.erl",
+            "src/rabbit_mgmt_data_compat.erl",
+            "src/rabbit_mgmt_db_handler.erl",
+            "src/rabbit_mgmt_external_stats.erl",
+            "src/rabbit_mgmt_ff.erl",
+            "src/rabbit_mgmt_format.erl",
+            "src/rabbit_mgmt_gc.erl",
+            "src/rabbit_mgmt_metrics_collector.erl",
+            "src/rabbit_mgmt_metrics_gc.erl",
+            "src/rabbit_mgmt_storage.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",

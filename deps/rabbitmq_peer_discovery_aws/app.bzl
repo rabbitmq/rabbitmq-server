@@ -51,9 +51,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_peer_discovery_aws.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_peer_discovery_aws.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -61,10 +59,10 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_peer_discovery_aws.erl",
+            "src/rabbitmq_peer_discovery_aws.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

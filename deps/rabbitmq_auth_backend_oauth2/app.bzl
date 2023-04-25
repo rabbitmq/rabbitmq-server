@@ -73,9 +73,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_auth_backend_oauth2.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_auth_backend_oauth2.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -83,10 +81,17 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
+            "src/rabbit_auth_backend_oauth2.erl",
+            "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_scope.erl",
+            "src/uaa_jwks.erl",
+            "src/uaa_jwt.erl",
+            "src/uaa_jwt_jwk.erl",
+            "src/uaa_jwt_jwt.erl",
+            "src/wildcard.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

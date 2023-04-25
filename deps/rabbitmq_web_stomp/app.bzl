@@ -75,9 +75,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_web_stomp.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_web_stomp.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -85,10 +83,16 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_web_stomp_app.erl",
+            "src/rabbit_web_stomp_connection_sup.erl",
+            "src/rabbit_web_stomp_handler.erl",
+            "src/rabbit_web_stomp_internal_event_handler.erl",
+            "src/rabbit_web_stomp_listener.erl",
+            "src/rabbit_web_stomp_middleware.erl",
+            "src/rabbit_web_stomp_stream_handler.erl",
+            "src/rabbit_web_stomp_sup.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

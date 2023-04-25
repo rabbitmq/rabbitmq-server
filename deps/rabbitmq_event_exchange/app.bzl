@@ -57,25 +57,21 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_event_exchange.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_event_exchange.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_event_exchange_decorator.erl",
+            "src/rabbit_exchange_type_event.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_event_exchange.hrl",
-        ],
+        srcs = ["include/rabbit_event_exchange.hrl"],
     )
     filegroup(
         name = "license_files",

@@ -59,25 +59,25 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_peer_discovery_common.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_peer_discovery_common.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_peer_discovery_cleanup.erl",
+            "src/rabbit_peer_discovery_common_app.erl",
+            "src/rabbit_peer_discovery_common_sup.erl",
+            "src/rabbit_peer_discovery_config.erl",
+            "src/rabbit_peer_discovery_httpc.erl",
+            "src/rabbit_peer_discovery_util.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_peer_discovery.hrl",
-        ],
+        srcs = ["include/rabbit_peer_discovery.hrl"],
     )
     filegroup(
         name = "license_files",

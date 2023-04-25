@@ -55,10 +55,16 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_top_app.erl",
+            "src/rabbit_top_extension.erl",
+            "src/rabbit_top_sup.erl",
+            "src/rabbit_top_util.erl",
+            "src/rabbit_top_wm_ets_tables.erl",
+            "src/rabbit_top_wm_process.erl",
+            "src/rabbit_top_wm_processes.erl",
+            "src/rabbit_top_worker.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

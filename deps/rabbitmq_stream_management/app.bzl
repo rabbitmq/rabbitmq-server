@@ -91,10 +91,17 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_stream_connection_consumers_mgmt.erl",
+            "src/rabbit_stream_connection_mgmt.erl",
+            "src/rabbit_stream_connection_publishers_mgmt.erl",
+            "src/rabbit_stream_connections_mgmt.erl",
+            "src/rabbit_stream_connections_vhost_mgmt.erl",
+            "src/rabbit_stream_consumers_mgmt.erl",
+            "src/rabbit_stream_management_utils.erl",
+            "src/rabbit_stream_mgmt_db.erl",
+            "src/rabbit_stream_publishers_mgmt.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

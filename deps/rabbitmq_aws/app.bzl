@@ -61,25 +61,27 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_aws.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_aws.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbitmq_aws.erl",
+            "src/rabbitmq_aws_app.erl",
+            "src/rabbitmq_aws_config.erl",
+            "src/rabbitmq_aws_json.erl",
+            "src/rabbitmq_aws_sign.erl",
+            "src/rabbitmq_aws_sup.erl",
+            "src/rabbitmq_aws_urilib.erl",
+            "src/rabbitmq_aws_xml.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbitmq_aws.hrl",
-        ],
+        srcs = ["include/rabbitmq_aws.hrl"],
     )
     filegroup(
         name = "license_files",

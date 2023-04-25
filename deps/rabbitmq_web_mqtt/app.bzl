@@ -69,9 +69,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_web_mqtt.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_web_mqtt.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -79,10 +77,14 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_web_mqtt_app.erl",
+            "src/rabbit_web_mqtt_connection_info.erl",
+            "src/rabbit_web_mqtt_connection_sup.erl",
+            "src/rabbit_web_mqtt_handler.erl",
+            "src/rabbit_web_mqtt_middleware.erl",
+            "src/rabbit_web_mqtt_stream_handler.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

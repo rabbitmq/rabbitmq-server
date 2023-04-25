@@ -8,9 +8,7 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = [
-            "src/rabbit_web_mqtt_examples_app.erl",
-        ],
+        srcs = ["src/rabbit_web_mqtt_examples_app.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_mqtt_examples",
         dest = "ebin",
@@ -45,10 +43,9 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_web_mqtt_examples_app.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
@@ -70,9 +67,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = [
-            "src/rabbit_web_mqtt_examples_app.erl",
-        ],
+        srcs = ["src/rabbit_web_mqtt_examples_app.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_mqtt_examples",
         dest = "test",

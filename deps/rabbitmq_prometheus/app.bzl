@@ -69,9 +69,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_prometheus.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_prometheus.schema"],
     )
     filegroup(
         name = "public_hdrs",
@@ -79,10 +77,15 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/collectors/prometheus_process_collector.erl",
+            "src/collectors/prometheus_rabbitmq_alarm_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/rabbit_prometheus_app.erl",
+            "src/rabbit_prometheus_dispatcher.erl",
+            "src/rabbit_prometheus_handler.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

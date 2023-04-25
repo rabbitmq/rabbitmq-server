@@ -92,10 +92,20 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_tracing_app.erl",
+            "src/rabbit_tracing_consumer.erl",
+            "src/rabbit_tracing_consumer_sup.erl",
+            "src/rabbit_tracing_files.erl",
+            "src/rabbit_tracing_mgmt.erl",
+            "src/rabbit_tracing_sup.erl",
+            "src/rabbit_tracing_traces.erl",
+            "src/rabbit_tracing_util.erl",
+            "src/rabbit_tracing_wm_file.erl",
+            "src/rabbit_tracing_wm_files.erl",
+            "src/rabbit_tracing_wm_trace.erl",
+            "src/rabbit_tracing_wm_traces.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

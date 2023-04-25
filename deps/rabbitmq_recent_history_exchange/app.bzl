@@ -8,9 +8,7 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = [
-            "src/rabbit_exchange_type_recent_history.erl",
-        ],
+        srcs = ["src/rabbit_exchange_type_recent_history.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_recent_history_exchange",
         dest = "ebin",
@@ -27,9 +25,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = [
-            "src/rabbit_exchange_type_recent_history.erl",
-        ],
+        srcs = ["src/rabbit_exchange_type_recent_history.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_recent_history_exchange",
         dest = "test",
@@ -53,16 +49,13 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_exchange_type_recent_history.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_recent_history.hrl",
-        ],
+        srcs = ["include/rabbit_recent_history.hrl"],
     )
     filegroup(
         name = "private_hdrs",

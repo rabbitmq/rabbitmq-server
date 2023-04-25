@@ -35,10 +35,10 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_auth_mechanism_ssl.erl",
+            "src/rabbit_auth_mechanism_ssl_app.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",

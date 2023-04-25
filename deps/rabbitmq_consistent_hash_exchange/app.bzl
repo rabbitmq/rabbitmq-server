@@ -55,16 +55,14 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Diagnostics.Commands.ConsistentHashExchangeRingStateCommand.erl",
+            "src/rabbit_exchange_type_consistent_hash.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbitmq_consistent_hash_exchange.hrl",
-        ],
+        srcs = ["include/rabbitmq_consistent_hash_exchange.hrl"],
     )
     filegroup(
         name = "private_hdrs",

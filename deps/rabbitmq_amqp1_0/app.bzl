@@ -85,25 +85,33 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_amqp1_0.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_amqp1_0.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
+            "src/rabbit_amqp1_0.erl",
+            "src/rabbit_amqp1_0_channel.erl",
+            "src/rabbit_amqp1_0_incoming_link.erl",
+            "src/rabbit_amqp1_0_link_util.erl",
+            "src/rabbit_amqp1_0_message.erl",
+            "src/rabbit_amqp1_0_outgoing_link.erl",
+            "src/rabbit_amqp1_0_reader.erl",
+            "src/rabbit_amqp1_0_session.erl",
+            "src/rabbit_amqp1_0_session_process.erl",
+            "src/rabbit_amqp1_0_session_sup.erl",
+            "src/rabbit_amqp1_0_session_sup_sup.erl",
+            "src/rabbit_amqp1_0_util.erl",
+            "src/rabbit_amqp1_0_writer.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_amqp1_0.hrl",
-        ],
+        srcs = ["include/rabbit_amqp1_0.hrl"],
     )
     filegroup(
         name = "license_files",

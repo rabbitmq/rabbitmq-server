@@ -103,10 +103,29 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand.erl",
+            "src/rabbit_federation_app.erl",
+            "src/rabbit_federation_db.erl",
+            "src/rabbit_federation_event.erl",
+            "src/rabbit_federation_exchange.erl",
+            "src/rabbit_federation_exchange_link.erl",
+            "src/rabbit_federation_exchange_link_sup_sup.erl",
+            "src/rabbit_federation_link_sup.erl",
+            "src/rabbit_federation_link_util.erl",
+            "src/rabbit_federation_parameters.erl",
+            "src/rabbit_federation_pg.erl",
+            "src/rabbit_federation_queue.erl",
+            "src/rabbit_federation_queue_link.erl",
+            "src/rabbit_federation_queue_link_sup_sup.erl",
+            "src/rabbit_federation_status.erl",
+            "src/rabbit_federation_sup.erl",
+            "src/rabbit_federation_upstream.erl",
+            "src/rabbit_federation_upstream_exchange.erl",
+            "src/rabbit_federation_util.erl",
+            "src/rabbit_log_federation.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",

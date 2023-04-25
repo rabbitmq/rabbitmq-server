@@ -72,16 +72,23 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/amqp10_client.erl",
+            "src/amqp10_client_app.erl",
+            "src/amqp10_client_connection.erl",
+            "src/amqp10_client_connection_sup.erl",
+            "src/amqp10_client_connections_sup.erl",
+            "src/amqp10_client_frame_reader.erl",
+            "src/amqp10_client_session.erl",
+            "src/amqp10_client_sessions_sup.erl",
+            "src/amqp10_client_sup.erl",
+            "src/amqp10_client_types.erl",
+            "src/amqp10_msg.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = [
-            "src/amqp10_client.hrl",
-        ],
+        srcs = ["src/amqp10_client.hrl"],
     )
     filegroup(
         name = "public_hdrs",

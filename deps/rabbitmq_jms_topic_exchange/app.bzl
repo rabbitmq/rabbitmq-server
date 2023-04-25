@@ -55,16 +55,14 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_jms_topic_exchange.erl",
+            "src/sjx_evaluator.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_jms_topic_exchange.hrl",
-        ],
+        srcs = ["include/rabbit_jms_topic_exchange.hrl"],
     )
     filegroup(
         name = "private_hdrs",

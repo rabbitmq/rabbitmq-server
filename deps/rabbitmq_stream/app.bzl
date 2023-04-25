@@ -85,25 +85,32 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_stream.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_stream.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand.erl",
+            "src/rabbit_stream.erl",
+            "src/rabbit_stream_connection_sup.erl",
+            "src/rabbit_stream_manager.erl",
+            "src/rabbit_stream_metrics.erl",
+            "src/rabbit_stream_metrics_gc.erl",
+            "src/rabbit_stream_reader.erl",
+            "src/rabbit_stream_sup.erl",
+            "src/rabbit_stream_utils.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = [
-            "include/rabbit_stream_metrics.hrl",
-        ],
+        srcs = ["include/rabbit_stream_metrics.hrl"],
     )
     filegroup(
         name = "license_files",

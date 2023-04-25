@@ -34,10 +34,13 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/trust_store_http.erl",
+            "src/trust_store_http_app.erl",
+            "src/trust_store_http_sup.erl",
+            "src/trust_store_invalid_handler.erl",
+            "src/trust_store_list_handler.erl",
+        ],
     )
     filegroup(
         name = "priv",

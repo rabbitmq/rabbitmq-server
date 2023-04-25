@@ -77,19 +77,25 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/rabbitmq_stomp.schema",
-        ],
+        srcs = ["priv/schema/rabbitmq_stomp.schema"],
     )
     filegroup(
         name = "private_hdrs",
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStompConnectionsCommand.erl",
+            "src/rabbit_stomp.erl",
+            "src/rabbit_stomp_client_sup.erl",
+            "src/rabbit_stomp_connection_info.erl",
+            "src/rabbit_stomp_frame.erl",
+            "src/rabbit_stomp_internal_event_handler.erl",
+            "src/rabbit_stomp_processor.erl",
+            "src/rabbit_stomp_reader.erl",
+            "src/rabbit_stomp_sup.erl",
+            "src/rabbit_stomp_util.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",

@@ -72,16 +72,23 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_cowboy_middleware.erl",
+            "src/rabbit_cowboy_redirect.erl",
+            "src/rabbit_cowboy_stream_h.erl",
+            "src/rabbit_web_dispatch.erl",
+            "src/rabbit_web_dispatch_app.erl",
+            "src/rabbit_web_dispatch_listing_handler.erl",
+            "src/rabbit_web_dispatch_registry.erl",
+            "src/rabbit_web_dispatch_sup.erl",
+            "src/rabbit_web_dispatch_util.erl",
+            "src/webmachine_log.erl",
+            "src/webmachine_log_handler.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = [
-            "src/webmachine_logger.hrl",
-        ],
+        srcs = ["src/webmachine_logger.hrl"],
     )
     filegroup(
         name = "public_hdrs",
