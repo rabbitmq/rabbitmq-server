@@ -2810,8 +2810,8 @@ get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 	{ok, Q} -> %% should we account for different queue states here?
 	    case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
 							   fun (X, Y) -> erlang:min(X, Y) end, Q) of
-		undefined -> GCT;
-		Val -> Val
+		    undefined -> GCT;
+		    Val -> Val
 	    end;
 	_ ->
 	    GCT
@@ -2822,8 +2822,8 @@ get_consumer_timeout(PA = #pending_ack{tag  = CTag},
     case maps:find(CTag, CMap) of
         {ok, {_, {_, _, _, Args}}} ->
 	    case rabbit_misc:table_lookup(Args, <<"x-consumer-timeout">>) of
-		{long, Timeout} -> Timeout;
-		_            -> get_queue_consumer_timeout(PA, State)
+		    {long, Timeout} -> Timeout;
+		    _            -> get_queue_consumer_timeout(PA, State)
 	    end;
 	_ ->
 	    get_queue_consumer_timeout(PA, State)
@@ -2831,9 +2831,9 @@ get_consumer_timeout(PA = #pending_ack{tag  = CTag},
 
 evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
     case ?QUEUE:get(UAMQ, empty) of
-	empty ->
-	    {noreply, State};
-	PA ->  evaluate_consumer_timeout1(PA, State)
+	    empty ->
+	        {noreply, State};
+	    PA ->  evaluate_consumer_timeout1(PA, State)
     end.
 
 evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
