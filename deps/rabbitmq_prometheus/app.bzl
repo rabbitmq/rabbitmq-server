@@ -8,7 +8,15 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/collectors/prometheus_process_collector.erl",
+            "src/collectors/prometheus_rabbitmq_alarm_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/rabbit_prometheus_app.erl",
+            "src/rabbit_prometheus_dispatcher.erl",
+            "src/rabbit_prometheus_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_prometheus",
         dest = "ebin",
@@ -29,7 +37,15 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/collectors/prometheus_process_collector.erl",
+            "src/collectors/prometheus_rabbitmq_alarm_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/rabbit_prometheus_app.erl",
+            "src/rabbit_prometheus_dispatcher.erl",
+            "src/rabbit_prometheus_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_prometheus",
         dest = "test",
@@ -53,11 +69,12 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/schema/rabbitmq_prometheus.schema",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
@@ -69,11 +86,13 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

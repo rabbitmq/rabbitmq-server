@@ -90,7 +90,6 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "srcs",
@@ -101,11 +100,23 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/rabbit_mgmt.hrl",
+        ],
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-APACHE2-excanvas",
+            "LICENSE-BSD-base64js",
+            "LICENSE-ISC-cowboy",
+            "LICENSE-MIT-EJS",
+            "LICENSE-MIT-Flot",
+            "LICENSE-MIT-Sammy",
+            "LICENSE-MIT-jQuery",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

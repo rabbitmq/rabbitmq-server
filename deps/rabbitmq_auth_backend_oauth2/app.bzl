@@ -8,7 +8,17 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
+            "src/rabbit_auth_backend_oauth2.erl",
+            "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_scope.erl",
+            "src/uaa_jwks.erl",
+            "src/uaa_jwt.erl",
+            "src/uaa_jwt_jwk.erl",
+            "src/uaa_jwt_jwt.erl",
+            "src/wildcard.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_auth_backend_oauth2",
         dest = "ebin",
@@ -29,7 +39,17 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
+            "src/rabbit_auth_backend_oauth2.erl",
+            "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_scope.erl",
+            "src/uaa_jwks.erl",
+            "src/uaa_jwt.erl",
+            "src/uaa_jwt_jwk.erl",
+            "src/uaa_jwt_jwt.erl",
+            "src/wildcard.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_auth_backend_oauth2",
         dest = "test",
@@ -53,11 +73,12 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/schema/rabbitmq_auth_backend_oauth2.schema",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
@@ -69,11 +90,13 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

@@ -8,7 +8,13 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/trust_store_http.erl",
+            "src/trust_store_http_app.erl",
+            "src/trust_store_http_sup.erl",
+            "src/trust_store_invalid_handler.erl",
+            "src/trust_store_list_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "trust_store_http",
         dest = "ebin",
@@ -35,19 +41,15 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -59,7 +61,13 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/trust_store_http.erl",
+            "src/trust_store_http_app.erl",
+            "src/trust_store_http_sup.erl",
+            "src/trust_store_invalid_handler.erl",
+            "src/trust_store_list_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "trust_store_http",
         dest = "test",

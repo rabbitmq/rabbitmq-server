@@ -8,7 +8,16 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbitmq_aws.erl",
+            "src/rabbitmq_aws_app.erl",
+            "src/rabbitmq_aws_config.erl",
+            "src/rabbitmq_aws_json.erl",
+            "src/rabbitmq_aws_sign.erl",
+            "src/rabbitmq_aws_sup.erl",
+            "src/rabbitmq_aws_urilib.erl",
+            "src/rabbitmq_aws_xml.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_aws",
         dest = "ebin",
@@ -24,7 +33,16 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbitmq_aws.erl",
+            "src/rabbitmq_aws_app.erl",
+            "src/rabbitmq_aws_config.erl",
+            "src/rabbitmq_aws_json.erl",
+            "src/rabbitmq_aws_sign.erl",
+            "src/rabbitmq_aws_sup.erl",
+            "src/rabbitmq_aws_urilib.erl",
+            "src/rabbitmq_aws_xml.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_aws",
         dest = "test",
@@ -43,11 +61,12 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/schema/rabbitmq_aws.schema",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "srcs",
@@ -58,11 +77,18 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/rabbitmq_aws.hrl",
+        ],
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-erlcloud",
+            "LICENSE-httpc_aws",
+            "LICENSE-rabbitmq_aws",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

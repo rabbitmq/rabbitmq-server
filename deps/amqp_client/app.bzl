@@ -84,7 +84,6 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
 
     filegroup(
@@ -96,15 +95,22 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/amqp_client.hrl",
+            "include/amqp_client_internal.hrl",
+            "include/amqp_gen_consumer_spec.hrl",
+            "include/rabbit_routing_prefixes.hrl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

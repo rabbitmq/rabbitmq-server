@@ -80,11 +80,12 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/schema/rabbitmq_mqtt.schema",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "srcs",
@@ -95,11 +96,20 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/mqtt_machine.hrl",
+            "include/mqtt_machine_v0.hrl",
+            "include/rabbit_mqtt.hrl",
+            "include/rabbit_mqtt_frame.hrl",
+            "include/rabbit_mqtt_retained_msg_store.hrl",
+        ],
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

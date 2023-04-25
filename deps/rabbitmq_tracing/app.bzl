@@ -8,7 +8,20 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_tracing_app.erl",
+            "src/rabbit_tracing_consumer.erl",
+            "src/rabbit_tracing_consumer_sup.erl",
+            "src/rabbit_tracing_files.erl",
+            "src/rabbit_tracing_mgmt.erl",
+            "src/rabbit_tracing_sup.erl",
+            "src/rabbit_tracing_traces.erl",
+            "src/rabbit_tracing_util.erl",
+            "src/rabbit_tracing_wm_file.erl",
+            "src/rabbit_tracing_wm_files.erl",
+            "src/rabbit_tracing_wm_trace.erl",
+            "src/rabbit_tracing_wm_traces.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_tracing",
         dest = "ebin",
@@ -30,7 +43,20 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_tracing_app.erl",
+            "src/rabbit_tracing_consumer.erl",
+            "src/rabbit_tracing_consumer_sup.erl",
+            "src/rabbit_tracing_files.erl",
+            "src/rabbit_tracing_mgmt.erl",
+            "src/rabbit_tracing_sup.erl",
+            "src/rabbit_tracing_traces.erl",
+            "src/rabbit_tracing_util.erl",
+            "src/rabbit_tracing_wm_file.erl",
+            "src/rabbit_tracing_wm_files.erl",
+            "src/rabbit_tracing_wm_trace.erl",
+            "src/rabbit_tracing_wm_traces.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_tracing",
         dest = "test",
@@ -55,11 +81,13 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/www/js/tmpl/traces.ejs",
+            "priv/www/js/tracing.js",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
@@ -71,11 +99,13 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

@@ -8,7 +8,26 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_boot_state.erl",
+            "src/rabbit_boot_state_sup.erl",
+            "src/rabbit_boot_state_systemd.erl",
+            "src/rabbit_boot_state_xterm_titlebar.erl",
+            "src/rabbit_logger_fmt_helpers.erl",
+            "src/rabbit_logger_json_fmt.erl",
+            "src/rabbit_logger_std_h.erl",
+            "src/rabbit_logger_text_fmt.erl",
+            "src/rabbit_prelaunch.erl",
+            "src/rabbit_prelaunch_app.erl",
+            "src/rabbit_prelaunch_conf.erl",
+            "src/rabbit_prelaunch_dist.erl",
+            "src/rabbit_prelaunch_early_logging.erl",
+            "src/rabbit_prelaunch_erlang_compat.erl",
+            "src/rabbit_prelaunch_errors.erl",
+            "src/rabbit_prelaunch_file.erl",
+            "src/rabbit_prelaunch_sighandler.erl",
+            "src/rabbit_prelaunch_sup.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_prelaunch",
         dest = "ebin",
@@ -25,7 +44,26 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_boot_state.erl",
+            "src/rabbit_boot_state_sup.erl",
+            "src/rabbit_boot_state_systemd.erl",
+            "src/rabbit_boot_state_xterm_titlebar.erl",
+            "src/rabbit_logger_fmt_helpers.erl",
+            "src/rabbit_logger_json_fmt.erl",
+            "src/rabbit_logger_std_h.erl",
+            "src/rabbit_logger_text_fmt.erl",
+            "src/rabbit_prelaunch.erl",
+            "src/rabbit_prelaunch_app.erl",
+            "src/rabbit_prelaunch_conf.erl",
+            "src/rabbit_prelaunch_dist.erl",
+            "src/rabbit_prelaunch_early_logging.erl",
+            "src/rabbit_prelaunch_erlang_compat.erl",
+            "src/rabbit_prelaunch_errors.erl",
+            "src/rabbit_prelaunch_file.erl",
+            "src/rabbit_prelaunch_sighandler.erl",
+            "src/rabbit_prelaunch_sup.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_prelaunch",
         dest = "test",
@@ -52,19 +90,15 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

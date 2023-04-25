@@ -119,16 +119,34 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/amqqueue.hrl",
+            "include/amqqueue_v1.hrl",
+            "include/amqqueue_v2.hrl",
+            "include/gm_specs.hrl",
+            "include/rabbit_global_counters.hrl",
+            "include/vhost.hrl",
+            "include/vhost_v1.hrl",
+            "include/vhost_v2.hrl",
+        ],
     )
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/schema/.gitignore",
+            "priv/schema/rabbit.schema",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
+        srcs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+            "src/rabbit_fifo_v0.hrl",
+            "src/rabbit_fifo_v1.hrl",
+            "src/rabbit_stream_coordinator.hrl",
+        ],
     )
     filegroup(
         name = "srcs",
@@ -139,7 +157,10 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
