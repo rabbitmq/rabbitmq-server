@@ -47,9 +47,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = [
-            "src/rabbit_stream_core.erl",
-        ],
+        srcs = ["src/rabbit_stream_core.erl"],
     )
     filegroup(
         name = "public_hdrs",

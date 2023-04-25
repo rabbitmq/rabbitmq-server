@@ -58,9 +58,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = [
-            "src/rabbit_federation_mgmt.erl",
-        ],
+        srcs = ["src/rabbit_federation_mgmt.erl"],
     )
     filegroup(
         name = "private_hdrs",

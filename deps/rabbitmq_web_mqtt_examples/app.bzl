@@ -43,9 +43,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = [
-            "src/rabbit_web_mqtt_examples_app.erl",
-        ],
+        srcs = ["src/rabbit_web_mqtt_examples_app.erl"],
     )
     filegroup(
         name = "private_hdrs",

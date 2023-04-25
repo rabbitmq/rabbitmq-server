@@ -32,9 +32,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = [
-            "src/rabbit_exchange_type_random.erl",
-        ],
+        srcs = ["src/rabbit_exchange_type_random.erl"],
     )
     filegroup(
         name = "private_hdrs",
