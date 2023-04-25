@@ -114,8 +114,8 @@
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 
--define(EVAL_MEMBERS_TIMEOUT, 60000).
--define(EVAL_MEMBERS_EVENT_TIMEOUT, 30000).
+-define(EVAL_MEMBERS_TIMEOUT, 60000*60).
+-define(EVAL_MEMBERS_EVENT_TIMEOUT, 60000).
 
 
 %%----------- QQ policies ---------------------------------------------------
@@ -601,7 +601,7 @@ add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
             create_add_member_effects(ClusterName, Cluster,
                                       Q, QName, NodesToAdd);
         {_,_} ->
-            rabbit_log:debug("CALLED: NOOP ~n",[]),
+            rabbit_log:debug("CALLED: NOOP ~p~n",[QName]),
             undefined
     end.
 
@@ -614,7 +614,7 @@ get_target_size(Q) ->
     end.
 
 create_add_member_effects(ClusterName, Cluster, Q, QName, New) ->
-    rabbit_log:debug("CALLED: WILL ADD ~p~n",[New]),
+    rabbit_log:debug("CALLED: WILL ADD ~p for Q ~p~n",[New, QName]),
     NewMembers = [make_add_member_effect(Q, QName, {ClusterName, N}) || N <- New],
     {add_members, NewMembers, Cluster}.
 
