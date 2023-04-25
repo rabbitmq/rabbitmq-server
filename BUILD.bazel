@@ -56,7 +56,6 @@ exports_files([
 # gazelle:exclude deps/prometheus
 # gazelle:exclude deps/quantile_estimator
 # gazelle:exclude deps/ra
-# gazelle:exclude deps/rabbitmq_cli
 # gazelle:exclude deps/ranch
 # gazelle:exclude deps/recon
 # gazelle:exclude deps/redbug

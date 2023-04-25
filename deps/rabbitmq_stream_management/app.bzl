@@ -8,7 +8,17 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_stream_connection_consumers_mgmt.erl",
+            "src/rabbit_stream_connection_mgmt.erl",
+            "src/rabbit_stream_connection_publishers_mgmt.erl",
+            "src/rabbit_stream_connections_mgmt.erl",
+            "src/rabbit_stream_connections_vhost_mgmt.erl",
+            "src/rabbit_stream_consumers_mgmt.erl",
+            "src/rabbit_stream_management_utils.erl",
+            "src/rabbit_stream_mgmt_db.erl",
+            "src/rabbit_stream_publishers_mgmt.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream_management",
         dest = "ebin",
@@ -31,7 +41,17 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_stream_connection_consumers_mgmt.erl",
+            "src/rabbit_stream_connection_mgmt.erl",
+            "src/rabbit_stream_connection_publishers_mgmt.erl",
+            "src/rabbit_stream_connections_mgmt.erl",
+            "src/rabbit_stream_connections_vhost_mgmt.erl",
+            "src/rabbit_stream_consumers_mgmt.erl",
+            "src/rabbit_stream_management_utils.erl",
+            "src/rabbit_stream_mgmt_db.erl",
+            "src/rabbit_stream_publishers_mgmt.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream_management",
         dest = "test",
@@ -57,27 +77,41 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = [
+            "priv/www/js/stream.js",
+            "priv/www/js/tmpl/streamConnection.ejs",
+            "priv/www/js/tmpl/streamConnections.ejs",
+            "priv/www/js/tmpl/streamConsumersList.ejs",
+            "priv/www/js/tmpl/streamPublishersList.ejs",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_stream_connection_consumers_mgmt.erl",
+            "src/rabbit_stream_connection_mgmt.erl",
+            "src/rabbit_stream_connection_publishers_mgmt.erl",
+            "src/rabbit_stream_connections_mgmt.erl",
+            "src/rabbit_stream_connections_vhost_mgmt.erl",
+            "src/rabbit_stream_consumers_mgmt.erl",
+            "src/rabbit_stream_management_utils.erl",
+            "src/rabbit_stream_mgmt_db.erl",
+            "src/rabbit_stream_publishers_mgmt.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
