@@ -8,7 +8,7 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = ["src/rabbit_exchange_type_random.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_random_exchange",
         dest = "ebin",
@@ -31,27 +31,25 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = ["src/rabbit_exchange_type_random.erl"],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-APACHE2",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -63,7 +61,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = ["src/rabbit_exchange_type_random.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_random_exchange",
         dest = "test",

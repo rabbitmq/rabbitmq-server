@@ -8,7 +8,29 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand.erl",
+            "src/rabbit_federation_app.erl",
+            "src/rabbit_federation_db.erl",
+            "src/rabbit_federation_event.erl",
+            "src/rabbit_federation_exchange.erl",
+            "src/rabbit_federation_exchange_link.erl",
+            "src/rabbit_federation_exchange_link_sup_sup.erl",
+            "src/rabbit_federation_link_sup.erl",
+            "src/rabbit_federation_link_util.erl",
+            "src/rabbit_federation_parameters.erl",
+            "src/rabbit_federation_pg.erl",
+            "src/rabbit_federation_queue.erl",
+            "src/rabbit_federation_queue_link.erl",
+            "src/rabbit_federation_queue_link_sup_sup.erl",
+            "src/rabbit_federation_status.erl",
+            "src/rabbit_federation_sup.erl",
+            "src/rabbit_federation_upstream.erl",
+            "src/rabbit_federation_upstream_exchange.erl",
+            "src/rabbit_federation_util.erl",
+            "src/rabbit_log_federation.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_federation",
         dest = "ebin",
@@ -30,7 +52,29 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand.erl",
+            "src/rabbit_federation_app.erl",
+            "src/rabbit_federation_db.erl",
+            "src/rabbit_federation_event.erl",
+            "src/rabbit_federation_exchange.erl",
+            "src/rabbit_federation_exchange_link.erl",
+            "src/rabbit_federation_exchange_link_sup_sup.erl",
+            "src/rabbit_federation_link_sup.erl",
+            "src/rabbit_federation_link_util.erl",
+            "src/rabbit_federation_parameters.erl",
+            "src/rabbit_federation_pg.erl",
+            "src/rabbit_federation_queue.erl",
+            "src/rabbit_federation_queue_link.erl",
+            "src/rabbit_federation_queue_link_sup_sup.erl",
+            "src/rabbit_federation_status.erl",
+            "src/rabbit_federation_sup.erl",
+            "src/rabbit_federation_upstream.erl",
+            "src/rabbit_federation_upstream_exchange.erl",
+            "src/rabbit_federation_util.erl",
+            "src/rabbit_log_federation.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_federation",
         dest = "test",
@@ -55,27 +99,50 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand.erl",
+            "src/rabbit_federation_app.erl",
+            "src/rabbit_federation_db.erl",
+            "src/rabbit_federation_event.erl",
+            "src/rabbit_federation_exchange.erl",
+            "src/rabbit_federation_exchange_link.erl",
+            "src/rabbit_federation_exchange_link_sup_sup.erl",
+            "src/rabbit_federation_link_sup.erl",
+            "src/rabbit_federation_link_util.erl",
+            "src/rabbit_federation_parameters.erl",
+            "src/rabbit_federation_pg.erl",
+            "src/rabbit_federation_queue.erl",
+            "src/rabbit_federation_queue_link.erl",
+            "src/rabbit_federation_queue_link_sup_sup.erl",
+            "src/rabbit_federation_status.erl",
+            "src/rabbit_federation_sup.erl",
+            "src/rabbit_federation_upstream.erl",
+            "src/rabbit_federation_upstream_exchange.erl",
+            "src/rabbit_federation_util.erl",
+            "src/rabbit_log_federation.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/logging.hrl",
+            "include/rabbit_federation.hrl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
