@@ -194,12 +194,14 @@ join_tags(Tags) ->
   Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
   string:join(Strings, " ").
 
--spec parse_peeraddr(inet:ip_address()) -> string().
+-spec parse_peeraddr(inet:ip_address() | unknown) -> string().
+parse_peeraddr(unknown) ->
+    rabbit_data_coercion:to_list(unknown);
 parse_peeraddr(PeerAddr) ->
     handle_inet_ntoa_peeraddr(inet:ntoa(PeerAddr), PeerAddr).
 
--spec handle_inet_ntoa_peeraddr({'error', term()} | string(), inet:ip_address()) -> string().
+-spec handle_inet_ntoa_peeraddr({'error', term()} | string(), inet:ip_address() | unknown) -> string().
 handle_inet_ntoa_peeraddr({error, einval}, PeerAddr) ->
-    rabbit_data_coercion:to_list(io_lib:format("~w", [PeerAddr]));
+    rabbit_data_coercion:to_list(PeerAddr);
 handle_inet_ntoa_peeraddr(PeerAddrStr, _PeerAddr0) ->
     PeerAddrStr.
