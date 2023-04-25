@@ -68,7 +68,7 @@ platform(
 platform(
     name = "erlang_linux_git_master_platform",
     constraint_values = [
-        "@erlang_config//:erlang_26",
+        "@erlang_config//:erlang_26_unknown",
         "@elixir_config//:elixir_1_14",
     ],
     parents = ["@rbe//config:platform"],
