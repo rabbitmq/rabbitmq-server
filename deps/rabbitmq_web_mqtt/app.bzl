@@ -8,7 +8,14 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_web_mqtt_app.erl",
+            "src/rabbit_web_mqtt_connection_info.erl",
+            "src/rabbit_web_mqtt_connection_sup.erl",
+            "src/rabbit_web_mqtt_handler.erl",
+            "src/rabbit_web_mqtt_middleware.erl",
+            "src/rabbit_web_mqtt_stream_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_mqtt",
         dest = "ebin",
@@ -30,7 +37,14 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_web_mqtt_app.erl",
+            "src/rabbit_web_mqtt_connection_info.erl",
+            "src/rabbit_web_mqtt_connection_sup.erl",
+            "src/rabbit_web_mqtt_handler.erl",
+            "src/rabbit_web_mqtt_middleware.erl",
+            "src/rabbit_web_mqtt_stream_handler.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_web_mqtt",
         dest = "test",
@@ -55,27 +69,32 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = ["priv/schema/rabbitmq_web_mqtt.schema"],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_web_mqtt_app.erl",
+            "src/rabbit_web_mqtt_connection_info.erl",
+            "src/rabbit_web_mqtt_connection_sup.erl",
+            "src/rabbit_web_mqtt_handler.erl",
+            "src/rabbit_web_mqtt_middleware.erl",
+            "src/rabbit_web_mqtt_stream_handler.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

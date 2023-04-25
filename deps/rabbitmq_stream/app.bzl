@@ -8,7 +8,23 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand.erl",
+            "src/rabbit_stream.erl",
+            "src/rabbit_stream_connection_sup.erl",
+            "src/rabbit_stream_manager.erl",
+            "src/rabbit_stream_metrics.erl",
+            "src/rabbit_stream_metrics_gc.erl",
+            "src/rabbit_stream_reader.erl",
+            "src/rabbit_stream_sup.erl",
+            "src/rabbit_stream_utils.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream",
         dest = "ebin",
@@ -31,7 +47,23 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand.erl",
+            "src/rabbit_stream.erl",
+            "src/rabbit_stream_connection_sup.erl",
+            "src/rabbit_stream_manager.erl",
+            "src/rabbit_stream_metrics.erl",
+            "src/rabbit_stream_metrics_gc.erl",
+            "src/rabbit_stream_reader.erl",
+            "src/rabbit_stream_sup.erl",
+            "src/rabbit_stream_utils.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream",
         dest = "test",
@@ -57,26 +89,41 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
+        srcs = ["priv/schema/rabbitmq_stream.schema"],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand.erl",
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand.erl",
+            "src/rabbit_stream.erl",
+            "src/rabbit_stream_connection_sup.erl",
+            "src/rabbit_stream_manager.erl",
+            "src/rabbit_stream_metrics.erl",
+            "src/rabbit_stream_metrics_gc.erl",
+            "src/rabbit_stream_reader.erl",
+            "src/rabbit_stream_sup.erl",
+            "src/rabbit_stream_utils.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = ["include/rabbit_stream_metrics.hrl"],
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
