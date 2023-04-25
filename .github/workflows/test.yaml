@@ -29,15 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-<<<<<<< HEAD
         erlang_major:
         - "24"
         - "25"
-=======
-        otp_version_id:
-        - 25_0
-        - 25_3
->>>>>>> 8a82109fcf (Add OTP 25.3 to the build and CI matrix as otp-max)
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
