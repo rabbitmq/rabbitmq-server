@@ -10,7 +10,15 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_control_helper.erl",
+            "src/rabbit_ct_broker_helpers.erl",
+            "src/rabbit_ct_config_schema.erl",
+            "src/rabbit_ct_helpers.erl",
+            "src/rabbit_ct_proper_helpers.erl",
+            "src/rabbit_ct_vm_helpers.erl",
+            "src/rabbit_mgmt_test_util.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_ct_helpers",
         dest = "ebin",
@@ -30,7 +38,15 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(["src/**/*.erl"]),
+        srcs = [
+            "src/rabbit_control_helper.erl",
+            "src/rabbit_ct_broker_helpers.erl",
+            "src/rabbit_ct_config_schema.erl",
+            "src/rabbit_ct_helpers.erl",
+            "src/rabbit_ct_proper_helpers.erl",
+            "src/rabbit_ct_vm_helpers.erl",
+            "src/rabbit_mgmt_test_util.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_ct_helpers",
         dest = "test",
@@ -66,25 +82,36 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         testonly = True,
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/rabbit_control_helper.erl",
+            "src/rabbit_ct_broker_helpers.erl",
+            "src/rabbit_ct_config_schema.erl",
+            "src/rabbit_ct_helpers.erl",
+            "src/rabbit_ct_proper_helpers.erl",
+            "src/rabbit_ct_vm_helpers.erl",
+            "src/rabbit_mgmt_test_util.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
         testonly = True,
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/rabbit_assert.hrl",
+            "include/rabbit_mgmt_test.hrl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
         testonly = True,
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
         testonly = True,
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-APACHE2",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
