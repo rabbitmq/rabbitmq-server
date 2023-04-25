@@ -20,13 +20,30 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = native.glob(
-            ["src/**/*.erl"],
-            exclude = [
-                "src/amqp_gen_connection.erl",
-                "src/amqp_gen_consumer.erl",
-            ],
-        ),
+        srcs = [
+            "src/amqp_auth_mechanisms.erl",
+            "src/amqp_channel.erl",
+            "src/amqp_channel_sup.erl",
+            "src/amqp_channel_sup_sup.erl",
+            "src/amqp_channels_manager.erl",
+            "src/amqp_client.erl",
+            "src/amqp_connection.erl",
+            "src/amqp_connection_sup.erl",
+            "src/amqp_connection_type_sup.erl",
+            "src/amqp_direct_connection.erl",
+            "src/amqp_direct_consumer.erl",
+            "src/amqp_main_reader.erl",
+            "src/amqp_network_connection.erl",
+            "src/amqp_rpc_client.erl",
+            "src/amqp_rpc_server.erl",
+            "src/amqp_selective_consumer.erl",
+            "src/amqp_ssl.erl",
+            "src/amqp_sup.erl",
+            "src/amqp_uri.erl",
+            "src/amqp_util.erl",
+            "src/rabbit_routing_util.erl",
+            "src/uri_parser.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "amqp_client",
         beam = [":behaviours"],
@@ -57,13 +74,30 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = native.glob(
-            ["src/**/*.erl"],
-            exclude = [
-                "src/amqp_gen_connection.erl",
-                "src/amqp_gen_consumer.erl",
-            ],
-        ),
+        srcs = [
+            "src/amqp_auth_mechanisms.erl",
+            "src/amqp_channel.erl",
+            "src/amqp_channel_sup.erl",
+            "src/amqp_channel_sup_sup.erl",
+            "src/amqp_channels_manager.erl",
+            "src/amqp_client.erl",
+            "src/amqp_connection.erl",
+            "src/amqp_connection_sup.erl",
+            "src/amqp_connection_type_sup.erl",
+            "src/amqp_direct_connection.erl",
+            "src/amqp_direct_consumer.erl",
+            "src/amqp_main_reader.erl",
+            "src/amqp_network_connection.erl",
+            "src/amqp_rpc_client.erl",
+            "src/amqp_rpc_server.erl",
+            "src/amqp_selective_consumer.erl",
+            "src/amqp_ssl.erl",
+            "src/amqp_sup.erl",
+            "src/amqp_uri.erl",
+            "src/amqp_util.erl",
+            "src/rabbit_routing_util.erl",
+            "src/uri_parser.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "amqp_client",
         beam = [":test_behaviours"],
@@ -84,27 +118,55 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = native.glob(["priv/**/*"]),
     )
 
     filegroup(
         name = "srcs",
-        srcs = native.glob([
-            "src/**/*.app.src",
-            "src/**/*.erl",
-        ]),
+        srcs = [
+            "src/amqp_auth_mechanisms.erl",
+            "src/amqp_channel.erl",
+            "src/amqp_channel_sup.erl",
+            "src/amqp_channel_sup_sup.erl",
+            "src/amqp_channels_manager.erl",
+            "src/amqp_client.erl",
+            "src/amqp_connection.erl",
+            "src/amqp_connection_sup.erl",
+            "src/amqp_connection_type_sup.erl",
+            "src/amqp_direct_connection.erl",
+            "src/amqp_direct_consumer.erl",
+            "src/amqp_gen_connection.erl",
+            "src/amqp_gen_consumer.erl",
+            "src/amqp_main_reader.erl",
+            "src/amqp_network_connection.erl",
+            "src/amqp_rpc_client.erl",
+            "src/amqp_rpc_server.erl",
+            "src/amqp_selective_consumer.erl",
+            "src/amqp_ssl.erl",
+            "src/amqp_sup.erl",
+            "src/amqp_uri.erl",
+            "src/amqp_util.erl",
+            "src/rabbit_routing_util.erl",
+            "src/uri_parser.erl",
+        ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = native.glob(["include/**/*.hrl"]),
+        srcs = [
+            "include/amqp_client.hrl",
+            "include/amqp_client_internal.hrl",
+            "include/amqp_gen_consumer_spec.hrl",
+            "include/rabbit_routing_prefixes.hrl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
-        srcs = native.glob(["src/**/*.hrl"]),
     )
     filegroup(
         name = "license_files",
-        srcs = native.glob(["LICENSE*"]),
+        srcs = [
+            "LICENSE",
+            "LICENSE-MPL-RabbitMQ",
+        ],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
