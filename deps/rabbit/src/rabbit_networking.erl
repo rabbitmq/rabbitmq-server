@@ -271,7 +271,7 @@ listener_of_protocol_ets(Protocol) ->
 
 -spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
 stop_ranch_listener_of_protocol(Protocol) ->
-    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
+    case ranch_ref_of_protocol(Protocol) of
         undefined -> ok;
         Ref       ->
             rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
@@ -578,7 +578,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
-      connections_local() ++ rabbit_networking:local_non_amqp_connections()).
+      connections_local() ++ local_non_amqp_connections()).
 
 -spec close_connection(pid(), string()) -> 'ok'.
 
