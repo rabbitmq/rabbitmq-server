@@ -2830,30 +2830,6 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
-<<<<<<< HEAD
-evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
-                                                   consumer_timeout = Timeout},
-                                       unacked_message_q = UAMQ}) ->
-    Now = os:system_time(millisecond),
-    case ?QUEUE:get(UAMQ, empty) of
-        #pending_ack{delivery_tag = ConsumerTag,
-                     delivered_at = Time}
-          when is_integer(Timeout)
-               andalso Time < Now - Timeout ->
-            rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
-                                       "waiting for delivery acknowledgement. Timeout used: ~p ms. "
-                                       "This timeout value can be configured, see consumers doc guide to learn more",
-                                       [rabbit_data_coercion:to_binary(ConsumerTag),
-                                        Channel, Timeout]),
-            Ex = rabbit_misc:amqp_error(precondition_failed,
-                                        "delivery acknowledgement on channel ~w timed out. "
-                                        "Timeout value used: ~p ms. "
-                                        "This timeout value can be configured, see consumers doc guide to learn more",
-                                        [Channel, Timeout], none),
-            handle_exception(Ex, State0);
-        _ ->
-            {noreply, State0}
-=======
 get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 			   _State = #ch{cfg = #conf{consumer_timeout = GCT}}) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -2865,7 +2841,6 @@ get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 	    end;
 	_ ->
 	    GCT
->>>>>>> 5dd88488ac (Allow setting consumer timeout via queue policy/arg and as consumer arg. Close #5437)
     end.
 
 get_consumer_timeout(PA = #pending_ack{tag  = CTag},
