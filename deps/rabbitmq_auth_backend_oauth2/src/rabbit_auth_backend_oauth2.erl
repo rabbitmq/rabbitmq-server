@@ -507,7 +507,7 @@ validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedTo
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
-validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ResourceServerId, ScopePrefix) ->
+validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, _ResourceServerId, ScopePrefix) ->
   case application:get_env(?APP, ?VERIFY_AUD, true) of
     true -> {error, {badarg, {aud_field_is_missing}}};
     false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
