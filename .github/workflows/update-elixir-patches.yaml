@@ -68,10 +68,6 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-<<<<<<< HEAD
-      if: steps.check-for-branch.outputs.c != 0
-=======
->>>>>>> d59a1db01c (Update the automation to bump erlang/elixir patches in CI (backport #7991) (#7996))
       uses: peter-evans/create-pull-request@v5.0.0
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
@@ -80,14 +76,5 @@ jobs:
         title: Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         commit-message: |
           Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
-        labels: |
-          backport-v3.11.x
-          backport-v3.10.x
-<<<<<<< HEAD
-          backport-v3.9.x
-          backport-v3.8.x
-        branch: bump-elixir-${{ matrix.elixir_version }}
-=======
         branch: ${{ env.branch }}
->>>>>>> d59a1db01c (Update the automation to bump erlang/elixir patches in CI (backport #7991) (#7996))
         delete-branch: true

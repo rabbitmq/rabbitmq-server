@@ -143,10 +143,6 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-<<<<<<< HEAD
-      if: steps.check-for-branch.outputs.c != 0
-=======
->>>>>>> d59a1db01c (Update the automation to bump erlang/elixir patches in CI (backport #7991) (#7996))
       uses: peter-evans/create-pull-request@v5.0.0
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
