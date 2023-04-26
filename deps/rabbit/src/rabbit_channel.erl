@@ -2804,34 +2804,67 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
-evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
-                                                   consumer_timeout = Timeout},
-                                       unacked_message_q = UAMQ}) ->
-    Now = os:system_time(millisecond),
-    case ?QUEUE:get(UAMQ, empty) of
-        #pending_ack{delivery_tag = ConsumerTag,
-                     delivered_at = Time}
-          when is_integer(Timeout)
-               andalso Time < Now - Timeout ->
-            rabbit_log_channel:warning("Consumer ~ts on channel ~w has timed out "
-                                       "waiting for delivery acknowledgement. Timeout used: ~tp ms. "
-                                       "This timeout value can be configured, see consumers doc guide to learn more",
-                                       [rabbit_data_coercion:to_binary(ConsumerTag),
-                                        Channel, Timeout]),
-            Ex = rabbit_misc:amqp_error(precondition_failed,
-                                        "delivery acknowledgement on channel ~w timed out. "
-                                        "Timeout value used: ~tp ms. "
-                                        "This timeout value can be configured, see consumers doc guide to learn more",
-                                        [Channel, Timeout], none),
-            handle_exception(Ex, State0);
-        _ ->
-            {noreply, State0}
+get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
+			   _State = #ch{cfg = #conf{consumer_timeout = GCT}}) ->
+    case rabbit_amqqueue:lookup(QName) of
+	{ok, Q} -> %% should we account for different queue states here?
+	    case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
+							   fun (X, Y) -> erlang:min(X, Y) end, Q) of
+		    undefined -> GCT;
+		    Val -> Val
+	    end;
+	_ ->
+	    GCT
     end.
+
+get_consumer_timeout(PA = #pending_ack{tag  = CTag},
+                     State = #ch{consumer_mapping = CMap}) ->
+    case maps:find(CTag, CMap) of
+        {ok, {_, {_, _, _, Args}}} ->
+	    case rabbit_misc:table_lookup(Args, <<"x-consumer-timeout">>) of
+		    {long, Timeout} -> Timeout;
+		    _            -> get_queue_consumer_timeout(PA, State)
+	    end;
+	_ ->
+	    get_queue_consumer_timeout(PA, State)
+    end.
+
+evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
+    case ?QUEUE:get(UAMQ, empty) of
+	    empty ->
+	        {noreply, State};
+	    PA ->  evaluate_consumer_timeout1(PA, State)
+    end.
+
+evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
+                           State) ->
+    Now = os:system_time(millisecond),
+    case get_consumer_timeout(PA, State) of
+        Timeout when is_integer(Timeout)
+                     andalso Time < Now - Timeout ->
+            handle_consumer_timed_out(Timeout, PA, State);
+        _ ->
+            {noreply, State}
+    end.
+
+handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag},
+			  State = #ch{cfg = #conf{channel = Channel}}) ->
+    rabbit_log_channel:warning("Consumer ~ts on channel ~w has timed out "
+			       "waiting for delivery acknowledgement. Timeout used: ~tp ms. "
+			       "This timeout value can be configured, see consumers doc guide to learn more",
+			       [rabbit_data_coercion:to_binary(DeliveryTag),
+				Channel, Timeout]),
+    Ex = rabbit_misc:amqp_error(precondition_failed,
+				"delivery acknowledgement on channel ~w timed out. "
+				"Timeout value used: ~tp ms. "
+				"This timeout value can be configured, see consumers doc guide to learn more",
+				[Channel, Timeout], none),
+    handle_exception(Ex, State).
 
 handle_queue_actions(Actions, #ch{} = State0) ->
     WriterPid = State0#ch.cfg#conf.writer_pid,
     lists:foldl(
-      fun 
+      fun
           ({settled, QRef, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QRef, S0);
           ({rejected, _QRef, MsgSeqNos}, S0) ->
