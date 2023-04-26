@@ -241,7 +241,7 @@ def rabbitmq_integration_suite(
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
@@ -263,7 +263,7 @@ def rabbitmq_integration_suite(
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_FEATURE_FLAGS": "",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
