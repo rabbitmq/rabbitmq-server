@@ -50,19 +50,22 @@ jobs:
             backport-v3.11.x
             backport-v3.10.x
     timeout-minutes: 10
+    env:
+      branch: bump-otp-${{ matrix.erlang_version }}
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
       with:
         ref: ${{ matrix.branch }}
-    - name: SKIP IF THE PR ALREADY EXISTS
+    - name: FAIL IF THE PR ALREADY EXISTS
       id: check-for-branch
       run: |
         set +e
-        git ls-remote --exit-code --heads origin bump-otp-${{ matrix.erlang_version }}
-        echo "::set-output name=c::$?"
+        if git ls-remote --exit-code --heads origin ${{ env.branch }}; then
+          echo "Branch ${{ env.branch }} already exits"
+          exit 1
+        fi
     - name: DETERMINE LATEST PATCH & SHA
-      if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags?per_page=100 \
@@ -92,11 +95,10 @@ jobs:
           exit 1
         fi
 
-        echo "::set-output name=VERSION::${VERSION}"
-        echo "::set-output name=SHA::${SHA}"
-        echo "::set-output name=SHA2::${SHA2}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "SHA=${SHA}" >> $GITHUB_OUTPUT
+        echo "SHA2=${SHA2}" >> $GITHUB_OUTPUT
     - name: MODIFY VERSION FILE
-      if: steps.check-for-branch.outputs.c != 0
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
@@ -143,7 +145,6 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-      if: steps.check-for-branch.outputs.c != 0
       uses: peter-evans/create-pull-request@v5.0.0
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
@@ -158,5 +159,5 @@ jobs:
         commit-message: |
           Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         labels: ${{ matrix.labels }}
-        branch: bump-otp-${{ matrix.erlang_version }}
+        branch: ${{ env.branch }}
         delete-branch: true

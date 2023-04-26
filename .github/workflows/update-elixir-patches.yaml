@@ -17,17 +17,20 @@ jobs:
         - elixir_version: "1.14"
           name: '1_14'
     timeout-minutes: 10
+    env:
+      branch: bump-elixir-${{ matrix.elixir_version }}
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
-    - name: SKIP IF THE PR ALREADY EXISTS
+    - name: FAIL IF THE PR ALREADY EXISTS
       id: check-for-branch
       run: |
         set +e
-        git ls-remote --exit-code --heads origin bump-elixir-${{ matrix.elixir_version }}
-        echo "::set-output name=c::$?"
+        if git ls-remote --exit-code --heads origin ${{ env.branch }}; then
+          echo "Branch ${{ env.branch }} already exits"
+          exit 1
+        fi
     - name: DETERMINE LATEST PATCH & SHA
-      if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
@@ -47,10 +50,9 @@ jobs:
           exit 1
         fi
 
-        echo "::set-output name=VERSION::${TAG_NAME#v}"
-        echo "::set-output name=SHA::${SHA}"
+        echo "VERSION=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+        echo "SHA=${SHA}" >> $GITHUB_OUTPUT
     - name: MODIFY VERSION FILE
-      if: steps.check-for-branch.outputs.c != 0
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
@@ -67,7 +69,6 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-      if: steps.check-for-branch.outputs.c != 0
       uses: peter-evans/create-pull-request@v5.0.0
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
@@ -85,5 +86,5 @@ jobs:
           backport-v3.12.x
           backport-v3.11.x
           backport-v3.10.x
-        branch: bump-elixir-${{ matrix.elixir_version }}
+        branch: ${{ env.branch }}
         delete-branch: true
