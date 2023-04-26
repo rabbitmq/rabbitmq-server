@@ -245,7 +245,7 @@ def rabbitmq_integration_suite(
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
@@ -277,7 +277,7 @@ def rabbitmq_integration_suite(
             "stream_single_active_consumer,direct_exchange_routing_v2,listener_records_in_ets,tracking_records_in_ets",
             # required starting from 3.12.0 in rabbitmq_management_agent:
             # empty_basic_get_metric, drop_unroutable_metric
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
