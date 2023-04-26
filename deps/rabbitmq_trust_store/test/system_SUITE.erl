@@ -297,7 +297,8 @@ validate_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cacerts, RootCerts},
+                                                           ssl_options = [{verify, verify_peer},
+                                                                          {cacerts, RootCerts},
                                                                           {cert, CertTrusted},
                                                                           {key, KeyTrusted}]}),
     %% Clean: client & server TLS/TCP
