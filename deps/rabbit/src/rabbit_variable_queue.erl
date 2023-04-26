@@ -2601,14 +2601,22 @@ maybe_deltas_to_betas(DelsAndAcksFun,
              count        = DeltaCount,
              transient    = Transient,
              end_seq_id   = DeltaSeqIdEnd } = Delta,
+    %% For v1 we always want to read messages up to the next segment boundary.
+    %% This is because v1 is not optimised for multiple reads from the same
+    %% segment: every time we read messages from a segment it has to read
+    %% and parse the entire segment from disk, filtering the messages we
+    %% requested afterwards.
+    %%
+    %% For v2 we want to limit the number of messages read at once to lower
+    %% the memory footprint. We use the consume rate to determine how many
+    %% messages we read.
+    DeltaSeqLimit = case Version of
+        1 -> DeltaSeqIdEnd;
+        2 -> DeltaSeqId + MemoryLimit
+    end,
     DeltaSeqId1 =
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
-                   %% We must limit the number of messages read at once
-                   %% otherwise the queue will attempt to read up to segment_entry_count()
-                   %% messages from the index each time. The value is determined
-                   %% using the consuming rate.
-                   DeltaSeqId + MemoryLimit,
-                   DeltaSeqIdEnd]),
+                   DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
     {List, StoreState2} = case Version of
         1 -> {List0, StoreState};
