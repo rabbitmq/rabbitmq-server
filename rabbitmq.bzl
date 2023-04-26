@@ -262,7 +262,6 @@ def rabbitmq_integration_suite(
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
-<<<<<<< HEAD
             # The feature flags listed below are required. This means they must
             # be enabled in mixed-version testing before even starting cluster
             # because newer node don't have the corresponding
@@ -275,20 +274,7 @@ def rabbitmq_integration_suite(
             #   maintenance_mode_status
             #   user_limits
             "RABBITMQ_FEATURE_FLAGS": "quorum_queue,implicit_default_bindings,virtual_host_metadata,maintenance_mode_status,user_limits",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
-=======
-            # The feature flags listed below are required. This means they must be enabled in mixed-version testing
-            # before even starting the cluster because newer nodes don't have the corresponding compatibility/migration code.
-            "RABBITMQ_FEATURE_FLAGS":
-            # required starting from 3.11.0 in rabbit:
-            "quorum_queue,implicit_default_bindings,virtual_host_metadata,maintenance_mode_status,user_limits," +
-            # required starting from 3.12.0 in rabbit:
-            "feature_flags_v2,stream_queue,classic_queue_type_delivery_support,classic_mirrored_queue_version," +
-            "stream_single_active_consumer,direct_exchange_routing_v2,listener_records_in_ets,tracking_records_in_ets",
-            # required starting from 3.12.0 in rabbitmq_management_agent:
-            # empty_basic_get_metric, drop_unroutable_metric
             "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
->>>>>>> 330aa8acab (Simplify the reference to RABBITMQ_RUN in bazel in integration tests)
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
