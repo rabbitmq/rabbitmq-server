@@ -262,24 +262,8 @@ def rabbitmq_integration_suite(
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
-<<<<<<< HEAD
             "RABBITMQ_FEATURE_FLAGS": "",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
-=======
-            # The feature flags listed below are required. This means they must
-            # be enabled in mixed-version testing before even starting cluster
-            # because newer node don't have the corresponding
-            # compatibility/migration code.
-            #
-            # Starting from 3.11.0:
-            #   quorum_queue
-            #   implicit_default_bindings
-            #   virtual_host_metadata
-            #   maintenance_mode_status
-            #   user_limits
-            "RABBITMQ_FEATURE_FLAGS": "quorum_queue,implicit_default_bindings,virtual_host_metadata,maintenance_mode_status,user_limits",
             "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
->>>>>>> 505c7ae326 (Simplify the reference to RABBITMQ_RUN in bazel in integration tests (backport #7989) (backport #7992) (#7995))
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
