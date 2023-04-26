@@ -20,7 +20,7 @@ all() ->
         permission_resource,
         permission_topic
     ].
-
+  
 variable_expansion(_Config) ->
     Scenarios = [
       { "Emtpy Scopes",
@@ -31,7 +31,7 @@ variable_expansion(_Config) ->
       },
       { "No Scopes",
         #{
-           <<"client_id">> => <<"some_client">>      
+           <<"client_id">> => <<"some_client">>
          }, <<"default">>, []
       },
       { "Expand token's var and vhost",
