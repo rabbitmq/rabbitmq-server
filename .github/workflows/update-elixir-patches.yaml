@@ -69,12 +69,7 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-<<<<<<< HEAD
-      if: steps.check-for-branch.outputs.c != 0
-      uses: peter-evans/create-pull-request@v4.2.3
-=======
       uses: peter-evans/create-pull-request@v5.0.0
->>>>>>> bb6c50311f (Update the automation to bump erlang/elixir patches in CI)
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
@@ -90,10 +85,5 @@ jobs:
         labels: |
           backport-v3.11.x
           backport-v3.10.x
-<<<<<<< HEAD
-          backport-v3.9.x
-        branch: bump-elixir-${{ matrix.elixir_version }}
-=======
         branch: ${{ env.branch }}
->>>>>>> bb6c50311f (Update the automation to bump erlang/elixir patches in CI)
         delete-branch: true
