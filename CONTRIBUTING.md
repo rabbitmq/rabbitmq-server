@@ -8,7 +8,7 @@ Pull requests is the primary place of discussing code changes.
 The process is fairly standard:
 
  * Fork the repository or repositories you plan on contributing to
- * Run `make`
+ * Run `bazel sync` if you plan to [use Bazel](https://github.com/rabbitmq/contribute/wiki/Bazel-and-BuildBuddy), or `make`
  * Create a branch with a descriptive name in the relevant repositories
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
