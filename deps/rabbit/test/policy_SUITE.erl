@@ -168,12 +168,13 @@ target_count_policy(Config) ->
                       {<<"ha-params">>, BNodes}],
     NodesPolicyOne = [{<<"ha-mode">>, <<"nodes">>},
                       {<<"ha-params">>, [hd(BNodes)]}],
+    SyncModePolicyAuto = [{<<"ha-mode">>, <<"all">>}, {<<"ha-sync-mode">>, <<"automatic">>}],
+    SyncModePolicyMan = [{<<"ha-mode">>, <<"all">>}, {<<"ha-sync-mode">>, <<"manual">>}],
 
     %% ALL has precedence
     Opts = #{config => Config,
              server => Server,
              qname  => QName},
-
     verify_policies(AllPolicy, ExactlyPolicyTwo, [{<<"ha-mode">>, <<"all">>}], Opts),
 
     verify_policies(ExactlyPolicyTwo, AllPolicy, [{<<"ha-mode">>, <<"all">>}], Opts),
@@ -181,6 +182,10 @@ target_count_policy(Config) ->
     verify_policies(AllPolicy, NodesPolicyAll, [{<<"ha-mode">>, <<"all">>}], Opts),
 
     verify_policies(NodesPolicyAll, AllPolicy, [{<<"ha-mode">>, <<"all">>}], Opts),
+
+    %% %% Sync mode OperPolicy has precedence
+    verify_policies(SyncModePolicyMan, SyncModePolicyAuto, [{<<"ha-sync-mode">>, <<"automatic">>}], Opts),
+    verify_policies(SyncModePolicyAuto, SyncModePolicyMan, [{<<"ha-sync-mode">>, <<"manual">>}], Opts),
 
     %% exactly has precedence over nodes
     verify_policies(ExactlyPolicyTwo, NodesPolicyAll,[{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}], Opts),
