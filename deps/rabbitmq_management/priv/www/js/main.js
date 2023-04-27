@@ -278,7 +278,9 @@ function set_timer_interval(interval) {
 }
 
 function reset_timer() {
-    clearInterval(timer);
+    if (timer != null) {
+        clearInterval(timer);
+    }
     if (timer_interval != null) {
         timer = setInterval(partial_update, timer_interval);
     }
@@ -741,13 +743,31 @@ function postprocess() {
     update_multifields();
 }
 
+function is_valid_regexp(value) {
+    try {
+        var _ = new RegExp(value, 'i');
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 function url_pagination_template_context(template, context, defaultPage, defaultPageSize){
     var page_number_request = fmt_page_number_request(context, defaultPage);
     var page_size = fmt_page_size_request(context, defaultPageSize);
     var name_request = fmt_filter_name_request(context, "");
     var use_regex = fmt_regex_request(context, "") == "checked";
     if (use_regex) {
-        name_request = esc(name_request);
+        // rabbitmq/rabbitmq-server#8008: if the expression cannot be compiled to a reg exp,
+        // assume a regular text filter
+        var valid_regexp = is_valid_regexp(name_request);
+        if (!valid_regexp) {
+            show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
+            use_regex = false;
+        }
+        if (use_regex && valid_regexp) {
+            name_request = esc(name_request);
+        }
     }
     return  '/' + template +
         '?page=' +  page_number_request +
