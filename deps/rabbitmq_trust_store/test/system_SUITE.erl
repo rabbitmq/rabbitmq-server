@@ -222,6 +222,7 @@ validation_success_for_AMQP_client1(Config) ->
                                                            ssl_options = [{cacerts, [Root]},
                                                                           {cert, Certificate},
                                                                           {key, Key},
+                                                                          {verify, verify_none},
                                                                           {versions, ['tlsv1.2']}]}),
 
     %% Clean: client & server TLS/TCP.
@@ -236,8 +237,8 @@ validation_failure_for_AMQP_client(Config) ->
 validation_failure_for_AMQP_client1(Config) ->
     %% Given: a root certificate and a certificate rooted with another
     %% authority.
-    {Root, Cert, Key}      = ct_helper:make_certs(),
-    {_,  CertOther, KeyOther}    = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}   = ct_helper:make_certs(),
+    {_, CertOther, KeyOther} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -245,7 +246,7 @@ validation_failure_for_AMQP_client1(Config) ->
     %% When: Rabbit accepts certificates rooted with just one
     %% particular authority.
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1, 1),
 
@@ -254,9 +255,10 @@ validation_failure_for_AMQP_client1(Config) ->
     {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
-                                   ssl_options = [{verify, verify_none},
+                                   ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertOther},
                                                   {key, KeyOther},
+                                                  {verify, verify_none},
                                                   {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
@@ -265,15 +267,8 @@ validation_failure_for_AMQP_client1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% With Erlang 18.3, there is a regression which causes the SSL
-        %% connection to crash with the following exception:
-        %% ** {badarg,[{ets,update_counter,[1507362,#Ref<0.0.3.9>,-1],[]},
-        %%             {ssl_pkix_db,ref_count,3,...
-        %%
-        %% When this exception reaches the connection process before the
-        %% expected TLS error, amqp_connection:start() returns {error,
-        %% closed} instead.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -288,8 +283,8 @@ validate_chain(Config) ->
 
 validate_chain1(Config) ->
     %% Given: a whitelisted certificate `CertTrusted` AND a CA `RootTrusted`
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {RootTrusted, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}       = ct_helper:make_certs(),
+    {_, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -298,7 +293,7 @@ validate_chain1(Config) ->
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1, 1),
 
@@ -306,11 +301,11 @@ validate_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cacerts, [RootTrusted]},
+                                                           ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertTrusted},
                                                                           {key, KeyTrusted},
                                                                           {verify, verify_none},
-                                                                          {server_name_indication, disable}]}),
+                                                                          {versions, ['tlsv1.2']}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -321,7 +316,7 @@ validate_longer_chain(Config) ->
 
 validate_longer_chain1(Config) ->
 
-    {Root, Cert, Key} = ct_helper:make_certs(),
+    {ServerCACerts, Cert, Key} = ct_helper:make_certs(),
 
     %% Given: a whitelisted certificate `CertTrusted`
     %% AND a certificate `CertUntrusted` that is not whitelisted with the same root as `CertTrusted`
@@ -333,8 +328,8 @@ validate_longer_chain1(Config) ->
 
     TestDataTrusted = public_key:pkix_test_data(#{
         root => [],
-        intermediates => [[{key, KeyInterDec}]],
-        peer => []
+        intermediates => [[{digest, sha256}, {key, KeyInterDec}]],
+        peer => [{digest, sha256}, {key, {rsa, 2048, 17}}]
     }),
     CertTrusted = proplists:get_value(cert, TestDataTrusted),
     KeyTrusted = proplists:get_value(key, TestDataTrusted),
@@ -342,7 +337,7 @@ validate_longer_chain1(Config) ->
 
     TestDataUntrusted = public_key:pkix_test_data(#{
         root => #{cert => CertInter, key => KeyInterDec},
-        peer => []
+        peer => [{digest, sha256}, {key, {rsa, 2048, 17}}]
     }),
     CertUntrusted = proplists:get_value(cert, TestDataUntrusted),
     KeyUntrusted = proplists:get_value(key, TestDataUntrusted),
@@ -354,15 +349,21 @@ validate_longer_chain1(Config) ->
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, ServerCACerts},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1, 1),
+
+    %% @todo The following 3 connection tests are actually the same test: the cacerts option
+    %%       of the client is only used so the client can verify that the server certificate
+    %%       is correct. The cacerts are not sent to the server. When the client verification
+    %%       is enabled they must include the correct CA for the server, that's all there is
+    %%       to it.
 
     %% When: a client connects and present `CertInter` as well as the `CertTrusted`
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cacerts, [CertInter]},
+                                                           ssl_options = [{cacerts, [CertInter|ServerCACerts]},
                                                                           {cert, CertTrusted},
                                                                           {key, KeyTrusted},
                                                                           {verify, verify_none},
@@ -372,7 +373,7 @@ validate_longer_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con2} = amqp_connection:start(#amqp_params_network{host = Host,
                                                             port = Port,
-                                                            ssl_options = [{cacerts, [RootCA, CertInter]},
+                                                            ssl_options = [{cacerts, [RootCA, CertInter|ServerCACerts]},
                                                                            {cert, CertTrusted},
                                                                            {key, KeyTrusted},
                                                                            {verify, verify_none},
@@ -382,7 +383,7 @@ validate_longer_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con3} = amqp_connection:start(#amqp_params_network{host = Host,
                                                             port = Port,
-                                                            ssl_options = [{cacerts, [CertInter, RootCA]},
+                                                            ssl_options = [{cacerts, [CertInter, RootCA|ServerCACerts]},
                                                                            {cert, CertTrusted},
                                                                            {key, KeyTrusted},
                                                                            {verify, verify_none},
@@ -393,7 +394,7 @@ validate_longer_chain1(Config) ->
     {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
-                                    ssl_options = [{cacerts, [RootCA]},
+                                    ssl_options = [{cacerts, [RootCA|ServerCACerts]},
                                                    {cert, CertInter},
                                                    {key, KeyInter},
                                                    {verify, verify_none},
@@ -405,8 +406,8 @@ validate_longer_chain1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -418,7 +419,7 @@ validate_longer_chain1(Config) ->
     {error, Error2} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
-                                    ssl_options = [{cacerts, [RootCA, CertInter]},
+                                    ssl_options = [{cacerts, [RootCA, CertInter|ServerCACerts]},
                                                    {cert, CertUntrusted},
                                                    {key, KeyUntrusted},
                                                    {verify, verify_none},
@@ -430,8 +431,8 @@ validate_longer_chain1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -449,15 +450,15 @@ validate_chain_without_whitelisted(Config) ->
 
 validate_chain_without_whitelisted1(Config) ->
     %% Given: a certificate `CertUntrusted` that is NOT whitelisted.
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {RootUntrusted,  CertUntrusted, KeyUntrusted} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}           = ct_helper:make_certs(),
+    {_, CertUntrusted, KeyUntrusted} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1, 1),
 
@@ -467,10 +468,11 @@ validate_chain_without_whitelisted1(Config) ->
     {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
-                                   ssl_options = [{cacerts, [RootUntrusted]},
+                                   ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertUntrusted},
                                                   {key, KeyUntrusted},
-                                                  {verify, verify_none}]}),
+                                                  {verify, verify_none},
+                                                  {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -478,8 +480,8 @@ validate_chain_without_whitelisted1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -493,8 +495,8 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
 
 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root1(Config) ->
     %% Given: a certificate `CertTrusted` AND that it is whitelisted.
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}       = ct_helper:make_certs(),
+    {_, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -505,7 +507,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     %% When: Rabbit validates paths with a different root `R` than
     %% that of the certificate `CertTrusted`.
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1, 1),
 
@@ -513,7 +515,8 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     %% is allowed.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cert, CertTrusted},
+                                                           ssl_options = [{cacerts, RootCerts},
+                                                                          {cert, CertTrusted},
                                                                           {key, KeyTrusted},
                                                                           {verify, verify_none},
                                                                           {versions, ['tlsv1.2']}]}),
@@ -528,8 +531,8 @@ removed_certificate_denied_from_AMQP_client(Config) ->
 
 removed_certificate_denied_from_AMQP_client1(Config) ->
     %% Given: a certificate `CertOther` AND that it is whitelisted.
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {_,  CertOther, KeyOther} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}   = ct_helper:make_certs(),
+    {_, CertOther, KeyOther} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -540,9 +543,9 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     %% file system's time), remove the whitelisted certificate,
     %% then wait for the trust-store to refresh the whitelist.
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
-                                                      {cert, Cert},
-                                                      {key, Key} | cfg()], 1, 1),
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
     ok = delete("bob.pem", Config),
@@ -553,7 +556,8 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
-                                   ssl_options = [{cert, CertOther},
+                                   ssl_options = [{cacerts, RootCerts},
+                                                  {cert, CertOther},
                                                   {key, KeyOther},
                                                   {verify, verify_none},
                                                   {versions, ['tlsv1.2']}]}),
@@ -564,8 +568,8 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -581,8 +585,8 @@ installed_certificate_accepted_from_AMQP_client(Config) ->
 
 installed_certificate_accepted_from_AMQP_client1(Config) ->
     %% Given: a certificate `CertOther` which is NOT yet whitelisted.
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {_,  CertOther, KeyOther} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}   = ct_helper:make_certs(),
+    {_, CertOther, KeyOther} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -592,9 +596,9 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
     %% file system's time), add a certificate to the directory,
     %% then wait for the trust-store to refresh the whitelist.
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
-                                                      {cert, Cert},
-                                                      {key, Key} | cfg()], 1, 1),
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
     ok = whitelist(Config, "charlie", CertOther),
@@ -604,7 +608,8 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
     %% is allowed.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cert, CertOther},
+                                                           ssl_options = [{cacerts, RootCerts},
+                                                                          {cert, CertOther},
                                                                           {key, KeyOther},
                                                                           {verify, verify_none},
                                                                           {versions, ['tlsv1.2']}]}),
@@ -625,7 +630,7 @@ whitelist_directory_DELTA1(Config) ->
     %% of which are whitelisted).
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
-    {Root, Cert, Key} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key} = ct_helper:make_certs(),
 
     {_,  CertListed1, KeyListed1} = ct_helper:make_certs(),
     {_,  CertRevoked, KeyRevoked} = ct_helper:make_certs(),
@@ -640,7 +645,7 @@ whitelist_directory_DELTA1(Config) ->
     %% a certificate to the directory, then wait for the
     %% trust-store to refresh the whitelist.
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1, 1),
 
@@ -652,14 +657,16 @@ whitelist_directory_DELTA1(Config) ->
     %% Then: connectivity to Rabbit is as it should be.
     {ok, Conn1} = amqp_connection:start(#amqp_params_network{host = Host,
                                                              port = Port,
-                                                             ssl_options = [{cert, CertListed1},
+                                                             ssl_options = [{cacerts, RootCerts},
+                                                                            {cert, CertListed1},
                                                                             {key, KeyListed1},
                                                                             {verify, verify_none},
                                                                             {versions, ['tlsv1.2']}]}),
     {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
-                                   ssl_options = [{cert, CertRevoked},
+                                   ssl_options = [{cacerts, RootCerts},
+                                                  {cert, CertRevoked},
                                                   {key, KeyRevoked},
                                                   {verify, verify_none},
                                                   {versions, ['tlsv1.2']}]}),
@@ -670,8 +677,8 @@ whitelist_directory_DELTA1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -679,7 +686,8 @@ whitelist_directory_DELTA1(Config) ->
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = Host,
                                                              port = Port,
-                                                             ssl_options = [{cert, CertListed2},
+                                                             ssl_options = [{cacerts, RootCerts},
+                                                                            {cert, CertListed2},
                                                                             {key, KeyListed2},
                                                                             {verify, verify_none},
                                                                             {versions, ['tlsv1.2']}]}),
@@ -696,17 +704,17 @@ replaced_whitelisted_certificate_should_be_accepted(Config) ->
 
 replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     %% Given: a root certificate and a 2 other certificates
-    {Root, Cert, Key}      = ct_helper:make_certs(),
-    {_,  CertFirst, KeyFirst}    = ct_helper:make_certs(),
-    {_,  CertUpdated, KeyUpdated}    = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}        = ct_helper:make_certs(),
+    {_,  CertFirst, KeyFirst}     = ct_helper:make_certs(),
+    {_,  CertUpdated, KeyUpdated} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
-                                                    {cert, Cert},
-                                                    {key, Key} | cfg()], 1, 1),
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1, 1),
     %% And: the first certificate has been whitelisted
     ok = whitelist(Config, "bart", CertFirst),
     rabbit_trust_store:refresh(),
@@ -717,7 +725,8 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     {ok, Con} =
      amqp_connection:start(#amqp_params_network{host = Host,
                                                 port = Port,
-                                                ssl_options = [{cert, CertFirst},
+                                                ssl_options = [{cacerts, RootCerts},
+                                                               {cert, CertFirst},
                                                                {key, KeyFirst},
                                                                {verify, verify_none},
                                                                {versions, ['tlsv1.2']}]}),
@@ -725,7 +734,8 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
-                                    ssl_options = [{cert, CertUpdated},
+                                    ssl_options = [{cacerts, RootCerts},
+                                                   {cert, CertUpdated},
                                                    {key, KeyUpdated},
                                                    {verify, verify_none},
                                                    {versions, ['tlsv1.2']}]}),
@@ -736,8 +746,8 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression;
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
@@ -753,15 +763,16 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     {error, Error2} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
-                                    ssl_options = [{cert, CertFirst},
+                                    ssl_options = [{cacerts, RootCerts},
+                                                   {cert, CertFirst},
+                                                   {key, KeyFirst},
+                                                   {verify, verify_none},
+                                                   {versions, ['tlsv1.2']},
                                                    %% disable ssl session caching
                                                    %% as this ensures the cert
                                                    %% will be re-verified by the
                                                    %% server
-                                                   {reuse_sessions, false},
-                                                   {key, KeyFirst},
-                                                   {verify, verify_none},
-                                                   {versions, ['tlsv1.2']}]}),
+                                                   {reuse_sessions, false}]}),
     case Error2 of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -769,19 +780,20 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
-        %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        %% Sometimes the TCP socket gets closed before the client receives the alert.
+        closed -> ok
     end,
 
     %% And: the updated certificate should allow the user to connect
     {ok, Con2} =
      amqp_connection:start(#amqp_params_network{host = Host,
                                                 port = Port,
-                                                ssl_options = [{cert, CertUpdated},
-                                                               {reuse_sessions, false},
+                                                ssl_options = [{cacerts, RootCerts},
+                                                               {cert, CertUpdated},
                                                                {key, KeyUpdated},
                                                                {verify, verify_none},
-                                                               {versions, ['tlsv1.2']}]}),
+                                                               {versions, ['tlsv1.2']},
+                                                               {reuse_sessions, false}]}),
     ok = amqp_connection:close(Con2),
     %% Clean: server TLS/TCP.
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -806,8 +818,8 @@ ignore_corrupt_cert1(Config) ->
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}       = ct_helper:make_certs(),
+    {_, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     rabbit_trust_store:refresh(),
     ok = whitelist(Config, "alice", CertTrusted),
@@ -817,7 +829,7 @@ ignore_corrupt_cert1(Config) ->
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1, 1),
 
@@ -826,7 +838,8 @@ ignore_corrupt_cert1(Config) ->
     %% is allowed.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cert, CertTrusted},
+                                                           ssl_options = [{cacerts, RootCerts},
+                                                                          {cert, CertTrusted},
                                                                           {key, KeyTrusted},
                                                                           {verify, verify_none},
                                                                           {versions, ['tlsv1.2']}]}),
@@ -844,8 +857,8 @@ ignore_same_cert_with_different_name1(Config) ->
 
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     Port = port(Config),
-    {Root, Cert, Key} = ct_helper:make_certs(),
-    {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+    {RootCerts, Cert, Key}       = ct_helper:make_certs(),
+    {_, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     rabbit_trust_store:refresh(),
     ok = whitelist(Config, "alice", CertTrusted),
@@ -854,16 +867,17 @@ ignore_same_cert_with_different_name1(Config) ->
     rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
-                                                      {cert, Cert},
-                                                      {key, Key} | cfg()], 1, 1),
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% Then: the trust store should keep functioning.
     %% And: a client presenting the whitelisted certificate `CertTrusted`
     %% is allowed.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cert, CertTrusted},
+                                                           ssl_options = [{cacerts, RootCerts},
+                                                                          {cert, CertTrusted},
                                                                           {key, KeyTrusted},
                                                                           {verify, verify_none},
                                                                           {versions, ['tlsv1.2']}]}),
