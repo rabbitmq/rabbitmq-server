@@ -8,6 +8,8 @@
 -module(rabbit_quorum_queue).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_merge_strategy).
 
 -export([init/1,
          close/1,
@@ -30,7 +32,7 @@
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
--export([become_leader/2, handle_tick/3, spawn_deleter/1]).
+-export([become_leader/2, handle_tick/3, spawn_deleter/1, eval_members/3]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
@@ -65,6 +67,7 @@
          is_compatible/3,
          declare/2,
          is_stateful/0]).
+-export([validate_policy/1, merge_policy_value/3]).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
                                  qname_to_internal_name/1]).
@@ -110,6 +113,34 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
+
+-define(EVAL_MEMBERS_TIMEOUT, 60000*60).
+-define(EVAL_MEMBERS_EVENT_TIMEOUT, 60000).
+
+
+%%----------- QQ policies ---------------------------------------------------
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "QQ policy validation"},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"target-group-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"target-group-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"target-group-size">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
+
+validate_policy(Args) ->
+    Count = proplists:get_value(<<"target-group-size">>, Args, none),
+    case is_integer(Count) andalso Count > 0 of
+        true -> ok;
+        false -> {error, "~tp is not a valid qq target count value", [Count]}
+    end.
+
+merge_policy_value(<<"target-group-size">>, _Val, OpVal) ->
+    OpVal.
 
 %%----------- rabbit_queue_type ---------------------------------------------
 
@@ -177,7 +208,7 @@ start_cluster(Q) ->
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    QuorumSize = get_default_quorum_initial_group_size(Arguments),
+    QuorumSize = get_default_quorum_initial_group_size(Arguments, Q),
     RaName = case qname_to_internal_name(QName) of
                  {ok, A} ->
                      A;
@@ -193,11 +224,7 @@ start_cluster(Q) ->
                      [QuorumSize, rabbit_misc:rs(QName), Leader]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
-            TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                              ?TICK_TIMEOUT),
-            SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
-                                                   ?SNAPSHOT_INTERVAL),
-            RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
+            RaConfs = [make_ra_conf(NewQ, ServerId)
                        || ServerId <- members(NewQ)],
             try erpc_call(Leader, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
@@ -549,6 +576,96 @@ reductions(Name) ->
         error:badarg ->
             0
     end.
+
+eval_members(ClusterName, Cluster, QName) ->
+    MemberNodes = [N || {_, N} <- Cluster],
+    ExpectedNodes = rabbit_nodes:list_members(),
+    Remove = MemberNodes -- ExpectedNodes,
+    case Remove of
+        [] ->
+            add_member_effects(ClusterName, Cluster, QName, MemberNodes);
+        _ ->
+            remove_member_effects(ClusterName, Cluster, QName, Remove)
+    end.
+
+add_member_effects(ClusterName, Cluster, QName, MemberNodes) ->
+    Running = rabbit_nodes:list_running(),
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    New = Running -- MemberNodes,
+    Size = get_target_size(Q),
+    CurrentSize = length(MemberNodes),
+    case {CurrentSize < Size, New} of
+        {true, NewNodes} when NewNodes =/= [] ->
+            NodesToAdd = lists:sublist(grow_order_sort(NewNodes),
+                                       Size - CurrentSize),
+            create_add_member_effects(ClusterName, Cluster,
+                                      Q, QName, NodesToAdd);
+        {_,_} ->
+            rabbit_log:debug("CALLED: NOOP ~p~n",[QName]),
+            undefined
+    end.
+
+get_target_size(Q) ->
+    case rabbit_policy:get(<<"target-group-size">>, Q) of
+        undefined ->
+            0;
+        N ->
+            N
+    end.
+
+create_add_member_effects(ClusterName, Cluster, Q, QName, New) ->
+    rabbit_log:debug("CALLED: WILL ADD ~p for Q ~p~n",[New, QName]),
+    NewMembers = [make_add_member_effect(Q, QName, {ClusterName, N}) || N <- New],
+    {add_members, NewMembers, Cluster}.
+
+make_add_member_effect(Q, QName, {_ClusterName, Node} = ServerId) ->
+    Conf = make_ra_conf(Q, ServerId),
+    ResultFun = fun({ok, _, Leader}) ->
+                        Fun = fun(Q1) ->
+                                      Q2 = update_type_state(
+                                             Q1, fun(#{nodes := Nodes} = Ts) ->
+                                                         Ts#{nodes => [Node | Nodes]}
+                                                 end),
+                                      amqqueue:set_pid(Q2, Leader)
+                              end,
+                        _ = rabbit_amqqueue:update(QName, Fun)
+                end,
+    {{ServerId, Conf}, ResultFun}.
+
+%% Just an idea to pick the 'right' node. In the future maybe a have availabilty
+%% zone filters etc for picking a node.
+%% TODO Reuse logic from `rabbit_queue_location:select_leader_and_followers` instead
+grow_order_sort(Nodes) ->
+    QueueLenFun =
+        fun(Node) ->
+                length([Q || Q <- rabbit_amqqueue:list_by_type(quorum),
+                             amqqueue:get_state(Q) =/= crashed,
+                             lists:member(Node, rabbit_amqqueue:get_quorum_nodes(Q))])
+        end,
+    NodeWithQLen = lists:keysort(
+                     2,
+                     [{Node, QueueLenFun(Node)} || Node <- Nodes]),
+    [N || {N,_} <- NodeWithQLen].
+
+remove_member_effects(ClusterName, Cluster, QName, RemovedFromCluster) ->
+    rabbit_log:debug("CALLED: WILL REMOVE ~p~n",[RemovedFromCluster]),
+    RemoveMembers = [make_remove_member_effect(QName, {ClusterName, N}) ||
+                        N <- RemovedFromCluster],
+    {remove_members, RemoveMembers, Cluster}.
+
+make_remove_member_effect(QName, {_ClusterName, Node} = ServerId) ->
+    ResultFun = fun({ok, _, _}) ->
+                        Fun = fun(Q1) ->
+                                  update_type_state(
+                                    Q1,
+                                    fun(#{nodes := Nodes} = Ts) ->
+                                            Ts#{nodes => lists:delete(Node,
+                                                                      Nodes)}
+                                    end)
+                              end,
+                        _ = rabbit_amqqueue:update(QName, Fun)
+                end,
+    {ServerId, ResultFun}.
 
 is_recoverable(Q) ->
     Node = node(),
@@ -1090,11 +1207,7 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q),
-    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
-    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
-                                           ?SNAPSHOT_INTERVAL),
-    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval),
+    Conf = make_ra_conf(Q, ServerId),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, ServerId, Timeout) of
@@ -1574,12 +1687,18 @@ quorum_ctag(Other) ->
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
-get_default_quorum_initial_group_size(Arguments) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of
-        undefined ->
+get_default_quorum_initial_group_size(Arguments, Q) ->
+    PolicyValue = rabbit_policy:get(<<"target-group-size">>, Q),
+    ArgValue = rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>),
+    case {ArgValue, PolicyValue} of
+        {undefined, undefined} ->
             application:get_env(rabbit, quorum_cluster_size, 3);
-        {_Type, Val} ->
-            Val
+        {undefined, V} ->
+            V;
+        {{_Type, V}, undefined} ->
+            V;
+        {{_Type, ArgV}, PolV} ->
+            max(ArgV, PolV)
     end.
 
 %% member with the current leader first
@@ -1591,7 +1710,16 @@ members(Q) when ?amqqueue_is_quorum(Q) ->
 format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
+make_ra_conf(Q, ServerId) ->
+    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                      ?TICK_TIMEOUT),
+    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
+                                           ?SNAPSHOT_INTERVAL),
+    %% Do we want these values to be configurable?
+    MemberEvalTimeout = application:get_env(rabbit, quorum_eval_members_timeout,
+                                            ?EVAL_MEMBERS_TIMEOUT),
+    MemberEvalEventTimeout = application:get_env(rabbit, quorum_eval_members_event_timeout,
+                                                 ?EVAL_MEMBERS_EVENT_TIMEOUT),
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
@@ -1607,6 +1735,8 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
       log_init_args => #{uid => UId,
                          snapshot_interval => SnapshotInterval},
       tick_timeout => TickTimeout,
+      eval_members_timeout => MemberEvalTimeout,
+      eval_members_event_timeout => MemberEvalEventTimeout,
       machine => RaMachine,
       ra_event_formatter => Formatter}.
 

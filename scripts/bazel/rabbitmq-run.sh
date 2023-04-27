@@ -170,6 +170,9 @@ for arg in "$@"; do
         start-cluster)
             CMD="$arg"
             ;;
+        add-node)
+            CMD="$arg"
+            ;;
         stop-cluster)
             CMD="$arg"
             ;;
@@ -278,6 +281,31 @@ case $CMD in
                 nodename0=$RABBITMQ_NODENAME
             fi
         done
+        ;;
+    add-node)
+        n=${NODE_NUM:=3}
+        NODE0=${NODE_LEADER:="rabbit-0"}
+        setup_node_env "$n"
+        RABBITMQ_NODE_PORT=$((5672 + n)) \
+            RABBITMQ_SERVER_START_ARGS=" \
+            -rabbit loopback_users [] \
+            -rabbitmq_management listener [{port,$((15672 + n))}] \
+            -rabbitmq_mqtt tcp_listeners [$((1883 + n))] \
+            -rabbitmq_web_mqtt tcp_config [{port,$((1893 + n))}] \
+            -rabbitmq_web_mqtt_examples listener [{port,$((1903 + n))}] \
+            -rabbitmq_stomp tcp_listeners [$((61613 + n))] \
+            -rabbitmq_web_stomp tcp_config [{port,$((61623 + n))}] \
+            -rabbitmq_web_stomp_examples listener [{port,$((61633 + n))}] \
+            -rabbitmq_prometheus tcp_config [{port,$((15692 + n))}] \
+            -rabbitmq_stream tcp_listeners [$((5552 + n))]" \
+            "$RABBITMQ_SERVER" \
+                > "$RABBITMQ_LOG_BASE"/startup_log \
+                2> "$RABBITMQ_LOG_BASE"/startup_err &
+
+        await_startup
+        "$RABBITMQCTL" -n "$RABBITMQ_NODENAME" stop_app
+        "$RABBITMQCTL" -n "$RABBITMQ_NODENAME" join_cluster "$NODE0"
+        "$RABBITMQCTL" -n "$RABBITMQ_NODENAME" start_app
         ;;
     stop-cluster)
         nodes=${NODES:=3}

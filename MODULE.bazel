@@ -279,11 +279,17 @@ erlang_package.hex_package(
     version = "0.2.1",
 )
 
-erlang_package.hex_package(
-    name = "ra",
+#erlang_package.hex_package(
+#    name = "ra",
+#    build_file = "@rabbitmq-server//bazel:BUILD.ra",
+#    sha256 = "13b03f02cf6c1837c527edd4a953f0c09da0abad0af6985b64bfd66943c4c5c3",
+#    version = "2.5.1",
+#)
+
+erlang_package.git_package(
+    branch = "sunge/handle_status_callback",
+    repository = "SimonUnge/ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
-    sha256 = "13b03f02cf6c1837c527edd4a953f0c09da0abad0af6985b64bfd66943c4c5c3",
-    version = "2.5.1",
 )
 
 erlang_package.hex_package(
