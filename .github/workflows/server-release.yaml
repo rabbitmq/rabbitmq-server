@@ -123,7 +123,7 @@ jobs:
         DEBIAN_ORIG_TARBALL: rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}.orig.tar.xz
         UNPACKED_DIR: ${{ github.workspace }}/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}
       run: |
-        tree -L 2
+        ls $PWD
 
         # Because we are creating a source package as well, Debian expects the
         # source archive to have a specially formatted name. Copy the original
