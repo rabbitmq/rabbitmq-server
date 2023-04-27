@@ -47,7 +47,7 @@ print() ->
     ok.
 
 stop() ->
-    dbg:stop_clear(),
+    dbg:stop(),
     ?MODULE ! stop,
     ok.
 
