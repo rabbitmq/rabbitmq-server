@@ -17,7 +17,7 @@
 %% Just make these constant for the time being.
 -define(INCOMING_CREDIT, 65536).
 
--record(incoming_link, {name, exchange, routing_key,
+-record(incoming_link, {name, exchange, routing_key, mandatory,
                         delivery_id = undefined,
                         delivery_count = 0,
                         send_settle_mode = undefined,
@@ -53,6 +53,7 @@ attach(#'v1_0.attach'{name = Name,
                            SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_MIXED ->
                         amqp_channel:register_confirm_handler(BCh, self()),
                         rabbit_amqp1_0_channel:call(BCh, #'confirm.select'{}),
+                        amqp_channel:register_return_handler(BCh, self()),
                         true
                 end,
             Flow = #'v1_0.flow'{ handle = Handle,
@@ -69,7 +70,8 @@ attach(#'v1_0.attach'{name = Name,
               initial_delivery_count = undefined, % must be, I am the receiver
               role = ?RECV_ROLE}, %% server is receiver
             IncomingLink1 =
-                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode},
+                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode,
+                                           mandatory = Confirm},
             {ok, [Attach, Flow], IncomingLink1, Confirm};
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
@@ -142,7 +144,8 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
            end,
     rabbit_amqp1_0_channel:cast_flow(
       BCh, #'basic.publish'{exchange    = X,
-                            routing_key = RKey}, Msg),
+                            routing_key = RKey,
+                            mandatory = true}, Msg),
     {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                   C when C =< 0 ->
                                       {true,  ?INCOMING_CREDIT div 2};
