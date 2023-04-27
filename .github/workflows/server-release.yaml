@@ -58,7 +58,7 @@ jobs:
         SOURCE_DIST_DIR: ${{ github.workspace }}/source-dist
       run: |
         mkdir -p ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
-        pushd vmware-rabbitmq
+        pushd rabbitmq-server
         git archive ${{ github.ref }} \
           | tar -x -C ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
         popd
