@@ -111,7 +111,10 @@
           consumer_timeout,
           authz_context,
           %% defines how ofter gc will be executed
-          writer_gc_threshold
+          writer_gc_threshold,
+          %% true with AMQP 1.0 to include the publishing sequence
+          %% in the return callback, false otherwise
+          extended_return_callback
          }).
 
 -record(pending_ack, {
@@ -518,6 +521,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
+    UseExtendedReturnCallback = use_extended_return_callback(AmqpParams),
     {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
@@ -536,7 +540,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             max_message_size = MaxMessageSize,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
-                            writer_gc_threshold = GCThreshold
+                            writer_gc_threshold = GCThreshold,
+                            extended_return_callback = UseExtendedReturnCallback
                            },
                 limiter = Limiter,
                 tx                      = none,
@@ -1075,6 +1080,15 @@ extract_variable_map_from_amqp_params([Value]) ->
     extract_variable_map_from_amqp_params(Value);
 extract_variable_map_from_amqp_params(_) ->
     #{}.
+
+%% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
+%% Used for AMQP 1.0
+use_extended_return_callback({amqp_params_direct,_,_,_,_,
+                              {amqp_adapter_info,_,_,_,_,_,{'AMQP',"1.0"},_},
+                              _}) ->
+    true;
+use_extended_return_callback(_) ->
+    false.
 
 check_msg_size(Content, MaxMessageSize, GCThreshold) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
@@ -1917,9 +1931,8 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             ok
     end.
 
-basic_return(#basic_message{exchange_name = ExchangeName,
-                            routing_keys  = [RoutingKey | _CcRoutes],
-                            content       = Content},
+basic_return(Content, #basic_message{exchange_name = ExchangeName,
+                                     routing_keys  = [RoutingKey | _CcRoutes]},
              State = #ch{cfg = #conf{protocol = Protocol,
                                      writer_pid = WriterPid}},
              Reason) ->
@@ -2154,7 +2167,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
+                   RoutedToQueueNames = [QName]},
+                   State0 = #ch{cfg = #conf{extended_return_callback = ExtendedReturnCallback},
+                                queue_states = QueueStates0}) -> %% optimisation when there is one queue
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQueueNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
@@ -2163,7 +2178,12 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
+<<<<<<< HEAD
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+=======
+            ok = process_routing_mandatory(ExtendedReturnCallback, Mandatory, Qs, MsgSeqNo, Message, State0),
+            QueueNames = rabbit_amqqueue:queue_names(Qs),
+>>>>>>> d8f77c5882 (Settle unroutable message with released state)
             State1 = process_routing_confirm(Confirm, QueueNames, MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
@@ -2191,7 +2211,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   RoutedToQueueNames}, State0 = #ch{queue_states = QueueStates0}) ->
+                   RoutedToQueueNames},
+                   State0 = #ch{cfg = #conf{extended_return_callback = ExtendedReturnCallback},
+                                queue_states = QueueStates0}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQueueNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
@@ -2200,7 +2222,12 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
+<<<<<<< HEAD
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+=======
+            ok = process_routing_mandatory(ExtendedReturnCallback, Mandatory, Qs, MsgSeqNo, Message, State0),
+            QueueNames = rabbit_amqqueue:queue_names(Qs),
+>>>>>>> d8f77c5882 (Settle unroutable message with released state)
             State1 = process_routing_confirm(Confirm, QueueNames,
                                              MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
@@ -2222,19 +2249,32 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
               [rabbit_misc:rs(Resource)])
     end.
 
-process_routing_mandatory(_Mandatory = true,
+process_routing_mandatory(_ExtendedReturnCallback = false,
+                          _Mandatory = true,
                           _RoutedToQs = [],
-                          Msg, State) ->
+                          _MsgSeqNo,
+                          #basic_message{content = Content} = Msg, State) ->
     rabbit_global_counters:messages_unroutable_returned(amqp091, 1),
-    ok = basic_return(Msg, State, no_route),
+    ok = basic_return(Content, Msg, State, no_route),
     ok;
-process_routing_mandatory(_Mandatory = false,
+process_routing_mandatory(_ExtendedReturnCallback = true,
+                          _Mandatory = true,
                           _RoutedToQs = [],
+                          MsgSeqNo,
+                          #basic_message{content = Content} = Msg, State) ->
+    rabbit_global_counters:messages_unroutable_returned(amqp091, 1),
+    %% providing the publishing sequence for AMQP 1.0
+    ok = basic_return({MsgSeqNo, Content}, Msg, State, no_route),
+    ok;
+process_routing_mandatory(_ExtendedReturnCallback,
+                          _Mandatory = false,
+                          _RoutedToQs = [],
+                          _MsgSeqNo,
                           #basic_message{exchange_name = ExchangeName}, State) ->
     rabbit_global_counters:messages_unroutable_dropped(amqp091, 1),
     ?INCR_STATS(exchange_stats, ExchangeName, 1, drop_unroutable, State),
     ok;
-process_routing_mandatory(_, _, _, _) ->
+process_routing_mandatory(_, _, _, _, _, _) ->
     ok.
 
 process_routing_confirm(false, _, _, _, State) ->

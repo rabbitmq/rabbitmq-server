@@ -105,7 +105,10 @@
 
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command
-        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
+        (pid(), rabbit_framing:amqp_method_record(),
+         rabbit_types:content() |
+         {integer(), rabbit_types:content()} %% publishing sequence for AMQP 1.0 return callback
+        ) ->
             'ok'.
 -spec send_command_sync(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command_sync
