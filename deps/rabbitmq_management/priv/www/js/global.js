@@ -489,8 +489,7 @@ var HELP = {
 
     'filter-regex' :
     'Whether to enable regular expression matching. Both string literals \
-    and regular expressions are matched in a case-insensitive manner.<br/><br/> \
-    (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
+    and regular expressions are matched in a case-insensitive manner.<br/><br/>',
 
     'consumer-active' :
     'Whether the consumer is active or not, i.e. whether the consumer can get messages from the queue. \
@@ -500,7 +499,7 @@ var HELP = {
     (<a href="https://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
 
     'consumer-owner' :
-    '<a href="https://www.rabbitmq.com/consumers.html">AMQP consumers</a> belong to an AMQP channel, \
+    '<a href="https://www.rabbitmq.com/consumers.html">AMQP 0-9-1 consumers</a> belong to a channel, \
     and <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection.',
 
     'plugins' :
