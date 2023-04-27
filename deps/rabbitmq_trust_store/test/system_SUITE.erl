@@ -221,7 +221,9 @@ validation_success_for_AMQP_client1(Config) ->
                                                            port = Port,
                                                            ssl_options = [{cacerts, [Root]},
                                                                           {cert, Certificate},
-                                                                          {key, Key}]}),
+                                                                          {key, Key},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
 
     %% Clean: client & server TLS/TCP.
     ok = amqp_connection:close(Con),
@@ -255,7 +257,9 @@ validation_failure_for_AMQP_client1(Config) ->
                                    port = Port,
                                    ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertOther},
-                                                  {key, KeyOther}]}),
+                                                  {key, KeyOther},
+                                                  {verify, verify_none},
+                                                  {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -297,10 +301,11 @@ validate_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{verify, verify_peer},
-                                                                          {cacerts, RootCerts},
+                                                           ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
+                                                                          {key, KeyTrusted},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -360,7 +365,9 @@ validate_longer_chain1(Config) ->
                                                            port = Port,
                                                            ssl_options = [{cacerts, [CertInter|ServerCACerts]},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
+                                                                          {key, KeyTrusted},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
 
     %% When: a client connects and present `RootTrusted` and `CertInter` as well as the `CertTrusted`
     %% Then: the connection is successful.
@@ -368,7 +375,9 @@ validate_longer_chain1(Config) ->
                                                             port = Port,
                                                             ssl_options = [{cacerts, [RootCA, CertInter|ServerCACerts]},
                                                                            {cert, CertTrusted},
-                                                                           {key, KeyTrusted}]}),
+                                                                           {key, KeyTrusted},
+                                                                           {verify, verify_none},
+                                                                           {versions, ['tlsv1.2']}]}),
 
     %% When: a client connects and present `CertInter` and `RootCA` as well as the `CertTrusted`
     %% Then: the connection is successful.
@@ -376,7 +385,9 @@ validate_longer_chain1(Config) ->
                                                             port = Port,
                                                             ssl_options = [{cacerts, [CertInter, RootCA|ServerCACerts]},
                                                                            {cert, CertTrusted},
-                                                                           {key, KeyTrusted}]}),
+                                                                           {key, KeyTrusted},
+                                                                           {verify, verify_none},
+                                                                           {versions, ['tlsv1.2']}]}),
 
     % %% When: a client connects and present `CertInter` and `RootCA` but NOT `CertTrusted`
     % %% Then: the connection is not succcessful
@@ -385,7 +396,9 @@ validate_longer_chain1(Config) ->
                                     port = Port,
                                     ssl_options = [{cacerts, [RootCA|ServerCACerts]},
                                                    {cert, CertInter},
-                                                   {key, KeyInter}]}),
+                                                   {key, KeyInter},
+                                                   {verify, verify_none},
+                                                   {versions, ['tlsv1.2']}]}),
     case Error1 of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -408,7 +421,9 @@ validate_longer_chain1(Config) ->
                                     port = Port,
                                     ssl_options = [{cacerts, [RootCA, CertInter|ServerCACerts]},
                                                    {cert, CertUntrusted},
-                                                   {key, KeyUntrusted}]}),
+                                                   {key, KeyUntrusted},
+                                                   {verify, verify_none},
+                                                   {versions, ['tlsv1.2']}]}),
     case Error2 of
         %% Expected error from amqp_client.
         {tls_alert, "bad certificate"} -> ok;
@@ -455,7 +470,9 @@ validate_chain_without_whitelisted1(Config) ->
                                    port = Port,
                                    ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertUntrusted},
-                                                  {key, KeyUntrusted}]}),
+                                                  {key, KeyUntrusted},
+                                                  {verify, verify_none},
+                                                  {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -500,7 +517,9 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
                                                            port = Port,
                                                            ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
+                                                                          {key, KeyTrusted},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -539,7 +558,9 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
                                    port = Port,
                                    ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertOther},
-                                                  {key, KeyOther}]}),
+                                                  {key, KeyOther},
+                                                  {verify, verify_none},
+                                                  {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -589,7 +610,9 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
                                                            port = Port,
                                                            ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertOther},
-                                                                          {key, KeyOther}]}),
+                                                                          {key, KeyOther},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
 
     %% Clean: Client & server TLS/TCP
     ok = amqp_connection:close(Con),
@@ -636,13 +659,17 @@ whitelist_directory_DELTA1(Config) ->
                                                              port = Port,
                                                              ssl_options = [{cacerts, RootCerts},
                                                                             {cert, CertListed1},
-                                                                            {key, KeyListed1}]}),
+                                                                            {key, KeyListed1},
+                                                                            {verify, verify_none},
+                                                                            {versions, ['tlsv1.2']}]}),
     {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
                                    ssl_options = [{cacerts, RootCerts},
                                                   {cert, CertRevoked},
-                                                  {key, KeyRevoked}]}),
+                                                  {key, KeyRevoked},
+                                                  {verify, verify_none},
+                                                  {versions, ['tlsv1.2']}]}),
     case Error of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -661,7 +688,9 @@ whitelist_directory_DELTA1(Config) ->
                                                              port = Port,
                                                              ssl_options = [{cacerts, RootCerts},
                                                                             {cert, CertListed2},
-                                                                            {key, KeyListed2}]}),
+                                                                            {key, KeyListed2},
+                                                                            {verify, verify_none},
+                                                                            {versions, ['tlsv1.2']}]}),
     %% Clean: delete certificate file, close client & server
     %% TLS/TCP
     ok = amqp_connection:close(Conn1),
@@ -698,14 +727,18 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                 port = Port,
                                                 ssl_options = [{cacerts, RootCerts},
                                                                {cert, CertFirst},
-                                                               {key, KeyFirst}]}),
+                                                               {key, KeyFirst},
+                                                               {verify, verify_none},
+                                                               {versions, ['tlsv1.2']}]}),
     %% verify the other certificate is not accepted
     {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
                                     ssl_options = [{cacerts, RootCerts},
                                                    {cert, CertUpdated},
-                                                   {key, KeyUpdated}]}),
+                                                   {key, KeyUpdated},
+                                                   {verify, verify_none},
+                                                   {versions, ['tlsv1.2']}]}),
     case Error1 of
         %% Expected error from amqp_client.
         ?SERVER_REJECT_CLIENT -> ok;
@@ -733,6 +766,8 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                     ssl_options = [{cacerts, RootCerts},
                                                    {cert, CertFirst},
                                                    {key, KeyFirst},
+                                                   {verify, verify_none},
+                                                   {versions, ['tlsv1.2']},
                                                    %% disable ssl session caching
                                                    %% as this ensures the cert
                                                    %% will be re-verified by the
@@ -756,6 +791,8 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                 ssl_options = [{cacerts, RootCerts},
                                                                {cert, CertUpdated},
                                                                {key, KeyUpdated},
+                                                               {verify, verify_none},
+                                                               {versions, ['tlsv1.2']},
                                                                {reuse_sessions, false}]}),
     ok = amqp_connection:close(Con2),
     %% Clean: server TLS/TCP.
@@ -803,7 +840,9 @@ ignore_corrupt_cert1(Config) ->
                                                            port = Port,
                                                            ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
+                                                                          {key, KeyTrusted},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -839,7 +878,9 @@ ignore_same_cert_with_different_name1(Config) ->
                                                            port = Port,
                                                            ssl_options = [{cacerts, RootCerts},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
+                                                                          {key, KeyTrusted},
+                                                                          {verify, verify_none},
+                                                                          {versions, ['tlsv1.2']}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
