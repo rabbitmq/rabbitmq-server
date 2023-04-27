@@ -8,8 +8,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   source-dist:
-    name: Build source-dist archive
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+    outputs:
+      rabbitmq_version: ${{ steps.version.outputs.rabbitmq_version }}
+      full_version: ${{ steps.version.outputs.full_version }}
     timeout-minutes: 20
     steps:
     - name: CHECKOUT REPOSITORY
@@ -20,15 +22,15 @@ jobs:
       id: version
       working-directory: rabbitmq-server
       run: |
-        # Use github.run_id so that these versions are chronological
-        # when sorted
-        ref="${{ github.head_ref || github.ref }}"
-        rabbitmq_version="${ref##*/}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
-        echo "rabbitmq_version=${rabbitmq_version}" | tee -a $GITHUB_OUTPUT
-    - name: INJECT VERSION
+        RABBITMQ_VERSION=$(grep -E '^APP_VERSION' rabbitmq.bzl | awk '{gsub(/"/, "", $3); print $3}')
+        FULL_VERSION=${RABBITMQ_VERSION}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
+
+        echo "rabbitmq_version=${RABBITMQ_VERSION}" | tee -a $GITHUB_OUTPUT
+        echo "full_version=${FULL_VERSION}" | tee -a $GITHUB_OUTPUT
+    - name: INJECT FULL VERSION
       working-directory: rabbitmq-server
       run: |
-        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.rabbitmq_version }}"/' rabbitmq.bzl
+        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.full_version }}"/' rabbitmq.bzl
         rm *_orig
     - name: CONFIGURE OTP & ELIXIR
       uses: erlef/setup-beam@v1.15
@@ -56,14 +58,15 @@ jobs:
     - name: BUILD source-dist.tar.xz
       env:
         SOURCE_DIST_DIR: ${{ github.workspace }}/source-dist
+        SERVER_DIR: ${{ github.workspace }}/source-dist/rabbitmq-server-${{ steps.version.outputs.full_version }}
       run: |
-        mkdir -p ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
+        mkdir -p ${{ env.SERVER_DIR }}
         pushd rabbitmq-server
         git archive ${{ github.ref }} \
-          | tar -x -C ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
+          | tar -x -C ${{ env.SERVER_DIR }}
         popd
-        pushd ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
-        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.rabbitmq_version }}"/' rabbitmq.bzl
+        pushd ${{ env.SERVER_DIR }}
+        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.full_version }}"/' rabbitmq.bzl
         rm *_orig
         popd
 
@@ -97,3 +100,51 @@ jobs:
         name: package-generic-unix.tar.xz
         path: ${{ env.archives_dir }}/package-generic-unix.tar.xz
         if-no-files-found: error
+  build-test-package-debian:
+    needs:
+    - source-dist
+    runs-on: ubuntu-latest
+    container: pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-25.0
+    timeout-minutes: 20
+    steps:
+    - name: CHECKOUT rabbitmq/rabbitmq-packaging
+      uses: actions/checkout@v3
+      with:
+        repository: rabbitmq/rabbitmq-packaging
+        ref: bazel
+        path: rabbitmq-packaging
+    - name: DOWNLOAD source-dist.tar.xz
+      uses: actions/download-artifact@v3
+      with:
+        name: source-dist.tar.xz
+    - name: BUILD .deb
+      working-directory: rabbitmq-packaging/debs/Debian
+      env:
+        DEBIAN_ORIG_TARBALL: rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}.orig.tar.xz
+        UNPACKED_DIR: ${{ github.workspace }}/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}
+      run: |
+        tree -L 2
+
+        # Because we are creating a source package as well, Debian expects the
+        # source archive to have a specially formatted name. Copy the original
+        # archive to a correctly named file.
+        cp "${{ github.workspace }}/source-dist.tar.xz" "${{ env.DEBIAN_ORIG_TARBALL }}"
+        # Prepare the source directory: we extract the source archive and copy
+        # the debian/ subdirectory.
+        xzcat "${{ env.DEBIAN_ORIG_TARBALL }}" | tar -xf -
+        cp -a debian "${{ env.UNPACKED_DIR }}/debian"
+        # Install build dependencies. To help us, we use mk-build-deps(1) from
+        # the devscripts package.
+        #
+        # We ignore errors from the first `dpkg -i` because the command will
+        # fail: dependencies are missing and dpkg(8) doesn't install them.
+        # That's why we have `apt-get install -f` following. To double-check
+        # everything went fine, we have the second `dpkg -i`.
+        apt-get install -y --no-install-recommends devscripts equivs
+        mk-build-deps debian/control
+        dpkg -i ./rabbitmq-server-build-deps_*_all.deb || true
+        apt-get install -y -f -V --no-install-recommends
+        dpkg -i ./rabbitmq-server-build-deps_*_all.deb
+
+        cd "${{ env.UNPACKED_DIR}}"; \
+          dpkg-buildpackage -sa
