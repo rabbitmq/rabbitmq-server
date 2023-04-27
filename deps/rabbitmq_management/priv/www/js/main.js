@@ -761,7 +761,7 @@ function url_pagination_template_context(template, context, defaultPage, default
     // assume a regular text filter
     var valid_regexp = is_valid_regexp(name_request);
     if (!valid_regexp) {
-        show_popup('warn', fmt_escape_html(`Expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
+        show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
         use_regex = false;
     }
     if (use_regex && valid_regexp) {
