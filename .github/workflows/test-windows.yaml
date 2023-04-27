@@ -3,9 +3,6 @@ on:
   schedule:
   - cron: '0 2 * * *'
   workflow_dispatch:
-  push:
-    paths:
-    - .github/workflows/test-windows.yaml
 jobs:
   test:
     name: Test Windows
