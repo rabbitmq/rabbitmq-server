@@ -23,7 +23,7 @@ jobs:
       working-directory: rabbitmq-server
       run: |
         RABBITMQ_VERSION=$(grep -E '^APP_VERSION' rabbitmq.bzl | awk '{gsub(/"/, "", $3); print $3}')
-        FULL_VERSION=${RABBITMQ_VERSION}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
+        FULL_VERSION="${RABBITMQ_VERSION}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
 
         echo "rabbitmq_version=${RABBITMQ_VERSION}" | tee -a $GITHUB_OUTPUT
         echo "full_version=${FULL_VERSION}" | tee -a $GITHUB_OUTPUT
