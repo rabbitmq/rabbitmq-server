@@ -757,15 +757,17 @@ function url_pagination_template_context(template, context, defaultPage, default
     var page_size = fmt_page_size_request(context, defaultPageSize);
     var name_request = fmt_filter_name_request(context, "");
     var use_regex = fmt_regex_request(context, "") == "checked";
-    // rabbitmq/rabbitmq-server#8008: if the expression cannot be compiled to a reg exp,
-    // assume a regular text filter
-    var valid_regexp = is_valid_regexp(name_request);
-    if (!valid_regexp) {
-        show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
-        use_regex = false;
-    }
-    if (use_regex && valid_regexp) {
-        name_request = esc(name_request);
+    if (use_regex) {
+        // rabbitmq/rabbitmq-server#8008: if the expression cannot be compiled to a reg exp,
+        // assume a regular text filter
+        var valid_regexp = is_valid_regexp(name_request);
+        if (!valid_regexp) {
+            show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
+            use_regex = false;
+        }
+        if (use_regex && valid_regexp) {
+            name_request = esc(name_request);
+        }
     }
     return  '/' + template +
         '?page=' +  page_number_request +
