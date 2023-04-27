@@ -90,7 +90,7 @@ jobs:
     - name: RESOLVE ARCHIVES_DIR
       working-directory: rabbitmq-server
       run: |
-        echo "archives_dir=$(readlink -f bazel-bin/bazel)" >> $GITHUB_ENV
+        echo "archives_dir=$(readlink -f bazel-bin)" >> $GITHUB_ENV
     - name: UPLOAD package-generic-unix.tar.xz
       uses: actions/upload-artifact@v3.1.2
       with:
