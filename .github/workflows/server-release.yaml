@@ -22,8 +22,9 @@ jobs:
       run: |
         # Use github.run_id so that these versions are chronological
         # when sorted
-        rabbitmq_version="${{ github.ref_name }}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
-        echo "rabbitmq_version=${rabbitmq_version}" >> $GITHUB_OUTPUT
+        ref="${{ github.head_ref || github.ref }}"
+        rabbitmq_version="${ref##*/}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
+        echo "rabbitmq_version=${rabbitmq_version}" | tee -a $GITHUB_OUTPUT
     - name: INJECT VERSION
       working-directory: rabbitmq-server
       run: |
