@@ -53,9 +53,13 @@
      {mfa, {rabbit_registry, register,
             [operator_policy_validator, <<"ha-params">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
             [policy_merge_strategy, <<"ha-mode">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
             [policy_merge_strategy, <<"ha-params">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"ha-sync-mode">>, ?MODULE]}},
      {requires, rabbit_registry},
      {enables, recovery}]}).
 
@@ -808,6 +812,8 @@ merge_policy_value(<<"ha-mode">>, _Val, <<"all">> = OpVal) ->
 merge_policy_value(<<"ha-mode">>, <<"exactly">> = Val, _OpVal) ->
     Val;
 merge_policy_value(<<"ha-mode">>, _Val, <<"exactly">> = OpVal) ->
+    OpVal;
+merge_policy_value(<<"ha-sync-mode">>, _Val, OpVal) ->
     OpVal;
 %% Both values are integers, both are ha-mode 'exactly'
 merge_policy_value(<<"ha-params">>, Val, OpVal) when is_integer(Val)
