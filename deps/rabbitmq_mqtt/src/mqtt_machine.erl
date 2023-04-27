@@ -22,7 +22,6 @@
 -type config() :: map().
 
 -type reply() :: {ok, term()} | {error, term()}.
--type client_id() :: term().
 
 -type command() :: {register, client_id(), pid()} |
                    {unregister, client_id(), pid()} |

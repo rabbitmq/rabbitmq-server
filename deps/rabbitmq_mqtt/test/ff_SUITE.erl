@@ -83,13 +83,13 @@ delete_ra_cluster_mqtt_node(Config) ->
                  rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
 
     %% Ra processes should be gone
-    rabbit_ct_helpers:eventually(
+    eventually(
       ?_assert(lists:all(fun(Pid) -> Pid =:= undefined end,
                          rabbit_ct_broker_helpers:rpc_all(Config, erlang, whereis, [mqtt_node])))),
     %% new client ID tracking works
     ?assertEqual(1, length(util:all_connection_pids(Config))),
-    ?assert(erlang:is_process_alive(C)),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    eventually(?_assertEqual(0, length(util:all_connection_pids(Config)))).
 
 rabbit_mqtt_qos0_queue(Config) ->
     FeatureFlag = ?FUNCTION_NAME,

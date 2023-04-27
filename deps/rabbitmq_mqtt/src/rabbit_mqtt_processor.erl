@@ -426,7 +426,7 @@ register_client_id(VHost, ClientId)
 
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
-            case rabbit_mqtt_collector:register(ClientId, self()) of
+            case collector_register(ClientId) of
                 {ok, Corr} ->
                     %% Ra node takes care of removing duplicate client ID connections.
                     {ok, {pending, Corr}};
@@ -1228,7 +1228,7 @@ maybe_send_will(_, _, _) ->
 unregister_client(#state{cfg = #cfg{client_id = ClientId}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
-            rabbit_mqtt_collector:unregister(ClientId, self());
+            rabbit_mqtt_collector:unregister(binary_to_list(ClientId), self());
         false ->
             ok
     end.
@@ -1283,9 +1283,10 @@ handle_ra_event({applied, [{Corr, ok}]},
     State#state{ra_register_state = registered};
 handle_ra_event({not_leader, Leader, Corr},
                 State = #state{ra_register_state = {pending, Corr},
-                               cfg = #cfg{client_id = ClientId}}) ->
+                               cfg = #cfg{client_id = ClientIdBin}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
+            ClientId = binary_to_list(ClientIdBin),
             %% retry command against actual leader
             {ok, NewCorr} = rabbit_mqtt_collector:register(Leader, ClientId, self()),
             State#state{ra_register_state = {pending, NewCorr}};
@@ -1297,7 +1298,7 @@ handle_ra_event(register_timeout,
                                cfg = #cfg{client_id = ClientId}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
-            {ok, NewCorr} = rabbit_mqtt_collector:register(ClientId, self()),
+            {ok, NewCorr} = collector_register(ClientId),
             State#state{ra_register_state = {pending, NewCorr}};
         false ->
             State
@@ -1783,6 +1784,10 @@ message_redelivered(true, ProtoVer, QType) ->
     rabbit_global_counters:messages_redelivered(ProtoVer, QType, 1);
 message_redelivered(_, _, _) ->
     ok.
+
+collector_register(ClientIdBin) ->
+    ClientId = binary_to_list(ClientIdBin),
+    rabbit_mqtt_collector:register(ClientId, self()).
 
 -spec format_status(state()) -> map().
 format_status(
