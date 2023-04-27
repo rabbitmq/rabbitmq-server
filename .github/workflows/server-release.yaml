@@ -121,18 +121,24 @@ jobs:
       working-directory: rabbitmq-packaging/debs/Debian
       env:
         DEBIAN_ORIG_TARBALL: rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}.orig.tar.xz
-        UNPACKED_DIR: ${{ github.workspace }}/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}
       run: |
-        ls $PWD
+        set -x
+
+        pwd
+
+        SOURCE_DIST_FILE="$PWD/source-dist.tar.xz"
+        UNPACKED_DIR="$PWD/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}"
+
+        cd rabbitmq-packaging/debs/Debian
 
         # Because we are creating a source package as well, Debian expects the
         # source archive to have a specially formatted name. Copy the original
         # archive to a correctly named file.
-        cp "${{ github.workspace }}/source-dist.tar.xz" "${{ env.DEBIAN_ORIG_TARBALL }}"
+        cp "${SOURCE_DIST_FILE}" "${{ env.DEBIAN_ORIG_TARBALL }}"
         # Prepare the source directory: we extract the source archive and copy
         # the debian/ subdirectory.
         xzcat "${{ env.DEBIAN_ORIG_TARBALL }}" | tar -xf -
-        cp -a debian "${{ env.UNPACKED_DIR }}/debian"
+        cp -a debian "${UNPACKED_DIR}/debian"
         # Install build dependencies. To help us, we use mk-build-deps(1) from
         # the devscripts package.
         #
