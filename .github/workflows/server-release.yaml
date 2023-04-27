@@ -1,0 +1,99 @@
+name: Server Release
+on:
+  push:
+    branches:
+      - rin/github-actions-server-release-pipeline
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-dist:
+    name: Build source-dist archive
+    runs-on: ubuntu-20.04
+    timeout-minutes: 20
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+      with:
+        path: rabbitmq-server
+    - name: COMPUTE VERSION
+      id: version
+      working-directory: rabbitmq-server
+      run: |
+        # Use github.run_id so that these versions are chronological
+        # when sorted
+        rabbitmq_version="${{ github.ref_name }}-${{ github.run_id }}-$(git rev-parse --short HEAD)"
+        echo "rabbitmq_version=${rabbitmq_version}" >> $GITHUB_OUTPUT
+    - name: INJECT VERSION
+      working-directory: rabbitmq-server
+      run: |
+        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.rabbitmq_version }}"/' rabbitmq.bzl
+        rm *_orig
+    - name: CONFIGURE OTP & ELIXIR
+      uses: erlef/setup-beam@v1.15
+      with:
+        otp-version: 25
+        elixir-version: 1.14
+    - name: CONFIGURE BAZEL
+      working-directory: rabbitmq-server
+      run: |
+        cat << EOF >> user.bazelrc
+          build --disk_cache=
+          build --color=yes
+        EOF
+    - name: BUILD package-generic-unix.tar.xz
+      working-directory: rabbitmq-server
+      run: |
+        bazelisk build //:package-generic-unix \
+          --host_platform=//:erlang_external_platform \
+          --repository_cache=${{ github.workspace }}/repo-cache \
+          --verbose_failures
+    - name: FETCH BCR
+      uses: actions/checkout@v3
+      with:
+        repository: bazelbuild/bazel-central-registry
+        path: bcr
+    - name: BUILD source-dist.tar.xz
+      env:
+        SOURCE_DIST_DIR: ${{ github.workspace }}/source-dist
+      run: |
+        mkdir -p ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
+        pushd vmware-rabbitmq
+        git archive ${{ github.ref }} \
+          | tar -x -C ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
+        popd
+        pushd ${SOURCE_DIST_DIR}/rabbitmq-server-${{ steps.version.outputs.rabbitmq_version }}
+        sed -i"_orig" -E '/APP_VERSION/ s/"[0-9]+\..*"/"${{ steps.version.outputs.rabbitmq_version }}"/' rabbitmq.bzl
+        rm *_orig
+        popd
+
+        mkdir -p ${SOURCE_DIST_DIR}/bcr
+        pushd bcr
+        git archive main \
+          | tar -x -C ${SOURCE_DIST_DIR}/bcr bazel_registry.json modules
+        popd
+
+        rsync -a ${{ github.workspace }}/repo-cache ${SOURCE_DIST_DIR}
+
+        cd source-dist
+        tree -L 3
+        tar --create \
+          --xz \
+          --file ../source-dist.tar.xz \
+          *
+    - name: UPLOAD source-dist.tar.xz
+      uses: actions/upload-artifact@v3.1.2
+      with:
+        name: source-dist.tar.xz
+        path: source-dist.tar.xz
+        if-no-files-found: error
+    - name: RESOLVE ARCHIVES_DIR
+      working-directory: rabbitmq-server
+      run: |
+        echo "archives_dir=$(readlink -f bazel-bin/bazel)" >> $GITHUB_ENV
+    - name: UPLOAD package-generic-unix.tar.xz
+      uses: actions/upload-artifact@v3.1.2
+      with:
+        name: package-generic-unix.tar.xz
+        path: ${{ env.archives_dir }}/package-generic-unix.tar.xz
+        if-no-files-found: error
