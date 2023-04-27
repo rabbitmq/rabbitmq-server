@@ -24,6 +24,18 @@ on:
       - '*.bazel'
       - .github/workflows/test-mixed-versions.yaml
   pull_request:
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-mixed-versions.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
