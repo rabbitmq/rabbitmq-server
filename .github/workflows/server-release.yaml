@@ -46,7 +46,6 @@ jobs:
       working-directory: rabbitmq-server
       run: |
         bazelisk build //:package-generic-unix \
-          --host_platform=//:erlang_external_platform \
           --repository_cache=${{ github.workspace }}/repo-cache \
           --verbose_failures
     - name: FETCH BCR
