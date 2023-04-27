@@ -22,6 +22,40 @@ of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!fo
 
 See [this guide on how to use Bazel and BuildBuddy for RabbitMQ core development](https://github.com/rabbitmq/contribute/wiki/Bazel-and-BuildBuddy).
 
+
+## Working on Management UI with BrowserSync
+
+When working on management UI code, besides starting the node with
+
+``` shell
+bazel run broker RABBITMQ_ENABLED_PLUGINS=rabbitmq_management
+```
+
+(or any other set of plugins), it is highly recommended to use [BrowserSync](https://browsersync.io/#install)
+to shorten the edit/feedback cycle for JS files, CSS, and so on.
+
+First, install BrowserSync using NPM:
+
+``` shell
+npm install -g browser-sync
+```
+
+Assuming a node running locally with HTTP API on port `15672`, start
+a BrowserSync proxy like so:
+
+``` shell
+cd deps/rabbitmq_management/priv/www
+
+browser-sync start --proxy localhost:15672 --serverStatic . --files .
+```
+
+BrowserSync will automatically open a browser window for you to use. The window
+will automatically refresh when one of the static (templates, JS, CSS) files change.
+
+All HTTP requests that BrowserSync does not know how to handle will be proxied to
+the HTTP API at `localhost:15672`.
+
+
 ## Formatting the RabbitMQ CLI
 
 The RabbitMQ CLI uses the standard [Elixir code formatter](https://hexdocs.pm/mix/main/Mix.Tasks.Format.html). To ensure correct code formatting of the CLI:
