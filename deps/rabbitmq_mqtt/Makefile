@@ -47,7 +47,7 @@ DEPS = ranch rabbit_common rabbit amqp_client ra
 TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_web_mqtt
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
-dep_emqtt = git https://github.com/rabbitmq/emqtt.git otp-26-compatibility
+dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
