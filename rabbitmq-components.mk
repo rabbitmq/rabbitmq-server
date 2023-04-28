@@ -111,7 +111,7 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 # possible to work with rabbitmq-public-umbrella.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.8.0
+dep_cowboy = hex 2.10.0
 dep_cowlib = hex 2.12.1
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git master
 dep_prometheus = hex 4.10.0
