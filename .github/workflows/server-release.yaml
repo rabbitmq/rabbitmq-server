@@ -128,6 +128,8 @@ jobs:
         SOURCE_DIST_FILE="$PWD/source-dist.tar.xz"
         UNPACKED_DIR="$PWD/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}"
 
+        mkdir "${UNPACKED_DIR}"
+
         cd rabbitmq-packaging/debs/Debian
 
         # Because we are creating a source package as well, Debian expects the
