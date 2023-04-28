@@ -1225,10 +1225,11 @@ maybe_send_will(true, ConnStr,
 maybe_send_will(_, _, _) ->
     ok.
 
-unregister_client(#state{cfg = #cfg{client_id = ClientId}}) ->
+unregister_client(#state{cfg = #cfg{client_id = ClientIdBin}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
-            rabbit_mqtt_collector:unregister(binary_to_list(ClientId), self());
+            ClientId = rabbit_data_coercion:to_list(ClientIdBin),
+            rabbit_mqtt_collector:unregister(ClientId, self());
         false ->
             ok
     end.
@@ -1286,7 +1287,7 @@ handle_ra_event({not_leader, Leader, Corr},
                                cfg = #cfg{client_id = ClientIdBin}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
         true ->
-            ClientId = binary_to_list(ClientIdBin),
+            ClientId = rabbit_data_coercion:to_list(ClientIdBin),
             %% retry command against actual leader
             {ok, NewCorr} = rabbit_mqtt_collector:register(Leader, ClientId, self()),
             State#state{ra_register_state = {pending, NewCorr}};
@@ -1786,7 +1787,7 @@ message_redelivered(_, _, _) ->
     ok.
 
 collector_register(ClientIdBin) ->
-    ClientId = binary_to_list(ClientIdBin),
+    ClientId = rabbit_data_coercion:to_list(ClientIdBin),
     rabbit_mqtt_collector:register(ClientId, self()).
 
 -spec format_status(state()) -> map().
