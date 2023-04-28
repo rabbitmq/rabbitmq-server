@@ -19,9 +19,12 @@
          teardown_steps/0,
          get_node_config/3,
          rabbitmqctl/3,
-         rpc/4,
+         rpc/4, rpc/5,
          stop_node/2
         ]).
+
+-import(rabbit_ct_helpers,
+        [eventually/3]).
 
 -define(OPTS, [{connect_timeout, 1},
                {ack_timeout, 1}]).
@@ -127,17 +130,15 @@ connection_id_tracking(Config) ->
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
-    Server = get_node_config(Config, 0, nodename),
     C = connect(<<"simpleClient">>, Config, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
     ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
     assert_connection_count(Config, 4, 1),
     process_flag(trap_exit, true),
-    ok = stop_node(Config, Server),
+    ok = stop_node(Config, 0),
     await_exit(C),
-    assert_connection_count(Config, 4, 0),
-    ok.
+    ok = eventually(?_assertEqual([], util:all_connection_pids(1, Config)), 500, 4).
 
 connection_id_tracking_with_decommissioned_node(Config) ->
     case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
