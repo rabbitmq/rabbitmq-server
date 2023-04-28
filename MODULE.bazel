@@ -399,7 +399,7 @@ erlang_dev_package.hex_package(
 
 erlang_dev_package.git_package(
     name = "emqtt",
-    branch = "otp-26-compatibility",
+    branch = "master",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
     repository = "rabbitmq/emqtt",
 )
