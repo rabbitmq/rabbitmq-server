@@ -532,7 +532,7 @@ process_request(?DISCONNECT,
             %% DISCONNECT.
             ?LOG_WARNING("MQTT protocol error: Ignoring requested Session Expiry "
                          "Interval ~p in DISCONNECT because it was 0 in CONNECT.",
-                         [RequestedSEI, Props]),
+                         [RequestedSEI]),
             State0;
         _ ->
             %% "The session expiry interval can be modified at disconnect."

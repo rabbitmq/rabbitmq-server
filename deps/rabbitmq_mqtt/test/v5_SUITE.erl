@@ -135,7 +135,7 @@ init_per_testcase(T, Config)
        T =:= session_expiry_interval_disconnect_to_infinity;
        T =:= session_expiry_interval_reconnect_infinity_to_zero ->
     Par = max_session_expiry_interval_secs,
-    Default = rpc(Config, application, get_env, [?APP, Par]),
+    {ok, Default} = rpc(Config, application, get_env, [?APP, Par]),
     ok = rpc(Config, application, set_env, [?APP, Par, infinity]),
     Config1 = rabbit_ct_helpers:set_config(Config, {Par, Default}),
     rabbit_ct_helpers:testcase_started(Config1, T);
