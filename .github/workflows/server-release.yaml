@@ -118,7 +118,6 @@ jobs:
       with:
         name: source-dist.tar.xz
     - name: BUILD .deb
-      working-directory: rabbitmq-packaging/debs/Debian
       env:
         DEBIAN_ORIG_TARBALL: rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}.orig.tar.xz
       run: |
