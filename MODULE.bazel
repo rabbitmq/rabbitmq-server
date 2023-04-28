@@ -399,9 +399,14 @@ erlang_dev_package.hex_package(
 
 erlang_dev_package.git_package(
     name = "emqtt",
+    branch = "otp-26-compatibility",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
+<<<<<<< HEAD
     repository = "emqx/emqtt",
     tag = "1.8.2",
+=======
+    repository = "rabbitmq/emqtt",
+>>>>>>> 00ac55a81c (Adopt otp 25.0.4)
 )
 
 erlang_dev_package.git_package(
