@@ -13,7 +13,7 @@
          list/0, list_pids/0, leave/1]).
 
 %%----------------------------------------------------------------------------
--spec register(term(), pid()) -> {ok, reference()} | {error, term()}.
+-spec register(client_id(), pid()) -> {ok, reference()} | {error, term()}.
 register(ClientId, Pid) ->
     {ClusterName, _} = NodeId = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
@@ -28,7 +28,7 @@ register(ClientId, Pid) ->
             register(Leader, ClientId, Pid)
     end.
 
--spec register(ra:server_id(), term(), pid()) ->
+-spec register(ra:server_id(), client_id(), pid()) ->
     {ok, reference()} | {error, term()}.
 register(ServerId, ClientId, Pid) ->
     Corr = make_ref(),
@@ -36,7 +36,7 @@ register(ServerId, ClientId, Pid) ->
     erlang:send_after(5000, self(), {ra_event, undefined, register_timeout}),
     {ok, Corr}.
 
--spec unregister(binary(), pid()) -> ok.
+-spec unregister(client_id(), pid()) -> ok.
 unregister(ClientId, Pid) ->
     {ClusterName, _} = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of

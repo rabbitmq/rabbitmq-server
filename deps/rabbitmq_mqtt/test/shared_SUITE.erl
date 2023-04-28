@@ -87,7 +87,6 @@ subgroups() ->
          ,large_message_amqp_to_mqtt
          ,keepalive
          ,keepalive_turned_off
-         ,duplicate_client_id
          ,block
          ,amqp_to_mqtt_qos0
          ,clean_session_disconnect_client
@@ -112,7 +111,8 @@ subgroups() ->
        maintenance,
        delete_create_queue,
        publish_to_all_queue_types_qos0,
-       publish_to_all_queue_types_qos1
+       publish_to_all_queue_types_qos1,
+       duplicate_client_id
       ]}
     ].
 
@@ -1143,17 +1143,19 @@ keepalive_turned_off(Config) ->
     ok = emqtt:disconnect(C).
 
 duplicate_client_id(Config) ->
+    [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     DuplicateClientId = ?FUNCTION_NAME,
-    C1 = connect(DuplicateClientId, Config),
+    %% Connect to old node in mixed version cluster.
+    C1 = connect(DuplicateClientId, Config, Server2, []),
     eventually(?_assertEqual(1, length(all_connection_pids(Config)))),
-
     process_flag(trap_exit, true),
-    C2 = connect(DuplicateClientId, Config),
+    %% Connect to new node in mixed version cluster.
+    C2 = connect(DuplicateClientId, Config, Server1, []),
     await_exit(C1),
     timer:sleep(200),
     ?assertEqual(1, length(all_connection_pids(Config))),
-
-    ok = emqtt:disconnect(C2).
+    ok = emqtt:disconnect(C2),
+    eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
 
 block(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
