@@ -125,7 +125,10 @@ jobs:
 
         pwd
 
-        SOURCE_DIST_FILE="$PWD/source-dist.tar.xz"
+        DEBIAN_VERSION=${{ needs.source-dist.outputs.rabbitmq_version }}
+
+        SOURCE_DIST_FILE="$PWD/rabbitmq-server-${{ needs.source-dist.outputs.rabbitmq_version }}.tar.xz"
+        mv source-dist.tar.xz "${SOURCE_DIST_FILE}"
         UNPACKED_DIR="$PWD/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}"
 
         mkdir "${UNPACKED_DIR}"
