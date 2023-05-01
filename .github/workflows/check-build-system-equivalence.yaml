@@ -1,0 +1,125 @@
+name: Check Bazel/Erlang.mk Equivalence
+on:
+  schedule:
+  - cron: '0 2 * * *'
+  workflow_dispatch:
+env:
+  erlang_version: 25.3
+  elixir_version: 1.14
+  VERSION: 3.13.0
+  PLUGINS: amqp10_common amqp10_client rabbitmq_amqp1_0 rabbitmq_auth_backend_cache rabbitmq_auth_backend_http rabbitmq_auth_backend_ldap rabbitmq_auth_backend_oauth2 rabbitmq_auth_mechanism_ssl rabbitmq_consistent_hash_exchange rabbitmq_event_exchange rabbitmq_federation rabbitmq_jms_topic_exchange rabbitmq_mqtt rabbitmq_random_exchange rabbitmq_recent_history_exchange rabbitmq_sharding rabbitmq_shovel rabbitmq_stomp rabbitmq_stream rabbitmq_trust_store rabbitmq_web_dispatch rabbitmq_management_agent rabbitmq_management rabbitmq_prometheus rabbitmq_federation_management rabbitmq_shovel_management rabbitmq_stream_management rabbitmq_top rabbitmq_tracing rabbitmq_web_mqtt rabbitmq_web_mqtt_examples rabbitmq_web_stomp rabbitmq_web_stomp_examples rabbitmq_aws rabbitmq_peer_discovery_common rabbitmq_peer_discovery_aws rabbitmq_peer_discovery_k8s rabbitmq_peer_discovery_consul rabbitmq_peer_discovery_etcd
+jobs:
+  build-with-bazel:
+    name: bazel build package-generic-unix.tar.xz
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+    - name: CONFIGURE ERLANG
+      uses: erlef/setup-beam@v1.15.3
+      with:
+        otp-version: ${{ env.erlang_version }}
+        elixir-version: ${{ env.elixir_version }}
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build --disk_cache=
+          build --color=yes
+        EOF
+    - name: BUILD package-generic-unix.tar.xz
+      run: |
+        bazelisk build //:package-generic-unix
+    - name: RESOLVE ARCHIVES_DIR
+      run: |
+        echo "archives_dir=$(readlink -f bazel-bin)" >> $GITHUB_ENV
+    - name: UPLOAD package-generic-unix.tar.xz
+      uses: actions/upload-artifact@v3.1.2
+      with:
+        name: bazel-package-generic-unix.tar.xz
+        path: ${{ env.archives_dir }}/package-generic-unix.tar.xz
+        if-no-files-found: error
+
+  build-with-make:
+    name: make package-generic-unix.tar.xz
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+      with:
+        path: rabbitmq
+    - name: CONFIGURE ERLANG
+      uses: erlef/setup-beam@v1.15.3
+      with:
+        otp-version: ${{ env.erlang_version }}
+        elixir-version: ${{ env.elixir_version }}
+    - name: BUILD package-generic-unix.tar.xz
+      env:
+        MAKE: make
+      run: |
+        $MAKE -C rabbitmq \
+          source-dist \
+          PACKAGES_DIR="$PWD/PACKAGES" \
+          PLUGINS="$PLUGINS" \
+          PROJECT_VERSION="$VERSION"
+        $MAKE -C rabbitmq/packaging \
+          package-generic-unix \
+          PACKAGES_DIR="$PWD/PACKAGES" \
+          VERSION="$VERSION"
+    - name: UPLOAD package-generic-unix.tar.xz
+      uses: actions/upload-artifact@v3.1.2
+      with:
+        name: make-package-generic-unix.tar.xz
+        path: PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
+        if-no-files-found: error
+
+  compare:
+    needs:
+    - build-with-bazel
+    - build-with-make
+    name: Compare package-generic-unix.tar.xz
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+      with:
+        path: rabbitmq-server
+    - name: CONFIGURE ERLANG
+      uses: erlef/setup-beam@v1.15.3
+      with:
+        otp-version: ${{ env.erlang_version }}
+        elixir-version: ${{ env.elixir_version }}
+    - name: DOWNLOAD bazel-package-generic-unix.tar.xz
+      uses: actions/download-artifact@v3
+      with:
+        name: bazel-package-generic-unix.tar.xz
+    - name: DOWNLOAD make-package-generic-unix.tar.xz
+      uses: actions/download-artifact@v3
+      with:
+        name: make-package-generic-unix.tar.xz
+    - name: EXPAND & COMPARE
+      run: |
+        mkdir bazel
+        pushd bazel
+          tar -xf ${{ github.workspace }}/package-generic-unix.tar.xz
+          find . | sort > ${{ github.workspace }}/bazel.manifest
+        popd
+
+        mkdir make
+        pushd make
+          tar -xf ${{ github.workspace }}/rabbitmq-server-generic-unix-*.tar.xz
+          # delete an empty directory
+          rm -d rabbitmq_server-*/plugins/rabbitmq_random_exchange-*/include
+          find . | sort > ${{ github.workspace }}/make.manifest
+        popd
+
+        tree -L 2 bazel
+        tree -L 2 make
+
+        sleep 1
+
+        set -x
+
+        ./rabbitmq-server/tools/compare_dist.sh make bazel
