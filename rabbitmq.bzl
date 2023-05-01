@@ -76,7 +76,9 @@ ALL_PLUGINS = [
     "//deps/rabbitmq_trust_store:erlang_app",
     "//deps/rabbitmq_web_dispatch:erlang_app",
     "//deps/rabbitmq_web_mqtt:erlang_app",
+    "//deps/rabbitmq_web_mqtt_examples:erlang_app",
     "//deps/rabbitmq_web_stomp:erlang_app",
+    "//deps/rabbitmq_web_stomp_examples:erlang_app",
 ]
 
 LABELS_WITH_TEST_VERSIONS = [

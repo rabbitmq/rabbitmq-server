@@ -7,7 +7,7 @@ define PROJECT_ENV
 []
 endef
 
-LOCAL_DEPS = crypto inets ssl xmerl
+LOCAL_DEPS = crypto inets ssl xmerl public_key
 BUILD_DEPS = rabbit_common
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 TEST_DEPS = meck

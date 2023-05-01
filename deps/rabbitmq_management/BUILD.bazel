@@ -61,7 +61,7 @@ test_suite_beam_files(name = "test_suite_beam_files")
 # gazelle:erlang_app_extra_app crypto
 # gazelle:erlang_app_extra_app public_key
 
-# gazelle:erlang_app_dep_exclude ranch
+# gazelle:erlang_app_dep ranch
 
 rabbitmq_app(
     name = "erlang_app",
@@ -89,6 +89,7 @@ rabbitmq_app(
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@cowboy//:erlang_app",
         "@cowlib//:erlang_app",
+        "@ranch//:erlang_app",
     ],
 )
 
