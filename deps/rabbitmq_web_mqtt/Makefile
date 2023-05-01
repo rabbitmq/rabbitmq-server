@@ -17,6 +17,7 @@ endef
 BUILD_WITHOUT_QUIC=1
 export BUILD_WITHOUT_QUIC
 
+LOCAL_DEPS = ssl
 DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
 

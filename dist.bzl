@@ -77,7 +77,7 @@ def _sbin_dir_private_impl(ctx):
     ]
 
 def _escript_dir_private_impl(ctx):
-    escripts = [copy_escript(ctx, escript) for escript in ctx.files._scripts]
+    escripts = [copy_escript(ctx, escript) for escript in ctx.files._escripts]
 
     return [
         DefaultInfo(
@@ -135,6 +135,12 @@ def _versioned_plugins_dir_impl(ctx):
         "",
         maybe_install_erlang(ctx),
     ]
+
+    commands.append(
+        "echo 'Put your EZs here and use rabbitmq-plugins to enable them.' > {plugins_dir}/README".format(
+            plugins_dir = plugins_dir.path,
+        )
+    )
 
     for plugin in plugins:
         lib_info = plugin[ErlangAppInfo]
