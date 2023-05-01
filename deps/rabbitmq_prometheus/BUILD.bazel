@@ -41,6 +41,7 @@ rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
+    app_description = "Prometheus metrics for RabbitMQ",
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,

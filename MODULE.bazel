@@ -199,8 +199,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "gen_batch_server",
     build_file = "@rabbitmq-server//bazel:BUILD.gen_batch_server",
-    sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
-    version = "0.8.7",
+    sha256 = "c3e6a1a2a0fb62aee631a98cfa0fd8903e9562422cbf72043953e2fb1d203017",
+    version = "0.8.8",
 )
 
 erlang_package.hex_package(
