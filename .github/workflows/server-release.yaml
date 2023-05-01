@@ -119,17 +119,27 @@ jobs:
         name: source-dist.tar.xz
     - name: BUILD .deb
       env:
-        DEBIAN_ORIG_TARBALL: rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}.orig.tar.xz
+        VERSION: ${{ needs.source-dist.outputs.full_version }}
       run: |
         set -x
 
-        pwd
+        apt-get update
 
-        DEBIAN_VERSION=${{ needs.source-dist.outputs.rabbitmq_version }}
+        # We convert the "-" before the semver label to a "~". "~"
+        # is sorted before anything, even the empty string, when the
+        # Debian packaging system compares versions. Thus we make sure
+        # prerelease versions are sorted before final release versions,
+        # and the latter takes precedence.
+        #
+        # See the Debian Policy:
+        # https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version
+        DEBIAN_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
+
+        DEBIAN_ORIG_TARBALL: rabbitmq_server-${DEBIAN_VERSION}.orig.tar.xz
 
         SOURCE_DIST_FILE="$PWD/rabbitmq-server-${{ needs.source-dist.outputs.rabbitmq_version }}.tar.xz"
         mv source-dist.tar.xz "${SOURCE_DIST_FILE}"
-        UNPACKED_DIR="$PWD/rabbitmq_server-${{ needs.source-dist.outputs.rabbitmq_version }}"
+        UNPACKED_DIR="$(basename "${SOURCE_DIST_FILE}" .tar.xz)"
 
         mkdir "${UNPACKED_DIR}"
 
