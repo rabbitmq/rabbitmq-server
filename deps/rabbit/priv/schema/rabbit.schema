@@ -2483,6 +2483,8 @@ end}.
 {mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
     {datatype, {enum, [true, false]}}]}.
 
+{mapping, "quorum_queue.property_equivalence.relaxed_checks_on_redeclaration", "rabbit.quorum_relaxed_checks_on_redeclaration", [
+    {datatype, {enum, [true, false]}}]}.
 
 %%
 %% Runtime parameters
