@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -44,7 +44,15 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     end
   end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  def validate_execution_environment(args, opts) do
+    Validators.chain(
+      [
+        &Validators.rabbit_is_running/2,
+        &Validators.existing_cluster_member/2
+      ],
+      [args, opts]
+    )
+  end
 
   def run([node, strategy], %{
         node: node_name,

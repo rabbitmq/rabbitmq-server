@@ -47,6 +47,22 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
+  def existing_cluster_member([potential_member | _], %{node: node_name}) do
+    case Helpers.cluster_member?(node_name, potential_member) do
+      false -> {:validation_failure, {:not_a_cluster_member, potential_member}}
+      true -> :ok
+    end
+  end
+
+  def existing_cluster_member(args, %{node: node_name}, extract_member) do
+    potential_member = extract_member.(args)
+
+    case Helpers.cluster_member?(node_name, potential_member) do
+      false -> {:validation_failure, {:not_a_cluster_member, potential_member}}
+      true -> :ok
+    end
+  end
+
   def mnesia_dir_is_set(_, opts) do
     case require_mnesia_dir(opts) do
       :ok -> :ok
