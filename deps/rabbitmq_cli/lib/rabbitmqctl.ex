@@ -469,7 +469,8 @@ defmodule RabbitMQCtl do
   end
 
   defp format_error({:error, :not_found = result}, _opts, _) do
-    {:error, ExitCodes.exit_code_for(result), "Object (queue, stream, exchange, etc) was not found"}
+    {:error, ExitCodes.exit_code_for(result),
+     "Object (queue, stream, exchange, etc) was not found"}
   end
 
   defp format_error(
