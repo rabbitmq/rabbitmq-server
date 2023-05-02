@@ -22,7 +22,7 @@
 
 %%----------------------------------------------------------------------------
 
--spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error2(term()).
+-spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error2(pid(), {no_such_vhost, rabbit_types:vhost()}).
 
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
@@ -37,7 +37,8 @@ start(VHost) ->
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a recovery terms manager for vhost ~ts: vhost no longer exists!",
-                             [VHost])
+                             [VHost]),
+            {error, {no_such_vhost, VHost}}
     end.
 
 -spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
