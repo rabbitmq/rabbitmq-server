@@ -30,7 +30,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
     Validators.chain(
       [
         &Validators.rabbit_is_running/2,
-        &Validators.existing_cluster_member/2
+        fn (args, opts) ->
+          extractor = fn([_, val]) -> val end
+          Validators.existing_cluster_member(args, opts, extractor)
+        end
       ],
       [args, opts]
     )
