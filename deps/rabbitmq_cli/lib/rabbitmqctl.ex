@@ -468,6 +468,10 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_code_for(result), "Virtual host '#{vhost}' does not exist"}
   end
 
+  defp format_error({:error, :not_found = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result), "Object (queue, stream, exchange, etc) was not found"}
+  end
+
   defp format_error(
          {:error, {:incompatible_version, local_version, remote_version} = result},
          _opts,
