@@ -470,12 +470,12 @@ defmodule RabbitMQCtl do
 
   defp format_error({:error, {:not_found, vhost, name} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result),
-     "Object (queue, stream, exchange, etc) '#{name}' was not found in virtual host '#{vhost}}'"}
+     "Object (queue, stream, exchange, etc) '#{name}' was not found in virtual host '#{vhost}'"}
   end
 
   defp format_error({:error, {:not_found, object_type, vhost, name} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result),
-     "#{object_type} '#{name}' was not found in virtual host '#{vhost}}'"}
+     "#{object_type} '#{name}' was not found in virtual host '#{vhost}'"}
   end
 
   defp format_error({:error, :not_found = result}, _opts, _) do
