@@ -237,6 +237,7 @@ plt(
     name = "deps_plt",
     apps = [
         "mnesia",  # keep
+        "runtime_tools",
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
