@@ -12,6 +12,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbitmq_mqtt/include/rabbit_mqtt.hrl").
+-include_lib("rabbitmq_mqtt/include/rabbit_mqtt_packet.hrl").
 
 -export([
     init/2,
@@ -27,8 +28,6 @@
 -export([upgrade/4,
          upgrade/5,
          takeover/7]).
-
--type option(T) :: undefined | T.
 
 -record(state, {
           socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
@@ -156,7 +155,9 @@ websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcSta
                                                             conn_name = ConnName }) ->
     ?LOG_WARNING("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
-    stop(State);
+    rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, ProcState),
+    defer_close(?CLOSE_PROTOCOL_ERROR),
+    {[], State};
 websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
                                                                           conn_name = ConnName }) ->
     ?LOG_WARNING("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s",
@@ -173,14 +174,17 @@ websocket_info({'$gen_cast', refresh_config},
     PState = rabbit_mqtt_processor:update_trace(ConnName, PState0),
     State = State0#state{proc_state = PState},
     {[], State, hibernate};
-websocket_info({keepalive, Req}, State = #state{keepalive = KState0,
+websocket_info({keepalive, Req}, State = #state{proc_state = ProcState,
+                                                keepalive = KState0,
                                                 conn_name = ConnName}) ->
     case rabbit_mqtt_keepalive:handle(Req, KState0) of
         {ok, KState} ->
             {[], State#state{keepalive = KState}, hibernate};
         {error, timeout} ->
             ?LOG_ERROR("keepalive timeout in Web MQTT connection ~p", [ConnName]),
-            stop(State, ?CLOSE_NORMAL, <<"MQTT keepalive timeout">>);
+            rabbit_mqtt_processor:send_disconnect(?RC_KEEP_ALIVE_TIMEOUT, ProcState),
+            defer_close(?CLOSE_NORMAL),
+            {[], State};
         {error, Reason} ->
             ?LOG_ERROR("keepalive error in Web MQTT connection ~p: ~p",
                        [ConnName, Reason]),
@@ -286,7 +290,7 @@ handle_data1(Data, State = #state{socket = Socket,
                         {error, Reason, _} ->
                             stop_mqtt_protocol_error(State, Reason, ConnName);
                         {stop, {disconnect, server_initiated}, _} ->
-                            defer_close(),
+                            defer_close(?CLOSE_PROTOCOL_ERROR),
                             {[], State};
                         {stop, {disconnect, client_initiated}, ProcState1} ->
                             stop({_SendWill = false, State#state{proc_state = ProcState1}})
@@ -294,7 +298,7 @@ handle_data1(Data, State = #state{socket = Socket,
             end;
         {error, {disconnect_reason_code, ReasonCode}} ->
             rabbit_mqtt_processor:send_disconnect(ReasonCode, ProcState),
-            defer_close(),
+            defer_close(?CLOSE_PROTOCOL_ERROR),
             {[], State};
         {error, Reason} ->
             stop_mqtt_protocol_error(State, Reason, ConnName)
@@ -306,8 +310,8 @@ handle_data1(Data, State = #state{socket = Socket,
     end.
 
 %% Allow DISCONNECT packet to be sent to client before closing the connection.
-defer_close() ->
-    self() ! {stop, ?CLOSE_PROTOCOL_ERROR, server_initiated_disconnect},
+defer_close(CloseStatusCode) ->
+    self() ! {stop, CloseStatusCode, server_initiated_disconnect},
     ok.
 
 stop_mqtt_protocol_error(State, Reason, ConnName) ->
