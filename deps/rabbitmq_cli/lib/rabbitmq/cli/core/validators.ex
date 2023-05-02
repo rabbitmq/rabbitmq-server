@@ -47,10 +47,6 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
-<<<<<<< HEAD
-  def mnesia_dir_is_set(_, opts) do
-    case require_mnesia_dir(opts) do
-=======
   def existing_cluster_member([potential_member | _], %{node: node_name}) do
     case Helpers.cluster_member?(node_name, potential_member) do
       false -> {:validation_failure, {:not_a_cluster_member, potential_member}}
@@ -67,9 +63,8 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
-  def data_dir_is_set(_, opts) do
-    case require_data_dir(opts) do
->>>>>>> 40b59fc54c (rabbitmq-queues: validate cluster membership of the argument)
+  def mnesia_dir_is_set(_, opts) do
+    case require_mnesia_dir(opts) do
       :ok -> :ok
       {:error, err} -> {:validation_failure, err}
     end
