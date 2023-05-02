@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -25,7 +25,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
+  def validate_execution_environment(args, opts) do
+    Validators.chain(
+      [
+        &Validators.rabbit_is_running/2,
+        fn args, opts ->
+          extractor = fn [_, val] -> val end
+          Validators.existing_cluster_member(args, opts, extractor)
+        end
+      ],
+      [args, opts]
+    )
+  end
 
   def run([name, node] = _args, %{vhost: vhost, node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, [
@@ -36,6 +48,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
          ]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot add members to a classic queue"}
+
+      {:error, :not_found} ->
+        {:error, {:not_found, :queue, vhost, name}}
 
       other ->
         other

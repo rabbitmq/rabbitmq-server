@@ -393,6 +393,9 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:unsupported_formatter),
     do: "the requested formatter is not supported by this command"
 
+  defp format_validation_error({:not_a_cluster_member, potential_member}),
+    do: "node #{potential_member} is not a member of the cluster"
+
   defp format_validation_error(err), do: inspect(err)
 
   @spec exit_program(integer()) :: no_return()
@@ -463,6 +466,21 @@ defmodule RabbitMQCtl do
 
   defp format_error({:error, {:no_such_vhost, vhost} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result), "Virtual host '#{vhost}' does not exist"}
+  end
+
+  defp format_error({:error, {:not_found, vhost, name} = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Object (queue, stream, exchange, etc) '#{name}' was not found in virtual host '#{vhost}'"}
+  end
+
+  defp format_error({:error, {:not_found, object_type, vhost, name} = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "#{object_type} '#{name}' was not found in virtual host '#{vhost}'"}
+  end
+
+  defp format_error({:error, :not_found = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Object (queue, stream, exchange, etc) was not found"}
   end
 
   defp format_error(
