@@ -120,8 +120,8 @@ grow_invalid_node_filtered(Config) ->
     #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
     DummyNode = not_really_a_node@nothing,
     publish_confirm(Ch, QName),
-    {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
-    ?assertNotMatch(#{{"/", "grow-err"} := _}, parse_result(Out1)),
+    %% validated as of rabbitmq-server#8007
+    {error, _ExitCode, _} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
     ok.
 
 parse_result(S) ->
