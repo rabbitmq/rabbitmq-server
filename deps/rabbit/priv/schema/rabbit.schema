@@ -785,7 +785,14 @@ end}.
                 Conf,
                 ["default_policies", "operator"],
                 fun({["default_policies","operator",ID,"classic_queues"|T], V}) ->
-                    {["default_policies","operator",ID|T],V};
+                    NewV = case T of
+                              ["ha_sync_mode"] ->
+                                  list_to_binary(V);
+                              ["ha_mode"] ->
+                                  list_to_binary(V);
+                              _ -> V
+                          end,
+                    {["default_policies","operator",ID|T], NewV};
                    (E) -> E
                 end),
     case Props of
