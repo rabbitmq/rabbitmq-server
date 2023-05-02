@@ -32,13 +32,9 @@ erlang_bytecode(
         "src/cowboy_stream.erl",
         "src/cowboy_sub_protocol.erl",
     ],
-    outs = [
-        "ebin/cowboy_middleware.beam",
-        "ebin/cowboy_stream.beam",
-        "ebin/cowboy_sub_protocol.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "cowboy",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -68,33 +64,10 @@ erlang_bytecode(
         "src/cowboy_tracer_h.erl",
         "src/cowboy_websocket.erl",
     ],
-    outs = [
-        "ebin/cowboy.beam",
-        "ebin/cowboy_app.beam",
-        "ebin/cowboy_bstr.beam",
-        "ebin/cowboy_children.beam",
-        "ebin/cowboy_clear.beam",
-        "ebin/cowboy_clock.beam",
-        "ebin/cowboy_compress_h.beam",
-        "ebin/cowboy_constraints.beam",
-        "ebin/cowboy_handler.beam",
-        "ebin/cowboy_http.beam",
-        "ebin/cowboy_http2.beam",
-        "ebin/cowboy_loop.beam",
-        "ebin/cowboy_metrics_h.beam",
-        "ebin/cowboy_req.beam",
-        "ebin/cowboy_rest.beam",
-        "ebin/cowboy_router.beam",
-        "ebin/cowboy_static.beam",
-        "ebin/cowboy_stream_h.beam",
-        "ebin/cowboy_sup.beam",
-        "ebin/cowboy_tls.beam",
-        "ebin/cowboy_tracer_h.beam",
-        "ebin/cowboy_websocket.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "cowboy",
     beam = [":behaviours"],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
     deps = [
         "@cowlib//:erlang_app",
@@ -113,7 +86,6 @@ filegroup(
 filegroup(
     name = "srcs",
     srcs = [
-        "src/cowboy.app.src",
         "src/cowboy.erl",
         "src/cowboy_app.erl",
         "src/cowboy_bstr.erl",
@@ -142,20 +114,11 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "private_hdrs",
-    srcs = [],
-)
+filegroup(name = "private_hdrs")
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -181,9 +144,12 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "cowboy",
     beam_files = [":beam_files"],
     extra_apps = ["crypto"],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = [
         "@cowlib//:erlang_app",
         "@ranch//:erlang_app",
@@ -194,4 +160,11 @@ alias(
     name = "cowboy",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
