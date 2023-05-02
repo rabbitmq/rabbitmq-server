@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
