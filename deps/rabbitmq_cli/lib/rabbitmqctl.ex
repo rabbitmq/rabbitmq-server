@@ -393,6 +393,9 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:unsupported_formatter),
     do: "the requested formatter is not supported by this command"
 
+  defp format_validation_error({:not_a_cluster_member, potential_member}),
+    do: "node #{potential_member} is not a member of the cluster"
+
   defp format_validation_error(err), do: inspect(err)
 
   @spec exit_program(integer()) :: no_return()

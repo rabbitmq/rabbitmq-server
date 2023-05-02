@@ -68,6 +68,11 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def cluster_member?(target_node, node_to_check, timeout \\ 30_000) do
+    node_to_check_a = DataCoercion.to_atom(node_to_check)
+    Enum.member?(nodes_in_cluster(target_node, timeout), node_to_check_a)
+  end
+
   def node_running?(node) do
     :net_adm.ping(node) == :pong
   end
