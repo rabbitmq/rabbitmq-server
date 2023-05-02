@@ -43,6 +43,8 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_code_for({:no_such_vhost, _}), do: exit_dataerr()
   def exit_code_for({:no_such_user, _}), do: exit_nouser()
   def exit_code_for(:not_found), do: exit_dataerr()
+  def exit_code_for({:not_found, _vhost, _name}), do: exit_dataerr()
+  def exit_code_for({:not_found, _object_type, _vhost, _name}), do: exit_dataerr()
   def exit_code_for({:badrpc_multi, :timeout, _}), do: exit_tempfail()
   def exit_code_for({:badrpc, :timeout}), do: exit_tempfail()
   def exit_code_for({:badrpc, {:timeout, _}}), do: exit_tempfail()

@@ -49,6 +49,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot add members to a classic queue"}
 
+      {:error, :not_found} ->
+        {:error, {:not_found, :queue, vhost, name}}
+
       other ->
         other
     end
