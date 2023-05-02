@@ -23,8 +23,7 @@
 -export([info/2]).
 
 -include("rabbit_mqtt.hrl").
-
--type option(T) :: undefined | T.
+-include("rabbit_mqtt_packet.hrl").
 
 -define(HIBERNATE_AFTER, 1000).
 
@@ -113,6 +112,7 @@ handle_cast(duplicate_id,
                             conn_name  = ConnName }) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with duplicate id '~ts'",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
+    rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, PState),
     {stop, {shutdown, duplicate_id}, State};
 
 handle_cast(decommission_node,
@@ -198,13 +198,15 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     maybe_process_deferred_recv(control_throttle(State));
 
-handle_info({keepalive, Req}, State = #state{keepalive = KState0,
+handle_info({keepalive, Req}, State = #state{proc_state = PState,
+                                             keepalive = KState0,
                                              conn_name = ConnName}) ->
     case rabbit_mqtt_keepalive:handle(Req, KState0) of
         {ok, KState} ->
             {noreply, State#state{keepalive = KState}, ?HIBERNATE_AFTER};
         {error, timeout} ->
             ?LOG_ERROR("closing MQTT connection ~p (keepalive timeout)", [ConnName]),
+            rabbit_mqtt_processor:send_disconnect(?RC_KEEP_ALIVE_TIMEOUT, PState),
             {stop, {shutdown, keepalive_timeout}, State};
         {error, Reason} ->
             {stop, Reason, State}

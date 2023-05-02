@@ -47,6 +47,10 @@
         [http_get/2,
          http_delete/3]).
 
+%% defined in MQTT v5 (not in v4 or v3)
+-define(RC_KEEP_ALIVE_TIMEOUT, 16#8D).
+-define(RC_SESSION_TAKEN_OVER, 16#8E).
+
 all() ->
     [{group, mqtt},
      {group, web_mqtt}].
@@ -1165,8 +1169,9 @@ keepalive(Config) ->
     eventually(?_assertMatch(#{publishers := 0},
                              util:get_global_counters(Config)),
                KeepaliveMs, 3 * KeepaliveSecs),
-    await_exit(C1),
 
+    await_exit(C1),
+    assert_v5_disconnect_reason_code(Config, ?RC_KEEP_ALIVE_TIMEOUT),
     true = rpc(Config, meck, validate, [Mod]),
     ok = rpc(Config, meck, unload, [Mod]),
 
@@ -1209,6 +1214,7 @@ duplicate_client_id(Config) ->
     process_flag(trap_exit, true),
     %% Connect to new node in mixed version cluster.
     C2 = connect(DuplicateClientId, Config, Server1, []),
+    assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER),
     await_exit(C1),
     timer:sleep(200),
     ?assertEqual(1, length(all_connection_pids(Config))),
@@ -1598,3 +1604,13 @@ bind(Ch, QueueName, Topic)
                            Ch, #'queue.bind'{queue       = QueueName,
                                              exchange    = <<"amq.topic">>,
                                              routing_key = Topic}).
+
+assert_v5_disconnect_reason_code(Config, ReasonCode) ->
+    case ?config(mqtt_version, Config) of
+        V when V =:= v3; V =:= v4 ->
+            ok;
+        v5 ->
+            receive {disconnected, ReasonCode, _Props} -> ok
+            after 1000 -> ct:fail("missing DISCONNECT packet from server")
+            end
+    end.
