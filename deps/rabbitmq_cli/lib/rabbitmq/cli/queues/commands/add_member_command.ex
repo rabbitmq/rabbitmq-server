@@ -25,7 +25,16 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
+  def validate_execution_environment(args, opts) do
+    Validators.chain(
+      [
+        &Validators.rabbit_is_running/2,
+        &Validators.existing_cluster_member/2
+      ],
+      [args, opts]
+    )
+  end
 
   def run([name, node] = _args, %{vhost: vhost, node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, [
