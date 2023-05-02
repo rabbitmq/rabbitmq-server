@@ -42,6 +42,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   # a special case of bad_argument
   def exit_code_for({:no_such_vhost, _}), do: exit_dataerr()
   def exit_code_for({:no_such_user, _}), do: exit_nouser()
+  def exit_code_for(:not_found), do: exit_dataerr()
   def exit_code_for({:badrpc_multi, :timeout, _}), do: exit_tempfail()
   def exit_code_for({:badrpc, :timeout}), do: exit_tempfail()
   def exit_code_for({:badrpc, {:timeout, _}}), do: exit_tempfail()
