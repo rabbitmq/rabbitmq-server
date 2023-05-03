@@ -209,6 +209,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                     dest, DCh, Dest, DeclareParams,
                                     RouteState)
                           end),
+                    maybe_ensure_queue(Dest, DCh),
                     {XName, RK} = rabbit_routing_util:parse_routing(Dest),
                     {ok, Target, Link#incoming_link{
                                    route_state = RouteState1,
@@ -224,6 +225,20 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _Else ->
             {error, {address_not_utf8_string, Address}}
     end.
+
+maybe_ensure_queue({amqqueue, Q}, Ch) ->
+    try
+        rabbit_amqp1_0_channel:convert_error(
+          fun () ->
+                  Method = #'queue.declare'{queue = list_to_binary(Q),
+                                            passive = true},
+                  amqp_channel:call(Ch, Method)
+          end)
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED} ->
+              ok
+    end;
+maybe_ensure_queue(_, _) ->
+    ok.
 
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
     #'v1_0.flow'{handle         = Handle,
