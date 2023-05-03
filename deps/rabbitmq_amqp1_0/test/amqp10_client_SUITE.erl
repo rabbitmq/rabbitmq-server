@@ -25,6 +25,7 @@ groups() ->
      {tests, [], [
                   reliable_send_receive_with_outcomes,
                   publishing_to_non_existing_queue_should_settle_with_released,
+                  open_link_to_non_existing_destination_should_end_session,
                   roundtrip_classic_queue_with_drain,
                   roundtrip_quorum_queue_with_drain,
                   roundtrip_stream_queue_with_drain,
@@ -159,7 +160,7 @@ publishing_to_non_existing_queue_should_settle_with_released(Config) ->
     QName = <<Container/binary, Suffix/binary>>,
     Host = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    Address = <<"/amq/queue/", QName/binary>>,
+    Address = <<"/exchange/amq.direct/", QName/binary>>,
 
     OpnConf = #{address => Host,
                 port => Port,
@@ -182,6 +183,36 @@ publishing_to_non_existing_queue_should_settle_with_released(Config) ->
     ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:close_connection(Connection),
     flush("post sender close"),
+    ok.
+
+open_link_to_non_existing_destination_should_end_session(Config) ->
+    Container = atom_to_list(?FUNCTION_NAME),
+    Name = Container ++ "foo",
+    Addresses = [
+                 "/exchange/" ++ Name ++ "/bar",
+                 "/amq/queue/" ++ Name
+                ],
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => list_to_binary(Container),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+
+    [begin
+         {ok, Connection} = amqp10_client:open_connection(OpnConf),
+         {ok, Session} = amqp10_client:begin_session(Connection),
+         SenderLinkName = <<"test-sender">>,
+         ct:pal("Address ~p", [Address]),
+         {ok, _} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    list_to_binary(Address)),
+
+         wait_for_session_end(Session),
+         ok = amqp10_client:close_connection(Connection),
+         flush("post sender close")
+
+     end || Address <- Addresses],
     ok.
 
 roundtrip_classic_queue_with_drain(Config) ->
@@ -403,6 +434,16 @@ wait_for_credit(Sender) ->
               ct:fail(credited_timeout)
     end.
 
+wait_for_session_end(Session) ->
+    receive
+        {amqp10_event, {session, Session, {ended, _}}} ->
+            flush(?FUNCTION_NAME),
+            ok
+    after 5000 ->
+              flush("wait_for_session_end timed out"),
+              ct:fail(settled_timeout)
+    end.
+
 wait_for_settlement(Tag) ->
     wait_for_settlement(Tag, accepted).
 
@@ -413,7 +454,7 @@ wait_for_settlement(Tag, State) ->
             ok
     after 5000 ->
               flush("wait_for_settlement timed out"),
-              ct:fail(credited_timeout)
+              ct:fail(settled_timeout)
     end.
 
 wait_for_accepts(0) -> ok;
