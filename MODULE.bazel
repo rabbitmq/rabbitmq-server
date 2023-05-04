@@ -172,8 +172,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "credentials_obfuscation",
     build_file = "@rabbitmq-server//bazel:BUILD.credentials_obfuscation",
-    sha256 = "fe8ece91a1ba6c8a08eb1063cfd5b063a723c5fe29a1fad6b7cbd76cb18d2eeb",
-    version = "3.2.0",
+    sha256 = "738ace0ed5545d2710d3f7383906fc6f6b582d019036e5269c4dbd85dbced566",
+    version = "3.4.0",
 )
 
 erlang_package.hex_package(
