@@ -1,5 +1,7 @@
 define PROJECT_ENV
 [
+	{tcp_config, [{port, 15692}]},
+	{ssl_config, []},
 	{return_per_object_metrics, false}
 ]
 endef
