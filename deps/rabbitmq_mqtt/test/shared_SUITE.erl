@@ -438,12 +438,13 @@ events(Config) ->
                 true -> 'Web MQTT';
                 false -> 'MQTT'
             end,
-    ExpectedConnectionProps = [{protocol, {Proto, {3,1,1}}},
-                               {node, Server},
-                               {vhost, <<"/">>},
-                               {user, <<"guest">>},
-                               {pid, ConnectionPid}],
-    assert_event_prop(ExpectedConnectionProps, E1),
+    assert_event_prop([{protocol, {Proto, {3,1,1}}},
+                       {node, Server},
+                       {vhost, <<"/">>},
+                       {user, <<"guest">>},
+                       {client_properties, [{client_id, longstr, ClientId}]},
+                       {pid, ConnectionPid}],
+                      E1),
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
 
@@ -490,7 +491,10 @@ events(Config) ->
 
     [E6, E7 | E8] = get_events(Server),
     assert_event_type(connection_closed, E6),
-    assert_event_prop(ExpectedConnectionProps, E6),
+    ?assertEqual(E1#event.props, E6#event.props,
+                 "connection_closed event props should match connection_created event props. "
+                 "See https://github.com/rabbitmq/rabbitmq-server/discussions/6331"),
+
     case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
         true ->
             assert_event_type(queue_deleted, E7),
