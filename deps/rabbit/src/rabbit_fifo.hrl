@@ -17,7 +17,7 @@
         is_list(H) orelse
         (is_map(H) andalso is_map_key(size, H))).
 
--type tuple(A, B) :: nonempty_improper_list(A, B).
+-type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
 
@@ -35,7 +35,7 @@
 %% same process
 
 -type msg_header() :: msg_size() |
-                      tuple(msg_size(), Expiry :: milliseconds()) |
+                      optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
                         delivery_count => non_neg_integer(),
                         expiry => milliseconds()}.
@@ -51,7 +51,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type msg() :: tuple(option(ra:index()), msg_header()).
+-type msg() :: optimised_tuple(option(ra:index()), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
