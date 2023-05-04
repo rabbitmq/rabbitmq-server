@@ -106,6 +106,7 @@ all_tests() ->
      declare_invalid_arg_1,
      declare_invalid_arg_2,
      declare_invalid_arg_3,
+     relaxed_argument_equivalence_checks_on_qq_redeclare,
      consume_invalid_arg_1,
      consume_invalid_arg_2,
      start_queue,
@@ -414,6 +415,45 @@ declare_invalid_arg_3(Config) ->
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
        declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                        {<<"x-max-length">>, long, -5}])).
+
+
+relaxed_argument_equivalence_checks_on_qq_redeclare(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_relaxed_checks_on_redeclaration, true]),
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    VHost = <<"redeclarevhost">>,
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Q = atom_to_binary(?FUNCTION_NAME, utf8),
+
+    %% Declare a quorum queue
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                 {<<"x-expires">>, long, 1000}])),
+
+    %% re-declare it as a classic queue, which is OK on this node because we've opted in
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                                 {<<"x-expires">>, long, 1000}])),
+    %% re-declare it as classic queue with classic only arguments ignored: OK
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                                 {<<"x-max-priority">>, byte, 5},
+                                 {<<"x-expires">>, long, 1000}])),
+    %% re-declare it as a classic queue, with shared arguments not part of original queue: this should fail
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                       {<<"x-message-ttl">>, long, 5},
+                       {<<"x-expires">>, long, 1000}])),
+
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_relaxed_checks_on_redeclaration, false]),
+    ok.
 
 consume_invalid_arg_1(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
