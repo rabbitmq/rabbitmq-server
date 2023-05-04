@@ -27,7 +27,6 @@
 -type option(T) :: undefined | T.
 
 -define(HIBERNATE_AFTER, 1000).
--define(PROTO_FAMILY, 'MQTT').
 
 -record(state,
         {socket :: rabbit_net:socket(),
@@ -140,7 +139,7 @@ handle_cast(QueueEvent = {queue_event, _, _},
     end;
 
 handle_cast({force_event_refresh, Ref}, State0) ->
-    Infos = infos(?CREATION_EVENT_KEYS, State0),
+    Infos = infos(?EVENT_KEYS, State0),
     rabbit_event:notify(connection_created, Infos, Ref),
     State = rabbit_event:init_stats_timer(State0, #state.stats_timer),
     {noreply, State, ?HIBERNATE_AFTER};
@@ -154,7 +153,7 @@ handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
 handle_info(connection_created, State) ->
-    Infos = infos(?CREATION_EVENT_KEYS, State),
+    Infos = infos(?EVENT_KEYS, State),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     {noreply, State, ?HIBERNATE_AFTER};
@@ -265,7 +264,8 @@ terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
         connect_packet_unprocessed ->
             ok;
         _ ->
-            rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState)
+            Infos = infos(?EVENT_KEYS, State),
+            rabbit_mqtt_processor:terminate(SendWill, ConnName, Infos, PState)
     end,
     log_terminate(Reason, State).
 
@@ -514,7 +514,7 @@ i(Cert, #state{socket = Sock})
 i(timeout, #state{keepalive = KState}) ->
     rabbit_mqtt_keepalive:interval_secs(KState);
 i(protocol, #state{proc_state = ProcState}) ->
-    {?PROTO_FAMILY, rabbit_mqtt_processor:proto_version_tuple(ProcState)};
+    {'MQTT', rabbit_mqtt_processor:proto_version_tuple(ProcState)};
 i(Key, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:info(Key, ProcState).
 

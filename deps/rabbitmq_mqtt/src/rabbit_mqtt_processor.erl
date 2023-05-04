@@ -149,7 +149,6 @@ process_connect(
         {ok, RaRegisterState} ?= register_client_id(VHost, ClientId),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
-        self() ! connection_created,
         {ok,
          #state{
             cfg = #cfg{socket = Socket,
@@ -207,6 +206,7 @@ process_connect(State0) ->
         {ok, SessPresent, State2} ?= handle_clean_sess_qos1(QoS0SessPresent, State1),
         State = cache_subscriptions(SessPresent, State2),
         rabbit_networking:register_non_amqp_connection(self()),
+        self() ! connection_created,
         {ok, SessPresent, State}
     else
         {error, _} = Error ->
@@ -1190,19 +1190,9 @@ send(Packet, ProtoVer, SendFun) ->
     Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
     ok = SendFun(Data).
 
--spec terminate(boolean(), binary(), atom(), state()) -> ok.
-terminate(SendWill, ConnName, ProtoFamily,
-          State = #state{cfg = #cfg{vhost = VHost},
-                         auth_state = #auth_state{user = #user{username = Username}}
-                        }) ->
+-spec terminate(boolean(), binary(), rabbit_event:event_props(), state()) -> ok.
+terminate(SendWill, ConnName, Infos, State) ->
     maybe_send_will(SendWill, ConnName, State),
-    Infos = [{name, ConnName},
-             {node, node()},
-             {pid, self()},
-             {disconnected_at, os:system_time(milli_seconds)},
-             {protocol, {ProtoFamily, proto_version_tuple(State)}},
-             {vhost, VHost},
-             {user, Username}],
     rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
