@@ -5,6 +5,34 @@ load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG", "without")
+load(
+    "@rabbitmq-server//bazel/elixir:mix_archive_build.bzl",
+    "mix_archive_build",
+)
+
+mix_archive_build(
+    name = "parallel_stream_ez",
+    srcs = ["@parallel_stream//:sources"],
+    archives = ["@hex//:archive"],
+    out = "parallel_stream.ez",
+)
+
+mix_archive_build(
+    name = "csv_ez",
+    srcs = ["@csv//:sources"],
+    archives = ["@hex//:archive"],
+    ez_deps = [
+        ":parallel_stream_ez",
+    ],
+    out = "csv.ez",
+)
+
+mix_archive_build(
+    name = "json_ez",
+    srcs = ["@json//:sources"],
+    archives = ["@hex//:archive"],
+    out = "json.ez",
+)
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
