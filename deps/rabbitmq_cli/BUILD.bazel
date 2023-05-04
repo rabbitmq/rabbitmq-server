@@ -119,6 +119,11 @@ plt(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
+    ez_deps = [
+        ":parallel_stream_ez",
+        ":csv_ez",
+        ":json_ez",
+    ],
 )
 
 dialyze(
