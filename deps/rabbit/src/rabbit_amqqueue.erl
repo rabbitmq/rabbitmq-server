@@ -653,13 +653,16 @@ priv_absent(QueueName, QPid, _IsDurable, alive) ->
 
 assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
     case equivalence_check_level(Q, Args1) of
-        full_check ->
+        all_checks ->
             perform_full_equivalence_checks(Q, DurableDeclare, AutoDeleteDeclare,
                                             Args1, Owner);
-        limited_check_on_qq_redeclaration ->
+        relaxed_checks ->
             perform_limited_equivalence_checks_on_qq_redeclaration(Q, Args1)
     end.
 
+-type equivalence_check_level() :: 'all_checks' | 'relaxed_checks'.
+
+-spec equivalence_check_level(amqqueue:amqqueue(), rabbit_framing:amqp_table()) -> equivalence_check_level().
 equivalence_check_level(Q, NewArgs) ->
     Relaxed = rabbit_misc:get_env(rabbit,
                                   quorum_relaxed_checks_on_redeclaration,
@@ -671,12 +674,12 @@ equivalence_check_level(Q, NewArgs) ->
             NewType = rabbit_misc:table_lookup(NewArgs, <<"x-queue-type">>),
             case {OldType, NewType} of
                 {{longstr, <<"quorum">>}, {longstr, <<"classic">>}} ->
-                    limited_check_on_qq_redeclaration;
+                    relaxed_checks;
                 _ ->
-                    full_check
+                    all_checks
             end;
         false ->
-            full_check
+            all_checks
     end.
 
 perform_full_equivalence_checks(Q, DurableDeclare, AutoDeleteDeclare, NewArgs, Owner) ->

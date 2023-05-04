@@ -107,7 +107,7 @@ all_tests() ->
      declare_invalid_arg_1,
      declare_invalid_arg_2,
      declare_invalid_arg_3,
-     redeclare_qq_as_classic,
+     relaxed_argument_equivalence_checks_on_qq_redeclare,
      consume_invalid_arg_1,
      consume_invalid_arg_2,
      start_queue,
@@ -418,7 +418,7 @@ declare_invalid_arg_3(Config) ->
                        {<<"x-max-length">>, long, -5}])).
 
 
-redeclare_qq_as_classic(Config) ->
+relaxed_argument_equivalence_checks_on_qq_redeclare(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbit, quorum_relaxed_checks_on_redeclaration, true]),
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -435,16 +435,16 @@ redeclare_qq_as_classic(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                  {<<"x-expires">>, long, 1000}])),
 
-    %% re-declare it as 'classic' queue, which now is OK.
+    %% re-declare it as a classic queue, which is OK on this node because we've opted in
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
                                  {<<"x-expires">>, long, 1000}])),
-    %% re-declare it as 'classic' queue, with classic only arguments ignored, so OK.
+    %% re-declare it as classic queue with classic only arguments ignored: OK
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
                                  {<<"x-max-priority">>, byte, 5},
                                  {<<"x-expires">>, long, 1000}])),
-    %% re-declare it as 'classic' queue, with shared arguments not part of original queue not OK,
+    %% re-declare it as a classic queue, with shared arguments not part of original queue: this should fail
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
