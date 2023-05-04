@@ -652,13 +652,57 @@ priv_absent(QueueName, QPid, _IsDurable, alive) ->
             'ok' | rabbit_types:channel_exit() | rabbit_types:connection_exit().
 
 assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
+    case equivalence_check_level(Q, Args1) of
+        all_checks ->
+            perform_full_equivalence_checks(Q, DurableDeclare, AutoDeleteDeclare,
+                                            Args1, Owner);
+        relaxed_checks ->
+            perform_limited_equivalence_checks_on_qq_redeclaration(Q, Args1)
+    end.
+
+-type equivalence_check_level() :: 'all_checks' | 'relaxed_checks'.
+
+-spec equivalence_check_level(amqqueue:amqqueue(), rabbit_framing:amqp_table()) -> equivalence_check_level().
+equivalence_check_level(Q, NewArgs) ->
+    Relaxed = rabbit_misc:get_env(rabbit,
+                                  quorum_relaxed_checks_on_redeclaration,
+                                  false),
+    case Relaxed of
+        true ->
+            ExistingArgs = amqqueue:get_arguments(Q),
+            OldType = rabbit_misc:table_lookup(ExistingArgs, <<"x-queue-type">>),
+            NewType = rabbit_misc:table_lookup(NewArgs, <<"x-queue-type">>),
+            case {OldType, NewType} of
+                {{longstr, <<"quorum">>}, {longstr, <<"classic">>}} ->
+                    relaxed_checks;
+                _ ->
+                    all_checks
+            end;
+        false ->
+            all_checks
+    end.
+
+perform_full_equivalence_checks(Q, DurableDeclare, AutoDeleteDeclare, NewArgs, Owner) ->
     QName = amqqueue:get_name(Q),
     DurableQ = amqqueue:is_durable(Q),
     AutoDeleteQ = amqqueue:is_auto_delete(Q),
     ok = check_exclusive_access(Q, Owner, strict),
     ok = rabbit_misc:assert_field_equivalence(DurableQ, DurableDeclare, QName, durable),
     ok = rabbit_misc:assert_field_equivalence(AutoDeleteQ, AutoDeleteDeclare, QName, auto_delete),
-    ok = assert_args_equivalence(Q, Args1).
+    ok = assert_args_equivalence(Q, NewArgs).
+
+perform_limited_equivalence_checks_on_qq_redeclaration(Q, NewArgs) ->
+    QName = amqqueue:get_name(Q),
+    ExistingArgs = amqqueue:get_arguments(Q),
+    CheckTypeArgs = [<<"x-dead-letter-exchange">>,
+                     <<"x-dead-letter-routing-key">>,
+                     <<"x-expires">>,
+                     <<"x-max-length">>,
+                     <<"x-max-length-bytes">>,
+                     <<"x-single-active-consumer">>,
+                     <<"x-message-ttl">>],
+    ok = rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QName, CheckTypeArgs).
+
 
 -spec augment_declare_args(vhost:name(), boolean(),
                            boolean(), boolean(),
@@ -1608,7 +1652,7 @@ activate_limit_all(QRefs, ChPid) ->
 deactivate_limit_all(QRefs, ChPid) ->
     QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
-                                      [{deactivate_limit, ChPid}]}).									  
+                                      [{deactivate_limit, ChPid}]}).
 
 -spec credit(amqqueue:amqqueue(),
              rabbit_types:ctag(),
