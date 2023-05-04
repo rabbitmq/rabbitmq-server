@@ -50,7 +50,8 @@
          messages_unacknowledged
         ]).
 
--define(CREATION_EVENT_KEYS,
+%% Connection opened or closed.
+-define(EVENT_KEYS,
         ?ITEMS ++
         [name,
          client_properties,

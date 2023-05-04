@@ -48,7 +48,6 @@
 -define(CLOSE_NORMAL, 1000).
 -define(CLOSE_PROTOCOL_ERROR, 1002).
 -define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
--define(PROTO_FAMILY, 'Web MQTT').
 
 %% cowboy_sub_protcol
 upgrade(Req, Env, Handler, HandlerState) ->
@@ -164,7 +163,7 @@ websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_s
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     stop(State);
 websocket_info({'$gen_cast', {force_event_refresh, Ref}}, State0) ->
-    Infos = infos(?CREATION_EVENT_KEYS, State0),
+    Infos = infos(?EVENT_KEYS, State0),
     rabbit_event:notify(connection_created, Infos, Ref),
     State = rabbit_event:init_stats_timer(State0, #state.stats_timer),
     {[], State, hibernate};
@@ -209,7 +208,7 @@ websocket_info({shutdown, Reason}, #state{conn_name = ConnName} = State) ->
     ?LOG_INFO("Web MQTT closing connection ~tp: ~tp", [ConnName, Reason]),
     stop(State, ?CLOSE_NORMAL, Reason);
 websocket_info(connection_created, State) ->
-    Infos = infos(?CREATION_EVENT_KEYS, State),
+    Infos = infos(?EVENT_KEYS, State),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     {[], State, hibernate};
@@ -231,7 +230,8 @@ terminate(_Reason, _Request,
         connect_packet_unprocessed ->
             ok;
         _ ->
-            rabbit_mqtt_processor:terminate(SendWill, ConnName, ?PROTO_FAMILY, PState)
+            Infos = infos(?EVENT_KEYS, State),
+            rabbit_mqtt_processor:terminate(SendWill, ConnName, Infos, PState)
     end.
 
 %% Internal.
@@ -395,7 +395,7 @@ i(reductions, _) ->
 i(garbage_collection, _) ->
     rabbit_misc:get_gc_info(self());
 i(protocol, #state{proc_state = PState}) ->
-    {?PROTO_FAMILY, rabbit_mqtt_processor:proto_version_tuple(PState)};
+    {'Web MQTT', rabbit_mqtt_processor:proto_version_tuple(PState)};
 i(SSL, #state{socket = Sock})
   when SSL =:= ssl;
        SSL =:= ssl_protocol;
