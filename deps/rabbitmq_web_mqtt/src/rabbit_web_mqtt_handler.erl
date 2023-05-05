@@ -156,7 +156,7 @@ websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcSta
     ?LOG_WARNING("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, ProcState),
-    defer_close(?CLOSE_PROTOCOL_ERROR),
+    defer_close(?CLOSE_NORMAL),
     {[], State};
 websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
                                                                           conn_name = ConnName }) ->
