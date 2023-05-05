@@ -33,20 +33,42 @@ init(_) ->
 
 -spec start_configured_listener() -> ok.
 start_configured_listener() ->
-    case get_env(tcp_config, []) of
+    TCPListenerConf = get_env(tcp_config, []),
+    TLSListenerConf = get_env(ssl_config, []),
+
+    case {TCPListenerConf, TLSListenerConf} of
+        %% nothing is configured
+        {[], []}  -> start_default_tcp_listener();
+        %% TLS only
+        {[], Val} -> start_configured_tls_listener(Val);
+        %% plain TCP only
+        {Val, []} -> start_configured_tcp_listener(Val);
+        %% both
+        {Val0, Val1} ->
+            start_configured_tcp_listener(Val0),
+            start_configured_tls_listener(Val1)
+    end,
+    ok.
+
+start_default_tcp_listener() ->
+    start_configured_tcp_listener([{port, ?DEFAULT_PORT}]).
+
+start_configured_tcp_listener(Conf) ->
+    case Conf of
         [] -> ok;
         TCPCon ->
             TCPListener = maybe_disable_sendfile(TCPCon),
             start_listener(TCPListener)
-    end,
-    case get_env(ssl_config, []) of
+    end.
+
+start_configured_tls_listener(Conf) ->
+    case Conf of
         [] -> ok;
         SSLCon ->
             SSLListener0 = [{ssl, true} | SSLCon],
             SSLListener1 = maybe_disable_sendfile(SSLListener0),
             start_listener(SSLListener1)
-    end,
-    ok.
+    end.
 
 maybe_disable_sendfile(Listener) ->
     DisableSendfile = #{sendfile => false},
