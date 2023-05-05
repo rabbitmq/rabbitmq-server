@@ -19,7 +19,8 @@
          release_state_change_lock/0]).
 
 -ifdef(TEST).
--export([registry_loading_lock/0]).
+-export([registry_loading_lock/0,
+         purge_old_registry/1]).
 -endif.
 
 -define(FF_STATE_CHANGE_LOCK, {feature_flags_state_change, self()}).
@@ -734,9 +735,14 @@ registry_vsn() ->
     proplists:get_value(vsn, Attrs, undefined).
 
 purge_old_registry(Mod) ->
-    case code:is_loaded(Mod) of
-        {file, _} -> do_purge_old_registry(Mod);
-        false     -> ok
+    case erlang:check_process_code(self(), rabbit_ff_registry) of
+        false ->
+            case code:is_loaded(Mod) of
+                {file, _} -> do_purge_old_registry(Mod);
+                false     -> ok
+            end;
+        true ->
+            ok
     end.
 
 do_purge_old_registry(Mod) ->

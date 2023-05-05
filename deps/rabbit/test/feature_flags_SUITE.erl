@@ -25,6 +25,7 @@
 
          registry_general_usage/1,
          registry_concurrent_reloads/1,
+         try_to_deadlock_in_registry_reload/1,
          enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
          enable_feature_flag_when_ff_file_is_unwritable/1,
@@ -100,7 +101,8 @@ groups() ->
      {registry, [],
       [
        registry_general_usage,
-       registry_concurrent_reloads
+       registry_concurrent_reloads,
+       try_to_deadlock_in_registry_reload
       ]},
      {feature_flags_v2, [], Groups}
     ].
@@ -556,6 +558,46 @@ registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
 registry_spammer1(FeatureNames) ->
     ?assertEqual(FeatureNames, ?list_ff(all)),
     registry_spammer1(FeatureNames).
+
+try_to_deadlock_in_registry_reload(_Config) ->
+    rabbit_ff_registry_factory:purge_old_registry(rabbit_ff_registry),
+    _ = code:delete(rabbit_ff_registry),
+    ?assertEqual(false, code:is_loaded(rabbit_ff_registry)),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureProps = #{provided_by => rabbit,
+                     stability => stable},
+
+    Lock = rabbit_ff_registry_factory:registry_loading_lock(),
+    global:set_lock(Lock, [node()]),
+
+    Parent = self(),
+    ProcessA = spawn_link(
+                 fun() ->
+                         FF = rabbit_ff_registry:get(FeatureName),
+                         erlang:unlink(Parent),
+                         Parent ! {self(), FF}
+                 end),
+    timer:sleep(1000),
+
+    ct:pal("Inject arbitrary feature flag to reload registry"),
+    rabbit_feature_flags:inject_test_feature_flags(
+      #{FeatureName => FeatureProps}),
+
+    ct:pal("Release registry loading lock"),
+    global:del_lock(Lock, [node()]),
+
+    ct:pal("Waiting for process A to exit"),
+    receive
+        {ProcessA, FF} ->
+            ?assertEqual(FeatureProps, FF),
+            ok
+    after 10000 ->
+              {_, Stacktrace} = erlang:process_info(
+                                  ProcessA, current_stacktrace),
+              ct:pal("Process A stuck; stacktrace: ~p", [Stacktrace]),
+              error(registry_reload_deadlock)
+    end.
 
 enable_feature_flag_in_a_healthy_situation(Config) ->
     FeatureName = ff_from_testsuite,
