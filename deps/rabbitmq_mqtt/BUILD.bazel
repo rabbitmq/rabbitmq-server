@@ -269,7 +269,6 @@ rabbitmq_integration_suite(
 
 rabbitmq_suite(
     name = "packet_prop_SUITE",
-    size = "small",
     deps = [
         "//deps/rabbitmq_ct_helpers:erlang_app",
     ],

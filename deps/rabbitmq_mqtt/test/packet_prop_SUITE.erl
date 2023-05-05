@@ -103,7 +103,7 @@ publish_packet() ->
                        retain = boolean()},
             variable = #mqtt_packet_publish{
                           packet_id = packet_id(Qos),
-                          topic_name = utf8()},
+                          topic_name = utf8_string()},
             payload = binary()}).
 
 publish_with_properties_packet() ->
@@ -135,16 +135,16 @@ publish_properties() ->
          list(elements([{'Payload-Format-Indicator', bit()},
                         {'Message-Expiry-Interval', four_byte_integer()},
                         {'Topic-Alias', two_byte_integer()},
-                        {'Response-Topic', utf8()},
-                        {'Correlation-Data', binary()},
+                        {'Response-Topic', utf8_string()},
+                        {'Correlation-Data', binary_data()},
                         user_property(),
                         {'Subscription-Identifier', non_zero_variable_byte_integer()},
-                        {'Content-Type', utf8()}])),
+                        {'Content-Type', utf8_string()}])),
          maps:from_list(L)).
 
 puback_properties() ->
     ?LET(L,
-         list(elements([{'Reason-String', utf8()},
+         list(elements([{'Reason-String', utf8_string()},
                         user_property()
                        ])),
          maps:from_list(L)).
@@ -152,7 +152,7 @@ puback_properties() ->
 disconnect_properties() ->
     ?LET(L,
          list(elements([{'Session-Expiry-Interval', four_byte_integer()},
-                        {'Reason-String', utf8()},
+                        {'Reason-String', utf8_string()},
                         user_property()
                        ])),
          maps:from_list(L)).
@@ -162,7 +162,7 @@ user_property() ->
      non_empty(list(frequency(
                       [{5, utf8_string_pair()},
                        %% "The same name is allowed to appear more than once." [v5 3.3.2.3.7]
-                       {1, {<<"same name">>, utf8()}},
+                       {1, {<<"same name">>, utf8_string()}},
                        {1, {<<"same name">>, <<"same value">>}}
                       ])))}.
 
@@ -196,9 +196,30 @@ variable_byte_integer() ->
 non_zero_variable_byte_integer() ->
     integer(1, 268_435_455).
 
+%% "The length of Binary Data is limited to the range of 0 to 65,535 Bytes." [v5 1.5.6]
+binary_data() ->
+    binary_up_to(16#ffff).
+
+binary_up_to(N) ->
+    ?LET(X, integer(0, N), binary(X)).
+
 %% v5 1.5.7
 utf8_string_pair() ->
-    {utf8(), utf8()}.
+    {utf8_string(), utf8_string()}.
+
+%% "Unless stated otherwise all UTF-8 encoded strings can have any length
+%% in the range 0 to 65,535 bytes." v5 1.5.4
+utf8_string() ->
+    %% Defining an upper size other than 'inf' is too slow because the
+    %% test ?SIZE is not taken into account anymore.
+    MaxCodePointSize = 4,
+    MaxCodePoints = 16#ffff div MaxCodePointSize,
+    ?LET(Bin, utf8(inf, MaxCodePointSize),
+         begin
+             L0 = unicode:characters_to_list(Bin, utf8),
+             L = lists:sublist(L0, MaxCodePoints),
+             unicode:characters_to_binary(L, utf8, utf8)
+         end).
 
 %% "A Reason Code is a one byte unsigned value" [v5 2.4]
 reason_code() ->
