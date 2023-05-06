@@ -76,7 +76,7 @@ jobs:
           echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
 
       - name: Configure OTP & Elixir
-        uses: erlef/setup-beam@v1.15
+        uses: erlef/setup-beam@v1.15.3
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
