@@ -22,7 +22,9 @@ APP_NAME = "rabbitmq_prometheus"
 APP_MODULE = "rabbit_prometheus_app"
 
 APP_ENV = """[
-	{return_per_object_metrics, false}
+	    {return_per_object_metrics, false},
+	    {tcp_config, [{port, 15692}]},
+	    {ssl_config, []}
 ]"""
 
 all_beam_files(name = "all_beam_files")
