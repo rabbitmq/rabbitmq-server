@@ -285,7 +285,7 @@ maybe_remove_nodes([Node | Nodes], false) ->
             ?LOG_WARNING(
                "Peer discovery: removing all quorum queue replicas on node ~ts", [Node],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-            rabbit_quorum_queue:shrink_all(Node)
+            _ = rabbit_quorum_queue:shrink_all(Node)
     end,
 >>>>>>> 0c649b3687 (See #2882. Also call quorum shrink command)
     maybe_remove_nodes(Nodes, false).
