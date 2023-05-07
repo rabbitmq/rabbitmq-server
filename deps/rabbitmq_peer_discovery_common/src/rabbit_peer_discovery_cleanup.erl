@@ -277,7 +277,13 @@ maybe_remove_nodes([Node | Nodes], false) ->
     ?LOG_WARNING(
        "Peer discovery: removing unknown node ~ts from the cluster", [Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-    rabbit_db_cluster:forget_member(Node, false),
+    case rabbit_db_cluster:forget_member(Node, false) of
+        ok ->
+            ?LOG_WARNING(
+               "Peer discovery: removing member replica node ~ts from group", [Node],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+            rabbit_quorum_queue:shrink_all(Node)
+    end,
     maybe_remove_nodes(Nodes, false).
 
 %%--------------------------------------------------------------------
