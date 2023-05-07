@@ -283,7 +283,7 @@ maybe_remove_nodes([Node | Nodes], false) ->
     case rabbit_db_cluster:forget_member(Node, false) of
         ok ->
             ?LOG_WARNING(
-               "Peer discovery: removing member replica node ~ts from group", [Node],
+               "Peer discovery: removing all quorum queue replicas on node ~ts", [Node],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             rabbit_quorum_queue:shrink_all(Node)
     end,
