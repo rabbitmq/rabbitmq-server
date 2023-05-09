@@ -195,7 +195,9 @@
                                  id :: option(subscription_identifier())
                                 }).
 
--record(mqtt_subscription, {topic_filter :: binary(),
+-type topic_filter() :: binary().
+
+-record(mqtt_subscription, {topic_filter :: topic_filter(),
                             options :: #mqtt_subscription_opts{}
                            }).
 
@@ -211,7 +213,7 @@
 
 -record(mqtt_packet_unsubscribe, {packet_id :: packet_id(),
                                   props :: properties(),
-                                  topic_filters :: [binary(), ...]
+                                  topic_filters :: [topic_filter(), ...]
                                  }).
 
 -record(mqtt_packet_unsuback, {packet_id :: packet_id(),

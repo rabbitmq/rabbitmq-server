@@ -79,6 +79,7 @@ cluster_size_1_tests() ->
      subscription_option_no_local_wildcards,
      subscription_option_retain_as_published,
      subscription_option_retain_as_published_wildcards,
+     subscription_option_retain_handling,
      subscription_identifier,
      subscription_identifier_amqp091,
      subscription_identifier_at_most_once_dead_letter,
@@ -659,6 +660,49 @@ subscription_option_retain_as_published_wildcards(Config) ->
     ok = emqtt:publish(C, <<"t/2">>, <<"">>, [{retain, true}]),
     ok = emqtt:disconnect(C).
 
+subscription_option_retain_handling(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
+    {ok, _} = emqtt:publish(C1, <<"t/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"t/2">>, <<"m2">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"t/3">>, <<"m3">>, [{retain, true}, {qos, 1}]),
+    {ok, _, [1, 1, 1]} = emqtt:subscribe(C1, [{<<"t/1">>, [{rh, 0}, {qos, 1}]},
+                                              %% Subscription does not exist.
+                                              {<<"t/2">>, [{rh, 1}, {qos, 1}]},
+                                              {<<"t/3">>, [{rh, 2}, {qos, 1}]}]),
+    ok = expect_publishes(C1, <<"t/1">>, [<<"m1">>]),
+    ok = expect_publishes(C1, <<"t/2">>, [<<"m2">>]),
+    assert_nothing_received(),
+
+    {ok, _, [1, 1, 1]} = emqtt:subscribe(C1, [{<<"t/1">>, [{rh, 0}, {qos, 1}]},
+                                              %% Subscription exists.
+                                              {<<"t/2">>, [{rh, 1}, {qos, 1}]},
+                                              {<<"t/3">>, [{rh, 2}, {qos, 1}]}]),
+    ok = expect_publishes(C1, <<"t/1">>, [<<"m1">>]),
+    assert_nothing_received(),
+
+    {ok, _, [0, 0, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, [{rh, 0}, {qos, 0}]},
+                                              %% That specific subscription does not exist.
+                                              {<<"t/2">>, [{rh, 1}, {qos, 0}]},
+                                              {<<"t/3">>, [{rh, 2}, {qos, 0}]}]),
+    ok = expect_publishes(C1, <<"t/1">>, [<<"m1">>]),
+    ok = expect_publishes(C1, <<"t/2">>, [<<"m2">>]),
+    assert_nothing_received(),
+
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [0, 0, 0]} = emqtt:subscribe(C2, [{<<"t/1">>, [{rh, 0}, {qos, 0}]},
+                                              %% Subscription exists.
+                                              {<<"t/2">>, [{rh, 1}, {qos, 0}]},
+                                              {<<"t/3">>, [{rh, 2}, {qos, 0}]}]),
+    ok = expect_publishes(C2, <<"t/1">>, [<<"m1">>]),
+    assert_nothing_received(),
+
+    ok = emqtt:publish(C2, <<"t/1">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t/2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t/3">>, <<"">>, [{retain, true}]),
+    ok = emqtt:disconnect(C2).
+
 subscription_identifier(Config) ->
     C1 = connect(<<"c1">>, Config),
     C2 = connect(<<"c2">>, Config),
@@ -944,7 +988,7 @@ subscription_options_modify_qos(Qos, Config) ->
             assert_received_no_duplicates();
         1 ->
             ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
-            ok = util:expect_publishes(Sub, Topic, ExpectedPayloads)
+            ok = expect_publishes(Sub, Topic, ExpectedPayloads)
     end,
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(Sub).
@@ -990,7 +1034,7 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
             assert_received_no_duplicates();
         1 ->
             ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
-            ok = util:expect_publishes(Subv5, Topic, ExpectedPayloads)
+            ok = expect_publishes(Subv5, Topic, ExpectedPayloads)
     end,
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(Subv5).
