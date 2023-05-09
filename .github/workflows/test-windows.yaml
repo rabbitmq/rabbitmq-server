@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
         - erlang_version: "26.0-rc3"
-          elixir_version: "1.14.4"
+          elixir_version: "1.14.3"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
