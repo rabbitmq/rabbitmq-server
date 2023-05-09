@@ -48,11 +48,11 @@ suite() ->
 
 all() ->
     [
-     {group, feature_flags_v2}
+     {group, cluster_size_1},
+     {group, cluster_size_3}
     ].
 
 groups() ->
-    Groups =
     [
      {cluster_size_1, [parallel],
       [
@@ -73,9 +73,6 @@ groups() ->
        have_required_feature_flag_in_cluster_and_add_member_without_it,
        error_during_migration_after_initial_success
       ]}
-    ],
-    [
-     {feature_flags_v2, [], Groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -92,8 +89,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(feature_flags_v2, Config) ->
-    rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
 init_per_group(cluster_size_1, Config) ->
     rabbit_ct_helpers:set_config(Config, {nodes_count, 1});
 init_per_group(cluster_size_3, Config) ->

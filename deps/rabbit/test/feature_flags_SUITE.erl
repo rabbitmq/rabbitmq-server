@@ -53,12 +53,19 @@ suite() ->
 all() ->
     [
      {group, registry},
-     {group, feature_flags_v2}
+     {group, enabling_on_single_node},
+     {group, enabling_in_cluster},
+     {group, clustering},
+     {group, activating_plugin}
     ].
 
 groups() ->
-    Groups =
     [
+     {registry, [],
+      [
+       registry_general_usage,
+       registry_concurrent_reloads
+      ]},
      {enabling_on_single_node, [],
       [
        enable_feature_flag_in_a_healthy_situation,
@@ -94,15 +101,6 @@ groups() ->
        activating_plugin_with_new_ff_disabled,
        activating_plugin_with_new_ff_enabled
       ]}
-    ],
-
-    [
-     {registry, [],
-      [
-       registry_general_usage,
-       registry_concurrent_reloads
-      ]},
-     {feature_flags_v2, [], Groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -118,56 +116,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(feature_flags_v2, Config) ->
-    %% `feature_flags_v2' is now required and won't work in mixed-version
-    %% clusters if the other version doesn't support it.
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            rabbit_ct_helpers:set_config(
-              Config, {enable_feature_flags_v2, true});
-        true ->
-            %% Before we run `feature_flags_v2'-related tests, we must ensure
-            %% that both umbrellas support them. Otherwise there is no point
-            %% in running them.
-            %% To determine that `feature_flags_v2' are supported, we can't
-            %% query RabbitMQ which is not started. Therefore, we check if the
-            %% source or bytecode of `rabbit_ff_controller' is present.
-            Dir1 = ?config(rabbit_srcdir, Config),
-            File1 = filename:join([Dir1, "ebin", "rabbit_ff_controller.beam"]),
-            SupportedPrimary = filelib:is_file(File1),
-            SupportedSecondary =
-                case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-                    undefined ->
-                        %% make
-                        Dir2 = ?config(secondary_rabbit_srcdir, Config),
-                        File2 = filename:join(
-                                  [Dir2, "src", "rabbit_ff_controller.erl"]),
-                        filelib:is_file(File2);
-                    RmqRunSecondary ->
-                        %% bazel
-                        Dir2 = filename:dirname(RmqRunSecondary),
-                        Beam = filename:join(
-                                 [Dir2, "plugins", "rabbit-*",
-                                  "ebin", "rabbit_ff_controller.beam"]),
-                        case filelib:wildcard(Beam) of
-                            [_] -> true;
-                            [] -> false
-                        end
-                end,
-            case {SupportedPrimary, SupportedSecondary} of
-                {true, true} ->
-                    rabbit_ct_helpers:set_config(
-                      Config, {enable_feature_flags_v2, true});
-                {false, true} ->
-                    {skip,
-                     "Primary umbrella does not support "
-                     "feature_flags_v2"};
-                {true, false} ->
-                    {skip,
-                     "Secondary umbrella does not support "
-                     "feature_flags_v2"}
-            end
-    end;
 init_per_group(enabling_on_single_node, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -1102,8 +1050,16 @@ required_plugin_feature_flag_enabled_after_activation(Config) ->
        is_feature_flag_enabled(Config, RequiredFName)).
 
 plugin_stable_ff_enabled_on_initial_node_start(Config) ->
+    %% If `$RABBITMQ_FEATURE_FLAGS' is set, we force the list of feature flags
+    %% to enable on a virgin node, bypassing the automatic enablement of stable
+    %% feature flags. That's why the plugin feature flag will be disabled at
+    %% first in this situation.
+    HasForcedFeatureFlags = os:getenv("RABBITMQ_FEATURE_FLAGS") =/= false,
+    InitiallyEnabled = not HasForcedFeatureFlags,
     ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
-    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+    ?assertEqual(
+       [InitiallyEnabled],
+       is_feature_flag_enabled(Config, plugin_ff)),
 
     ?assertEqual(ok, enable_feature_flag_on(Config, 0, plugin_ff)),
 

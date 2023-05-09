@@ -80,12 +80,7 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config)
         when Testcase == is_quorum_critical_test
             orelse Testcase == is_mirror_sync_critical_test ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase)
-    end;
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

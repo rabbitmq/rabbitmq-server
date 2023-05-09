@@ -205,12 +205,7 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase = stream_queues_have_consumers_field, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "mixed version clusters are not supported"};
-        _ ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase)
-    end;
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase = disabled_operator_policy_test, Config) ->
     Restrictions = [{operator_policy_changes, [{disabled, true}]}],
     rabbit_ct_broker_helpers:rpc_all(Config,

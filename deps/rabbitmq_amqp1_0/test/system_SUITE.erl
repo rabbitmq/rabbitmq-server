@@ -57,21 +57,16 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(streams, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-            Config1 = rabbit_ct_helpers:set_config(Config, [
-                {rmq_nodename_suffix, Suffix},
-                {amqp10_client_library, dotnet}
-              ]),
-            rabbit_ct_helpers:run_setup_steps(Config1, [
-                fun build_dotnet_test_project/1
-            ] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps());
-        _     ->
-            {skip, "stream tests are skipped in mixed mode"}
-    end;
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {amqp10_client_library, dotnet}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun build_dotnet_test_project/1
+    ] ++
+    rabbit_ct_broker_helpers:setup_steps() ++
+    rabbit_ct_client_helpers:setup_steps());
 init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
