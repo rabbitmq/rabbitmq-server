@@ -70,26 +70,22 @@ cowboy_ws_connection_pid(RanchConnPid) ->
     Pid.
 
 mqtt_init() ->
-  CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
-  CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
-  Routes = cowboy_router:compile([{'_', [
-      {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
-  ]}]),
-  CowboyOpts = CowboyOpts0#{
+    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
+    TcpConfig = get_env(tcp_config, []),
+    SslConfig = get_env(ssl_config, []),
+    Routes = cowboy_router:compile([{'_', [
+        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
+    ]}]),
+    CowboyOpts = CowboyOpts0#{
                  env => #{dispatch => Routes},
                  proxy_header => get_env(proxy_protocol, false),
                  stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]
                 },
-  case get_env(tcp_config, []) of
-      []       -> ok;
-      TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)
-  end,
-  case get_env(ssl_config, []) of
-      []       -> ok;
-      TLSConf0 -> start_tls_listener(TLSConf0, CowboyOpts)
-  end,
-  ok.
+    start_tcp_listener(TcpConfig, CowboyOpts),
+    start_tls_listener(SslConfig, CowboyOpts).
 
+start_tcp_listener([], _) -> ok;
 start_tcp_listener(TCPConf0, CowboyOpts) ->
     {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
     RanchRef = rabbit_networking:ranch_ref(TCPConf),
@@ -115,6 +111,8 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
     rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
                     [IpStr, Port]).
 
+
+start_tls_listener([], _) -> ok;
 start_tls_listener(TLSConf0, CowboyOpts) ->
     _ = rabbit_networking:ensure_ssl(),
     {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
