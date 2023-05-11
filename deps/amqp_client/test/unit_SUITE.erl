@@ -147,8 +147,9 @@ amqp_uri_parsing(_Config) ->
             {server_name_indication,"host3"}],
     ?assertEqual(lists:usort(Exp3), lists:usort(TLSOpts3)),
 
-    {ok, #amqp_params_network{host = "host4", ssl_options = TLSOpts4}} =
-        amqp_uri:parse("amqps://host4/%2f?cacertfile=/path/to/cacertfile.pem"
+    {ok, #amqp_params_network{username = <<"user">>, password = <<"pass">>,
+                              host = "host4", ssl_options = TLSOpts4}} =
+        amqp_uri:parse("amqps://user:pass@host4/%2f?cacertfile=/path/to/cacertfile.pem"
                        "&certfile=/path/to/certfile.pem"
                        "&password=topsecret"
                        "&depth=5"),
@@ -171,8 +172,9 @@ amqp_uri_parsing(_Config) ->
                               {verify, verify_none}]),
                  lists:usort(TLSOpts8)),
 
-    {ok, #amqp_params_network{host = "127.0.0.1", ssl_options = TLSOpts9}} =
-        amqp_uri:parse("amqps://127.0.0.1/%2f?cacertfile=/path/to/cacertfile.pem"
+    {ok, #amqp_params_network{username = <<"user">>, password = <<"pass">>,
+                              host = "127.0.0.1", ssl_options = TLSOpts9}} =
+        amqp_uri:parse("amqps://user:pass@127.0.0.1/%2f?cacertfile=/path/to/cacertfile.pem"
                        "&certfile=/path/to/certfile.pem"
                        "&password=topsecret"
                        "&depth=5"),
