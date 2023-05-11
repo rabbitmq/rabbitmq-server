@@ -564,6 +564,23 @@ dir() -> mnesia:system_info(directory).
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     NodeIsVirgin = is_virgin_node(),
     rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
+    %% We want to synchronize feature flags first before we wait for
+    %% tables (which is needed to ensure the local view of the tables
+    %% matches the rest of the cluster). The reason is that some
+    %% feature flags may add or remove tables. In this case the list
+    %% of tables returned by `rabbit_table:definitions()' usually
+    %% depends on the state of feature flags but this state is local.
+    %%
+    %% For instance, a feature flag may remove a table (so it's gone
+    %% from the cluster). If we were to wait for that table locally
+    %% before synchronizing feature flags, we would wait forever;
+    %% indeed the feature flag being disabled before sync,
+    %% `rabbit_table:definitions()' would return the old table.
+    %%
+    %% Feature flags need to be synced before any change to Mnesia
+    %% membership. If enabling feature flags fails, Mnesia could remain
+    %% in an inconsistent state that prevents later joining the nodes.
+    ensure_feature_flags_are_in_sync(nodes_excl_me(ClusterNodes), NodeIsVirgin),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -577,29 +594,14 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
         {[], false, disc} ->
             %% RAM -> disc, starting from scratch
             ok = create_schema(),
-            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
             ok;
         {[], true, disc} ->
             %% First disc node up
             _ = maybe_force_load(),
-            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
             ok;
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
             _ = maybe_force_load(),
-            %% We want to synchronize feature flags first before we wait for
-            %% tables (which is needed to ensure the local view of the tables
-            %% matches the rest of the cluster). The reason is that some
-            %% feature flags may add or remove tables. In this case the list
-            %% of tables returned by `rabbit_table:definitions()' usually
-            %% depends on the state of feature flags but this state is local.
-            %%
-            %% For instance, a feature flag may remove a table (so it's gone
-            %% from the cluster). If we were to wait for that table locally
-            %% before synchronizing feature flags, we would wait forever;
-            %% indeed the feature flag being disabled before sync,
-            %% `rabbit_table:definitions()' would return the old table.
-            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:ensure_local_copies(NodeType)
     end,
