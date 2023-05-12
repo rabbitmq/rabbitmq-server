@@ -110,7 +110,6 @@ use_repo(
 )
 
 register_toolchains(
-<<<<<<< HEAD
     "@erlang_config//24:toolchain_major",
     "@erlang_config//24:toolchain_major_minor",
     "@erlang_config//25_0:toolchain_major",
@@ -121,24 +120,10 @@ register_toolchains(
     "@erlang_config//25_2:toolchain_major_minor",
     "@erlang_config//25_3:toolchain_major",
     "@erlang_config//25_3:toolchain_major_minor",
+    "@erlang_config//26:toolchain_major",
+    "@erlang_config//26:toolchain_major_minor",
     "@erlang_config//git_master:toolchain_major",
     "@erlang_config//git_master:toolchain_major_minor",
-=======
-    "@erlang_config//24:toolchain",
-    "@erlang_config//24:toolchain2",
-    "@erlang_config//25_0:toolchain",
-    "@erlang_config//25_0:toolchain2",
-    "@erlang_config//25_1:toolchain",
-    "@erlang_config//25_1:toolchain2",
-    "@erlang_config//25_2:toolchain",
-    "@erlang_config//25_2:toolchain2",
-    "@erlang_config//25_3:toolchain",
-    "@erlang_config//25_3:toolchain2",
-    "@erlang_config//26:toolchain",
-    "@erlang_config//26:toolchain2",
-    "@erlang_config//git_master:toolchain",
-    "@erlang_config//git_master:toolchain2",
->>>>>>> 34016b7c27 (Add OTP 26.0-rc3 config to bazel)
     "@elixir_config//external:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
