@@ -1393,7 +1393,7 @@ enable_dependencies1(
       Rets :: #{node() => term()}.
 
 run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
-    FeatureProps = rabbit_ff_registry:get(FeatureName),
+    FeatureProps = rabbit_ff_registry_wrapper:get(FeatureName),
     Callbacks = maps:get(callbacks, FeatureProps, #{}),
     case Callbacks of
         #{Command := {CallbackMod, CallbackFun}}

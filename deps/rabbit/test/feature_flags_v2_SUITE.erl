@@ -188,6 +188,7 @@ setup_slave_node(Config, Testcase) ->
     ok = setup_logger(),
     ok = setup_data_dir(Config),
     ok = setup_feature_flags_file(Config),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ok = start_controller(),
     case Testcase of
         have_required_feature_flag_in_cluster_and_add_member_with_it_disabled
