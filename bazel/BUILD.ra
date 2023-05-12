@@ -27,15 +27,9 @@ erlang_bytecode(
         "src/ra_machine.erl",
         "src/ra_snapshot.erl",
     ],
-    outs = [
-        "ebin/ra_machine.beam",
-        "ebin/ra_snapshot.beam",
-    ],
-    hdrs = [
-        "src/ra.hrl",
-        "src/ra_server.hrl",
-    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "ra",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -49,11 +43,13 @@ erlang_bytecode(
         "src/ra_dbg.erl",
         "src/ra_directory.erl",
         "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
         "src/ra_file_handle.erl",
         "src/ra_flru.erl",
         "src/ra_leaderboard.erl",
         "src/ra_lib.erl",
         "src/ra_log.erl",
+        "src/ra_log_cache.erl",
         "src/ra_log_ets.erl",
         "src/ra_log_meta.erl",
         "src/ra_log_pre_init.erl",
@@ -77,50 +73,14 @@ erlang_bytecode(
         "src/ra_system_sup.erl",
         "src/ra_systems_sup.erl",
     ],
-    outs = [
-        "ebin/ra.beam",
-        "ebin/ra_app.beam",
-        "ebin/ra_bench.beam",
-        "ebin/ra_counters.beam",
-        "ebin/ra_dbg.beam",
-        "ebin/ra_directory.beam",
-        "ebin/ra_env.beam",
-        "ebin/ra_file_handle.beam",
-        "ebin/ra_flru.beam",
-        "ebin/ra_leaderboard.beam",
-        "ebin/ra_lib.beam",
-        "ebin/ra_log.beam",
-        "ebin/ra_log_ets.beam",
-        "ebin/ra_log_meta.beam",
-        "ebin/ra_log_pre_init.beam",
-        "ebin/ra_log_reader.beam",
-        "ebin/ra_log_segment.beam",
-        "ebin/ra_log_segment_writer.beam",
-        "ebin/ra_log_snapshot.beam",
-        "ebin/ra_log_sup.beam",
-        "ebin/ra_log_wal.beam",
-        "ebin/ra_log_wal_sup.beam",
-        "ebin/ra_machine_ets.beam",
-        "ebin/ra_machine_simple.beam",
-        "ebin/ra_metrics_ets.beam",
-        "ebin/ra_monitors.beam",
-        "ebin/ra_server.beam",
-        "ebin/ra_server_proc.beam",
-        "ebin/ra_server_sup.beam",
-        "ebin/ra_server_sup_sup.beam",
-        "ebin/ra_sup.beam",
-        "ebin/ra_system.beam",
-        "ebin/ra_system_sup.beam",
-        "ebin/ra_systems_sup.beam",
-    ],
-    hdrs = [
-        "src/ra.hrl",
-        "src/ra_server.hrl",
-    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "ra",
     beam = [":behaviours"],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
-    deps = ["@gen_batch_server//:erlang_app"],
+    deps = [
+        "@gen_batch_server//:erlang_app",
+    ],
 )
 
 filegroup(
@@ -142,11 +102,13 @@ filegroup(
         "src/ra_dbg.erl",
         "src/ra_directory.erl",
         "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
         "src/ra_file_handle.erl",
         "src/ra_flru.erl",
         "src/ra_leaderboard.erl",
         "src/ra_lib.erl",
         "src/ra_log.erl",
+        "src/ra_log_cache.erl",
         "src/ra_log_ets.erl",
         "src/ra_log_meta.erl",
         "src/ra_log_pre_init.erl",
@@ -182,15 +144,9 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -220,12 +176,15 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "ra",
     beam_files = [":beam_files"],
     extra_apps = [
         "crypto",
         "sasl",
     ],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = [
         "@aten//:erlang_app",
         "@gen_batch_server//:erlang_app",
@@ -237,4 +196,13 @@ alias(
     name = "ra",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
 )
