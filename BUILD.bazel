@@ -3,7 +3,7 @@ load(
     "bool_flag",
     "string_flag",
 )
-load("@rules_pkg//:mappings.bzl", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_erlang//gazelle:def.bzl", "GAZELLE_ERLANG_RUNTIME_DEPS")
 load("@rules_erlang//:erlang_bytecode2.bzl", "erlc_opts")
