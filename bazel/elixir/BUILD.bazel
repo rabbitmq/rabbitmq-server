@@ -12,3 +12,15 @@ elixir_as_app(
     name = "erlang_app",
     visibility = ["//visibility:public"],
 )
+
+elixir_as_app(
+    name = "logger",
+    app = "logger",
+    visibility = ["//visibility:public"],
+)
+
+elixir_as_app(
+    name = "iex",
+    app = "iex",
+    visibility = ["//visibility:public"],
+)
