@@ -914,5 +914,41 @@ credential_validator.regexp = ^abc\\d+",
        {<<"shovel">>, 1},
        {<<"federation">>, 2}
      ]}]}]}],
+<<<<<<< HEAD
+=======
+   []},
+
+  %%
+  %% Deprecated features
+  %%
+
+  {deprecated_features_cmq,
+   "deprecated_features.permit.classic_mirrored_queues = false",
+   [{rabbit, [
+      {permitted_deprecated_features, #{classic_mirrored_queues => false}}
+     ]}],
+   []},
+
+  %%
+  %% Message interceptors
+  %%
+
+  {message_interceptors,
+   "incoming_message_interceptors.set_header_timestamp.overwrite = true",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_timestamp, true}]}
+     ]}],
+   []},
+
+  {message_interceptors,
+  "
+   incoming_message_interceptors.set_header_routing_node.overwrite = false
+   incoming_message_interceptors.set_header_timestamp.overwrite = false
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_routing_node, false},
+                                       {set_header_timestamp, false}]}
+     ]}],
+>>>>>>> 044f6e3bac (Move plugin rabbitmq-message-timestamp to the core)
    []}
 ].

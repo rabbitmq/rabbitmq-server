@@ -1288,9 +1288,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_write_permitted_on_topic(Exchange, User, RoutingKey, AuthzContext),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = #content {properties = Props} =
+    DecodedContent0 = #content {properties = Props} =
         maybe_set_fast_reply_to(
           rabbit_binary_parser:ensure_content_decoded(Content), State),
+    DecodedContent = rabbit_message_interceptor:intercept(DecodedContent0),
     check_user_id_header(Props, State),
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
