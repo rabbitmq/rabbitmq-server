@@ -1921,3 +1921,6 @@ machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
                     [From, To]),
     {State, []}.
+
+maps_to_list(M) ->
+    lists:sort(maps:to_list(M)).
