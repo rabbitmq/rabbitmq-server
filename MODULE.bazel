@@ -5,7 +5,7 @@ module(
 
 bazel_dep(
     name = "rules_pkg",
-    version = "0.5.1",
+    version = "0.9.1",
 )
 
 bazel_dep(
@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.9.14",
+    version = "3.10.0",
 )
 
 erlang_config = use_extension(
@@ -110,20 +110,20 @@ use_repo(
 )
 
 register_toolchains(
-    "@erlang_config//24:toolchain",
-    "@erlang_config//24:toolchain2",
-    "@erlang_config//25_0:toolchain",
-    "@erlang_config//25_0:toolchain2",
-    "@erlang_config//25_1:toolchain",
-    "@erlang_config//25_1:toolchain2",
-    "@erlang_config//25_2:toolchain",
-    "@erlang_config//25_2:toolchain2",
-    "@erlang_config//25_3:toolchain",
-    "@erlang_config//25_3:toolchain2",
-    "@erlang_config//26:toolchain",
-    "@erlang_config//26:toolchain2",
-    "@erlang_config//git_master:toolchain",
-    "@erlang_config//git_master:toolchain2",
+    "@erlang_config//24:toolchain_major",
+    "@erlang_config//24:toolchain_major_minor",
+    "@erlang_config//25_0:toolchain_major",
+    "@erlang_config//25_0:toolchain_major_minor",
+    "@erlang_config//25_1:toolchain_major",
+    "@erlang_config//25_1:toolchain_major_minor",
+    "@erlang_config//25_2:toolchain_major",
+    "@erlang_config//25_2:toolchain_major_minor",
+    "@erlang_config//25_3:toolchain_major",
+    "@erlang_config//25_3:toolchain_major_minor",
+    "@erlang_config//26:toolchain_major",
+    "@erlang_config//26:toolchain_major_minor",
+    "@erlang_config//git_master:toolchain_major",
+    "@erlang_config//git_master:toolchain_major_minor",
     "@elixir_config//external:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
