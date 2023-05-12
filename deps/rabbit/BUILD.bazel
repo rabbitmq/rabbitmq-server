@@ -499,6 +499,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "rabbit_message_interceptor_SUITE",
+    size = "medium",
+)
+
+rabbitmq_integration_suite(
     name = "message_size_limit_SUITE",
     size = "medium",
 )

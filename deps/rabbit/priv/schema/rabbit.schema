@@ -2504,6 +2504,32 @@ end}.
     end
 }.
 
+%%
+%% Message interceptors
+%%
+{mapping, "incoming_message_interceptors.$interceptor.overwrite", "rabbit.incoming_message_interceptors", [
+    {datatype, {enum, [true, false]}}]}.
+
+{translation, "rabbit.incoming_message_interceptors",
+    fun(Conf) ->
+         case cuttlefish_variable:filter_by_prefix("incoming_message_interceptors", Conf) of
+             [] ->
+                 cuttlefish:unset();
+             L ->
+                 [begin
+                      Interceptor = list_to_atom(Interceptor0),
+                      case lists:member(Interceptor, [set_header_timestamp,
+                                                      set_header_routing_node]) of
+                          true ->
+                              {Interceptor, Overwrite};
+                          false ->
+                              cuttlefish:invalid(io_lib:format("~p is invalid", [Interceptor]))
+                      end
+                  end || {["incoming_message_interceptors", Interceptor0, "overwrite"], Overwrite} <- L]
+         end
+    end
+}.
+
 % ===============================
 % Validators
 % ===============================
