@@ -113,7 +113,7 @@
          remote_nodes/0,
          running_remote_nodes/0,
          does_node_support/3,
-         inject_test_feature_flags/1,
+         inject_test_feature_flags/1, inject_test_feature_flags/2,
          query_supported_feature_flags/0,
          does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
@@ -336,8 +336,8 @@ list() -> list(all).
 %% `disabled'.
 %% @returns A map of selected feature flags.
 
-list(all)      -> rabbit_ff_registry:list(all);
-list(enabled)  -> rabbit_ff_registry:list(enabled);
+list(all)      -> rabbit_ff_registry_wrapper:list(all);
+list(enabled)  -> rabbit_ff_registry_wrapper:list(enabled);
 list(disabled) -> maps:filter(
                     fun(FeatureName, _) -> is_disabled(FeatureName) end,
                     list(all)).
@@ -381,7 +381,7 @@ enable(FeatureNames) when is_list(FeatureNames) ->
     with_feature_flags(FeatureNames, fun enable/1).
 
 uses_callbacks(FeatureName) when is_atom(FeatureName) ->
-    case rabbit_ff_registry:get(FeatureName) of
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
         undefined    -> false;
         FeatureProps -> uses_callbacks(FeatureProps)
     end;
@@ -504,9 +504,11 @@ is_supported(FeatureNames, Timeout) ->
 %%   `false' if one of them is not.
 
 is_supported_locally(FeatureName) when is_atom(FeatureName) ->
-    rabbit_ff_registry:is_supported(FeatureName);
+    rabbit_ff_registry_wrapper:is_supported(FeatureName);
 is_supported_locally(FeatureNames) when is_list(FeatureNames) ->
-    lists:all(fun(F) -> rabbit_ff_registry:is_supported(F) end, FeatureNames).
+    lists:all(
+      fun(F) -> rabbit_ff_registry_wrapper:is_supported(F) end,
+      FeatureNames).
 
 -spec is_enabled(feature_name() | [feature_name()]) -> boolean().
 %% @doc
@@ -563,19 +565,19 @@ is_enabled(FeatureNames, blocking) ->
     end.
 
 is_enabled_nb(FeatureName) when is_atom(FeatureName) ->
-    rabbit_ff_registry:is_enabled(FeatureName);
+    rabbit_ff_registry_wrapper:is_enabled(FeatureName);
 is_enabled_nb(FeatureNames) when is_list(FeatureNames) ->
     lists:foldl(
       fun
           (_F, state_changing = Acc) ->
               Acc;
           (F, false = Acc) ->
-              case rabbit_ff_registry:is_enabled(F) of
+              case rabbit_ff_registry_wrapper:is_enabled(F) of
                   state_changing -> state_changing;
                   _              -> Acc
               end;
           (F, _) ->
-              rabbit_ff_registry:is_enabled(F)
+              rabbit_ff_registry_wrapper:is_enabled(F)
       end,
       true, FeatureNames).
 
@@ -710,7 +712,7 @@ get_state(FeatureName) when is_atom(FeatureName) ->
 %% given feature flag name doesn't correspond to a known feature flag.
 
 get_stability(FeatureName) when is_atom(FeatureName) ->
-    case rabbit_ff_registry:get(FeatureName) of
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
         undefined    -> undefined;
         FeatureProps -> get_stability(FeatureProps)
     end;
@@ -738,6 +740,9 @@ init() ->
 -define(PT_TESTSUITE_ATTRS, {?MODULE, testsuite_feature_flags_attrs}).
 
 inject_test_feature_flags(FeatureFlags) ->
+    inject_test_feature_flags(FeatureFlags, true).
+
+inject_test_feature_flags(FeatureFlags, InitReg) ->
     ExistingAppAttrs = module_attributes_from_testsuite(),
     FeatureFlagsPerApp0 = lists:foldl(
                             fun({Origin, Origin, FFlags}, Acc) ->
@@ -768,7 +773,10 @@ inject_test_feature_flags(FeatureFlags) ->
       [FeatureFlags, AttributesFromTestsuite],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     ok = persistent_term:put(?PT_TESTSUITE_ATTRS, AttributesFromTestsuite),
-    rabbit_ff_registry_factory:initialize_registry().
+    case InitReg of
+        true  -> rabbit_ff_registry_factory:initialize_registry();
+        false -> ok
+    end.
 
 module_attributes_from_testsuite() ->
     persistent_term:get(?PT_TESTSUITE_ATTRS, []).
