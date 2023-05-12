@@ -25,7 +25,8 @@
 
          registry_general_usage/1,
          registry_concurrent_reloads/1,
-         try_to_deadlock_in_registry_reload/1,
+         try_to_deadlock_in_registry_reload_1/1,
+         try_to_deadlock_in_registry_reload_2/1,
          enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
          enable_feature_flag_when_ff_file_is_unwritable/1,
@@ -102,7 +103,8 @@ groups() ->
       [
        registry_general_usage,
        registry_concurrent_reloads,
-       try_to_deadlock_in_registry_reload
+       try_to_deadlock_in_registry_reload_1,
+       try_to_deadlock_in_registry_reload_2
       ]},
      {feature_flags_v2, [], Groups}
     ].
@@ -120,6 +122,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(registry, Config) ->
+    logger:set_primary_config(level, debug),
+    rabbit_ct_helpers:run_steps(
+      Config,
+      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]);
 init_per_group(feature_flags_v2, Config) ->
     %% `feature_flags_v2' is now required and won't work in mixed-version
     %% clusters if the other version doesn't support it.
@@ -213,7 +220,6 @@ init_per_testcase(Testcase, Config) ->
               end,
     case ?config(tc_group_properties, Config1) of
         [{name, registry} | _] ->
-            logger:set_primary_config(level, debug),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config1),
                                              rabbit_misc:format(
                                                "feature_flags-~ts",
@@ -308,7 +314,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 -define(list_ff(Which),
-        lists:sort(maps:keys(rabbit_ff_registry:list(Which)))).
+        lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(Which)))).
 
 registry_general_usage(_Config) ->
     %% At first, the registry must be uninitialized.
@@ -330,20 +336,20 @@ registry_general_usage(_Config) ->
     ?assert(rabbit_ff_registry:is_registry_initialized()),
     ?assertMatch([ff_a, ff_b], ?list_ff(all)),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
-                   ff_b => false}, rabbit_ff_registry:states()),
+                   ff_b => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% We can declare a new feature flag at runtime. All of them are
     %% supported but still disabled.
@@ -354,23 +360,23 @@ registry_general_usage(_Config) ->
     rabbit_feature_flags:inject_test_feature_flags(NewFeatureFlags),
     rabbit_ff_registry_factory:initialize_registry(),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b, ff_c], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% After enabling `ff_a`, it is actually the case. Others are
     %% supported but remain disabled.
@@ -378,23 +384,23 @@ registry_general_usage(_Config) ->
                                                    #{ff_a => true},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => true,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([ff_a], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_b, ff_c], ?list_ff(disabled)),
-    ?assert(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% This time, we mark the state of `ff_c` as `state_changing`. We
     %% expect all other feature flag states to remain unchanged.
@@ -403,23 +409,25 @@ registry_general_usage(_Config) ->
                                                      ff_c => state_changing},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
-    ?assertEqual(#{ff_a => false,
-                   ff_b => false,
-                   ff_c => state_changing}, rabbit_ff_registry:states()),
+    ?assertEqual(
+       #{ff_a => false,
+         ff_b => false,
+         ff_c => state_changing},
+       rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([ff_c], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertMatch(state_changing, rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertMatch(state_changing, rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% Finally, we disable `ff_c`. All of them are supported but
     %% disabled.
@@ -428,23 +436,23 @@ registry_general_usage(_Config) ->
                                                      ff_c => false},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b, ff_c], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)).
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)).
 
 registry_concurrent_reloads(_Config) ->
     case rabbit_ff_registry:is_registry_initialized() of
@@ -559,7 +567,7 @@ registry_spammer1(FeatureNames) ->
     ?assertEqual(FeatureNames, ?list_ff(all)),
     registry_spammer1(FeatureNames).
 
-try_to_deadlock_in_registry_reload(_Config) ->
+try_to_deadlock_in_registry_reload_1(_Config) ->
     rabbit_ff_registry_factory:purge_old_registry(rabbit_ff_registry),
     _ = code:delete(rabbit_ff_registry),
     ?assertEqual(false, code:is_loaded(rabbit_ff_registry)),
@@ -568,36 +576,208 @@ try_to_deadlock_in_registry_reload(_Config) ->
     FeatureProps = #{provided_by => rabbit,
                      stability => stable},
 
+    Parent = self(),
+
+    %% Deadlock steps:
+    %% * Process A acquires the lock first.
+    %% * Process B loads the registry stub and waits for the lock.
+    %% * Process A deletes the registry stub and loads the initialized
+    %%   registry.
+    %% * Process B wants to purge the deleted registry stub by sending a
+    %%   request to the Code server.
+    %%
+    %% => Process B waits forever the return from the Code server because the
+    %% Code server waits for process B to be runnable again to handle the
+    %% signal.
+
+    ProcessA = spawn_link(
+                 fun() ->
+                         %% Process A acquires the lock manually first to
+                         %% ensure the ordering of events. It can be acquired
+                         %% recursively, so the feature flag injection can
+                         %% "acquire" it again and proceed.
+                         ct:pal("Process A: Acquire registry loading lock"),
+                         Lock =
+                         rabbit_ff_registry_factory:registry_loading_lock(),
+                         global:set_lock(Lock, [node()]),
+                         receive proceed -> ok end,
+
+                         ct:pal(
+                           "Process A: "
+                           "Inject arbitrary feature flag to reload "
+                           "registry"),
+                         rabbit_feature_flags:inject_test_feature_flags(
+                           #{FeatureName => FeatureProps}),
+
+                         ct:pal("Process A: Release registry loading lock"),
+                         global:del_lock(Lock, [node()]),
+
+                         ct:pal("Process A: Exiting..."),
+                         erlang:unlink(Parent)
+                 end),
+    timer:sleep(500),
+
+    ProcessB = spawn_link(
+                 fun() ->
+                         %% Process B is the one loading the registry stub and
+                         %% wants to initialize the real registry.
+                         ct:pal(
+                           "Process B: "
+                           "Trigger automatic initial registry load"),
+                         FF = rabbit_ff_registry_wrapper:get(FeatureName),
+
+                         ct:pal("Process B: Exiting..."),
+                         erlang:unlink(Parent),
+                         Parent ! {self(), FF}
+                 end),
+    timer:sleep(500),
+
+    begin
+        {_, StacktraceA} = erlang:process_info(ProcessA, current_stacktrace),
+        {_, StacktraceB} = erlang:process_info(ProcessB, current_stacktrace),
+        ct:pal(
+          "Process stacktraces:~n"
+          "  Process A: ~p~n"
+          "  Process B: ~p",
+          [StacktraceA, StacktraceB])
+    end,
+
+    %% Process A is resumed. Without a proper check, process B would try to
+    %% purge the copy of the registry it is currently using itself, causing a
+    %% deadlock because the Code server wants process A to handle a signal, but
+    %% process A is not runnable.
+    ProcessA ! proceed,
+
+    ct:pal("Waiting for process B to exit"),
+    receive
+        {ProcessB, FF} ->
+            ?assertEqual(FeatureProps, FF),
+            ok
+    after 10000 ->
+              {_, StacktraceB} = erlang:process_info(
+                                   ProcessB, current_stacktrace),
+              ct:pal("Process B stuck; stacktrace: ~p", [StacktraceB]),
+              error(registry_reload_deadlock)
+    end.
+
+try_to_deadlock_in_registry_reload_2(_Config) ->
+    rabbit_ff_registry_factory:purge_old_registry(rabbit_ff_registry),
+    _ = code:delete(rabbit_ff_registry),
+    ?assertEqual(false, code:is_loaded(rabbit_ff_registry)),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureProps = #{provided_by => rabbit,
+                     stability => stable},
+
+    ct:pal("Inject arbitrary feature flag to reload registry"),
+    rabbit_feature_flags:inject_test_feature_flags(
+      #{FeatureName => FeatureProps},
+      false),
+
+    _ = erlang:process_flag(trap_exit, true),
+
+    ct:pal("Parent ~p: Acquire registry loading lock", [self()]),
     Lock = rabbit_ff_registry_factory:registry_loading_lock(),
     global:set_lock(Lock, [node()]),
 
     Parent = self(),
+
+    %% Deadlock steps:
+    %% * Processes A, B1 and B2 wait for the lock. The registry stub is loaded.
+    %% * Process B1 acquires the lock.
+    %% * Process B1 deletes the registry stub and loads the initialized
+    %%   registry.
+    %% * Process A acquires the lock.
+    %% * Process A wants to purge the deleted registry stub by sending a
+    %%   request to the Code server.
+    %%
+    %% => Process A waits forever the return from the Code server because the
+    %% Code server waits for process B2 to stop lingering on the deleted
+    %% registry stub, but process B2 waits for the lock.
+
     ProcessA = spawn_link(
                  fun() ->
-                         FF = rabbit_ff_registry:get(FeatureName),
+                         %% Process A acquires the lock automatically as part
+                         %% of requesting an explicit initialization of the
+                         %% registry. Process A doesn't linger on the registry
+                         %% stub.
+                         ct:pal(
+                           "Process A ~p: "
+                           "Trigger manual initial registry load",
+                           [self()]),
+                         rabbit_ff_registry_factory:initialize_registry(),
+
+                         ct:pal("Process A ~p: Exiting...", [self()]),
                          erlang:unlink(Parent),
-                         Parent ! {self(), FF}
+                         Parent ! {self(), done}
                  end),
-    timer:sleep(1000),
 
-    ct:pal("Inject arbitrary feature flag to reload registry"),
-    rabbit_feature_flags:inject_test_feature_flags(
-      #{FeatureName => FeatureProps}),
+    FunB = fun() ->
+                   %% Processes B1 and B2 acquire the lock automatically as
+                   %% part of trying to load the registry as part of they
+                   %% querying a feature flag.
+                   ct:pal(
+                     "Process B ~p: "
+                     "Trigger automatic initial registry load",
+                     [self()]),
+                   _ = rabbit_ff_registry_wrapper:get(FeatureName),
 
-    ct:pal("Release registry loading lock"),
+                   ct:pal(
+                     "Process B ~p: Exiting...",
+                     [self()]),
+                   erlang:unlink(Parent),
+                   Parent ! {self(), done}
+           end,
+    ProcessB1 = spawn_link(FunB),
+    ProcessB2 = spawn_link(FunB),
+    timer:sleep(500),
+
+    %% We use `erlang:suspend_process/1' and `erlang:resume_process/1' to
+    %% ensure the order in which processes acquire the lock.
+    erlang:suspend_process(ProcessA),
+    erlang:suspend_process(ProcessB1),
+    erlang:suspend_process(ProcessB2),
+    timer:sleep(500),
+
+    ct:pal("Parent ~p: Release registry loading lock", [self()]),
     global:del_lock(Lock, [node()]),
 
-    ct:pal("Waiting for process A to exit"),
-    receive
-        {ProcessA, FF} ->
-            ?assertEqual(FeatureProps, FF),
-            ok
-    after 10000 ->
-              {_, Stacktrace} = erlang:process_info(
-                                  ProcessA, current_stacktrace),
-              ct:pal("Process A stuck; stacktrace: ~p", [Stacktrace]),
-              error(registry_reload_deadlock)
-    end.
+    erlang:resume_process(ProcessB1),
+    timer:sleep(500),
+    erlang:resume_process(ProcessA),
+    timer:sleep(500),
+    erlang:resume_process(ProcessB2),
+
+    ct:pal("Waiting for processes to exit"),
+    Procs = [ProcessA, ProcessB1, ProcessB2],
+    lists:foreach(
+      fun(Pid) ->
+              receive
+                  {Pid, done} ->
+                      ok;
+                  {'EXIT', Pid, Reason} ->
+                      ct:pal("Process ~p exited; reason: ~p", [Pid, Reason]),
+                      error(test_process_killed)
+              after 10000 ->
+                        lists:foreach(
+                          fun(Pid1) ->
+                                  PI = erlang:process_info(
+                                         Pid1, current_stacktrace),
+                                  case PI of
+                                      undefined ->
+                                          ok;
+                                      {_, Stacktrace} ->
+                                          ct:pal(
+                                            "Process ~p stuck; "
+                                            "stacktrace: ~p",
+                                            [Pid1, Stacktrace])
+                                  end
+                          end, Procs),
+                        error(registry_reload_deadlock)
+              end
+      end, Procs),
+
+    ok.
 
 enable_feature_flag_in_a_healthy_situation(Config) ->
     FeatureName = ff_from_testsuite,
