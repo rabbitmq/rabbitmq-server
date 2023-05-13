@@ -13,25 +13,25 @@ load(
 mix_archive_build(
     name = "parallel_stream_ez",
     srcs = ["@parallel_stream//:sources"],
-    archives = ["@hex//:archive"],
     out = "parallel_stream.ez",
+    archives = ["@hex//:archive"],
 )
 
 mix_archive_build(
     name = "csv_ez",
     srcs = ["@csv//:sources"],
+    out = "csv.ez",
     archives = ["@hex//:archive"],
     ez_deps = [
         ":parallel_stream_ez",
     ],
-    out = "csv.ez",
 )
 
 mix_archive_build(
     name = "json_ez",
     srcs = ["@json//:sources"],
-    archives = ["@hex//:archive"],
     out = "json.ez",
+    archives = ["@hex//:archive"],
 )
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
@@ -112,6 +112,11 @@ plt(
         "public_key",
         "runtime_tools",
     ],
+    ez_deps = [
+        ":parallel_stream_ez",
+        ":csv_ez",
+        ":json_ez",
+    ],
     ignore_warnings = True,
     libs = [":elixir"],
     deps = [
@@ -119,11 +124,6 @@ plt(
         "//bazel/elixir:logger",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
-    ],
-    ez_deps = [
-        ":parallel_stream_ez",
-        ":csv_ez",
-        ":json_ez",
     ],
 )
 
