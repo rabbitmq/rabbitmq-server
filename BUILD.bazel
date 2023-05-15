@@ -32,6 +32,7 @@ exports_files([
 
 # gazelle:exclude .github
 # gazelle:exclude .elixir_ls
+# gazelle:exclude .erlang.mk
 # gazelle:exclude bazel
 # gazelle:exclude bazel-out
 # gazelle:exclude deps/*/priv
@@ -66,6 +67,8 @@ exports_files([
 # gazelle:exclude deps/systemd
 # gazelle:exclude deps/thoas
 # gazelle:exclude deps/*/deps
+# gazelle:exclude deps/*/.erlang.mk
+# gazelle:exclude deps/rabbitmq_cli/_build
 # gazelle:exclude packaging
 # gazelle:exclude plugins
 # gazelle:exclude PACKAGES
