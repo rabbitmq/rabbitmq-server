@@ -1532,8 +1532,7 @@ incoming_message_interceptors(Config) ->
           #amqp_msg{payload = Payload,
                     props = #'P_basic'{
                                timestamp = Secs,
-                               headers = [{<<"timestamp_in_ms">>, long, Ms},
-                                          {<<"x-mqtt-publish-qos">>, byte, 0}]
+                               headers = [{<<"timestamp_in_ms">>, long, Ms} | _XHeaders]
                               }}}
            when Ms < NowMs + 4000 andalso
                 Ms > NowMs - 4000 andalso
