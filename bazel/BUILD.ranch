@@ -17,10 +17,12 @@ erlc_opts(
 
 erlang_bytecode(
     name = "behaviours",
-    srcs = ["src/ranch_transport.erl"],
-    outs = ["ebin/ranch_transport.beam"],
-    hdrs = [],
+    srcs = [
+        "src/ranch_transport.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "ranch",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -44,27 +46,10 @@ erlang_bytecode(
         "src/ranch_sup.erl",
         "src/ranch_tcp.erl",
     ],
-    outs = [
-        "ebin/ranch.beam",
-        "ebin/ranch_acceptor.beam",
-        "ebin/ranch_acceptors_sup.beam",
-        "ebin/ranch_app.beam",
-        "ebin/ranch_conns_sup.beam",
-        "ebin/ranch_conns_sup_sup.beam",
-        "ebin/ranch_crc32c.beam",
-        "ebin/ranch_embedded_sup.beam",
-        "ebin/ranch_listener_sup.beam",
-        "ebin/ranch_protocol.beam",
-        "ebin/ranch_proxy_header.beam",
-        "ebin/ranch_server.beam",
-        "ebin/ranch_server_proxy.beam",
-        "ebin/ranch_ssl.beam",
-        "ebin/ranch_sup.beam",
-        "ebin/ranch_tcp.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "ranch",
     beam = [":behaviours"],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -99,19 +84,15 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "private_hdrs",
-    srcs = [],
-)
+filegroup(name = "private_hdrs")
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
 filegroup(
     name = "priv",
-    srcs = [],
+    srcs = [
+        "ebin/ranch.appup",  # keep
+    ],
 )
 
 filegroup(
@@ -138,13 +119,23 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "ranch",
     beam_files = [":beam_files"],
     extra_apps = ["ssl"],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
 alias(
     name = "ranch",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
