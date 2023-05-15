@@ -452,6 +452,12 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
   Version => uint16
   CorrelationId => uint32
   SubscriptionId => uint8
+  
+UnsubscribeResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x800c
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Create
