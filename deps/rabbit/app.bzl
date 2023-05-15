@@ -501,10 +501,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = [
-            "priv/schema/.gitignore",
-            "priv/schema/rabbit.schema",
-        ],
+        srcs = ["priv/schema/rabbit.schema"],  #keep
     )
     filegroup(
         name = "private_hdrs",
