@@ -65,6 +65,8 @@ exports_files([
 # gazelle:exclude deps/syslog
 # gazelle:exclude deps/sysmon_handler
 # gazelle:exclude deps/systemd
+# gazelle:exclude deps/thoas
+# gazelle:exclude deps/*/deps
 # gazelle:exclude packaging
 # gazelle:exclude plugins
 # gazelle:exclude PACKAGES
