@@ -914,5 +914,27 @@ credential_validator.regexp = ^abc\\d+",
        {<<"shovel">>, 1},
        {<<"federation">>, 2}
      ]}]}]}],
+   []},
+
+  %%
+  %% Message interceptors
+  %%
+
+  {message_interceptors,
+   "message_interceptors.incoming.set_header_timestamp.overwrite = true",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_timestamp, true}]}
+     ]}],
+   []},
+
+  {message_interceptors,
+  "
+   message_interceptors.incoming.set_header_routing_node.overwrite = false
+   message_interceptors.incoming.set_header_timestamp.overwrite = false
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_routing_node, false},
+                                       {set_header_timestamp, false}]}
+     ]}],
    []}
 ].

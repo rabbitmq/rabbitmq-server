@@ -1082,13 +1082,14 @@ publish_to_queues(
                headers = [{<<"x-mqtt-publish-qos">>, byte, Qos}],
                delivery_mode = delivery_mode(Qos)},
     {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
-    Content = #content{
-                 class_id = ClassId,
-                 properties = Props,
-                 properties_bin = none,
-                 protocol = none,
-                 payload_fragments_rev = [Payload]
-                },
+    Content0 = #content{
+                  class_id = ClassId,
+                  properties = Props,
+                  properties_bin = none,
+                  protocol = none,
+                  payload_fragments_rev = [Payload]
+                 },
+    Content = rabbit_message_interceptor:intercept(Content0),
     BasicMessage = #basic_message{
                       exchange_name = ExchangeName,
                       routing_keys = [RoutingKey],

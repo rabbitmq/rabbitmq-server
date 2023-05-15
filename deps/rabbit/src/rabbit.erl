@@ -1640,18 +1640,20 @@ ensure_working_fhc() ->
 %% should be placed into persistent_term for efficiency.
 persist_static_configuration() ->
     persist_static_configuration(
-      [{rabbit, classic_queue_index_v2_segment_entry_count},
-       {rabbit, classic_queue_store_v2_max_cache_size},
-       {rabbit, classic_queue_store_v2_check_crc32}
+      [classic_queue_index_v2_segment_entry_count,
+       classic_queue_store_v2_max_cache_size,
+       classic_queue_store_v2_check_crc32,
+       incoming_message_interceptors
       ]).
 
-persist_static_configuration(AppParams) ->
+persist_static_configuration(Params) ->
+    App = ?MODULE,
     lists:foreach(
-      fun(Key = {App, Param}) ->
+      fun(Param) ->
               case application:get_env(App, Param) of
                   {ok, Value} ->
-                      ok = persistent_term:put(Key, Value);
+                      ok = persistent_term:put({App, Param}, Value);
                   undefined ->
                       ok
               end
-      end, AppParams).
+      end, Params).
