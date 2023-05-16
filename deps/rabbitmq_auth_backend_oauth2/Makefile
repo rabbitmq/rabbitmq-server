@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_auth_backend_oauth2
 PROJECT_DESCRIPTION = OAuth 2 and JWT-based AuthN and AuthZ backend
 
+LOCAL_DEPS = inets public_key
 BUILD_DEPS = rabbit_common
 DEPS = rabbit cowlib jose base64url
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client

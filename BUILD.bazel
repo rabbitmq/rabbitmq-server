@@ -70,9 +70,12 @@ exports_files([
 # gazelle:exclude deps/*/deps
 # gazelle:exclude deps/*/.erlang.mk
 # gazelle:exclude deps/rabbitmq_cli/_build
+# gazelle:exclude extra_deps
 # gazelle:exclude packaging
 # gazelle:exclude plugins
 # gazelle:exclude PACKAGES
+# gazelle:exclude plugins
+# gazelle:exclude release-notes
 # gazelle:exclude logs
 # gazelle:erlang_apps_dirs deps
 # gazelle:erlang_skip_rules test_erlang_app
@@ -215,13 +218,7 @@ iex_eval(
 
 filegroup(
     name = "root-licenses",
-    srcs = glob(
-        ["LICENSE*"],
-        exclude = [
-            "LICENSE.md",
-            "LICENSE.txt",
-        ],
-    ),
+    srcs = glob(["LICENSE*"]),
     visibility = ["//visibility:public"],
 )
 
