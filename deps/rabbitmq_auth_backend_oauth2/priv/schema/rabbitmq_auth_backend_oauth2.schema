@@ -5,15 +5,11 @@
 %%
 %% ----------------------------------------------------------------------------
 
-<<<<<<< HEAD
-%% A prefix used for scopes in UAA to avoid scope collisions (or unintended overlap). It is an empty string by default.
-=======
 %% OAuth Resource identity. Usage:
 %% - This is the identity of a RabbitMQ server/cluster used as the
 %% recipient of JWT Tokens (see audience claim, https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.3).
 %% - This is also the resource identifier used by RabbitMQ server/cluster in the authorization and access token
 %% requests (https://datatracker.ietf.org/doc/html/draft-ietf-oauth-resource-indicators-05#page-3)
->>>>>>> 0131e9900f (Configure Oauth scope prefix)
 %%
 %% Up to version 3.12, RabbitMQ's scopes followed this pattern : <resource_server_id>.<scope>.
 %% Nowadays, there is a new setting called scope_prefix and RabbitMQ's scopes follow this pattern instead:
