@@ -87,7 +87,7 @@ def _impl(ctx):
         source_scripts = ctx.files._scripts_windows
     scripts = [_copy_script(ctx, script) for script in source_scripts]
 
-    escripts = [copy_escript(ctx, escript) for escript in ctx.files._scripts]
+    escripts = [copy_escript(ctx, escript) for escript in ctx.files._escripts]
 
     plugins = flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
@@ -108,6 +108,18 @@ def _impl(ctx):
     ]
 
 RABBITMQ_HOME_ATTRS = {
+    "_escripts": attr.label_list(
+        default = [
+            "//deps/rabbit:scripts/rabbitmq-diagnostics",
+            "//deps/rabbit:scripts/rabbitmq-plugins",
+            "//deps/rabbit:scripts/rabbitmq-queues",
+            "//deps/rabbit:scripts/rabbitmq-streams",
+            "//deps/rabbit:scripts/rabbitmq-upgrade",
+            "//deps/rabbit:scripts/rabbitmqctl",
+            "//deps/rabbit:scripts/vmware-rabbitmq",
+        ],
+        allow_files = True,
+    ),
     "_scripts": attr.label_list(
         default = [
             "//deps/rabbit:scripts/rabbitmq-defaults",

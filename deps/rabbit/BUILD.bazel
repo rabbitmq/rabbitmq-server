@@ -1090,7 +1090,7 @@ genrule(
     outs = ["manpages.tar"],
     cmd = """set -euo pipefail
 
-DESTDIR=manpages-tmp/share/man
+DESTDIR=share/man
 mkdir -p $${DESTDIR}
 for mp in $(SRCS); do
     section=$${mp##*.}
@@ -1098,8 +1098,8 @@ for mp in $(SRCS); do
     gzip < $$mp \\
         > $${DESTDIR}/man$$section/$$(basename $$mp).gz
 done
-tar --strip-components 1 -cf $@ manpages-tmp/*
-rm -dr manpages-tmp
+tar -cf $@ share
+rm -dr share
 """,
     visibility = ["//visibility:public"],
 )
