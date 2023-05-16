@@ -33,6 +33,7 @@
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 -define(RESOURCE_SERVER_ID, resource_server_id).
+-define(SCOPE_PREFIX, scope_prefix).
 %% a term defined for Rich Authorization Request tokens to identify a RabbitMQ permission
 -define(RESOURCE_SERVER_TYPE, resource_server_type).
 %% verify server_server_id aud field is on the aud field
@@ -498,23 +499,23 @@ post_process_payload_in_rich_auth_request_format(#{<<"authorization_details">> :
 validate_payload(#{?SCOPE_JWT_FIELD := _Scope } = DecodedToken) ->
     ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
-    validate_payload(DecodedToken, ResourceServerId).
+    ScopePrefix = application:get_env(?APP, ?SCOPE_PREFIX, <<ResourceServerId/binary, ".">>),
+    validate_payload(DecodedToken, ResourceServerId, ScopePrefix).
 
-validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId) ->
+validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId, ScopePrefix) ->
     case check_aud(Aud, ResourceServerId) of
-        ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}};
+        ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
-validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ResourceServerId) ->
+validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, _ResourceServerId, ScopePrefix) ->
   case application:get_env(?APP, ?VERIFY_AUD, true) of
     true -> {error, {badarg, {aud_field_is_missing}}};
-    false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}}
+    false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
   end.
 
 filter_scopes(Scopes, <<"">>) -> Scopes;
-filter_scopes(Scopes, ResourceServerId)  ->
-    PrefixPattern = <<ResourceServerId/binary, ".">>,
-    matching_scopes_without_prefix(Scopes, PrefixPattern).
+filter_scopes(Scopes, ScopePrefix)  ->
+    matching_scopes_without_prefix(Scopes, ScopePrefix).
 
 check_aud(_, <<>>)    -> ok;
 check_aud(Aud, ResourceServerId) ->
