@@ -17,6 +17,7 @@ all() ->
     [
         test_own_scope,
         test_validate_payload_resource_server_id_mismatch,
+        test_validate_payload_with_scope_prefix,
         test_validate_payload,
         test_validate_payload_when_verify_aud_false,
         test_successful_access_with_a_token,
@@ -39,6 +40,7 @@ all() ->
         test_post_process_token_payload_complex_claims,
         test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field,
         test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
+        test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
         test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
@@ -101,6 +103,7 @@ end_per_testcase(_, Config) ->
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 -define(RESOURCE_SERVER_TYPE, <<"rabbitmq-type">>).
+-define(DEFAULT_SCOPE_PREFIX, <<"rabbitmq.">>).
 
 test_post_process_token_payload(_) ->
     ArgumentsExpections = [
@@ -719,6 +722,49 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field(
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
     application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
 
+
+test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_prefix, <<>>),
+    Alias = <<"client-alias-1">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_aliases, #{
+        Alias => [
+            <<"configure:vhost/one">>,
+            <<"write:vhost/two">>,
+            <<"read:vhost/one">>,
+            <<"read:vhost/two">>,
+            <<"read:vhost/two/abc">>,
+            <<"tag:management">>,
+            <<"tag:custom">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+      ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Username), Jwk),
+
+    {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_granted(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix),
+    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+
 test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
@@ -1175,16 +1221,16 @@ test_command_pem_no_kid(Config) ->
 
 test_own_scope(_) ->
     Examples = [
-        {<<"foo">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>,
+        {<<"foo.">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>,
                      <<"one.two">>, <<"foobar">>, <<"foo.other.third">>],
                     [<<"bar">>, <<"other.third">>]},
-        {<<"foo">>, [], []},
-        {<<"foo">>, [<<"foo">>, <<"other.foo.bar">>], []},
+        {<<"foo.">>, [], []},
+        {<<"foo.">>, [<<"foo">>, <<"other.foo.bar">>], []},
         {<<"">>, [<<"foo">>, <<"bar">>], [<<"foo">>, <<"bar">>]}
     ],
     lists:map(
-        fun({ResId, Src, Dest}) ->
-            Dest = rabbit_auth_backend_oauth2:filter_scopes(Src, ResId)
+        fun({ScopePrefix, Src, Dest}) ->
+            Dest = rabbit_auth_backend_oauth2:filter_scopes(Src, ScopePrefix)
         end,
         Examples).
 
@@ -1198,10 +1244,30 @@ test_validate_payload_resource_server_id_mismatch(_) ->
 
     ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID,
                                           [<<"foo">>,<<"bar">>]}}},
-                 rabbit_auth_backend_oauth2:validate_payload(NoKnownResourceServerId, ?RESOURCE_SERVER_ID)),
+                 rabbit_auth_backend_oauth2:validate_payload(NoKnownResourceServerId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)),
 
     ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID, []}}},
-                 rabbit_auth_backend_oauth2:validate_payload(EmptyAud, ?RESOURCE_SERVER_ID)).
+                 rabbit_auth_backend_oauth2:validate_payload(EmptyAud, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
+
+test_validate_payload_with_scope_prefix(_) ->
+    Scenarios = [ { <<>>,
+                #{<<"aud">>   => [?RESOURCE_SERVER_ID],
+                  <<"scope">> => [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]},
+                [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]
+                },
+                { <<"some-prefix::">>,
+                  #{<<"aud">>   => [?RESOURCE_SERVER_ID],
+                    <<"scope">> => [<<"some-prefix::foo">>, <<"foo.bar">>, <<"some-prefix::other.third">> ]},
+                 [<<"foo">>, <<"other.third">>]
+                 }
+
+               ],
+
+  lists:map(fun({ ScopePrefix, Token, ExpectedScopes}) ->
+      ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID], <<"scope">> => ExpectedScopes } },
+        rabbit_auth_backend_oauth2:validate_payload(Token, ?RESOURCE_SERVER_ID, ScopePrefix))
+      end
+    , Scenarios).
 
 test_validate_payload(_) ->
     KnownResourceServerId = #{<<"aud">>   => [?RESOURCE_SERVER_ID],
@@ -1210,7 +1276,7 @@ test_validate_payload(_) ->
                                               <<"foobar">>, <<"rabbitmq.other.third">>]},
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
+                 rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
 
 test_validate_payload_when_verify_aud_false(_) ->
     WithoutAud = #{
@@ -1219,7 +1285,7 @@ test_validate_payload_when_verify_aud_false(_) ->
                                               <<"foobar">>, <<"rabbitmq.other.third">>]},
     ?assertEqual({ok, #{
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(WithoutAud, ?RESOURCE_SERVER_ID)),
+                 rabbit_auth_backend_oauth2:validate_payload(WithoutAud, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)),
 
     WithAudWithUnknownResourceId = #{
                               <<"aud">>   => [<<"unknown">>],
@@ -1228,7 +1294,7 @@ test_validate_payload_when_verify_aud_false(_) ->
                                               <<"foobar">>, <<"rabbitmq.other.third">>]},
     ?assertEqual({ok, #{<<"aud">>   => [<<"unknown">>],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(WithAudWithUnknownResourceId, ?RESOURCE_SERVER_ID)).
+                 rabbit_auth_backend_oauth2:validate_payload(WithAudWithUnknownResourceId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
 
 
 
