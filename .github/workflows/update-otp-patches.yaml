@@ -17,6 +17,7 @@ jobs:
         - "25.1"
         - "25.2"
         - "25.3"
+        - "26.0"
         include:
         - erlang_version: "24.3"
           name: '24'
@@ -47,6 +48,12 @@ jobs:
             backport-v3.12.x
             backport-v3.11.x
             backport-v3.10.x
+        - erlang_version: "26.0"
+          name: '26'
+          branch: main
+          labels: |
+            backport-v3.12.x
+            backport-v3.11.x
     timeout-minutes: 10
     env:
       branch: bump-otp-${{ matrix.erlang_version }}
