@@ -175,6 +175,12 @@
                     {requires,    [rabbit_alarm, guid_generator]},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_quorum_queue_periodic_membership_reconciliation,
+                   [{description, "Quorums Queue membership reconciliation"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_quorum_queue_periodic_membership_reconciliation]}},
+                    {requires, [database]}]}).
+
 -rabbit_boot_step({rabbit_epmd_monitor,
                    [{description, "epmd monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,

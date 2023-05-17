@@ -8,6 +8,8 @@
 -module(rabbit_quorum_queue).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_merge_strategy).
 
 -export([init/1,
          close/1,
@@ -35,8 +37,8 @@
 -export([format/1]).
 -export([open_files/1]).
 -export([peek/2, peek/3]).
--export([add_member/4]).
--export([delete_member/3]).
+-export([add_member/4, add_member/2]).
+-export([delete_member/3, delete_member/2]).
 -export([requeue/3]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
@@ -65,6 +67,7 @@
          is_compatible/3,
          declare/2,
          is_stateful/0]).
+-export([validate_policy/1, merge_policy_value/3]).
 
 -export([force_shrink_member_to_current_member/2,
          force_all_queues_shrink_member_to_current_member/0]).
@@ -113,6 +116,34 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
+
+%%----------- QQ policies ---------------------------------------------------
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "QQ target group size policies. "
+      "target-group-size controls the targeted number of "
+      "member nodes for the queue. If set, RabbitMQ will try to "
+      "grow the queue members to the target size. "
+      "See module rabbit_queue_member_eval."},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"target-group-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"target-group-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"target-group-size">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
+
+validate_policy(Args) ->
+    Count = proplists:get_value(<<"target-group-size">>, Args, none),
+    case is_integer(Count) andalso Count > 0 of
+        true -> ok;
+        false -> {error, "~tp is not a valid qq target count value", [Count]}
+    end.
+
+merge_policy_value(<<"target-group-size">>, Val, OpVal) ->
+    max(Val, OpVal).
 
 %%----------- rabbit_queue_type ---------------------------------------------
 
@@ -215,6 +246,7 @@ start_cluster(Q) ->
                     ok = rabbit_fifo_client:update_machine_state(LeaderId,
                                                                  ra_machine_config(NewQ)),
                     notify_decorators(QName, startup),
+                    rabbit_quorum_queue_periodic_membership_reconciliation:queue_created(NewQ),
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
@@ -1093,6 +1125,8 @@ add_member(VHost, Name, Node, Timeout) ->
                     E
     end.
 
+add_member(Q, Node) ->
+    add_member(Q, Node, ?ADD_MEMBER_TIMEOUT).
 add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     {RaName, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),

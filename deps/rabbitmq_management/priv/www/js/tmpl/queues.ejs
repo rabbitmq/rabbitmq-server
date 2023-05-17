@@ -336,7 +336,8 @@
                 <% if (queue_type == "quorum") { %>
                   <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
                   | <span class="argument-link" field="arguments" key="x-quorum-initial-group-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span><br/>
-                  <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
+                  | <span class="argument-link" field="arguments" key="x-quorum-target-group-size" type="number">Target cluster size</span><span class="help" id="qourum-queue-target-group-size"></span>    
+                    <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
                 <% } %>
                 <% if (queue_type == "stream") { %>
                   <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
