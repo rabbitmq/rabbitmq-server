@@ -38,8 +38,8 @@ mix_archive_build(
 rabbitmqctl(
     name = "rabbitmqctl",
     srcs = [
-        "mix.exs",
         "config/config.exs",
+        "mix.exs",
     ] + glob([
         "lib/**/*.ex",
     ]),
@@ -83,9 +83,9 @@ rabbitmqctl_check_formatted_test(
     name = "check_formatted",
     size = "small",
     srcs = [
-        "mix.exs",
-        "config/config.exs",
         ".formatter.exs",
+        "config/config.exs",
+        "mix.exs",
     ] + glob([
         "lib/**/*.ex",
         "test/**/*.exs",
@@ -141,9 +141,9 @@ rabbitmqctl_test(
     name = "tests",
     size = "large",
     srcs = [
-        "mix.exs",
-        "config/config.exs",
         ".formatter.exs",
+        "config/config.exs",
+        "mix.exs",
     ] + glob([
         "lib/**/*.ex",
         "test/**/*.exs",
