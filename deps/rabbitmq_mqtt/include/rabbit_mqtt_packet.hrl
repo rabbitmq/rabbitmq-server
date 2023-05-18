@@ -167,7 +167,7 @@
                               client_id :: binary(),
                               will_props :: properties(),
                               will_topic :: option(binary()),
-                              will_msg :: option(binary()),
+                              will_payload :: option(binary()),
                               username :: option(binary()),
                               password :: option(binary())
                              }).

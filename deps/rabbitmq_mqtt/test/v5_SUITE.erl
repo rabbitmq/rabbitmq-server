@@ -627,8 +627,8 @@ subscription_option_retain_as_published(Config) ->
                         retain := true}} -> ok
     after 1000 -> ct:fail("did not receive m1")
     end,
-    ok = emqtt:publish(C1, <<"t/1">>, <<"">>, [{retain, true}]),
-    ok = emqtt:publish(C1, <<"t/2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C1, <<"t/1">>, <<>>, [{retain, true}]),
+    ok = emqtt:publish(C1, <<"t/2">>, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
 
@@ -656,8 +656,8 @@ subscription_option_retain_as_published_wildcards(Config) ->
                         retain := true}} -> ok
     after 1000 -> ct:fail("did not receive m2")
     end,
-    ok = emqtt:publish(C, <<"t/1">>, <<"">>, [{retain, true}]),
-    ok = emqtt:publish(C, <<"t/2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C, <<"t/1">>, <<>>, [{retain, true}]),
+    ok = emqtt:publish(C, <<"t/2">>, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C).
 
 subscription_option_retain_handling(Config) ->
@@ -698,9 +698,9 @@ subscription_option_retain_handling(Config) ->
     ok = expect_publishes(C2, <<"t/1">>, [<<"m1">>]),
     assert_nothing_received(),
 
-    ok = emqtt:publish(C2, <<"t/1">>, <<"">>, [{retain, true}]),
-    ok = emqtt:publish(C2, <<"t/2">>, <<"">>, [{retain, true}]),
-    ok = emqtt:publish(C2, <<"t/3">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t/1">>, <<>>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t/2">>, <<>>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t/3">>, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C2).
 
 subscription_identifier(Config) ->
@@ -871,7 +871,7 @@ subscription_options_persisted(Config) ->
     after 1000 -> ct:fail("did not receive m2")
     end,
     assert_nothing_received(),
-    ok = emqtt:publish(C2, <<"t2">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C2, <<"t2">>, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C2).
 
 %% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a Non‑shared
@@ -939,7 +939,7 @@ subscription_options_modify(Config) ->
     end,
 
     assert_nothing_received(),
-    ok = emqtt:publish(C, Topic, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(C, Topic, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C).
 
 %% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a
@@ -1084,7 +1084,7 @@ compatibility_v3_v5(Config) ->
                properties := #{'Subscription-Identifier' := 99}}} -> ok
     after 1000 -> ct:fail("did not receive from v3")
     end,
-    ok = emqtt:publish(Cv3, <<"v5">>, <<"">>, [{retain, true}]),
+    ok = emqtt:publish(Cv3, <<"v5">>, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(Cv3),
     ok = emqtt:disconnect(Cv5).
 

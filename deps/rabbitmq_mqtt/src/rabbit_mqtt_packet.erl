@@ -216,15 +216,15 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
     true = protocol_name_approved(ProtoVer, ProtoName),
     {Props, Rest1} = parse_props(Rest0, ProtoVer),
     {ClientId, Rest2} = parse_bin(Rest1),
-    {WillProps, WillTopic, WillMsg, Rest3} =
+    {WillProps, WillTopic, WillPayload, Rest3} =
     case WillFlag of
         0 ->
             {#{}, undefined, undefined, Rest2};
         1 ->
             {WillProps0, R0} = parse_props(Rest2, ProtoVer),
             {WillTopic0, R1} = parse_bin(R0),
-            {WillMsg0, R2} = parse_bin(R1),
-            {WillProps0, WillTopic0, WillMsg0, R2}
+            {WillPayload0, R2} = parse_bin(R1),
+            {WillProps0, WillTopic0, WillPayload0, R2}
     end,
     {UserName, Rest} = parse_bin(Rest3, UsernameFlag),
     {PasssWord, <<>>} = parse_bin(Rest, PasswordFlag),
@@ -239,7 +239,7 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
        client_id = ClientId,
        will_props = WillProps,
        will_topic = WillTopic,
-       will_msg = WillMsg,
+       will_payload = WillPayload,
        username = UserName,
        password = PasssWord}.
 

@@ -962,7 +962,7 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                                    will_qos = Qos,
                                    will_topic = Topic,
                                    will_props = Props,
-                                   will_msg = Msg}) ->
+                                   will_payload = Payload}) ->
     EffectiveQos = maybe_downgrade_qos(Qos),
     Correlation = case EffectiveQos of
                       ?QOS_0 -> undefined;
@@ -974,7 +974,7 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                    topic = Topic,
                    dup = false,
                    props = Props,
-                   payload = Msg}}.
+                   payload = Payload}}.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
     case rabbit_vhost:exists(VHost) of
