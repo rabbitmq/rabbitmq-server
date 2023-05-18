@@ -1096,7 +1096,7 @@ eventually({Line, _}, _, 0) ->
 eventually({Line, Assertion} = TestObj, PollInterval, PollCount)
   when is_integer(Line), Line >= 0, is_function(Assertion, 0),
        is_integer(PollInterval), PollInterval >= 0,
-       is_integer(PollCount), PollCount >= 0 ->
+       is_integer(PollCount), PollCount > 0 ->
     case catch Assertion() of
         ok ->
             ok;

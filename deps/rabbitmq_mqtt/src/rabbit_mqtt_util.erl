@@ -29,8 +29,10 @@
 -define(SPARKPLUG_MP_MQTT_TO_AMQP, sparkplug_mp_mqtt_to_amqp).
 -define(SPARKPLUG_MP_AMQP_TO_MQTT, sparkplug_mp_amqp_to_mqtt).
 
--spec queue_name_bin(binary(), qos()) ->
+-spec queue_name_bin(binary(), qos() | will) ->
     binary().
+queue_name_bin(ClientId, will) ->
+    <<"mqtt-will-", ClientId/binary>>;
 queue_name_bin(ClientId, QoS) ->
     Prefix = queue_name_prefix(ClientId),
     queue_name0(Prefix, QoS).

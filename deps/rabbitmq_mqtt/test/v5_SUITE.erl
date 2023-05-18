@@ -32,8 +32,11 @@
 
 %% defined in MQTT v5 (not in v4 or v3)
 -define(RC_SUCCESS, 16#00).
+-define(RC_NORMAL_DISCONNECTION, 16#00).
+-define(RC_DISCONNECT_WITH_WILL, 16#04).
 -define(RC_NO_SUBSCRIPTION_EXISTED, 16#11).
 -define(RC_UNSPECIFIED_ERROR, 16#80).
+-define(RC_SESSION_TAKEN_OVER, 16#8E).
 
 all() ->
     [{group, mqtt},
@@ -56,21 +59,20 @@ cluster_size_1_tests() ->
      client_set_max_packet_size_publish,
      client_set_max_packet_size_connack,
      client_set_max_packet_size_invalid,
-     message_expiry_interval,
-     message_expiry_interval_will_message,
-     message_expiry_interval_retained_message,
-     session_expiry_interval_classic_queue_disconnect_decrease,
-     session_expiry_interval_quorum_queue_disconnect_decrease,
-     session_expiry_interval_disconnect_zero_to_non_zero,
-     session_expiry_interval_disconnect_non_zero_to_zero,
-     session_expiry_interval_disconnect_infinity_to_zero,
-     session_expiry_interval_disconnect_to_infinity,
-     session_expiry_interval_reconnect_non_zero,
-     session_expiry_interval_reconnect_zero,
-     session_expiry_interval_reconnect_infinity_to_zero,
+     message_expiry,
+     message_expiry_will_message,
+     message_expiry_retained_message,
+     session_expiry_classic_queue_disconnect_decrease,
+     session_expiry_quorum_queue_disconnect_decrease,
+     session_expiry_disconnect_zero_to_non_zero,
+     session_expiry_disconnect_non_zero_to_zero,
+     session_expiry_disconnect_infinity_to_zero,
+     session_expiry_disconnect_to_infinity,
+     session_expiry_reconnect_non_zero,
+     session_expiry_reconnect_zero,
+     session_expiry_reconnect_infinity_to_zero,
      client_publish_qos2,
      client_rejects_publish,
-     will_qos2,
      client_receive_maximum_min,
      client_receive_maximum_large,
      unsubscribe_success,
@@ -93,12 +95,24 @@ cluster_size_1_tests() ->
      compatibility_v3_v5,
      session_upgrade_v3_v5_unsubscribe,
      session_upgrade_v4_v5_no_queue_bind_permission,
-     amqp091_cc_header
+     amqp091_cc_header,
+     disconnect_with_will,
+     will_qos2,
+     will_delay_greater_than_session_expiry,
+     will_delay_less_than_session_expiry,
+     will_delay_equals_session_expiry,
+     will_delay_session_expiry_zero,
+     will_delay_reconnect_no_will,
+     will_delay_reconnect_with_will,
+     will_delay_session_takeover,
+     will_delay_message_expiry,
+     will_delay_message_expiry_publish_properties
     ].
 
 cluster_size_3_tests() ->
     [session_migrate_v3_v5,
-     session_takeover_v3_v5
+     session_takeover_v3_v5,
+     will_delay_node_restart
     ].
 
 suite() ->
@@ -143,11 +157,11 @@ init_per_group(Group, Config0) ->
                rabbit_ct_client_helpers:setup_steps()),
     case Group of
         cluster_size_1 ->
-            ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5);
+            ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
+            Config;
         cluster_size_3 ->
-            ok
-    end,
-    Config.
+            util:maybe_skip_v5(Config)
+    end.
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
@@ -160,9 +174,9 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(T, Config)
-  when T =:= session_expiry_interval_disconnect_infinity_to_zero;
-       T =:= session_expiry_interval_disconnect_to_infinity;
-       T =:= session_expiry_interval_reconnect_infinity_to_zero ->
+  when T =:= session_expiry_disconnect_infinity_to_zero;
+       T =:= session_expiry_disconnect_to_infinity;
+       T =:= session_expiry_reconnect_infinity_to_zero ->
     Par = max_session_expiry_interval_secs,
     {ok, Default} = rpc(Config, application, get_env, [?APP, Par]),
     ok = rpc(Config, application, set_env, [?APP, Par, infinity]),
@@ -177,15 +191,19 @@ init_per_testcase0(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(T, Config)
-  when T =:= session_expiry_interval_disconnect_infinity_to_zero;
-       T =:= session_expiry_interval_disconnect_to_infinity;
-       T =:= session_expiry_interval_reconnect_infinity_to_zero ->
+  when T =:= session_expiry_disconnect_infinity_to_zero;
+       T =:= session_expiry_disconnect_to_infinity;
+       T =:= session_expiry_reconnect_infinity_to_zero ->
     Par = max_session_expiry_interval_secs,
     Default = ?config(Par, Config),
     ok = rpc(Config, application, set_env, [?APP, Par, Default]),
-    rabbit_ct_helpers:testcase_finished(Config, T);
+    end_per_testcase0(T, Config);
+end_per_testcase(T, Config) ->
+    end_per_testcase0(T, Config).
 
-end_per_testcase(Testcase, Config) ->
+end_per_testcase0(Testcase, Config) ->
+    %% Assert that every testcase cleaned up their MQTT sessions.
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -224,7 +242,7 @@ client_set_max_packet_size_invalid(Config) ->
     unlink(C),
     ?assertMatch({error, _}, Connect(C)).
 
-message_expiry_interval(Config) ->
+message_expiry(Config) ->
     NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     Pub = connect(<<"publisher">>, Config),
@@ -265,7 +283,7 @@ message_expiry_interval(Config) ->
     Sub3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(Sub3).
 
-message_expiry_interval_will_message(Config) ->
+message_expiry_will_message(Config) ->
     NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     Opts = [{will_topic, Topic},
@@ -274,16 +292,12 @@ message_expiry_interval_will_message(Config) ->
             {will_props, #{'Message-Expiry-Interval' => 1}}
            ],
     Pub = connect(<<"will-publisher">>, Config, Opts),
-    timer:sleep(100),
-    [ServerPublisherPid] = util:all_connection_pids(Config),
-
     Sub1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
     ok = emqtt:disconnect(Sub1),
 
     unlink(Pub),
-    %% Trigger sending of will message.
-    erlang:exit(ServerPublisherPid, test_will),
+    erlang:exit(Pub, trigger_will_message),
     %% Wait for will message to expire.
     timer:sleep(1100),
     NumExpired = dead_letter_metric(messages_dead_lettered_expired_total, Config) - NumExpiredBefore,
@@ -293,7 +307,7 @@ message_expiry_interval_will_message(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(Sub2).
 
-message_expiry_interval_retained_message(Config) ->
+message_expiry_retained_message(Config) ->
     Pub = connect(<<"publisher">>, Config),
 
     {ok, _} = emqtt:publish(Pub, <<"topic1">>, #{'Message-Expiry-Interval' => 100},
@@ -344,15 +358,15 @@ message_expiry_interval_retained_message(Config) ->
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(Sub).
 
-session_expiry_interval_classic_queue_disconnect_decrease(Config) ->
-    ok = session_expiry_interval_disconnect_decrease(rabbit_classic_queue, Config).
+session_expiry_classic_queue_disconnect_decrease(Config) ->
+    ok = session_expiry_disconnect_decrease(rabbit_classic_queue, Config).
 
-session_expiry_interval_quorum_queue_disconnect_decrease(Config) ->
+session_expiry_quorum_queue_disconnect_decrease(Config) ->
     ok = rpc(Config, application, set_env, [?APP, durable_queue_type, quorum]),
-    ok = session_expiry_interval_disconnect_decrease(rabbit_quorum_queue, Config),
+    ok = session_expiry_disconnect_decrease(rabbit_quorum_queue, Config),
     ok = rpc(Config, application, unset_env, [?APP, durable_queue_type]).
 
-session_expiry_interval_disconnect_decrease(QueueType, Config) ->
+session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 100}}]),
     {ok, _, [1]} = emqtt:subscribe(C1, <<"t/1">>, qos1),
@@ -364,7 +378,7 @@ session_expiry_interval_disconnect_decrease(QueueType, Config) ->
                  rabbit_misc:table_lookup(amqqueue:get_arguments(Q1), ?QUEUE_TTL_KEY)),
 
     %% DISCONNECT decreases Session Expiry Interval from 100 seconds to 1 second.
-    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 1}),
+    ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 1}),
     assert_queue_ttl(1, 1, Config),
 
     timer:sleep(1500),
@@ -374,13 +388,13 @@ session_expiry_interval_disconnect_decrease(QueueType, Config) ->
                  proplists:lookup(session_present, emqtt:info(C2))),
     ok = emqtt:disconnect(C2).
 
-session_expiry_interval_disconnect_zero_to_non_zero(Config) ->
+session_expiry_disconnect_zero_to_non_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 0}}]),
     {ok, _, [1]} = emqtt:subscribe(C1, <<"t/1">>, qos1),
     %% "If the Session Expiry Interval in the CONNECT packet was zero, then it is a Protocol
     %% Error to set a non-zero Session Expiry Interval in the DISCONNECT packet sent by the Client.
-    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 60}),
+    ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 60}),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
     %% Due to the prior protocol error, we expect the requested session expiry interval of
     %% 60 seconds not to be applied. Therefore, the server should reply in CONNACK that
@@ -389,30 +403,30 @@ session_expiry_interval_disconnect_zero_to_non_zero(Config) ->
                  proplists:lookup(session_present, emqtt:info(C2))),
     ok = emqtt:disconnect(C2).
 
-session_expiry_interval_disconnect_non_zero_to_zero(Config) ->
+session_expiry_disconnect_non_zero_to_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
     {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
                                            {<<"t/1">>, qos1}]),
     ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
-    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 0}),
+    ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 0}),
     eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
     ?assertEqual({session_present, 0},
                  proplists:lookup(session_present, emqtt:info(C2))),
     ok = emqtt:disconnect(C2).
 
-session_expiry_interval_disconnect_infinity_to_zero(Config) ->
+session_expiry_disconnect_infinity_to_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}}]),
     {ok, _, [1, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, qos1},
                                            {<<"t/0">>, qos0}]),
     assert_no_queue_ttl(2, Config),
 
-    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 0}),
+    ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 0}),
     eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))).
 
-session_expiry_interval_disconnect_to_infinity(Config) ->
+session_expiry_disconnect_to_infinity(Config) ->
     ClientId = ?FUNCTION_NAME,
     %% Connect with a non-zero and non-infinity Session Expiry Interval.
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 1}}]),
@@ -421,14 +435,14 @@ session_expiry_interval_disconnect_to_infinity(Config) ->
     assert_queue_ttl(1, 2, Config),
 
     %% Disconnect with infinity should remove queue TTL from both queues.
-    ok = emqtt:disconnect(C1, _RcNormalDisconnection = 0, #{'Session-Expiry-Interval' => 16#FFFFFFFF}),
+    ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 16#FFFFFFFF}),
     timer:sleep(100),
     assert_no_queue_ttl(2, Config),
 
     C2 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C2).
 
-session_expiry_interval_reconnect_non_zero(Config) ->
+session_expiry_reconnect_non_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
     {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
@@ -446,7 +460,7 @@ session_expiry_interval_reconnect_non_zero(Config) ->
     C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 
-session_expiry_interval_reconnect_zero(Config) ->
+session_expiry_reconnect_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
     {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
@@ -461,7 +475,7 @@ session_expiry_interval_reconnect_zero(Config) ->
     assert_queue_ttl(0, 2, Config),
     ok = emqtt:disconnect(C2).
 
-session_expiry_interval_reconnect_infinity_to_zero(Config) ->
+session_expiry_reconnect_infinity_to_zero(Config) ->
     ClientId = ?FUNCTION_NAME,
     C1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}}]),
     {ok, _, [0, 1]} = emqtt:subscribe(C1, [{<<"t/0">>, qos0},
@@ -479,6 +493,7 @@ client_publish_qos2(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     {C, Connect} = start_client(ClientId, Config, 0, []),
     ?assertMatch({ok, #{'Maximum-QoS' := 1}}, Connect(C)),
+    unlink(C),
     ?assertEqual({error, {disconnected, _RcQosNotSupported = 155, #{}}},
                  emqtt:publish(C, Topic, <<"msg">>, qos2)).
 
@@ -503,15 +518,6 @@ client_rejects_publish(Config) ->
     NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
     ?assertEqual(1, NumRejected),
     ok = emqtt:disconnect(C).
-
-will_qos2(Config) ->
-    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
-    Opts = [{will_topic, Topic},
-            {will_payload, <<"msg">>},
-            {will_qos, 2}],
-    {C, Connect} = start_client(ClientId, Config, 0, Opts),
-    unlink(C),
-    ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
 
 client_receive_maximum_min(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
@@ -1149,6 +1155,306 @@ amqp091_cc_header(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
 
+disconnect_with_will(Config) ->
+    Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    C = connect(ClientId, Config, [{will_topic, Topic},
+                                   {will_payload, Payload}]),
+    ok = emqtt:disconnect(C, ?RC_DISCONNECT_WITH_WILL),
+    ok = expect_publishes(Sub, Topic, [Payload]),
+    ok = emqtt:disconnect(Sub).
+
+will_qos2(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Opts = [{will_topic, Topic},
+            {will_payload, <<"msg">>},
+            {will_qos, 2}],
+    {C, Connect} = start_client(ClientId, Config, 0, Opts),
+    unlink(C),
+    ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
+
+will_delay_less_than_session_expiry(Config) ->
+    will_delay(1, 5, Config).
+
+will_delay_equals_session_expiry(Config) ->
+    will_delay(1, 1, Config).
+
+will_delay_greater_than_session_expiry(Config) ->
+    will_delay(5, 1, Config).
+
+%% "The Server delays publishing the Client’s Will Message until the Will Delay
+%% Interval has passed or the Session ends, whichever happens first." [v5 3.1.3.2.2]
+will_delay(WillDelay, SessionExpiry, Config)
+  when WillDelay =:= 1 orelse
+       SessionExpiry =:= 1->
+    Topic = <<"a/b">>,
+    Msg = <<"msg">>,
+    ClientId = ?FUNCTION_NAME,
+    Opts = [{properties, #{'Session-Expiry-Interval' => SessionExpiry}},
+            {will_props, #{'Will-Delay-Interval' => WillDelay}},
+            {will_topic, Topic},
+            {will_payload, Msg}],
+    C1 = connect(ClientId, Config, Opts),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    unlink(C1),
+    erlang:exit(C1, trigger_will_message),
+    receive TooEarly -> ct:fail(TooEarly)
+    after 800 -> ok
+    end,
+    receive {publish, #{payload := Msg}} -> ok
+    after 2000 -> ct:fail(will_message_timeout)
+    end,
+    %% Cleanup
+    C2 = connect(ClientId, Config),
+    ok = emqtt:disconnect(C2),
+    ok = emqtt:disconnect(Sub).
+
+will_delay_session_expiry_zero(Config) ->
+    Topic = <<"a/b">>,
+    Msg = <<"msg">>,
+    Opts = [{will_props, #{'Will-Delay-Interval' => 1}},
+            {will_topic, Topic},
+            {will_payload, Msg}],
+    C = connect(?FUNCTION_NAME, Config, Opts),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    unlink(C),
+    erlang:exit(C, trigger_will_message),
+    %% Since default Session Expiry Interval is 0, we expect Will Message immediately.
+    receive {publish, #{payload := Msg}} -> ok
+    after 500 -> ct:fail(will_message_timeout)
+    end,
+    ok = emqtt:disconnect(Sub).
+
+will_delay_reconnect_no_will(Config) ->
+    Topic = <<"my/topic">>,
+    ClientId = Payload = atom_to_binary(?FUNCTION_NAME),
+
+    Sub = connect(<<"sub">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+
+    Opts = [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}},
+            {will_props, #{'Will-Delay-Interval' => 1}},
+            {will_topic, Topic},
+            {will_payload, Payload}],
+    C1 = connect(ClientId, Config, Opts),
+    unlink(C1),
+    erlang:exit(C1, trigger_will_message),
+    %% Should not receive anything because Will Delay is 1 second.
+    assert_nothing_received(200),
+    %% Reconnect with same ClientId, this time without a Will Message.
+    C2 = connect(ClientId, Config, [{clean_start, false}]),
+    %% Should not receive anything because client reconnected within Will Delay Interval.
+    assert_nothing_received(1100),
+    ok = emqtt:disconnect(C2, ?RC_DISCONNECT_WITH_WILL),
+    %% Should not receive anything because new client did not set Will Message.
+    assert_nothing_received(1100),
+    ok = emqtt:disconnect(Sub).
+
+will_delay_reconnect_with_will(Config) ->
+    Topic = <<"my/topic">>,
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<"sub">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    C1 = connect(ClientId, Config,
+                 [{properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}},
+                  {will_props, #{'Will-Delay-Interval' => 1}},
+                  {will_topic, Topic},
+                  {will_payload, <<"will-1">>}]),
+    unlink(C1),
+    erlang:exit(C1, trigger_will_message),
+    %% Should not receive anything because Will Delay is 1 second.
+    assert_nothing_received(300),
+    %% Reconnect with same ClientId, again with a delayed will message.
+    C2 = connect(ClientId, Config,
+                 [{clean_start, false},
+                  {properties, #{'Session-Expiry-Interval' => 16#FFFFFFFF}},
+                  {will_props, #{'Will-Delay-Interval' => 1}},
+                  {will_topic, Topic},
+                  {will_payload, <<"will-2">>}]),
+    ok = emqtt:disconnect(C2, ?RC_DISCONNECT_WITH_WILL),
+    %% The second will message should be sent after 1 second.
+    assert_nothing_received(700),
+    ok = expect_publishes(Sub, Topic, [<<"will-2">>]),
+    %% The first will message should not be sent.
+    assert_nothing_received(),
+    %% Cleanup
+    C3 = connect(ClientId, Config),
+    ok = emqtt:disconnect(C3),
+    ok = emqtt:disconnect(Sub).
+
+%% "If a Network Connection uses a Client Identifier of an existing Network Connection to the Server,
+%% the Will Message for the exiting connection is sent unless the new connection specifies Clean
+%% Start of 0 and the Will Delay is greater than zero." [v5 3.1.3.2.2]
+will_delay_session_takeover(Config) ->
+    Topic = <<"my/topic">>,
+    Sub = connect(<<"sub">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+
+    C1a = connect(<<"c1">>, Config,
+                  [{properties, #{'Session-Expiry-Interval' => 120}},
+                   {will_props, #{'Will-Delay-Interval' => 30}},
+                   {will_topic, Topic},
+                   {will_payload, <<"will-1a">>}]),
+    C2a = connect(<<"c2">>, Config,
+                  [{will_topic, Topic},
+                   {will_payload, <<"will-2a">>}]),
+    C3a = connect(<<"c3">>, Config,
+                  [{will_topic, Topic},
+                   {will_payload, <<"will-3a">>}]),
+    C4a = connect(<<"c4">>, Config,
+                  [{will_topic, Topic},
+                   {will_payload, <<"will-4a">>}]),
+    Clients = [C1a, C2a, C3a, C4a],
+    [true = unlink(C) || C <- Clients],
+    C1b = connect(<<"c1">>, Config,
+                  [{clean_start, false},
+                   {properties, #{'Session-Expiry-Interval' => 120}},
+                   {will_props, #{'Will-Delay-Interval' => 30}},
+                   {will_topic, Topic},
+                   {will_payload, <<"will-1b">>}]),
+    C2b = connect(<<"c2">>, Config,
+                  [{clean_start, false},
+                   {properties, #{'Session-Expiry-Interval' => 120}},
+                   {will_props, #{'Will-Delay-Interval' => 30}},
+                   {will_topic, Topic},
+                   {will_payload, <<"will-2b">>}]),
+    C3b = connect(<<"c3">>, Config,
+                  [{clean_start, true},
+                   {properties, #{'Session-Expiry-Interval' => 120}},
+                   {will_props, #{'Will-Delay-Interval' => 30}},
+                   {will_topic, Topic},
+                   {will_payload, <<"will-3b">>}]),
+    C4b = connect(<<"c4">>, Config,
+                  [{clean_start, false},
+                   {properties, #{'Session-Expiry-Interval' => 0}},
+                   {will_topic, Topic},
+                   {will_payload, <<"will-4b">>}]),
+    [receive {disconnected, ?RC_SESSION_TAKEN_OVER, #{}} -> ok
+     after 1000 -> ct:fail("server did not disconnect us")
+     end || _ <- Clients],
+
+    ok = expect_publishes(Sub, Topic, [<<"will-3a">>, <<"will-4a">>]),
+    assert_nothing_received(),
+
+    [ok = emqtt:disconnect(C) || C <- [Sub, C1b, C2b, C3b, C4b]].
+
+will_delay_message_expiry(Config) ->
+    Q1 = <<"dead-letter-queue-1">>,
+    Q2 = <<"dead-letter-queue-2">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = Q1,
+                                     arguments = [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                                  {<<"x-dead-letter-routing-key">>, longstr, Q2}]}),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Q1,
+                                             exchange = <<"amq.topic">>,
+                                             routing_key = <<"my.topic">>}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = Q2}),
+    C = connect(<<"my-client">>, Config,
+                [{properties, #{'Session-Expiry-Interval' => 1}},
+                 {will_props, #{'Will-Delay-Interval' => 1,
+                                'Message-Expiry-Interval' => 1}},
+                 {will_topic, <<"my/topic">>},
+                 {will_payload, <<"msg">>}]),
+    ok = emqtt:disconnect(C, ?RC_DISCONNECT_WITH_WILL),
+    %% After 1 second, Will Message is published, i.e. dead lettered the 1st time,
+    %% after 2 seconds, Will Message is dead lettered the 2nd time:
+    %% mqtt-will-my-client -> dead-letter-queue-1 -> dead-letter-queue-2
+    %% Wait for 2 more seconds to validate that the Will Message does not expire again in dead-letter-queue-2.
+    timer:sleep(4000),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q2})),
+    [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- [Q1, Q2]].
+
+%% "The PUBLISH packet sent to a Client by the Server MUST contain a Message Expiry Interval
+%% set to the received value minus the time that the message has been waiting in the Server."
+%% [v5 MQTT-3.3.2-6]
+%% Test that requirement for a Will Message with both Will Delay Interval and Message Expiry Interval.
+will_delay_message_expiry_publish_properties(Config) ->
+    Topic = <<"my/topic">>,
+    ClientId = Payload = atom_to_binary(?FUNCTION_NAME),
+    Sub1 = connect(ClientId, Config, [{properties, #{'Session-Expiry-Interval' => 60}}]),
+    {ok, _, [1]} = emqtt:subscribe(Sub1, Topic, qos1),
+    ok = emqtt:disconnect(Sub1),
+    C = connect(<<"will">>, Config,
+                [{properties, #{'Session-Expiry-Interval' => 2}},
+                 {will_props, #{'Will-Delay-Interval' => 2,
+                                'Message-Expiry-Interval' => 20}},
+                 {will_topic, Topic},
+                 {will_qos, 1},
+                 {will_payload, Payload}]),
+    ok = emqtt:disconnect(C, ?RC_DISCONNECT_WITH_WILL),
+    %% After 2 seconds, Will Message is published.
+    %% Wait for 2 more seconds to check the Message Expiry Interval sent to the client
+    %% is adjusted correctly.
+    timer:sleep(4000),
+    Sub2 = connect(ClientId, Config, [{clean_start, false}]),
+    receive {publish, #{client_pid := Sub2,
+                        topic := Topic,
+                        payload := Payload,
+                        properties := #{'Message-Expiry-Interval' := MEI}}} ->
+                %% Since the point in time the Message was published,
+                %% it has been waiting in the Server for 2 seconds to be consumed.
+                assert_message_expiry_interval(20 - 2, MEI)
+    after 300 -> ct:fail("did not receive Will Message")
+    end,
+    ok = emqtt:disconnect(Sub2).
+
+%% "In the case of a Server shutdown or failure, the Server MAY defer publication of Will Messages
+%% until a subsequent restart. If this happens, there might be a delay between the time the Server
+%% experienced failure and when the Will Message is published." [v5 3.1.2.5]
+%%
+%% This test ensures that if a server is drained, shut down, the delayed Will Message expires,
+%% and the server restarts, the delayed Will Message will still be published.
+%% Publishing delayed Will Messages for unclean server shutdowns is currently not supported.
+will_delay_node_restart(Config) ->
+    Topic = <<"my/topic">>,
+    Payload = <<"my-will">>,
+
+    Sub1a = connect(<<"sub1">>, Config, 0, [{properties, #{'Session-Expiry-Interval' => 900}}]),
+    {ok, _, [0]} = emqtt:subscribe(Sub1a, Topic),
+    Sub2 = connect(<<"sub2">>, Config, 1, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic),
+    WillDelaySecs = 10,
+    Ca = connect(<<"will">>, Config, 0,
+                 [{properties, #{'Session-Expiry-Interval' => 900}},
+                  {will_props, #{'Will-Delay-Interval' => WillDelaySecs}},
+                  {will_topic, Topic},
+                  {will_qos, 0},
+                  {will_payload, Payload}]),
+    unlink(Sub1a),
+    unlink(Ca),
+    T = erlang:monotonic_time(millisecond),
+    ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    ElapsedMs = erlang:monotonic_time(millisecond) - T,
+    SleepMs = max(0, timer:seconds(WillDelaySecs) - ElapsedMs),
+    ct:pal("Sleeping for ~b ms waiting for Will Message to expire while node 0 is down...", [SleepMs]),
+    timer:sleep(SleepMs),
+    assert_nothing_received(),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    %% After node 0 restarts, we should receive the Will Message promptly on both nodes 0 and 1.
+    receive {publish, #{client_pid := Sub2,
+                        payload := Payload}} -> ok
+    after 1000 -> ct:fail("did not receive Will Message on node 1")
+    end,
+    Sub1b = connect(<<"sub1">>, Config, 0, [{clean_start, false}]),
+    receive {publish, #{client_pid := Sub1b,
+                        payload := Payload}} -> ok
+    after 1000 -> ct:fail("did not receive Will Message on node 0")
+    end,
+
+    ok = emqtt:disconnect(Sub1b),
+    ok = emqtt:disconnect(Sub2),
+    Cb = connect(<<"will">>, Config),
+    ok = emqtt:disconnect(Cb).
+
 session_migrate_v3_v5(Config) ->
     session_switch_v3_v5(Config, true).
 
@@ -1156,61 +1462,46 @@ session_takeover_v3_v5(Config) ->
     session_switch_v3_v5(Config, false).
 
 session_switch_v3_v5(Config, Disconnect) ->
-    V5Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, mqtt_v5),
-    [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     %% Connect to old node in mixed version cluster.
-    C1 = connect(ClientId, Config, Server2, [{proto_ver, v3} | non_clean_sess_opts()]),
+    C1 = connect(ClientId, Config, 1, [{proto_ver, v3} | non_clean_sess_opts()]),
     ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(C1))),
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     case Disconnect of
         true -> ok = emqtt:disconnect(C1);
         false -> unlink(C1)
     end,
-    monitor(process, C1),
 
-    case V5Enabled of
-        true ->
-            %% Upgrade session from v3 to v5.
-            C2 = connect(ClientId, Config, Server1, [{proto_ver, v5} | non_clean_sess_opts()]),
-            ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(C2))),
-            %% Subscription created with old v3 client should work.
-            {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
-            receive {publish,
-                     #{client_pid := C2,
-                       payload := <<"m1">>,
-                       qos := 1}} -> ok
-            after 1000 -> ct:fail("did not receive from m1")
-            end,
-            %% Modifying subscription with v5 specific feature should work.
-            {ok, _, [1]} = emqtt:subscribe(C2, Topic, [{nl, true}, {qos, 1}]),
-            {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
-            receive {publish, P} -> ct:fail("Unexpected local PUBLISH: ~p", [P])
-            after 500 -> ok
-            end,
-            case Disconnect of
-                true -> ok = emqtt:disconnect(C2);
-                false -> unlink(C2)
-            end;
-        false ->
-            ok
+    %% Upgrade session from v3 to v5 (on new node in mixed version cluster).
+    C2 = connect(ClientId, Config, 0, [{proto_ver, v5} | non_clean_sess_opts()]),
+    ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(C2))),
+    %% Subscription created with old v3 client should work.
+    {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
+    receive {publish,
+             #{client_pid := C2,
+               payload := <<"m1">>,
+               qos := 1}} -> ok
+    after 1000 -> ct:fail("did not receive from m1")
+    end,
+    %% Modifying subscription with v5 specific feature should work.
+    {ok, _, [1]} = emqtt:subscribe(C2, Topic, [{nl, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
+    receive {publish, P} -> ct:fail("Unexpected local PUBLISH: ~p", [P])
+    after 500 -> ok
+    end,
+    case Disconnect of
+        true -> ok = emqtt:disconnect(C2);
+        false -> unlink(C2)
     end,
 
-    %% If feature flag mqtt_v5 is
-    %% * enabled: downgrade session from v5 to v3
-    %% * disabled: in mixed version cluster connect to new node using v3
-    C3 = connect(ClientId, Config, Server1, [{proto_ver, v3} | non_clean_sess_opts()]),
+    %% Downgrade session from v5 to v3.
+    C3 = connect(ClientId, Config, 0, [{proto_ver, v3} | non_clean_sess_opts()]),
     ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(C3))),
-    receive {'DOWN', _, _, C1, _} -> ok
-    after 1000 -> ct:fail("C1 did not exit")
-    end,
-    case {Disconnect, V5Enabled} of
-        {false, true} ->
-            receive {disconnected, _RcSessionTakenOver = 142, #{}} -> ok
-            after 1000 -> ct:fail("missing DISCONNECT packet for C2")
-            end;
-        _ ->
-            ok
+    case Disconnect of
+        true -> ok;
+        false -> receive {disconnected, ?RC_SESSION_TAKEN_OVER, #{}} -> ok
+                 after 1000 -> ct:fail("missing DISCONNECT packet for C2")
+                 end
     end,
     %% We expect that v5 specific subscription feature does not apply
     %% anymore when downgrading the session.
@@ -1237,7 +1528,7 @@ session_switch_v3_v5(Config, Disconnect) ->
     assert_nothing_received(),
 
     ok = emqtt:disconnect(C3),
-    C4 = connect(ClientId, Config, Server1, [{proto_ver, v3}, {clean_start, true}]),
+    C4 = connect(ClientId, Config, 0, [{proto_ver, v3}, {clean_start, true}]),
     ok = emqtt:disconnect(C4),
     eventually(?_assertEqual([], all_connection_pids(Config))).
 
@@ -1269,6 +1560,9 @@ dead_letter_metric(Metric, Config, Strategy) ->
     maps:get(Metric, Map).
 
 assert_nothing_received() ->
+    assert_nothing_received(500).
+
+assert_nothing_received(Timeout) ->
     receive Unexpected -> ct:fail("Received unexpected message: ~p", [Unexpected])
-    after 500 -> ok
+    after Timeout -> ok
     end.

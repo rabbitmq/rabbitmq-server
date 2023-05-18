@@ -137,8 +137,8 @@ websocket_info({bump_credit, Msg}, State) ->
     handle_credits(State);
 websocket_info({reply, Data}, State) ->
     {[{binary, Data}], State, hibernate};
-websocket_info({stop, CloseCode, Error}, State) ->
-    stop(State, CloseCode, Error);
+websocket_info({stop, CloseCode, Error, SendWill}, State) ->
+    stop({SendWill, State}, CloseCode, Error);
 websocket_info({'EXIT', _, _}, State) ->
     stop(State);
 websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
@@ -151,12 +151,17 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                        [State#state.conn_name, Reason]),
             stop(State#state{proc_state = PState})
     end;
-websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
-                                                            conn_name = ConnName }) ->
+websocket_info({'$gen_cast', duplicate_id}, State) ->
+    %% Delete this backward compatibility clause when feature flag
+    %% delete_ra_cluster_mqtt_node becomes required.
+    websocket_info({'$gen_cast', {duplicate_id, true}}, State);
+websocket_info({'$gen_cast', {duplicate_id, SendWill}},
+               State = #state{proc_state = ProcState,
+                              conn_name = ConnName}) ->
     ?LOG_WARNING("Web MQTT disconnecting a client with duplicate ID '~s' (~p)",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, ProcState),
-    defer_close(?CLOSE_NORMAL),
+    defer_close(?CLOSE_NORMAL, SendWill),
     {[], State};
 websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
                                                                           conn_name = ConnName }) ->
@@ -235,7 +240,7 @@ terminate(_Reason, _Request,
             ok;
         _ ->
             Infos = infos(?EVENT_KEYS, State),
-            rabbit_mqtt_processor:terminate(SendWill, ConnName, Infos, PState)
+            rabbit_mqtt_processor:terminate(SendWill, Infos, PState)
     end.
 
 %% Internal.
@@ -277,8 +282,9 @@ handle_data1(Data, State = #state{socket = Socket,
                                                 proc_state = ProcState1});
                         {error, Reason} ->
                             ?LOG_ERROR("Rejected Web MQTT connection ~ts: ~p", [ConnName, Reason]),
-                            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, connect_packet_rejected},
-                            {[], {_SendWill = false, State}}
+                            self() ! {stop, ?CLOSE_PROTOCOL_ERROR, connect_packet_rejected,
+                                      _SendWill = false},
+                            {[], State}
                     end;
                 _ ->
                     case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
@@ -292,8 +298,8 @@ handle_data1(Data, State = #state{socket = Socket,
                         {stop, {disconnect, server_initiated}, _} ->
                             defer_close(?CLOSE_PROTOCOL_ERROR),
                             {[], State};
-                        {stop, {disconnect, client_initiated}, ProcState1} ->
-                            stop({_SendWill = false, State#state{proc_state = ProcState1}})
+                        {stop, {disconnect, {client_initiated, SendWill}}, ProcState1} ->
+                            stop({SendWill, State#state{proc_state = ProcState1}})
                     end
             end;
         {error, {disconnect_reason_code, ReasonCode}} ->
@@ -311,7 +317,10 @@ handle_data1(Data, State = #state{socket = Socket,
 
 %% Allow DISCONNECT packet to be sent to client before closing the connection.
 defer_close(CloseStatusCode) ->
-    self() ! {stop, CloseStatusCode, server_initiated_disconnect},
+    defer_close(CloseStatusCode, true).
+
+defer_close(CloseStatusCode, SendWill) ->
+    self() ! {stop, CloseStatusCode, server_initiated_disconnect, SendWill},
     ok.
 
 stop_mqtt_protocol_error(State, Reason, ConnName) ->

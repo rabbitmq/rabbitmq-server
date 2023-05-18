@@ -138,12 +138,9 @@ await_exit(Pid, Reason) ->
 maybe_skip_v5(Config) ->
     case ?config(mqtt_version, Config) of
         v5 ->
-            case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, mqtt_v5) of
-                true ->
-                    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
-                    Config;
-                false ->
-                    {skip, "Feature flag mqtt_v5 is not supported by the entire cluster"}
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5) of
+                ok -> Config;
+                {skip, _} = Skip -> Skip
             end;
         _ ->
             Config
