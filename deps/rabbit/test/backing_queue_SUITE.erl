@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+ % This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -43,8 +43,6 @@
     bq_queue_index,
     bq_queue_index_props,
     {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
-    {variable_queue_lazy, [parallel], ?VARIABLE_QUEUE_TESTCASES ++
-                                      [variable_queue_mode_change]},
     bq_variable_queue_delete_msg_store_files_callback,
     bq_queue_recover
   ]).
@@ -142,8 +140,6 @@ init_per_group1(backing_queue_embed_limit_1024, Config) ->
     Config;
 init_per_group1(variable_queue_default, Config) ->
     rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
-init_per_group1(variable_queue_lazy, Config) ->
-    rabbit_ct_helpers:set_config(Config, {variable_queue_type, lazy});
 %% @todo These groups are no longer used?
 init_per_group1(from_cluster_node1, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {0, 1}});
