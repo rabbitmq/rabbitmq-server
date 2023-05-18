@@ -225,9 +225,6 @@ var HELP = {
     'queue-max-age':
       'Sets the data retention for stream queues in time units </br>(Y=Years, M=Months, D=Days, h=hours, m=minutes, s=seconds).<br/>E.g. "1h" configures the stream to only keep the last 1 hour of received messages.</br></br>(Sets the x-max-age argument.)',
 
-    'queue-lazy':
-      'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',
-
     'queue-version':
       'Set the queue version. Defaults to version 1.<br/>Version 1 has a journal-based index that embeds small messages.<br/>Version 2 has a different index which improves memory usage and performance in many scenarios, as well as a per-queue store for messages that were previously embedded.<br/>(Sets the "x-queue-version" argument.)',
 
