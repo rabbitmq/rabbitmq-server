@@ -1196,8 +1196,8 @@ maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
 ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username = Username}}}) ->
     case get_queue(QoS, State) of
-        {ok, Q} ->
-            {ok, Q};
+        {ok, _Q} = Ok ->
+            Ok;
         {error, {resource_locked, Q}} ->
             QName = amqqueue:get_name(Q),
             ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
@@ -1227,7 +1227,7 @@ create_queue(
                     rabbit_core_metrics:queue_declared(QName),
                     QArgs = queue_args(QoS, SessionExpiry),
                     Q0 = amqqueue:new(QName,
-                                      self(),
+                                      none,
                                       _Durable = true,
                                       _AutoDelete = false,
                                       queue_owner(SessionExpiry),
