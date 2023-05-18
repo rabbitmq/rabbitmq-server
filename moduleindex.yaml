@@ -588,6 +588,7 @@ rabbit:
 - rabbit_nodes
 - rabbit_observer_cli
 - rabbit_observer_cli_classic_queues
+- rabbit_observer_cli_quorum_queues
 - rabbit_osiris_metrics
 - rabbit_parameter_validation
 - rabbit_peer_discovery
