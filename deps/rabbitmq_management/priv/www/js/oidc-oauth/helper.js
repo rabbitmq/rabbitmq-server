@@ -19,7 +19,19 @@ function oauth_initialize_if_required() {
 
 }
 
+<<<<<<< HEAD
 
+=======
+function rabbit_base_uri() {
+  return window.location.protocol + "//" + window.location.hostname + rabbit_port() + rabbit_path_prefix()
+}
+function rabbit_path_prefix() {
+  return window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "");
+}
+function rabbit_port() {
+  return window.location.port ? ":" +  window.location.port : "";
+}
+>>>>>>> 1022f7d197 (Do not mount route to pages)
 function auth_settings_apply_defaults(authSettings) {
   if (authSettings.enable_uaa == "true") {
 
@@ -162,15 +174,15 @@ function oauth_redirectToHome(oauth) {
   go_to_home()
 }
 function go_to_home() {
-  location.href = rabbit_path_prefix + "/"
+  location.href = rabbit_path_prefix() + "/"
 }
 function go_to_authority() {
   location.href = oauth.authority
 }
 function oauth_redirectToLogin(error) {
-  if (!error) location.href = rabbit_path_prefix + "/"
+  if (!error) location.href = rabbit_path_prefix() + "/"
   else {
-    location.href = rabbit_path_prefix + "/?error=" + error
+    location.href = rabbit_path_prefix() + "/?error=" + error
   }
 }
 function oauth_completeLogin() {

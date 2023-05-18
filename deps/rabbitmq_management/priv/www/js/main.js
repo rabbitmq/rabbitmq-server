@@ -360,13 +360,15 @@ function update_navigation() {
         var selected = false;
         if (contains_current_highlight(val)) {
             selected = true;
-            if (!leaf(val)) {
-                descend = nav(val);
+            if (!leaf(val) && val[2] && ac.canAccessVhosts()) {
+                descend = nav(val)
             }
         }
         if (show(path)) {
+          if (val.length < 3 || ( val[2] && ac.canAccessVhosts() )) {
             l1 += '<li><a href="' + nav(path) + '"' +
-                (selected ? ' class="selected"' : '') + '>' + k + '</a></li>';
+                (selected ? ' class="selected"' : '') + '>' + k + '</a></li>'
+          }
         }
     }
 
@@ -387,7 +389,12 @@ function nav(pair) {
 }
 
 function show(pair) {
-    return jQuery.inArray(pair[1], user_tags) != -1;
+    var hasUserTag = jQuery.inArray(pair[1], user_tags) != -1
+    if (pair.length > 2 && pair[2]) {
+      return hasUserTag && ac.canAccessVhosts()
+    } else {
+      return hasUserTag
+    }
 }
 
 function leaf(pair) {
