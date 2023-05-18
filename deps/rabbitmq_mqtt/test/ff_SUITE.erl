@@ -27,9 +27,12 @@ all() ->
 
 groups() ->
     [
-     {cluster_size_3, [shuffle], [delete_ra_cluster_mqtt_node,
-                                  rabbit_mqtt_qos0_queue,
-                                  mqtt_v5]}
+     {cluster_size_3, [],
+      [rabbit_mqtt_qos0_queue,
+       %% delete_ra_cluster_mqtt_node must run before mqtt_v5
+       %% because the latter depends on (i.e. auto-enables) the former.
+       delete_ra_cluster_mqtt_node,
+       mqtt_v5]}
     ].
 
 suite() ->

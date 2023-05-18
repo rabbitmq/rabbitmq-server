@@ -107,13 +107,18 @@ handle_call({info, InfoItems}, _From, State) ->
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
 
-handle_cast(duplicate_id,
-            State = #state{ proc_state = PState,
-                            conn_name  = ConnName }) ->
+%% Delete this backward compatibility clause when feature flag
+%% delete_ra_cluster_mqtt_node becomes required.
+handle_cast(duplicate_id, State) ->
+    handle_cast({duplicate_id, true}, State);
+
+handle_cast({duplicate_id, SendWill},
+            State = #state{proc_state = PState,
+                           conn_name = ConnName}) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with duplicate id '~ts'",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, PState),
-    {stop, {shutdown, duplicate_id}, State};
+    {stop, {shutdown, duplicate_id}, {SendWill, State}};
 
 handle_cast(decommission_node,
             State = #state{ proc_state = PState,
@@ -257,8 +262,7 @@ handle_info(Msg, State) ->
 
 terminate(Reason, State = #state{}) ->
     terminate(Reason, {true, State});
-terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
-                                            keepalive = KState0,
+terminate(Reason, {SendWill, State = #state{keepalive = KState0,
                                             proc_state = PState}}) ->
     KState = rabbit_mqtt_keepalive:cancel_timer(KState0),
     maybe_emit_stats(State#state{keepalive = KState}),
@@ -267,7 +271,7 @@ terminate(Reason, {SendWill, State = #state{conn_name = ConnName,
             ok;
         _ ->
             Infos = infos(?EVENT_KEYS, State),
-            rabbit_mqtt_processor:terminate(SendWill, ConnName, Infos, PState)
+            rabbit_mqtt_processor:terminate(SendWill, Infos, PState)
     end,
     log_terminate(Reason, State).
 
@@ -367,8 +371,8 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                         {stop, {disconnect, server_initiated} = Reason, ProcState1} ->
                             ?LOG_ERROR("MQTT protocol error on connection ~ts: ~tp", [ConnName, Reason]),
                             {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                        {stop, {disconnect, client_initiated}, ProcState1} ->
-                            {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
+                        {stop, {disconnect, {client_initiated, SendWill}}, ProcState1} ->
+                            {stop, normal, {SendWill, pstate(State, ProcState1)}}
                     end
             end;
         {error, {disconnect_reason_code, ReasonCode} = Reason} ->

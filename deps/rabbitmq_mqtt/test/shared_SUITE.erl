@@ -138,7 +138,9 @@ cluster_size_3_tests() ->
      delete_create_queue,
      publish_to_all_queue_types_qos0,
      publish_to_all_queue_types_qos1,
-     duplicate_client_id
+     duplicate_client_id,
+     session_reconnect,
+     session_takeover
     ].
 
 suite() ->
@@ -291,14 +293,12 @@ will_without_disconnect(Config) ->
             {will_payload, LastWillMsg},
             {will_qos, 1}],
     Pub = connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_publisher">>, Config, Opts),
-    timer:sleep(100),
-    [ServerPublisherPid] = all_connection_pids(Config),
     Sub = connect(<<(atom_to_binary(?FUNCTION_NAME))/binary, "_subscriber">>, Config),
     {ok, _, [1]} = emqtt:subscribe(Sub, LastWillTopic, qos1),
 
     %% Client does not send DISCONNECT packet. Therefore, will message should be sent.
     unlink(Pub),
-    erlang:exit(ServerPublisherPid, test_will),
+    erlang:exit(Pub, test_will),
     ?assertEqual(ok, expect_publishes(Sub, LastWillTopic, [LastWillMsg])),
 
     ok = emqtt:disconnect(Sub).
@@ -843,8 +843,8 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
                  get_global_counters(Config)),
 
     ok = emqtt:disconnect(C1),
-    ?assertMatch(#{consumers := 0},
-                 get_global_counters(Config)),
+    eventually(?_assertMatch(#{consumers := 0},
+                             get_global_counters(Config))),
 
     timer:sleep(20),
     ok = emqtt:publish(Pub, Topic, <<"msg-3-qos0">>, qos0),
@@ -1174,7 +1174,7 @@ keepalive(Config) ->
     %% We expect the server to respect the keepalive closing the connection.
     eventually(?_assertMatch(#{publishers := 0},
                              util:get_global_counters(Config)),
-               KeepaliveMs, 3 * KeepaliveSecs),
+               KeepaliveMs, 4 * KeepaliveSecs),
 
     await_exit(C1),
     assert_v5_disconnect_reason_code(Config, ?RC_KEEP_ALIVE_TIMEOUT),
@@ -1213,19 +1213,65 @@ keepalive_turned_off(Config) ->
 
 duplicate_client_id(Config) ->
     [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    DuplicateClientId = ?FUNCTION_NAME,
-    %% Connect to old node in mixed version cluster.
-    C1 = connect(DuplicateClientId, Config, Server2, []),
-    eventually(?_assertEqual(1, length(all_connection_pids(Config)))),
+    %% Test session takeover by both new and old node in mixed version clusters.
+    ClientId1 = <<"c1">>,
+    ClientId2 = <<"c2">>,
+    C1a = connect(ClientId1, Config, Server2, []),
+    C2a = connect(ClientId2, Config, Server1, []),
+    eventually(?_assertEqual(2, length(all_connection_pids(Config)))),
     process_flag(trap_exit, true),
-    %% Connect to new node in mixed version cluster.
-    C2 = connect(DuplicateClientId, Config, Server1, []),
+    C1b = connect(ClientId1, Config, Server1, []),
+    C2b = connect(ClientId2, Config, Server2, []),
     assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER),
-    await_exit(C1),
+    assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER),
+    await_exit(C1a),
+    await_exit(C2a),
     timer:sleep(200),
-    ?assertEqual(1, length(all_connection_pids(Config))),
-    ok = emqtt:disconnect(C2),
+    ?assertEqual(2, length(all_connection_pids(Config))),
+    ok = emqtt:disconnect(C1b),
+    ok = emqtt:disconnect(C2b),
     eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
+
+session_reconnect(Config) ->
+    session_switch(Config, true).
+
+session_takeover(Config) ->
+    session_switch(Config, false).
+
+session_switch(Config, Disconnect) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    %% Connect to old node in mixed version cluster.
+    C1 = connect(ClientId, Config, 1, [non_clean_sess_opts()]),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    case Disconnect of
+        true -> ok = emqtt:disconnect(C1);
+        false -> unlink(C1)
+    end,
+    %% Connect to new node in mixed version cluster.
+    C2 = connect(ClientId, Config, 0, [non_clean_sess_opts()]),
+    case Disconnect of
+        true -> ok;
+        false -> assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER)
+    end,
+    %% New connection should be able to modify subscription.
+    {ok, _, [0]} = emqtt:subscribe(C2, Topic, qos0),
+    {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
+    receive {publish, #{client_pid := C2,
+                        payload := <<"m1">>,
+                        qos := 0}} -> ok
+    after 1000 -> ct:fail("did not receive m1 with QoS 0")
+    end,
+    %% New connection should be able to unsubscribe.
+    ?assertMatch({ok, _, _}, emqtt:unsubscribe(C2, Topic)),
+    {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 300 -> ok
+    end,
+
+    ok = emqtt:disconnect(C2),
+    C3 = connect(ClientId, Config, 0, [{clean_start, true}]),
+    ok = emqtt:disconnect(C3),
+    eventually(?_assertEqual([], all_connection_pids(Config))).
 
 block(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),

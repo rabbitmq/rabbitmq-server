@@ -7,7 +7,7 @@
 
 -record(resource, {
     virtual_host,
-    %% exchange, queue, ...
+    %% exchange, queue, topic
     kind,
     %% name as a binary
     name

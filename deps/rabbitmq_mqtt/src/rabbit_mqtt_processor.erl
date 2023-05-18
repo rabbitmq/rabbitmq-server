@@ -4,17 +4,16 @@
 %%
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
-
-%% This module contains code that is common to MQTT and Web MQTT connections.
 -module(rabbit_mqtt_processor).
 
 -feature(maybe_expr, enable).
 
 -export([info/2, init/4, process_packet/2,
-         terminate/4, handle_pre_hibernate/0,
+         terminate/3, handle_pre_hibernate/0,
          handle_ra_event/2, handle_down/2, handle_queue_event/2,
          proto_version_tuple/1, throttle/2, format_status/1,
          remove_duplicate_client_id_connections/2,
+         remove_duplicate_client_id_connections/3,
          update_trace/2, send_disconnect/2]).
 
 -ifdef(TEST).
@@ -98,7 +97,7 @@
 
 -opaque state() :: #state{}.
 
-%% NB: If init/4 returns an error, it must clean up itself because terminate/4 will not be called.
+%% NB: If init/4 returns an error, it must clean up itself because terminate/3 will not be called.
 -spec init(ConnectPacket :: mqtt_packet(),
            RawSocket :: rabbit_net:socket(),
            ConnectionName :: binary(),
@@ -125,7 +124,8 @@ process_connect(
      clean_start = CleanStart,
      client_id  = ClientId0,
      keep_alive = KeepaliveSecs,
-     props = ConnectProps} = Packet,
+     props = ConnectProps,
+     will_props = WillProps} = Packet,
   Socket, ConnName0, SendFun, {PeerIp, PeerPort, Ip, Port}) ->
     ?LOG_DEBUG("Received a CONNECT, client ID: ~s, username: ~s, clean start: ~s, "
                "protocol version: ~p, keepalive: ~p, property names: ~p",
@@ -181,36 +181,37 @@ process_connect(
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
-        {ok, RaRegisterState} ?= register_client_id(VHost, ClientId),
+        {ok, RaRegisterState} ?= register_client_id(VHost, ClientId, CleanStart, WillProps),
         {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
-        {ok,
-         #state{
-            cfg = #cfg{socket = Socket,
-                       proto_ver = proto_integer_to_atom(ProtoVer),
-                       clean_start = CleanStart,
-                       session_expiry_interval_secs = SessionExpiry,
-                       ssl_login_name = SslLoginName,
-                       delivery_flow = Flow,
-                       trace_state = TraceState,
-                       prefetch = prefetch(ConnectProps),
-                       conn_name = ConnName,
-                       ip_addr = Ip,
-                       port = Port,
-                       peer_ip_addr = PeerIp,
-                       peer_port = PeerPort,
-                       send_fun = SendFun,
-                       exchange = rabbit_misc:r(VHost, exchange, rabbit_mqtt_util:env(exchange)),
-                       retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
-                       vhost = VHost,
-                       client_id = ClientId,
-                       will_msg = WillMsg,
-                       max_packet_size = MaxPacketSize},
-            auth_state = #auth_state{
-                            user = User,
-                            authz_ctx = AuthzCtx},
-            ra_register_state = RaRegisterState}}
+        S = #state{
+               cfg = #cfg{socket = Socket,
+                          proto_ver = proto_integer_to_atom(ProtoVer),
+                          clean_start = CleanStart,
+                          session_expiry_interval_secs = SessionExpiry,
+                          ssl_login_name = SslLoginName,
+                          delivery_flow = Flow,
+                          trace_state = TraceState,
+                          prefetch = prefetch(ConnectProps),
+                          conn_name = ConnName,
+                          ip_addr = Ip,
+                          port = Port,
+                          peer_ip_addr = PeerIp,
+                          peer_port = PeerPort,
+                          send_fun = SendFun,
+                          exchange = rabbit_misc:r(VHost, exchange, rabbit_mqtt_util:env(exchange)),
+                          retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
+                          vhost = VHost,
+                          client_id = ClientId,
+                          will_msg = WillMsg,
+                          max_packet_size = MaxPacketSize},
+               auth_state = #auth_state{
+                               user = User,
+                               authz_ctx = AuthzCtx},
+               ra_register_state = RaRegisterState},
+        ok ?= clear_will_msg(S),
+        {ok, S}
     end,
     Result = case Result0 of
                  {ok, State0 = #state{}} ->
@@ -309,7 +310,7 @@ process_connect(State0) ->
 
 -spec process_packet(mqtt_packet(), state()) ->
     {ok, state()} |
-    {stop, {disconnect, client_initiated | server_initiated}, state()} |
+    {stop, {disconnect, {client_initiated, SendWill :: boolean()} | server_initiated}, state()} |
     {error, Reason :: term(), state()}.
 process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
                State = #state{auth_state = #auth_state{}})
@@ -318,7 +319,7 @@ process_packet(Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = Type}},
 
 -spec process_request(packet_type(), mqtt_packet(), state()) ->
     {ok, state()} |
-    {stop, {disconnect, client_initiated | server_initiated}, state()} |
+    {stop, {disconnect, {client_initiated, SendWill :: boolean()} | server_initiated}, state()} |
     {error, Reason :: term(), state()}.
 process_request(?PUBACK,
                 #mqtt_packet{variable = #mqtt_packet_puback{packet_id = PacketId,
@@ -513,9 +514,6 @@ process_request(?PINGREQ, #mqtt_packet{}, State = #state{cfg = #cfg{client_id = 
     ?LOG_DEBUG("Sent a PINGRESP to client ID ~s", [ClientId]),
     {ok, State};
 
-%%TODO Check ReasonCode whether to publish a will message:
-%% "If the Network Connection is closed without the Client first sending a DISCONNECT packet with Reason
-%% Code 0x00 (Normal disconnection) and the Connection has a Will Message, the Will Message is published."
 process_request(?DISCONNECT,
                 #mqtt_packet{variable = #mqtt_packet_disconnect{reason_code = Rc,
                                                                 props = Props}},
@@ -559,7 +557,10 @@ process_request(?DISCONNECT,
                           end, existing_queue_names(State0)),
             State0#state{cfg = Cfg#cfg{session_expiry_interval_secs = NewSEI}}
     end,
-    {stop, {disconnect, client_initiated}, State}.
+    %% "If the Network Connection is closed without the Client first sending a DISCONNECT packet with Reason
+    %% Code 0x00 (Normal disconnection) [...] the Will Message is published." [v5 3.14]
+    SendWill = Rc > ?RC_NORMAL_DISCONNECTION,
+    {stop, {disconnect, {client_initiated, SendWill}}, State}.
 
 -spec maybe_update_session_expiry_interval(amqqueue:amqqueue(), session_expiry_interval()) -> ok.
 maybe_update_session_expiry_interval(Queue, Expiry) ->
@@ -639,10 +640,10 @@ ensure_client_id(ClientId, _, _)
   when is_binary(ClientId) ->
     {ok, ClientId}.
 
--spec register_client_id(rabbit_types:vhost(), binary()) ->
+-spec register_client_id(rabbit_types:vhost(), binary(), boolean(), properties()) ->
     {ok, RaRegisterState :: undefined | {pending, reference()}} |
     {error, ConnectErrorCode :: pos_integer()}.
-register_client_id(VHost, ClientId)
+register_client_id(VHost, ClientId, CleanStart, WillProps)
   when is_binary(VHost), is_binary(ClientId) ->
     %% Always register client ID in pg.
     PgGroup = {VHost, ClientId},
@@ -661,20 +662,38 @@ register_client_id(VHost, ClientId)
                     {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
             end;
         false ->
+            %% "If a Network Connection uses a Client Identifier of an existing Network Connection to
+            %% the Server, the Will Message for the exiting connection is sent unless the new
+            %% connection specifies Clean Start of 0 and the Will Delay is greater than zero."
+            %% [v5 3.1.3.2.2]
+            Args = case {CleanStart, WillProps} of
+                       {false, #{'Will-Delay-Interval' := I}} when I > 0 ->
+                           [PgGroup, self(), false];
+                       _ ->
+                           [PgGroup, self()]
+                   end,
             ok = erpc:multicast([node() | nodes()],
                                 ?MODULE,
                                 remove_duplicate_client_id_connections,
-                                [PgGroup, self()]),
+                                Args),
             {ok, undefined}
     end.
 
--spec remove_duplicate_client_id_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
+%% Once feature flag mqtt_v5 becomes required, the caller should always pass SendWill to this
+%% function (remove_duplicate_client_id_connections/2) so that we can delete this function.
+-spec remove_duplicate_client_id_connections(
+        {rabbit_types:vhost(), binary()}, pid()) -> ok.
 remove_duplicate_client_id_connections(PgGroup, PidToKeep) ->
+    remove_duplicate_client_id_connections(PgGroup, PidToKeep, true).
+
+-spec remove_duplicate_client_id_connections(
+        {rabbit_types:vhost(), binary()}, pid(), boolean()) -> ok.
+remove_duplicate_client_id_connections(PgGroup, PidToKeep, SendWill) ->
     try persistent_term:get(?PG_SCOPE) of
         PgScope ->
             Pids = pg:get_local_members(PgScope, PgGroup),
             lists:foreach(fun(Pid) ->
-                                  gen_server:cast(Pid, duplicate_id)
+                                  gen_server:cast(Pid, {duplicate_id, SendWill})
                           end, Pids -- [PidToKeep])
     catch _:badarg ->
               %% MQTT supervision tree on this node not fully started
@@ -719,11 +738,7 @@ handle_clean_start_qos0(State) ->
 handle_clean_start_qos1(QoS0SessPresent, State) ->
     handle_clean_start(QoS0SessPresent, ?QOS_1, State).
 
-handle_clean_start(
-  _, QoS,
-  State = #state{cfg = #cfg{clean_start = true},
-                 auth_state = #auth_state{user = User = #user{username = Username},
-                                          authz_ctx = AuthzCtx}}) ->
+handle_clean_start(_, QoS, State = #state{cfg = #cfg{clean_start = true}}) ->
     %% "If the Server accepts a connection with CleanSession set to 1, the Server
     %% MUST set Session Present to 0 in the CONNACK packet [MQTT-3.2.2-1].
     SessPresent = false,
@@ -732,10 +747,8 @@ handle_clean_start(
             {ok, SessPresent, State};
         {ok, Q0} ->
             QName = amqqueue:get_name(Q0),
-            %% configure access to queue required for queue.delete
-            case check_resource_access(User, QName, configure, AuthzCtx) of
+            case delete_queue(QName, State) of
                 ok ->
-                    delete_queue(QName, Username),
                     {ok, SessPresent, State};
                 {error, access_refused} ->
                     {error, ?RC_NOT_AUTHORIZED}
@@ -949,6 +962,15 @@ send_retained_message(TopicFilter0, SubscribeQos,
                         payload = Payload},
             _ = send(Packet, State),
             State
+    end.
+
+clear_will_msg(#state{cfg = #cfg{vhost = Vhost,
+                                 client_id = ClientId}} = State) ->
+    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, will),
+    QName = #resource{virtual_host = Vhost, kind = queue, name = QNameBin},
+    case delete_queue(QName, State) of
+        ok -> ok;
+        {error, access_refused} -> {error, ?RC_NOT_AUTHORIZED}
     end.
 
 make_will_msg(#mqtt_packet_connect{will_flag = false}) ->
@@ -1194,7 +1216,7 @@ maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
-ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username = Username}}}) ->
+ensure_queue(QoS, State) ->
     case get_queue(QoS, State) of
         {ok, _Q} = Ok ->
             Ok;
@@ -1202,57 +1224,80 @@ ensure_queue(QoS, State = #state{auth_state = #auth_state{user = #user{username 
             QName = amqqueue:get_name(Q),
             ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
                        [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
-            delete_queue(QName, Username),
-            create_queue(QoS, State);
+            case delete_queue(QName, State) of
+                ok ->
+                    create_queue(QoS, State);
+                {error, access_refused} = E ->
+                    E
+            end;
         {error, not_found} ->
             create_queue(QoS, State)
     end.
 
-create_queue(
-  QoS, #state{cfg = #cfg{
-                       vhost = VHost,
-                       client_id = ClientId,
-                       session_expiry_interval_secs = SessionExpiry},
-              auth_state = #auth_state{
-                              user = User = #user{username = Username},
-                              authz_ctx = AuthzCtx}
-             }) ->
-    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
+create_queue(Qos, State = #state{cfg = #cfg{session_expiry_interval_secs = SessionExpiry}}) ->
+    Owner = queue_owner(SessionExpiry),
+    Args = queue_args(Qos, SessionExpiry),
+    Type = queue_type(Qos, SessionExpiry, Args),
+    create_queue(Qos, Owner, Args, Type, State).
+
+create_queue(QNamePart, QOwner, QArgs, QType,
+             #state{cfg = #cfg{
+                             vhost = VHost,
+                             client_id = ClientId},
+                    auth_state = #auth_state{
+                                    user = User = #user{username = Username},
+                                    authz_ctx = AuthzCtx}
+                   }) ->
+    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QNamePart),
     QName = rabbit_misc:r(VHost, queue, QNameBin),
-    %% configure access to queue required for queue.declare
-    case check_resource_access(User, QName, configure, AuthzCtx) of
-        ok ->
-            case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-                false ->
-                    rabbit_core_metrics:queue_declared(QName),
-                    QArgs = queue_args(QoS, SessionExpiry),
-                    Q0 = amqqueue:new(QName,
-                                      none,
-                                      _Durable = true,
-                                      _AutoDelete = false,
-                                      queue_owner(SessionExpiry),
-                                      QArgs,
-                                      VHost,
-                                      #{user => Username},
-                                      queue_type(QoS, SessionExpiry, QArgs)
-                                     ),
-                    case rabbit_queue_type:declare(Q0, node()) of
-                        {new, Q} when ?is_amqqueue(Q) ->
-                            rabbit_core_metrics:queue_created(QName),
-                            {ok, Q};
-                        Other ->
-                            ?LOG_ERROR("Failed to declare ~s: ~p",
-                                       [rabbit_misc:rs(QName), Other]),
-                            {error, queue_declare}
-                    end;
-                {true, Limit} ->
-                    ?LOG_ERROR("cannot declare ~s because "
-                               "queue limit ~p in vhost '~s' is reached",
-                               [rabbit_misc:rs(QName), Limit, VHost]),
-                    {error, queue_limit_exceeded}
-            end;
-        {error, access_refused} = E ->
-            E
+    maybe
+        %% configure access to queue required for queue.declare
+        ok ?= check_resource_access(User, QName, configure, AuthzCtx),
+        ok ?= case rabbit_misc:table_lookup(QArgs, <<"x-dead-letter-exchange">>) of
+                  undefined ->
+                      ok;
+                  {longstr, XNameBin} ->
+                      %% with DLX requires additionally read access to queue
+                      %% and write access to DLX exchange
+                      case check_resource_access(User, QName, read, AuthzCtx) of
+                          ok ->
+                              XName = #resource{virtual_host = VHost,
+                                                kind = exchange,
+                                                name = XNameBin},
+                              check_resource_access(User, XName, write, AuthzCtx);
+                          Err0 -> Err0
+                      end
+              end,
+        case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+            false ->
+                rabbit_core_metrics:queue_declared(QName),
+                Q0 = amqqueue:new(QName,
+                                  none,
+                                  _Durable = true,
+                                  _AutoDelete = false,
+                                  QOwner,
+                                  QArgs,
+                                  VHost,
+                                  #{user => Username},
+                                  QType),
+                case rabbit_queue_type:declare(Q0, node()) of
+                    {new, Q} when ?is_amqqueue(Q) ->
+                        rabbit_core_metrics:queue_created(QName),
+                        {ok, Q};
+                    Other ->
+                        ?LOG_ERROR("Failed to declare ~s: ~p",
+                                   [rabbit_misc:rs(QName), Other]),
+                        {error, queue_declare}
+                end;
+            {true, Limit} ->
+                ?LOG_ERROR("cannot declare ~s because "
+                           "queue limit ~p in vhost '~s' is reached",
+                           [rabbit_misc:rs(QName), Limit, VHost]),
+                {error, queue_limit_exceeded}
+        end
+    else
+        {error, access_refused} = Err ->
+            Err
     end.
 
 -spec queue_owner(SessionExpiryInterval :: non_neg_integer()) ->
@@ -1269,16 +1314,19 @@ queue_owner(_) ->
 queue_args(_, 0) ->
     [];
 queue_args(QoS, SessionExpiry) ->
-    Args = case SessionExpiry of
-               infinity -> [];
-               Secs -> [{?QUEUE_TTL_KEY, long, timer:seconds(Secs)}]
-           end,
+    Args = queue_ttl_args(SessionExpiry),
     case {QoS, rabbit_mqtt_util:env(durable_queue_type)} of
         {?QOS_1, quorum} ->
             [{<<"x-queue-type">>, longstr, <<"quorum">>} | Args];
         _ ->
             Args
     end.
+
+queue_ttl_args(infinity) ->
+    [];
+queue_ttl_args(SessionExpirySecs)
+  when is_integer(SessionExpirySecs) andalso SessionExpirySecs > 0 ->
+    [{?QUEUE_TTL_KEY, long, timer:seconds(SessionExpirySecs)}].
 
 queue_type(?QOS_0, 0, QArgs) ->
     case rabbit_queue_type:is_enabled(?QUEUE_TYPE_QOS_0) of
@@ -1608,30 +1656,112 @@ send_disconnect(ReasonCode, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}} = Sta
 send_disconnect(_, _) ->
     ok.
 
--spec terminate(boolean(), binary(), rabbit_event:event_props(), state()) -> ok.
-terminate(SendWill, ConnName, Infos, State) ->
-    maybe_send_will(SendWill, ConnName, State),
+-spec terminate(boolean(), rabbit_event:event_props(), state()) -> ok.
+terminate(SendWill, Infos, State) ->
     rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
     unregister_client(State),
     maybe_decrement_consumer(State),
     maybe_decrement_publisher(State),
-    maybe_delete_mqtt_qos0_queue(State).
+    _ = maybe_delete_mqtt_qos0_queue(State),
+    maybe_send_will(SendWill, State).
 
--spec maybe_send_will(boolean(), binary(), state()) -> ok.
-maybe_send_will(true, ConnStr,
-                State = #state{cfg = #cfg{will_msg = WillMsg = #mqtt_msg{topic = Topic}}}) ->
+-spec maybe_send_will(boolean(), state()) -> ok.
+maybe_send_will(
+  true, #state{cfg = #cfg{will_msg = #mqtt_msg{
+                                        props = Props = #{'Will-Delay-Interval' := Delay},
+                                        retain = Retain,
+                                        qos = Qos,
+                                        topic = Topic,
+                                        payload = Payload},
+                          session_expiry_interval_secs = SessionExpiry,
+                          exchange = #resource{name = XName},
+                          client_id = ClientId,
+                          vhost = Vhost}} = State)
+  when is_integer(Delay) andalso Delay > 0 andalso SessionExpiry > 0 ->
+    QArgs0 = queue_ttl_args(SessionExpiry),
+    QArgs =  QArgs0 ++ [{<<"x-dead-letter-exchange">>, longstr, XName},
+                        {<<"x-dead-letter-routing-key">>, longstr, mqtt_to_amqp(Topic)}],
+    T = erlang:monotonic_time(millisecond),
+    case create_queue(will, none, QArgs, rabbit_queue_type:default(), State) of
+        {ok, Q} ->
+            #resource{name = QNameBin} = amqqueue:get_name(Q),
+            DefaultX = #resource{virtual_host = Vhost,
+                                 kind = exchange,
+                                 name = <<"">>},
+            %% "The Server delays publishing the Client’s Will Message until the Will Delay
+            %% Interval has passed or the Session ends, whichever happens first." [v5 3.1.3.2.2]
+            MsgTTLSecs = min(Delay, SessionExpiry),
+            MsgTTL0 = timer:seconds(MsgTTLSecs),
+            MsgTTL = if SessionExpiry =:= infinity ->
+                            MsgTTL0;
+                        is_integer(SessionExpiry) ->
+                            %% Queue creation could have taken several milliseconds.
+                            Elapsed = erlang:monotonic_time(millisecond) - T,
+                            SessionExpiryFromNow = timer:seconds(SessionExpiry) - Elapsed,
+                            %% Ensure the Will Message is dead lettered BEFORE the queue expires.
+                            %% 5 ms should be enough time to send out the Will Message.
+                            %% The important bit is that, in the queue implementation, the
+                            %% message expiry timer fires before the queue expiry timer.
+                            %% From MQTT client perspective, the granularity of defined intervals
+                            %% is seconds. So sending the Will Message a few milliseconds earlier
+                            %% doesn't matter from the client's point of view.
+                            %% However, we shouldn't send the Will Message too early because
+                            %% "The Client can arrange for the Will Message to notify that Session
+                            %% Expiry has occurred" [v5 3.1.2.5]
+                            %% So, we don't want to send out a false positive session expiry
+                            %% notification in case the client reconnects shortly after.
+                            Interval0 = SessionExpiryFromNow - 5,
+                            Interval = max(0, Interval0),
+                            min(MsgTTL0, Interval)
+                     end,
+            {Headers, Timestamp} = case Props of
+                                       #{'Message-Expiry-Interval' := ExpirySecs} ->
+                                           E = integer_to_binary(timer:seconds(ExpirySecs)),
+                                           {[{<<"x-dead-letter-expiration">>, longstr, E},
+                                             {<<"x-mqtt-will-delay-interval">>, long, Delay}],
+                                            os:system_time(second)};
+                                       _ ->
+                                           {[], undefined}
+                                   end,
+            PBasic = #'P_basic'{
+                        headers = Headers ++ [{<<"x-mqtt-publish-qos">>, byte, Qos},
+                                              {<<"x-mqtt-retain">>, bool, Retain}],
+                        %% Persist message regardless of Will QoS since there is no noticable
+                        %% performance benefit if that single message is transient. This ensures that
+                        %% delayed Will Messages are not lost after a broker restart.
+                        delivery_mode = 2,
+                        expiration = integer_to_binary(MsgTTL),
+                        timestamp = Timestamp},
+            case check_publish_permitted(DefaultX, Topic, State) of
+                ok ->
+                    ok = rabbit_basic:publish(DefaultX, QNameBin, PBasic, Payload),
+                    ?LOG_DEBUG("scheduled delayed Will Message to topic ~s for MQTT "
+                               "client ID ~s to be sent in ~b ms",
+                               [Topic, ClientId, MsgTTL]);
+                {error, access_refused = Reason} ->
+                    log_delayed_will_failure(Topic, ClientId, Reason)
+            end;
+        {error, Reason} ->
+            log_delayed_will_failure(Topic, ClientId, Reason)
+    end;
+maybe_send_will(true, State = #state{cfg = #cfg{will_msg = WillMsg = #mqtt_msg{topic = Topic},
+                                                client_id = ClientId}}) ->
     case publish_to_queues_with_checks(WillMsg, State) of
         {ok, _} ->
-            ?LOG_DEBUG("sent MQTT will message to topic ~s on connection ~s",
-                       [Topic, ConnStr]);
+            ?LOG_DEBUG("sent Will Message to topic ~s for MQTT client ID ~s",
+                       [Topic, ClientId]);
         {error, Reason, _} ->
-            ?LOG_DEBUG("failed to send MQTT will message to topic ~s on connection ~s: ~p",
-                       [Topic, ConnStr, Reason])
+            ?LOG_DEBUG("failed to send Will Message to topic ~s for MQTT client ID ~s: ~p",
+                       [Topic, ClientId, Reason])
     end;
-maybe_send_will(_, _, _) ->
+maybe_send_will(_, _) ->
     ok.
+
+log_delayed_will_failure(Topic, ClientId, Reason) ->
+    ?LOG_DEBUG("failed to schedule delayed Will Message to topic ~s for MQTT client ID ~s: ~p",
+               [Topic, ClientId, Reason]).
 
 unregister_client(#state{cfg = #cfg{client_id = ClientIdBin}}) ->
     case rabbit_mqtt_ff:track_client_id_in_ra() of
@@ -1661,21 +1791,37 @@ maybe_delete_mqtt_qos0_queue(
 maybe_delete_mqtt_qos0_queue(_) ->
     ok.
 
-delete_queue(QName, Username) ->
-    rabbit_amqqueue:with(
-      QName,
-      fun (Q) ->
-              rabbit_queue_type:delete(Q, false, false, Username)
-      end,
-      fun (not_found) ->
-              ok;
-          ({absent, Q, crashed}) ->
-              rabbit_classic_queue:delete_crashed(Q, Username);
-          ({absent, Q, stopped}) ->
-              rabbit_classic_queue:delete_crashed(Q, Username);
-          ({absent, _Q, _Reason}) ->
-              ok
-      end).
+-spec delete_queue(rabbit_amqqueue:name(), state()) ->
+    ok | {error, access_refused}.
+delete_queue(QName,
+             #state{auth_state = #auth_state{
+                                    user = User = #user{username = Username},
+                                    authz_ctx = AuthzCtx}}) ->
+    %% configure access to queue required for queue.delete
+    case check_resource_access(User, QName, configure, AuthzCtx) of
+        ok ->
+            case rabbit_amqqueue:with(
+                   QName,
+                   fun (Q) ->
+                           rabbit_queue_type:delete(Q, false, false, Username)
+                   end,
+                   fun (not_found) ->
+                           ok;
+                       ({absent, Q, crashed}) ->
+                           rabbit_classic_queue:delete_crashed(Q, Username);
+                       ({absent, Q, stopped}) ->
+                           rabbit_classic_queue:delete_crashed(Q, Username);
+                       ({absent, _Q, _Reason}) ->
+                           ok
+                   end) of
+                {ok, _N} ->
+                    ok;
+                ok ->
+                    ok
+            end;
+        {error, access_refused} = E ->
+            E
+    end.
 
 -spec handle_pre_hibernate() -> ok.
 handle_pre_hibernate() ->
@@ -1914,7 +2060,14 @@ p_basic_to_publish_properties(#'P_basic'{headers = Headers,
             %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
             %% Expiry Interval set to the received value minus the time that the
             %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-            WaitingSeconds = os:system_time(second) - TimestampSeconds,
+            WaitingSeconds0 = os:system_time(second) - TimestampSeconds,
+            %% For a delayed Will Message, the waiting time starts when the Will Message was published.
+            WaitingSeconds = case rabbit_basic:header(<<"x-mqtt-will-delay-interval">>, Headers) of
+                                 {<<"x-mqtt-will-delay-interval">>, long, Delay} ->
+                                     WaitingSeconds0 - Delay;
+                                 _ ->
+                                     WaitingSeconds0
+                             end,
             Expiry = max(0, ExpirationSeconds - WaitingSeconds),
             #{'Message-Expiry-Interval' => Expiry};
         false ->
@@ -2024,30 +2177,34 @@ publish_to_queues_with_checks(
   Msg = #mqtt_msg{topic = Topic,
                   retain = Retain},
   State = #state{cfg = #cfg{exchange = Exchange,
-                            retainer_pid = RPid},
-                 auth_state = #auth_state{user = User,
-                                          authz_ctx = AuthzCtx}}) ->
-    case check_resource_access(User, Exchange, write, AuthzCtx) of
+                            retainer_pid = RPid}}) ->
+    case check_publish_permitted(Exchange, Topic, State) of
         ok ->
-            case check_topic_access(Topic, write, State) of
-                ok ->
-                    case publish_to_queues(Msg, State) of
-                        {ok, _} = Ok ->
-                            case Retain of
-                                false ->
-                                    ok;
-                                true ->
-                                    hand_off_to_retainer(RPid, Topic, Msg)
-                            end,
-                            Ok;
-                        Error ->
-                            Error
-                    end;
-                {error, access_refused} ->
-                    {error, access_refused, State}
+            case publish_to_queues(Msg, State) of
+                {ok, _} = Ok ->
+                    case Retain of
+                        false ->
+                            ok;
+                        true ->
+                            hand_off_to_retainer(RPid, Topic, Msg)
+                    end,
+                    Ok;
+                Error ->
+                    Error
             end;
         {error, access_refused} ->
             {error, access_refused, State}
+    end.
+
+-spec check_publish_permitted(rabbit_exchange:name(), binary(), state()) ->
+    ok | {error, access_refused}.
+check_publish_permitted(Exchange, Topic,
+                         State = #state{auth_state = #auth_state{
+                                                        user = User,
+                                                        authz_ctx = AuthzCtx}}) ->
+    case check_resource_access(User, Exchange, write, AuthzCtx) of
+        ok -> check_topic_access(Topic, write, State);
+        {error, access_refused} = E -> E
     end.
 
 check_resource_access(User, Resource, Perm, Context) ->
@@ -2074,24 +2231,22 @@ check_resource_access(User, Resource, Perm, Context) ->
     end.
 
 check_topic_access(
-  TopicName, Access,
+  Topic, Access,
   #state{auth_state = #auth_state{user = User = #user{username = Username}},
          cfg = #cfg{client_id = ClientId,
                     vhost = VHost,
-                    exchange = #resource{name = ExchangeBin}}}) ->
+                    exchange = XName = #resource{name = XNameBin}}}) ->
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
             end,
-    Key = {TopicName, Username, ClientId, VHost, ExchangeBin, Access},
+    Key = {Topic, Username, ClientId, VHost, XNameBin, Access},
     case lists:member(Key, Cache) of
         true ->
             ok;
         false ->
-            Resource = #resource{virtual_host = VHost,
-                                 kind = topic,
-                                 name = ExchangeBin},
-            RoutingKey = mqtt_to_amqp(TopicName),
+            Resource = XName#resource{kind = topic},
+            RoutingKey = mqtt_to_amqp(Topic),
             Context = #{routing_key  => RoutingKey,
                         variable_map => #{<<"username">> => Username,
                                           <<"vhost">> => VHost,
