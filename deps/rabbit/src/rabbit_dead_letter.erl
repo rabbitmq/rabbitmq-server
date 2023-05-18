@@ -26,7 +26,7 @@
 publish(Msg, Reason, X, RK, SourceQName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, SourceQName),
     Delivery = rabbit_basic:delivery(false, false, DLMsg, undefined),
-    QNames0 = rabbit_exchange:route(X, Delivery, [v2]),
+    QNames0 = rabbit_exchange:route(X, Delivery, #{return_binding_keys => true}),
     {QNames, Cycles} = detect_cycles(Reason, DLMsg, QNames0),
     lists:foreach(fun log_cycle_once/1, Cycles),
     Qs0 = rabbit_amqqueue:lookup_many(QNames),

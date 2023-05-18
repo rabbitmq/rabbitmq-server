@@ -47,12 +47,12 @@ enabled(none) ->
 enabled(#exchange{}) ->
     true.
 
--spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_v2_destinations(),
+-spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_return(),
              binary(), rabbit_types:username(), state()) -> 'ok'.
 tap_in(Msg, QNames, ConnName, Username, State) ->
     tap_in(Msg, QNames, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
--spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_v2_destinations(),
+-spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_return(),
                    binary(), rabbit_channel:channel_number(),
                    rabbit_types:username(), state()) -> 'ok'.
 

@@ -326,7 +326,7 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
 %% get_many().
 %% -------------------------------------------------------------------
 
--spec get_many(rabbit_exchange:route_v2_destinations()) ->
+-spec get_many(rabbit_exchange:route_return()) ->
     [amqqueue:amqqueue() | {amqqueue:amqqueue(), [rabbit_types:binding_key(), ...]}].
 get_many(Names) when is_list(Names) ->
     rabbit_db:run(

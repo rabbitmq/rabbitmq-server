@@ -29,9 +29,9 @@ all_tests() ->
      set,
      delete,
      delete_all_for_exchange,
-     match_v1,
-     match_v2_many_destinations,
-     match_v2_single_destination
+     match,
+     match_return_binding_keys_many_destinations,
+     match_return_binding_keys_single_destination
     ].
 
 %% -------------------------------------------------------------------
@@ -78,10 +78,10 @@ set1(_Config) ->
     Dst = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
     RoutingKey = <<"a.b.c">>,
     Binding = #binding{source = Src, key = RoutingKey, destination = Dst, args = #{}},
-    ?assertEqual({[], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, [])),
+    ?assertEqual({[], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding)),
-    ?assertEqual({[Dst], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, [])),
+    ?assertEqual({[Dst], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     passed.
 
 delete(Config) ->
@@ -101,10 +101,10 @@ delete1(_Config) ->
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding1)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding2)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding3)),
-    {Actual, #{}} = rabbit_db_topic_exchange:match(Src, RoutingKey, []),
+    {Actual, #{}} = rabbit_db_topic_exchange:match(Src, RoutingKey, #{}),
     ?assertEqual(Dsts, lists:sort(Actual)),
     ?assertEqual(ok, rabbit_db_topic_exchange:delete([Binding1, Binding2])),
-    ?assertEqual({[Dst3], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, [])),
+    ?assertEqual({[Dst3], #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     passed.
 
 delete_all_for_exchange(Config) ->
@@ -121,18 +121,18 @@ delete_all_for_exchange1(_Config) ->
     set(Src1, RoutingKey, Dst1),
     set(Src1, RoutingKey, Dst2),
     set(Src2, RoutingKey, Dst1),
-    {Actual, #{}} = rabbit_db_topic_exchange:match(Src1, RoutingKey, []),
+    {Actual, #{}} = rabbit_db_topic_exchange:match(Src1, RoutingKey, #{}),
     ?assertEqual(Dsts, lists:sort(Actual)),
-    ?assertEqual({[Dst1], #{}}, rabbit_db_topic_exchange:match(Src2, RoutingKey, [])),
+    ?assertEqual({[Dst1], #{}}, rabbit_db_topic_exchange:match(Src2, RoutingKey, #{})),
     ?assertEqual(ok, rabbit_db_topic_exchange:delete_all_for_exchange(Src1)),
-    ?assertEqual({[], #{}}, rabbit_db_topic_exchange:match(Src1, RoutingKey, [])),
-    ?assertEqual({[Dst1], #{}}, rabbit_db_topic_exchange:match(Src2, RoutingKey, [])),
+    ?assertEqual({[], #{}}, rabbit_db_topic_exchange:match(Src1, RoutingKey, #{})),
+    ?assertEqual({[Dst1], #{}}, rabbit_db_topic_exchange:match(Src2, RoutingKey, #{})),
     passed.
 
-match_v1(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, match_v1_0, [Config]).
+match(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, match_0, [Config]).
 
-match_v1_0(_Config) ->
+match_0(_Config) ->
     Src = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
     Dst1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
     Dst2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
@@ -148,26 +148,26 @@ match_v1_0(_Config) ->
     set(Src, <<"#.#">>, Dst5),
     set(Src, <<"a.*">>, Dst6),
     set(Src, <<"a.b.#">>, Dst7),
-    {Dsts1, Qs1} = rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, []),
+    {Dsts1, Qs1} = rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, #{}),
     ?assertEqual(lists:sort([Dst1, Dst2, Dst3, Dst4, Dst5, Dst7]),
                  lists:usort(Dsts1)),
-    {Dsts2, Qs2} = rabbit_db_topic_exchange:match(Src, <<"a.b">>, []),
+    {Dsts2, Qs2} = rabbit_db_topic_exchange:match(Src, <<"a.b">>, #{}),
     ?assertEqual(lists:sort([Dst3, Dst4, Dst5, Dst6, Dst7]),
                  lists:usort(Dsts2)),
-    {Dsts3, Qs3} = rabbit_db_topic_exchange:match(Src, <<"">>, []),
+    {Dsts3, Qs3} = rabbit_db_topic_exchange:match(Src, <<"">>, #{}),
     ?assertEqual(lists:sort([Dst4, Dst5]),
                  lists:usort(Dsts3)),
-    {Dsts4, Qs4} = rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>, []),
+    {Dsts4, Qs4} = rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>, #{}),
     ?assertEqual(lists:sort([Dst3, Dst4, Dst5]),
                  lists:usort(Dsts4)),
     ?assert(lists:all(fun(Qs) -> maps:size(Qs) =:= 0 end, [Qs1, Qs2, Qs3, Qs4])),
     passed.
 
-match_v2_many_destinations(Config) ->
+match_return_binding_keys_many_destinations(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
-               Config, ?MODULE, match_v2_many_destinations0, []).
+               Config, ?MODULE, match_return_binding_keys_many_destinations0, []).
 
-match_v2_many_destinations0() ->
+match_return_binding_keys_many_destinations0() ->
     Src = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
     Dst1 = rabbit_misc:r(?VHOST, queue, <<"mqtt-subscription-q1">>),
     Dst2 = rabbit_misc:r(?VHOST, queue, <<"mqtt-subscription-q2">>),
@@ -191,7 +191,7 @@ match_v2_many_destinations0() ->
     Mod = rabbit_feature_flags,
     ok = meck:new(Mod),
     ok = meck:expect(Mod, is_enabled, [mqtt_v5], true),
-    Opts = [v2],
+    Opts = #{return_binding_keys => true},
 
     {Exchanges1, Qs1} = rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, Opts),
     ?assertMatch(#{Dst1 := [<<"a.b.c">>],
@@ -234,11 +234,11 @@ match_v2_many_destinations0() ->
     ok = meck:unload(Mod),
     passed.
 
-match_v2_single_destination(Config) ->
+match_return_binding_keys_single_destination(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
-               Config, ?MODULE, match_v2_single_destination0, []).
+               Config, ?MODULE, match_return_binding_keys_single_destination0, []).
 
-match_v2_single_destination0() ->
+match_return_binding_keys_single_destination0() ->
     Src = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
     Dst = rabbit_misc:r(?VHOST, queue, <<"mqtt-subscription-myclientqos1">>),
     [set(Src, BKey, Dst) ||
@@ -247,7 +247,7 @@ match_v2_single_destination0() ->
     Mod = rabbit_feature_flags,
     ok = meck:new(Mod),
     ok = meck:expect(Mod, is_enabled, [mqtt_v5], true),
-    Opts = [v2],
+    Opts = #{return_binding_keys => true},
 
     {[], Qs} = rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, Opts),
     ?assertEqual(1, map_size(Qs)),

@@ -1459,7 +1459,7 @@ publish_to_queues(
                  },
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            QNames0 = rabbit_exchange:route(Exchange, Delivery, [v2]),
+            QNames0 = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(BasicMessage, QNames, ConnName, Username, TraceState),
             deliver_to_queues(Delivery, QNames, State);
