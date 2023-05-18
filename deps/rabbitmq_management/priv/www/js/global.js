@@ -635,10 +635,58 @@ var exchange_types;
 // Used for access control
 var user_tags;
 var user;
+var ac;
+var display;
+
+var ui_data_model = {
+  vhosts: [],
+  nodes: [],
+
+};
+
+// Access control
+
+function AccessControl(user, ui_data_model) {
+  this.user = user;
+  this.user_tags = expand_user_tags(user.tags);
+  this.ui_data_model = ui_data_model;
+
+  this.isMonitoringUser = function() {
+    return this.user_tags.includes("monitoring");
+  };
+  this.isAdministratorUser = function() {
+    return this.user_tags.includes("administrator");
+  };
+  this.isPolicyMakerUser = function() {
+    return this.user_tags.includes("policymaker");
+  };
+  this.canAccessVhosts = function() {
+    return this.ui_data_model.vhosts.length > 0;
+  };
+  this.canListNodes = function() {
+    return this.isMonitoringUser() && this.ui_data_model.nodes.length > 1;
+  };
+
+};
+
+function DisplayControl(overview, ui_data_model) {
+  this.nodes = ac.canListNodes() && ui_data_model.nodes.length > 1;
+  this.vhosts = ac.canAccessVhosts();
+  this.rabbitmqVersions = false;
+  var v = '';
+  for (var i = 0; i < ui_data_model.nodes.length; i++) {
+      var v1 = fmt_rabbit_version(ui_data_model.nodes[i].applications);
+      if (v1 != 'unknown') {
+          if (v != '' && v != v1) this.rabbitmqVersions = true;
+          v = v1;
+      }
+  }
+  this.data = ui_data_model;
+
+}
 
 // Set up the above vars
-function setup_global_vars() {
-    var overview = JSON.parse(sync_get('/overview'));
+function setup_global_vars(overview) {
     rates_mode = overview.rates_mode;
     is_op_policy_updating_enabled = overview.is_op_policy_updating_enabled;
     user_tags = expand_user_tags(user.tags);
@@ -673,8 +721,8 @@ function setup_global_vars() {
         if (nodes.length > 1) {
             nodes_interesting = true;
             var v = '';
-            for (var i = 0; i < nodes.length; i++) {
-                var v1 = fmt_rabbit_version(nodes[i].applications);
+            for (var i = 0; i < ui_data_model.nodes.length; i++) {
+                var v1 = fmt_rabbit_version(ui_data_model.nodes[i].applications);
                 if (v1 != 'unknown') {
                     if (v != '' && v != v1) rabbit_versions_interesting = true;
                     v = v1;
@@ -682,7 +730,7 @@ function setup_global_vars() {
             }
         }
     }
-    vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
+    vhosts_interesting = ui_data_model.vhosts.length > 1;
 
     queue_type = "default";
     current_vhost = get_pref('vhost');

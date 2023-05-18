@@ -111,11 +111,24 @@ function check_login () {
   if (!isNaN(user_login_session_timeout)) {
     update_login_session_timeout(user_login_session_timeout)
   }
-  setup_global_vars()
+
+  ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
+  ac = new AccessControl(user, ui_data_model)
+  if (ac.isMonitoringUser()) {
+    ui_data_model.nodes = JSON.parse(sync_get('/nodes'))
+  }
+  var overview = JSON.parse(sync_get('/overview'))
+
+  display = new DisplayControl(overview, ui_data_model)
+
+  setup_global_vars(overview)
+
   setup_constant_events()
   update_vhosts()
   update_interval()
   setup_extensions()
+
+
   return true
 }
 
@@ -183,17 +196,18 @@ function setup_constant_events() {
 }
 
 function update_vhosts() {
-    var vhosts = JSON.parse(sync_get('/vhosts'));
-    vhosts_interesting = vhosts.length > 1;
-    if (vhosts_interesting)
+    if (display.vhosts) {
         $('#vhost-form').show();
-    else
+        $('li#vhost').show();
+    }else {
         $('#vhost-form').hide();
+        $('li#vhost').hide();
+    }
     var select = $('#show-vhost').get(0);
-    select.options.length = vhosts.length + 1;
+    select.options.length = ui_data_model.vhosts.length + 1;
     var index = 0;
-    for (var i = 0; i < vhosts.length; i++) {
-        var vhost = vhosts[i].name;
+    for (var i = 0; i < ui_data_model.vhosts.length; i++) {
+        var vhost = ui_data_model.vhosts[i].name;
         select.options[i + 1] = new Option(vhost, vhost);
         if (vhost == current_vhost) index = i + 1;
     }

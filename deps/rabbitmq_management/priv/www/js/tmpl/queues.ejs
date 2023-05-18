@@ -23,11 +23,11 @@
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="queues">+/-</span></th>
   </tr>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
     <th><%= fmt_sort('Name',         'name') %></th>
-<% if (nodes_interesting) { %>
+<% if (display.nodes) { %>
     <th><%= fmt_sort('Node',         'node') %></th>
 <% } %>
 <% if (show_column('queues', 'type')) { %>
@@ -116,11 +116,11 @@
     var queue = queues.items[i];
 %>
   <tr<%= alt_rows(i, queue.arguments) %>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
    <td><%= fmt_string(queue.vhost) %></td>
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name, queue.arguments) %></td>
-<% if (nodes_interesting) { %>
+<% if (display.nodes) { %>
    <td>
      <% if (queue.node) { %>
       <%= fmt_node(queue.node) %>
@@ -226,12 +226,13 @@
   </div>
 </div>
 
+<% if (ac.canAccessVhosts()) { %>
 <div class="section-hidden">
   <h2>Add a new queue</h2>
   <div class="hider">
     <form action="#/queues" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -284,8 +285,8 @@
         </tr>
 <% } %>
 <%
-  if (nodes_interesting) {
-   var nodes = JSON.parse(sync_get('/nodes'));
+  if (ac.canListNodes()) {
+   var nodes = display.data_model.nodes
 %>
         <tr>
           <th><label>Node:</label></th>
@@ -354,4 +355,5 @@
       <input type="submit" value="Add queue"/>
     </form>
   </div>
+  <% } %>
 </div>
