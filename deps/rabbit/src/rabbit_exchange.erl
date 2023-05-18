@@ -21,13 +21,13 @@
 
 %%----------------------------------------------------------------------------
 
--export_type([name/0, type/0, route_opts/0, route_v2_destinations/0]).
+-export_type([name/0, type/0, route_opts/0, route_return/0]).
 -type name() :: rabbit_types:exchange_name().
 -type type() :: rabbit_types:exchange_type().
--type route_opts() :: [v2].
--type route_v2_destinations() :: [rabbit_amqqueue:name() |
-                                  {rabbit_amqqueue:name(),
-                                   [MatchedBindingKeys :: rabbit_types:binding_key(), ...]}].
+-type route_opts() :: #{return_binding_keys => boolean()}.
+-type route_return() :: [rabbit_amqqueue:name() |
+                         {rabbit_amqqueue:name(),
+                          [MatchedBindingKeys :: rabbit_types:binding_key(), ...]}].
 -type fun_name() :: atom().
 
 %%----------------------------------------------------------------------------
@@ -348,10 +348,10 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
 %% like #delivery{message = #basic_message{routing_keys = [...]}}
 -spec route(rabbit_types:exchange(), #delivery{}) -> [rabbit_amqqueue:name()].
 route(Exchange, Delivery) ->
-    route(Exchange, Delivery, []).
+    route(Exchange, Delivery, #{}).
 
 -spec route (rabbit_types:exchange(), #delivery{}, route_opts()) ->
-    route_v2_destinations().
+    route_return().
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery,

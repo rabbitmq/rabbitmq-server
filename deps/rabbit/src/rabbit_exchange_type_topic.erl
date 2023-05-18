@@ -35,7 +35,7 @@ description() ->
 serialise_events() -> false.
 
 route(Exchange, Delivery) ->
-    route(Exchange, Delivery, []).
+    route(Exchange, Delivery, #{}).
 
 %% This function can return duplicate destinations or duplicate binding keys.
 %% The caller of this function is responsible for filtering out duplicates.

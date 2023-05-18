@@ -74,9 +74,9 @@ delete(Bs) when is_list(Bs) ->
             rabbit_types:routing_key(),
             rabbit_exchange:route_opts()) -> match_ret().
 %% @doc Finds the topic bindings matching the given exchange and routing key and returns
-%% the destination of the bindings (with the matched bindings in v2).
+%% the destination of the bindings (with the matched bindings).
 %%
-%% @returns a list of resources (with matched bindings in v2).
+%% @returns a list of resources (with matched binding).
 %%
 %% @private
 
@@ -84,7 +84,8 @@ match(XName, RoutingKey, Opts) ->
     rabbit_db:run(
       #{mnesia =>
             fun() ->
-                    match_in_mnesia(XName, RoutingKey, lists:member(v2, Opts))
+                    BKeys = maps:get(return_binding_keys, Opts, false),
+                    match_in_mnesia(XName, RoutingKey, BKeys)
             end
        }).
 
@@ -131,9 +132,9 @@ delete_all_for_exchange_in_mnesia(XName) ->
               ok
       end).
 
-match_in_mnesia(XName, RoutingKey, V2) ->
+match_in_mnesia(XName, RoutingKey, BKeys) ->
     Words = split_topic_key(RoutingKey),
-    mnesia:async_dirty(fun trie_match/3, [XName, Words, V2]).
+    mnesia:async_dirty(fun trie_match/3, [XName, Words, BKeys]).
 
 trie_remove_all_nodes(X) ->
     remove_all(?MNESIA_NODE_TABLE,
@@ -191,32 +192,32 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
 
-trie_match(X, Words, V2) ->
-    trie_match(X, root, Words, V2, [], {[], #{}}).
+trie_match(X, Words, BKeys) ->
+    trie_match(X, root, Words, BKeys, [], {[], #{}}).
 
-trie_match(X, Node, [], V2, Walked, ResAcc0) ->
+trie_match(X, Node, [], BKeys, Walked, ResAcc0) ->
     Destinations = trie_bindings(X, Node),
-    ResAcc = maybe_add_binding_key(V2, Destinations, Walked, ResAcc0),
+    ResAcc = maybe_add_binding_key(BKeys, Destinations, Walked, ResAcc0),
     trie_match_part(X, Node, "#", fun trie_match_skip_any/6, [],
-                    V2, Walked, ResAcc);
-trie_match(X, Node, [W | RestW] = Words, V2, Walked, ResAcc) ->
+                    BKeys, Walked, ResAcc);
+trie_match(X, Node, [W | RestW] = Words, BKeys, Walked, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
-                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, V2, Walked, Acc)
+                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, BKeys, Walked, Acc)
                 end, ResAcc, [{W, fun trie_match/6, RestW},
                               {"*", fun trie_match/6, RestW},
                               {"#", fun trie_match_skip_any/6, Words}]).
 
-trie_match_part(X, Node, Search, MatchFun, RestW, V2, Walked, ResAcc) ->
+trie_match_part(X, Node, Search, MatchFun, RestW, BKeys, Walked, ResAcc) ->
     case trie_child(X, Node, Search) of
-        {ok, NextNode} -> MatchFun(X, NextNode, RestW, V2, [Search | Walked], ResAcc);
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, [Search | Walked], ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any(X, Node, [], V2, Walked, ResAcc) ->
-    trie_match(X, Node, [], V2, Walked, ResAcc);
-trie_match_skip_any(X, Node, [_ | RestW] = Words, V2, Walked, ResAcc) ->
-    trie_match_skip_any(X, Node, RestW, V2, Walked,
-                        trie_match(X, Node, Words, V2, Walked, ResAcc)).
+trie_match_skip_any(X, Node, [], BKeys, Walked, ResAcc) ->
+    trie_match(X, Node, [], BKeys, Walked, ResAcc);
+trie_match_skip_any(X, Node, [_ | RestW] = Words, BKeys, Walked, ResAcc) ->
+    trie_match_skip_any(X, Node, RestW, BKeys, Walked,
+                        trie_match(X, Node, Words, BKeys, Walked, ResAcc)).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of

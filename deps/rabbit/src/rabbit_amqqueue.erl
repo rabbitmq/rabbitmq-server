@@ -319,7 +319,7 @@ lookup(Name) when is_record(Name, resource) ->
 lookup_durable_queue(QName) ->
     rabbit_db_queue:get_durable(QName).
 
--spec lookup_many(rabbit_exchange:route_v2_destinations()) ->
+-spec lookup_many(rabbit_exchange:route_return()) ->
     [amqqueue:amqqueue() | {amqqueue:amqqueue(), binding_keys()}].
 lookup_many([])     -> [];                             %% optimisation
 lookup_many(Names) when is_list(Names) ->
