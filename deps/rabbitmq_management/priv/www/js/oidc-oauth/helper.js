@@ -19,9 +19,6 @@ function oauth_initialize_if_required() {
 
 }
 
-<<<<<<< HEAD
-
-=======
 function rabbit_base_uri() {
   return window.location.protocol + "//" + window.location.hostname + rabbit_port() + rabbit_path_prefix()
 }
@@ -31,7 +28,6 @@ function rabbit_path_prefix() {
 function rabbit_port() {
   return window.location.port ? ":" +  window.location.port : "";
 }
->>>>>>> 1022f7d197 (Do not mount route to pages)
 function auth_settings_apply_defaults(authSettings) {
   if (authSettings.enable_uaa == "true") {
 
