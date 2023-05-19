@@ -3,12 +3,15 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 const MENU_TABS = By.css('div#menu ul#tabs')
 const USER = By.css('li#logout')
 const LOGOUT_FORM = By.css('li#logout form')
+const SELECT_VHOSTS = By.css('select#show-vhost')
 
-const CONNECTION_TAB = By.css('div#menu ul#tabs li a[href="#/connections"]')
-const CHANNELS_TAB = By.css('div#menu ul#tabs li a[href="#/channels"]')
-const QUEUES_TAB = By.css('div#menu ul#tabs li a[href="#/queues"]')
-const EXCHANGES_TAB = By.css('div#menu ul#tabs li a[href="#/exchanges"]')
-const ADMIN_TAB = By.css('div#menu ul#tabs li a[href="#/users"]')
+const OVERVIEW_TAB = By.css('div#menu ul#tabs li#Overview')
+const CONNECTION_TAB = By.css('div#menu ul#tabs li#Connections')
+const CHANNELS_TAB = By.css('div#menu ul#tabs li#Channels')
+const QUEUES_TAB = By.css('div#menu ul#tabs li#Queues')
+const EXCHANGES_TAB = By.css('div#menu ul#tabs li#Exchanges')
+const ADMIN_TAB = By.css('div#menu ul#tabs li#Admin')
+const STREAM_TAB = By.css('div#menu ul#tabs li#Stream')
 
 module.exports = class BasePage {
   driver
@@ -34,6 +37,10 @@ module.exports = class BasePage {
     return this.getText(USER)
   }
 
+  async clickOnOverviewTab () {
+    return this.click(CONNECTION_TAB)
+  }
+
   async clickOnConnectionsTab () {
     return this.click(CONNECTION_TAB)
   }
@@ -52,6 +59,20 @@ module.exports = class BasePage {
 
   async clickOnQueuesTab () {
     return this.click(QUEUES_TAB)
+  }
+
+  async clickOnStreamTab () {
+    return this.click(STREAM_TAB)
+  }
+
+  async getSelectableVhosts() {
+    let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
+    let options = await selectable.findElements(By.css('option'))
+    let table_model = []
+    for (let option of options) {
+      table_model.push(await option.getText())
+    }
+    return table_model
   }
 
   async getTable(locator, firstNColumns) {
