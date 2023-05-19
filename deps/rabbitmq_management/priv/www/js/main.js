@@ -366,7 +366,7 @@ function update_navigation() {
         }
         if (show(path)) {
           if (val.length < 3 || ( val[2] && ac.canAccessVhosts() )) {
-            l1 += '<li><a href="' + nav(path) + '"' +
+            l1 += '<li id="' + k + '"><a href="' + nav(path) + '"' +
                 (selected ? ' class="selected"' : '') + '>' + k + '</a></li>'
           }
         }
