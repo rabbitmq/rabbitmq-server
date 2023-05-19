@@ -274,10 +274,15 @@ dispatcher_add(function(sammy) {
             if (sync_delete(this, '/operator-policies/:vhost/:name'))
                 update();
         });
-      path('#/limits', {'limits': '/vhost-limits',
-                        'user_limits': '/user-limits',
-                        'users': '/users',
-                        'vhosts': '/vhosts'}, 'limits');
+      let datamodel = {
+        'limits': '/vhost-limits',
+        'user_limits': '/user-limits',
+        'vhosts': '/vhosts'
+      }
+      if (ac.isAdministratorUser()) {
+        datamodel['users'] = '/users'
+      }
+      path('#/limits', datamodel, 'limits');
 
       sammy.put('#/limits', function() {
           var valAsInt = parseInt(this.params.value);

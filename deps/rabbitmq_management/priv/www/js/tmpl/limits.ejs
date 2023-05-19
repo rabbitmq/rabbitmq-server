@@ -137,6 +137,7 @@
   </div>
 </div>
 
+<% if(ac.isAdministratorUser()) { %>
 <div class="section administrator-only" id="set-user-limits">
   <h2>Set / update a user limit</h2>
   <div class="hider">
@@ -175,3 +176,5 @@
       </form>
   </div>
 </div>
+<% } %>
+ 
