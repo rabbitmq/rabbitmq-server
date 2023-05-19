@@ -73,6 +73,7 @@ subgroups() ->
          ,pubsub_separate_connections
          ,will_with_disconnect
          ,will_without_disconnect
+         ,decode_basic_properties
          ,quorum_queue_rejects
          ,events
          ,internal_event_handler
@@ -277,6 +278,27 @@ will_without_disconnect(Config) ->
     ?assertEqual(ok, expect_publishes(Sub, LastWillTopic, [LastWillMsg])),
 
     ok = emqtt:disconnect(Sub).
+
+%% Test that an MQTT connection decodes the AMQP 0.9.1 'P_basic' properties.
+%% see https://github.com/rabbitmq/rabbitmq-server/discussions/8252
+decode_basic_properties(Config) ->
+    App = rabbitmq_mqtt,
+    Par = durable_queue_type,
+    ok = rpc(Config, application, set_env, [App, Par, quorum]),
+    ClientId = Topic = Payload = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
+    QuorumQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_quorum_queue]),
+    ?assertEqual(1, length(QuorumQueues)),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
+                                           routing_key = Topic},
+                      #amqp_msg{payload = Payload}),
+    ok = expect_publishes(C1, Topic, [Payload]),
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C2),
+    ok = rpc(Config, application, unset_env, [App, Par]).
 
 quorum_queue_rejects(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
