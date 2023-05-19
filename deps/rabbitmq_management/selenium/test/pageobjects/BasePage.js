@@ -37,6 +37,10 @@ module.exports = class BasePage {
     return this.getText(USER)
   }
 
+  async waitForOverviewTab() {
+    return this.waitForDisplayed(OVERVIEW_TAB)
+  }
+
   async clickOnOverviewTab () {
     return this.click(CONNECTION_TAB)
   }
@@ -44,25 +48,43 @@ module.exports = class BasePage {
   async clickOnConnectionsTab () {
     return this.click(CONNECTION_TAB)
   }
+  async waitForConnectionsTab() {
+    return this.waitForDisplayed(CONNECTION_TAB)
+  }
 
   async clickOnAdminTab () {
     return this.click(ADMIN_TAB)
+  }
+  async waitForAdminTab() {
+    return this.waitForDisplayed(ADMIN_TAB)
   }
 
   async clickOnChannelsTab () {
     return this.click(CHANNELS_TAB)
   }
+  async waitForChannelsTab() {
+    return this.waitForDisplayed(CHANNELS_TAB)
+  }
 
   async clickOnExchangesTab () {
     return this.click(EXCHANGES_TAB)
+  }
+  async waitForExchangesTab() {
+    return this.waitForDisplayed(EXCHANGES_TAB)
   }
 
   async clickOnQueuesTab () {
     return this.click(QUEUES_TAB)
   }
+  async waitForQueuesTab() {
+    return this.waitForDisplayed(QUEUES_TAB)
+  }
 
   async clickOnStreamTab () {
     return this.click(STREAM_TAB)
+  }
+  async waitForStreamTab() {
+    return this.waitForDisplayed(STREAM_TAB)
   }
 
   async getSelectableVhosts() {
@@ -91,11 +113,23 @@ module.exports = class BasePage {
   }
 
   async waitForLocated (locator) {
-    return this.driver.wait(until.elementLocated(locator), this.timeout, 'Timed out after 30 seconds', this.polling);
+    try {
+      return this.driver.wait(until.elementLocated(locator), this.timeout,
+        'Timed out after 30 seconds locating ' + locator, this.polling)
+    }catch(error) {
+      console.error("Failed to locate element " + locator)
+      throw error
+    }
   }
 
   async waitForVisible (element) {
-    return this.driver.wait(until.elementIsVisible(element), this.timeout, 'Timed out after 30 seconds', this.polling);
+    try {
+      return this.driver.wait(until.elementIsVisible(element), this.timeout,
+        'Timed out after 30 seconds awaiting till visible ' + element, this.polling)
+    }catch(error) {
+      console.error("Failed to find visible element " + element)
+      throw error
+    }
   }
 
   async waitForDisplayed (locator) {
@@ -114,7 +148,12 @@ module.exports = class BasePage {
 
   async click (locator) {
     const element = await this.waitForDisplayed(locator)
-    return element.click()
+    try {
+      return element.click()
+    } catch(error) {
+      console.error("Failed to click on " + locator + " due to " + error);
+      throw error;
+    }
   }
 
   async submit (locator) {
