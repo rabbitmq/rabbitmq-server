@@ -49,9 +49,6 @@
   "vhosts": [
     {
       "name": "/"
-    },
-    {
-      "name": "another"
     }
   ],
   "permissions": [
