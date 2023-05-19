@@ -23,21 +23,23 @@ describe('monitoring user without any vhosts permissions', function () {
   })
 
   it('can access all menu options', async function () {
-    await overview.clickOnConnectionsTab()
-    await overview.clickOnChannelsTab()
-    await overview.clickOnQueuesTab()
-    await overview.clickOnExchangesTab()
-    await overview.clickOnAdminTab()
-    await overview.clickOnStreamTab()
+    await overview.waitForOverviewTab()
+    await overview.waitForConnectionsTab()
+    await overview.waitForChannelsTab()
+    await overview.waitForQueuesTab()
+    await overview.waitForExchangesTab()
+    await overview.waitForAdminTab()
+    await overview.waitForStreamTab()
   })
   it('can access all Admin menu options', async function () {
     await overview.clickOnAdminTab()
-    await admin.clickOnPolicies()
-    await admin.clickOnLimits()
-    assert.rejects(admin.clickOnUsers())
-    assert.rejects(admin.clickOnVhosts())
-    assert.rejects(admin.clickOnFeatureFlags())
-    assert.rejects(admin.clickOnCluster())
+    await admin.waitForLimitsMenuOption()
+    await admin.waitForPoliciesMenuOption()
+
+    assert.rejects(admin.waitForUsersMenuOption())
+    assert.rejects(admin.waitForVhostsMenuOption())
+    assert.rejects(admin.waitForFeatureFlagsMenuOption())
+    assert.rejects(admin.waitForClusterMenuOption())
   })
 
   it('can choose from any available vhost', async function () {

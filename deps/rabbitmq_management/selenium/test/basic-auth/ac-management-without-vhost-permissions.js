@@ -23,12 +23,12 @@ describe('management user without any vhosts permissions', function () {
   })
 
   it('can only access overview', async function () {
-    assert.rejects(overview.clickOnConnectionsTab())
-    assert.rejects(overview.clickOnChannelsTab())
-    assert.rejects(overview.clickOnQueuesTab())
-    assert.rejects(overview.clickOnExchangesTab())
-    assert.rejects(overview.clickOnAdminTab())
-    assert.rejects(overview.clickOnStreamTab())
+    assert.rejects(overview.waitForConnectionsTab())
+    assert.rejects(overview.waitForChannelsTab())
+    assert.rejects(overview.waitForQueuesTab())
+    assert.rejects(overview.waitForExchangesTab())
+    assert.rejects(overview.waitForAdminTab())
+    assert.rejects(overview.waitForStreamTab())
   })
 
   it('cannot see nor choose any available vhost', async function () {
