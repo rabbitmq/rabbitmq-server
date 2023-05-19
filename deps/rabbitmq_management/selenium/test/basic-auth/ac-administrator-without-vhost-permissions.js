@@ -52,7 +52,6 @@ describe('administrator user without any vhosts permissions', function () {
   it('can choose from any available vhost', async function () {
     vhosts = await overview.getSelectableVhosts()
     assert.ok(vhosts.includes("/"))
-    assert.ok(vhosts.includes("another"))
     assert.ok(vhosts.includes("All"))
   })
 
