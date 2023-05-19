@@ -108,11 +108,39 @@ start_rabbitmq() {
   begin "Starting rabbitmq ..."
 
   init_rabbitmq
+<<<<<<< HEAD
+=======
+
+
+  RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+
+
+  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+  print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
+
+	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
+		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
+
+}
+start_docker_rabbitmq() {
+  begin "Starting rabbitmq in docker ..."
+
+  init_rabbitmq
+>>>>>>> 67e04259a0 (Test various user tags without vhost permissions)
   kill_container_if_exist rabbitmq
 
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+<<<<<<< HEAD
   ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+=======
+  RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
+  print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
+>>>>>>> 67e04259a0 (Test various user tags without vhost permissions)
 
   docker run \
     --detach \
@@ -122,7 +150,12 @@ start_rabbitmq() {
     -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
     -v /tmp$MOUNT_RABBITMQ_CONF:${MOUNT_RABBITMQ_CONF}:ro \
     -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
+<<<<<<< HEAD
     -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_DIR}:/config \
+=======
+    -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH}:/config \
+    -v ${RABBITMQ_CONFIG_DIR}/imports:/var/rabbitmq/imports \
+>>>>>>> 67e04259a0 (Test various user tags without vhost permissions)
     ${RABBITMQ_DOCKER_IMAGE}
 
   wait_for_message rabbitmq "Server startup complete"

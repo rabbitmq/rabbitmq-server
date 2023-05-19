@@ -5,7 +5,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown } = require('../utils
 
 const LoginPage = require('../pageobjects/LoginPage')
 
-describe('Management UI with basic authentication', function () {
+describe('A management user without vhost permissions', function () {
   let homePage
   let captureScreen
 
