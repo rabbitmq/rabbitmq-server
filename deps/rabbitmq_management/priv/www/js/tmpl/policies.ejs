@@ -8,7 +8,7 @@
 <table class="list">
  <thead>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
@@ -24,10 +24,10 @@
     var policy = policies[i];
 %>
    <tr<%= alt_rows(i)%>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
-<% if (is_user_policymaker) { %>
+<% if (ac.isPolicyMakerUser()) { %>
      <td><%= link_policy(policy.vhost, policy.name) %></td>
 <% } else { %>
      <td><%= fmt_string(policy.name) %></td>
@@ -47,14 +47,14 @@
   </div>
 </div>
 
-<% if (is_user_policymaker && vhosts.length > 0) { %>
+<% if (ac.isPolicyMakerUser() && ac.canAccessVhosts()) { %>
 
 <div class="section-hidden">
   <h2>Add / update a policy</h2>
   <div class="hider">
     <form action="#/policies" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -180,7 +180,7 @@
 <table class="list">
  <thead>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
@@ -188,7 +188,7 @@
     <th>Apply to</th>
     <th>Definition</th>
     <th>Priority</th>
-<% if (user_administrator && is_op_policy_updating_enabled) { %>
+<% if (ac.isAdministratorUser() && is_op_policy_updating_enabled) { %>
     <th class="administrator-only">Clear</th>
 <% } %>
   </tr>
@@ -199,7 +199,7 @@
     var policy = operator_policies[i];
 %>
    <tr<%= alt_rows(i)%>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= fmt_string(policy.name) %></td>
@@ -207,7 +207,7 @@
      <td><%= fmt_string(policy['apply-to']) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
      <td><%= fmt_string(policy.priority) %></td>
-<% if (user_administrator && is_op_policy_updating_enabled) { %>
+<% if (ac.isAdministratorUser && is_op_policy_updating_enabled) { %>
      <td class="administrator-only">
         <form action="#/operator_policies" method="delete" class="confirm">
             <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
@@ -227,14 +227,14 @@
   </div>
 </div>
 
-<% if (user_administrator && vhosts.length > 0 && is_op_policy_updating_enabled) { %>
+<% if (ac.isAdministratorUser() && ac.canAccessVhosts() > 0 && is_op_policy_updating_enabled) { %>
 
 <div class="section-hidden">
   <h2>Add / update an operator policy</h2>
   <div class="hider">
     <form action="#/operator_policies" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -313,4 +313,3 @@
   </div>
 </div>
 <% } %>
-

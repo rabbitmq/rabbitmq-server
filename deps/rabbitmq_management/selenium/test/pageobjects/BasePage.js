@@ -3,12 +3,15 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 const MENU_TABS = By.css('div#menu ul#tabs')
 const USER = By.css('li#logout')
 const LOGOUT_FORM = By.css('li#logout form')
+const SELECT_VHOSTS = By.css('select#show-vhost')
 
-const CONNECTION_TAB = By.css('div#menu ul#tabs li a[href="#/connections"]')
-const CHANNELS_TAB = By.css('div#menu ul#tabs li a[href="#/channels"]')
-const QUEUES_TAB = By.css('div#menu ul#tabs li a[href="#/queues"]')
-const EXCHANGES_TAB = By.css('div#menu ul#tabs li a[href="#/exchanges"]')
-const ADMIN_TAB = By.css('div#menu ul#tabs li a[href="#/users"]')
+const OVERVIEW_TAB = By.css('div#menu ul#tabs li#Overview')
+const CONNECTION_TAB = By.css('div#menu ul#tabs li#Connections')
+const CHANNELS_TAB = By.css('div#menu ul#tabs li#Channels')
+const QUEUES_TAB = By.css('div#menu ul#tabs li#Queues')
+const EXCHANGES_TAB = By.css('div#menu ul#tabs li#Exchanges')
+const ADMIN_TAB = By.css('div#menu ul#tabs li#Admin')
+const STREAM_TAB = By.css('div#menu ul#tabs li#Stream')
 
 module.exports = class BasePage {
   driver
@@ -34,24 +37,64 @@ module.exports = class BasePage {
     return this.getText(USER)
   }
 
+  async waitForOverviewTab() {
+    return this.waitForDisplayed(OVERVIEW_TAB)
+  }
+
+  async clickOnOverviewTab () {
+    return this.click(CONNECTION_TAB)
+  }
+
   async clickOnConnectionsTab () {
     return this.click(CONNECTION_TAB)
+  }
+  async waitForConnectionsTab() {
+    return this.waitForDisplayed(CONNECTION_TAB)
   }
 
   async clickOnAdminTab () {
     return this.click(ADMIN_TAB)
   }
+  async waitForAdminTab() {
+    return this.waitForDisplayed(ADMIN_TAB)
+  }
 
   async clickOnChannelsTab () {
     return this.click(CHANNELS_TAB)
+  }
+  async waitForChannelsTab() {
+    return this.waitForDisplayed(CHANNELS_TAB)
   }
 
   async clickOnExchangesTab () {
     return this.click(EXCHANGES_TAB)
   }
+  async waitForExchangesTab() {
+    return this.waitForDisplayed(EXCHANGES_TAB)
+  }
 
   async clickOnQueuesTab () {
     return this.click(QUEUES_TAB)
+  }
+  async waitForQueuesTab() {
+    return this.waitForDisplayed(QUEUES_TAB)
+  }
+
+  async clickOnStreamTab () {
+    return this.click(STREAM_TAB)
+  }
+  async waitForStreamTab() {
+    return this.waitForDisplayed(STREAM_TAB)
+  }
+
+  async getSelectableVhosts() {
+    let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
+    let options = await selectable.findElements(By.css('option'))
+    let table_model = []
+    for (let option of options) {
+      table_model.push(await option.getText())
+    }
+    return table_model
   }
 
   async getTable(locator, firstNColumns) {
@@ -70,11 +113,23 @@ module.exports = class BasePage {
   }
 
   async waitForLocated (locator) {
-    return this.driver.wait(until.elementLocated(locator), this.timeout, 'Timed out after 30 seconds', this.polling);
+    try {
+      return this.driver.wait(until.elementLocated(locator), this.timeout,
+        'Timed out after 30 seconds locating ' + locator, this.polling)
+    }catch(error) {
+      console.error("Failed to locate element " + locator)
+      throw error
+    }
   }
 
   async waitForVisible (element) {
-    return this.driver.wait(until.elementIsVisible(element), this.timeout, 'Timed out after 30 seconds', this.polling);
+    try {
+      return this.driver.wait(until.elementIsVisible(element), this.timeout,
+        'Timed out after 30 seconds awaiting till visible ' + element, this.polling)
+    }catch(error) {
+      console.error("Failed to find visible element " + element)
+      throw error
+    }
   }
 
   async waitForDisplayed (locator) {
@@ -93,7 +148,12 @@ module.exports = class BasePage {
 
   async click (locator) {
     const element = await this.waitForDisplayed(locator)
-    return element.click()
+    try {
+      return element.click()
+    } catch(error) {
+      console.error("Failed to click on " + locator + " due to " + error);
+      throw error;
+    }
   }
 
   async submit (locator) {
