@@ -940,15 +940,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
-        name = "lazy_queue_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/lazy_queue_SUITE.erl"],
-        outs = ["test/lazy_queue_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
-    erlang_bytecode(
         name = "list_consumers_sanity_check_SUITE_beam_files",
         testonly = True,
         srcs = ["test/list_consumers_sanity_check_SUITE.erl"],

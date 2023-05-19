@@ -100,7 +100,6 @@ define PROJECT_ENV
 
 	    %% rabbitmq-server#973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
-	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
 	    %% rabbitmq-server#589
@@ -205,7 +204,6 @@ SLOW_CT_SUITES := backing_queue \
 		  eager_sync \
 		  feature_flags \
 		  health_check \
-		  lazy_queue \
 		  many_node_ha \
 		  metrics \
 		  msg_store \
