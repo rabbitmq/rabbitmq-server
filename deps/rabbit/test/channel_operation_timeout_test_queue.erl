@@ -80,7 +80,7 @@
 
           io_batch_size,
 
-          %% default queue or lazy queue
+          %% default queue (or lazy queue from 3.6 to 3.11)
           mode,
           version = 1,
           %% Fast path for confirms handling. Instead of having
