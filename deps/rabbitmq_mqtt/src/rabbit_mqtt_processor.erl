@@ -1413,8 +1413,10 @@ deliver_to_client(Msgs, Ack, State) ->
                 end, State, Msgs).
 
 deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
-                             #basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}},
+                             #basic_message{content = Content}},
                       AckRequired, State0) ->
+    #content{properties = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
     PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
                        {byte, QoS0} ->
                            QoS0;
