@@ -1829,11 +1829,12 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client(Msg = {QNameOrType, QPid, QMsgId, _Redelivered,
-                             #basic_message{content = Content}},
+deliver_one_to_client(Msg0 = {QNameOrType, QPid, QMsgId, _Redelivered,
+                              BasicMsg = #basic_message{content = Content0}},
                       AckRequired, State0) ->
-    #content{properties = #'P_basic'{headers = Headers}} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
+    Content = #content{properties = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content0),
+    Msg = setelement(5, Msg0, BasicMsg#basic_message{content = Content}),
     PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
                        {byte, QoS0} ->
                            QoS0;
