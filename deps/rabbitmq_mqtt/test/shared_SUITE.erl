@@ -310,7 +310,7 @@ decode_basic_properties(Config) ->
     Par = durable_queue_type,
     ok = rpc(Config, application, set_env, [App, Par, quorum]),
     ClientId = Topic = Payload = atom_to_binary(?FUNCTION_NAME),
-    C1 = connect(ClientId, Config, [{clean_start, false}]),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     QuorumQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_quorum_queue]),
     ?assertEqual(1, length(QuorumQueues)),
