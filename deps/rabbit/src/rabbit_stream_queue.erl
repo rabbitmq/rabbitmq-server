@@ -672,7 +672,7 @@ is_writer(_Member) -> false.
 
 get_counters(Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
-    {ok, #{members := Members}} = rabbit_stream_coordinator:stream_overview(StreamId),
+    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
     %% split members to query the writer last
     %% this minimizes the risk of confusing output where replicas are ahead of the writer
     Writer = maps:keys(maps:filter(fun (_, M) -> is_writer(M) end, Members)),
