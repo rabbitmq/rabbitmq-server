@@ -252,7 +252,31 @@ augment_consumer({{Q, Ch, CTag}, Props}) ->
     [{queue, format_resource(Q)},
      {channel_details, augment_channel_pid(Ch)},
      {channel_pid, Ch},
-     {consumer_tag, CTag} | Props].
+     {consumer_tag, CTag},
+     {consumer_timeout, consumer_timeout(Props, Q)} | Props].
+
+consumer_timeout(_Props, Q) ->
+    get_queue_consumer_timeout(Q, get_global_consumer_timeout()).
+
+get_queue_consumer_timeout(QName, GCT) ->
+    case rabbit_amqqueue:lookup(QName) of
+	{ok, Q} -> %% should we account for different queue states here?
+	    case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
+							   fun (X, Y) -> erlang:min(X, Y) end, Q) of
+		    undefined -> GCT;
+		    Val -> Val
+	    end;
+	_ ->
+	    GCT
+    end.
+
+get_global_consumer_timeout() ->
+    case application:get_env(rabbit, consumer_timeout) of
+        {ok, MS} when is_integer(MS) ->
+            MS;
+        _ ->
+            undefined
+    end.
 
 consumers_by_vhost(VHost) ->
     ets:select(consumer_stats,
