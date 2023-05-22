@@ -19,20 +19,13 @@
 -define(GROUP_CONFIG,
         #{global_consumer_timeout => [{rabbit, [{consumer_timeout, ?CONSUMER_TIMEOUT}]},
                                       {queue_policy, []},
-                                      {queue_arguments, []},
-                                      {consumer_arguments, []}],
+                                      {queue_arguments, []}],
           queue_policy_consumer_timeout => [{rabbit, []},
                                             {queue_policy, [{<<"consumer-timeout">>, ?CONSUMER_TIMEOUT}]},
-                                            {queue_arguments, []},
-                                            {consumer_arguments, []}],
+                                            {queue_arguments, []}],
           queue_argument_consumer_timeout => [{rabbit, []},
                                               {queue_policy, []},
-                                              {queue_arguments, [{<<"x-consumer-timeout">>, long, ?CONSUMER_TIMEOUT}]},
-                                              {consumer_arguments, []}],
-          consumer_argument_consumer_timeout => [{rabbit, []},
-                                                 {queue_policy, []},
-                                                 {queue_arguments, []},
-                                                 {consumer_arguments, [{<<"x-consumer-timeout">>, long, ?CONSUMER_TIMEOUT}]}]}).
+                                              {queue_arguments, [{<<"x-consumer-timeout">>, long, ?CONSUMER_TIMEOUT}]}]}).
 
 -import(quorum_queue_utils, [wait_for_messages/2]).
 
@@ -40,20 +33,13 @@ all() ->
     [
      {group, global_consumer_timeout},
      {group, queue_policy_consumer_timeout},
-     {group, queue_argument_consumer_timeout},
-     {group, consumer_argument_consumer_timeout}
+     {group, queue_argument_consumer_timeout}
     ].
 
 groups() ->
-    ConsumerTests = [consumer_timeout,
-                     consumer_timeout_no_basic_cancel_capability],
-    AllTests = ConsumerTests ++ [consumer_timeout_basic_get],
-
-    ConsumerTestsParallel = [
-       {classic_queue, [parallel], ConsumerTests},
-       {mirrored_queue, [parallel], ConsumerTests},
-       {quorum_queue, [parallel], ConsumerTests}
-      ],
+    AllTests = [consumer_timeout,
+                consumer_timeout_no_basic_cancel_capability,
+                consumer_timeout_basic_get],
 
     AllTestsParallel = [
        {classic_queue, [parallel], AllTests},
@@ -63,8 +49,7 @@ groups() ->
     [
      {global_consumer_timeout, [], AllTestsParallel},
      {queue_policy_consumer_timeout, [], AllTestsParallel},
-     {queue_argument_consumer_timeout, [], AllTestsParallel},
-     {consumer_argument_consumer_timeout, [], ConsumerTestsParallel}
+     {queue_argument_consumer_timeout, [], AllTestsParallel}
     ].
 
 suite() ->
@@ -158,7 +143,7 @@ consumer_timeout(Config) ->
     declare_queue(Ch, Config, QName),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false, ?config(consumer_arguments, Config)),
+    subscribe(Ch, QName, false),
     erlang:monitor(process, Conn),
     erlang:monitor(process, Ch),
     receive
@@ -226,7 +211,7 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     erlang:monitor(process, Conn),
     erlang:monitor(process, Ch),
-    subscribe(Ch, QName, false, ?config(consumer_arguments, Config)),
+    subscribe(Ch, QName, false),
     receive
         {#'basic.deliver'{delivery_tag = _,
                           redelivered  = false}, _} ->
@@ -280,14 +265,13 @@ consume(Ch, QName, NoAck, Payloads) ->
          DTag
      end || Payload <- Payloads].
 
-subscribe(Ch, Queue, NoAck, Args) ->
-    subscribe(Ch, Queue, NoAck, <<"ctag">>, Args).
+subscribe(Ch, Queue, NoAck) ->
+    subscribe(Ch, Queue, NoAck, <<"ctag">>).
 
-subscribe(Ch, Queue, NoAck, Ctag, Args) ->
+subscribe(Ch, Queue, NoAck, Ctag) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
-                                                consumer_tag = Ctag,
-                                                arguments = Args
+                                                consumer_tag = Ctag
                                                },
                            self()),
     receive
