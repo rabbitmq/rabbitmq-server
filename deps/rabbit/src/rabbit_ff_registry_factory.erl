@@ -735,14 +735,9 @@ registry_vsn() ->
     proplists:get_value(vsn, Attrs, undefined).
 
 purge_old_registry(Mod) ->
-    case erlang:check_process_code(self(), rabbit_ff_registry) of
-        false ->
-            case code:is_loaded(Mod) of
-                {file, _} -> do_purge_old_registry(Mod);
-                false     -> ok
-            end;
-        true ->
-            ok
+    case code:is_loaded(Mod) of
+        {file, _} -> do_purge_old_registry(Mod);
+        false     -> ok
     end.
 
 do_purge_old_registry(Mod) ->
