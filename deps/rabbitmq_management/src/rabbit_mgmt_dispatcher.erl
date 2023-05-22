@@ -27,12 +27,13 @@ build_routes(Ignore) ->
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalPaths = [{module_app(M), "www"} || M <- modules(Ignore)],
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
+    OauthBootstrap = build_oauth_bootstrap_route(Prefix),
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
         [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
-    Routes2 = RootIdxRtes ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
+    Routes2 = RootIdxRtes ++ OauthBootstrap ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->
@@ -40,6 +41,12 @@ build_root_index_routes("", ManagementApp) ->
 build_root_index_routes(Prefix, ManagementApp) ->
     [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
      {Prefix, rabbit_mgmt_wm_static, root_idx_file(ManagementApp)}].
+
+build_oauth_bootstrap_route("") ->
+    [{"/js/oidc-oauth/bootstrap.js", rabbit_mgmt_oauth_bootstrap, #{}}];
+build_oauth_bootstrap_route(Prefix) ->
+    [{"/js/oidc-oauth/bootstrap.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/oidc-oauth/bootstrap.js"},
+     {Prefix ++ "/js/oidc-oauth/bootstrap.js", rabbit_mgmt_oauth_bootstrap, #{}}].
 
 build_redirect_route(Path, Location) ->
     {Path, rabbit_mgmt_wm_redirect, Location}.
