@@ -2,7 +2,8 @@
 var mgr;
 var _management_logger;
 
-function oauth_initialize_if_required() {
+/*
+function oauth_initialize_if_required_deprecated() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
     rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
     rabbit_base_uri = window.location.protocol + "//" + window.location.hostname
@@ -18,8 +19,17 @@ function oauth_initialize_if_required() {
     }
 
 }
+*/
 
-
+function rabbit_base_uri() {
+  return window.location.protocol + "//" + window.location.hostname + rabbit_port() + rabbit_path_prefix()
+}
+function rabbit_path_prefix() {
+  return window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "");
+}
+function rabbit_port() {
+  return window.location.port ? ":" +  window.location.port : "";
+}
 function auth_settings_apply_defaults(authSettings) {
 
   if (!authSettings.oauth_response_type) {
@@ -59,8 +69,8 @@ function oauth_initialize(authSettings) {
         response_type: authSettings.oauth_response_type,
         scope: authSettings.oauth_scopes,
         resource: authSettings.oauth_resource_id,
-        redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri + "/",
+        redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
+        post_logout_redirect_uri: rabbit_base_uri() + "/",
 
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
@@ -141,15 +151,15 @@ function oauth_redirectToHome(oauth) {
   go_to_home()
 }
 function go_to_home() {
-  location.href = rabbit_path_prefix + "/"
+  location.href = rabbit_path_prefix() + "/"
 }
 function go_to_authority() {
   location.href = oauth.authority
 }
 function oauth_redirectToLogin(error) {
-  if (!error) location.href = rabbit_path_prefix + "/"
+  if (!error) location.href = rabbit_path_prefix() + "/"
   else {
-    location.href = rabbit_path_prefix + "/?error=" + error
+    location.href = rabbit_path_prefix() + "/?error=" + error
   }
 }
 function oauth_completeLogin() {
