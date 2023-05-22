@@ -2818,17 +2818,8 @@ get_queue_consumer_timeout(_PA = #pending_ack{queue = QName},
 	    GCT
     end.
 
-get_consumer_timeout(PA = #pending_ack{tag  = CTag},
-                     State = #ch{consumer_mapping = CMap}) ->
-    case maps:find(CTag, CMap) of
-        {ok, {_, {_, _, _, Args}}} ->
-	    case rabbit_misc:table_lookup(Args, <<"x-consumer-timeout">>) of
-		    {long, Timeout} -> Timeout;
-		    _            -> get_queue_consumer_timeout(PA, State)
-	    end;
-	_ ->
-	    get_queue_consumer_timeout(PA, State)
-    end.
+get_consumer_timeout(PA, State) ->
+    get_queue_consumer_timeout(PA, State).
 
 evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
     case ?QUEUE:get(UAMQ, empty) of
