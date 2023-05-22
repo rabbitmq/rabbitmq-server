@@ -28,8 +28,6 @@ endef
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
 DEPS = thoas recon credentials_obfuscation
 
-dep_credentials_obfuscation = hex 3.4.0
-
 # Variables and recipes in development.*.mk are meant to be used from
 # any Git clone. They are excluded from the files published to Hex.pm.
 # Generated files are published to Hex.pm however so people using this
