@@ -155,14 +155,14 @@ erlang_config(
         ),
         internal_erlang_from_github_release(
             name = "26",
-            sha256 = "ce962175c4d90161a7247d8e2e4ae36f9d8cc0214c8f52dba8ba84a82afc096f",
-            version = "26.0-rc3",
+            sha256 = "3ff3c53d7ef9a45b5720e95b8756269c1a1b58eb51accc992ca97522fdb234d4",
+            version = "26.0",
         ),
         internal_erlang_from_http_archive(
             name = "git_master",
             strip_prefix = "otp-master",
             url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-            version = "26",
+            version = "27",
         ),
     ],
 )
