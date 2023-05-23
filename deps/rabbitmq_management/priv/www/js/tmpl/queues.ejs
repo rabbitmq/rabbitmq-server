@@ -8,7 +8,7 @@
 <table class="list">
  <thead>
   <tr>
-    <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <%= group_heading('queues', 'Overview', [display.vhosts, display.nodes, true]) %>
 <% if(disable_stats && enable_queue_totals) { %>
     <%= group_heading('queues', 'Messages', []) %>
 <% } else { %>
@@ -286,7 +286,7 @@
 <% } %>
 <%
   if (ac.canListNodes()) {
-   var nodes = display.data_model.nodes
+   var nodes = display.data.nodes
 %>
         <tr>
           <th><label>Node:</label></th>
