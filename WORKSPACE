@@ -19,7 +19,11 @@ rules_pkg_dependencies()
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
+<<<<<<< HEAD
     tag = "3.10.0",
+=======
+    tag = "3.10.5",
+>>>>>>> 63984839e9 (Use the latest rules_erlang)
 )
 
 load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")

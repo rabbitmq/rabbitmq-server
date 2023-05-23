@@ -25,13 +25,21 @@ bazel_dep(
 
 bazel_dep(
     name = "gazelle",
+<<<<<<< HEAD
     version = "0.28.0",
+=======
+    version = "0.29.0",
+>>>>>>> 63984839e9 (Use the latest rules_erlang)
     repo_name = "bazel_gazelle",
 )
 
 bazel_dep(
     name = "rules_erlang",
+<<<<<<< HEAD
     version = "3.10.0",
+=======
+    version = "3.10.5",
+>>>>>>> 63984839e9 (Use the latest rules_erlang)
 )
 
 erlang_config = use_extension(
