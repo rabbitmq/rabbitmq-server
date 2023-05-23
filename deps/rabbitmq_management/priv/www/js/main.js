@@ -113,13 +113,13 @@ function check_login () {
   }
 
   ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
-  ac = new AccessControl(user, ui_data_model)
+  ac.update(user, ui_data_model)
   if (ac.isMonitoringUser()) {
     ui_data_model.nodes = JSON.parse(sync_get('/nodes'))
   }
   var overview = JSON.parse(sync_get('/overview'))
 
-  display = new DisplayControl(overview, ui_data_model)
+  display.update(overview, ui_data_model)
 
   setup_global_vars(overview)
 
