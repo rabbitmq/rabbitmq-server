@@ -3,13 +3,8 @@ var mgr;
 var _management_logger;
 
 function oauth_initialize_if_required() {
-    rabbit_port = window.location.port ? ":" +  window.location.port : ""
-    rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
-    rabbit_base_uri = window.location.protocol + "//" + window.location.hostname
-      + rabbit_port + rabbit_path_prefix
-
     var request = new XMLHttpRequest();
-    request.open("GET", rabbit_base_uri + "/api/auth", false);
+    request.open("GET", rabbit_base_uri() + "/api/auth", false);
     request.send(null);
     if (request.status === 200) {
         return oauth_initialize(JSON.parse(request.responseText));
