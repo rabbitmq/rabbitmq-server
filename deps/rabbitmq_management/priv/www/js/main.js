@@ -111,9 +111,6 @@ function check_login () {
   if (!isNaN(user_login_session_timeout)) {
     update_login_session_timeout(user_login_session_timeout)
   }
-<<<<<<< HEAD
-  setup_global_vars()
-=======
 
   ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
   ac.update(user, ui_data_model)
@@ -126,11 +123,12 @@ function check_login () {
 
   setup_global_vars(overview)
 
->>>>>>> cc4fc57d0b (Fix #8276)
   setup_constant_events()
   update_vhosts()
   update_interval()
   setup_extensions()
+
+
   return true
 }
 
@@ -198,17 +196,18 @@ function setup_constant_events() {
 }
 
 function update_vhosts() {
-    var vhosts = JSON.parse(sync_get('/vhosts'));
-    vhosts_interesting = vhosts.length > 1;
-    if (vhosts_interesting)
+    if (display.vhosts) {
         $('#vhost-form').show();
-    else
+        $('li#vhost').show();
+    }else {
         $('#vhost-form').hide();
+        $('li#vhost').hide();
+    }
     var select = $('#show-vhost').get(0);
-    select.options.length = vhosts.length + 1;
+    select.options.length = ui_data_model.vhosts.length + 1;
     var index = 0;
-    for (var i = 0; i < vhosts.length; i++) {
-        var vhost = vhosts[i].name;
+    for (var i = 0; i < ui_data_model.vhosts.length; i++) {
+        var vhost = ui_data_model.vhosts[i].name;
         select.options[i + 1] = new Option(vhost, vhost);
         if (vhost == current_vhost) index = i + 1;
     }
@@ -361,13 +360,15 @@ function update_navigation() {
         var selected = false;
         if (contains_current_highlight(val)) {
             selected = true;
-            if (!leaf(val)) {
-                descend = nav(val);
+            if (!leaf(val) && val[2] && ac.canAccessVhosts()) {
+                descend = nav(val)
             }
         }
         if (show(path)) {
-            l1 += '<li><a href="' + nav(path) + '"' +
-                (selected ? ' class="selected"' : '') + '>' + k + '</a></li>';
+          if (val.length < 3 || ( val[2] && ac.canAccessVhosts() )) {
+            l1 += '<li id="' + k + '"><a href="' + nav(path) + '"' +
+                (selected ? ' class="selected"' : '') + '>' + k + '</a></li>'
+          }
         }
     }
 
@@ -388,7 +389,12 @@ function nav(pair) {
 }
 
 function show(pair) {
-    return jQuery.inArray(pair[1], user_tags) != -1;
+    var hasUserTag = jQuery.inArray(pair[1], user_tags) != -1
+    if (pair.length > 2 && pair[2]) {
+      return hasUserTag && ac.canAccessVhosts()
+    } else {
+      return hasUserTag
+    }
 }
 
 function leaf(pair) {
