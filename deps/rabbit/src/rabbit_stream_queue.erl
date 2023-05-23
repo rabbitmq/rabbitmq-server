@@ -688,7 +688,7 @@ get_counters(Q) ->
 safe_get_overview(Node, QName) ->
     case rpc:call(Node, ?MODULE, get_overview, [QName]) of
         {badrpc, _} ->
-            #{node => Node};
+            undefined;
         Result ->
             Result
     end.
