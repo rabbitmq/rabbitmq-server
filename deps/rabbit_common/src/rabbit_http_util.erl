@@ -9,7 +9,6 @@
 -export([path_split/1]).
 -export([urlsplit/1, urlsplit_path/1, urlunsplit/1, urlunsplit_path/1]).
 -export([parse_header/1]).
--export([shell_quote/1, cmd/1, cmd_string/1, cmd_port/2, cmd_status/1, cmd_status/2]).
 -export([record_to_proplist/2, record_to_proplist/3]).
 -export([safe_relative_path/1, partition/2]).
 -export([parse_qvalues/1, pick_accepted_encodings/3]).
@@ -102,52 +101,6 @@ safe_relative_path(P, Acc) ->
             safe_relative_path(Rest, [Part | Acc])
     end.
 
-%% @spec shell_quote(string()) -> string()
-%% @doc Quote a string according to UNIX shell quoting rules, returns a string
-%%      surrounded by double quotes.
-shell_quote(L) ->
-    shell_quote(L, [$\"]).
-
-%% @spec cmd_port([string()], Options) -> port()
-%% @doc open_port({spawn, mochiweb_util:cmd_string(Argv)}, Options).
-cmd_port(Argv, Options) ->
-    open_port({spawn, cmd_string(Argv)}, Options).
-
-%% @spec cmd([string()]) -> string()
-%% @doc os:cmd(cmd_string(Argv)).
-cmd(Argv) ->
-    os:cmd(cmd_string(Argv)).
-
-%% @spec cmd_string([string()]) -> string()
-%% @doc Create a shell quoted command string from a list of arguments.
-cmd_string(Argv) ->
-    string:join([shell_quote(X) || X <- Argv], " ").
-
-%% @spec cmd_status([string()]) -> {ExitStatus::integer(), Stdout::binary()}
-%% @doc Accumulate the output and exit status from the given application,
-%%      will be spawned with cmd_port/2.
-cmd_status(Argv) ->
-    cmd_status(Argv, []).
-
-%% @spec cmd_status([string()], [atom()]) -> {ExitStatus::integer(), Stdout::binary()}
-%% @doc Accumulate the output and exit status from the given application,
-%%      will be spawned with cmd_port/2.
-cmd_status(Argv, Options) ->
-    Port = cmd_port(Argv, [exit_status, stderr_to_stdout,
-                           use_stdio, binary | Options]),
-    try cmd_loop(Port, [])
-    after catch port_close(Port)
-    end.
-
-%% @spec cmd_loop(port(), list()) -> {ExitStatus::integer(), Stdout::binary()}
-%% @doc Accumulate the output and exit status from a port.
-cmd_loop(Port, Acc) ->
-    receive
-        {Port, {exit_status, Status}} ->
-            {Status, iolist_to_binary(lists:reverse(Acc))};
-        {Port, {data, Data}} ->
-            cmd_loop(Port, [Data | Acc])
-    end.
 
 %% @spec join([iolist()], iolist()) -> iolist()
 %% @doc Join a list of strings or binaries together with the given separator
@@ -406,15 +359,6 @@ record_to_proplist(Record, Fields, TypeKey)
   when tuple_size(Record) - 1 =:= length(Fields) ->
     lists:zip([TypeKey | Fields], tuple_to_list(Record)).
 
-
-shell_quote([], Acc) ->
-    lists:reverse([$\" | Acc]);
-shell_quote([C | Rest], Acc) when C =:= $\" orelse C =:= $\` orelse
-                                  C =:= $\\ orelse C =:= $\$ ->
-    shell_quote(Rest, [C, $\\ | Acc]);
-shell_quote([C | Rest], Acc) ->
-    shell_quote(Rest, [C | Acc]).
-
 %% @spec parse_qvalues(string()) -> [qvalue()] | invalid_qvalue_string
 %% @type qvalue() = {media_type() | encoding() , float()}.
 %% @type media_type() = string().
@@ -607,60 +551,6 @@ record_to_proplist_test() ->
                           record_info(fields, test_record),
                           typekey)),
     ok.
-
-shell_quote_test() ->
-    ?assertEqual(
-       "\"foo \\$bar\\\"\\`' baz\"",
-       shell_quote("foo $bar\"`' baz")),
-    ok.
-
-cmd_port_test_spool(Port, Acc) ->
-    receive
-        {Port, eof} ->
-            Acc;
-        {Port, {data, {eol, Data}}} ->
-            cmd_port_test_spool(Port, ["\n", Data | Acc]);
-        {Port, Unknown} ->
-            throw({unknown, Unknown})
-    after 1000 ->
-            throw(timeout)
-    end.
-
-cmd_port_test() ->
-    Port = cmd_port(["echo", "$bling$ `word`!"],
-                    [eof, stream, {line, 4096}]),
-    Res = try lists:append(lists:reverse(cmd_port_test_spool(Port, [])))
-          after catch port_close(Port)
-          end,
-    self() ! {Port, wtf},
-    try cmd_port_test_spool(Port, [])
-    catch throw:{unknown, wtf} -> ok
-    end,
-    try cmd_port_test_spool(Port, [])
-    catch throw:timeout -> ok
-    end,
-    ?assertEqual(
-       "$bling$ `word`!\n",
-       Res).
-
-cmd_test() ->
-    ?assertEqual(
-       "$bling$ `word`!\n",
-       cmd(["echo", "$bling$ `word`!"])),
-    ok.
-
-cmd_string_test() ->
-    ?assertEqual(
-       "\"echo\" \"\\$bling\\$ \\`word\\`!\"",
-       cmd_string(["echo", "$bling$ `word`!"])),
-    ok.
-
-cmd_status_test() ->
-    ?assertEqual(
-       {0, <<"$bling$ `word`!\n">>},
-       cmd_status(["echo", "$bling$ `word`!"])),
-    ok.
-
 
 parse_header_test() ->
     ?assertEqual(
