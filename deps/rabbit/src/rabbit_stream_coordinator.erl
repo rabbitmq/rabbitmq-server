@@ -271,7 +271,7 @@ query_pid(StreamId, MFA) when is_list(StreamId) ->
 -spec stream_overview(stream_id()) ->
     {ok, #{epoch := osiris:epoch(),
            members := #{node() := #{state := term(),
-                                    role := writer | replica,
+                                    role := {writer | replica, osiris:epoch()},
                                     current := term(),
                                     target := running | stopped}},
            num_listeners := non_neg_integer(),
