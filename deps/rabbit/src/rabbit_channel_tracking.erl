@@ -79,19 +79,22 @@ handle_cast({channel_closed, Details}) ->
     %% channel has terminated, unregister if local
     unregister_tracked_by_pid(pget(pid, Details));
 handle_cast({connection_closed, ConnDetails}) ->
-    ThisNode= node(),
-    ConnPid = pget(pid, ConnDetails),
-
+    ThisNode = node(),
     case pget(node, ConnDetails) of
         ThisNode ->
-            TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_channel:debug(
-                "Closing all channels from connection '~ts' "
-                "because it has been closed", [pget(name, ConnDetails)]),
-            %% Shutting down channels will take care of unregistering the
-            %% corresponding tracking.
-            shutdown_tracked_items(TrackedChs, undefined),
-            ok;
+            ConnPid = pget(pid, ConnDetails),
+            case get_tracked_channels_by_connection_pid(ConnPid) of
+                [] ->
+                    ok;
+                TrackedChs ->
+                    rabbit_log_channel:debug(
+                      "Closing ~b channel(s) because connection '~ts' has been closed",
+                      [length(TrackedChs), pget(name, ConnDetails)]),
+                    %% Shutting down channels will take care of unregistering the
+                    %% corresponding tracking.
+                    shutdown_tracked_items(TrackedChs, undefined),
+                    ok
+            end;
         _DifferentNode ->
             ok
     end;
