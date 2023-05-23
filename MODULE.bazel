@@ -330,6 +330,7 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+    build_file = "@rabbitmq-server//bazel:BUILD.syslog",
     repository = "schlagert/syslog",
     tag = "4.0.0",
 )
