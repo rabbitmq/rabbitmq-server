@@ -638,6 +638,76 @@ var exchange_types;
 // Used for access control
 var user_tags;
 var user;
+<<<<<<< HEAD
+=======
+var ac = new AccessControl();
+var display = new DisplayControl();
+
+var ui_data_model = {
+  vhosts: [],
+  nodes: [],
+
+};
+
+// Access control
+
+function AccessControl() {
+
+  this.update = function(user, ui_data_model) {
+    this.user = user;
+    this.user_tags = expand_user_tags(user.tags);
+    this.ui_data_model = ui_data_model;
+  };
+  this.isMonitoringUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("monitoring");
+    else return false;
+  };
+  this.isAdministratorUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("administrator");
+    else return false;
+  };
+  this.isPolicyMakerUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("policymaker");
+    else return false;
+  };
+  this.canAccessVhosts = function() {
+    if (this.ui_data_model)
+      return this.ui_data_model.vhosts.length > 0;
+    else return false;
+  };
+  this.canListNodes = function() {
+    if (this.ui_data_model)
+      return this.isMonitoringUser() && this.ui_data_model.nodes.length > 1;
+    else return false;
+  };
+
+};
+
+function DisplayControl() {
+  this.nodes = false
+  this.vhosts = false
+  this.rabbitmqVersions = false
+
+  this.update = function(overview, ui_data_model) {    
+    this.nodes = ac.canListNodes() && ui_data_model.nodes.length > 1
+    this.vhosts = ac.canAccessVhosts()
+    this.rabbitmqVersions = false
+    var v = '';
+    for (var i = 0; i < ui_data_model.nodes.length; i++) {
+        var v1 = fmt_rabbit_version(ui_data_model.nodes[i].applications);
+        if (v1 != 'unknown') {
+            if (v != '' && v != v1) this.rabbitmqVersions = true;
+            v = v1;
+        }
+    }
+    this.data = ui_data_model;
+  }
+
+}
+>>>>>>> cc4fc57d0b (Fix #8276)
 
 // Set up the above vars
 function setup_global_vars() {

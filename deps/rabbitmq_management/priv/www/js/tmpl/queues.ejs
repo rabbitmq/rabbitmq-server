@@ -8,7 +8,7 @@
 <table class="list">
  <thead>
   <tr>
-    <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <%= group_heading('queues', 'Overview', [display.vhosts, display.nodes, true]) %>
 <% if(disable_stats && enable_queue_totals) { %>
     <%= group_heading('queues', 'Messages', []) %>
 <% } else { %>
@@ -284,8 +284,13 @@
         </tr>
 <% } %>
 <%
+<<<<<<< HEAD
   if (nodes_interesting) {
    var nodes = JSON.parse(sync_get('/nodes'));
+=======
+  if (ac.canListNodes()) {
+   var nodes = display.data.nodes
+>>>>>>> 30184053c9 (Fix member variable for datamodel in Display)
 %>
         <tr>
           <th><label>Node:</label></th>

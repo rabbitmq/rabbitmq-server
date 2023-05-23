@@ -111,7 +111,22 @@ function check_login () {
   if (!isNaN(user_login_session_timeout)) {
     update_login_session_timeout(user_login_session_timeout)
   }
+<<<<<<< HEAD
   setup_global_vars()
+=======
+
+  ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
+  ac.update(user, ui_data_model)
+  if (ac.isMonitoringUser()) {
+    ui_data_model.nodes = JSON.parse(sync_get('/nodes'))
+  }
+  var overview = JSON.parse(sync_get('/overview'))
+
+  display.update(overview, ui_data_model)
+
+  setup_global_vars(overview)
+
+>>>>>>> cc4fc57d0b (Fix #8276)
   setup_constant_events()
   update_vhosts()
   update_interval()
