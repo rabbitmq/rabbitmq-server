@@ -1195,6 +1195,16 @@ stdout_formatter:
 - stdout_formatter_paragraph
 - stdout_formatter_table
 - stdout_formatter_utils
+syslog:
+- syslog
+- syslog_error_h
+- syslog_lager_backend
+- syslog_lib
+- syslog_logger
+- syslog_logger_h
+- syslog_monitor
+- syslog_rfc3164
+- syslog_rfc5424
 sysmon_handler:
 - sysmon_handler_app
 - sysmon_handler_example_handler
