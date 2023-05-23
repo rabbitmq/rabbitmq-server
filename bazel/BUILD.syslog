@@ -1,0 +1,121 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "behaviours",
+    srcs = [
+        "src/syslog_logger.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "syslog",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/syslog.erl",
+        "src/syslog_error_h.erl",
+        "src/syslog_lager_backend.erl",
+        "src/syslog_lib.erl",
+        "src/syslog_logger_h.erl",
+        "src/syslog_monitor.erl",
+        "src/syslog_rfc3164.erl",
+        "src/syslog_rfc5424.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "syslog",
+    beam = [":behaviours"],
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/syslog.app.src",
+        "src/syslog.erl",
+        "src/syslog_error_h.erl",
+        "src/syslog_lager_backend.erl",
+        "src/syslog_lib.erl",
+        "src/syslog_logger.erl",
+        "src/syslog_logger_h.erl",
+        "src/syslog_monitor.erl",
+        "src/syslog_rfc3164.erl",
+        "src/syslog_rfc5424.erl",
+    ],
+)
+
+filegroup(name = "private_hdrs")
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/syslog.hrl",
+    ],
+)
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "syslog",
+    beam_files = [":beam_files"],
+    extra_apps = ["sasl"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+)
+
+alias(
+    name = "syslog",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
