@@ -25,13 +25,13 @@ bazel_dep(
 
 bazel_dep(
     name = "gazelle",
-    version = "0.30.0",
+    version = "0.29.0",
     repo_name = "bazel_gazelle",
 )
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.10.1",
+    version = "3.10.5",
 )
 
 erlang_config = use_extension(
