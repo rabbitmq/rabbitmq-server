@@ -252,6 +252,8 @@ DeclarePublisherResponse => Key Version CorrelationId ResponseCode
 
 === Publish
 
+Version 1
+
 ```
 Publish => Key Version PublisherId PublishedMessages
   Key => uint16 // 0x0002
@@ -260,6 +262,20 @@ Publish => Key Version PublisherId PublishedMessages
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
   PublishingId => uint64
+  Message => bytes
+```
+
+Version 2
+
+```
+Publish => Key Version PublisherId PublishedMessages
+  Key => uint16 // 0x0002
+  Version => uint16
+  PublisherId => uint8
+  PublishedMessages => [PublishedMessage]
+  PublishedMessage => PublishingId Message
+  PublishingId => uint64
+  FilterValue => string
   Message => bytes
 ```
 

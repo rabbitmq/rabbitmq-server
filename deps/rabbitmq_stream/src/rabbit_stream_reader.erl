@@ -1309,15 +1309,15 @@ handle_inbound_data(Transport,
                 {Connection, State#stream_connection_state{data = CoreState}},
                 Commands).
 
-publishing_ids_from_messages(<<>>) ->
+publishing_ids_from_messages(_, <<>>) ->
     [];
-publishing_ids_from_messages(<<PublishingId:64,
+publishing_ids_from_messages(?VERSION_1 = V, <<PublishingId:64,
                                0:1,
                                MessageSize:31,
                                _Message:MessageSize/binary,
                                Rest/binary>>) ->
-    [PublishingId | publishing_ids_from_messages(Rest)];
-publishing_ids_from_messages(<<PublishingId:64,
+    [PublishingId | publishing_ids_from_messages(V, Rest)];
+publishing_ids_from_messages(?VERSION_1 = V, <<PublishingId:64,
                                1:1,
                                _CompressionType:3,
                                _Unused:4,
@@ -1326,7 +1326,15 @@ publishing_ids_from_messages(<<PublishingId:64,
                                BatchSize:32,
                                _Batch:BatchSize/binary,
                                Rest/binary>>) ->
-    [PublishingId | publishing_ids_from_messages(Rest)].
+    [PublishingId | publishing_ids_from_messages(V, Rest)];
+publishing_ids_from_messages(?VERSION_2 = V, <<PublishingId:64,
+                               FilterValueLength:16, _FilterValue:FilterValueLength/binary,
+                               0:1,
+                               MessageSize:31,
+                               _Message:MessageSize/binary,
+                               Rest/binary>>) ->
+    [PublishingId | publishing_ids_from_messages(V, Rest)].
+%% TODO handle filter value with sub-batching
 
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
@@ -1740,6 +1748,18 @@ handle_frame_post_auth(Transport,
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
+                       Connection,
+                       State,
+                       {publish, PublisherId, MessageCount, Messages}) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {publish, ?VERSION_1, PublisherId, MessageCount, Messages});
+handle_frame_post_auth(Transport,
+                       Connection,
+                       State,
+                       {publish_v2, PublisherId, MessageCount, Messages}) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {publish, ?VERSION_2, PublisherId, MessageCount, Messages});
+handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
                                           virtual_host = VirtualHost,
@@ -1747,7 +1767,7 @@ handle_frame_post_auth(Transport,
                                           publishers = Publishers} =
                            Connection,
                        State,
-                       {publish, PublisherId, MessageCount, Messages}) ->
+                       {publish, Version, PublisherId, MessageCount, Messages}) ->
     case Publishers of
         #{PublisherId := Publisher} ->
             #publisher{stream = Stream,
@@ -1766,14 +1786,14 @@ handle_frame_post_auth(Transport,
                                                            User, #{})
             of
                 ok ->
-                    rabbit_stream_utils:write_messages(Leader,
+                    rabbit_stream_utils:write_messages(Version, Leader,
                                                        Reference,
                                                        PublisherId,
                                                        Messages),
                     sub_credits(Credits, MessageCount),
                     {Connection, State};
                 error ->
-                    PublishingIds = publishing_ids_from_messages(Messages),
+                    PublishingIds = publishing_ids_from_messages(Version, Messages),
                     Command =
                         {publish_error,
                          PublisherId,
@@ -1788,7 +1808,7 @@ handle_frame_post_auth(Transport,
                     {Connection, State}
             end;
         _ ->
-            PublishingIds = publishing_ids_from_messages(Messages),
+            PublishingIds = publishing_ids_from_messages(Version, Messages),
             Command =
                 {publish_error,
                  PublisherId,
@@ -2806,15 +2826,27 @@ init_reader(ConnectionTransport,
             Properties,
             OffsetSpec) ->
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
-    Options =
-        #{transport => ConnectionTransport,
-          chunk_selector => get_chunk_selector(Properties)},
+    Options = filter_spec(Properties,
+                          #{transport => ConnectionTransport,
+                            chunk_selector => get_chunk_selector(Properties)}),
     {ok, Segment} =
         osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
     rabbit_log:debug("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
 
+filter_spec(#{<<"filters">> := FiltersBin} = Properties, Options) ->
+    Filters = binary:split(FiltersBin, <<",">>, [global]),
+    MatchUnfiltered = case Properties of
+                          #{<<"match-unfiltered">> := <<"true">>} ->
+                              true;
+                          _ ->
+                              false
+                      end,
+    Options#{filter_spec =>
+             #{filters => Filters, match_unfiltered => MatchUnfiltered}};
+filter_spec(_, Options) ->
+    Options.
 
 single_active_consumer(#consumer{configuration =
                                  #consumer_configuration{properties = Properties}}) ->
