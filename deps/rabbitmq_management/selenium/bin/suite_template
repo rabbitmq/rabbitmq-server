@@ -112,7 +112,7 @@ kill_container_if_exist() {
   docker stop $1 &> /dev/null || true && docker rm $1 &> /dev/null || true
 }
 wait_for_message() {
-  attemps_left=10
+  attemps_left=15
   while ! docker logs $1 | grep -q "$2";
   do
       sleep 5
@@ -135,10 +135,19 @@ init_rabbitmq() {
 
 }
 start_rabbitmq() {
-  if [[ "$PROFILES" == *"docker"* ]]; then
+  if [[ "$PROFILES" == *"cluster"* ]]; then
+    start_cluster_rabbitmq
+  elif  [[ "$PROFILES" == *"docker"* ]]; then
     start_docker_rabbitmq
   else
     start_local_rabbitmq
+  fi
+}
+stop_rabbitmq() {
+  if [[ "$PROFILES" == *"cluster"* ]]; then
+    stop_cluster_rabbitmq
+  elif  [[ "$PROFILES" == *"docker"* ]]; then
+    kill_container_if_exist rabbitmq
   fi
 }
 
@@ -146,12 +155,8 @@ start_local_rabbitmq() {
   begin "Starting rabbitmq ..."
 
   init_rabbitmq
-
-
   RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-
-
   RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
   print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
@@ -166,27 +171,82 @@ start_docker_rabbitmq() {
 
   init_rabbitmq
   kill_container_if_exist rabbitmq
-
+  rm -rf $CONF_DIR/rabbitmq
   mkdir -p $CONF_DIR/rabbitmq
+
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-  RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
-  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-  print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
+  RABBITMQ_TEST_DIR="/etc/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+
+  print "> EFFECTIVE RABBITMQ CONFIGURATION: "
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
+  mkdir -p $CONF_DIR/rabbitmq/conf.d
+  cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d
+  if [ -d "${RABBITMQ_CONFIG_DIR}/imports" ]; then
+    cp -r ${RABBITMQ_CONFIG_DIR}/imports $CONF_DIR/rabbitmq
+  fi
+  if [ -n "${OAUTH_SIGNING_KEY_PATH}" ]; then
+    cp ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH} $CONF_DIR/rabbitmq
+  fi
+  if ! [ -x "$(command -v tree)" ]; then
+    ls -lR $CONF_DIR/rabbitmq
+  else
+    tree $CONF_DIR/rabbitmq
+  fi
 
   docker run \
     --detach \
     --name rabbitmq \
     --net ${DOCKER_NETWORK} \
     -p 15672:15672 -p 5672:5672 \
-    -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-    -v $CONF_DIR/rabbitmq/rabbitmq.conf:${MOUNT_RABBITMQ_CONF}:ro \
-    -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
-    -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH}:/config \
-    -v ${RABBITMQ_CONFIG_DIR}/imports:/var/rabbitmq/imports \
+    -v ${CONF_DIR}/rabbitmq:/etc/rabbitmq:ro \
     ${RABBITMQ_DOCKER_IMAGE}
 
   wait_for_message rabbitmq "Server startup complete"
   end "RabbitMQ ready"
+}
+
+start_cluster_rabbitmq() {
+  begin "Starting rabbitmq cluster ..."
+
+  init_rabbitmq
+  kill_container_if_exist rabbitmq
+  mkdir -p $CONF_DIR/rabbitmq
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+  RABBITMQ_TEST_DIR="/etc/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+
+  print "> EFFECTIVE RABBITMQ CONFIGURATION: "
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
+  mkdir -p $CONF_DIR/rabbitmq/conf.d
+  cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d
+  if [ -d "${RABBITMQ_CONFIG_DIR}/imports" ]; then
+    cp -r ${RABBITMQ_CONFIG_DIR}/imports $CONF_DIR/rabbitmq
+  fi
+  if [ -n "${OAUTH_SIGNING_KEY_PATH}" ]; then
+    cp ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH} $CONF_DIR/rabbitmq
+  fi
+  if ! [ -x "$(command -v tree)" ]; then
+    ls -lR $CONF_DIR/rabbitmq
+  else
+    tree $CONF_DIR/rabbitmq
+  fi
+
+  export RABBITMQ_DOCKER_IMAGE
+  export RABBITMQ_DIR=$CONF_DIR/rabbitmq
+  export DOCKER_NETWORK
+  docker-compose -f ${TEST_DIR}/compose.yml -p rabbitmq up --detach
+
+  wait_for_message rabbitmq_rabbitmq_1 "Server startup complete"
+  end "RabbitMQ ready"
+}
+stop_cluster_rabbitmq() {
+  docker-compose -f ${TEST_DIR}/compose.yml -p rabbitmq down
+}
+save_rabbitmq_logs() {
+  if [[ "$PROFILES" == *"cluster"* ]]; then
+    docker-compose -f ${TEST_DIR}/compose.yml -p rabbitmq logs > $LOGS/rabbitmq.log
+  elif [[ "$PROFILES" == *"docker"* ]]; then
+    save_container_logs rabbitmq
+  fi
 }
 init_uaa() {
   UAA_CONFIG_PATH=${UAA_CONFIG_PATH:-oauth/uaa}
@@ -222,6 +282,12 @@ start_uaa() {
   wait_for_oidc_endpoint uaa $UAA_URL
   end "UAA is ready"
 }
+stop_uaa() {
+  kill_container_if_exist uaa
+}
+save_uaa_logs() {
+  save_container_logs uaa
+}
 init_keycloak() {
   KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
   KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})
@@ -255,6 +321,12 @@ start_keycloak() {
 
   wait_for_oidc_endpoint keycloak $KEYCLOAK_URL
   end "Keycloak is ready"
+}
+stop_keycloak() {
+  kill_container_if_exist keycloak
+}
+save_keycloak_logs() {
+  save_container_logs keycloak
 }
 wait_for_oidc_endpoint() {
   NAME=$1
@@ -342,7 +414,12 @@ start_fakeportal() {
   wait_for_url $FAKEPORTAL_URL
   end "Fakeportal is ready"
 }
-
+stop_fakeportal() {
+  kill_container_if_exist fakeportal
+}
+save_fakeportal_logs() {
+  save_container_logs fakeportal
+}
 init_fakeproxy() {
   FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
   FAKEPROXY_DIR=${SCRIPT}/../fakeportal
@@ -384,7 +461,12 @@ start_fakeproxy() {
   end "Fakeproxy is ready"
 
 }
-
+stop_fakeproxy() {
+  kill_container_if_exist fakeproxy
+}
+save_fakeproxy_logs() {
+  save_container_logs fakeproxy
+}
 wait_for_url() {
   BASE_URL=$1
   if [[ $BASE_URL == *"localhost"** ]]; then
@@ -454,8 +536,12 @@ start_proxy() {
   wait_for_url $PROXIED_RABBITMQ_URL
   end "Proxy is ready"
 }
-
-
+stop_proxy() {
+  kill_container_if_exist proxy
+}
+save_proxy_logs() {
+  save_container_logs proxy
+}
 test() {
   kill_container_if_exist mocha
   begin "Running tests with env variables:"
@@ -495,6 +581,7 @@ save_logs() {
 save_container_logs() {
   docker container ls | grep $1 >/dev/null 2>&1 && docker logs $1 > $LOGS/$1.log || echo "$1 not running"
 }
+
 
 profiles_with_local_or_docker() {
   if [[ "$PROFILES" != *"local"* && "$PROFILES" != *"docker"* ]]; then
@@ -626,7 +713,8 @@ teardown_components() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     print "Tear down $i"
-    $(kill_container_if_exist $i)
+    stop="stop_$i"
+    $stop
   done
   end "Finished teardown"
 }
@@ -635,7 +723,8 @@ save_components_logs() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     print "Saving logs for $i"
-    $(save_container_logs $i)
+    save_logs="save_${i}_logs"
+    $save_logs
   done
   end "Finished saving logs"
 }

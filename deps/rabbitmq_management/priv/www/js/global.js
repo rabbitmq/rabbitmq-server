@@ -691,7 +691,7 @@ function DisplayControl() {
   this.vhosts = false
   this.rabbitmqVersions = false
 
-  this.update = function(overview, ui_data_model) {    
+  this.update = function(overview, ui_data_model) {
     this.nodes = ac.canListNodes() && ui_data_model.nodes.length > 1
     this.vhosts = ac.canAccessVhosts()
     this.rabbitmqVersions = false
