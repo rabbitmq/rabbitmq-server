@@ -284,8 +284,13 @@
         </tr>
 <% } %>
 <%
+<<<<<<< HEAD
   if (nodes_interesting) {
    var nodes = JSON.parse(sync_get('/nodes'));
+=======
+  if (ac.canListNodes()) {
+   var nodes = display.data.nodes
+>>>>>>> 30184053c9 (Fix member variable for datamodel in Display)
 %>
         <tr>
           <th><label>Node:</label></th>
