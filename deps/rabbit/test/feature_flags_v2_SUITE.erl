@@ -175,6 +175,7 @@ setup_slave_node(Config) ->
     ok = setup_logger(),
     ok = setup_data_dir(Config),
     ok = setup_feature_flags_file(Config),
+    _ = rabbit_ff_registry_factory:initialize_registry(),
     ok = start_controller(),
     ok = rabbit_feature_flags:enable(feature_flags_v2),
     ok.
