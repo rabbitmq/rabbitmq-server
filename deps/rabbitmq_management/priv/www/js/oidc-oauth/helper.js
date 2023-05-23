@@ -2,8 +2,7 @@
 var mgr;
 var _management_logger;
 
-/*
-function oauth_initialize_if_required_deprecated() {
+function oauth_initialize_if_required() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
     rabbit_path_prefix = window.location.pathname.replace(/(\/js\/oidc-oauth\/.*$|\/+$)/, "")
     rabbit_base_uri = window.location.protocol + "//" + window.location.hostname
@@ -19,7 +18,6 @@ function oauth_initialize_if_required_deprecated() {
     }
 
 }
-*/
 
 function rabbit_base_uri() {
   return window.location.protocol + "//" + window.location.hostname + rabbit_port() + rabbit_path_prefix()
