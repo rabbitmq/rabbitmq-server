@@ -137,6 +137,7 @@
 -record(client_msstate,
         { server,
           client_ref,
+          current_file,
           index_state,
           index_module,
           dir,
@@ -182,6 +183,7 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
+                      current_file       :: undefined | {non_neg_integer(), file:fd()},
                       index_state        :: any(),
                       index_module       :: atom(),
                       %% Stored as binary() as opposed to file:filename() to save memory.
@@ -435,6 +437,7 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
                                           ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
+                      current_file       = undefined,
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = rabbit_file:filename_to_binary(Dir),
@@ -446,13 +449,21 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
 -spec client_terminate(client_msstate()) -> 'ok'.
 
 client_terminate(CState = #client_msstate { client_ref = Ref }) ->
-    ok = server_call(CState, {client_terminate, Ref}).
+    ok = server_call(CState, {client_terminate, Ref}),
+    client_maybe_close_current_file(CState).
 
 -spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
     ok = server_cast(CState, {client_dying, Ref}),
-    ok = server_cast(CState, {client_delete, Ref}).
+    ok = server_cast(CState, {client_delete, Ref}),
+    client_maybe_close_current_file(CState).
+
+client_maybe_close_current_file(#client_msstate{ current_file = CurrentFile }) ->
+    case CurrentFile of
+        undefined -> ok;
+        {_File, Fd} -> ok = file:close(Fd)
+    end.
 
 -spec client_ref(client_msstate()) -> client_ref().
 
@@ -1348,9 +1359,21 @@ write_message(MsgId, Msg,
                              current_file_offset = CurOffset + TotalSize }).
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
-                               total_size = TotalSize }, State = #client_msstate{ dir = Dir }) ->
-    {ok, Hdl} = file:open(form_filename(Dir, filenum_to_name(File)),
-                          [binary, read, raw]),
+                               total_size = TotalSize }, State = #client_msstate{ current_file = CurrentFile0, dir = Dir }) ->
+    {ok, Hdl} = case CurrentFile0 of
+        {File, Fd} ->
+            {ok, Fd};
+        {_AnotherFile, Fd} ->
+            ok = file:close(Fd),
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw]);
+        undefined ->
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw])
+    end,
+
+%    {ok, Hdl} = file:open(form_filename(Dir, filenum_to_name(File)),
+%                          [binary, read, raw]),
     {ok, {MsgId, Msg}} =
         case rabbit_msg_file:pread(Hdl, Offset, TotalSize) of
             {ok, {MsgId, _}} = Obj ->
@@ -1364,8 +1387,8 @@ read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
                                    {proc_dict, get()}
                                   ]}}
         end,
-    ok = file:close(Hdl),
-    {Msg, State}.
+%    ok = file:close(Hdl),
+    {Msg, State#client_msstate{ current_file = {File, Hdl}}}.
 
 contains_message(MsgId, From, State) ->
     MsgLocation = index_lookup_positive_ref_count(MsgId, State),
