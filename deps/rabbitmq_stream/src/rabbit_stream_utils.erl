@@ -29,6 +29,7 @@
          sort_partitions/1,
          strip_cr_lf/1,
          consumer_activity_status/2,
+         filter_spec/1,
          command_versions/0]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
@@ -128,6 +129,21 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                undefined,
                PublisherId,
                <<PublishingId:64,
+                 -1:16/signed,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok =
+        osiris:write(ClusterLeader,
+                     undefined,
+                     {PublisherId, PublishingId},
+                     Message),
+    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               undefined,
+               PublisherId,
+               <<PublishingId:64,
                  FilterValueLength:16, FilterValue:FilterValueLength/binary,
                  0:1,
                  MessageSize:31,
@@ -143,6 +159,17 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
                <<PublishingId:64,
+                 -1:16/signed,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
+    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               PublisherRef,
+               PublisherId,
+               <<PublishingId:64,
                  FilterValueLength:16, FilterValue:FilterValueLength/binary,
                  0:1,
                  MessageSize:31,
@@ -150,7 +177,6 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  Rest/binary>>) ->
     ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, {FilterValue, Message}),
     write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest).
-%% TODO handle filter value with sub-batching
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
@@ -274,6 +300,26 @@ consumer_activity_status(Active, Properties) ->
             single_active;
         {true, false} ->
             waiting
+    end.
+
+filter_spec(Properties) ->
+    Filters = maps:fold(fun(<<"filter.",_/binary>>, V, Acc) ->
+                                [V] ++ Acc;
+                           (_, _, Acc) ->
+                                Acc
+                        end, [], Properties),
+    case Filters of
+        [] ->
+            #{};
+        _ ->
+            MatchUnfiltered = case Properties of
+                                  #{<<"match-unfiltered">> := <<"true">>} ->
+                                      true;
+                                  _ ->
+                                      false
+                              end,
+            #{filter_spec =>
+              #{filters => Filters, match_unfiltered => MatchUnfiltered}}
     end.
 
 command_versions() ->

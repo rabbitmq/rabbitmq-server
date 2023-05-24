@@ -2826,27 +2826,14 @@ init_reader(ConnectionTransport,
             Properties,
             OffsetSpec) ->
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
-    Options = filter_spec(Properties,
-                          #{transport => ConnectionTransport,
-                            chunk_selector => get_chunk_selector(Properties)}),
+    Options = maps:merge(#{transport => ConnectionTransport,
+                           chunk_selector => get_chunk_selector(Properties)},
+                         rabbit_stream_utils:filter_spec(Properties)),
     {ok, Segment} =
         osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
     rabbit_log:debug("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
-
-filter_spec(#{<<"filters">> := FiltersBin} = Properties, Options) ->
-    Filters = binary:split(FiltersBin, <<",">>, [global]),
-    MatchUnfiltered = case Properties of
-                          #{<<"match-unfiltered">> := <<"true">>} ->
-                              true;
-                          _ ->
-                              false
-                      end,
-    Options#{filter_spec =>
-             #{filters => Filters, match_unfiltered => MatchUnfiltered}};
-filter_spec(_, Options) ->
-    Options.
 
 single_active_consumer(#consumer{configuration =
                                  #consumer_configuration{properties = Properties}}) ->

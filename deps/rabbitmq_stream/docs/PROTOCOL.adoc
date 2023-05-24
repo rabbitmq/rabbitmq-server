@@ -357,6 +357,13 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
 milliseconds from epoch
 
+Supported properties:
+
+* `single-active-consumer`: set to `true` to enable https://blog.rabbitmq.com/posts/2022/07/rabbitmq-3-11-feature-preview-single-active-consumer-for-streams/[single active consumer] for this subscription.
+* `super-stream`: set to the name of the super stream the subscribed is a partition of.
+* `filter.` (e.g. `filter.0`, `filter.1`, etc): prefix to use to define filter values for the subscription.
+* `match-unfiltered`: whether to return messages without any filter value or not.
+
 === Deliver
 
 Version 1

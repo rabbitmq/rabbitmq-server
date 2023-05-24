@@ -17,7 +17,7 @@ suite() ->
     [{timetrap, {seconds, 30}}].
 
 groups() ->
-    [{tests, [], [sort_partitions]}].
+    [{tests, [], [sort_partitions, filter_spec]}].
 
 init_per_suite(Config) ->
     Config.
@@ -63,6 +63,25 @@ sort_partitions(_Config) ->
                                                                  binding(<<"no-order-field">>),
                                                                  binding(<<"a">>,
                                                                          0)])]),
+    ok.
+
+filter_spec(_Config) ->
+    [begin
+         FilterSpec = rabbit_stream_utils:filter_spec(Properties),
+         ?assert(maps:is_key(filter_spec, FilterSpec)),
+         #{filter_spec := #{filters := Filters, match_unfiltered := MatchUnfiltered}} = FilterSpec,
+         ?assertEqual(lists:sort(ExpectedFilters), lists:sort(Filters)),
+         ?assertEqual(ExpectedMatchUnfiltered, MatchUnfiltered)
+     end || {Properties, ExpectedFilters, ExpectedMatchUnfiltered} <-
+            [{#{<<"filter.1">> => <<"apple">>,
+                <<"filter.2">> => <<"banana">>,
+                <<"sac">> => true}, [<<"apple">>, <<"banana">>], false},
+             {#{<<"filter.1">> => <<"apple">>}, [<<"apple">>], false},
+             {#{<<"filter.1">> => <<"apple">>,
+                <<"match-unfiltered">> => <<"true">>}, [<<"apple">>], true}
+            ]],
+    #{} = rabbit_stream_utils:filter_spec(#{}),
+    #{} = rabbit_stream_utils:filter_spec(#{<<"sac">> => true}),
     ok.
 
 binding(Destination, Order) ->
