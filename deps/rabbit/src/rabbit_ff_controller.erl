@@ -342,51 +342,99 @@ check_node_compatibility_task(NodeA, NodeB) ->
        [NodeA, NodeB],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     NodesA = list_nodes_clustered_with(NodeA),
-    NodesB = list_nodes_clustered_with(NodeB),
-    AreCompatible = case collect_inventory_on_nodes(NodesA) of
-                        {ok, InventoryA} ->
-                            ?LOG_DEBUG(
-                               "Feature flags: inventory of node `~s`:~n~p",
-                               [NodeA, InventoryA],
-                               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-                            case collect_inventory_on_nodes(NodesB) of
-                                {ok, InventoryB} ->
-                                    ?LOG_DEBUG(
-                                       "Feature flags: inventory of node "
-                                       "`~s`:~n~p",
-                                       [NodeB, InventoryB],
-                                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-                                    are_compatible(InventoryA, InventoryB);
-                                _ ->
-                                    false
-                            end;
-                        _ ->
-                            false
-                    end,
-    case AreCompatible of
-        true ->
-            ?LOG_NOTICE(
-               "Feature flags: nodes `~s` and `~s` are compatible",
-               [NodeA, NodeB],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            ok;
-        false ->
+    case NodesA of
+        _ when is_list(NodesA) ->
+            NodesB = list_nodes_clustered_with(NodeB),
+            case NodesB of
+                _ when is_list(NodesB) ->
+                    check_node_compatibility_task1(
+                      NodeA, NodesA,
+                      NodeB, NodesB);
+                Error ->
+                    ?LOG_WARNING(
+                       "Feature flags: "
+                       "error while querying cluster members from "
+                       "node `~s`:~n~p",
+                       [NodeB, Error],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    {error, {aborted_feature_flags_compat_check, Error}}
+            end;
+        Error ->
             ?LOG_WARNING(
-               "Feature flags: nodes `~s` and `~s` are incompatible",
-               [NodeA, NodeB],
+               "Feature flags: "
+               "error while querying cluster members from node `~s`:~n~p",
+               [NodeA, Error],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, incompatible_feature_flags}
+            {error, {aborted_feature_flags_compat_check, Error}}
     end.
 
--spec list_nodes_clustered_with(Node) -> [Node] when
-      Node :: node().
+check_node_compatibility_task1(NodeA, NodesA, NodeB, NodesB)
+  when is_list(NodesA) andalso is_list(NodesB) ->
+    case collect_inventory_on_nodes(NodesA) of
+        {ok, InventoryA} ->
+            ?LOG_DEBUG(
+               "Feature flags: inventory of node `~s`:~n~p",
+               [NodeA, InventoryA],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            case collect_inventory_on_nodes(NodesB) of
+                {ok, InventoryB} ->
+                    ?LOG_DEBUG(
+                       "Feature flags: inventory of node "
+                       "`~s`:~n~p",
+                       [NodeB, InventoryB],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    case are_compatible(InventoryA, InventoryB) of
+                        true ->
+                            ?LOG_NOTICE(
+                               "Feature flags: "
+                               "nodes `~s` and `~s` are compatible",
+                               [NodeA, NodeB],
+                               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                            ok;
+                        false ->
+                            ?LOG_WARNING(
+                               "Feature flags: "
+                               "nodes `~s` and `~s` are incompatible",
+                               [NodeA, NodeB],
+                               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                            {error, incompatible_feature_flags}
+                    end;
+                Error ->
+                    ?LOG_WARNING(
+                       "Feature flags: "
+                       "error while collecting inventory from "
+                       "nodes ~0tp:~n~p",
+                       [NodesB, Error],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    {error, {aborted_feature_flags_compat_check, Error}}
+            end;
+        Error ->
+            ?LOG_WARNING(
+               "Feature flags: "
+               "error while collecting inventory from nodes ~0tp:~n~p",
+               [NodesA, Error],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            {error, {aborted_feature_flags_compat_check, Error}}
+    end.
+
+-spec list_nodes_clustered_with(Node) -> Ret when
+      Node :: node(),
+      Ret :: Members | Error,
+      Members :: [node()],
+      Error :: {error, term()}.
 
 list_nodes_clustered_with(Node) ->
-    %% If Mnesia is stopped on the given node, it will return an empty list.
-    %% In this case, only consider that stopped node.
+    %% If `running_nodes()' returns an empty list, it means the `rabbit'
+    %% application is not running on `Node'. In this case, we consider this
+    %% node alone for now.
+    %%
+    %% It could be that RabbitMQ is starting on that node for instance;
+    %% indeed, feature flags compatibility is checked as part of RabbitMQ
+    %% booting. If that's not the case, collecting the feature flags inventory
+    %% later will fail anyway.
     case rpc_call(Node, ?MODULE, running_nodes, [], ?TIMEOUT) of
-        []   -> [Node];
-        List -> List
+        []          -> [Node];
+        ListOrError -> ListOrError
     end.
 
 -spec are_compatible(Inventory, Inventory) -> AreCompatible when
