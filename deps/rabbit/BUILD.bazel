@@ -334,6 +334,13 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "clustering_recovery_SUITE",
+    size = "medium",
+    shard_count = 2,
+    sharding_method = "case",
+)
+
+rabbitmq_integration_suite(
     name = "config_schema_SUITE",
     size = "medium",
     data = [
