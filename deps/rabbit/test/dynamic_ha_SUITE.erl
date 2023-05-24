@@ -1018,16 +1018,16 @@ apply_policy(Config, N, undefined) ->
 apply_policy(Config, N, all) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, <<"all">>,
-      [{<<"ha-sync-mode">>, <<"automatic">>}]);
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]);
 apply_policy(Config, N, {nodes, Nodes}) ->
     NNodes = [atom_to_binary(Node) || Node <- Nodes],
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"nodes">>, NNodes},
-      [{<<"ha-sync-mode">>, <<"automatic">>}]);
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]);
 apply_policy(Config, N, {exactly, Exactly}) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"exactly">>, Exactly},
-      [{<<"ha-sync-mode">>, <<"automatic">>}]).
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]).
 
 forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(
