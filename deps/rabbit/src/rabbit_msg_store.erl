@@ -11,7 +11,7 @@
 
 -export([start_link/5, successfully_recovered_state/1,
          client_init/3, client_terminate/1, client_delete_and_terminate/1,
-         client_ref/1,
+         client_pre_hibernate/1, client_ref/1,
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
 
 -export([set_maximum_since_use/2,
@@ -458,6 +458,12 @@ client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}),
     client_maybe_close_current_file(CState).
+
+-spec client_pre_hibernate(client_msstate()) -> client_msstate().
+
+client_pre_hibernate(CState) ->
+    client_maybe_close_current_file(CState),
+    CState#client_msstate{ current_file = undefined }.
 
 client_maybe_close_current_file(#client_msstate{ current_file = CurrentFile }) ->
     case CurrentFile of

@@ -804,12 +804,15 @@ timeout(State = #vqstate { index_mod   = IndexMod,
 handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
                                         index_state = IndexState0,
                                         store_state = StoreState0,
+                                        msg_store_clients = MSCState0,
                                         unconfirmed_simple = UCS,
                                         confirmed   = C }) ->
+    MSCState = msg_store_pre_hibernate(MSCState0),
     IndexState = IndexMod:flush(IndexState0),
     StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
     State #vqstate { index_state = IndexState,
                      store_state = StoreState,
+                     msg_store_clients = MSCState,
                      unconfirmed_simple = sets:new([{version,2}]),
                      confirmed   = sets:union(C, UCS) }.
 
@@ -1348,6 +1351,10 @@ msg_store_client_init(MsgStore, MsgOnDiskFun, VHost) ->
 msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, VHost) ->
     rabbit_vhost_msg_store:client_init(VHost, MsgStore,
                                        Ref, MsgOnDiskFun).
+
+msg_store_pre_hibernate({MSCStateP, MSCStateT}) ->
+    {rabbit_msg_store:client_pre_hibernate(MSCStateP),
+     rabbit_msg_store:client_pre_hibernate(MSCStateT)}.
 
 msg_store_write(MSCState, IsPersistent, SeqId, MsgId, Msg) ->
     with_immutable_msg_store_state(
