@@ -147,10 +147,6 @@ defmodule RabbitMQCtl.MixfileBase do
         path: Path.join(deps_dir, "csv")
       },
       {
-        :parallel_stream,
-        path: Path.join(deps_dir, "parallel_stream"), override: true
-      },
-      {
         :stdout_formatter,
         path: Path.join(deps_dir, "stdout_formatter"),
         compile: if(is_bazel, do: false, else: make_cmd)
