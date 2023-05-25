@@ -78,7 +78,7 @@ trace_qq() ->
                             ]
             )),
     timer:sleep(10000),
-    lg:stop(),
+    _ = lg:stop(),
     profile().
 
 profile() ->
