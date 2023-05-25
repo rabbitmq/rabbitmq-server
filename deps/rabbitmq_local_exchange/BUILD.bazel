@@ -65,5 +65,3 @@ alias(
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
 )
-
-assert_suites()
