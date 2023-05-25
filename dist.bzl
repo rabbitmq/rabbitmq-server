@@ -351,15 +351,6 @@ def source_archive(
         prefix = "deps/csv",
     )
 
-    pkg_files(
-        name = "parallel_stream-files",
-        srcs = [
-            "@parallel_stream//:sources",
-        ],
-        strip_prefix = "",
-        prefix = "deps/parallel_stream",
-    )
-
     pkg_tar(
         name = name,
         extension = "tar.xz",
@@ -367,7 +358,6 @@ def source_archive(
             ":deps-files",
             ":json-files",
             ":csv-files",
-            ":parallel_stream-files",
             Label("@rabbitmq-server//:root-licenses"),
         ],
         visibility = ["//visibility:public"],
