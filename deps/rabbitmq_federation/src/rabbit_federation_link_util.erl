@@ -140,15 +140,11 @@ connection_error(remote_start, {{shutdown, {server_initiated_close, Code, Messag
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-<<<<<<< HEAD
-    log_warning(XorQName, "did not connect to ~s. Reason: ~p",
-=======
     Reason = case E of
         {error, Value} -> Value;
         Other -> Other
     end,
     log_warning(XorQName, "did not connect to ~ts. Reason: ~tp",
->>>>>>> 1c59dd5361 (Queue federation: improve logging)
                 [rabbit_federation_upstream:params_to_string(UParams),
                  Reason]),
     {stop, {shutdown, restart}, State};
