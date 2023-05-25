@@ -537,6 +537,7 @@ rabbit:
 - rabbit_ff_extra
 - rabbit_ff_registry
 - rabbit_ff_registry_factory
+- rabbit_ff_registry_wrapper
 - rabbit_fhc_helpers
 - rabbit_fifo
 - rabbit_fifo_client
