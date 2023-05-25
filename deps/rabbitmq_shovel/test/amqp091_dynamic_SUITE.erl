@@ -48,7 +48,8 @@ groups() ->
     ]},
 
     {stream_queue_tests, [], [
-          stream_queues
+          stream_queues,
+          stream_queues_with_dest_args
     ]}
     ].
 
@@ -109,7 +110,9 @@ quorum_queues(Config) ->
                              {<<"src-queue">>,       <<"src">>},
                              {<<"dest-queue">>,      <<"dest">>},
                              {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"quorum">>}},
-                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>}}
+                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>,
+                                                       <<"x-dead-letter-exchange">> => <<"dlx1">>,
+                                                       <<"x-dead-letter-routing-key">> => <<"rk1">>}}
                             ]),
               amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
@@ -127,6 +130,16 @@ stream_queues(Config) ->
                             ]),
               amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
+
+stream_queues_with_dest_args(Config) ->
+    shovel_test_utils:set_param(
+      Config,
+      <<"test">>, [
+                   {<<"src-queue">>,       <<"src">>},
+                   {<<"dest-queue">>,      <<"dest">>},
+                   {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"stream">>,
+                                             <<"x-max-age">>    => <<"12h">>}}
+                  ]).
 
 set_properties_using_map(Config) ->
     with_amqp091_ch(Config,
