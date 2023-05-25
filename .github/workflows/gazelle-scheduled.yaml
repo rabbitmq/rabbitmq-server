@@ -30,7 +30,7 @@ jobs:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
-        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        title: bazel run gazelle
         body: >
           Automated changes created by
           ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
