@@ -1749,10 +1749,10 @@ force_all_queues_shrink_member_to_current_member() ->
          {RaName, _} = amqqueue:get_pid(Q),
          rabbit_log:warning("Disaster recovery procedure: shrinking queue ~p", [QName]),
          ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-         Fun = fun (Q) ->
-                       TS0 = amqqueue:get_type_state(Q),
+         Fun = fun (QQ) ->
+                       TS0 = amqqueue:get_type_state(QQ),
                        TS = TS0#{nodes => [Node]},
-                       amqqueue:set_type_state(Q, TS)
+                       amqqueue:set_type_state(QQ, TS)
                end,
          _ = rabbit_amqqueue:update(QName, Fun)
      end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
