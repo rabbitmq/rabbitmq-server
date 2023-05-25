@@ -1112,11 +1112,8 @@ queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
          ok = gatherer:fork(Gatherer),
          ok = worker_pool:submit_async(
                 fun () -> link(Gatherer),
-                          try
-                              queue_index_walker_reader(QueueName, Gatherer)
-                          after
-                              unlink(Gatherer)
-                          end,
+                          ok = queue_index_walker_reader(QueueName, Gatherer),
+                          unlink(Gatherer),
                           ok
                 end)
      end || QueueName <- DurableQueues],
