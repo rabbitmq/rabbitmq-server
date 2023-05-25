@@ -236,16 +236,19 @@ plt(
     name = "deps_plt",
     apps = [
         "mnesia",  # keep
+        "runtime_tools",  # keep
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
     plt = "//:base_plt",
+    deps = [
+        "@looking_glass//:erlang_app",  # keep
+    ],
 )
 
 dialyze(
     name = "dialyze",
-    # A few `lg` functions are unknown
-    dialyzer_opts = without("-Wunknown", RABBITMQ_DIALYZER_OPTS),
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
     target = ":erlang_app",
 )
