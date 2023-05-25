@@ -1,28 +1,14 @@
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load(
-    "//:rabbitmq.bzl",
-    "RABBITMQ_DIALYZER_OPTS",
-    "assert_suites",
-    "rabbitmq_app",
-)
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
+load("@rules_erlang//:eunit2.bzl", "eunit")
+load(":app.bzl", "all_beam_files", "all_srcs", "all_test_beam_files", "test_suite_beam_files")
+load("//:rabbitmq.bzl", "assert_suites", "rabbitmq_app")
 
-APP_NAME = "rabbitmq_local_exchange"
-
-APP_DESCRIPTION = "RabbitMQ Local Exchange"
+all_srcs(name = "all_srcs")
 
 all_beam_files(name = "all_beam_files")
 
 all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
 
 test_suite_beam_files(name = "test_suite_beam_files")
 
@@ -30,8 +16,7 @@ rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_name = APP_NAME,
+    app_name = "rabbitmq_local_exchange",
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
@@ -39,6 +24,12 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
+)
+
+alias(
+    name = "rabbitmq_local_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
 
 xref(
@@ -49,19 +40,18 @@ xref(
 plt(
     name = "deps_plt",
     for_target = ":erlang_app",
-    ignore_warnings = True,
     plt = "//:base_plt",
 )
 
 dialyze(
     name = "dialyze",
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
     target = ":erlang_app",
 )
 
-alias(
-    name = "rabbitmq_local_exchange",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
+
+assert_suites()

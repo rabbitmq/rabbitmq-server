@@ -939,6 +939,8 @@ rabbitmq_jms_topic_exchange:
 - rabbit_db_jms_exchange
 - rabbit_jms_topic_exchange
 - sjx_evaluator
+rabbitmq_local_exchange:
+- rabbit_exchange_type_local
 rabbitmq_management:
 - rabbit_mgmt_app
 - rabbit_mgmt_cors
