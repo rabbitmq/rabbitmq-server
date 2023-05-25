@@ -112,9 +112,15 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
+<<<<<<< HEAD
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
+=======
+dep_cowlib = hex 2.12.1
+dep_credentials_obfuscation = hex 3.4.0
+dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git main
+>>>>>>> 930cf82a1a (Use the new branch name for looking_glass)
 dep_prometheus = hex 4.10.0
 dep_ra = hex 2.4.6
 dep_ranch = hex 2.1.0
