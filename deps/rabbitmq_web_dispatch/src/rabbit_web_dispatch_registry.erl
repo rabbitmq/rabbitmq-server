@@ -157,8 +157,17 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    [{IPAddress, _Port, _Family} | _]
-        = rabbit_networking:tcp_listener_addresses(Port),
+    IPAddress = case rabbit_misc:pget(ip, Listener) of
+                    undefined ->
+                        [{AutoIPAddress, _Port, _Family} | _]
+                            = rabbit_networking:tcp_listener_addresses(Port),
+                        AutoIPAddress;
+                    IP when is_tuple(IP) ->
+                        IP;
+                    IP when is_list(IP) ->
+                        {ok, ParsedIP} = inet_parse:address(IP),
+                        ParsedIP
+                end,
     [{Protocol, IPAddress, Port}].
 
 lookup_dispatch(Lsnr) ->
