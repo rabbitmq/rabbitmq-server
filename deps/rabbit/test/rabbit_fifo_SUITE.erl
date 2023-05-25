@@ -655,11 +655,10 @@ state_enter_file_handle_leader_reservation_test(_) ->
 
     Resource = {resource, <<"/">>, queue, <<"test">>},
     Effects = rabbit_fifo:state_enter(leader, S0),
-    ?assertMatch([
-        {mod_call, m, f, [a, the_name]},
-        _Timer,
-        {mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}
-      ], Effects),
+    ?assertMatch([{mod_call, m, f, [a, the_name]},
+                  _Timer,
+                  {mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}
+                  | _], Effects),
     ok.
 
 state_enter_file_handle_other_reservation_test(_) ->
@@ -1161,20 +1160,22 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(C) ->
     Meta = meta(C, 1),
     % adding some consumers
     AddConsumer = fun({CTag, ChannelId}, State) ->
-        {NewState, _, _} = apply(
-            Meta,
-            make_checkout({CTag, ChannelId},
-                          {once, 1, simple_prefetch}, #{}),
-            State),
-        NewState
+                          {NewState, _, _} = apply(
+                                               Meta,
+                                               make_checkout({CTag, ChannelId},
+                                                             {once, 1, simple_prefetch}, #{}),
+                                               State),
+                          NewState
                   end,
-    State1 = lists:foldl(AddConsumer, State0,
-        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+    State1 = lists:foldl(AddConsumer, State0, [{<<"ctag1">>, Pid1},
+                                               {<<"ctag2">>, Pid2},
+                                               {<<"ctag3">>, Pid2},
+                                               {<<"ctag4">>, Pid3}]),
 
     Effects = rabbit_fifo:state_enter(leader, State1),
     %% 2 effects for each consumer process (channel process), 1 effect for the node,
     %% 1 effect for file handle reservation
-    ?assertEqual(2 * 3 + 1 + 1 + 1, length(Effects)).
+    ?assertEqual(2 * 3 + 1 + 1 + 1 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(C) ->
     Resource = rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),

@@ -104,7 +104,11 @@ handle_cast(pause, State = #state{run = false}) ->
 handle_cast(pause, State = #not_started{}) ->
     {noreply, State#not_started{run = false}};
 
-handle_cast(pause, State = #state{ch = Ch, upstream = Upstream}) ->
+handle_cast(pause, State = #state{ch = Ch, upstream = Upstream = #upstream{
+        name = UpName, queue_name = QName
+    }}) ->
+    rabbit_log_federation:debug("Federation link of ~s (upstream: '~s'): asked to pause",
+                                [QName, UpName]),
     cancel(Ch, Upstream),
     {noreply, State#state{run = false}};
 
@@ -305,9 +309,11 @@ visit_match(_ ,_) ->
 consumer_tag(#upstream{consumer_tag = ConsumerTag}) ->
     ConsumerTag.
 
-consume(Ch, Upstream, UQueue) ->
+consume(Ch, Upstream = #upstream{name = UpName}, UQueue) ->
     ConsumerTag = consumer_tag(Upstream),
     NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
+    rabbit_log_federation:debug("Federation link of ~ts: will consume from the upstream '~ts'",
+                                [rabbit_misc:rs(amqqueue:get_name(UQueue)), UpName]),
     amqp_channel:cast(
       Ch, #'basic.consume'{queue        = name(UQueue),
                            no_ack       = NoAck,
@@ -315,8 +321,10 @@ consume(Ch, Upstream, UQueue) ->
                            consumer_tag = ConsumerTag,
                            arguments    = [{<<"x-priority">>, long, -1}]}).
 
-cancel(Ch, Upstream) ->
+cancel(Ch, Upstream = #upstream{name = UpName, queue_name = QName}) ->
     ConsumerTag = consumer_tag(Upstream),
+    rabbit_log_federation:debug("Federation queue '~ts' link: will cancel consumer '~ts' on upstream '~ts'",
+                                [QName, ConsumerTag, UpName]),
     amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
                                           consumer_tag = ConsumerTag}).
 

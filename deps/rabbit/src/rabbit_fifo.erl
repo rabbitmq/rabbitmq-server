@@ -861,8 +861,10 @@ state_enter0(leader, #?MODULE{consumers = Cons,
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
-    FHReservation = [{mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}],
-    Effects = TimerEffs ++ Mons ++ Nots ++ NodeMons ++ FHReservation,
+    FHReservation = [{mod_call, rabbit_quorum_queue,
+                      file_handle_leader_reservation, [Resource]}],
+    NotifyDecs = notify_decorators_startup(Resource),
+    Effects = TimerEffs ++ Mons ++ Nots ++ NodeMons ++ FHReservation ++ [NotifyDecs],
     case BLH of
         undefined ->
             Effects;
@@ -1299,9 +1301,8 @@ query_notify_decorators_info(#?MODULE{consumers = Consumers} = State) ->
     MaxActivePriority = maps:fold(
                           fun(_, #consumer{credit = C,
                                            status = up,
-                                           cfg = #consumer_cfg{priority = P0}},
+                                           cfg = #consumer_cfg{priority = P}},
                               MaxP) when C > 0 ->
-                                  P = -P0,
                                   case MaxP of
                                       empty -> P;
                                       MaxP when MaxP > P -> MaxP;
@@ -2476,6 +2477,10 @@ get_priority_from_args(_) ->
 notify_decorators_effect(QName, MaxActivePriority, IsEmpty) ->
     {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
      [QName, consumer_state_changed, [MaxActivePriority, IsEmpty]]}.
+
+notify_decorators_startup(QName) ->
+    {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
+     [QName, startup, []]}.
 
 convert(To, To, State) ->
     State;
