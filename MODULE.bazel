@@ -34,6 +34,13 @@ bazel_dep(
     version = "3.10.5",
 )
 
+bazel_dep(
+    name = "com_github_rabbitmq_looking_glass",
+    version = "0.2.1",
+    repo_name = "looking_glass",
+    dev_dependency = True,
+)
+
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
