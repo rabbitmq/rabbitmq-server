@@ -2,7 +2,16 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("@rules_erlang//:eunit2.bzl", "eunit")
 load(":app.bzl", "all_beam_files", "all_srcs", "all_test_beam_files", "test_suite_beam_files")
-load("//:rabbitmq.bzl", "assert_suites", "rabbitmq_app")
+load(
+    "//:rabbitmq.bzl",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_app",
+    "rabbitmq_integration_suite",
+    "rabbitmq_suite",
+)
 
 all_srcs(name = "all_srcs")
 
@@ -17,6 +26,8 @@ rabbitmq_app(
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_name = "rabbitmq_local_exchange",
+    app_description = "Local Exchange type",
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
@@ -52,6 +63,12 @@ dialyze(
 eunit(
     name = "eunit",
     target = ":test_erlang_app",
+)
+
+broker_for_integration_suites()
+
+rabbitmq_integration_suite(
+    name = "rabbit_local_exchange_SUITE"
 )
 
 assert_suites()
