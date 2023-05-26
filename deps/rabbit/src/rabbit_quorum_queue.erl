@@ -96,7 +96,7 @@
          members,
          open_files,
          single_active_consumer_pid,
-         single_active_consumer_ctag,
+         single_active_consumer_tag,
          messages_ram,
          message_bytes_ram,
          messages_dlx,
@@ -456,7 +456,7 @@ handle_tick(QName,
                                                   messages_dlx,
                                                   message_bytes_dlx,
                                                   single_active_consumer_pid,
-                                                  single_active_consumer_ctag
+                                                  single_active_consumer_tag
                                                  ],
                       {SacTag, SacPid} = maps:get(single_active_consumer_id,
                                                   Overview, {'', ''}),
@@ -472,7 +472,7 @@ handle_tick(QName,
                                {messages_persistent, NumMessages},
                                {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
                                {message_bytes_dlx, MsgBytesDiscarded},
-                               {single_active_consumer_ctag, SacTag},
+                               {single_active_consumer_tag, SacTag},
                                {single_active_consumer_pid, SacPid}
                                | infos(QName, Keys)],
                       rabbit_core_metrics:queue_stats(QName, Infos),
@@ -1461,7 +1461,7 @@ i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
         {timeout, _} ->
             ''
     end;
-i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
+i(single_active_consumer_tag, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid,
                         fun rabbit_fifo:query_single_active_consumer/1) of
