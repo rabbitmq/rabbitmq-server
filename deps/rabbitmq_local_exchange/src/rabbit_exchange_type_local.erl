@@ -12,6 +12,7 @@
 -rabbit_boot_step({?MODULE, [
   {description,   "exchange type local"},
   {mfa,           {rabbit_registry, register, [exchange, <<"x-local">>, ?MODULE]}},
+  {cleanup,       {?MODULE, disable_plugin, []}},
   {requires,      rabbit_registry},
   {enables,       kernel_ready}
 ]}).
@@ -30,7 +31,8 @@
   serialise_events/0,
   validate/1,
   info/1,
-  info/2
+  info/2,
+  disable_plugin/0
 ]).
 
 description() ->
@@ -76,3 +78,7 @@ remove_bindings(_Serial, _X, _Bs) -> ok.
 validate_binding(_X, _B) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
+
+disable_plugin() ->
+    rabbit_registry:unregister(exchange, <<"x-local">>),
+    ok.

@@ -54,6 +54,11 @@ init_per_testcase(Testcase, Config) ->
     TestCaseName = rabbit_ct_helpers:config_to_testcase_name(Config, Testcase),
     Config1 = rabbit_ct_helpers:set_config(Config, {test_resource_name,
                                                     re:replace(TestCaseName, "/", "-", [global, {return, list}])}),
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [case rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_local_exchange) of
+      ok -> ok;
+      _ -> {skip}
+    end || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -64,6 +69,8 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 routed_to_one_local_queue_test(Config) ->
+    % ok = ensure_plugin_enabled(Config),
+
     E = make_exchange_name(Config, "0"),
     declare_exchange(Config, E),
     %% declare queue on the first two nodes: 0, 1
@@ -76,6 +83,8 @@ routed_to_one_local_queue_test(Config) ->
     passed.
 
 routed_to_one_nonlocal_queue_test(Config) ->
+    % ok = ensure_plugin_enabled(Config),
+
     E = make_exchange_name(Config, "0"),
     declare_exchange(Config, E),
     %% declare queue on nodes 0, 1
