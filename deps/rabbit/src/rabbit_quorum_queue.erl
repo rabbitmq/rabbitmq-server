@@ -1744,17 +1744,17 @@ force_shrink_member_to_current_member(VHost, Name) ->
 force_all_queues_shrink_member_to_current_member() ->
     rabbit_log:warning("Disaster recovery procedure: shrinking all quorum queues to a single node cluster"),
     Node = node(),
-    [begin
-         QName = amqqueue:get_name(Q),
-         {RaName, _} = amqqueue:get_pid(Q),
-         rabbit_log:warning("Disaster recovery procedure: shrinking queue ~p", [QName]),
-         ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-         Fun = fun (QQ) ->
-                       TS0 = amqqueue:get_type_state(QQ),
-                       TS = TS0#{nodes => [Node]},
-                       amqqueue:set_type_state(QQ, TS)
-               end,
-         _ = rabbit_amqqueue:update(QName, Fun)
-     end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
+    _ = [begin
+             QName = amqqueue:get_name(Q),
+             {RaName, _} = amqqueue:get_pid(Q),
+             rabbit_log:warning("Disaster recovery procedure: shrinking queue ~p", [QName]),
+             ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
+             Fun = fun (QQ) ->
+                           TS0 = amqqueue:get_type_state(QQ),
+                           TS = TS0#{nodes => [Node]},
+                           amqqueue:set_type_state(QQ, TS)
+                   end,
+             _ = rabbit_amqqueue:update(QName, Fun)
+         end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
     ok.
