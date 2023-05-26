@@ -143,20 +143,20 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),
-    case rabbit_misc:pget(ip, Listener) of
-        undefined ->
-            [rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                    IPAddress, Port)
-             || {IPAddress, _Port, _Family}
-                    <- rabbit_networking:tcp_listener_addresses(Port)];
-        IP when is_tuple(IP) ->
-            rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                   IP, Port);
-        IP when is_list(IP) ->
-            {ok, ParsedIP} = inet_parse:address(IP),
-            rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                   ParsedIP, Port)
-    end,
+    _ = case rabbit_misc:pget(ip, Listener) of
+            undefined ->
+                [rabbit_networking:tcp_listener_started(Protocol, Listener,
+                                                        IPAddress, Port)
+                 || {IPAddress, _Port, _Family}
+                        <- rabbit_networking:tcp_listener_addresses(Port)];
+            IP when is_tuple(IP) ->
+                rabbit_networking:tcp_listener_started(Protocol, Listener,
+                                                       IP, Port);
+            IP when is_list(IP) ->
+                {ok, ParsedIP} = inet_parse:address(IP),
+                rabbit_networking:tcp_listener_started(Protocol, Listener,
+                                                       ParsedIP, Port)
+        end,
     ok.
 
 get_tcp_conf(TCPConf0) ->
