@@ -1352,6 +1352,9 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, VHost) ->
     rabbit_vhost_msg_store:client_init(VHost, MsgStore,
                                        Ref, MsgOnDiskFun).
 
+msg_store_pre_hibernate({undefined, MSCStateT}) ->
+    {undefined,
+     rabbit_msg_store:client_pre_hibernate(MSCStateT)};
 msg_store_pre_hibernate({MSCStateP, MSCStateT}) ->
     {rabbit_msg_store:client_pre_hibernate(MSCStateP),
      rabbit_msg_store:client_pre_hibernate(MSCStateT)}.
