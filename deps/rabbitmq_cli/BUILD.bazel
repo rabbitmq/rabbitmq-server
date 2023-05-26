@@ -11,20 +11,10 @@ load(
 )
 
 mix_archive_build(
-    name = "parallel_stream_ez",
-    srcs = ["@parallel_stream//:sources"],
-    out = "parallel_stream.ez",
-    archives = ["@hex//:archive"],
-)
-
-mix_archive_build(
     name = "csv_ez",
     srcs = ["@csv//:sources"],
     out = "csv.ez",
     archives = ["@hex//:archive"],
-    ez_deps = [
-        ":parallel_stream_ez",
-    ],
 )
 
 mix_archive_build(
@@ -49,8 +39,7 @@ rabbitmqctl(
     license_files = glob(["LICENSE*"]),
     source_deps = {
         "@csv//:sources": "csv",
-        "@json//:sources": "json",
-        "@parallel_stream//:sources": "parallel_stream",  # transitive dep of csv 2.x
+        "@json//:sources": "json"
     },
     visibility = ["//visibility:public"],
     deps = [
@@ -113,7 +102,6 @@ plt(
         "runtime_tools",
     ],
     ez_deps = [
-        ":parallel_stream_ez",
         ":csv_ez",
         ":json_ez",
     ],
@@ -159,7 +147,6 @@ rabbitmqctl_test(
         "@csv//:sources": "csv",
         "@dialyxir//:sources": "dialyxir",
         "@json//:sources": "json",
-        "@parallel_stream//:sources": "parallel_stream",  # transitive dep of csv 2.x
         "@temp//:sources": "temp",
         "@x509//:sources": "x509",
     },
