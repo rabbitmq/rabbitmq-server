@@ -2565,6 +2565,14 @@ fetch_from_q3(State = #vqstate { delta = #delta { count = DeltaCount },
             {loaded, {MsgStatus, State1}}
     end.
 
+%% Thresholds for doing multi-read against the shared message
+%% stores. The values have been obtained through numerous
+%% experiments. Be careful when editing these values: after a
+%% certain size the performance drops and it becomes no longer
+%% interesting to keep the extra data in memory.
+-define(SHARED_READ_MANY_SIZE_THRESHOLD, 12000).
+-define(SHARED_READ_MANY_COUNT_THRESHOLD, 10).
+
 maybe_deltas_to_betas(State = #vqstate { rates = #rates{ out = OutRate }}) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
     %% We allow from 1 to 2048 messages in memory depending on the consume rate.
@@ -2619,24 +2627,25 @@ maybe_deltas_to_betas(DelsAndAcksFun,
     %% back into the #msg_status records.
     %%
     %% For shared message store messages we do the same but only
-    %% for messages < 20000 bytes and when there are at least 10
-    %% messages to fetch (otherwise we do the fetch 1 by 1 right
-    %% before sending the messages). The values have been
-    %% obtained through experiments because after a certain size
-    %% the performance drops and it become no longer interesting
-    %% to keep the extra data in memory. Since we have
-    %% two different shared stores for persistent/transient
-    %% they are treated separately when deciding whether to
-    %% read_many from either of them.
+    %% for messages < ?SHARED_READ_MANY_SIZE_THRESHOLD bytes and
+    %% when there are at least ?SHARED_READ_MANY_COUNT_THRESHOLD
+    %% messages to fetch from that store. Other messages will be
+    %% fetched one by one right before sending the messages.
+    %%
+    %% Since we have two different shared stores for persistent
+    %% and transient messages they are treated separately when
+    %% deciding whether to read_many from either of them.
     %%
     %% Because v2 and shared stores function differently we
     %% must keep different information for performing the reads.
     {V2Reads0, ShPersistReads, ShTransientReads} = lists:foldl(fun
         ({_, SeqId, MsgLocation, _, _}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when is_tuple(MsgLocation) ->
             {[{SeqId, MsgLocation}|V2ReadsAcc], ShPReadsAcc, ShTReadsAcc};
-        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< 20000 ->
+        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true},
+         {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
             {V2ReadsAcc, [MsgId|ShPReadsAcc], ShTReadsAcc};
-        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< 20000 ->
+        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false},
+         {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
             {V2ReadsAcc, ShPReadsAcc, [MsgId|ShTReadsAcc]};
         (_, Acc) ->
             Acc
@@ -2653,7 +2662,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
     %%
     %% Because read_many does not use FHC we do not get an updated MCState
     %% like with normal reads.
-    List2 = case length(ShPersistReads) < 10 of
+    List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
         true ->
             List1;
         false ->
@@ -2663,7 +2672,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                 _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
             end
     end,
-    List = case length(ShTransientReads) < 10 of
+    List = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
         true ->
             List2;
         false ->
