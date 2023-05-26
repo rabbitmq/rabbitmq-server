@@ -252,9 +252,9 @@ update_metadata(Name, Metadata0, ActingUser) ->
             Error
     end.
 
--spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-update(Name, Description, Tags, ActingUser) ->
-    Metadata = #{description => Description, tags => Tags},
+-spec update(vhost:name(), binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined', rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update(Name, Description, Tags, DefaultQueueType, ActingUser) ->
+    Metadata = #{description => Description, tags => Tags, default_queue_type => DefaultQueueType},
     update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
@@ -325,7 +325,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
                  true  ->
-                     update(Name, Description, ParsedTags, Username);
+                     update(Name, Description, ParsedTags, DefaultQueueType, Username);
                  false ->
                      Metadata0 = #{description => Description,
                                    tags => ParsedTags},

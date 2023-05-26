@@ -413,7 +413,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(notify_node_up, State = #state{guid = GUID}) ->
-    Nodes = rabbit_nodes:list_running() -- [node()],
+    Nodes = rabbit_nodes:list_reachable() -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
                       {node_up, node(), rabbit_db_cluster:node_type(), GUID}),
     %% register other active rabbits with this rabbit

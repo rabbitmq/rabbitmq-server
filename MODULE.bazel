@@ -25,13 +25,13 @@ bazel_dep(
 
 bazel_dep(
     name = "gazelle",
-    version = "0.30.0",
+    version = "0.29.0",
     repo_name = "bazel_gazelle",
 )
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.10.1",
+    version = "3.10.5",
 )
 
 erlang_config = use_extension(
@@ -179,8 +179,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "csv",
     build_file = "@rabbitmq-server//bazel:BUILD.csv",
-    sha256 = "54508938ac67e27966b10ef49606e3ad5995d665d7fc2688efb3eab1307c9079",
-    version = "2.4.1",
+    sha256 = "cbbe5455c93df5f3f2943e995e28b7a8808361ba34cf3e44267d77a01eaf1609",
+    version = "3.0.5",
 )
 
 erlang_package.hex_package(
@@ -259,13 +259,6 @@ erlang_package.git_package(
 )
 
 erlang_package.hex_package(
-    name = "parallel_stream",
-    build_file = "@rabbitmq-server//bazel:BUILD.parallel_stream",
-    sha256 = "639b2e8749e11b87b9eb42f2ad325d161c170b39b288ac8d04c4f31f8f0823eb",
-    version = "1.0.6",
-)
-
-erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
     sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
@@ -322,6 +315,7 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+    build_file = "@rabbitmq-server//bazel:BUILD.syslog",
     repository = "schlagert/syslog",
     tag = "4.0.0",
 )
@@ -358,7 +352,6 @@ use_repo(
     "json",
     "observer_cli",
     "osiris",
-    "parallel_stream",
     "prometheus",
     "ra",
     "ranch",
