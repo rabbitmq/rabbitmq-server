@@ -11,5 +11,6 @@
 
 init() ->
     application:set_env(observer_cli, plugins, [
-        rabbit_observer_cli_classic_queues:plugin_info()
+        rabbit_observer_cli_classic_queues:plugin_info(),
+        rabbit_observer_cli_quorum_queues:plugin_info()
     ]).
