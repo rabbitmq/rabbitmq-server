@@ -155,7 +155,7 @@ sheet_body(PrevState) ->
     {Body, PrevState}.
 
 list_quorum_queues() ->
-    rabbit_db_queue:get_all_by_type(rabbit_quorum_queue).
+    rabbit_amqqueue:list_by_type(rabbit_quorum_queue).
 
 format_int(N) when N >= 1_000_000_000 ->
     integer_to_list(N div 1_000_000_000) ++ "B";
