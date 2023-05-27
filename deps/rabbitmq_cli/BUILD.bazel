@@ -39,7 +39,7 @@ rabbitmqctl(
     license_files = glob(["LICENSE*"]),
     source_deps = {
         "@csv//:sources": "csv",
-        "@json//:sources": "json"
+        "@json//:sources": "json",
     },
     visibility = ["//visibility:public"],
     deps = [
