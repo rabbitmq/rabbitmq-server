@@ -1516,7 +1516,7 @@ stat(Q) ->
     rabbit_queue_type:stat(Q).
 
 -spec pid_of(amqqueue:amqqueue()) ->
-          pid() | 'none'.
+          pid() | amqqueue:ra_server_id() | 'none'.
 
 pid_of(Q) -> amqqueue:get_pid(Q).
 
