@@ -24,7 +24,7 @@ attributes(State) ->
     Content1 = "S - leader/follower, MsgQ - Erlang mailbox queue, CMD - commands, SIW - snapshots installed/written",
     Content2 = "SS - snapshots sent, SW - snapshots written, MS - messages sent",
     Content3 = "E - elections, WOp - write operations, WRe - write resends, GC - Ra forced GC",
-    Content4 = "CT - current term, SnapIdx - snapshot index, LA - last applied, CI - current index, LW - TODO, CL - commit latency",
+    Content4 = "CT - current term, SnapIdx - snapshot index, LA - last applied, CI - current index, LW - last written log entry index, CL - commit latency",
     RaCounters = ra_counters:overview(),
     {
     [ra_log_wal_header()] ++ [ra_log_wal_sheet(RaCounters)] ++
