@@ -411,26 +411,16 @@ import_raw(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]) of
         ok -> ok;
         {error, E} ->
-<<<<<<< HEAD
-            ct:pal("Import of JSON definitions ~p failed: ~p~n", [Body, E]),
-            ct:fail({failure, Body, E})
-=======
             ct:pal("Import of JSON definitions ~tp failed: ~tp~n", [Body, E]),
             ct:fail({expected_failure, Body, E})
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
     end.
 
 import_parsed(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_parsed, [Body]) of
         ok -> ok;
         {error, E} ->
-<<<<<<< HEAD
-            ct:pal("Import of parsed definitions ~p failed: ~p~n", [Body, E]),
-            ct:fail({failure, Body, E})
-=======
             ct:pal("Import of parsed definitions ~tp failed: ~tp~n", [Body, E]),
             ct:fail({expected_failure, Body, E})
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
     end.
 
 export(Config) ->
@@ -455,30 +445,17 @@ run_import_case(Path) ->
    case rabbit_definitions:import_raw(Body) of
      ok -> ok;
      {error, E} ->
-<<<<<<< HEAD
-       ct:pal("Import case ~p failed: ~p~n", [Path, E]),
-       ct:fail({failure, Path, E})
-=======
        ct:pal("Import case ~tp failed: ~tp~n", [Path, E]),
        ct:fail({expected_failure, Path, E})
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
    end.
 
 run_invalid_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
-<<<<<<< HEAD
-   ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
-   case rabbit_definitions:import_raw(Body) of
-     ok ->
-       ct:pal("Expected import case ~p to fail~n", [Path]),
-       ct:fail({failure, Path});
-=======
    ct:pal("Successfully loaded a definition file at ~tp~n", [Path]),
    case rabbit_definitions:import_raw(Body) of
      ok ->
        ct:pal("Expected import case ~tp to fail~n", [Path]),
        ct:fail({expected_failure, Path});
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
      {error, _E} -> ok
    end.
 

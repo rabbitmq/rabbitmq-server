@@ -293,21 +293,7 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
                     rabbit_log:debug("Will re-import definitions even if they have not changed"),
                     Mod:load(IsDir, Path);
                 true ->
-<<<<<<< HEAD
-                    Algo = rabbit_definitions_hashing:hashing_algorithm(),
-                    rabbit_log:debug("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
-                    CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-                    rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
-                    case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
-                        CurrentHash ->
-                            rabbit_log:info("Hash value of imported definitions matches current contents");
-                        UpdatedHash ->
-                            rabbit_log:debug("Hash value of imported definitions has changed to ~s", [binary:part(rabbit_misc:hexify(UpdatedHash), 0, 12)]),
-                            rabbit_definitions_hashing:store_global_hash(UpdatedHash)
-                    end
-=======
                     maybe_load_definitions_from_local_filesystem_if_unchanged(Mod, IsDir, Path)
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
             end
     end.
 
@@ -337,27 +323,7 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                     {error, "definition import source is configured but definitions.import_backend is not set"};
                 ModOrAlias ->
                     Mod = normalize_backend_module(ModOrAlias),
-<<<<<<< HEAD
-                    case should_skip_if_unchanged() of
-                        false ->
-                            rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
-                            Mod:load(Proplist);
-                        true ->
-                            rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory/source has changed)", [Mod]),
-                            CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-                            rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
-                            Algo = rabbit_definitions_hashing:hashing_algorithm(),
-                            case Mod:load_with_hashing(Proplist, CurrentHash, Algo) of
-                                CurrentHash ->
-                                    rabbit_log:info("Hash value of imported definitions matches current contents");
-                                UpdatedHash ->
-                                    rabbit_log:debug("Hash value of imported definitions has changed to ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
-                                    rabbit_definitions_hashing:store_global_hash(UpdatedHash)
-                            end
-                    end
-=======
                     maybe_load_definitions_from_pluggable_source_if_unchanged(Mod, Proplist)
->>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
             end
     end.
 
