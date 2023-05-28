@@ -35,7 +35,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
--import(rabbit_definitions, [import_raw/1]).
+-import(rabbit_definitions, [import_raw/1, decode/1, validate_definitions/1]).
 
 %%
 %% API
@@ -84,12 +84,18 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
         [] ->
             rabbit_definitions_hashing:hash(Algo, undefined);
         Defs ->
-            case rabbit_definitions_hashing:hash(Algo, Defs) of
-                PreviousHash -> PreviousHash;
-                Other        ->
-                    rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
-                    _ = load_from_local_path(IsDir, Path),
-                    Other
+            case validate_definitions(Defs) of
+                true ->
+                    case rabbit_definitions_hashing:hash(Algo, Defs) of
+                        PreviousHash -> PreviousHash;
+                        Other        ->
+                            rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+                            _ = load_from_local_path(IsDir, Path),
+                            Other
+                    end;
+                false ->
+                    rabbit_log:error("Failed to parse a definition file, path: ~p", [Path]),
+                    {error, not_json}
             end
     end.
 

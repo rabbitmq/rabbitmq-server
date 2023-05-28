@@ -51,7 +51,8 @@ groups() ->
                                import_case16,
                                import_case17,
                                import_case18,
-                               import_case19
+                               import_case19,
+                               import_case20
                               ]},
         
         {boot_time_import_using_classic_source, [], [
@@ -294,6 +295,15 @@ import_case19(Config) ->
             {skip, "Should not run in mixed version environments"}
     end.
 
+import_case20(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            import_invalid_file_case_if_unchanged(Config, "failing_case20");
+        true ->
+            %% skip the test in mixed version mode
+            {skip, "Should not run in mixed version environments"}
+    end.
+
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
       false ->
@@ -378,6 +388,11 @@ import_invalid_file_case(Config, CaseName) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
     ok.
 
+import_invalid_file_case_if_unchanged(Config, CaseName) ->
+    CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case_if_unchanged, [CasePath]),
+    ok.
+
 import_from_directory_case(Config, CaseName) ->
     import_from_directory_case_expect(Config, CaseName, ok).
 
@@ -396,16 +411,26 @@ import_raw(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]) of
         ok -> ok;
         {error, E} ->
+<<<<<<< HEAD
             ct:pal("Import of JSON definitions ~p failed: ~p~n", [Body, E]),
             ct:fail({failure, Body, E})
+=======
+            ct:pal("Import of JSON definitions ~tp failed: ~tp~n", [Body, E]),
+            ct:fail({expected_failure, Body, E})
+>>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
     end.
 
 import_parsed(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_parsed, [Body]) of
         ok -> ok;
         {error, E} ->
+<<<<<<< HEAD
             ct:pal("Import of parsed definitions ~p failed: ~p~n", [Body, E]),
             ct:fail({failure, Body, E})
+=======
+            ct:pal("Import of parsed definitions ~tp failed: ~tp~n", [Body, E]),
+            ct:fail({expected_failure, Body, E})
+>>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
     end.
 
 export(Config) ->
@@ -430,19 +455,43 @@ run_import_case(Path) ->
    case rabbit_definitions:import_raw(Body) of
      ok -> ok;
      {error, E} ->
+<<<<<<< HEAD
        ct:pal("Import case ~p failed: ~p~n", [Path, E]),
        ct:fail({failure, Path, E})
+=======
+       ct:pal("Import case ~tp failed: ~tp~n", [Path, E]),
+       ct:fail({expected_failure, Path, E})
+>>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
    end.
 
 run_invalid_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
+<<<<<<< HEAD
    ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
    case rabbit_definitions:import_raw(Body) of
      ok ->
        ct:pal("Expected import case ~p to fail~n", [Path]),
        ct:fail({failure, Path});
+=======
+   ct:pal("Successfully loaded a definition file at ~tp~n", [Path]),
+   case rabbit_definitions:import_raw(Body) of
+     ok ->
+       ct:pal("Expected import case ~tp to fail~n", [Path]),
+       ct:fail({expected_failure, Path});
+>>>>>>> 7e7431a06b (Fail boot if definition file is invalid JSON)
      {error, _E} -> ok
    end.
+
+run_invalid_import_case_if_unchanged(Path) ->
+    Mod = rabbit_definitions_import_local_filesystem,
+    ct:pal("Successfully loaded a definition to import from ~tp~n", [Path]),
+    case rabbit_definitions:maybe_load_definitions_from_local_filesystem_if_unchanged(Mod, false, Path) of
+        ok ->
+            ct:pal("Expected import case ~tp to fail~n", [Path]),
+            ct:fail({expected_failure, Path});
+        {error, _E} -> ok
+    end.
+
 
 queue_lookup(Config, VHost, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]).
