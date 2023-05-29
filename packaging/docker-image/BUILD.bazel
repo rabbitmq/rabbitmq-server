@@ -32,6 +32,7 @@ BUILD_DEPS_PACKAGES = [
 
 REQUIRED_PACKAGES = [
     "gosu",
+    "ca-certificates",
 ]
 
 CONVENIENCE_PACKAGES = [
