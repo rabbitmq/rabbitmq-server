@@ -660,7 +660,6 @@ test_successful_access_with_a_parsed_token(_) ->
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
-    VHost    = <<"vhost">>,
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
     {ok, #auth_user{impl = Impl} } =
