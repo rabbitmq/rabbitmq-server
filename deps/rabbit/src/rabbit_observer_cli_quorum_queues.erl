@@ -61,8 +61,14 @@ ra_log_wal_sheet(RaCounters) ->
         #{content => {byte, maps:get(bytes_written, RaLogWalCounters)}, width => 15},
         #{content => maps:get(writes, RaLogWalCounters), width => 14},
         #{content => maps:get(batches, RaLogWalCounters), width => 13},
-        #{content => {byte, maps:get(bytes_written, RaLogWalCounters) / maps:get(batches, RaLogWalCounters)}, width => 13},
-        #{content => maps:get(writes, RaLogWalCounters) / maps:get(batches, RaLogWalCounters), width => 21}
+        #{content => {byte, case maps:get(batches, RaLogWalCounters) of
+                                0 -> 0;
+                                Batches -> maps:get(bytes_written, RaLogWalCounters) / Batches
+                            end}, width => 13},
+        #{content => case maps:get(batches, RaLogWalCounters) of
+                         0 -> 0;
+                         Batches -> maps:get(writes, RaLogWalCounters) / Batches
+                     end, width => 21}
     ].
 
 ra_log_segment_writer_header() ->
