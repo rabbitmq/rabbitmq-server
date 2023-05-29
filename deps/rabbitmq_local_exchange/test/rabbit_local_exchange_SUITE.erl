@@ -45,7 +45,21 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
-    Config.
+    AnyNodeIsMissingPlugin =
+        lists:any(
+          fun (N) ->
+                  try
+                    rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_local_exchange),
+                    false
+                  catch
+                      _:_ -> true
+                  end
+          end,
+          rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    case AnyNodeIsMissingPlugin of
+        true -> {skip, "rabbitmq_local_exchange plugin not available"};
+        _ -> Config
+    end.
 
 end_per_group(_, Config) ->
     Config.
@@ -54,11 +68,6 @@ init_per_testcase(Testcase, Config) ->
     TestCaseName = rabbit_ct_helpers:config_to_testcase_name(Config, Testcase),
     Config1 = rabbit_ct_helpers:set_config(Config, {test_resource_name,
                                                     re:replace(TestCaseName, "/", "-", [global, {return, list}])}),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [case rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_local_exchange) of
-      ok -> ok;
-      _ -> {skip}
-    end || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
