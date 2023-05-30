@@ -19,8 +19,12 @@ all() ->
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload_with_scope_prefix,
         test_validate_payload,
+        test_validate_payload_without_scope,
         test_validate_payload_when_verify_aud_false,
         test_successful_access_with_a_token,
+        test_successful_authentication_without_scopes,
+        test_successful_authorization_without_scopes,
+        test_unsuccessful_access_without_scopes,
         test_successful_access_with_a_token_with_variables_in_scopes,
         test_successful_access_with_a_parsed_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
@@ -609,6 +613,30 @@ post_process_payload_with_complex_claim_authorization(Authorization) ->
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
 
+test_successful_authentication_without_scopes(_) ->
+  Jwk = ?UTIL_MOD:fixture_jwk(),
+  UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+  application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+
+  Username = <<"username">>,
+  Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
+
+  {ok, #auth_user{username = Username} } =
+      rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]).
+
+test_successful_authorization_without_scopes(_) ->
+  Jwk = ?UTIL_MOD:fixture_jwk(),
+  UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+  application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+
+  Username = <<"username">>,
+  Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
+
+  {ok, _ } =
+      rabbit_auth_backend_oauth2:user_login_authorization(Username, [{password, Token}]).
+
 test_successful_access_with_a_token(_) ->
     %% Generate a token with JOSE
     %% Check authorization with the token
@@ -980,6 +1008,21 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, <<"not a token">>}])).
 
+test_unsuccessful_access_without_scopes(_) ->
+    Username = <<"username">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+
+    Jwk   = ?UTIL_MOD:fixture_jwk(),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:token_without_scopes(), Username), Jwk),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+
+    {ok, #auth_user{username = Username, tags = [], impl = CredentialsFun } = AuthUser} =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+
+    ct:log("authuser ~p ~p ", [AuthUser, CredentialsFun()]),
+    assert_vhost_access_denied(AuthUser, <<"vhost">>).
+
 test_restricted_vhost_access_with_a_valid_token(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
@@ -1275,6 +1318,12 @@ test_validate_payload(_) ->
                                               <<"foobar">>, <<"rabbitmq.other.third">>]},
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
+
+test_validate_payload_without_scope(_) ->
+    KnownResourceServerId = #{<<"aud">>   => [?RESOURCE_SERVER_ID]
+                              },
+    ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID] }},
                  rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
 
 test_validate_payload_when_verify_aud_false(_) ->
