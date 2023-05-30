@@ -2361,8 +2361,8 @@ sets_subtract(Set1, Set2) ->
     end.
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
-    %% @todo Why does this behave like when msgs AND indices are written? indices may not be written yet here?
-    %% Right that's because the queue already acked it so it doesn't matter whether it's written to index.
+    %% The message was already acked so it doesn't matter if it was never written
+    %% to the index, we can process the confirm.
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->

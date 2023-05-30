@@ -45,46 +45,30 @@
  %% i.e. two pairs, so GC does not go idle when busy
 -define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
 
+%% We keep track of flying messages for writes and removes. The idea is that
+%% when a remove comes in before we could process the write, we skip the
+%% write and send a publisher confirm immediately. We later skip the remove
+%% as well since we didn't process the write.
+%%
 %% Flying events. They get added as things happen. The entry in the table
 %% may get removed after the server write or after the server remove. When
 %% the value is removed after a write, when the value is added again it
-%% will take the same value if the value was never removed.
+%% will be as if the value was never removed.
 %%
 %% So the possible values are only:
 %% - 1: client write
 %% - 3: client and server write
 %% - 7: client and server wrote, client remove before entry could be deleted
 %%
-%% Values 1 and 7 indicate there is a message in flight.
+%% Values 1 and 7 indicate there is a message in flight: a write or a remove.
 
-%% @todo
-%% We want to keep track of pending messages, we don't care about what the server has
-%% done with them (it will delete the object once it's done, if possible).
-%% So we only need two values: a write is in flight and a remove is in flight
-
--define(FLYING_WRITE, 1).  %% ets:insert_new? not really necessary but worth doing yes
--define(FLYING_WRITE_DONE, 2). %% ets:update_counter followed by a tentative remove
--define(FLYING_REMOVE, 4). %% ets:update_counter
+-define(FLYING_WRITE, 1).      %% Message in transit for writing.
+-define(FLYING_WRITE_DONE, 2). %% Message written in the store.
+-define(FLYING_REMOVE, 4).     %% Message removed from the store.
 %% Useful states.
 -define(FLYING_IS_WRITTEN, ?FLYING_WRITE + ?FLYING_WRITE_DONE). %% Write was handled.
 -define(FLYING_IS_IGNORED, ?FLYING_WRITE + ?FLYING_REMOVE).     %% Remove before write was handled.
 -define(FLYING_IS_REMOVED, ?FLYING_WRITE + ?FLYING_WRITE_DONE + ?FLYING_REMOVE). %% Remove.
-
-%% @todo OK so on write we can just insert_new and on remove we can just update_counter with a default.
-%% @todo On server write we lookup and then later we delete_object with value 3
-%%       We could do a match of CRef + value 1 to get all flying messages to do multi-write
-%%       if we wanted to, and group the confirms.
-%% @todo On server remove we lookup and then delete by key
-%%
-%% @todo What to do if a value is not as expected? Can this happen? Probably not?
-%%       Maybe not on store crash but what about queue crash? It's possible that
-%%       in that case we get a flying entry but not a message so we could leak
-%%       that way...
-
-%% We keep track of flying messages for writes and removes. The idea is that
-%% when a remove comes in before we could process the write, we skip the
-%% write and send a publisher confirm immediately. We later skip the remove
-%% as well since we didn't process the write.
 
 %%----------------------------------------------------------------------------
 
@@ -511,20 +495,6 @@ read(MsgId,
             {{ok, Msg}, CState}
     end.
 
-%% write to cache
-%% cast {write,...}
-%% some other write makes the file roll over and delete everything from the cache NOPE NOT EVERYTHING IT DOESN'T DELETE IF ENTRY WASN'T WRITTEN YET (or ignored)
-%% read from cache: entry not there
-%% read from index: {write,...} not processed yet
-%% crash NOPE!!! SEE ABOVE
-
-%% So the not_found is impossible unless there's a bug.
-
-%% what we want: the cache shouldn't be completely wiped, only the entries that don't match the current file
-%% maybe use a timestamp to allow us to only remove what was fully written and set that timestamp in both cache entry and {write,...} but I don't think that is good enough
-%% nope. OK what else can be used. We can track what messages were truly written and only remove those from the cache?
-%% but doing that in the main process could be slow, maybe do that in the GC process?
-
 -spec read_many([rabbit_types:msg_id()], client_msstate()) -> #{rabbit_types:msg_id() => msg()}.
 
 %% We disable read_many when the index module is not ETS for the time being.
@@ -683,36 +653,6 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
             mark_handle_closed(FileHandlesEts, File, Ref),
             {{ok, Msg}, CState1}
     end.
-
-%% @todo Can we merge the flying behavior with the cur_cache refc stuff?
-%%       If a message is in cur_cache it will be refc so the first time
-%%       the {write,...} makes it through we can check cur_cache instead?
-%%       If value has 0 refc we don't write?
-%client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
-%                                                    client_ref = CRef }) ->
-%    Key = {MsgId, CRef},
-%    %% @todo Use ets:update_counter with a default value.
-%    case ets:insert_new(FlyingEts, {Key, Diff}) of
-%        true  -> ok;
-%        false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
-%                     0    -> ok;
-%                     Diff -> ok;
-%                     Err when Err >= 2 ->
-%                         %% The message must be referenced twice in the queue
-%                         %% index. There is a bug somewhere, but we don't want
-%                         %% to take down anything just because of this. Let's
-%                         %% process the message as if the copies were in
-%                         %% different queues (fan-out).
-%                         ok;
-%                     Err  -> throw({bad_flying_ets_update, Diff, Err, Key})
-%                 catch error:badarg ->
-%                         %% this is guaranteed to succeed since the
-%                         %% server only removes and updates flying_ets
-%                         %% entries; it never inserts them
-%                         true = ets:insert_new(FlyingEts, {Key, Diff})
-%                 end,
-%                 ok
-%    end.
 
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
                                       dying_clients = DyingClients }) ->
@@ -895,73 +835,10 @@ handle_cast({client_delete, CRef},
     State1 = State #msstate { clients = maps:remove(CRef, Clients) },
     noreply(clear_client(CRef, State1));
 
-%% @todo I think we don't need the flying table as long as we use the value from the cache instead.
-%%       We only need to write the message if it wasn't already written in the current file (keep keys?)
-%%       and the cache is > 0. We should NOT worry about messages in previous files (?) well we should
-%%       because the index can only have a single value so writing to another file doesn't work.
-%%       Can we just update_counter the index and if it doesn't exist then write?
-%%
-%% client: - write to ets cache OR increase refc if already exists (which one takes priority? write if not fan-out, refc if fan-out, but can't know yet so write)
-%%         - send {write...}
-%%         DON'T update_flying anymore! The refc is doing it for us
-%%         how does the refc work? we probably should +2 the refc on client_write because it will be decreased by both client ack and write?
-%%
-%% server: - -1 the cache; if result is 0 then we don't need to write (it was already acked)
-%%         HMMM but we can't figure things out like this if there's fan-out
-%%         so if fan-out we just increase/decrease the index (assuming non-zero) like we do before,
-%%         we will just not have the flying optimisation in that case?
-%%
-%%
-%% remove: how do we know it was not written? we just read from the cache and if value is 0... Nope
-%%         we want to just -1 client-side and only tell the message store the message is gone if the value is 0 ideally or if the value isn't in the cache (of course)
-%%
-%%
-%% when should values be removed from the cache in that case? when the file rolls over I guess? I guess that's why flying and refc are separate
-
-
-
-
-%% we write to cache everytime we do a {write,...}
-%% we want to avoid writing to disk if not necessary
-
-%% write: to cache with +1 refc and +1 pending_write
-%% {write,...}: +0 refc -1 pending_write
-    %% if refc == 0 -> don't write
-    %% do we need to track pending_write at all?
-    %% what about confirms? maybe never try to do them early?
-%% remove: -1 refc
-
-
-
-
-%% write
-%% refc+1
-%% ignore
-%% confirm?
-
-
-
-
 handle_cast({write, CRef, MsgRef, MsgId, Flow},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
                                clients            = Clients,
                                credit_disc_bound  = CreditDiscBound }) ->
-
-    %% @todo Figure out how multi-write would work out with Flow.
-    %%       With noflow, no problem. With flow, we must ack for
-    %%       each message we end up writing?
-    %%
-    %% @todo Should we send a message per write? Probably, but
-    %%       the message should say "there is something to write"
-    %%       and we will look at the ets table?
-
-    %% @todo How do we know which messages were handled and which weren't? update_flying?
-    %%       Won't a multi-write prevent the flying (write/remove) optimisation?
-
-    %% @todo We don't want to multi-write we want to multi-confirm, so the update_flying
-    %%       we do here we instead want to do it on multiple messages if possible. So
-    %%       get all messages from CRef that would end up ignored and do them all at once.
-
     case Flow of
         flow   -> {CPid, _} = maps:get(CRef, Clients),
                   %% We are going to process a message sent by the
@@ -989,10 +866,6 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
             %% current file then the cache entry will be removed by
             %% the normal logic for that in write_message/4 and
             %% maybe_roll_to_new_file/2.
-            %% @todo OK I think this is the core of the issue with
-            %%       the cache. There's got to be a better way that
-            %%       allows keeping the cache while not preventing
-            %%       fast writes.
             case index_lookup(MsgId, State1) of
                 [#msg_location { file = File }]
                   when File == State1 #msstate.current_file ->
@@ -1162,21 +1035,6 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                         client_confirm(CRef, MsgIds, written, StateN)
                 end, State1, CGs).
 
-%% ets:match({{_, CRef}, 0})
-%% Delete all these objects.
-%% Check if MsgId is in there. Hmm no we can't assume we process in that case...
-    %% OK we NEVER remove the entry before we look in the case of write. So for write we will always have MsgId in there if it has 0.
-    %% So if MsgId is in there we delete the objects and we ignore.
-    %% But we can't delete the objects randomly since the counter may get updated we have to delete the objects we found explicitly (and only if they still say 0).
-%% OK but how do we avoid sending confirms multiple times then? The write message is coming anyway...
-    %% Hmmm....
-    %% We need to get rid of gen_server2? Probably too hard right now.
-    %% We could keep track of which MsgIds were already processed and ignore the message in that case.
-    %% Or since we delete_object we could just update_flying like before? But if the message was
-    %% already processed we will ignore it and we don't want to send a confirm again... Tough.
-%% (ignore) But we can do the ets:lookup and then if it's an ignore we match for the other ones?
-%% (ignore) But we'll have MORE ets operations in that case because we still have incoming write/remove...
-
 flying_write(Key, #msstate { flying_ets = FlyingEts }) ->
     case ets:lookup(FlyingEts, Key) of
         [{_, ?FLYING_WRITE}] ->
@@ -1199,36 +1057,6 @@ flying_remove(Key, #msstate { flying_ets = FlyingEts }) ->
     %% We are done with this message, we can unconditionally delete the entry.
     true = ets:delete(FlyingEts, Key),
     Res.
-
-%update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
-%    Key = {MsgId, CRef},
-%    NDiff = -Diff,
-%    case ets:lookup(FlyingEts, Key) of
-%        []           -> ignore; %% @todo How is that possible?! If we have a message we must have an entry...
-%        [{_,  Diff}] -> ignore; %% [1]
-%        [{_, NDiff}] -> ets:update_counter(FlyingEts, Key, {2, Diff}),
-%                        true = ets:delete_object(FlyingEts, {Key, 0}),
-%                        process;
-%        [{_, 0}]     -> true = ets:delete_object(FlyingEts, {Key, 0}),
-%                        ignore;
-%        [{_, Err}] when Err >= 2 ->
-%            %% The message must be referenced twice in the queue index. There
-%            %% is a bug somewhere, but we don't want to take down anything
-%            %% just because of this. Let's process the message as if the
-%            %% copies were in different queues (fan-out).
-%            ets:update_counter(FlyingEts, Key, {2, Diff}),
-%            true = ets:delete_object(FlyingEts, {Key, 0}),
-%            process;
-%        [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
-%    end.
-%% [1] We can get here, for example, in the following scenario: There
-%% is a write followed by a remove in flight. The counter will be 0,
-%% so on processing the write the server attempts to delete the
-%% entry. If at that point the client injects another write it will
-%% either insert a new entry, containing +1, or increment the existing
-%% entry to +1, thus preventing its removal. Either way therefore when
-%% the server processes the read, the counter will be +1.
-%% @todo But why would the client insert the same MsgId twice?
 
 %% The general idea is that when a client of a transient message store is dying,
 %% we want to avoid writing messages that would end up being removed immediately
@@ -1281,9 +1109,6 @@ write_message(MsgId, Msg, CRef,
         {write, State1} ->
             write_message(MsgId, Msg,
                           record_pending_confirm(CRef, MsgId, State1));
-        %% @todo Where does the confirm gets sent?
-        %%       They aren't because those messages will not get written or confirmed
-        %%       because the queue that sent the messages is shutting down.
         {ignore, CurFile, State1 = #msstate { current_file = CurFile }} ->
             State1;
         {ignore, _File, State1} ->
@@ -1377,9 +1202,6 @@ read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
             file:open(form_filename(Dir, filenum_to_name(File)),
                       [binary, read, raw])
     end,
-
-%    {ok, Hdl} = file:open(form_filename(Dir, filenum_to_name(File)),
-%                          [binary, read, raw]),
     {ok, {MsgId, Msg}} =
         case rabbit_msg_file:pread(Hdl, Offset, TotalSize) of
             {ok, {MsgId, _}} = Obj ->
@@ -1393,7 +1215,6 @@ read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
                                    {proc_dict, get()}
                                   ]}}
         end,
-%    ok = file:close(Hdl),
     {Msg, State#client_msstate{ current_file = {File, Hdl}}}.
 
 contains_message(MsgId, From, State) ->
@@ -1506,7 +1327,6 @@ open_file(Dir, FileName, Mode) ->
 mark_handle_open(FileHandlesEts, File, Ref) ->
     %% This is fine to fail (already exists). Note it could fail with
     %% the value being close, and not have it updated to open.
-    %% @todo Should it fail? Probably not anymore.
     ets:insert_new(FileHandlesEts, {{Ref, File}, erlang:monotonic_time()}),
     true.
 
@@ -1810,9 +1630,8 @@ maybe_roll_to_new_file(
                             valid_total_size = 0,
                             file_size        = 0,
                             locked           = false }),
-    %% @todo We only delete those that have no reference???
-    %%       Does that mean the cache can grow unbounded? No because we decrease the reference on {write,...}
-    %%       But we do get potential memory issues if the store is hammered.
+    %% We only delete messages from the cache that were written to disk
+    %% in the previous file.
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
     State1 #msstate { current_file_handle = NextHdl,
                       current_file        = NextFile,
