@@ -1622,7 +1622,7 @@ maybe_roll_to_new_file(
                      file_size_limit     = FileSizeLimit })
   when Offset >= FileSizeLimit ->
     State1 = internal_sync(State),
-    file_handle_cache:close(CurHdl),
+    ok = file_handle_cache:close(CurHdl),
     NextFile = CurFile + 1,
     {ok, NextHdl} = open_file(Dir, filenum_to_name(NextFile), ?WRITE_MODE),
     true = ets:insert_new(FileSummaryEts, #file_summary {
