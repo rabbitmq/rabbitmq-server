@@ -20,7 +20,7 @@ all() ->
         permission_resource,
         permission_topic
     ].
-  
+
 variable_expansion(_Config) ->
     Scenarios = [
       { "Emtpy Scopes",
