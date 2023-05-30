@@ -84,6 +84,15 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
       <<"aud">> => [<<"rabbitmq">>],
       <<"scope">> => Scopes}.
 
+token_without_scopes() ->
+    %% expiration is a timestamp with precision in seconds
+    #{
+      <<"kid">> => <<"token-key">>,
+      <<"iss">> => <<"unit_test">>,
+      <<"foo">> => <<"bar">>,
+      <<"aud">> => [<<"rabbitmq">>]
+      }.
+
 fixture_token() ->
     fixture_token([]).
 
