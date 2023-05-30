@@ -496,7 +496,7 @@ post_process_payload_in_rich_auth_request_format(#{<<"authorization_details">> :
 
 
 
-validate_payload(#{?SCOPE_JWT_FIELD := _Scope } = DecodedToken) ->
+validate_payload(DecodedToken) ->
     ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
     ScopePrefix = application:get_env(?APP, ?SCOPE_PREFIX, <<ResourceServerId/binary, ".">>),
@@ -505,6 +505,11 @@ validate_payload(#{?SCOPE_JWT_FIELD := _Scope } = DecodedToken) ->
 validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId, ScopePrefix) ->
     case check_aud(Aud, ResourceServerId) of
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
+        {error, Err} -> {refused, {invalid_aud, Err}}
+    end;
+validate_payload(#{?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId, _ScopePrefix) ->
+    case check_aud(Aud, ResourceServerId) of
+        ok           -> {ok, DecodedToken};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
 validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, _ResourceServerId, ScopePrefix) ->
@@ -534,7 +539,8 @@ check_aud(Aud, ResourceServerId) ->
 
 %%--------------------------------------------------------------------
 
-get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
+get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
+get_scopes(#{}) -> [].
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
 get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
