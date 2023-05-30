@@ -135,7 +135,10 @@ plt(
 
 PLUGINS = all_plugins(
     rabbitmq_workspace = "",
-)
+) + select({
+    "@rules_erlang//:debug_build": ["@looking_glass//:erlang_app"],
+    "//conditions:default": [],
+})
 
 rabbitmq_home(
     name = "broker-home",
