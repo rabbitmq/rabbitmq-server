@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - v3.12.x
       - v3.11.x
       - bump-otp-for-oci
       - bump-rbe-*
@@ -27,12 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "25.3"
+        - "26.0"
         browser:
         - chrome
         include:
-        - erlang_version: "25.3"
-          elixir_version: 1.13.4
+        - erlang_version: "26.0"
+          elixir_version: 1.14.5
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
       DOCKER_NETWORK: rabbitmq_net
