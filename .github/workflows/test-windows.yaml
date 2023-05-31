@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "26.0-rc3"
-          elixir_version: "1.14.4"
+        - erlang_version: "26.0"
+          elixir_version: "1.14.5"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY

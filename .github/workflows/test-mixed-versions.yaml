@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - v3.12.x
       - v3.11.x
       - v3.10.x
       - v3.9.x
@@ -126,7 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - "25_3"
+        - "25_0"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -170,8 +171,8 @@ jobs:
     strategy:
       matrix:
         include:
-        - erlang_version: "25.3"
-          elixir_version: 1.14.0
+        - erlang_version: "25.0"
+          elixir_version: 1.14.5
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
