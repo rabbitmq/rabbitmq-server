@@ -9,7 +9,7 @@
 
 %% stats about read / write operations that go through the fhc.
 
--export([init/0, update/3, update/2, update/1, get/0]).
+-export([init/0, update/3, update/2, update/1, inc/2, get/0]).
 
 -define(TABLE, ?MODULE).
 
@@ -44,6 +44,10 @@ update(Op, Thunk) ->
 
 update(Op) ->
     ets:update_counter(?TABLE, {Op, count}, 1),
+    ok.
+
+inc(Op, Count) ->
+    _ = ets:update_counter(?TABLE, {Op, count}, Count),
     ok.
 
 get() ->

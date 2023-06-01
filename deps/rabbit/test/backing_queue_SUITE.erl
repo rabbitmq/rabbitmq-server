@@ -216,8 +216,12 @@ msg_store(Config) ->
       ?MODULE, msg_store1, [Config]).
 
 msg_store1(_Config) ->
+    %% We simulate the SeqId (used as a message ref for the flying optimisation)
+    %% using the process dictionary.
+    GenRefFun = fun(Key) -> V = case get(Key) of undefined -> 0; V0 -> V0 end, put(Key, V + 1), V end,
+    GenRef = fun() -> GenRefFun(msc) end,
     restart_msg_store_empty(),
-    MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
+    MsgIds = [{GenRef(), msg_id_bin(M)} || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
     Ref = rabbit_guid:gen(),
     {Cap, MSCState} = msg_store_client_init_capture(
@@ -228,7 +232,7 @@ msg_store1(_Config) ->
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% test confirm logic
-    passed = test_msg_store_confirms([hd(MsgIds)], Cap, MSCState),
+    passed = test_msg_store_confirms([hd(MsgIds)], Cap, GenRef, MSCState),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
@@ -243,7 +247,7 @@ msg_store1(_Config) ->
     %% count code. We need to do this through a 2nd client since a
     %% single client is not supposed to write the same message more
     %% than once without first removing it.
-    ok = msg_store_write(MsgIds2ndHalf, MSC2State),
+    ok = msg_store_write([{GenRefFun(msc2), MsgId} || {_, MsgId} <- MsgIds2ndHalf], MSC2State),
     %% check they're still all in there
     true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half
@@ -271,16 +275,16 @@ msg_store1(_Config) ->
     ok = rabbit_variable_queue:stop_msg_store(?VHOST),
     ok = rabbit_variable_queue:start_msg_store(?VHOST,
            [], {fun ([]) -> finished;
-                    ([MsgId|MsgIdsTail])
+                    ([{_, MsgId}|MsgIdsTail])
                       when length(MsgIdsTail) rem 2 == 0 ->
                         {MsgId, 1, MsgIdsTail};
-                    ([MsgId|MsgIdsTail]) ->
+                    ([{_, MsgId}|MsgIdsTail]) ->
                         {MsgId, 0, MsgIdsTail}
                 end, MsgIds2ndHalf}),
     MSCState5 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
-      fun (MsgId, Bool) ->
+      fun ({_, MsgId}, Bool) ->
               not(Bool = rabbit_msg_store:contains(MsgId, MSCState5))
       end, false, MsgIds2ndHalf),
     ok = rabbit_msg_store:client_terminate(MSCState5),
@@ -303,34 +307,41 @@ msg_store1(_Config) ->
     {ok, FileSize} = application:get_env(rabbit, msg_store_file_size_limit),
     PayloadSizeBits = 65536,
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
-    MsgIdsBig = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
+    MsgIdsBig = [{GenRef(), msg_id_bin(X)} || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (MSCStateM) ->
-                   [ok = rabbit_msg_store:write(MsgId, Payload, MSCStateM) ||
-                       MsgId <- MsgIdsBig],
+                   [ok = rabbit_msg_store:write(SeqId, MsgId, Payload, MSCStateM) ||
+                       {SeqId, MsgId} <- MsgIdsBig],
                    MSCStateM
            end),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (MsgId, MSCStateM) ->
+           fun ({_, MsgId}, MSCStateM) ->
                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
                                                   MsgId, MSCStateM),
                    MSCStateN
            end, MsgIdsBig),
-    %% .., then 3s by 1...
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
-    %% .., then remove 3s by 2, from the young end first. This hits
-    %% GC (under 50% good data left, but no empty files. Must GC).
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
-    %% .., then remove 3s by 3, from the young end first. This hits
-    %% GC...
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
+    %% We remove every other other message first, then do it again a second
+    %% time with another set of messages and then a third time. We start
+    %% with younger messages on purpose. So we split the list in three
+    %% lists keeping the message reference.
+    Part = fun
+        PartFun([], _, Acc) ->
+            Acc;
+        PartFun([E|Tail], N, Acc) ->
+            Pos = 1 + (N rem 3),
+            AccL = element(Pos, Acc),
+            PartFun(Tail, N + 1, setelement(Pos, Acc, [E|AccL]))
+    end,
+    {One, Two, Three} = Part(MsgIdsBig, 0, {[], [], []}),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, One),
+    %% This is likely to hit GC (under 50% good data left in files, but no empty files).
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, Two),
+    %% Files are empty now and will get removed.
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, Three),
     %% ensure empty
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
@@ -339,7 +350,7 @@ msg_store1(_Config) ->
                    MSCStateM
            end),
     %%
-    passed = test_msg_store_client_delete_and_terminate(),
+    passed = test_msg_store_client_delete_and_terminate(fun() -> GenRefFun(msc_cdat) end),
     %% restart empty
     restart_msg_store_empty(),
     passed.
@@ -375,7 +386,8 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
             end
     end.
 
-on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+on_disk_await(Pid, MsgIds0) when is_list(MsgIds0) ->
+    {_, MsgIds} = lists:unzip(MsgIds0),
     Pid ! {await, MsgIds, self()},
     receive
         {Pid, arrived} -> ok;
@@ -394,29 +406,29 @@ msg_store_client_init_capture(MsgStore, Ref) ->
     {Pid, rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,
                                              fun (MsgIds, _ActionTaken) ->
                                                  Pid ! {on_disk, MsgIds}
-                                             end, undefined)}.
+                                             end)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
-             fun (MsgId, Atom1) when Atom1 =:= Atom ->
+             fun ({_, MsgId}, Atom1) when Atom1 =:= Atom ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
 
 msg_store_read(MsgIds, MSCState) ->
-    lists:foldl(fun (MsgId, MSCStateM) ->
+    lists:foldl(fun ({_, MsgId}, MSCStateM) ->
                         {{ok, MsgId}, MSCStateN} = rabbit_msg_store:read(
                                                      MsgId, MSCStateM),
                         MSCStateN
                 end, MSCState, MsgIds).
 
 msg_store_write(MsgIds, MSCState) ->
-    ok = lists:foldl(fun (MsgId, ok) ->
-                             rabbit_msg_store:write(MsgId, MsgId, MSCState)
+    ok = lists:foldl(fun ({SeqId, MsgId}, ok) ->
+                             rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState)
                      end, ok, MsgIds).
 
 msg_store_write_flow(MsgIds, MSCState) ->
-    ok = lists:foldl(fun (MsgId, ok) ->
-                             rabbit_msg_store:write_flow(MsgId, MsgId, MSCState)
+    ok = lists:foldl(fun ({SeqId, MsgId}, ok) ->
+                             rabbit_msg_store:write_flow(SeqId, MsgId, MsgId, MSCState)
                      end, ok, MsgIds).
 
 msg_store_remove(MsgIds, MSCState) ->
@@ -438,36 +450,42 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
       lists:foldl(fun (MsgId, MSCState) -> Fun(MsgId, MSCState) end,
                   msg_store_client_init(MsgStore, Ref), L)).
 
-test_msg_store_confirms(MsgIds, Cap, MSCState) ->
+test_msg_store_confirms(MsgIds, Cap, GenRef, MSCState) ->
     %% write -> confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    MsgIds1 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds1, MSCState),
+    ok = on_disk_await(Cap, MsgIds1),
     %% remove -> _
-    ok = msg_store_remove(MsgIds, MSCState),
+    ok = msg_store_remove(MsgIds1, MSCState),
     ok = on_disk_await(Cap, []),
     %% write, remove -> confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    MsgIds2 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds2, MSCState),
+    ok = msg_store_remove(MsgIds2, MSCState),
+    ok = on_disk_await(Cap, MsgIds2),
     %% write, remove, write -> confirmed, confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds ++ MsgIds),
+    MsgIds3 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds3, MSCState),
+    ok = msg_store_remove(MsgIds3, MSCState),
+    MsgIds4 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds4, MSCState),
+    ok = on_disk_await(Cap, MsgIds3 ++ MsgIds4),
     %% remove, write -> confirmed
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    ok = msg_store_remove(MsgIds4, MSCState),
+    MsgIds5 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds5, MSCState),
+    ok = on_disk_await(Cap, MsgIds5),
     %% remove, write, remove -> confirmed
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    ok = msg_store_remove(MsgIds5, MSCState),
+    MsgIds6 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds6, MSCState),
+    ok = msg_store_remove(MsgIds6, MSCState),
+    ok = on_disk_await(Cap, MsgIds6),
     %% confirmation on timer-based sync
-    passed = test_msg_store_confirm_timer(),
+    passed = test_msg_store_confirm_timer(GenRef),
     passed.
 
-test_msg_store_confirm_timer() ->
+test_msg_store_confirm_timer(GenRef) ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
@@ -480,33 +498,35 @@ test_msg_store_confirm_timer() ->
                 true  -> Self ! on_disk;
                 false -> ok
             end
-        end, undefined),
-    ok = msg_store_write([MsgId], MSCState),
-    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
-    ok = msg_store_remove([MsgId], MSCState),
+        end),
+    MsgIdsChecked = [{GenRef(), MsgId}],
+    ok = msg_store_write(MsgIdsChecked, MSCState),
+    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], GenRef, MSCState, false),
+    ok = msg_store_remove(MsgIdsChecked, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
-msg_store_keep_busy_until_confirm(MsgIds, MSCState, Blocked) ->
+msg_store_keep_busy_until_confirm(MsgIds, GenRef, MSCState, Blocked) ->
     After = case Blocked of
                 false -> 0;
                 true  -> ?MAX_WAIT
             end,
     Recurse = fun () -> msg_store_keep_busy_until_confirm(
-                          MsgIds, MSCState, credit_flow:blocked()) end,
+                          MsgIds, GenRef, MSCState, credit_flow:blocked()) end,
     receive
         on_disk            -> ok;
         {bump_credit, Msg} -> credit_flow:handle_bump_msg(Msg),
                               Recurse()
     after After ->
-            ok = msg_store_write_flow(MsgIds, MSCState),
-            ok = msg_store_remove(MsgIds, MSCState),
+            MsgIds1 = [{GenRef(), MsgId} || MsgId <- MsgIds],
+            ok = msg_store_write_flow(MsgIds1, MSCState),
+            ok = msg_store_remove(MsgIds1, MSCState),
             Recurse()
     end.
 
-test_msg_store_client_delete_and_terminate() ->
+test_msg_store_client_delete_and_terminate(GenRef) ->
     restart_msg_store_empty(),
-    MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
+    MsgIds = [{GenRef(), msg_id_bin(M)} || M <- lists:seq(1, 10)],
     Ref = rabbit_guid:gen(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = msg_store_write(MsgIds, MSCState),
@@ -1558,7 +1578,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                           MsgId, SeqId, rabbit_msg_store,
                           #message_properties{size = 10},
                           Persistent, infinity, QiN),
-                  ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
+                  ok = rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
     %% do this just to force all of the publishes through to the msg_store:
@@ -1570,7 +1590,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined, undefined).
+    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
@@ -1578,7 +1598,7 @@ variable_queue_init(Q, Recover) ->
              true  -> non_clean_shutdown;
              false -> new;
              Terms -> Terms
-         end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
+         end, fun nop/2, fun nop/1, fun nop/1).
 
 variable_queue_read_terms(QName) ->
     #resource { kind = queue,

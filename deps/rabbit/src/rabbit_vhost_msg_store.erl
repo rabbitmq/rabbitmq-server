@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start/4, stop/2, client_init/5, successfully_recovered_state/2]).
+-export([start/4, stop/2, client_init/4, successfully_recovered_state/2]).
 -export([vhost_store_pid/2]).
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
@@ -43,9 +43,9 @@ stop(VHost, Type) ->
             ok
     end.
 
-client_init(VHost, Type, Ref, MsgOnDiskFun, CloseFDsFun) ->
+client_init(VHost, Type, Ref, MsgOnDiskFun) ->
     with_vhost_store(VHost, Type, fun(StorePid) ->
-        rabbit_msg_store:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)
+        rabbit_msg_store:client_init(StorePid, Ref, MsgOnDiskFun)
     end).
 
 with_vhost_store(VHost, Type, Fun) ->

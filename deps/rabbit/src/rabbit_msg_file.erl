@@ -7,7 +7,7 @@
 
 -module(rabbit_msg_file).
 
--export([append/3, read/2, scan/4]).
+-export([append/3, read/2, pread/2, pread/3, scan/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -39,6 +39,9 @@
 
 append(FileHdl, MsgId, MsgBody)
   when is_binary(MsgId) andalso size(MsgId) =:= ?MSG_ID_SIZE_BYTES ->
+    %% @todo I think we are actually writing MsgId TWICE: once in
+    %%       the header, once in the body. Might be better to reduce
+    %%       the size of the body...
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
     Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
@@ -66,6 +69,44 @@ read(FileHdl, TotalSize) ->
             {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
+
+-spec pread(io_device(), position(), msg_size()) ->
+            rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
+                                      any()).
+
+pread(FileHdl, Offset, TotalSize) ->
+    Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
+    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
+    case file:pread(FileHdl, Offset, TotalSize) of
+        {ok, <<Size:?INTEGER_SIZE_BITS,
+               MsgId:?MSG_ID_SIZE_BYTES/binary,
+               MsgBodyBin:BodyBinSize/binary,
+               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
+            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
+        KO -> KO
+    end.
+
+-spec pread(io_device(), [{position(), msg_size()}]) ->
+            {ok, [msg()]} | {error, any()} | eof.
+
+pread(FileHdl, LocNums) ->
+    case file:pread(FileHdl, LocNums) of
+        {ok, DataL} -> {ok, pread_parse(DataL)};
+        KO -> KO
+    end.
+
+pread_parse([<<Size:?INTEGER_SIZE_BITS,
+               _MsgId:?MSG_ID_SIZE_BYTES/binary,
+               Rest0/bits>>|Tail]) ->
+    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
+    <<MsgBodyBin:BodyBinSize/binary,
+      ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS,
+      Rest/bits>> = Rest0,
+    [binary_to_term(MsgBodyBin)|pread_parse([Rest|Tail])];
+pread_parse([<<>>]) ->
+    [];
+pread_parse([<<>>|Tail]) ->
+    pread_parse(Tail).
 
 -spec scan(io_device(), file_size(), message_accumulator(A), A) ->
           {'ok', A, position()}.

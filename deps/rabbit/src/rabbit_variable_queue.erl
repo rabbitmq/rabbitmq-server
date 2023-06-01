@@ -26,7 +26,7 @@
 -export([convert_from_v2_to_v1_loop/8]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/6]).
+-export([start_msg_store/3, stop_msg_store/1, init/5]).
 
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -420,14 +420,14 @@ stop_msg_store(VHost) ->
 
 init(Queue, Recover, Callback) ->
     init(
-      Queue, Recover, Callback,
+      Queue, Recover,
       fun (MsgIds, ActionTaken) ->
               msgs_written_to_disk(Callback, MsgIds, ActionTaken)
       end,
       fun (MsgIds) -> msg_indices_written_to_disk(Callback, MsgIds) end,
       fun (MsgIds) -> msgs_and_indices_written_to_disk(Callback, MsgIds) end).
 
-init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init(Q, new, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
     %% We resolve the queue version immediately to avoid converting
@@ -440,14 +440,14 @@ init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) w
          IsDurable, IndexMod, IndexState, StoreState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                            MsgOnDiskFun, AsyncCallback, VHost);
+                                            MsgOnDiskFun, VHost);
              false -> undefined
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined,
-                               AsyncCallback, VHost), VHost);
+                               VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
-init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init(Q, Terms, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
@@ -455,8 +455,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
             true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                               MsgOnDiskFun, AsyncCallback,
-                                               VHost),
+                                               MsgOnDiskFun, VHost),
                      {C, fun (MsgId) when is_binary(MsgId) ->
                                  rabbit_msg_store:contains(MsgId, C);
                              (#basic_message{is_persistent = Persistent}) ->
@@ -465,8 +464,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
-                                             undefined, AsyncCallback,
-                                             VHost),
+                                             undefined, VHost),
     %% We MUST resolve the queue version immediately in order to recover.
     IndexMod = index_mod(Q),
     {DeltaCount, DeltaBytes, IndexState} =
@@ -654,7 +652,7 @@ ack([SeqId], State) ->
                               false -> {[], IndexState}
                           end,
             StoreState1 = case MsgLocation of
-                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
+                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
                 ?IN_QUEUE_STORE   -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
                 ?IN_QUEUE_INDEX   -> StoreState0;
                 ?IN_MEMORY        -> StoreState0
@@ -806,12 +804,15 @@ timeout(State = #vqstate { index_mod   = IndexMod,
 handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
                                         index_state = IndexState0,
                                         store_state = StoreState0,
+                                        msg_store_clients = MSCState0,
                                         unconfirmed_simple = UCS,
                                         confirmed   = C }) ->
+    MSCState = msg_store_pre_hibernate(MSCState0),
     IndexState = IndexMod:flush(IndexState0),
     StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
     State #vqstate { index_state = IndexState,
                      store_state = StoreState,
+                     msg_store_clients = MSCState,
                      unconfirmed_simple = sets:new([{version,2}]),
                      confirmed   = sets:union(C, UCS) }.
 
@@ -1298,27 +1299,26 @@ msg_status(Version, IsPersistent, IsDelivered, SeqId,
                 msg_props     = MsgProps}.
 
 beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, rabbit_queue_index, MsgProps, IsPersistent}) ->
+                 SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = Msg,
-                   persist_to   = queue_index,
-                   msg_location = memory};
-
-beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, {rabbit_classic_queue_store_v2, _, _}, MsgProps, IsPersistent}) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
-    MS0#msg_status{msg_id       = MsgId,
-                   msg          = Msg,
-                   persist_to   = queue_store,
-                   msg_location = memory};
+                   persist_to   = case MsgLocation of
+                                      rabbit_queue_index -> queue_index;
+                                      {rabbit_classic_queue_store_v2, _, _} -> queue_store;
+                                      rabbit_msg_store -> msg_store
+                                  end,
+                   msg_location = case MsgLocation of
+                                      rabbit_queue_index -> memory;
+                                      _ -> MsgLocation
+                                  end};
 
 beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = undefined,
                    persist_to   = case is_tuple(MsgLocation) of
-                                      true  -> queue_store;
+                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
                                       false -> msg_store
                                   end,
                    msg_location = MsgLocation}.
@@ -1344,23 +1344,26 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
                                            end),
     Res.
 
-msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
+msg_store_client_init(MsgStore, MsgOnDiskFun, VHost) ->
     msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
-                          Callback, VHost).
+                          VHost).
 
-msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
-    CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, VHost) ->
     rabbit_vhost_msg_store:client_init(VHost, MsgStore,
-                                       Ref, MsgOnDiskFun,
-                                       fun () ->
-                                           Callback(?MODULE, CloseFDsFun)
-                                       end).
+                                       Ref, MsgOnDiskFun).
 
-msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
+msg_store_pre_hibernate({undefined, MSCStateT}) ->
+    {undefined,
+     rabbit_msg_store:client_pre_hibernate(MSCStateT)};
+msg_store_pre_hibernate({MSCStateP, MSCStateT}) ->
+    {rabbit_msg_store:client_pre_hibernate(MSCStateP),
+     rabbit_msg_store:client_pre_hibernate(MSCStateT)}.
+
+msg_store_write(MSCState, IsPersistent, SeqId, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) ->
-              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+              rabbit_msg_store:write_flow(SeqId, MsgId, Msg, MSCState1)
       end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
@@ -1376,17 +1379,6 @@ msg_store_remove(MSCState, IsPersistent, MsgIds) ->
       fun (MCSState1) ->
               rabbit_msg_store:remove(MsgIds, MCSState1)
       end).
-
-msg_store_close_fds(MSCState, IsPersistent) ->
-    with_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
-
-msg_store_close_fds_fun(IsPersistent) ->
-    fun (?MODULE, State = #vqstate { msg_store_clients = MSCState }) ->
-            {ok, MSCState1} = msg_store_close_fds(MSCState, IsPersistent),
-            State #vqstate { msg_store_clients = MSCState1 }
-    end.
 
 betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId0 }) ->
     {Filtered, NextDeliverSeqId, Acks, RamReadyCount, RamBytes, TransientCount, TransientBytes} =
@@ -1725,7 +1717,7 @@ remove(false, MsgStatus = #msg_status {
 
     %% Remove from msg_store and queue index, if necessary
     StoreState1 = case MsgLocation of
-        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
+        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
         ?IN_QUEUE_STORE  -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
         ?IN_QUEUE_INDEX  -> StoreState0;
         ?IN_MEMORY       -> StoreState0
@@ -1895,7 +1887,7 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
 purge_betas_and_deltas(DelsAndAcksFun, State) ->
     %% We use the maximum memory limit when purging to get greater performance.
     MemoryLimit = 2048,
-    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State, MemoryLimit),
+    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State, MemoryLimit, metadata_only),
 
     case ?QUEUE:is_empty(Q3) of
         true  -> State0;
@@ -1917,7 +1909,7 @@ remove_queue_entries1(
                 is_persistent = IsPersistent} = MsgStatus,
   {MsgIdsByStore, NextDeliverSeqId, Acks, State}) ->
     {case MsgLocation of
-         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
+         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, {SeqId, MsgId}, MsgIdsByStore);
          _ -> MsgIdsByStore
      end,
      next_deliver_seq_id(SeqId, NextDeliverSeqId),
@@ -2057,7 +2049,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                           disk_write_count  = Count})
   when Force orelse IsPersistent ->
     case persist_to(MsgStatus) of
-        msg_store   -> ok = msg_store_write(MSCState, IsPersistent, MsgId,
+        msg_store   -> ok = msg_store_write(MSCState, IsPersistent, SeqId, MsgId,
                                             prepare_to_store(Msg)),
                        {MsgStatus#msg_status{msg_location = ?IN_SHARED_STORE},
                         State#vqstate{disk_write_count = Count + 1}};
@@ -2337,7 +2329,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
                {IndexOnDiskSeqIdsAcc, MsgIdsByStore, SeqIdsInStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgLocation of
-         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
+         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, {SeqId, MsgId}, MsgIdsByStore);
          _                -> MsgIdsByStore
      end,
      case MsgLocation of
@@ -2369,6 +2361,8 @@ sets_subtract(Set1, Set2) ->
     end.
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
+    %% The message was already acked so it doesn't matter if it was never written
+    %% to the index, we can process the confirm.
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
@@ -2574,15 +2568,23 @@ fetch_from_q3(State = #vqstate { delta = #delta { count = DeltaCount },
             {loaded, {MsgStatus, State1}}
     end.
 
+%% Thresholds for doing multi-read against the shared message
+%% stores. The values have been obtained through numerous
+%% experiments. Be careful when editing these values: after a
+%% certain size the performance drops and it becomes no longer
+%% interesting to keep the extra data in memory.
+-define(SHARED_READ_MANY_SIZE_THRESHOLD, 12000).
+-define(SHARED_READ_MANY_COUNT_THRESHOLD, 10).
+
 maybe_deltas_to_betas(State = #vqstate { rates = #rates{ out = OutRate }}) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
     %% We allow from 1 to 2048 messages in memory depending on the consume rate.
     MemoryLimit = min(1 + floor(2 * OutRate), 2048),
-    maybe_deltas_to_betas(AfterFun, State, MemoryLimit).
+    maybe_deltas_to_betas(AfterFun, State, MemoryLimit, messages).
 
 maybe_deltas_to_betas(_DelsAndAcksFun,
                       State = #vqstate {delta = ?BLANK_DELTA_PATTERN(X) },
-                      _MemoryLimit) ->
+                      _MemoryLimit, _WhatToRead) ->
     State;
 maybe_deltas_to_betas(DelsAndAcksFun,
                       State = #vqstate {
@@ -2591,13 +2593,14 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         index_mod            = IndexMod,
                         index_state          = IndexState,
                         store_state          = StoreState,
+                        msg_store_clients    = {MCStateP, MCStateT},
                         ram_msg_count        = RamMsgCount,
                         ram_bytes            = RamBytes,
                         disk_read_count      = DiskReadCount,
                         delta_transient_bytes = DeltaTransientBytes,
                         transient_threshold  = TransientThreshold,
                         version              = Version },
-                      MemoryLimit) ->
+                      MemoryLimit, WhatToRead) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
              transient    = Transient,
@@ -2619,21 +2622,80 @@ maybe_deltas_to_betas(DelsAndAcksFun,
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {List, StoreState2} = case Version of
-        1 -> {List0, StoreState};
-        %% When using v2 we try to read all messages from disk at once
-        %% instead of 1 by 1 at fetch time.
-        2 ->
-            Reads = [{SeqId, MsgLocation}
-                || {_, SeqId, MsgLocation, _, _} <- List0, is_tuple(MsgLocation)],
-            {Msgs, StoreState1} = rabbit_classic_queue_store_v2:read_many(Reads, StoreState),
-            {merge_read_msgs(List0, Reads, Msgs), StoreState1}
+    {List, StoreState3} = case WhatToRead of
+        messages ->
+            %% We try to read messages from disk all at once instead of
+            %% 1 by 1 at fetch time. When v1 is used and messages are
+            %% embedded, then the message content is already read from
+            %% disk at this point. For v2 embedded we must do a separate
+            %% call to obtain the contents and then merge the contents
+            %% back into the #msg_status records.
+            %%
+            %% For shared message store messages we do the same but only
+            %% for messages < ?SHARED_READ_MANY_SIZE_THRESHOLD bytes and
+            %% when there are at least ?SHARED_READ_MANY_COUNT_THRESHOLD
+            %% messages to fetch from that store. Other messages will be
+            %% fetched one by one right before sending the messages.
+            %%
+            %% Since we have two different shared stores for persistent
+            %% and transient messages they are treated separately when
+            %% deciding whether to read_many from either of them.
+            %%
+            %% Because v2 and shared stores function differently we
+            %% must keep different information for performing the reads.
+            {V2Reads0, ShPersistReads, ShTransientReads} = lists:foldl(fun
+                ({_, SeqId, MsgLocation, _, _}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when is_tuple(MsgLocation) ->
+                    {[{SeqId, MsgLocation}|V2ReadsAcc], ShPReadsAcc, ShTReadsAcc};
+                ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true},
+                 {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
+                    {V2ReadsAcc, [MsgId|ShPReadsAcc], ShTReadsAcc};
+                ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false},
+                 {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
+                    {V2ReadsAcc, ShPReadsAcc, [MsgId|ShTReadsAcc]};
+                (_, Acc) ->
+                    Acc
+            end, {[], [], []}, List0),
+            %% In order to properly read and merge V2 messages we want them
+            %% in the older->younger order.
+            V2Reads = lists:reverse(V2Reads0),
+            %% We do read_many for v2 store unconditionally.
+            {V2Msgs, StoreState2} = rabbit_classic_queue_store_v2:read_many(V2Reads, StoreState),
+            List1 = merge_read_msgs(List0, V2Reads, V2Msgs),
+            %% We read from the shared message store only if there are multiple messages
+            %% (10+ as we wouldn't get much benefits from smaller number of messages)
+            %% otherwise we wait and read later.
+            %%
+            %% Because read_many does not use FHC we do not get an updated MCState
+            %% like with normal reads.
+            List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+                true ->
+                    List1;
+                false ->
+                    ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
+                    case map_size(ShPersistMsgs) of
+                        0 -> List1;
+                        _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
+                    end
+            end,
+            List3 = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+                true ->
+                    List2;
+                false ->
+                    ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
+                    case map_size(ShTransientMsgs) of
+                        0 -> List2;
+                        _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
+                    end
+            end,
+            {List3, StoreState2};
+        metadata_only ->
+            {List0, StoreState}
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
                                  DelsAndAcksFun,
                                  State #vqstate { index_state = IndexState1,
-                                                  store_state = StoreState2 }),
+                                                  store_state = StoreState3 }),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
@@ -2645,7 +2707,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
               DelsAndAcksFun,
               State2 #vqstate {
                 delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })},
-              MemoryLimit);
+              MemoryLimit, WhatToRead);
         Q3aLen ->
             Q3b = ?QUEUE:join(Q3, Q3a),
             case DeltaCount - Q3aLen of
@@ -2670,8 +2732,20 @@ merge_read_msgs([M = {_, SeqId, _, _, _}|MTail], [{SeqId, _}|RTail], [Msg|MsgTai
     [setelement(1, M, Msg)|merge_read_msgs(MTail, RTail, MsgTail)];
 merge_read_msgs([M|MTail], RTail, MsgTail) ->
     [M|merge_read_msgs(MTail, RTail, MsgTail)];
+%% @todo We probably don't need to unwrap until the end.
 merge_read_msgs([], [], []) ->
     [].
+
+%% We may not get as many messages as we tried reading.
+merge_sh_read_msgs([M = {MsgId, _, _, _, _}|MTail], Reads) ->
+    case Reads of
+        #{MsgId := Msg} ->
+            [setelement(1, M, Msg)|merge_sh_read_msgs(MTail, Reads)];
+        _ ->
+            [M|merge_sh_read_msgs(MTail, Reads)]
+    end;
+merge_sh_read_msgs(MTail, _Reads) ->
+    MTail.
 
 %% Flushes queue index batch caches and updates queue index state.
 ui(#vqstate{index_mod        = IndexMod,

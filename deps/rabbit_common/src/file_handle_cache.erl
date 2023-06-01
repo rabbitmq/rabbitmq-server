@@ -558,6 +558,7 @@ obtain()          -> obtain(1).
 set_reservation() -> set_reservation(1).
 release()         -> release(1).
 release_reservation() -> release_reservation(file).
+%% @todo This isn't used.
 transfer(Pid)     -> transfer(Pid, 1).
 
 obtain(Count)          -> obtain(Count, socket).

@@ -12,7 +12,7 @@
 -behaviour(rabbit_msg_store_index).
 
 -export([new/1, recover/1,
-         lookup/2, insert/2, update/2, update_fields/3, delete/2,
+         lookup/2, select_from_file/3, select_all_from_file/2, insert/2, update/2, update_fields/3, delete/2,
          delete_object/2, clean_up_temporary_reference_count_entries_without_file/1, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
@@ -41,6 +41,18 @@ lookup(Key, State) ->
         []      -> not_found;
         [Entry] -> Entry
     end.
+
+%% @todo We currently fetch all and then filter by file.
+%% This might lead to too many lookups... How to best
+%% optimize this? ets:select didn't seem great.
+select_from_file(MsgIds, File, State) ->
+    All = [lookup(Id, State) || Id <- MsgIds],
+    [MsgLoc || MsgLoc=#msg_location{file=MsgFile} <- All, MsgFile =:= File].
+
+%% Note that this function is not terribly efficient and should only be
+%% used for compaction or similar.
+select_all_from_file(File, State) ->
+    ets:match_object(State #state.table, #msg_location { file = File, _ = '_' }).
 
 insert(Obj, State) ->
     true = ets:insert_new(State #state.table, Obj),
