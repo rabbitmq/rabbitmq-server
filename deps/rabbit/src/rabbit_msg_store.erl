@@ -597,8 +597,6 @@ contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { flying_ets = FlyingEts,
                                           client_ref = CRef }) ->
-    %% @todo OK we write 1 at a time but maybe we can avoid doing N ets updates for N messages...
-    %% @todo No we can't because an insert_new would insert nothing if even only one already exists...
     %% If the entry was deleted we act as if it wasn't by using the right default.
     [ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN}) || {MsgRef, _} <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).

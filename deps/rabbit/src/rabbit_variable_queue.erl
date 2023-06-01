@@ -1887,7 +1887,7 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
 purge_betas_and_deltas(DelsAndAcksFun, State) ->
     %% We use the maximum memory limit when purging to get greater performance.
     MemoryLimit = 2048,
-    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State, MemoryLimit),
+    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State, MemoryLimit, metadata_only),
 
     case ?QUEUE:is_empty(Q3) of
         true  -> State0;
@@ -2580,11 +2580,11 @@ maybe_deltas_to_betas(State = #vqstate { rates = #rates{ out = OutRate }}) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
     %% We allow from 1 to 2048 messages in memory depending on the consume rate.
     MemoryLimit = min(1 + floor(2 * OutRate), 2048),
-    maybe_deltas_to_betas(AfterFun, State, MemoryLimit).
+    maybe_deltas_to_betas(AfterFun, State, MemoryLimit, messages).
 
 maybe_deltas_to_betas(_DelsAndAcksFun,
                       State = #vqstate {delta = ?BLANK_DELTA_PATTERN(X) },
-                      _MemoryLimit) ->
+                      _MemoryLimit, _WhatToRead) ->
     State;
 maybe_deltas_to_betas(DelsAndAcksFun,
                       State = #vqstate {
@@ -2600,7 +2600,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         delta_transient_bytes = DeltaTransientBytes,
                         transient_threshold  = TransientThreshold,
                         version              = Version },
-                      MemoryLimit) ->
+                      MemoryLimit, WhatToRead) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
              transient    = Transient,
@@ -2622,74 +2622,80 @@ maybe_deltas_to_betas(DelsAndAcksFun,
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    %% We try to read messages from disk all at once instead of
-    %% 1 by 1 at fetch time. When v1 is used and messages are
-    %% embedded, then the message content is already read from
-    %% disk at this point. For v2 embedded we must do a separate
-    %% call to obtain the contents and then merge the contents
-    %% back into the #msg_status records.
-    %%
-    %% For shared message store messages we do the same but only
-    %% for messages < ?SHARED_READ_MANY_SIZE_THRESHOLD bytes and
-    %% when there are at least ?SHARED_READ_MANY_COUNT_THRESHOLD
-    %% messages to fetch from that store. Other messages will be
-    %% fetched one by one right before sending the messages.
-    %%
-    %% Since we have two different shared stores for persistent
-    %% and transient messages they are treated separately when
-    %% deciding whether to read_many from either of them.
-    %%
-    %% Because v2 and shared stores function differently we
-    %% must keep different information for performing the reads.
-    {V2Reads0, ShPersistReads, ShTransientReads} = lists:foldl(fun
-        ({_, SeqId, MsgLocation, _, _}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when is_tuple(MsgLocation) ->
-            {[{SeqId, MsgLocation}|V2ReadsAcc], ShPReadsAcc, ShTReadsAcc};
-        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true},
-         {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
-            {V2ReadsAcc, [MsgId|ShPReadsAcc], ShTReadsAcc};
-        ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false},
-         {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
-            {V2ReadsAcc, ShPReadsAcc, [MsgId|ShTReadsAcc]};
-        (_, Acc) ->
-            Acc
-    end, {[], [], []}, List0),
-    %% In order to properly read and merge V2 messages we want them
-    %% in the older->younger order.
-    V2Reads = lists:reverse(V2Reads0),
-    %% We do read_many for v2 store unconditionally.
-    {V2Msgs, StoreState2} = rabbit_classic_queue_store_v2:read_many(V2Reads, StoreState),
-    List1 = merge_read_msgs(List0, V2Reads, V2Msgs),
-    %% We read from the shared message store only if there are multiple messages
-    %% (10+ as we wouldn't get much benefits from smaller number of messages)
-    %% otherwise we wait and read later.
-    %%
-    %% Because read_many does not use FHC we do not get an updated MCState
-    %% like with normal reads.
-    List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
-        true ->
-            List1;
-        false ->
-            ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
-            case map_size(ShPersistMsgs) of
-                0 -> List1;
-                _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
-            end
-    end,
-    List = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
-        true ->
-            List2;
-        false ->
-            ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
-            case map_size(ShTransientMsgs) of
-                0 -> List2;
-                _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
-            end
+    {List, StoreState3} = case WhatToRead of
+        messages ->
+            %% We try to read messages from disk all at once instead of
+            %% 1 by 1 at fetch time. When v1 is used and messages are
+            %% embedded, then the message content is already read from
+            %% disk at this point. For v2 embedded we must do a separate
+            %% call to obtain the contents and then merge the contents
+            %% back into the #msg_status records.
+            %%
+            %% For shared message store messages we do the same but only
+            %% for messages < ?SHARED_READ_MANY_SIZE_THRESHOLD bytes and
+            %% when there are at least ?SHARED_READ_MANY_COUNT_THRESHOLD
+            %% messages to fetch from that store. Other messages will be
+            %% fetched one by one right before sending the messages.
+            %%
+            %% Since we have two different shared stores for persistent
+            %% and transient messages they are treated separately when
+            %% deciding whether to read_many from either of them.
+            %%
+            %% Because v2 and shared stores function differently we
+            %% must keep different information for performing the reads.
+            {V2Reads0, ShPersistReads, ShTransientReads} = lists:foldl(fun
+                ({_, SeqId, MsgLocation, _, _}, {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when is_tuple(MsgLocation) ->
+                    {[{SeqId, MsgLocation}|V2ReadsAcc], ShPReadsAcc, ShTReadsAcc};
+                ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, true},
+                 {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
+                    {V2ReadsAcc, [MsgId|ShPReadsAcc], ShTReadsAcc};
+                ({MsgId, _, rabbit_msg_store, #message_properties{size = Size}, false},
+                 {V2ReadsAcc, ShPReadsAcc, ShTReadsAcc}) when Size =< ?SHARED_READ_MANY_SIZE_THRESHOLD ->
+                    {V2ReadsAcc, ShPReadsAcc, [MsgId|ShTReadsAcc]};
+                (_, Acc) ->
+                    Acc
+            end, {[], [], []}, List0),
+            %% In order to properly read and merge V2 messages we want them
+            %% in the older->younger order.
+            V2Reads = lists:reverse(V2Reads0),
+            %% We do read_many for v2 store unconditionally.
+            {V2Msgs, StoreState2} = rabbit_classic_queue_store_v2:read_many(V2Reads, StoreState),
+            List1 = merge_read_msgs(List0, V2Reads, V2Msgs),
+            %% We read from the shared message store only if there are multiple messages
+            %% (10+ as we wouldn't get much benefits from smaller number of messages)
+            %% otherwise we wait and read later.
+            %%
+            %% Because read_many does not use FHC we do not get an updated MCState
+            %% like with normal reads.
+            List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+                true ->
+                    List1;
+                false ->
+                    ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
+                    case map_size(ShPersistMsgs) of
+                        0 -> List1;
+                        _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
+                    end
+            end,
+            List3 = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+                true ->
+                    List2;
+                false ->
+                    ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
+                    case map_size(ShTransientMsgs) of
+                        0 -> List2;
+                        _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
+                    end
+            end,
+            {List3, StoreState2};
+        metadata_only ->
+            {List0, StoreState}
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
                                  DelsAndAcksFun,
                                  State #vqstate { index_state = IndexState1,
-                                                  store_state = StoreState2 }),
+                                                  store_state = StoreState3 }),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
@@ -2701,7 +2707,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
               DelsAndAcksFun,
               State2 #vqstate {
                 delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })},
-              MemoryLimit);
+              MemoryLimit, WhatToRead);
         Q3aLen ->
             Q3b = ?QUEUE:join(Q3, Q3a),
             case DeltaCount - Q3aLen of
