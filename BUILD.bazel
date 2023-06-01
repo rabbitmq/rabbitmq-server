@@ -202,6 +202,11 @@ rabbitmqctl(
     home = ":broker-home",
 )
 
+rabbitmqctl(
+    name = "rabbitmq-upgrade",
+    home = ":broker-home",
+)
+
 shell(
     name = "repl",
     deps = PLUGINS,
