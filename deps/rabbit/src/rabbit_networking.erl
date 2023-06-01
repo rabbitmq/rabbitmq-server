@@ -234,7 +234,24 @@ ranch_ref(#listener{port = Port}) ->
     {acceptor, IPAddress, Port};
 ranch_ref(Listener) when is_list(Listener) ->
     Port = rabbit_misc:pget(port, Listener),
-    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+    IPAddress = case rabbit_misc:pget(ip, Listener) of
+        undefined ->
+            [{Value, _Port, _Family} | _] = tcp_listener_addresses(Port),
+            Value;
+        Value when is_list(Value) ->
+            %% since we only use this function to parse the address, only one result should
+            %% be returned
+            [{Parsed, _Family} | _] = gethostaddr(Value, auto),
+            Parsed;
+        Value when is_binary(Value) ->
+            Str = rabbit_data_coercion:to_list(Value),
+            %% since we only use this function to parse the address, only one result should
+            %% be returned
+            [{Parsed, _Family} | _] = gethostaddr(Str, auto),
+            Parsed;
+        Value when is_tuple(Value) ->
+            Value
+    end,
     {acceptor, IPAddress, Port};
 ranch_ref(undefined) ->
     undefined.
@@ -637,6 +654,7 @@ getaddr(Host, Family) ->
         {error, _}      -> gethostaddr(Host, Family)
     end.
 
+-spec gethostaddr(string(), inet:address_family() | 'auto') -> [{inet:ip_address(), inet:address_family()}].
 gethostaddr(Host, auto) ->
     Lookups = [{Family, inet:getaddr(Host, Family)} || Family <- [inet, inet6]],
     case [{IP, Family} || {Family, {ok, IP}} <- Lookups] of
