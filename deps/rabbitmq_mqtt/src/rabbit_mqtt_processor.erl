@@ -37,6 +37,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, <<"mqtt">>).
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
+-define(AMQP_091_SHORT_STR_MAX_SIZE, 255).
 
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
@@ -87,6 +88,9 @@
          %% (Not to be confused with packet IDs sent from client to server which can be the
          %% same IDs because client and server assign IDs independently of each other.)
          packet_id = 1 :: packet_id(),
+         %% "A Session cannot have more than one Non‑shared Subscription with the same Topic Filter,
+         %% so the Topic Filter can be used as a key to identify the subscription within that Session."
+         %% [v5 4.8.1]
          subscriptions = #{} :: subscriptions(),
          auth_state = #auth_state{},
          ra_register_state :: option(registered | {pending, reference()}),
@@ -1475,12 +1479,11 @@ publish_to_queues(
                                   _ ->
                                       {undefined, undefined}
                               end,
-    PBasic = #'P_basic'{
-                headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
-                           {<<"x-mqtt-retain">>, bool, Retain}],
-                delivery_mode = delivery_mode(Qos),
-                expiration = Expiration,
-                timestamp = Timestamp},
+    PBasic0 = mqtt_props_to_amqp_props(Props, Qos, Retain),
+    PBasic = PBasic0#'P_basic'{
+                       delivery_mode = delivery_mode(Qos),
+                       expiration = Expiration,
+                       timestamp = Timestamp},
     {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     Content0 = #content{
                   class_id = ClassId,
@@ -1725,15 +1728,15 @@ maybe_send_will(
                                        _ ->
                                            {[], undefined}
                                    end,
-            PBasic = #'P_basic'{
-                        headers = Headers ++ [{<<"x-mqtt-publish-qos">>, byte, Qos},
-                                              {<<"x-mqtt-retain">>, bool, Retain}],
-                        %% Persist message regardless of Will QoS since there is no noticable
-                        %% performance benefit if that single message is transient. This ensures that
-                        %% delayed Will Messages are not lost after a broker restart.
-                        delivery_mode = 2,
-                        expiration = integer_to_binary(MsgTTL),
-                        timestamp = Timestamp},
+            PBasic0 = mqtt_props_to_amqp_props(Props, Qos, Retain),
+            PBasic = PBasic0#'P_basic'{
+                               %% Persist message regardless of Will QoS since there is no noticable
+                               %% performance benefit if that single message is transient. This ensures that
+                               %% delayed Will Messages are not lost after a broker restart.
+                               headers = Headers ++ PBasic0#'P_basic'.headers,
+                               delivery_mode = 2,
+                               expiration = integer_to_binary(MsgTTL),
+                               timestamp = Timestamp},
             case check_publish_permitted(DefaultX, Topic, State) of
                 ok ->
                     ok = rabbit_basic:publish(DefaultX, QNameBin, PBasic, Payload),
@@ -2016,9 +2019,9 @@ maybe_publish_to_client(
             routing_keys = [RoutingKey | _CcRoutes],
             content = #content{payload_fragments_rev = FragmentsRev,
                                properties = PBasic = #'P_basic'{headers = Headers}}}},
-  QoS, State0) ->
+  QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
-    Props0 = p_basic_to_publish_properties(PBasic),
+    Props0 = amqp_props_to_mqtt_props(PBasic, ProtoVer),
     Props = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
     Packet =
@@ -2043,38 +2046,162 @@ maybe_publish_to_client(
                end,
     {SettleOp, State}.
 
-%% Converts AMQP 0.9.1 properties to MQTT v5 properties.
-%% TODO map more properties such as content_encoding, content_type, correlation_id, headers, etc.
--spec p_basic_to_publish_properties(#'P_basic'{}) -> properties().
-p_basic_to_publish_properties(#'P_basic'{headers = Headers,
-                                         expiration = Expiration,
-                                         timestamp = TimestampSeconds
-                                        })
-  when is_binary(Expiration) andalso
-       is_integer(TimestampSeconds) ->
-    %% Check whether source protocol is MQTT
-    case lists:keymember(<<"x-mqtt-publish-qos">>, 1, Headers) of
-        true ->
-            ExpirationMs = binary_to_integer(Expiration),
-            ExpirationSeconds = ExpirationMs div 1000,
-            %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
-            %% Expiry Interval set to the received value minus the time that the
-            %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-            WaitingSeconds0 = os:system_time(second) - TimestampSeconds,
-            %% For a delayed Will Message, the waiting time starts when the Will Message was published.
-            WaitingSeconds = case rabbit_basic:header(<<"x-mqtt-will-delay-interval">>, Headers) of
-                                 {<<"x-mqtt-will-delay-interval">>, long, Delay} ->
-                                     WaitingSeconds0 - Delay;
-                                 _ ->
-                                     WaitingSeconds0
-                             end,
-            Expiry = max(0, ExpirationSeconds - WaitingSeconds),
-            #{'Message-Expiry-Interval' => Expiry};
-        false ->
-            #{}
-    end;
-p_basic_to_publish_properties(#'P_basic'{}) ->
-    #{}.
+%% Convert MQTT v5 PUBLISH or Will properties to AMQP 0.9.1 properties.
+-spec mqtt_props_to_amqp_props(properties(), qos(), boolean()) ->
+    rabbit_framing:amqp_property_record().
+mqtt_props_to_amqp_props(Props, Qos, Retain) ->
+    P0 = #'P_basic'{headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
+                               {<<"x-mqtt-retain">>, bool, Retain}]},
+    P1 = case Props of
+             #{'Content-Type' := T}
+               when byte_size(T) =< ?AMQP_091_SHORT_STR_MAX_SIZE ->
+                 P0#'P_basic'{content_type = T};
+             _ ->
+                 %% TODO if Content-Type is > 255 bytes (which seems unlikely), should we:
+                 %% 1. silently ignore (as done right now), or
+                 %% 2. close the network connection (i.e. prohibit), or
+                 %% 3. add a custom AMQP 0.9.1 header?
+                 P0
+         end,
+    P2 = case Props of
+             #{'Payload-Format-Indicator' := 1} ->
+                 %% UTF-8 is not a MIME content encoding and therefore cannot be set as #'P_basic'.content_encoding.
+                 %% Rather, it would match to #'P_basic'.content_type = <<"text/plain;charset=UTF-8">>.
+                 %% However, we cannot set #'P_basic'.content_type because we don't know the subtype (wehther it's
+                 %% 'plain') and that field is already set by MQTT 5.0 property Content-Type.
+                 %% Therefore, we add a custom header.
+                 P1#'P_basic'{headers = [{<<"x-mqtt-payload-format-indicator">>, bool, true} |
+                                         P1#'P_basic'.headers]};
+             _ ->
+                 P1
+         end,
+    P3 = case Props of
+             #{'Response-Topic' := Topic} ->
+                 %% Unfortunately, we cannot set #'P_basic'.reply_to because they are expected to hold
+                 %% the binary queue name in AMQP 0.9.1: "One of the standard message properties is
+                 %% Reply-To, which is designed specifically for carrying the name of reply queues."
+                 %% Therefore, we add a custom header.
+                 P2#'P_basic'{headers = [{<<"x-reply-to-topic">>, longstr,
+                                          %% Convert such that an AMQP consumer can respond.
+                                          mqtt_to_amqp(Topic)} |
+                                         P2#'P_basic'.headers]};
+             _ ->
+                 P2
+         end,
+    P4 = case Props of
+             #{'Correlation-Data' := Corr}
+               when byte_size(Corr) =< ?AMQP_091_SHORT_STR_MAX_SIZE ->
+                 P3#'P_basic'{correlation_id = Corr};
+             #{'Correlation-Data' := Corr}
+               when byte_size(Corr) > ?AMQP_091_SHORT_STR_MAX_SIZE ->
+                 P3#'P_basic'{headers = [{<<"x-correlation">>, longstr, Corr} | P3#'P_basic'.headers]};
+             _ ->
+                 P3
+         end,
+    P = case Props of
+            #{'User-Property' := PropList} ->
+                %% "The same name is allowed to appear more than once."
+                %% "The Server MUST maintain the order of User Properties
+                %% when forwarding the Application Message" [v5 3.3.2.3.7]
+                %% However, in AMQP 0.9.1 Field Tables: "Duplicate fields are illegal."
+                %% To allow duplicate names and to maintain order, we create a 2 element map:
+                %% The 1st element contains all names in order.
+                %% The 2nd element contains all values in order.
+                {Names, Values} = lists:unzip(PropList),
+                Header = {<<"x-mqtt-user-property">>,
+                          table,
+                          rabbit_misc:to_amqp_table(#{<<"names">> => Names,
+                                                      <<"values">> => Values})},
+                P4#'P_basic'{headers = [Header | P4#'P_basic'.headers]};
+            _ ->
+                P4
+        end,
+    P.
+
+%% Convert AMQP 0.9.1 properties to MQTT v5 PUBLISH properties.
+-spec amqp_props_to_mqtt_props(rabbit_framing:amqp_property_record(), protocol_version_atom()) ->
+    properties().
+%% Do not unnecessarily convert properties.
+amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V3) ->
+    #{};
+amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V4) ->
+    #{};
+amqp_props_to_mqtt_props(
+  #'P_basic'{headers = Headers,
+             expiration = Expiration,
+             timestamp = TimestampSeconds,
+             content_type = ContentType,
+             correlation_id = CorrelationId
+            }, ?MQTT_PROTO_V5) ->
+    SourceProtocolIsMqtt = lists:keymember(<<"x-mqtt-publish-qos">>, 1, Headers),
+    P0 = if is_binary(Expiration) andalso
+            is_integer(TimestampSeconds) andalso
+            %% Only if source protocol is MQTT we know that timestamp was set by the server
+            SourceProtocolIsMqtt ->
+                ExpirationMs = binary_to_integer(Expiration),
+                ExpirationSeconds = ExpirationMs div 1000,
+                %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
+                %% Expiry Interval set to the received value minus the time that the
+                %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
+                WaitingSeconds0 = os:system_time(second) - TimestampSeconds,
+                %% For a delayed Will Message, the waiting time starts when the Will Message was published.
+                WaitingSeconds = case rabbit_basic:header(<<"x-mqtt-will-delay-interval">>, Headers) of
+                                     {<<"x-mqtt-will-delay-interval">>, long, Delay} ->
+                                         WaitingSeconds0 - Delay;
+                                     _ ->
+                                         WaitingSeconds0
+                                 end,
+                Expiry = max(0, ExpirationSeconds - WaitingSeconds),
+                #{'Message-Expiry-Interval' => Expiry};
+            true ->
+                #{}
+         end,
+    P1 = case ContentType of
+             T when is_binary(T) ->
+                 P0#{'Content-Type' => T};
+             _ ->
+                 P0
+         end,
+    P2 = case rabbit_basic:header(<<"x-mqtt-payload-format-indicator">>, Headers) of
+             {<<"x-mqtt-payload-format-indicator">>, bool, true} ->
+                 P1#{'Payload-Format-Indicator' => 1};
+             _ ->
+                 P1
+         end,
+    P3 = case rabbit_basic:header(<<"x-reply-to-topic">>, Headers) of
+             {<<"x-reply-to-topic">>, longstr, Topic}
+               when is_binary(Topic) ->
+                 P2#{'Response-Topic' => amqp_to_mqtt(Topic)};
+             _ ->
+                 P2
+         end,
+    P4 = case CorrelationId of
+             C when is_binary(C) ->
+                 P3#{'Correlation-Data' => C};
+             C when is_list(C) ->
+                 P3#{'Correlation-Data' => list_to_binary(C)};
+             _ ->
+                 case rabbit_basic:header(<<"x-correlation">>, Headers) of
+                     {<<"x-correlation">>, longstr, C}
+                       when is_binary(C) ->
+                         P3#{'Correlation-Data' => C};
+                     _ ->
+                         P3
+                 end
+         end,
+    P = case rabbit_basic:header(<<"x-mqtt-user-property">>, Headers) of
+            {<<"x-mqtt-user-property">>, table, Table} ->
+                case rabbit_misc:amqp_table(Table) of
+                    #{<<"names">> := Names,
+                      <<"values">> := Values} ->
+                        P4#{'User-Property' => lists:zip(Names, Values)};
+                    _ ->
+                        P4
+                end;
+            _ ->
+                P4
+        end,
+    P.
 
 matched_topic_filters_v5(Headers, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
     case rabbit_mqtt_util:table_lookup(Headers, <<"x-binding-keys">>) of

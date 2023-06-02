@@ -96,6 +96,11 @@ cluster_size_1_tests() ->
      session_upgrade_v3_v5_unsubscribe,
      session_upgrade_v4_v5_no_queue_bind_permission,
      amqp091_cc_header,
+     publish_property_content_type,
+     publish_property_payload_format_indicator,
+     publish_property_response_topic_correlation_data,
+     publish_property_user_property,
+     publish_property_mqtt_to_amqp091,
      disconnect_with_will,
      will_qos2,
      will_delay_greater_than_session_expiry,
@@ -106,7 +111,10 @@ cluster_size_1_tests() ->
      will_delay_reconnect_with_will,
      will_delay_session_takeover,
      will_delay_message_expiry,
-     will_delay_message_expiry_publish_properties
+     will_delay_message_expiry_publish_properties,
+     will_delay_properties,
+     will_properties,
+     retain_properties
     ].
 
 cluster_size_3_tests() ->
@@ -1155,6 +1163,153 @@ amqp091_cc_header(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
 
+publish_property_content_type(Config) ->
+    Topic = ClientId = Payload = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    %% "The Content Type MUST be a UTF-8 Encoded String" [v5 3.3.2.3.9]
+    {ok, _} = emqtt:publish(C, Topic, #{'Content-Type' => <<"text/plain😎;charset=UTF-8"/utf8>>}, Payload, [{qos, 1}]),
+    receive {publish, #{payload := Payload,
+                        properties := #{'Content-Type' := <<"text/plain😎;charset=UTF-8"/utf8>>}}} -> ok
+    after 1000 -> ct:fail("did not receive message")
+    end,
+    ok = emqtt:disconnect(C).
+
+publish_property_payload_format_indicator(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 0}, <<"m1">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 1}, <<"m2">>, [{qos, 1}]),
+    receive {publish, #{payload := <<"m1">>,
+                        properties := Props}} ->
+                ?assertEqual(0, maps:size(Props))
+    after 1000 -> ct:fail("did not receive m1")
+    end,
+    receive {publish, #{payload := <<"m2">>,
+                        properties := #{'Payload-Format-Indicator' := 1}}} -> ok
+    after 1000 -> ct:fail("did not receive m2")
+    end,
+    ok = emqtt:disconnect(C).
+
+publish_property_response_topic_correlation_data(Config) ->
+    %% "The Response Topic MUST be a UTF-8 Encoded String" [v5 3.3.2.3.5]
+    Requester = connect(<<"requester">>, Config),
+    FrenchResponder = connect(<<"French responder">>, Config),
+    ItalianResponder = connect(<<"Italian responder">>, Config),
+    ResponseTopic = <<"🗣️/response/for/English/request"/utf8>>,
+    {ok, _, [0]} = emqtt:subscribe(Requester, ResponseTopic),
+    {ok, _, [0]} = emqtt:subscribe(FrenchResponder, <<"greet/French">>),
+    {ok, _, [0]} = emqtt:subscribe(ItalianResponder, <<"greet/Italian">>),
+    CorrelationFrench = <<"French">>,
+    %% "the length of Binary Data is limited to the range of 0 to 65,535 Bytes" [v5 1.5.6]
+    %% Let's also test with large correlation data.
+    CorrelationItalian = <<"Italian", (binary:copy(<<"x">>, 65_500))/binary>>,
+    ok = emqtt:publish(Requester, <<"greet/French">>,
+                       #{'Response-Topic' => ResponseTopic,
+                         'Correlation-Data' => CorrelationFrench},
+                       <<"Harry">>, [{qos, 0}]),
+    ok = emqtt:publish(Requester, <<"greet/Italian">>,
+                       #{'Response-Topic' => ResponseTopic,
+                         'Correlation-Data' => CorrelationItalian},
+                       <<"Harry">>, [{qos, 0}]),
+    receive {publish, #{client_pid := FrenchResponder,
+                        payload := <<"Harry">>,
+                        properties := #{'Response-Topic' := ResponseTopic,
+                                        'Correlation-Data' := Corr0}}} ->
+                ok = emqtt:publish(FrenchResponder, ResponseTopic,
+                                   #{'Correlation-Data' => Corr0},
+                                   <<"Bonjour Henri">>, [{qos, 0}])
+    after 1000 -> ct:fail("French responder did not receive request")
+    end,
+    receive {publish, #{client_pid := ItalianResponder,
+                        payload := <<"Harry">>,
+                        properties := #{'Response-Topic' := ResponseTopic,
+                                        'Correlation-Data' := Corr1}}} ->
+                ok = emqtt:publish(ItalianResponder, ResponseTopic,
+                                   #{'Correlation-Data' => Corr1},
+                                   <<"Buongiorno Enrico">>, [{qos, 0}])
+    after 1000 -> ct:fail("Italian responder did not receive request")
+    end,
+    receive {publish, #{client_pid := Requester,
+                        properties := #{'Correlation-Data' := CorrelationItalian},
+                        payload := Payload0
+                       }} ->
+                ?assertEqual(<<"Buongiorno Enrico">>, Payload0)
+    after 1000 -> ct:fail("did not receive Italian response")
+    end,
+    receive {publish, #{client_pid := Requester,
+                        properties := #{'Correlation-Data' := CorrelationFrench},
+                        payload := Payload1
+                       }} ->
+                ?assertEqual(<<"Bonjour Henri">>, Payload1)
+    after 1000 -> ct:fail("did not receive French response")
+    end,
+    [ok = emqtt:disconnect(C) || C <- [Requester, FrenchResponder, ItalianResponder]].
+
+publish_property_user_property(Config) ->
+    Payload = Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    %% Same keys and values are allowed. Order must be maintained.
+    UserProperty = [{<<"k1">>, <<"v2">>},
+                    {<<"k1">>, <<"v2">>},
+                    {<<"k1">>, <<"v1">>},
+                    {<<"k0">>, <<"v0">>},
+                    %% "UTF-8 encoded strings can have any length in the range 0 to 65,535 bytes"
+                    %% [v5 1.5.4]
+                    {<<>>, <<>>},
+                    {<<(binary:copy(<<"k">>, 65_000))/binary, "🐇"/utf8>>,
+                     <<(binary:copy(<<"v">>, 65_000))/binary, "🐇"/utf8>>}],
+    {ok, _} = emqtt:publish(C, Topic, #{'User-Property' => UserProperty}, Payload, [{qos, 1}]),
+    receive {publish, #{payload := Payload,
+                        properties := #{'User-Property' := UserProperty}}} -> ok
+    after 1000 -> ct:fail("did not receive message")
+    end,
+    ok = emqtt:disconnect(C).
+
+%% Test Properties interoperability between MQTT and AMQP 0.9.1
+publish_property_mqtt_to_amqp091(Config) ->
+    Q = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
+                                                             exchange = <<"amq.topic">>,
+                                                             routing_key = <<"my.topic">>}),
+    C = connect(ClientId, Config),
+    MqttResponseTopic = <<"response/topic">>,
+    {ok, _, [1]} = emqtt:subscribe(C, MqttResponseTopic, qos1),
+    Correlation = <<"some correlation ID">>,
+    RequestPayload = <<"my request">>,
+    {ok, _} = emqtt:publish(C, <<"my/topic">>,
+                            #{'Content-Type' => <<"text/plain">>,
+                              'Correlation-Data' => Correlation,
+                              'Response-Topic' => MqttResponseTopic},
+                            RequestPayload, [{qos, 1}]),
+    {#'basic.get_ok'{},
+     #amqp_msg{payload = RequestPayload,
+               props = #'P_basic'{content_type = <<"text/plain">>,
+                                  correlation_id = Correlation,
+                                  delivery_mode = 2,
+                                  headers = Headers}}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+    {<<"x-reply-to-topic">>, longstr, AmqpResponseTopic} = rabbit_basic:header(<<"x-reply-to-topic">>, Headers),
+    ReplyPayload = <<"{\"my\" : \"reply\"}">>,
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
+                                           routing_key = AmqpResponseTopic},
+                      #amqp_msg{payload = ReplyPayload,
+                                props = #'P_basic'{correlation_id = Correlation,
+                                                   content_type = <<"application/json">>}}),
+    receive {publish,
+             #{client_pid := C,
+               topic := MqttResponseTopic,
+               payload := ReplyPayload,
+               properties := #{'Content-Type' := <<"application/json">>,
+                               'Correlation-Data' := Correlation}}} -> ok
+    after 500 -> ct:fail("did not receive reply")
+    end,
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+    ok = emqtt:disconnect(C).
+
 disconnect_with_will(Config) ->
     Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
     Sub = connect(<<"subscriber">>, Config),
@@ -1405,6 +1560,106 @@ will_delay_message_expiry_publish_properties(Config) ->
     after 300 -> ct:fail("did not receive Will Message")
     end,
     ok = emqtt:disconnect(Sub2).
+
+%% Test all Will Properties (v5 3.1.3.2) that are forwarded unaltered by the server.
+will_properties(Config) ->
+    will_properties0(Config, 0).
+
+%% Test all Will Properties (v5 3.1.3.2) that are forwarded unaltered by the server
+%% when Will Delay Interval is set.
+will_delay_properties(Config) ->
+    will_properties0(Config, 1).
+
+will_properties0(Config, WillDelayInterval) ->
+    Topic = Payload = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<"sub">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    UserProperty = [{<<"k1">>, <<"v2">>},
+                    {<<>>, <<>>},
+                    {<<"k1">>, <<"v1">>}],
+    CorrelationData = binary:copy(<<"x">>, 65_000),
+    C = connect(<<"will">>, Config,
+                [{properties, #{'Session-Expiry-Interval' => 1}},
+                 {will_props, #{'Will-Delay-Interval' => WillDelayInterval,
+                                'User-Property' => UserProperty,
+                                'Content-Type' => <<"text/plain😎;charset=UTF-8"/utf8>>,
+                                'Payload-Format-Indicator' => 1,
+                                'Response-Topic' => <<"response/topic">>,
+                                'Correlation-Data' => CorrelationData}},
+                 {will_topic, Topic},
+                 {will_qos, 0},
+                 {will_payload, Payload}]),
+    ok = emqtt:disconnect(C, ?RC_DISCONNECT_WITH_WILL),
+    if WillDelayInterval > 0 ->
+           receive Unexpected -> ct:fail(Unexpected)
+           after 700 -> ok
+           end;
+       WillDelayInterval =:= 0 ->
+           ok
+    end,
+    receive {publish,
+             #{client_pid := Sub,
+               topic := Topic,
+               payload := Payload,
+               properties := #{'User-Property' := UserProperty,
+                               'Content-Type' := <<"text/plain😎;charset=UTF-8"/utf8>>,
+                               'Payload-Format-Indicator' := 1,
+                               'Response-Topic' := <<"response/topic">>,
+                               'Correlation-Data' := CorrelationData} = Props}}
+              when map_size(Props) =:= 5 -> ok
+    after 1500 -> ct:fail("did not receive Will Message")
+    end,
+    ok = emqtt:disconnect(Sub).
+
+%% "When an Application Message is transported by MQTT it contains payload data,
+%% a Quality of Service (QoS), a collection of Properties, and a Topic Name" [v5 1.2]
+%% Since a retained message is an Application Message, it must also include the Properties.
+%% This test checks that the whole Application Message, especially Properties, are forwarded
+%% to future subscribers.
+retain_properties(Config) ->
+    Props = #{'Content-Type' => <<"text/plain;charset=UTF-8">>,
+              'User-Property' => [{<<"k1">>, <<"v2">>},
+                                  {<<>>, <<>>},
+                                  {<<"k1">>, <<"v1">>}],
+              'Payload-Format-Indicator' => 1,
+              'Response-Topic' => <<"response/topic">>,
+              'Correlation-Data' => <<"some correlation data">>},
+    %% Let's test both ways to retain messages:
+    %% 1. a Will Message that is retained, and
+    %% 2. a PUBLISH message that is retained
+    Pub = connect(<<"publisher">>, Config,
+                  [{will_retain, true},
+                   {will_topic, <<"t/1">>},
+                   {will_payload, <<"m1">>},
+                   {will_qos, 1},
+                   {will_props, Props}]),
+    {ok, _} = emqtt:publish(Pub, <<"t/2">>, Props, <<"m2">>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(Pub, ?RC_DISCONNECT_WITH_WILL),
+    %% Both messages are now retained.
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [1, 1]} = emqtt:subscribe(Sub, [{<<"t/1">>, qos1},
+                                            {<<"t/2">>, qos1}]),
+    receive {publish,
+             #{client_pid := Sub,
+               topic := <<"t/1">>,
+               payload := <<"m1">>,
+               retain := true,
+               qos := 1,
+               properties := Props}} -> ok
+    after 500 -> ct:fail("did not receive m1")
+    end,
+    receive {publish,
+             #{client_pid := Sub,
+               topic := <<"t/2">>,
+               payload := <<"m2">>,
+               retain := true,
+               qos := 1,
+               properties := Props}} -> ok
+    after 500 -> ct:fail("did not receive m2")
+    end,
+    ok = emqtt:publish(Sub, <<"t/1">>, <<>>, [{retain, true}]),
+    ok = emqtt:publish(Sub, <<"t/2">>, <<>>, [{retain, true}]),
+    ok = emqtt:disconnect(Sub).
 
 %% "In the case of a Server shutdown or failure, the Server MAY defer publication of Will Messages
 %% until a subsequent restart. If this happens, there might be a delay between the time the Server

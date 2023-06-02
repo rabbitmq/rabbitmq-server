@@ -222,6 +222,8 @@ end_per_testcase(Testcase, Config) ->
 
 end_per_testcase0(Testcase, Config) ->
     rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    %% Assert that every testcase cleaned up their MQTT sessions.
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
