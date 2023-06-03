@@ -1,5 +1,5 @@
 UPSTREAM_GIT=https://github.com/jasonrbriggs/stomp.py.git
-REVISION=v6.1.0
+REVISION=v8.1.0
 
 LIB_DIR=stomppy
 CHECKOUT_DIR=stomppy-git
