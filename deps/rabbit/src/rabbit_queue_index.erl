@@ -966,6 +966,10 @@ action_to_entry(RelSeq, Action, JEntries) ->
         ({no_pub,    del, no_ack}) when Action == ack ->
             {set, {no_pub, del,    ack}};
         ({?PUB,      del, no_ack}) when Action == ack ->
+            {reset, none};
+        %% Special case, missing del
+        %% See journal_minus_segment1/2
+        ({?PUB,   no_del, no_ack}) when Action == ack ->
             {reset, none}
     end.
 
@@ -1356,6 +1360,11 @@ segment_plus_journal1({?PUB = Pub, no_del, no_ack}, {no_pub, del, no_ack}) ->
 segment_plus_journal1({?PUB, no_del, no_ack},       {no_pub, del, ack}) ->
     {undefined, -1};
 segment_plus_journal1({?PUB, del, no_ack},          {no_pub, no_del, ack}) ->
+    {undefined, -1};
+
+%% Special case, missing del
+%% See journal_minus_segment1/2
+segment_plus_journal1({?PUB, no_del, no_ack},          {no_pub, no_del, ack}) ->
     {undefined, -1}.
 
 %% Remove from the journal entries for a segment, items that are
@@ -1426,6 +1435,16 @@ journal_minus_segment1({no_pub, no_del, ack},      {?PUB, del, no_ack}) ->
     {keep, 0};
 journal_minus_segment1({no_pub, no_del, ack},      {?PUB, del, ack}) ->
     {undefined, -1};
+
+%% Just ack in journal, missing del
+%% Since 3.10 message delivery is tracked per-queue, not per-message,
+%% but to keep queue index v1 format messages are always marked as
+%% delivered on publish. But for a message that was published before
+%% 3.10 this is not the case and the delivery marker can be missing.
+%% As a workaround we add the del marker because if a message is acked
+%% it must have been delivered as well.
+journal_minus_segment1({no_pub, no_del, ack},         {?PUB, no_del, no_ack}) ->
+    {{no_pub, del, ack}, 0};
 
 %% Deliver and ack in journal
 journal_minus_segment1({no_pub, del, ack},         {?PUB, no_del, no_ack}) ->
