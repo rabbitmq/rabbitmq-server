@@ -1215,7 +1215,7 @@ reg_v1_no_del_jif(Config) ->
     end.
 
 do_reg_v1_no_del_jif(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
+    St0 = #cq{name=prop_classic_queue_v1, mode=lazy, version=1,
               config=minimal_config(Config)},
 
     Res1 = cmd_setup_queue(St0),
@@ -1273,7 +1273,7 @@ reg_v1_no_del_idx(Config) ->
     end.
 
 do_reg_v1_no_del_idx(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
+    St0 = #cq{name=prop_classic_queue_v1, mode=lazy, version=1,
               config=minimal_config(Config)},
 
     Res1 = cmd_setup_queue(St0),
@@ -1341,7 +1341,7 @@ reg_v1_no_del_idx_unclean(Config) ->
     end.
 
 do_reg_v1_no_del_idx_unclean(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
+    St0 = #cq{name=prop_classic_queue_v1, mode=lazy, version=1,
               config=minimal_config(Config)},
 
     Res1 = cmd_setup_queue(St0),
