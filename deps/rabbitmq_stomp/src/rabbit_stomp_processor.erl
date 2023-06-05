@@ -613,7 +613,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
         {error, {auth_failure, _}} ->
             rabbit_log:warning("STOMP login failed for user '~s': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
-                  binary_to_list(Username) ++ "'~n", [], State);
+                  binary_to_list(Username) ++ "'", [], State);
         {error, not_allowed} ->
             rabbit_log:warning("STOMP login failed for user '~s': "
                                "virtual host access not allowed", [Username]),
