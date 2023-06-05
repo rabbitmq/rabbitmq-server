@@ -40,11 +40,6 @@ init_per_group(_, Config) ->
     Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
         rabbit_ct_broker_helpers:setup_steps()),
-    DataDir = ?config(data_dir, Config2),
-    PikaDir = filename:join([DataDir, "deps", "pika"]),
-    StomppyDir = filename:join([DataDir, "deps", "stomppy"]),
-    rabbit_ct_helpers:make(Config2, PikaDir, []),
-    rabbit_ct_helpers:make(Config2, StomppyDir, []),
     Config2.
 
 end_per_group(_, Config) ->
@@ -75,13 +70,6 @@ run(Config, Test) ->
     StompPortTls = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp_tls),
     AmqpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    PikaPath = filename:join([DataDir, "deps", "pika","pika"]),
-    StomppyPath = filename:join([DataDir, "deps", "stomppy", "stomppy"]),
-    PythonPath = case os:getenv("PYTHONPATH") of
-        false -> PikaPath ++ ":" ++ StomppyPath;
-        P -> PikaPath ++ ":" ++ StomppyPath ++ ":" ++ P
-    end,
-    os:putenv("PYTHONPATH", PythonPath),
     os:putenv("AMQP_PORT", integer_to_list(AmqpPort)),
     os:putenv("STOMP_PORT", integer_to_list(StompPort)),
     os:putenv("STOMP_PORT_TLS", integer_to_list(StompPortTls)),
