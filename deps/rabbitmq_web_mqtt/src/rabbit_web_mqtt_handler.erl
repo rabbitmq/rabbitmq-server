@@ -45,6 +45,7 @@
 
 %% Close frame status codes as defined in https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
 -define(CLOSE_NORMAL, 1000).
+-define(CLOSE_SERVER_GOING_DOWN, 1001).
 -define(CLOSE_PROTOCOL_ERROR, 1002).
 -define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
 
@@ -163,11 +164,18 @@ websocket_info({'$gen_cast', {duplicate_id, SendWill}},
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, ProcState),
     defer_close(?CLOSE_NORMAL, SendWill),
     {[], State};
-websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
-                                                                          conn_name = ConnName }) ->
+websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{proc_state = ProcState,
+                                                                         conn_name = ConnName}) ->
     ?LOG_WARNING("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
-    stop(State);
+    case Reason of
+        maintenance ->
+            rabbit_mqtt_processor:send_disconnect(?RC_SERVER_SHUTTING_DOWN, ProcState),
+            defer_close(?CLOSE_SERVER_GOING_DOWN),
+            {[], State};
+        _ ->
+            stop(State)
+    end;
 websocket_info({'$gen_cast', {force_event_refresh, Ref}}, State0) ->
     Infos = infos(?EVENT_KEYS, State0),
     rabbit_event:notify(connection_created, Infos, Ref),
