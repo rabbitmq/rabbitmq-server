@@ -132,7 +132,11 @@ handle_cast({close_connection, Reason},
             State = #state{conn_name = ConnName, proc_state = PState}) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
-    {stop, {shutdown, server_initiated_close}, State};
+    case Reason of
+        maintenance -> rabbit_mqtt_processor:send_disconnect(?RC_SERVER_SHUTTING_DOWN, PState);
+        _ -> ok
+    end,
+    {stop, {shutdown, {disconnect, server_initiated}}, State};
 
 handle_cast(QueueEvent = {queue_event, _, _},
             State = #state{proc_state = PState0}) ->

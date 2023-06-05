@@ -48,6 +48,7 @@
          http_delete/3]).
 
 %% defined in MQTT v5 (not in v4 or v3)
+-define(RC_SERVER_SHUTTING_DOWN, 16#8B).
 -define(RC_KEEP_ALIVE_TIMEOUT, 16#8D).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 
@@ -1131,6 +1132,7 @@ maintenance(Config) ->
     C0 = connect(<<"client-0">>, Config, 0, []),
     C1a = connect(<<"client-1a">>, Config, 1, []),
     C1b = connect(<<"client-1b">>, Config, 1, []),
+    ClientsNode1 = [C1a, C1b],
 
     timer:sleep(500),
 
@@ -1141,12 +1143,14 @@ maintenance(Config) ->
 
     process_flag(trap_exit, true),
     ok = drain_node(Config, 1),
-    [await_exit(Pid) || Pid <- [C1a, C1b]],
+    [await_exit(Pid) || Pid <- ClientsNode1],
+    [assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN) || _ <- ClientsNode1],
     ok = revive_node(Config, 1),
     ?assert(erlang:is_process_alive(C0)),
 
     ok = drain_node(Config, 0),
     await_exit(C0),
+    assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN),
     ok = revive_node(Config, 0).
 
 keepalive(Config) ->

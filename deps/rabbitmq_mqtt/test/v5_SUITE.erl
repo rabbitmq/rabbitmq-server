@@ -36,6 +36,7 @@
 -define(RC_DISCONNECT_WITH_WILL, 16#04).
 -define(RC_NO_SUBSCRIPTION_EXISTED, 16#11).
 -define(RC_UNSPECIFIED_ERROR, 16#80).
+-define(RC_SERVER_SHUTTING_DOWN, 16#8B).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 
 all() ->
@@ -1672,21 +1673,24 @@ will_delay_node_restart(Config) ->
     Topic = <<"my/topic">>,
     Payload = <<"my-will">>,
 
-    Sub1a = connect(<<"sub1">>, Config, 0, [{properties, #{'Session-Expiry-Interval' => 900}}]),
-    {ok, _, [0]} = emqtt:subscribe(Sub1a, Topic),
-    Sub2 = connect(<<"sub2">>, Config, 1, []),
-    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic),
+    Sub0a = connect(<<"sub0">>, Config, 0, [{properties, #{'Session-Expiry-Interval' => 900}}]),
+    {ok, _, [0]} = emqtt:subscribe(Sub0a, Topic),
+    Sub1 = connect(<<"sub1">>, Config, 1, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub1, Topic),
     WillDelaySecs = 10,
-    Ca = connect(<<"will">>, Config, 0,
-                 [{properties, #{'Session-Expiry-Interval' => 900}},
-                  {will_props, #{'Will-Delay-Interval' => WillDelaySecs}},
-                  {will_topic, Topic},
-                  {will_qos, 0},
-                  {will_payload, Payload}]),
-    unlink(Sub1a),
-    unlink(Ca),
+    C0a = connect(<<"will">>, Config, 0,
+                  [{properties, #{'Session-Expiry-Interval' => 900}},
+                   {will_props, #{'Will-Delay-Interval' => WillDelaySecs}},
+                   {will_topic, Topic},
+                   {will_qos, 0},
+                   {will_payload, Payload}]),
+    ClientsNode0 = [Sub0a, C0a],
+    [unlink(C) || C <- ClientsNode0],
     T = erlang:monotonic_time(millisecond),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
+    [receive {disconnected, ?RC_SERVER_SHUTTING_DOWN, #{}} -> ok
+     after 10_000 -> ct:fail("server did not disconnect us")
+     end || _ <- ClientsNode0],
     ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
     ElapsedMs = erlang:monotonic_time(millisecond) - T,
     SleepMs = max(0, timer:seconds(WillDelaySecs) - ElapsedMs),
@@ -1695,20 +1699,20 @@ will_delay_node_restart(Config) ->
     assert_nothing_received(),
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
     %% After node 0 restarts, we should receive the Will Message promptly on both nodes 0 and 1.
-    receive {publish, #{client_pid := Sub2,
+    receive {publish, #{client_pid := Sub1,
                         payload := Payload}} -> ok
     after 1000 -> ct:fail("did not receive Will Message on node 1")
     end,
-    Sub1b = connect(<<"sub1">>, Config, 0, [{clean_start, false}]),
-    receive {publish, #{client_pid := Sub1b,
+    Sub0b = connect(<<"sub0">>, Config, 0, [{clean_start, false}]),
+    receive {publish, #{client_pid := Sub0b,
                         payload := Payload}} -> ok
     after 1000 -> ct:fail("did not receive Will Message on node 0")
     end,
 
-    ok = emqtt:disconnect(Sub1b),
-    ok = emqtt:disconnect(Sub2),
-    Cb = connect(<<"will">>, Config),
-    ok = emqtt:disconnect(Cb).
+    ok = emqtt:disconnect(Sub0b),
+    ok = emqtt:disconnect(Sub1),
+    C0b = connect(<<"will">>, Config),
+    ok = emqtt:disconnect(C0b).
 
 session_migrate_v3_v5(Config) ->
     session_switch_v3_v5(Config, true).

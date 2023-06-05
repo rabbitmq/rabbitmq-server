@@ -71,7 +71,7 @@ emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
               rabbit_mqtt_reader:info(Pid, Items)
       end, Pids).
 
--spec close_local_client_connections(string() | binary()) -> {'ok', non_neg_integer()}.
+-spec close_local_client_connections(atom()) -> {'ok', non_neg_integer()}.
 close_local_client_connections(Reason) ->
     Pids = local_connection_pids(),
     lists:foreach(fun(Pid) ->
