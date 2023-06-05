@@ -1586,11 +1586,7 @@ process_routing_confirm(#delivery{confirm = true,
                                   msg_seq_no = PktId},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_unroutable_returned(ProtoVer, 1),
-    %% TODO MQTT 5 spec:
-    %% If the Server knows that there are no matching subscribers, it MAY use
-    %% Reason Code 0x10 (No matching subscribers) instead of 0x00 (Success).
-    %% Also return "No matching subscribers" if message dropped due to NoLocal flag?
-    send_puback(PktId, State),
+    send_puback(PktId, ?RC_NO_MATCHING_SUBSCRIBERS, State),
     State;
 process_routing_confirm(#delivery{confirm = false}, _, State) ->
     State;
@@ -1605,19 +1601,22 @@ process_routing_confirm(#delivery{confirm = true,
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
     State#state{unacked_client_pubs = U}.
 
--spec send_puback(packet_id() | list(packet_id()), state()) -> ok.
+-spec send_puback(list(packet_id()), state()) -> ok.
 send_puback(PktIds0, State)
   when is_list(PktIds0) ->
     %% Classic queues confirm messages unordered.
     %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
     PktIds = lists:usort(PktIds0),
     lists:foreach(fun(Id) ->
-                          send_puback(Id, State)
-                  end, PktIds);
-send_puback(PktId, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+                          send_puback(Id, ?RC_SUCCESS, State)
+                  end, PktIds).
+
+-spec send_puback(packet_id(), reason_code(), state()) -> ok.
+send_puback(PktId, ReasonCode, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
-                          variable = #mqtt_packet_puback{packet_id = PktId}},
+                          variable = #mqtt_packet_puback{packet_id = PktId,
+                                                         reason_code = ReasonCode}},
     _ = send(Packet, State),
     ok.
 

@@ -456,9 +456,11 @@ serialise(#mqtt_packet_fixed{type = ?PUBACK} = Fixed,
     PacketIdBin = <<PacketId:16>>,
     Variable = case Vsn of
                    V when V =< 4 orelse
-                          %% MQTT 5.0 spec: "The Reason Code and Property Length can be omitted
-                          %% if the Reason Code is 0x00 (Success) and there are no Properties."
-                          V =:= 5 andalso reason_code =:= ?RC_SUCCESS andalso map_size(Props) =:= 0 ->
+                          %% "The Reason Code and Property Length can be omitted if the Reason
+                          %% Code is 0x00 (Success) and there are no Properties." [v5 3.4.2.1]
+                          V =:= 5 andalso
+                          reason_code =:= ?RC_SUCCESS andalso
+                          map_size(Props) =:= 0 ->
                        PacketIdBin;
                    5 ->
                        [PacketIdBin,
