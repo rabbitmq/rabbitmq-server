@@ -44,8 +44,8 @@ delete_resource({ok, Username, UserConns}, ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     try
-        UserConns = list_user_connections(ReqData),
-        rabbit_mgmt_util:is_authorized_user(ReqData, Context, UserConns)
+        {ok, Username, _UserConns} = list_user_connections(ReqData),
+        rabbit_mgmt_util:is_authorized_user(ReqData, Context, [{user, Username}])
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
