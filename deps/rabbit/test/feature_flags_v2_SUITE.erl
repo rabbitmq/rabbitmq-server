@@ -202,6 +202,7 @@ setup_slave_node(Config, Testcase) ->
         _ ->
             ok = maybe_enable_feature_flags_v2(Config)
     end,
+    _ = catch rabbit_boot_state:set(ready),
     ok.
 
 setup_logger() ->
