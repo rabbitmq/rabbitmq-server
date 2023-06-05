@@ -30,7 +30,8 @@ define PROJECT_ENV
 	    {mailbox_soft_limit, 200},
 	    {max_packet_size_unauthenticated, 65536},
 	    %% 256 MB is upper limit defined by MQTT spec
-	    {max_packet_size_authenticated, 268435455}
+	    {max_packet_size_authenticated, 268435455},
+	    {topic_alias_max, 20}
 	  ]
 endef
 

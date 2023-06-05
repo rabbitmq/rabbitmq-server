@@ -7,6 +7,7 @@
 
 -define(PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, mqtt_max_packet_size_unauthenticated).
 -define(PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, mqtt_max_packet_size_authenticated).
+-define(TOPIC_ALIAS_MAX, mqtt_topic_alias_max).
 
 -type protocol_version() :: 3..5.
 

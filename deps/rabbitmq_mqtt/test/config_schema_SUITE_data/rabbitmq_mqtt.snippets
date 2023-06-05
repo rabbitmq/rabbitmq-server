@@ -159,5 +159,11 @@
   [{rabbitmq_mqtt,[
       {max_packet_size_unauthenticated, 1234},
       {max_packet_size_authenticated, 5678}]}],
+   [rabbitmq_mqtt]},
+
+  {topic_alias_max,
+  "mqtt.topic_alias_max = 1",
+  [{rabbitmq_mqtt,[
+      {topic_alias_max, 1}]}],
    [rabbitmq_mqtt]}
 ].

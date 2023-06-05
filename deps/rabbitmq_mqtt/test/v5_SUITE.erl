@@ -38,6 +38,7 @@
 -define(RC_UNSPECIFIED_ERROR, 16#80).
 -define(RC_SERVER_SHUTTING_DOWN, 16#8B).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
+-define(RC_TOPIC_ALIAS_INVALID, 16#94).
 
 all() ->
     [{group, mqtt},
@@ -115,7 +116,8 @@ cluster_size_1_tests() ->
      will_delay_message_expiry_publish_properties,
      will_delay_properties,
      will_properties,
-     retain_properties
+     retain_properties,
+     invalid_topic_alias
     ].
 
 cluster_size_3_tests() ->
@@ -1790,6 +1792,20 @@ session_switch_v3_v5(Config, Disconnect) ->
     C4 = connect(ClientId, Config, 0, [{proto_ver, v3}, {clean_start, true}]),
     ok = emqtt:disconnect(C4),
     eventually(?_assertEqual([], all_connection_pids(Config))).
+
+invalid_topic_alias(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    {C1, Connect} = start_client(ClientId, Config, 0, []),
+    ok, ConnackProps = Connect(C1),
+    ?assertMatch({ok, #{'Topic-Alias-Maximum' := 20}}, ConnackProps),
+    unlink(C1),
+    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
+                    emqtt:publish(C1, Topic, #{'Topic-Alias' => 0}, <<"msg">>, [{qos, 1}])),
+
+    C2 = connect(ClientId, Config),
+    unlink(C2),
+    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
+                    emqtt:publish(C2, Topic, #{'Topic-Alias' => 21}, <<"msg">>, [{qos, 1}])).
 
 %% -------------------------------------------------------------------
 %% Helpers

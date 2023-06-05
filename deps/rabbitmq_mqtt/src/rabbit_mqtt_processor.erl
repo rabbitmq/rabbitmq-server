@@ -232,7 +232,8 @@ process_connect(
                        'Session-Expiry-Interval' => case SessionExpiry of
                                                         infinity -> ?UINT_MAX;
                                                         Secs -> Secs
-                                                    end
+                                                    end,
+                        'Topic-Alias-Maximum' => persistent_term:get(?TOPIC_ALIAS_MAX)
                       },
             Props = case {ClientId0, ProtoVer} of
                         {<<>>, 5} ->
@@ -376,32 +377,40 @@ process_request(?PUBLISH,
                                                    props = Props},
                    payload = Payload},
                 State0 = #state{unacked_client_pubs = U,
-                                cfg = #cfg{proto_ver = ProtoVer}}) ->
-    EffectiveQos = maybe_downgrade_qos(Qos),
-    rabbit_global_counters:messages_received(ProtoVer, 1),
-    State = maybe_increment_publisher(State0),
-    Msg = #mqtt_msg{retain = Retain,
-                    qos = EffectiveQos,
-                    topic = Topic,
-                    dup = Dup,
-                    packet_id  = PacketId,
-                    payload = Payload,
-                    props = Props},
-    case EffectiveQos of
-        ?QOS_0 ->
-            publish_to_queues_with_checks(Msg, State);
-        ?QOS_1 ->
-            rabbit_global_counters:messages_received_confirm(ProtoVer, 1),
-            case rabbit_mqtt_confirms:contains(PacketId, U) of
-                false ->
+                                cfg = #cfg{proto_ver = ProtoVer,
+                                           client_id = ClientId}}) ->
+    case check_topic_alias(Props) of
+        error ->
+            ?LOG_WARNING("MQTT invalid topic alias. Disconnecting MQTT client ~ts", [ClientId]),
+            send_disconnect(?RC_TOPIC_ALIAS_INVALID, State0),
+            {stop, {disconnect, server_initiated}, State0};
+        {ok, _Alias} ->
+            EffectiveQos = maybe_downgrade_qos(Qos),
+            rabbit_global_counters:messages_received(ProtoVer, 1),
+            State = maybe_increment_publisher(State0),
+            Msg = #mqtt_msg{retain = Retain,
+                            qos = EffectiveQos,
+                            topic = Topic,
+                            dup = Dup,
+                            packet_id  = PacketId,
+                            payload = Payload,
+                            props = Props},
+            case EffectiveQos of
+                ?QOS_0 ->
                     publish_to_queues_with_checks(Msg, State);
-                true ->
-                    %% Client re-sent this PUBLISH packet.
-                    %% We already sent this message to target queues awaiting confirmations.
-                    %% Hence, we ignore this re-send.
-                    {ok, State}
+                ?QOS_1 ->
+                    rabbit_global_counters:messages_received_confirm(ProtoVer, 1),
+                    case rabbit_mqtt_confirms:contains(PacketId, U) of
+                        false ->
+                            publish_to_queues_with_checks(Msg, State);
+                        true ->
+                            %% Client re-sent this PUBLISH packet.
+                            %% We already sent this message to target queues awaiting confirmations.
+                            %% Hence, we ignore this re-send.
+                            {ok, State}
+                    end
             end
-    end;
+        end;
 
 process_request(?SUBSCRIBE,
                 #mqtt_packet{
@@ -1221,6 +1230,23 @@ delivery_mode(?QOS_2) -> 2.
 maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
+
+check_topic_alias(Props)->
+    %% MQTT spec 3.3.2.3.4
+    %% A Topic Alias of 0 is not permitted [MQTT-3.3.2-8].
+    %% A Client MUST NOT send a PUBLISH packet with a Topic Alias greater than the Topic Alias
+    %% Maximum value returned by the Server in the CONNACK packet [MQTT-3.3.2-9].
+    case maps:find('Topic-Alias', Props) of
+        {ok, Value} ->
+            case Value > 0 andalso Value =< persistent_term:get(?TOPIC_ALIAS_MAX) of
+                true ->
+                    {ok, Value};
+                false ->
+                    error
+                end;
+        error ->
+            {ok, noalias}
+    end.
 
 ensure_queue(QoS, State) ->
     case get_queue(QoS, State) of

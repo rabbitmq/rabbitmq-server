@@ -117,9 +117,18 @@ persist_static_configuration() ->
 
     {ok, MaxSizeAuth} = application:get_env(?APP_NAME, max_packet_size_authenticated),
     assert_valid_max_packet_size(MaxSizeAuth),
-    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth),
+
+    {ok, TopicAliasMax} = application:get_env(?APP_NAME, topic_alias_max),
+    assert_valid_topic_alias_max(TopicAliasMax),
+    ok = persistent_term:put(?TOPIC_ALIAS_MAX, TopicAliasMax).
 
 assert_valid_max_packet_size(Val) ->
     ?assert(is_integer(Val) andalso
             Val > 0 andalso
             Val =< ?MAX_PACKET_SIZE).
+
+assert_valid_topic_alias_max(Val) ->
+        ?assert(is_integer(Val) andalso
+            Val > 0 andalso
+            Val =< ?TWO_BYTE_INTEGER_MAX).

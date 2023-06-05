@@ -311,3 +311,10 @@ end}.
     {datatype, integer},
     {validators, ["non_zero_positive_integer"]}
 ]}.
+
+%% Topic aliax max
+
+{mapping, "mqtt.topic_alias_max", "rabbitmq_mqtt.topic_alias_max", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
