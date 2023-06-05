@@ -14,8 +14,7 @@
          client_pre_hibernate/1, client_ref/1,
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
 
--export([set_maximum_since_use/2,
-         compact_file/2, truncate_file/4, delete_file/2]). %% internal
+-export([compact_file/2, truncate_file/4, delete_file/2]). %% internal
 
 -export([scan_file_for_valid_messages/1]). %% salvage tool
 
@@ -30,20 +29,15 @@
 -define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
--define(TRANSFORM_TMP, "transform_tmp").
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
--define(READ_AHEAD_MODE, [read_ahead | ?READ_MODE]).
 -define(WRITE_MODE,      [write]).
 
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
 
 -define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
-
- %% i.e. two pairs, so GC does not go idle when busy
--define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
 
 %% We keep track of flying messages for writes and removes. The idea is that
 %% when a remove comes in before we could process the write, we skip the
@@ -601,11 +595,6 @@ remove(MsgIds, CState = #client_msstate { flying_ets = FlyingEts,
     [ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN}) || {MsgRef, _} <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
 
--spec set_maximum_since_use(server(), non_neg_integer()) -> 'ok'.
-
-set_maximum_since_use(Server, Age) when is_pid(Server); is_atom(Server) ->
-    gen_server2:cast(Server, {set_maximum_since_use, Age}).
-
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
@@ -666,9 +655,6 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
     pg:join({?MODULE, VHost, Type}, self()),
-
-    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
-                                             [self()]),
 
     Dir = filename:join(BaseDir, atom_to_list(Type)),
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
@@ -761,12 +747,8 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     {CurOffset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
     rabbit_log:debug("Finished rebuilding index", []),
-    %% read is only needed so that we can seek
-    {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
-                             [read | ?WRITE_MODE]),
-    {ok, CurOffset} = file_handle_cache:position(CurHdl, CurOffset),
-    ok = file_handle_cache:truncate(CurHdl),
-
+    %% Open the most recent file.
+    {ok, CurHdl} = writer_recover(Dir, CurFile, CurOffset),
     {ok, State1 #msstate { current_file_handle = CurHdl,
                            current_file_offset = CurOffset },
      hibernate,
@@ -897,10 +879,6 @@ handle_cast({compacted_file, File},
     %% So this will become a no-op and we can ignore the return value.
     _ = ets:update_element(FileSummaryEts, File,
                            {#file_summary.locked, false}),
-    noreply(State);
-
-handle_cast({set_maximum_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
 handle_info(sync, State) ->
@@ -952,7 +930,7 @@ terminate(Reason, State = #msstate { index_state         = IndexState,
     State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
-                              ok = file_handle_cache:close(CurHdl),
+                              ok = writer_close(CurHdl),
                               State2
              end,
     case store_file_summary(FileSummaryEts, Dir) of
@@ -1027,7 +1005,7 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                     end, [], CTM),
     ok = case CGs of
              [] -> ok;
-             _  -> file_handle_cache:sync(CurHdl)
+             _  -> writer_flush(CurHdl)
          end,
     lists:foldl(fun ({CRef, MsgIds}, StateN) ->
                         client_confirm(CRef, MsgIds, written, StateN)
@@ -1176,7 +1154,7 @@ write_message(MsgId, Msg,
                                  current_file        = CurFile,
                                  current_file_offset = CurOffset,
                                  file_summary_ets    = FileSummaryEts }) ->
-    {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
+    {ok, TotalSize} = writer_append(CurHdl, MsgId, Msg),
     ok = index_insert(
            #msg_location { msg_id = MsgId, ref_count = 1, file = CurFile,
                            offset = CurOffset, total_size = TotalSize }, State),
@@ -1313,14 +1291,64 @@ should_mask_action(CRef, MsgId,
 %% file helper functions
 %%----------------------------------------------------------------------------
 
+-record(writer, {
+    fd = file:fd(),
+    %% We are only using this buffer from one pid therefore
+    %% we will not acquire/release locks.
+    buffer = prim_buffer:prim_buffer()
+}).
+
+-define(MAX_BUFFER_SIZE, 1048576). %% 1MB.
+
+writer_open(Dir, Num) ->
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
+                         [append, binary, raw]),
+    {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
+
+writer_recover(Dir, Num, Offset) ->
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
+                         [read, write, binary, raw]),
+    {ok, Offset} = file:position(Fd, Offset),
+    ok = file:truncate(Fd),
+    {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
+
+writer_append(#writer{fd = Fd, buffer = Buffer}, MsgId, MsgBody) ->
+    MsgBodyBin = term_to_binary(MsgBody),
+    MsgBodyBinSize = byte_size(MsgBodyBin),
+    EntrySize = MsgBodyBinSize + 16, %% Size of MsgId + MsgBodyBin.
+    %% We send an iovec to the buffer instead of building a binary.
+    prim_buffer:write(Buffer, [
+        <<EntrySize:64>>,
+        MsgId,
+        MsgBodyBin,
+        <<255>> %% OK marker.
+    ]),
+    case prim_buffer:size(Buffer) of
+        Size when Size >= ?MAX_BUFFER_SIZE ->
+            ok = file:write(Fd, prim_buffer:read_iovec(Buffer, Size));
+        _ ->
+            ok
+    end,
+    {ok, EntrySize + 9}. %% EntrySize + size field + OK marker.
+
+%% Note: the message store no longer fsyncs; it only flushes data
+%% to disk. This is in line with classic queues v2 behavior.
+writer_flush(#writer{fd = Fd, buffer = Buffer}) ->
+    case prim_buffer:size(Buffer) of
+        0 ->
+            ok;
+        Size ->
+            file:write(Fd, prim_buffer:read_iovec(Buffer, Size))
+    end.
+
+writer_close(#writer{fd = Fd}) ->
+    file:close(Fd).
+
 open_file(File, Mode) ->
     file_handle_cache:open_with_absolute_path(
       File, ?BINARY_MODE ++ Mode,
       [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
        {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
-
-open_file(Dir, FileName, Mode) ->
-    open_file(form_filename(Dir, FileName), Mode).
 
 mark_handle_open(FileHandlesEts, File, Ref) ->
     %% This is fine to fail (already exists). Note it could fail with
@@ -1620,9 +1648,9 @@ maybe_roll_to_new_file(
                      file_size_limit     = FileSizeLimit })
   when Offset >= FileSizeLimit ->
     State1 = internal_sync(State),
-    ok = file_handle_cache:close(CurHdl),
+    ok = writer_close(CurHdl),
     NextFile = CurFile + 1,
-    {ok, NextHdl} = open_file(Dir, filenum_to_name(NextFile), ?WRITE_MODE),
+    {ok, NextHdl} = writer_open(Dir, NextFile),
     true = ets:insert_new(FileSummaryEts, #file_summary {
                             file             = NextFile,
                             valid_total_size = 0,
