@@ -64,11 +64,11 @@ class TestConnectDisconnect(base.BaseTest):
 
     def test_bad_username(self):
         ''' Test bad username'''
-        self.bad_connect("Access refused for user 'gust'\n", user='gust')
+        self.bad_connect("Access refused for user 'gust'", user='gust')
 
     def test_bad_password(self):
         ''' Test bad password'''
-        self.bad_connect("Access refused for user 'guest'\n", passcode='gust')
+        self.bad_connect("Access refused for user 'guest'", passcode='gust')
 
     def test_bad_vhost(self):
         ''' Test bad virtual host'''
