@@ -587,7 +587,12 @@ global_counters(Config) ->
     ok = emqtt:publish(C, Topic1, <<"testm1">>, qos0),
     {ok, _} = emqtt:publish(C, Topic2, <<"testm2">>, qos1),
     ok = emqtt:publish(C, <<"no/queue/bound">>, <<"msg-dropped">>, qos0),
-    {ok, _} = emqtt:publish(C, <<"no/queue/bound">>, <<"msg-returned">>, qos1),
+    {ok, Pub} = emqtt:publish(C, <<"no/queue/bound">>, <<"msg-returned">>, qos1),
+    case ?config(mqtt_version, Config) of
+        v3 -> ok;
+        v4 -> ok;
+        v5 -> ?assertMatch(#{reason_code_name := no_matching_subscribers}, Pub)
+    end,
 
     ok = expect_publishes(C, Topic0, [<<"testm0">>]),
     ok = expect_publishes(C, Topic1, [<<"testm1">>]),
@@ -1522,13 +1527,12 @@ max_packet_size_authenticated(Config) ->
     ok = emqtt:publish(C, Topic, binary:copy(<<"x">>, MaxSize + 1), qos0),
     await_exit(C),
     case ?config(mqtt_version, Config) of
-        V when V =:= v3; V =:= v4 ->
-            ok;
-        v5 ->
-            ?assertMatch(#{'Maximum-Packet-Size' := MaxSize}, ConnAckProps),
-            receive {disconnected, _ReasonCodePacketTooLarge = 149, _Props} -> ok
-            after 1000 -> ct:fail("missing DISCONNECT packet from server")
-            end
+        v3 -> ok;
+        v4 -> ok;
+        v5 -> ?assertMatch(#{'Maximum-Packet-Size' := MaxSize}, ConnAckProps),
+              receive {disconnected, _ReasonCodePacketTooLarge = 149, _Props} -> ok
+              after 1000 -> ct:fail("missing DISCONNECT packet from server")
+              end
     end,
     ok = rpc(Config, persistent_term, put, [Key, OldMaxSize]).
 
@@ -1689,10 +1693,9 @@ bind(Ch, QueueName, Topic)
 
 assert_v5_disconnect_reason_code(Config, ReasonCode) ->
     case ?config(mqtt_version, Config) of
-        V when V =:= v3; V =:= v4 ->
-            ok;
-        v5 ->
-            receive {disconnected, ReasonCode, _Props} -> ok
-            after 1000 -> ct:fail("missing DISCONNECT packet from server")
-            end
+        v3 -> ok;
+        v4 -> ok;
+        v5 -> receive {disconnected, ReasonCode, _Props} -> ok
+              after 1000 -> ct:fail("missing DISCONNECT packet from server")
+              end
     end.

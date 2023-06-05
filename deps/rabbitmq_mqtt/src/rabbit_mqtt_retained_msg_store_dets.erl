@@ -58,14 +58,12 @@ terminate(#store_state{table = T}) ->
   ok = dets:close(T).
 
 open_table(Dir, VHost) ->
-    dets:open_file(rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-                   table_options(rabbit_mqtt_util:path_for(Dir, VHost, ".dets"))).
-
-table_options(Path) ->
-    [{type, set},
-     {keypos, #retained_message.topic},
-     {file, Path},
-     {ram_file, true},
-     {repair, true},
-     {auto_save, rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000)}
-    ].
+    Tab = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
+    Path = rabbit_mqtt_util:path_for(Dir, VHost, ".dets"),
+    AutoSave = rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000),
+    dets:open_file(Tab, [{type, set},
+                         {keypos, #retained_message.topic},
+                         {file, Path},
+                         {ram_file, true},
+                         {repair, true},
+                         {auto_save, AutoSave}]).
