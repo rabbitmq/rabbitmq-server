@@ -35,7 +35,7 @@
          enable/1,
          enable_default/0,
          check_node_compatibility/1,
-         sync_cluster/0,
+         sync_cluster/1,
          refresh_after_app_load/0,
          get_forced_feature_flag_names/0]).
 
@@ -134,7 +134,7 @@ check_node_compatibility(RemoteNode) ->
     %% feature flags.
     check_node_compatibility_task(ThisNode, RemoteNode).
 
-sync_cluster() ->
+sync_cluster(Nodes) ->
     ?LOG_DEBUG(
        "Feature flags: SYNCING FEATURE FLAGS in cluster...",
        [],
@@ -142,13 +142,13 @@ sync_cluster() ->
     case erlang:whereis(?LOCAL_NAME) of
         Pid when is_pid(Pid) ->
             %% The function is called while `rabbit' is running.
-            gen_statem:call(?LOCAL_NAME, sync_cluster);
+            gen_statem:call(?LOCAL_NAME, {sync_cluster, Nodes});
         undefined ->
             %% The function is called while `rabbit' is stopped. We need to
             %% start a one-off controller, again to make sure concurrent
             %% changes are blocked.
             {ok, Pid} = start_link(),
-            Ret = gen_statem:call(Pid, sync_cluster),
+            Ret = gen_statem:call(Pid, {sync_cluster, Nodes}),
             gen_statem:stop(Pid),
             Ret
     end.
@@ -273,8 +273,8 @@ proceed_with_task({enable, FeatureNames}) ->
     enable_task(FeatureNames);
 proceed_with_task(enable_default) ->
     enable_default_task();
-proceed_with_task(sync_cluster) ->
-    sync_cluster_task();
+proceed_with_task({sync_cluster, Nodes}) ->
+    sync_cluster_task(Nodes);
 proceed_with_task(refresh_after_app_load) ->
     refresh_after_app_load_task().
 
@@ -645,6 +645,15 @@ get_forced_feature_flag_names_from_config() ->
       Reason :: term().
 
 sync_cluster_task() ->
+    Nodes = running_nodes(),
+    sync_cluster_task(Nodes).
+
+-spec sync_cluster_task(Nodes) -> Ret when
+      Nodes :: [node()],
+      Ret :: ok | {error, Reason},
+      Reason :: term().
+
+sync_cluster_task(Nodes) ->
     %% We assume that a feature flag can only be enabled, not disabled.
     %% Therefore this synchronization searches for feature flags enabled on
     %% some nodes but not all, and make sure they are enabled everywhere.
@@ -657,7 +666,6 @@ sync_cluster_task() ->
     %% would make sure a feature flag isn't enabled while there is a network
     %% partition. On the other hand, this would require that all nodes are
     %% running before we can expand the cluster...
-    Nodes = running_nodes(),
     ?LOG_DEBUG(
        "Feature flags: synchronizing feature flags on nodes: ~p",
        [Nodes],

@@ -1822,10 +1822,19 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin) ->
 sync_feature_flags_with_cluster(Nodes, NodeIsVirgin, Timeout) ->
     Clustered = Nodes =/= [],
     case is_enabled(feature_flags_v2) of
-        true when Clustered    -> rabbit_ff_controller:sync_cluster();
-        true when NodeIsVirgin -> rabbit_ff_controller:enable_default();
-        true                   -> ok;
-        false                  -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
+        true when Clustered ->
+            %% We don't use `rabbit_nodes:filter_running()' here because the
+            %% given `Nodes' list may contain nodes which are not members yet
+            %% (the cluster could be being created or expanded).
+            Nodes1 = [N || N <- Nodes, rabbit:is_running(N)],
+            Nodes2 = lists:usort([node() | Nodes1]),
+            rabbit_ff_controller:sync_cluster(Nodes2);
+        true when NodeIsVirgin ->
+            rabbit_ff_controller:enable_default();
+        true ->
+            ok;
+        false ->
+            sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
     end.
 
 sync_cluster_v1([], NodeIsVirgin, _) ->
@@ -1930,7 +1939,12 @@ sync_cluster_v1(Nodes, _NodeIsVirgin, Timeout) ->
                "switching to controller's sync",
                [],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            rabbit_ff_controller:sync_cluster();
+            %% We don't use `rabbit_nodes:filter_running()' here because the
+            %% given `Nodes' list may contain nodes which are not members yet
+            %% (the cluster could be being created or expanded).
+            Nodes1 = [N || N <- Nodes, rabbit:is_running(N)],
+            Nodes2 = lists:usort([node() | Nodes1]),
+            rabbit_ff_controller:sync_cluster(Nodes2);
         false ->
             _ = verify_which_feature_flags_are_actually_enabled(),
             RemoteNodes = Nodes -- [node()],
