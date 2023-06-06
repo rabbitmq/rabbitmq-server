@@ -1149,8 +1149,13 @@ sync_feature_flags_with_cluster([] = _Nodes, true = _NodeIsVirgin) ->
     rabbit_ff_controller:enable_default();
 sync_feature_flags_with_cluster([] = _Nodes, false = _NodeIsVirgin) ->
     ok;
-sync_feature_flags_with_cluster(_Nodes, _NodeIsVirgin) ->
-    rabbit_ff_controller:sync_cluster().
+sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
+    %% We don't use `rabbit_nodes:filter_running()' here because the given
+    %% `Nodes' list may contain nodes which are not members yet (the cluster
+    %% could be being created or expanded).
+    Nodes1 = [N || N <- Nodes, rabbit:is_running(N)],
+    Nodes2 = lists:usort([node() | Nodes1]),
+    rabbit_ff_controller:sync_cluster(Nodes2).
 
 -spec refresh_feature_flags_after_app_load() ->
     ok | {error, any()} | no_return().
