@@ -64,6 +64,7 @@
          %% client port
          peer_port,
          auth_mechanism,
+         authentication_state :: any(),
          connected_at :: integer(),
          helper_sup :: pid(),
          socket :: rabbit_net:socket(),
@@ -75,7 +76,6 @@
          stream_leaders :: #{stream() => pid()},
          stream_subscriptions :: #{stream() => [subscription_id()]},
          credits :: atomics:atomics_ref(),
-         authentication_state :: any(),
          user :: undefined | #user{},
          virtual_host :: undefined | binary(),
          connection_step ::
@@ -1433,9 +1433,12 @@ handle_frame_pre_auth(Transport,
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
                         {challenge, Challenge, AuthState1} ->
+<<<<<<< HEAD
                             rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
                                                                        <<>>,
                                                                        stream),
+=======
+>>>>>>> a24b44347a (Polish authentication in stream reader)
                             {C1#stream_connection{authentication_state = AuthState1,
                                                   connection_step = authenticating},
                              {sasl_authenticate, ?RESPONSE_SASL_CHALLENGE,
