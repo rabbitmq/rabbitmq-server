@@ -28,6 +28,7 @@
          mf_wait_and_count_runs_v2_post_enable/1,
          mf_crash_on_joining_node/1,
 
+         rpc_calls/1,
          enable_unknown_feature_flag_on_a_single_node/1,
          enable_supported_feature_flag_on_a_single_node/1,
          enable_unknown_feature_flag_in_a_3node_cluster/1,
@@ -36,6 +37,7 @@
          enable_unsupported_feature_flag_in_a_3node_cluster/1,
          enable_feature_flag_in_cluster_and_add_member_after/1,
          enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2/1,
+         enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/0,
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/1,
          enable_feature_flag_with_post_enable/1,
          have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
@@ -54,6 +56,10 @@ all() ->
 groups() ->
     Groups =
     [
+     {direct, [parallel],
+      [
+       rpc_calls
+      ]},
      {cluster_size_1, [parallel],
       [
        enable_unknown_feature_flag_on_a_single_node,
@@ -94,6 +100,8 @@ end_per_suite(Config) ->
 
 init_per_group(feature_flags_v2, Config) ->
     rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
+init_per_group(direct, Config) ->
+    Config;
 init_per_group(cluster_size_1, Config) ->
     rabbit_ct_helpers:set_config(Config, {nodes_count, 1});
 init_per_group(cluster_size_3, Config) ->
@@ -104,11 +112,15 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, Config) ->
     Config.
 
+init_per_testcase(rpc_calls, Config) ->
+    Config;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(
       Config,
       [fun(Cfg) -> start_slave_nodes(Cfg, Testcase) end]).
 
+end_per_testcase(rpc_calls, Config) ->
+    Config;
 end_per_testcase(_Testcase, Config) ->
     rabbit_ct_helpers:run_steps(
       Config,
@@ -327,6 +339,16 @@ get_peer_proc() ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
+rpc_calls(_Config) ->
+    List = [1, 2, 3],
+    ?assertEqual(
+       lists:sum(List),
+       rabbit_ff_controller:rpc_call(node(), lists, sum, [List], 11000)),
+    ?assertEqual(
+       {error, {erpc, noconnection}},
+       rabbit_ff_controller:rpc_call(
+         nonode@non_existing_host, lists, sum, [List], 11000)).
 
 enable_unknown_feature_flag_on_a_single_node(Config) ->
     [Node] = ?config(nodes, Config),
@@ -864,6 +886,9 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
            [])
          || Node <- AllNodes],
     ok.
+
+enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2() ->
+    [{timetrap, {minutes, 3}}].
 
 enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
     AllNodes = [LeavingNode | [FirstNode | _] = Nodes] = ?config(

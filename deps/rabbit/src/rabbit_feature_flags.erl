@@ -126,9 +126,6 @@
          get_overriden_running_nodes/0]).
 -endif.
 
-%% Default timeout for operations on remote nodes.
--define(TIMEOUT, 60000).
-
 -type feature_flag_modattr() :: {feature_name(),
                                  feature_props()}.
 %% The value of a `-rabbitmq_feature_flag()' module attribute used to
