@@ -75,7 +75,7 @@
          stream_leaders :: #{stream() => pid()},
          stream_subscriptions :: #{stream() => [subscription_id()]},
          credits :: atomics:atomics_ref(),
-         authentication_state :: atom(),
+         authentication_state :: any(),
          user :: undefined | #user{},
          virtual_host :: undefined | binary(),
          connection_step ::
@@ -1371,8 +1371,6 @@ handle_frame_pre_auth(Transport,
                                    ServerProperties}}),
     send(Transport, S, Frame),
     {Connection#stream_connection{client_properties = ClientProperties,
-                                  authentication_state =
-                                      peer_properties_exchanged,
                                   connection_step = peer_properties_exchanged},
      State};
 handle_frame_pre_auth(Transport,
@@ -1438,10 +1436,8 @@ handle_frame_pre_auth(Transport,
                             rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress,
                                                                        <<>>,
                                                                        stream),
-                            {C1#stream_connection{authentication_state =
-                                                      AuthState1,
-                                                  connection_step =
-                                                      authenticating},
+                            {C1#stream_connection{authentication_state = AuthState1,
+                                                  connection_step = authenticating},
                              {sasl_authenticate, ?RESPONSE_SASL_CHALLENGE,
                               Challenge}};
                         {ok, User = #user{username = Username}} ->
@@ -1458,11 +1454,9 @@ handle_frame_pre_auth(Transport,
                                                        [],
                                                        C1,
                                                        State),
-                                    {C1#stream_connection{authentication_state =
-                                                              done,
-                                                          user = User,
-                                                          connection_step =
-                                                              authenticated},
+                                    {C1#stream_connection{user = User,
+                                                          authentication_state = done,
+                                                          connection_step = authenticated},
                                      {sasl_authenticate, ?RESPONSE_CODE_OK,
                                       <<>>}};
                                 not_allowed ->
