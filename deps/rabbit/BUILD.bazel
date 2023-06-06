@@ -387,6 +387,14 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "deprecated_features_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":feature_flags_v2_SUITE_beam_files",
+    ],
+)
+
+rabbitmq_integration_suite(
     name = "disconnect_detected_during_alarm_SUITE",
     size = "medium",
 )

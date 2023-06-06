@@ -31,6 +31,8 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
+-include("src/rabbit_feature_flags.hrl").
+
 -export([is_supported/1, is_supported/2,
          enable/1,
          enable_default/0,
@@ -60,6 +62,8 @@
 
 -record(?MODULE, {from,
                   notify = #{}}).
+
+-type run_callback_error() :: {error, any()}.
 
 -define(LOCAL_NAME, ?MODULE).
 -define(GLOBAL_NAME, {?MODULE, global}).
@@ -536,11 +540,13 @@ enable_default_task() ->
             #{feature_flags := FeatureFlags} = Inventory,
             StableFeatureNames =
             maps:fold(
-              fun
-                  (FeatureName, #{stability := stable}, Acc) ->
-                      [FeatureName | Acc];
-                  (_FeatureName, _FeatureProps, Acc) ->
-                      Acc
+              fun(FeatureName, FeatureProps, Acc) ->
+                      Stability = rabbit_feature_flags:get_stability(
+                                    FeatureProps),
+                      case Stability of
+                          stable -> [FeatureName | Acc];
+                          _      -> Acc
+                      end
               end, [], FeatureFlags),
             enable_many(Inventory, StableFeatureNames);
         [] ->
@@ -673,9 +679,32 @@ sync_cluster_task(Nodes) ->
 
     case collect_inventory_on_nodes(Nodes) of
         {ok, Inventory} ->
-            FeatureNames = list_feature_flags_enabled_somewhere(
-                             Inventory, false),
-            enable_many(Inventory, FeatureNames);
+            CantEnable = list_deprecated_features_that_cant_be_denied(
+                           Inventory),
+            case CantEnable of
+                [] ->
+                    FeatureNames = list_feature_flags_enabled_somewhere(
+                                     Inventory, false),
+                    enable_many(Inventory, FeatureNames);
+                _ ->
+                    ?LOG_ERROR(
+                       "Feature flags: the following deprecated features "
+                       "can't be denied because their associated feature "
+                       "is being actively used: ~0tp",
+                       [CantEnable],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    lists:foreach(
+                      fun(FeatureName) ->
+                              Warning =
+                              rabbit_deprecated_features:get_warning(
+                                FeatureName),
+                              ?LOG_ERROR(
+                                 "~ts", [Warning],
+                                 #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+                      end, CantEnable),
+                    {error,
+                     {failed_to_deny_deprecated_features, CantEnable}}
+            end;
         Error ->
             Error
     end.
@@ -1057,7 +1086,8 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
 merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
     FeatureFlags = maps:merge(FeatureFlagsA, FeatureFlagsB),
     maps:map(
-      fun(FeatureName, FeatureProps) ->
+      fun
+          (FeatureName, FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
               %% When we collect feature flag properties from all nodes, we
               %% start with an empty cluster inventory (a common Erlang
               %% recursion pattern). This means that all feature flags are
@@ -1096,7 +1126,28 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
 
               FeatureProps1 = FeatureProps#{stability => Stability},
               FeatureProps2 = maps:remove(callbacks, FeatureProps1),
-              FeatureProps2
+              FeatureProps2;
+          (FeatureName, FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+              UnknownProps = #{deprecation_phase => permitted_by_default},
+              FeaturePropsA = maps:get(
+                                FeatureName, FeatureFlagsA, UnknownProps),
+              FeaturePropsB = maps:get(
+                                FeatureName, FeatureFlagsB, UnknownProps),
+
+              PhaseA = rabbit_deprecated_features:get_phase(FeaturePropsA),
+              PhaseB = rabbit_deprecated_features:get_phase(FeaturePropsB),
+              Phase = case {PhaseA, PhaseB} of
+                          {removed, _}           -> removed;
+                          {_, removed}           -> removed;
+                          {disconnected, _}      -> disconnected;
+                          {_, disconnected}      -> disconnected;
+                          {denied_by_default, _} -> denied_by_default;
+                          {_, denied_by_default} -> denied_by_default;
+                          _                      -> permitted_by_default
+                      end,
+
+              FeatureProps1 = FeatureProps#{deprecation_phase => Phase},
+              FeatureProps1
       end, FeatureFlags).
 
 -spec list_feature_flags_enabled_somewhere(Inventory, HandleStateChanging) ->
@@ -1125,6 +1176,32 @@ list_feature_flags_enabled_somewhere(
                                end, Acc1, FeatureStates)
                      end, #{}, StatesPerNode),
     lists:sort(maps:keys(MergedStates)).
+
+-spec list_deprecated_features_that_cant_be_denied(Inventory) ->
+    Ret when
+      Inventory :: rabbit_feature_flags:cluster_inventory(),
+      Ret :: [FeatureName],
+      FeatureName :: rabbit_feature_flags:feature_name().
+
+list_deprecated_features_that_cant_be_denied(
+  #{states_per_node := StatesPerNode}) ->
+    ThisNode = node(),
+    States = maps:get(ThisNode, StatesPerNode),
+
+    maps:fold(
+      fun
+          (FeatureName, true, Acc) ->
+              #{ThisNode := IsUsed} = run_callback(
+                                        [ThisNode], FeatureName,
+                                        is_feature_used, #{}, infinity),
+              case IsUsed of
+                  true   -> [FeatureName | Acc];
+                  false  -> Acc;
+                  _Error -> Acc
+              end;
+          (_FeatureName, false, Acc) ->
+              Acc
+      end, [], States).
 
 -spec list_nodes_who_know_the_feature_flag(Inventory, FeatureName) ->
     Ret when
@@ -1267,14 +1344,17 @@ rpc_calls(Nodes, Module, Function, Args, Timeout) when is_list(Nodes) ->
 %% Feature flag support queries.
 %% --------------------------------------------------------------------
 
--spec is_known(Inventory, FeatureFlag) -> IsKnown when
+-spec is_known(Inventory, FeatureProps) -> IsKnown when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
-      FeatureFlag :: rabbit_feature_flags:feature_props_extended(),
+      FeatureProps ::
+      rabbit_feature_flags:feature_props_extended() |
+      rabbit_deprecated_features:feature_props_extended(),
       IsKnown :: boolean().
+%% @private
 
 is_known(
   #{applications_per_node := ScannedAppsPerNode},
-  #{provided_by := App} = _FeatureFlag) ->
+  #{provided_by := App} = _FeatureProps) ->
     maps:fold(
       fun
           (_Node, ScannedApps, false) -> lists:member(App, ScannedApps);
@@ -1408,14 +1488,34 @@ enable_dependencies1(
 %% Migration function.
 %% --------------------------------------------------------------------
 
--spec run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
-    Rets when
+-spec run_callback
+(Nodes, FeatureName, Command, Extra, Timeout) -> Rets when
       Nodes :: [node()],
       FeatureName :: rabbit_feature_flags:feature_name(),
-      Command :: rabbit_feature_flags:callback_name(),
+      Command :: enable,
       Extra :: map(),
       Timeout :: timeout(),
-      Rets :: #{node() => term()}.
+      Rets :: #{node() =>
+                rabbit_feature_flags:enable_callback_ret() |
+                run_callback_error()};
+(Nodes, FeatureName, Command, Extra, Timeout) -> Rets when
+      Nodes :: [node()],
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      Command :: post_enable,
+      Extra :: map(),
+      Timeout :: timeout(),
+      Rets :: #{node() =>
+                rabbit_feature_flags:post_enable_callback_ret() |
+                run_callback_error()};
+(Nodes, FeatureName, Command, Extra, Timeout) -> Rets when
+      Nodes :: [node()],
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      Command :: is_feature_used,
+      Extra :: map(),
+      Timeout :: timeout(),
+      Rets :: #{node() =>
+                rabbit_deprecated_features:is_feature_used_callback_ret() |
+                run_callback_error()}.
 
 run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
     FeatureProps = rabbit_ff_registry_wrapper:get(FeatureName),
@@ -1443,8 +1543,9 @@ run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
             %% No callbacks defined for this feature flag. Consider it a
             %% success!
             Ret = case Command of
-                      enable      -> ok;
-                      post_enable -> ok
+                      enable          -> ok;
+                      post_enable     -> ok;
+                      is_feature_used -> false
                   end,
             #{node() => Ret}
     end.
@@ -1454,9 +1555,12 @@ run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
       Nodes :: [node()],
       CallbackMod :: module(),
       CallbackFun :: atom(),
-      Args :: rabbit_feature_flags:callbacks_args(),
+      Args :: rabbit_feature_flags:callbacks_args() |
+              rabbit_deprecated_features:callbacks_args(),
       Timeout :: timeout(),
-      Rets :: #{node() => rabbit_feature_flags:callbacks_rets()}.
+      Rets :: #{node() => rabbit_feature_flags:callbacks_rets() |
+                          rabbit_deprecated_features:callbacks_rets() |
+                          run_callback_error()}.
 
 do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout) ->
     #{feature_name := FeatureName,

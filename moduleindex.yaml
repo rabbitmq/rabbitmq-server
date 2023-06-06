@@ -530,6 +530,7 @@ rabbit:
 - rabbit_definitions_hashing
 - rabbit_definitions_import_https
 - rabbit_definitions_import_local_filesystem
+- rabbit_deprecated_features
 - rabbit_diagnostics
 - rabbit_direct
 - rabbit_direct_reply_to

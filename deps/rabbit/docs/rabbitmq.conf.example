@@ -548,6 +548,25 @@
 ## NB: Change these only if you understand what you are doing!
 ##
 
+## To permit or deny a deprecated feature when it is in its
+## `permitted_by_default` or `denied_by_default` deprecation phase, the
+## default state can be overriden from the configuration.
+##
+## When a deprecated feature is permitted by default (first phase of the
+## deprecation period), it means the feature is available by default and can
+## be turned off by setting it to false in the configuration.
+##
+## When a deprecated feature is denied by default (second phase of the
+## deprecation period), it means the feature is unavailable by default but can
+## be turned back on by setting it to true in the configuration.
+##
+## When a deprecated feature is "disconnected" or "removed" (last two phases
+## of the deprecation period), it is no longer possible to turn it back on
+## from the configuration.
+##
+# deprecated_features.permit.a_deprecated_feature = true
+# deprecated_features.permit.another_deprecated_feature = false
+
 ## Timeout used when waiting for Mnesia tables in a cluster to
 ## become available.
 ##
