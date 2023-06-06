@@ -25,17 +25,15 @@
          remove_bindings/3,
          assert_args_equivalence/2]).
 
--rabbit_boot_step(
-   {rabbit_exchange_type_super_stream_registry,
-    [{description, "exchange type x-super-stream: registry"},
-     {mfa, {rabbit_registry, register,
-            [exchange, <<"x-super-stream">>, ?MODULE]}},
-     {cleanup, {rabbit_registry, unregister,
-                [exchange, <<"x-super-stream">>]}},
-     {requires, rabbit_registry},
-     {enables, kernel_ready}]}).
+-rabbit_boot_step({rabbit_exchange_type_super_stream_registry,
+                   [{description, "exchange type x-super-stream: registry"},
+                    {mfa, {rabbit_registry, register,
+                           [exchange, <<"x-super-stream">>, ?MODULE]}},
+                    {cleanup, {rabbit_registry, unregister,
+                               [exchange, <<"x-super-stream">>]}},
+                    {requires, rabbit_registry},
+                    {enables, kernel_ready}]}).
 
--define(MNESIA_TABLE, rabbit_route).
 -define(SEED, 104729).
 
 description() ->
@@ -47,17 +45,22 @@ route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = [RKey | _]}}) ->
     %% get all bindings for the exchange and use murmur3 to generate
     %% the binding key to match on
-    MatchHead = #route{binding = #binding{source = Name, _ = '_'}},
-    Routes = ets:select(?MNESIA_TABLE, [{MatchHead, [], [['$_']]}]),
-    N = integer_to_binary(hash_mod(RKey, length(Routes))),
-    case lists:search(
-           fun(#route{binding = #binding{key = Key}}) ->
-                   Key =:= N
-           end, Routes) of
-        {value, #route{binding = #binding{destination = Dest}}} ->
-            [Dest];
-        false ->
-            []
+    % MatchHead = #route{binding = #binding{source = Name, _ = '_'}},
+    % Routes = ets:select(?MNESIA_TABLE, [{MatchHead, [], ['$_']}]),
+    case rabbit_binding:list_for_source(Name) of
+        [] ->
+            [];
+        Bindings ->
+            N = integer_to_binary(hash_mod(RKey, length(Bindings))),
+            % rabbit_log:debug("searching for ~p in ~p", [N, Routes]),
+            case lists:search(fun(#binding{key = Key}) ->
+                                      Key =:= N
+                              end, Bindings) of
+                {value, #binding{destination = Dest}} ->
+                    [Dest];
+                false ->
+                    []
+            end
     end.
 
 info(_) -> [].
@@ -82,5 +85,5 @@ remove_bindings(_Serial, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 
-hash_mod([RKey | _], N) ->
+hash_mod(RKey, N) ->
     murmerl3:hash_32(RKey, ?SEED) rem N.

@@ -8,9 +8,10 @@
 -module(rabbit_stream_manager_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("common_test/include/ct.hrl").
+% -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -18,10 +19,13 @@ all() ->
 
 groups() ->
     [{non_parallel_tests, [],
-      [manage_super_stream,
+      [manage_super_stream_exchange_type_direct,
+       manage_super_stream_exchange_type_x_super_stream,
+       route_direct_super_stream,
        lookup_leader,
        lookup_member,
-       partition_index]}].
+       partition_index,
+       partition_index_x_super_stream]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -98,32 +102,30 @@ lookup_member(Config) ->
 
     ?assertEqual({ok, deleted}, delete_stream(Config, Stream)).
 
-manage_super_stream(Config) ->
+manage_super_stream_exchange_type_direct(Config) ->
+    manage_super_stream(Config, <<"direct">>).
+
+manage_super_stream_exchange_type_x_super_stream(Config) ->
+    manage_super_stream(Config, <<"x-super-stream">>).
+
+manage_super_stream(Config, Type) ->
     % create super stream
     ?assertEqual(ok,
                  create_super_stream(Config,
-                                     <<"invoices">>,
-                                     [<<"invoices-0">>, <<"invoices-1">>,
-                                      <<"invoices-2">>],
-                                     [<<"0">>, <<"1">>, <<"2">>])),
+                                     #{name => <<"invoices">>,
+                                       exchange_type => Type,
+                                       partitions_source => {partitions, 3}})),
     % get the correct partitions
     ?assertEqual({ok,
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
                  partitions(Config, <<"invoices">>)),
 
-    [?assertEqual({ok, [Partition]},
-                  route(Config, RoutingKey, <<"invoices">>))
-     || {Partition, RoutingKey}
-            <- [{<<"invoices-0">>, <<"0">>}, {<<"invoices-1">>, <<"1">>},
-                {<<"invoices-2">>, <<"2">>}]],
-
     % get an error if trying to re-create it
     ?assertMatch({error, _},
                  create_super_stream(Config,
-                                     <<"invoices">>,
-                                     [<<"invoices-0">>, <<"invoices-1">>,
-                                      <<"invoices-2">>],
-                                     [<<"0">>, <<"1">>, <<"2">>])),
+                                     #{name => <<"invoices">>,
+                                       exchange_type => Type,
+                                       partitions_source => {partitions, 3}})),
 
     % can delete it
     ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
@@ -134,22 +136,40 @@ manage_super_stream(Config) ->
     % cannot create the super stream because a partition already exists
     ?assertMatch({error, _},
                  create_super_stream(Config,
-                                     <<"invoices">>,
-                                     [<<"invoices-0">>, <<"invoices-1">>,
-                                      <<"invoices-2">>],
-                                     [<<"0">>, <<"1">>, <<"2">>])),
+                                     #{name => <<"invoices">>,
+                                       exchange_type => Type,
+                                       partitions_source => {partitions, 3}})),
 
     ?assertMatch({ok, _}, delete_stream(Config, <<"invoices-1">>)),
+    ok.
+
+route_direct_super_stream(Config) ->
+    % create super stream
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     #{name => <<"invoices">>,
+                                       exchange_type => <<"direct">>,
+                                       partitions_source => {partitions, 3}})),
+    % get the correct partitions
+    ?assertEqual({ok,
+                  [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
+                 partitions(Config, <<"invoices">>)),
+
+    [?assertEqual({ok, [Partition]},
+                  route(Config, RoutingKey, <<"invoices">>))
+     || {Partition, RoutingKey}
+            <- [{<<"invoices-0">>, <<"0">>}, {<<"invoices-1">>, <<"1">>},
+                {<<"invoices-2">>, <<"2">>}]],
+    ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
     ok.
 
 partition_index(Config) ->
     % create super stream
     ?assertEqual(ok,
                  create_super_stream(Config,
-                                     <<"invoices">>,
-                                     [<<"invoices-0">>, <<"invoices-1">>,
-                                      <<"invoices-2">>],
-                                     [<<"0">>, <<"1">>, <<"2">>])),
+                                     #{name => <<"invoices">>,
+                                       exchange_type => <<"direct">>,
+                                       partitions_source => {partitions, 3}})),
     [?assertEqual({ok, Index},
                   partition_index(Config, <<"invoices">>, Stream))
      || {Index, Stream}
@@ -189,17 +209,35 @@ partition_index(Config) ->
     amqp_connection:close(C),
     ok.
 
-create_super_stream(Config, Name, Partitions, RKs) ->
+partition_index_x_super_stream(Config) ->
+    % create super stream
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     #{name => <<"invoices">>,
+                                       exchange_type => <<"x-super-stream">>,
+                                       partitions_source => {partitions, 3}})),
+    [?assertEqual({ok, Index},
+                  partition_index(Config, <<"invoices">>, Stream))
+     || {Index, Stream}
+            <- [{0, <<"invoices-0">>}, {1, <<"invoices-1">>},
+                {2, <<"invoices-2">>}]],
+
+    ?assertEqual({error, stream_not_found},
+                 partition_index(Config, <<"invoices">>,
+                                 <<"bananas-gorilla">>)),
+
+    ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
+
+    ok.
+
+create_super_stream(Config, Spec0) ->
+    Spec = Spec0#{vhost => <<"/">>,
+                  username => <<"guest">>},
     rabbit_ct_broker_helpers:rpc(Config,
                                  0,
                                  rabbit_stream_manager,
                                  create_super_stream,
-                                 [<<"/">>,
-                                  Name,
-                                  Partitions,
-                                  #{},
-                                  RKs,
-                                  <<"guest">>]).
+                                 [Spec]).
 
 delete_super_stream(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config,

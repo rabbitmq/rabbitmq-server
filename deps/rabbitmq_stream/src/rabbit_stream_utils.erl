@@ -28,6 +28,7 @@
          extract_stream_list/2,
          sort_partitions/1,
          strip_cr_lf/1,
+         partition_name/2,
          consumer_activity_status/2,
          command_versions/0]).
 
@@ -241,8 +242,21 @@ sort_partitions(Partitions) ->
                end,
                Partitions).
 
+table_lookup(Key, Args, Default) ->
+    case rabbit_misc:table_lookup(Args, Key) of
+        undefined ->
+            Default;
+        {_T, V} ->
+            V
+    end.
+
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
+
+partition_name(SuperStream, Suffix0)
+  when is_binary(SuperStream) ->
+    Suffix = rabbit_data_coercion:to_binary(Suffix0),
+    <<SuperStream/binary, "-", Suffix/binary>>.
 
 consumer_activity_status(Active, Properties) ->
     case {rabbit_stream_reader:single_active_consumer(Properties), Active}
