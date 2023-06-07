@@ -69,5 +69,10 @@
 
 -optional_callbacks([route/3]).
 
-added_to_rabbit_registry(_Type, _ModuleName) -> ok.
-removed_from_rabbit_registry(_Type) -> ok.
+added_to_rabbit_registry(Type, _ModuleName) ->
+    persistent_term:erase(Type),
+    ok.
+
+removed_from_rabbit_registry(Type) ->
+    persistent_term:erase(Type),
+    ok.
