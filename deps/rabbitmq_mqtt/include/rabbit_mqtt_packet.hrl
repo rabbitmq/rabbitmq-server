@@ -225,11 +225,16 @@
                                  props = #{} :: properties()
                                 }).
 
-%% TODO Add compatibility for old #mqtt_msg{} record that could still be stored on disk
-%% in retained message stores (both ETS and DETS): Could either migrate or do the conversion
-%% lazily in rabbit_mqtt_retained_msg_store:lookup/2.
-%%
-%% MQTT application message.
+%% old MQTT application message up to 3.12
+-type mqtt_msg_v0() :: {RecordName :: mqtt_msg,
+                        Retain :: boolean(),
+                        Qos :: qos(),
+                        Topic :: binary(),
+                        Dup :: boolean(),
+                        Packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
+                        Payload :: binary()}.
+
+%% MQTT application message starting in 3.13
 -record(mqtt_msg, {retain :: boolean(),
                    qos :: qos(),
                    topic :: binary(),
@@ -245,9 +250,7 @@
 
 %% does not include vhost because vhost is used in the (D)ETS table name
 -record(retained_message, {topic :: binary(),
-                           mqtt_msg :: mqtt_msg()
+                           mqtt_msg :: mqtt_msg() | mqtt_msg_v0()
                           }).
-
--type retained_message() :: #retained_message{}.
 
 -type option(T) :: undefined | T.

@@ -48,7 +48,7 @@ insert(Topic, Msg, #store_state{table = T}) ->
   true = ets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}),
   ok.
 
--spec lookup(binary(), store_state()) -> mqtt_msg() | undefined.
+-spec lookup(binary(), store_state()) -> mqtt_msg() | mqtt_msg_v0() | undefined.
 lookup(Topic, #store_state{table = T}) ->
   case ets:lookup(T, Topic) of
     []      -> undefined;

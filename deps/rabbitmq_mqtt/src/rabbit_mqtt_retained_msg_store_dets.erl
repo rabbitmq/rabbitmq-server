@@ -42,7 +42,7 @@ insert(Topic, Msg, #store_state{table = T}) ->
   ok = dets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}).
 
 -spec lookup(binary(), store_state()) ->
-    mqtt_msg() | undefined.
+    mqtt_msg() | mqtt_msg_v0() | undefined.
 lookup(Topic, #store_state{table = T}) ->
   case dets:lookup(T, Topic) of
     []      -> undefined;
