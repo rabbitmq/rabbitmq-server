@@ -800,10 +800,13 @@ start_stream_tls_connection(Port) ->
     start_stream_connection(ssl, Port).
 
 start_stream_connection(Transport, Port) ->
-    TlsOpts = case Transport of
-        ssl -> [{verify, verify_none}];
-        _   -> []
-      end,
+    TlsOpts =
+        case Transport of
+            ssl ->
+                [{verify, verify_none}];
+            _ ->
+                []
+        end,
     {ok, S} =
         Transport:connect("localhost", Port,
                           [{active, false}, {mode, binary}] ++ TlsOpts),

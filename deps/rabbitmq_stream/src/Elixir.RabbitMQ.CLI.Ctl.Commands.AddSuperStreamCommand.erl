@@ -56,7 +56,8 @@ validate([], _Opts) ->
 validate([_Name], #{partitions := _, routing_keys := _}) ->
     {validation_failure,
      "Specify --partitions or routing-keys, not both."};
-validate([_Name], #{exchange_type := <<"x-super-stream">>, routing_keys := _}) ->
+validate([_Name],
+         #{exchange_type := <<"x-super-stream">>, routing_keys := _}) ->
     {validation_failure,
      "Exchange type x-super-stream cannot be used with routing-keys."};
 validate([_Name], #{partitions := Partitions}) when Partitions < 1 ->
@@ -153,8 +154,7 @@ usage() ->
       "s <partitions>] [--routing-keys <routing-keys>]">>.
 
 usage_additional() ->
-    [[<<"<name>">>,
-      <<"The name of the super stream.">>],
+    [[<<"<name>">>, <<"The name of the super stream.">>],
      [<<"--vhost <vhost>">>,
       <<"The virtual host the super stream is added to.">>],
      [<<"--partitions <partitions>">>,
@@ -180,26 +180,25 @@ run([SuperStream],
       timeout := Timeout,
       partitions := Partitions} =
         Opts) ->
-    Spec0 = maps:with([vhost,
-                       exchange_type], Opts),
-    Spec = Spec0#{username => cli_acting_user(),
-                  name => SuperStream,
-                  partitions_source => {partition_count, Partitions},
-                  arguments => stream_arguments(Opts)},
+    Spec0 = maps:with([vhost, exchange_type], Opts),
+    Spec =
+        Spec0#{username => cli_acting_user(),
+               name => SuperStream,
+               partitions_source => {partition_count, Partitions},
+               arguments => stream_arguments(Opts)},
     create_super_stream(NodeName, Timeout, Spec);
 run([SuperStream],
     #{node := NodeName,
       timeout := Timeout,
       routing_keys := RoutingKeysStr} =
         Opts) ->
-    Spec0 = maps:with([vhost,
-                       exchange_type], Opts),
-    RoutingKeys =
-        [K || K <- string:lexemes(RoutingKeysStr, ", ")],
-    Spec = Spec0#{username => cli_acting_user(),
-                  name => SuperStream,
-                  partitions_source => {routing_keys, RoutingKeys},
-                  arguments => stream_arguments(Opts)},
+    Spec0 = maps:with([vhost, exchange_type], Opts),
+    RoutingKeys = [K || K <- string:lexemes(RoutingKeysStr, ", ")],
+    Spec =
+        Spec0#{username => cli_acting_user(),
+               name => SuperStream,
+               partitions_source => {routing_keys, RoutingKeys},
+               arguments => stream_arguments(Opts)},
     create_super_stream(NodeName, Timeout, Spec).
 
 stream_arguments(Opts) ->
@@ -207,6 +206,7 @@ stream_arguments(Opts) ->
 
 %% Something strange, dialyzer infers that map_size/1 returns positive_integer()
 -dialyzer({no_match, stream_arguments/2}).
+
 stream_arguments(Acc, Arguments) when map_size(Arguments) =:= 0 ->
     Acc;
 stream_arguments(Acc, #{max_length_bytes := Value} = Arguments) ->
@@ -245,13 +245,12 @@ duration_to_seconds([{sign, _},
                      {seconds, S}]) ->
     Y * 365 * 86400 + M * 30 * 86400 + D * 86400 + H * 3600 + Mn * 60 + S.
 
-create_super_stream(NodeName,
-                    Timeout,
-                    Spec) ->
+create_super_stream(NodeName, Timeout, Spec) ->
     case rabbit_misc:rpc_call(NodeName,
                               rabbit_stream_manager,
                               create_super_stream,
-                              [Spec], Timeout)
+                              [Spec],
+                              Timeout)
     of
         ok ->
             {ok,

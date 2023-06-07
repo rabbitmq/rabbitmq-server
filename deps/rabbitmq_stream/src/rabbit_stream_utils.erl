@@ -235,23 +235,25 @@ sort_partitions(#exchange{type = direct}, Partitions) ->
                       {{_, Order1}, {_, Order2}} ->
                           rabbit_data_coercion:to_integer(Order1)
                           =< rabbit_data_coercion:to_integer(Order2);
-                      {undefined, {_, _Order2}} -> false;
-                      {{_, _Order1}, undefined} -> true;
-                      _ -> true
+                      {undefined, {_, _Order2}} ->
+                          false;
+                      {{_, _Order1}, undefined} ->
+                          true;
+                      _ ->
+                          true
                   end
                end,
                Partitions);
 sort_partitions(#exchange{type = 'x-super-stream'}, Partitions) ->
     lists:sort(fun(#binding{key = Key1}, #binding{key = Key2}) ->
-                          binary_to_integer(Key1)
-                          =< binary_to_integer(Key2)
-               end, Partitions).
+                  binary_to_integer(Key1) =< binary_to_integer(Key2)
+               end,
+               Partitions).
 
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
 
-partition_name(SuperStream, Suffix0)
-  when is_binary(SuperStream) ->
+partition_name(SuperStream, Suffix0) when is_binary(SuperStream) ->
     Suffix = rabbit_data_coercion:to_binary(Suffix0),
     <<SuperStream/binary, "-", Suffix/binary>>.
 

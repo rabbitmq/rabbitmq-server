@@ -60,25 +60,41 @@ route(#exchange{name = Name},
             end
     end.
 
-info(_) -> [].
-info(_, _) -> [].
-validate(_X) -> ok.
+info(_) ->
+    [].
+
+info(_, _) ->
+    [].
+
+validate(_X) ->
+    ok.
 
 validate_binding(_X, #binding{key = K}) ->
     try
         %% just check the Key is an integer
         _ = binary_to_integer(K),
         ok
-    catch error:badarg ->
+    catch
+        error:badarg ->
             {error,
              {binding_invalid, "The binding key must be an integer: ~tp", [K]}}
     end.
 
-create(_Serial, _X) -> ok.
-delete(_Serial, _X) -> ok.
-policy_changed(_X1, _X2) -> ok.
-add_binding(_Serial, _X, _B) -> ok.
-remove_bindings(_Serial, _X, _Bs) -> ok.
+create(_Serial, _X) ->
+    ok.
+
+delete(_Serial, _X) ->
+    ok.
+
+policy_changed(_X1, _X2) ->
+    ok.
+
+add_binding(_Serial, _X, _B) ->
+    ok.
+
+remove_bindings(_Serial, _X, _Bs) ->
+    ok.
+
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 

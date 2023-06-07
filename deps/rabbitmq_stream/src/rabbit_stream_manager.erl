@@ -30,9 +30,6 @@
          create/4,
          delete/3,
          create_super_stream/1,
-         %% obsolete use create_super_stream/1
-         % create_super_stream/3,
-         %% obsolete use create_super_stream/1
          create_super_stream/6,
          delete_super_stream/3,
          lookup_leader/2,
@@ -43,17 +40,22 @@
          partitions/2,
          partition_index/3]).
 
+         %% obsolete use create_super_stream/1
+         % create_super_stream/3,
+         %% obsolete use create_super_stream/1
+
 -record(state, {configuration}).
 
 -type super_stream_spec() ::
-#{name := binary(),
-  vhost := binary(),
-  username := binary(),
-  partitions_source := {partition_count, pos_integer()} |
-                       {routing_keys, [binary()]},
-  arguments => map(),
-  exchange_type => binary() %<<"direct">> | <<"x-super-stream">>,
- }.
+    #{name := binary(),
+      vhost := binary(),
+      username := binary(),
+      partitions_source :=
+          {partition_count, pos_integer()} | {routing_keys, [binary()]},
+      arguments => map(),
+      exchange_type => binary()}.
+
+                            %<<"direct">> | <<"x-super-stream">>,
 
 start_link(Conf) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Conf], []).
@@ -88,19 +90,16 @@ create_super_stream(VirtualHost,
                     Arguments,
                     RoutingKeys,
                     Username) ->
-    Options = #{partitions => Partitions,
-                args => Arguments,
-                routing_keys => RoutingKeys,
-                username => Username},
+    Options =
+        #{partitions => Partitions,
+          args => Arguments,
+          routing_keys => RoutingKeys,
+          username => Username},
     create_super_stream(VirtualHost, Name, Options).
 
-
-
--spec create_super_stream(binary(),
-                          binary(),
-                          map()) -> ok | {error, term()}.
-create_super_stream(VirtualHost,
-                    Name,
+-spec create_super_stream(binary(), binary(), map()) ->
+                             ok | {error, term()}.
+create_super_stream(VirtualHost, Name,
                     #{username := Username} = Options) ->
     Type = maps:get(exchange_type, Options, <<"direct">>),
     Partitions = maps:get(partitions, Options, []),
@@ -116,30 +115,29 @@ create_super_stream(VirtualHost,
                      RoutingKeys,
                      Username}).
 
-
 -spec create_super_stream(super_stream_spec()) ->
-    ok | {error, term()}.
+                             ok | {error, term()}.
 create_super_stream(#{exchange_type := <<"x-super-stream">>,
                       partitions_source := {routing_keys, _}}) ->
     {error, unsupported_specification};
 create_super_stream(#{name := Name,
                       vhost := VHost,
                       username := Username,
-                      partitions_source := PartitionSource} = Spec) ->
+                      partitions_source := PartitionSource} =
+                        Spec) ->
     Type = maps:get(exchange_type, Spec, <<"direct">>),
     Arguments = maps:get(arguments, Spec, #{}),
     {Partitions, RoutingKeys} =
         case PartitionSource of
             {partition_count, Count} ->
-                Streams = [rabbit_stream_utils:partition_name(Name, K)
-                           || K <- lists:seq(0, Count - 1)],
-                Keys = [integer_to_binary(K) ||
-                               K <- lists:seq(0, Count - 1)],
+                Streams =
+                    [rabbit_stream_utils:partition_name(Name, K)
+                     || K <- lists:seq(0, Count - 1)],
+                Keys = [integer_to_binary(K) || K <- lists:seq(0, Count - 1)],
                 {Streams, Keys};
             {routing_keys, Keys} ->
                 Streams =
-                    [rabbit_stream_utils:partition_name(Name, K)
-                     || K <- Keys],
+                    [rabbit_stream_utils:partition_name(Name, K) || K <- Keys],
                 {Streams, Keys}
         end,
 
@@ -825,15 +823,16 @@ add_super_stream_binding(VirtualHost,
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, ExchangeNameBin),
     QueueName = rabbit_misc:r(VirtualHost, queue, QueueNameBin),
     Pid = self(),
-    Arguments = case ExchangeType of
-                    <<"direct">> ->
-                        rabbit_misc:set_table_value([],
-                                                    <<"x-stream-partition-order">>,
-                                                    long,
-                                                    Order);
-                    _ ->
-                        []
-                end,
+    Arguments =
+        case ExchangeType of
+            <<"direct">> ->
+                rabbit_misc:set_table_value([],
+                                            <<"x-stream-partition-order">>,
+                                            long,
+                                            Order);
+            _ ->
+                []
+        end,
     case rabbit_binding:add(#binding{source = ExchangeName,
                                      destination = QueueName,
                                      key = RoutingKey,
@@ -952,22 +951,24 @@ is_resource_stream_queue(#resource{kind = queue} = Resource) ->
 is_resource_stream_queue(_) ->
     false.
 
-partition_index(#exchange{name = ExchangeName,
-                          type = ExchangeType} = Exchange, Stream) ->
+partition_index(#exchange{name = ExchangeName, type = ExchangeType} =
+                    Exchange,
+                Stream) ->
     UnorderedBindings =
         [Binding
          || Binding = #binding{destination = #resource{name = Q} = D}
-            <- rabbit_binding:list_for_source(ExchangeName),
+                <- rabbit_binding:list_for_source(ExchangeName),
             is_resource_stream_queue(D), Q == Stream],
     case UnorderedBindings of
         [] ->
             {error, stream_not_found};
         _ when ExchangeType =:= direct ->
-            Bindings = rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
+            Bindings =
+                rabbit_stream_utils:sort_partitions(Exchange,
+                                                    UnorderedBindings),
             Binding = lists:nth(1, Bindings),
             #binding{args = Args} = Binding,
-            case rabbit_misc:table_lookup(Args,
-                                          <<"x-stream-partition-order">>)
+            case rabbit_misc:table_lookup(Args, <<"x-stream-partition-order">>)
             of
                 {_, Order} ->
                     Index = rabbit_data_coercion:to_integer(Order),
