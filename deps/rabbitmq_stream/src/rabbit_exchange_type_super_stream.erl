@@ -45,14 +45,11 @@ route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = [RKey | _]}}) ->
     %% get all bindings for the exchange and use murmur3 to generate
     %% the binding key to match on
-    % MatchHead = #route{binding = #binding{source = Name, _ = '_'}},
-    % Routes = ets:select(?MNESIA_TABLE, [{MatchHead, [], ['$_']}]),
     case rabbit_binding:list_for_source(Name) of
         [] ->
             [];
         Bindings ->
             N = integer_to_binary(hash_mod(RKey, length(Bindings))),
-            % rabbit_log:debug("searching for ~p in ~p", [N, Routes]),
             case lists:search(fun(#binding{key = Key}) ->
                                       Key =:= N
                               end, Bindings) of

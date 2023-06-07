@@ -21,6 +21,7 @@ groups() ->
     [{non_parallel_tests, [],
       [manage_super_stream_exchange_type_direct,
        manage_super_stream_exchange_type_x_super_stream,
+       create_super_stream_with_routing_keys,
        route_direct_super_stream,
        lookup_leader,
        lookup_member,
@@ -114,7 +115,7 @@ manage_super_stream(Config, Type) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => Type,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
     % get the correct partitions
     ?assertEqual({ok,
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
@@ -125,7 +126,7 @@ manage_super_stream(Config, Type) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => Type,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
 
     % can delete it
     ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
@@ -138,9 +139,27 @@ manage_super_stream(Config, Type) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => Type,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
 
     ?assertMatch({ok, _}, delete_stream(Config, <<"invoices-1">>)),
+    ok.
+
+create_super_stream_with_routing_keys(Config) ->
+    RKs = [<<"1">>, <<"2">>, <<"3">>],
+    % create super stream
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     #{name => <<"invoices">>,
+                                       partitions_source => {routing_keys, RKs}})),
+
+    ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
+
+    % should fail when exchange_type is x-super-stream
+    ?assertMatch({error, _},
+                 create_super_stream(Config,
+                                     #{name => <<"invoices">>,
+                                       exchange_type => <<"x-super-stream">>,
+                                       partitions_source => {routing_keys, RKs}})),
     ok.
 
 route_direct_super_stream(Config) ->
@@ -149,7 +168,7 @@ route_direct_super_stream(Config) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => <<"direct">>,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
     % get the correct partitions
     ?assertEqual({ok,
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
@@ -169,7 +188,7 @@ partition_index(Config) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => <<"direct">>,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
     [?assertEqual({ok, Index},
                   partition_index(Config, <<"invoices">>, Stream))
      || {Index, Stream}
@@ -215,7 +234,7 @@ partition_index_x_super_stream(Config) ->
                  create_super_stream(Config,
                                      #{name => <<"invoices">>,
                                        exchange_type => <<"x-super-stream">>,
-                                       partitions_source => {partitions, 3}})),
+                                       partitions_source => {partition_count, 3}})),
     [?assertEqual({ok, Index},
                   partition_index(Config, <<"invoices">>, Stream))
      || {Index, Stream}

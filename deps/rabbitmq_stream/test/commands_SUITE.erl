@@ -55,6 +55,7 @@ groups() ->
        list_group_consumers_run]},
      {super_streams, [],
       [add_super_stream_merge_defaults,
+       add_delete_super_stream_x_super_stram_run,
        add_super_stream_validate,
        delete_super_stream_merge_defaults,
        delete_super_stream_validate,
@@ -617,6 +618,7 @@ add_delete_super_stream_run(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Opts =
         #{node => Node,
+          exchange_type => <<"direct">>,
           timeout => 10000,
           vhost => <<"/">>},
 
@@ -680,6 +682,35 @@ add_delete_super_stream_run(Config) ->
     ?assertMatch({ok, _},
                  ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
 
+    ok.
+
+add_delete_super_stream_x_super_stram_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          exchange_type => <<"x-super-stream">>,
+          timeout => 10000,
+          vhost => <<"/">>},
+
+    % with number of partitions
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{partitions => 3},
+                                                          Opts))),
+    ?assertEqual({ok,
+                  [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
+                 partitions(Config, <<"invoices">>)),
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({error, stream_not_found},
+                 partitions(Config, <<"invoices">>)),
+
+    % with routing keys
+    ?assertMatch({error, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{routing_keys =>
+                                                                <<" amer,emea , apac">>},
+                                                          Opts))),
     ok.
 
 partitions(Config, Name) ->

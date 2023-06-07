@@ -119,6 +119,9 @@ create_super_stream(VirtualHost,
 
 -spec create_super_stream(super_stream_spec()) ->
     ok | {error, term()}.
+create_super_stream(#{exchange_type := <<"x-super-stream">>,
+                      partitions_source := {routing_keys, _}}) ->
+    {error, unsupported_specification};
 create_super_stream(#{name := Name,
                       vhost := VHost,
                       username := Username,
@@ -127,7 +130,7 @@ create_super_stream(#{name := Name,
     Arguments = maps:get(arguments, Spec, #{}),
     {Partitions, RoutingKeys} =
         case PartitionSource of
-            {partitions, Count} ->
+            {partition_count, Count} ->
                 Streams = [rabbit_stream_utils:partition_name(Name, K)
                            || K <- lists:seq(0, Count - 1)],
                 Keys = [integer_to_binary(K) ||
@@ -650,15 +653,14 @@ delete_stream(VirtualHost, Reference, Username) ->
 super_stream_partitions(VirtualHost, SuperStream) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     try
-        _ = rabbit_exchange:lookup_or_die(ExchangeName),
+        Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
         UnorderedBindings =
             [Binding
              || Binding = #binding{destination = D}
                     <- rabbit_binding:list_for_source(ExchangeName),
                 is_resource_stream_queue(D)],
         OrderedBindings =
-            rabbit_stream_utils:sort_partitions(UnorderedBindings),
-        rabbit_log:debug("OrderedBindings ~p", [OrderedBindings]),
+            rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
         {ok,
          lists:foldl(fun (#binding{destination =
                                        #resource{kind = queue, name = Q}},
@@ -951,7 +953,7 @@ is_resource_stream_queue(_) ->
     false.
 
 partition_index(#exchange{name = ExchangeName,
-                          type = ExchangeType}, Stream) ->
+                          type = ExchangeType} = Exchange, Stream) ->
     UnorderedBindings =
         [Binding
          || Binding = #binding{destination = #resource{name = Q} = D}
@@ -961,7 +963,7 @@ partition_index(#exchange{name = ExchangeName,
         [] ->
             {error, stream_not_found};
         _ when ExchangeType =:= direct ->
-            Bindings = rabbit_stream_utils:sort_partitions(UnorderedBindings),
+            Bindings = rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
             Binding = lists:nth(1, Bindings),
             #binding{args = Args} = Binding,
             case rabbit_misc:table_lookup(Args,
