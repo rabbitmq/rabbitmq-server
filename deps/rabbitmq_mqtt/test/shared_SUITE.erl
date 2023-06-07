@@ -122,6 +122,7 @@ cluster_size_1_tests() ->
      ,default_queue_type
      ,incoming_message_interceptors
      ,utf8
+     ,retained_message_conversion
      ,bind_exchange_to_exchange
     ].
 
@@ -1598,6 +1599,29 @@ incoming_message_interceptors(Config) ->
 
     delete_queue(Ch, QName),
     true = rpc(Config, persistent_term, erase, [Key]),
+    ok = emqtt:disconnect(C).
+
+%% This test makes sure that a retained message that got written in 3.12 or earlier
+%% can be consumed in 3.13 or later.
+retained_message_conversion(Config) ->
+    Topic = <<"a/b">>,
+    Payload = <<"my retained msg">>,
+    OldMqttMsgFormat = {mqtt_msg, _Retain = true, _QoS = 1, Topic, _Dup = false, _PktId = 1, Payload},
+    RetainerPid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [<<"/">>]),
+    {rabbit_mqtt_retainer, StoreState, _} = sys:get_state(RetainerPid),
+    ok = rpc(Config, rabbit_mqtt_retained_msg_store, insert, [Topic, OldMqttMsgFormat, StoreState]),
+
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    receive {publish, #{client_pid := C,
+                        dup := false,
+                        qos := 1,
+                        retain := true,
+                        topic := Topic,
+                        payload := Payload}} -> ok
+    after 1000 -> ct:fail("missing retained message")
+    end,
+    ok = emqtt:publish(C, Topic, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C).
 
 %% Test that the server can handle UTF-8 encoded strings.

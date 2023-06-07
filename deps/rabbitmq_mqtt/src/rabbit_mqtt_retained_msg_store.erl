@@ -45,7 +45,7 @@
     ok.
 
 -callback lookup(Topic :: binary(), State :: any()) ->
-    mqtt_msg() | undefined.
+    mqtt_msg() | mqtt_msg_v0() | undefined.
 
 -callback delete(Topic :: binary(), State :: any()) ->
     ok.
@@ -82,7 +82,12 @@ insert(Topic, Msg, #?STATE{store_mod = Mod,
     mqtt_msg() | undefined.
 lookup(Topic, #?STATE{store_mod = Mod,
                       store_state = StoreState}) ->
-    Mod:lookup(Topic, StoreState).
+    case Mod:lookup(Topic, StoreState) of
+        OldMsg when is_record(OldMsg, mqtt_msg, 7) ->
+            convert_mqtt_msg(OldMsg);
+        Other ->
+            Other
+    end.
 
 -spec delete(Topic :: binary(), state()) -> ok.
 delete(Topic, #?STATE{store_mod = Mod,
@@ -112,3 +117,14 @@ expire(Mod, Tab) ->
          (_, Acc) ->
               Acc
       end, #{}, Tab).
+
+%% Retained messages written in 3.12 (or earlier) are converted when read in 3.13 (or later).
+-spec convert_mqtt_msg(mqtt_msg_v0()) -> mqtt_msg().
+convert_mqtt_msg({mqtt_msg, Retain, Qos, Topic, Dup, PacketId, Payload}) ->
+    #mqtt_msg{retain = Retain,
+              qos = Qos,
+              topic = Topic,
+              dup = Dup,
+              packet_id = PacketId,
+              payload = Payload,
+              props = #{}}.
