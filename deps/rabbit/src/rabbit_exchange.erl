@@ -375,14 +375,10 @@ route1(_, _, _, {[], _, QNames}) ->
     QNames;
 route1(Delivery, Decorators, Opts,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
-    XMod = type_to_module(Type),
-    %% TODO benchmark cost of erlang:function_exported/3
-    %% If it's slow, only call route/3 if XMod =:= rabbit_exchange_type_topic
-    ExchangeDests = case erlang:function_exported(XMod, route, 3) of
-                        true ->
-                            XMod:route(X, Delivery, Opts);
-                        false ->
-                            XMod:route(X, Delivery)
+    {Route, Arity} = type_to_route_fun(Type),
+    ExchangeDests = case Arity of
+                        2 -> Route(X, Delivery);
+                        3 -> Route(X, Delivery, Opts)
                     end,
     DecorateDests  = process_decorators(X, Decorators, Delivery),
     AlternateDests = process_alternate(X, ExchangeDests),
@@ -496,4 +492,18 @@ type_to_module(T) ->
             end;
         Module ->
             Module
+    end.
+
+type_to_route_fun(T) ->
+    case persistent_term:get(T, undefined) of
+        undefined ->
+            XMod = type_to_module(T),
+            FunArity = case erlang:function_exported(XMod, route, 3) of
+                           true -> {fun XMod:route/3, 3};
+                           false -> {fun XMod:route/2, 2}
+                       end,
+            persistent_term:put(T, FunArity),
+            FunArity;
+        FunArity ->
+            FunArity
     end.
