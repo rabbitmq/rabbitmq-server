@@ -45,11 +45,13 @@ end_per_testcase(_TestCase, _Config) ->
 %%%===================================================================
 
 sort_partitions(_Config) ->
-    [] = rabbit_stream_utils:sort_partitions([]),
+    Exchange = #exchange{type = direct},
+    [] = rabbit_stream_utils:sort_partitions(Exchange, []),
     ?assertEqual([<<"a">>, <<"b">>, <<"c">>],
                  [S
                   || #binding{destination = #resource{name = S}}
-                         <- rabbit_stream_utils:sort_partitions([binding(<<"c">>,
+                         <- rabbit_stream_utils:sort_partitions(Exchange,
+                                                                [binding(<<"c">>,
                                                                          2),
                                                                  binding(<<"b">>,
                                                                          1),
@@ -58,7 +60,8 @@ sort_partitions(_Config) ->
     ?assertEqual([<<"a">>, <<"c">>, <<"no-order-field">>],
                  [S
                   || #binding{destination = #resource{name = S}}
-                         <- rabbit_stream_utils:sort_partitions([binding(<<"c">>,
+                         <- rabbit_stream_utils:sort_partitions(Exchange,
+                                                                [binding(<<"c">>,
                                                                          10),
                                                                  binding(<<"no-order-field">>),
                                                                  binding(<<"a">>,

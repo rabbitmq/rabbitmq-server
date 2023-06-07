@@ -193,7 +193,7 @@ run([SuperStream],
       routing_keys := RoutingKeysStr} =
         Opts) ->
     Spec0 = maps:with([vhost, exchange_type], Opts),
-    RoutingKeys = [K || K <- string:lexemes(RoutingKeysStr, ", ")],
+    RoutingKeys = [string:trim(K) || K <- string:lexemes(RoutingKeysStr, ",")],
     Spec =
         Spec0#{username => cli_acting_user(),
                name => SuperStream,
