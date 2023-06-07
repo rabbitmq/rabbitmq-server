@@ -21,6 +21,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
 import com.rabbitmq.stream.impl.Client;
 import com.rabbitmq.stream.impl.Client.Response;
 import io.netty.channel.EventLoopGroup;
@@ -28,10 +30,11 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BooleanSupplier;
+import java.util.stream.IntStream;
 import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.*;
@@ -40,12 +43,17 @@ public class TestUtils {
 
   static int streamPortNode1() {
     String port = System.getProperty("node1.stream.port", "5552");
-    return Integer.valueOf(port);
+    return Integer.parseInt(port);
   }
 
   static int streamPortNode2() {
     String port = System.getProperty("node2.stream.port", "5552");
-    return Integer.valueOf(port);
+    return Integer.parseInt(port);
+  }
+
+  static int amqpPortNode1() {
+    String port = System.getProperty("node1.amqp.port", "5672");
+    return Integer.parseInt(port);
   }
 
   static void waitUntil(BooleanSupplier condition) throws InterruptedException {
@@ -217,5 +225,68 @@ public class TestUtils {
           "response code %d",
           expectedResponse);
     }
+  }
+
+  static void deleteSuperStreamTopology(Connection connection, String superStream, int partitions)
+      throws Exception {
+    String[] routingKeys =
+        IntStream.range(0, partitions).mapToObj(String::valueOf).toArray(String[]::new);
+    try (Channel ch = connection.createChannel()) {
+      ch.exchangeDelete(superStream);
+      for (String routingKey : routingKeys) {
+        String partitionName = superStream + "-" + routingKey;
+        ch.queueDelete(partitionName);
+      }
+    }
+  }
+
+  static void declareSuperStreamTopology(Connection connection, String superStream, int partitions)
+      throws Exception {
+    String[] rks = IntStream.range(0, partitions).mapToObj(String::valueOf).toArray(String[]::new);
+    try (Channel ch = connection.createChannel()) {
+      ch.exchangeDeclare(
+          superStream,
+          "x-super-stream",
+          true,
+          false,
+          Collections.singletonMap("x-super-stream", true));
+
+      List<Object[]> bindings = new ArrayList<>(rks.length);
+      for (int i = 0; i < rks.length; i++) {
+        bindings.add(new Object[] {rks[i], i});
+      }
+      // shuffle the order to make sure we get in the correct order from the server
+      Collections.shuffle(bindings);
+
+      for (Object[] binding : bindings) {
+        String routingKey = (String) binding[0];
+        String partitionName = superStream + "-" + routingKey;
+        ch.queueDeclare(
+            partitionName, true, false, false, Collections.singletonMap("x-queue-type", "stream"));
+        ch.queueBind(
+            partitionName,
+            superStream,
+            routingKey,
+            Collections.singletonMap("x-stream-partition-order", binding[1]));
+      }
+    }
+  }
+
+  static Condition<CountDownLatch> completed() {
+    return new Condition<>(
+        countDownLatch -> {
+          try {
+            return countDownLatch.await(10, SECONDS);
+          } catch (InterruptedException e) {
+            Thread.interrupted();
+            throw new RuntimeException(e);
+          }
+        },
+        "not completed after 10 seconds");
+  }
+
+  interface CallableConsumer<T> {
+
+    void accept(T o) throws Exception;
   }
 }

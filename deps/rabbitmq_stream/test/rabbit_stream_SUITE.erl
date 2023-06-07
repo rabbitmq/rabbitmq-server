@@ -424,6 +424,7 @@ java(Config) ->
     StreamPortNode2 = get_stream_port(Config, 1),
     StreamPortTlsNode1 = get_stream_port_tls(Config, 0),
     StreamPortTlsNode2 = get_stream_port_tls(Config, 1),
+    AmqpPortNode1 = get_amqp_port(Config),
     Node1Name = get_node_name(Config, 0),
     Node2Name = get_node_name(Config, 1),
     RabbitMqCtl = get_rabbitmqctl(Config),
@@ -439,6 +440,7 @@ java(Config) ->
                                 {"NODE2_STREAM_PORT=~b", [StreamPortNode2]},
                                 {"NODE2_STREAM_PORT_TLS=~b",
                                  [StreamPortTlsNode2]},
+                                {"NODE1_AMQP_PORT=~b", [AmqpPortNode1]},
                                 {"RABBITMQCTL=~tp", [RabbitMqCtl]}]),
     {ok, _} = MakeResult.
 
@@ -458,6 +460,9 @@ get_stream_port_tls(Config) ->
 get_stream_port_tls(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node,
                                              tcp_port_stream_tls).
+
+get_amqp_port(Config) ->
+   rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp).
 
 get_node_name(Config) ->
     get_node_name(Config, 0).
