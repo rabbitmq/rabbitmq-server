@@ -31,9 +31,9 @@
 %%
 %% @private
 
-set(#binding{source = XName, key = RoutingKey, destination = Destination, args = Args}) ->
+set(#binding{source = XName, key = BindingKey, destination = Destination, args = Args}) ->
     rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(XName, RoutingKey, Destination, Args) end
+      #{mnesia => fun() -> set_in_mnesia(XName, BindingKey, Destination, Args) end
        }).
 
 %% -------------------------------------------------------------------
@@ -115,10 +115,10 @@ clear_in_mnesia() ->
 split_topic_key(Key) ->
     split_topic_key(Key, [], []).
 
-set_in_mnesia(XName, RoutingKey, Destination, Args) ->
+set_in_mnesia(XName, BindingKey, Destination, Args) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
-              FinalNode = follow_down_create(XName, split_topic_key(RoutingKey)),
+              FinalNode = follow_down_create(XName, split_topic_key(BindingKey)),
               trie_add_binding(XName, FinalNode, Destination, Args),
               ok
       end).
