@@ -246,6 +246,12 @@ erlang_package.hex_package(
     version = "1.4.1",
 )
 
+erlang_package.git_package(
+    branch = "master",
+    build_file = "@//:bazel/BUILD.murmerl3",
+    repository = "rabbitmq/murmerl3",
+)
+
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
@@ -357,6 +363,7 @@ use_repo(
     "gun",
     "jose",
     "json",
+    "murmerl3",
     "observer_cli",
     "osiris",
     "prometheus",
