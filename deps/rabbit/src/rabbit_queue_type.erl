@@ -558,7 +558,6 @@ add_binding_keys(Delivery, []) ->
 add_binding_keys(Delivery, BindingKeys) ->
     L = [{longstr, B} || B <- BindingKeys],
     BasicMsg = rabbit_basic:add_header(
-                 %% TODO avoid binary creation?
                  <<"x-binding-keys">>, array, L,
                  Delivery#delivery.message),
     Delivery#delivery{message = BasicMsg}.
