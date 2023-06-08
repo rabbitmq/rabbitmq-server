@@ -36,6 +36,7 @@
 -define(RC_DISCONNECT_WITH_WILL, 16#04).
 -define(RC_NO_SUBSCRIPTION_EXISTED, 16#11).
 -define(RC_UNSPECIFIED_ERROR, 16#80).
+-define(RC_PROTOCOL_ERROR, 16#82).
 -define(RC_SERVER_SHUTTING_DOWN, 16#8B).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 -define(RC_TOPIC_ALIAS_INVALID, 16#94).
@@ -117,7 +118,9 @@ cluster_size_1_tests() ->
      will_delay_properties,
      will_properties,
      retain_properties,
-     invalid_topic_alias
+     invalid_topic_alias,
+     unknown_topic_alias,
+     topic_alias
     ].
 
 cluster_size_3_tests() ->
@@ -1806,6 +1809,33 @@ invalid_topic_alias(Config) ->
     unlink(C2),
     ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
                     emqtt:publish(C2, Topic, #{'Topic-Alias' => 21}, <<"msg">>, [{qos, 1}])).
+
+unknown_topic_alias(Config) ->
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config),
+    unlink(C),
+    ?assertMatch({error, {disconnected, ?RC_PROTOCOL_ERROR, _}},
+                    emqtt:publish(C, <<>>, #{'Topic-Alias' => 1}, <<"msg">>, [{qos, 1}])).
+
+topic_alias(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<ClientId/binary, "_sub">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, [{qos, 1}]),
+
+    Pub = connect(<<ClientId/binary, "_pub">>, Config),
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Topic-Alias' => 5}, <<"msg1">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"msg2">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"msg3">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Topic-Alias' => 7}, <<"msg4">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"msg5">>, [{qos, 1}]),
+    expect_publishes(Sub, Topic, [<<"msg1">>, <<"msg2">>, <<"msg3">>, <<"msg4">>, <<"msg5">>]),
+
+    {ok, _, [0]} = emqtt:subscribe(Sub, <<Topic/binary, "_2">>, [{qos, 0}]),
+    {ok, _} = emqtt:publish(Pub, <<Topic/binary, "_2">>, #{'Topic-Alias' => 2}, <<"msg6">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 2}, <<"msg7">>, [{qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"msg8">>, [{qos, 1}]),
+    expect_publishes(Sub, <<Topic/binary, "_2">>, [<<"msg6">>, <<"msg7">>, <<"msg8">>]),
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub).
 
 %% -------------------------------------------------------------------
 %% Helpers
