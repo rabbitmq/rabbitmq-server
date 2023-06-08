@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.10.5",
+    version = "3.10.7",
 )
 
 bazel_dep(

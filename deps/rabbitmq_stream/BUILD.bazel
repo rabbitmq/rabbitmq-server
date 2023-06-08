@@ -49,8 +49,6 @@ test_suite_beam_files(name = "test_suite_beam_files")
 
 # gazelle:erlang_app_extra_app ssl
 
-# gazelle:erlang_app_dep murmerl3
-
 # gazelle:erlang_app_dep_exclude rabbit_common
 
 rabbitmq_app(
