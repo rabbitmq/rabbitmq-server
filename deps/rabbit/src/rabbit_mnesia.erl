@@ -172,7 +172,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
     DiscoveredNodes = lists:usort(DiscoveredNodes0),
     rabbit_log:info("All discovered existing cluster peers: ~ts",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
-    Peers = nodes_excl_me(DiscoveredNodes),
+    Peers = rabbit_nodes:nodes_excl_me(DiscoveredNodes),
     case Peers of
         [] ->
             rabbit_log:info("Discovered no peer nodes to cluster with. "
@@ -199,7 +199,7 @@ join_discovered_peers_with_retries(TryNodes, _NodeType, 0, _DelayInterval) ->
                 [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
 join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval) ->
-    case find_reachable_peer_to_cluster_with(nodes_excl_me(TryNodes)) of
+    case find_reachable_peer_to_cluster_with(rabbit_nodes:nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~ts' selected for auto-clustering", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
@@ -239,7 +239,7 @@ join_cluster(DiscoveryNode, NodeType) ->
         false -> ok
     end,
     {ClusterNodes, _, _} = discover_cluster([DiscoveryNode]),
-    case me_in_nodes(ClusterNodes) of
+    case rabbit_nodes:me_in_nodes(ClusterNodes) of
         false ->
             case check_cluster_consistency(DiscoveryNode, false) of
                 {ok, _} ->
@@ -342,7 +342,7 @@ update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
     Status = {AllNodes, _, _} = discover_cluster([DiscoveryNode]),
-    case me_in_nodes(AllNodes) of
+    case rabbit_nodes:me_in_nodes(AllNodes) of
         true ->
             %% As in `check_consistency/0', we can safely delete the
             %% schema here, since it'll be replicated from the other
@@ -502,7 +502,7 @@ cluster_status_from_mnesia() ->
                 true  -> AllNodes = mnesia:system_info(db_nodes),
                          DiscCopies = mnesia:table_info(schema, disc_copies),
                          DiscNodes = case NodeType of
-                                         disc -> nodes_incl_me(DiscCopies);
+                                         disc -> rabbit_nodes:nodes_incl_me(DiscCopies);
                                          ram  -> DiscCopies
                                      end,
                          %% `mnesia:system_info(running_db_nodes)' is safe since
@@ -524,7 +524,7 @@ cluster_status(WhichNodes) ->
                 %% The cluster status file records the status when the node is
                 %% online, but we know for sure that the node is offline now, so
                 %% we can remove it from the list of running nodes.
-                {AllNodes0, DiscNodes0, nodes_excl_me(RunningNodes0)}
+                {AllNodes0, DiscNodes0, rabbit_nodes:nodes_excl_me(RunningNodes0)}
         end,
     case WhichNodes of
         status  -> Nodes;
@@ -544,7 +544,7 @@ node_info() ->
 node_type() ->
     {_AllNodes, DiscNodes, _RunningNodes} =
         rabbit_node_monitor:read_cluster_status(),
-    case DiscNodes =:= [] orelse me_in_nodes(DiscNodes) of
+    case DiscNodes =:= [] orelse rabbit_nodes:me_in_nodes(DiscNodes) of
         true  -> disc;
         false -> ram
     end.
@@ -580,7 +580,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     %% Feature flags need to be synced before any change to Mnesia
     %% membership. If enabling feature flags fails, Mnesia could remain
     %% in an inconsistent state that prevents later joining the nodes.
-    ensure_feature_flags_are_in_sync(nodes_excl_me(ClusterNodes), NodeIsVirgin),
+    ensure_feature_flags_are_in_sync(rabbit_nodes:nodes_excl_me(ClusterNodes), NodeIsVirgin),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -717,7 +717,7 @@ check_cluster_consistency() ->
     case lists:foldl(
            fun (Node,  {error, _})    -> check_cluster_consistency(Node, true);
                (_Node, {ok, Status})  -> {ok, Status}
-           end, {error, not_found}, nodes_excl_me(cluster_nodes(all)))
+           end, {error, not_found}, rabbit_nodes:nodes_excl_me(cluster_nodes(all)))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
             case ordsets:is_subset(ordsets:from_list(cluster_nodes(all)),
@@ -966,7 +966,7 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    case nodes_excl_me(cluster_nodes(all)) of
+    case rabbit_nodes:nodes_excl_me(cluster_nodes(all)) of
         []       -> ok;
         AllNodes -> case lists:any(fun leave_cluster/1, AllNodes) of
                         true  -> ok;
@@ -1003,7 +1003,7 @@ stop_mnesia() ->
     ensure_mnesia_not_running().
 
 change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
-    ClusterNodes = nodes_excl_me(ClusterNodes0),
+    ClusterNodes = rabbit_nodes:nodes_excl_me(ClusterNodes0),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
         {{ok, []}, [_|_]} when CheckOtherNodes ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
@@ -1024,7 +1024,7 @@ check_consistency(Node, OTP, Rabbit, ProtocolVersion, Status) ->
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
-    case me_in_nodes(RemoteAllNodes) of
+    case rabbit_nodes:me_in_nodes(RemoteAllNodes) of
         true ->
             {ok, RemoteStatus};
         false ->
@@ -1151,12 +1151,6 @@ is_only_clustered_disc_node() ->
 
 are_we_clustered_with(Node) ->
     lists:member(Node, mnesia_lib:all_nodes()).
-
-me_in_nodes(Nodes) -> lists:member(node(), Nodes).
-
-nodes_incl_me(Nodes) -> lists:usort([node()|Nodes]).
-
-nodes_excl_me(Nodes) -> Nodes -- [node()].
 
 -spec e(any()) -> no_return().
 
