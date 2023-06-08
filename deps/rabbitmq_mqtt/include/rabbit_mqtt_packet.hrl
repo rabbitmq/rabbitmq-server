@@ -254,4 +254,6 @@
                            mqtt_msg :: mqtt_msg() | mqtt_msg_v0()
                           }).
 
+-type topic_aliases() :: map().
+
 -type option(T) :: undefined | T.

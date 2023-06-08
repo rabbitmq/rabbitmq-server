@@ -96,7 +96,8 @@
          ra_register_state :: option(registered | {pending, reference()}),
          %% quorum queues and streams whose soft limit has been exceeded
          queues_soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
-         qos0_messages_dropped = 0 :: non_neg_integer()
+         qos0_messages_dropped = 0 :: non_neg_integer(),
+         topic_aliases :: option(topic_aliases())
         }).
 
 -opaque state() :: #state{}.
@@ -213,7 +214,8 @@ process_connect(
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx},
-               ra_register_state = RaRegisterState},
+               ra_register_state = RaRegisterState,
+               topic_aliases = #{}},
         ok ?= clear_will_msg(S),
         {ok, S}
     end,
@@ -372,22 +374,25 @@ process_request(?PUBLISH,
                    fixed = #mqtt_packet_fixed{qos = Qos,
                                               retain = Retain,
                                               dup = Dup},
-                   variable = #mqtt_packet_publish{topic_name = Topic,
-                                                   packet_id = PacketId,
+                   variable = #mqtt_packet_publish{packet_id = PacketId,
                                                    props = Props},
-                   payload = Payload},
+                   payload = Payload} = Packet,
                 State0 = #state{unacked_client_pubs = U,
                                 cfg = #cfg{proto_ver = ProtoVer,
                                            client_id = ClientId}}) ->
-    case check_topic_alias(Props) of
-        error ->
+    case process_alias(Packet, State0) of
+        {error, invalid_alias} ->
             ?LOG_WARNING("MQTT invalid topic alias. Disconnecting MQTT client ~ts", [ClientId]),
             send_disconnect(?RC_TOPIC_ALIAS_INVALID, State0),
             {stop, {disconnect, server_initiated}, State0};
-        {ok, _Alias} ->
+        {error, unknown_alias} ->
+            ?LOG_WARNING("MQTT unknown topic alias. Disconnecting MQTT client ~ts", [ClientId]),
+            send_disconnect(?RC_PROTOCOL_ERROR, State0),
+            {stop, {disconnect, server_initiated}, State0};
+        {ok, Topic, State1} ->
             EffectiveQos = maybe_downgrade_qos(Qos),
             rabbit_global_counters:messages_received(ProtoVer, 1),
-            State = maybe_increment_publisher(State0),
+            State = maybe_increment_publisher(State1),
             Msg = #mqtt_msg{retain = Retain,
                             qos = EffectiveQos,
                             topic = Topic,
@@ -1231,22 +1236,54 @@ maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
-check_topic_alias(Props)->
-    %% MQTT spec 3.3.2.3.4
-    %% A Topic Alias of 0 is not permitted [MQTT-3.3.2-8].
-    %% A Client MUST NOT send a PUBLISH packet with a Topic Alias greater than the Topic Alias
-    %% Maximum value returned by the Server in the CONNACK packet [MQTT-3.3.2-9].
-    case maps:find('Topic-Alias', Props) of
-        {ok, Value} ->
-            case Value > 0 andalso Value =< persistent_term:get(?TOPIC_ALIAS_MAX) of
-                true ->
-                    {ok, Value};
-                false ->
-                    error
+%% MQTT5 spec 3.3.2.3.4
+%% A Topic Alias of 0 is not permitted [MQTT-3.3.2-8].
+%% A Client MUST NOT send a PUBLISH packet with a Topic Alias greater than the Topic Alias
+%% Maximum value returned by the Server in the CONNACK packet [MQTT-3.3.2-9].
+%% MQTT5 spec 3.3.4
+%% If the receiver does not already have a mapping for this Topic Alias and the packet has
+%% a zero length Topic Name field it is a Protocol Error, the receiver uses DISCONNECT with Reason Code of 0x82.
+process_alias(#mqtt_packet{variable = #mqtt_packet_publish{topic_name = <<>>,
+                                                          props = #{'Topic-Alias' := Alias}}},
+              #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5},
+                     topic_aliases = TopicAliases} = State) ->
+    case Alias  > 0 andalso Alias =< persistent_term:get(?TOPIC_ALIAS_MAX) of
+        true ->
+            case find_alias(Alias, TopicAliases) of
+                {ok, TopicName} ->
+                    {ok, TopicName, State};
+                {error, _} = Err ->
+                    Err
                 end;
+        false ->
+            {error, invalid_alias}
+        end;
+process_alias(#mqtt_packet{
+                          variable = #mqtt_packet_publish{
+                          topic_name = Topic,
+                          props = #{'Topic-Alias' := Alias}
+                        }
+    },
+    State = #state{topic_aliases = TopicAliases,
+                   cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+    case Alias  > 0 andalso Alias =< persistent_term:get(?TOPIC_ALIAS_MAX) of
+        true ->
+            {ok, Topic, State#state{topic_aliases = maps:put(Alias, Topic, TopicAliases)}};
+        false ->
+            {error, invalid_alias}
+        end;
+process_alias(#mqtt_packet{variable = #mqtt_packet_publish{topic_name = Topic}}, State) ->
+    {ok, Topic, State}.
+
+find_alias(_Alias, undefined) ->
+    {error, unknown_alias};
+find_alias(Alias, TopicAliases) ->
+    case maps:find(Alias, TopicAliases) of
         error ->
-            {ok, noalias}
-    end.
+            {error, unknown_alias};
+        Return ->
+            Return
+        end.
 
 ensure_queue(QoS, State) ->
     case get_queue(QoS, State) of
