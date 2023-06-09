@@ -78,8 +78,8 @@ erlang_config.internal_erlang_from_github_release(
 
 erlang_config.internal_erlang_from_github_release(
     name = "26",
-    sha256 = "3ff3c53d7ef9a45b5720e95b8756269c1a1b58eb51accc992ca97522fdb234d4",
-    version = "26.0",
+    sha256 = "d0c8e17f73e7146294ba39f499de086d0640058ec038c24021722ea612207d92",
+    version = "26.0.1",
 )
 
 erlang_config.internal_erlang_from_http_archive(
