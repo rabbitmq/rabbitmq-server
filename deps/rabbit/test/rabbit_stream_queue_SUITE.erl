@@ -88,6 +88,7 @@ all_tests() ->
      declare_invalid_properties,
      declare_server_named,
      declare_invalid_arg,
+     declare_invalid_filter_size,
      consume_invalid_arg,
      declare_queue,
      delete_queue,
@@ -261,7 +262,11 @@ declare_args(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-length-bytes">>, long, 2_000_000}])),
+                                 {<<"x-max-length-bytes">>, long, 2_000_000},
+                                 {<<"x-max-age">>, longstr, <<"10D">>},
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 5_000_000},
+                                 {<<"x-stream-filter-size-bytes">>, long, 32}
+                                ])),
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -330,6 +335,17 @@ declare_invalid_arg(Config) ->
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
        declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                        {<<"x-overflow">>, longstr, <<"reject-publish">>}])).
+
+declare_invalid_filter_size(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - Invalid value for  x-stream-filter-size-bytes">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                       {<<"x-stream-filter-size-bytes">>, long, 256}])).
 
 consume_invalid_arg(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -2232,7 +2248,8 @@ update_retention_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 200}
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 200},
+                                 {<<"x-stream-filter-size-bytes">>, long, 32}
                                 ])),
     check_leader_and_replicas(Config, Servers),
 

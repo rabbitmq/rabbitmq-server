@@ -110,7 +110,9 @@ declare(Q0, _Node) when ?amqqueue_is_stream(Q0) ->
            [fun rabbit_queue_type_util:check_auto_delete/1,
             fun rabbit_queue_type_util:check_exclusive/1,
             fun rabbit_queue_type_util:check_non_durable/1,
-            fun rabbit_stream_queue:check_max_segment_size_bytes/1],
+            fun check_max_segment_size_bytes/1,
+            fun check_filter_size/1
+           ],
            Q0) of
         ok ->
             create_stream(Q0);
@@ -126,6 +128,18 @@ check_max_segment_size_bytes(Q) ->
         {_Type, Val} when Val > ?MAX_STREAM_MAX_SEGMENT_SIZE ->
             {protocol_error, precondition_failed, "Exceeded max value for x-stream-max-segment-size-bytes",
              []};
+        _ ->
+            ok
+    end.
+
+check_filter_size(Q) ->
+    Args = amqqueue:get_arguments(Q),
+    case rabbit_misc:table_lookup(Args, <<"x-stream-filter-size-bytes">>) of
+        undefined ->
+            ok;
+        {_Type, Val} when Val > 255 orelse Val < 16 ->
+            {protocol_error, precondition_failed,
+             "Invalid value for  x-stream-filter-size-bytes", []};
         _ ->
             ok
     end.
@@ -865,34 +879,29 @@ delete_replica(VHost, Name, Node) ->
 make_stream_conf(Q) ->
     QName = amqqueue:get_name(Q),
     Name = stream_name(QName),
-    %% MaxLength = args_policy_lookup(<<"max-length">>, policy_precedence/2, Q),
-    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
-    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
     Formatter = {?MODULE, format_osiris_event, [QName]},
-    Retention = lists:filter(fun({_, R}) ->
-                                     R =/= undefined
-                             end, [{max_bytes, MaxBytes},
-                                   {max_age, MaxAge}]),
-    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
-                   #{reference => QName,
-                     name => Name,
-                     retention => Retention,
-                     event_formatter => Formatter,
-                     epoch => 1}).
+    update_stream_conf(Q, #{reference => QName,
+                            name => Name,
+                            event_formatter => Formatter,
+                            epoch => 1}).
 
 update_stream_conf(undefined, #{} = Conf) ->
     Conf;
 update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>,
+                                             fun policy_precedence/2, Q),
+    FilterSizeBytes = args_policy_lookup(<<"stream-filter-size-bytes">>,
+                                         fun policy_precedence/2, Q),
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
-    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
-                   Conf#{retention => Retention}).
+    add_if_defined(
+      filter_size, FilterSizeBytes,
+      add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
+                     Conf#{retention => Retention})).
 
 add_if_defined(_, undefined, Map) ->
     Map;
