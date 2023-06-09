@@ -170,6 +170,12 @@ stream_queue_arguments(ArgumentsAcc,
                              Value}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"queue-leader-locator">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"stream-filter-size-bytes">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-stream-filter-size-bytes">>, long,
+                             binary_to_integer(Value)}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"stream-filter-size-bytes">>, Arguments));
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
     ArgumentsAcc.
 
@@ -191,6 +197,11 @@ validate_stream_queue_arguments([{<<"x-queue-leader-locator">>,
         false ->
             error
     end;
+validate_stream_queue_arguments([{<<"x-stream-filter-size-bytes">>, long,
+                                  FilterSize}
+                                 | _])
+    when FilterSize < 16 orelse FilterSize > 255 ->
+    error;
 validate_stream_queue_arguments([_ | T]) ->
     validate_stream_queue_arguments(T).
 

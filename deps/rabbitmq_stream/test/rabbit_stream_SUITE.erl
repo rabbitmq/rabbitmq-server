@@ -46,7 +46,8 @@ groups() ->
        timeout_authenticating,
        timeout_close_sent,
        max_segment_size_bytes_validation,
-       close_connection_on_consumer_update_timeout]},
+       close_connection_on_consumer_update_timeout,
+       set_filter_size]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
@@ -431,6 +432,37 @@ close_connection_on_consumer_update_timeout(Config) ->
     Cb3 = test_delete_stream(Transport, Sb, Stream, Cb2, false),
     _Cb4 = test_close(Transport, Sb, Cb3),
     closed = wait_for_socket_close(Transport, Sb, 10),
+    ok.
+
+set_filter_size(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+
+    Tests = [
+             {128, ?RESPONSE_CODE_OK},
+             {15, ?RESPONSE_CODE_PRECONDITION_FAILED},
+             {256, ?RESPONSE_CODE_PRECONDITION_FAILED}
+            ],
+
+    C3 = lists:foldl(fun({Size, ExpectedResponseCode}, Conn0) ->
+                             Frame = rabbit_stream_core:frame(
+                                       {request, 1,
+                                        {create_stream, Stream,
+                                         #{<<"stream-filter-size-bytes">> => integer_to_binary(Size)}}}),
+                             ok = Transport:send(S, Frame),
+                             {Cmd, Conn1} = receive_commands(Transport, S, Conn0),
+                             ?assertMatch({response, 1, {create_stream, ExpectedResponseCode}}, Cmd),
+                             Conn1
+                     end, C2, Tests),
+
+    _ = test_close(Transport, S, C3),
+    closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
 consumer_count(Config) ->
