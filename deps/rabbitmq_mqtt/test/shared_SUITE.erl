@@ -124,6 +124,7 @@ cluster_size_1_tests() ->
      ,utf8
      ,retained_message_conversion
      ,bind_exchange_to_exchange
+     ,bind_exchange_to_exchange_single_message
     ].
 
 cluster_size_3_tests() ->
@@ -503,7 +504,9 @@ events(Config) ->
     assert_event_prop(ExpectedConnectionProps, E1),
 
     Qos = 0,
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, Qos),
+    MqttTopic = <<"my/topic">>,
+    AmqpTopic = <<"my.topic">>,
+    {ok, _, _} = emqtt:subscribe(C, MqttTopic, Qos),
 
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
@@ -532,18 +535,19 @@ events(Config) ->
                       E2),
     assert_event_type(binding_created, E3),
     ExpectedBindingArgs = case ?config(mqtt_version, Config) of
-                              v5 -> [{mqtt_subscription_opts, Qos, false, false, 0, undefined}];
+                              v5 -> [{mqtt_subscription_opts, Qos, false, false, 0, undefined},
+                                     {<<"x-binding-key">>, longstr, AmqpTopic}];
                               _ -> []
                           end,
     assert_event_prop([{source_name, <<"amq.topic">>},
                        {source_kind, exchange},
                        {destination_name, QueueNameBin},
                        {destination_kind, queue},
-                       {routing_key, <<"TopicA">>},
+                       {routing_key, AmqpTopic},
                        {arguments, ExpectedBindingArgs}],
                       E3),
 
-    {ok, _, _} = emqtt:unsubscribe(C, <<"TopicA">>),
+    {ok, _, _} = emqtt:unsubscribe(C, MqttTopic),
 
     [E5] = get_events(Server),
     assert_event_type(binding_deleted, E5),
@@ -1656,7 +1660,40 @@ bind_exchange_to_exchange(Config) ->
     {ok, _} = emqtt:publish(C, <<"a/b">>, <<"msg">>, qos1),
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                              amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+    #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+    ok = emqtt:disconnect(C).
+
+bind_exchange_to_exchange_single_message(Config) ->
+    SourceX = <<"amq.topic">>,
+    DestinationX = <<"destination">>,
+    Q = <<"q">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DestinationX,
+                                                                         durable = true,
+                                                                         auto_delete = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q,
+                                                                   durable = true}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
+                                                             exchange = DestinationX,
+                                                             routing_key = <<"a.b">>}),
+    #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = DestinationX,
+                                                                   source = SourceX,
+                                                                   routing_key = <<"*.b">>}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
+                                                             exchange = SourceX,
+                                                             routing_key = <<"a.b">>}),
+    C = connect(?FUNCTION_NAME, Config),
+    %% Message should be routed as follows:
+    %% SourceX -> DestinationX -> Q and
+    %% SourceX -> Q
+    {ok, _} = emqtt:publish(C, <<"a/b">>, <<"msg">>, qos1),
+    %% However, since we publish only one time a single message and have a single destination queue,
+    %% we expect only one copy of the message to end up in the destination queue.
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
+    timer:sleep(10),
+    ?assertEqual(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
     ok = emqtt:disconnect(C).
 
 %% -------------------------------------------------------------------

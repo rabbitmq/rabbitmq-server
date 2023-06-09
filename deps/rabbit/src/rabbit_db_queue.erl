@@ -327,13 +327,14 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
 %% -------------------------------------------------------------------
 
 -spec get_many(rabbit_exchange:route_return()) ->
-    [amqqueue:amqqueue() | {amqqueue:amqqueue(), [rabbit_types:binding_key(), ...]}].
+    [amqqueue:amqqueue() | {amqqueue:amqqueue(), rabbit_types:unique_binding_keys()}].
 get_many(Names) when is_list(Names) ->
     rabbit_db:run(
       #{mnesia => fun() -> get_many_in_mnesia(?MNESIA_TABLE, Names) end
        }).
+
 get_many_in_mnesia(Table, [{Name, BindingKeys}])
-  when is_list(BindingKeys) ->
+  when is_map(BindingKeys) ->
     case ets:lookup(Table, Name) of
         [] -> [];
         [Q] -> [{Q, BindingKeys}]
@@ -345,7 +346,7 @@ get_many_in_mnesia(Table, Names)
     %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
     %% expensive for reasons explained in rabbit_mnesia:dirty_read/1.
     lists:filtermap(fun({Name, BindingKeys})
-                          when is_list(BindingKeys) ->
+                          when is_map(BindingKeys) ->
                             case ets:lookup(Table, Name) of
                                 [] -> false;
                                 [Q] -> {true, {Q, BindingKeys}}

@@ -103,7 +103,7 @@
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
--type binding_keys() :: [rabbit_types:binding_key()].
+-type binding_keys() :: rabbit_types:unique_binding_keys().
 
 %%----------------------------------------------------------------------------
 
@@ -2044,7 +2044,7 @@ queue(Q)
   when ?is_amqqueue(Q) ->
     Q;
 queue({Q, BindingKeys})
-  when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+  when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
     Q.
 
 -spec queue_name(name() | {name(), binding_keys()}) ->
@@ -2052,17 +2052,17 @@ queue({Q, BindingKeys})
 queue_name(QName = #resource{kind = queue}) ->
     QName;
 queue_name({QName = #resource{kind = queue}, BindingKeys})
-  when is_list(BindingKeys) ->
+  when is_map(BindingKeys) ->
     QName.
 
 -spec queue_names([Q | {Q, binding_keys()}]) ->
     [name()] when Q :: amqqueue:amqqueue().
 queue_names(Queues)
   when is_list(Queues) ->
-    lists:map(fun({Q, BindingKeys})
-                    when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+    lists:map(fun(Q) when ?is_amqqueue(Q) ->
                       amqqueue:get_name(Q);
-                 (Q) when ?is_amqqueue(Q) ->
+                 ({Q, BindingKeys})
+                   when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
                       amqqueue:get_name(Q)
               end, Queues).
 
