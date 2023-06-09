@@ -107,9 +107,15 @@ http_file(
 
 http_file(
     name = "otp_src_26",
+<<<<<<< HEAD
     downloaded_file_path = "OTP-26.0-rc3.tar.gz",
     sha256 = "f4fc2c5e1da56eb659003015ab80c42e50cef1129cca8c14457a522d1793498d",
     urls = ["https://github.com/erlang/otp/archive/OTP-26.0-rc3.tar.gz"],
+=======
+    downloaded_file_path = "OTP-26.0.1.tar.gz",
+    sha256 = "dc02213328f88939013bedcbb7f170ffec60fc718ef685221c813b579f812602",
+    urls = ["https://github.com/erlang/otp/archive/OTP-26.0.1.tar.gz"],
+>>>>>>> 1dc6db8f76 (Adopt otp 26.0.1)
 )
 
 load(
@@ -148,8 +154,13 @@ erlang_config(
         ),
         internal_erlang_from_github_release(
             name = "26",
+<<<<<<< HEAD
             sha256 = "ce962175c4d90161a7247d8e2e4ae36f9d8cc0214c8f52dba8ba84a82afc096f",
             version = "26.0-rc3",
+=======
+            sha256 = "d0c8e17f73e7146294ba39f499de086d0640058ec038c24021722ea612207d92",
+            version = "26.0.1",
+>>>>>>> 1dc6db8f76 (Adopt otp 26.0.1)
         ),
         internal_erlang_from_http_archive(
             name = "git_master",
