@@ -27,7 +27,7 @@
 -type route_opts() :: #{return_binding_keys => boolean()}.
 -type route_return() :: [rabbit_amqqueue:name() |
                          {rabbit_amqqueue:name(),
-                          [MatchedBindingKeys :: rabbit_types:binding_key(), ...]}].
+                          rabbit_types:unique_binding_keys()}].
 -type fun_name() :: atom().
 
 %%----------------------------------------------------------------------------
@@ -365,7 +365,13 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                                                 not virtual_reply_queue(RK)];
         _ ->
             Decs = rabbit_exchange_decorator:select(route, Decorators),
-            lists:usort(route1(Delivery, Decs, Opts, {[X], XName, []}))
+            QNamesToBindings = route1(Delivery, Decs, Opts, {[X], XName, #{}}),
+            case Opts of
+                #{return_binding_keys := true} ->
+                    maps:to_list(QNamesToBindings);
+                _ ->
+                    maps:keys(QNamesToBindings)
+            end
     end.
 
 virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
@@ -414,12 +420,23 @@ process_route(#resource{kind = exchange} = XName,
         false -> {cons_if_present(XName, WorkList),
                   gb_sets:add_element(XName, SeenXs), QNames}
     end;
+process_route({#resource{kind = exchange} = XName, BindingKeys}, Acc)
+  when is_map(BindingKeys) ->
+    process_route(XName, Acc);
 process_route(#resource{kind = queue} = QName,
-              {WorkList, SeenXs, QNames}) ->
-    {WorkList, SeenXs, [QName | QNames]};
+              {WorkList, SeenXs, QNames0}) ->
+    QNames = case maps:is_key(QName, QNames0) of
+                 true -> QNames0;
+                 false -> QNames0#{QName => #{}}
+             end,
+    {WorkList, SeenXs, QNames};
 process_route({#resource{kind = queue} = QName, BindingKeys},
-              {WorkList, SeenXs, QNames}) ->
-    {WorkList, SeenXs, [{QName, lists:usort(BindingKeys)} | QNames]}.
+              {WorkList, SeenXs, QNames0}) ->
+    QNames = maps:update_with(QName,
+                              fun(BKeys) -> maps:merge(BindingKeys, BKeys) end,
+                              BindingKeys,
+                              QNames0),
+    {WorkList, SeenXs, QNames}.
 
 cons_if_present(XName, L) ->
     case lookup(XName) of

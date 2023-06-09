@@ -601,18 +601,18 @@ subscription_option_no_local_wildcards(Config) ->
     C = connect(?FUNCTION_NAME, Config),
     {ok, _, [0, 0, 0, 0]} =
     emqtt:subscribe(C, [{<<"+/1">>, [{nl, true}]},
-                        {<<"t/1/#">>, [{nl, true}]},
+                        {<<"t/1/#">>, [{nl, false}]},
                         {<<"+/2">>, [{nl, true}]},
-                        {<<"t/2/#">>, [{nl, false}]}]),
+                        {<<"t/2/#">>, [{nl, true}]}]),
     %% Matches the first two subscriptions.
-    %% All matching subscriptions have the No Local option set.
-    %% Therefore, we should not receive m1.
-    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>),
-    %% Matches the last two subscriptions.
     %% Not all matching subscriptions have the No Local option set.
-    %% Therefore, we should receive m2.
+    %% Therefore, we should receive m1.
+    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>),
+    ok = expect_publishes(C, <<"t/1">>, [<<"m1">>]),
+    %% Matches the last two subscriptions.
+    %% All matching subscriptions have the No Local option set.
+    %% Therefore, we should not receive m2.
     ok = emqtt:publish(C, <<"t/2">>, <<"m2">>),
-    ok = expect_publishes(C, <<"t/2">>, [<<"m2">>]),
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
 

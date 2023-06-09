@@ -437,7 +437,7 @@ process_request(?SUBSCRIBE,
                       maybe
                           {ok, Q} ?= ensure_queue(QoS, S0),
                           QName = amqqueue:get_name(Q),
-                          BindingArgs = binding_args_for_proto_ver(ProtoVer, Opts),
+                          BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
                           ok ?= add_subscription(TopicFilter, BindingArgs, QName, S0),
                           ok ?= maybe_delete_old_subscription(TopicFilter, Opts, S0),
                           Subs = maps:put(TopicFilter, Opts, S0#state.subscriptions),
@@ -478,19 +478,19 @@ process_request(?SUBSCRIBE,
 
 process_request(?UNSUBSCRIBE,
                 #mqtt_packet{variable = #mqtt_packet_unsubscribe{packet_id  = PacketId,
-                                                                 topic_filters = Topics},
+                                                                 topic_filters = TopicFilters},
                              payload = undefined},
                 State0) ->
-    ?LOG_DEBUG("Received an UNSUBSCRIBE for topic filter(s) ~p", [Topics]),
+    ?LOG_DEBUG("Received an UNSUBSCRIBE for topic filter(s) ~p", [TopicFilters]),
     {ReasonCodes, State} =
     lists:foldl(
-      fun(Topic, {L, #state{subscriptions = Subs0,
-                            cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
-              case maps:take(Topic, Subs0) of
+      fun(TopicFilter, {L, #state{subscriptions = Subs0,
+                                  cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
+              case maps:take(TopicFilter, Subs0) of
                   {Opts, Subs} ->
-                      BindingArgs = binding_args_for_proto_ver(ProtoVer, Opts),
+                      BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
                       case delete_subscription(
-                             Topic, BindingArgs, Opts#mqtt_subscription_opts.qos, S0) of
+                             TopicFilter, BindingArgs, Opts#mqtt_subscription_opts.qos, S0) of
                           ok ->
                               S = S0#state{subscriptions = Subs},
                               maybe_decrement_consumer(S0, S),
@@ -503,7 +503,7 @@ process_request(?UNSUBSCRIBE,
                   error ->
                       {[?RC_NO_SUBSCRIPTION_EXISTED | L], S0}
               end
-      end, {[], State0}, Topics),
+      end, {[], State0}, TopicFilters),
     Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?UNSUBACK},
                          variable = #mqtt_packet_unsuback{
                                        packet_id = PacketId,
@@ -866,8 +866,23 @@ init_subscriptions0(QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
     try
         Subs = lists:foldl(
                  fun(#binding{key = Key,
-                              args = Args = [Opts0 = #mqtt_subscription_opts{}]},
+                              args = Args = []},
                      Acc) ->
+                         Opts = #mqtt_subscription_opts{qos = QoS},
+                         TopicFilter = amqp_to_mqtt(Key),
+                         case ProtoVer of
+                             ?MQTT_PROTO_V5 ->
+                                 %% session upgrade
+                                 NewBindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
+                                 ok = recreate_subscription(TopicFilter, Args, NewBindingArgs, QoS, State0);
+                             _ ->
+                                 ok
+                         end,
+                         maps:put(TopicFilter, Opts, Acc);
+                    (#binding{key = Key,
+                              args = Args},
+                     Acc) ->
+                         Opts0 = #mqtt_subscription_opts{} = lists:keyfind(mqtt_subscription_opts, 1, Args),
                          TopicFilter = amqp_to_mqtt(Key),
                          Opts = case ProtoVer of
                                     ?MQTT_PROTO_V5 ->
@@ -877,19 +892,6 @@ init_subscriptions0(QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
                                         ok = recreate_subscription(TopicFilter, Args, [], QoS, State0),
                                         #mqtt_subscription_opts{qos = QoS}
                                 end,
-                         maps:put(TopicFilter, Opts, Acc);
-                    (#binding{key = Key,
-                              args = Args = []},
-                     Acc) ->
-                         Opts = #mqtt_subscription_opts{qos = QoS},
-                         TopicFilter = amqp_to_mqtt(Key),
-                         case ProtoVer of
-                             ?MQTT_PROTO_V5 ->
-                                 %% session upgrade
-                                 ok = recreate_subscription(TopicFilter, Args, [Opts], QoS, State0);
-                             _ ->
-                                 ok
-                         end,
                          maps:put(TopicFilter, Opts, Acc)
                  end, #{}, Bindings),
         {ok, Subs}
@@ -1388,10 +1390,13 @@ consume(Q, QoS, #state{
             Err
     end.
 
-binding_args_for_proto_ver(?MQTT_PROTO_V5, SubOpts) ->
-    [SubOpts];
-binding_args_for_proto_ver(_, _) ->
-    [].
+binding_args_for_proto_ver(?MQTT_PROTO_V3, _, _) ->
+    [];
+binding_args_for_proto_ver(?MQTT_PROTO_V4, _, _) ->
+    [];
+binding_args_for_proto_ver(?MQTT_PROTO_V5, TopicFilter, SubOpts) ->
+    BindingKey = mqtt_to_amqp(TopicFilter),
+    [SubOpts, {<<"x-binding-key">>, longstr, BindingKey}].
 
 add_subscription(TopicFilter, BindingArgs, Qos, State)
   when is_integer(Qos) ->
@@ -1414,7 +1419,7 @@ maybe_delete_old_subscription(TopicFilter, Opts, State = #state{subscriptions = 
         #{TopicFilter := OldOpts}
           when OldOpts =/= Opts ->
             delete_subscription(TopicFilter,
-                                binding_args_for_proto_ver(ProtoVer, OldOpts),
+                                binding_args_for_proto_ver(ProtoVer, TopicFilter, OldOpts),
                                 OldOpts#mqtt_subscription_opts.qos,
                                 State);
         _ ->
@@ -1535,8 +1540,8 @@ drop_local(QNames, #state{subscriptions = Subs,
            BindingKeys})
             when Vhost0 =:= Vhost andalso
                  ClientId0 =:= ClientId ->
-              lists:any(
-                fun(BKey) ->
+              rabbit_misc:maps_any(
+                fun(BKey, true) ->
                         TopicFilter = amqp_to_mqtt(BKey),
                         case Subs of
                             #{TopicFilter := #mqtt_subscription_opts{
@@ -2019,8 +2024,8 @@ maybe_publish_to_client(
             content = #content{payload_fragments_rev = FragmentsRev,
                                properties = PBasic = #'P_basic'{headers = Headers}}}},
   QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
-    MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
     Props0 = amqp_props_to_mqtt_props(PBasic, ProtoVer),
+    MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
     Props = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
     Packet =

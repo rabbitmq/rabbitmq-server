@@ -28,7 +28,7 @@
 
 -callback route(rabbit_types:exchange(), rabbit_types:delivery(), rabbit_exchange:route_opts()) ->
     [rabbit_types:binding_destination() |
-     {rabbit_amqqueue:name(), [rabbit_types:binding_key(), ...]}].
+     {rabbit_types:binding_destination(), rabbit_types:unique_binding_keys()}].
 
 %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
 -callback validate(rabbit_types:exchange()) -> 'ok'.

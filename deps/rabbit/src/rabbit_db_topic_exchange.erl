@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([set/1, delete_all_for_exchange/1, delete/1, match/3]).
+-export([set/1, delete_all_for_exchange/1, delete/1, match/2]).
 
 %% For testing
 -export([clear/0]).
@@ -18,8 +18,7 @@
 -define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
 -define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
 
--type match_ret() :: {[rabbit_types:binding_destination()],
-                      #{rabbit_amqqueue:name() => [rabbit_types:binding_key(), ...]}}.
+-type match_result() :: #{rabbit_types:binding_destination() => rabbit_types:unique_binding_keys()}.
 
 %% -------------------------------------------------------------------
 %% set().
@@ -71,22 +70,20 @@ delete(Bs) when is_list(Bs) ->
 %% -------------------------------------------------------------------
 
 -spec match(rabbit_exchange:name(),
-            rabbit_types:routing_key(),
-            rabbit_exchange:route_opts()) -> match_ret().
+            rabbit_types:routing_key()) -> match_result().
 %% @doc Finds the topic bindings matching the given exchange and routing key and returns
-%% the destination of the bindings (with the matched bindings).
+%% the destination of the bindings potentially with the matched bindings.
 %%
-%% @returns a list of resources (with matched binding).
+%% @returns destinations with matched bindings
 %%
 %% @private
 
-match(XName, RoutingKey, Opts) ->
+match(XName, RoutingKey) ->
     rabbit_db:run(
       #{mnesia =>
-            fun() ->
-                    BKeys = maps:get(return_binding_keys, Opts, false),
-                    match_in_mnesia(XName, RoutingKey, BKeys)
-            end
+        fun() ->
+                match_in_mnesia(XName, RoutingKey)
+        end
        }).
 
 %% -------------------------------------------------------------------
@@ -132,9 +129,9 @@ delete_all_for_exchange_in_mnesia(XName) ->
               ok
       end).
 
-match_in_mnesia(XName, RoutingKey, BKeys) ->
+match_in_mnesia(XName, RoutingKey) ->
     Words = split_topic_key(RoutingKey),
-    mnesia:async_dirty(fun trie_match/3, [XName, Words, BKeys]).
+    mnesia:async_dirty(fun trie_match/2, [XName, Words]).
 
 trie_remove_all_nodes(X) ->
     remove_all(?MNESIA_NODE_TABLE,
@@ -192,32 +189,31 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
 
-trie_match(X, Words, BKeys) ->
-    trie_match(X, root, Words, BKeys, [], {[], #{}}).
+trie_match(X, Words) ->
+    trie_match(X, root, Words, #{}).
 
-trie_match(X, Node, [], BKeys, Walked, ResAcc0) ->
-    Destinations = trie_bindings(X, Node),
-    ResAcc = maybe_add_binding_key(BKeys, Destinations, Walked, ResAcc0),
-    trie_match_part(X, Node, "#", fun trie_match_skip_any/6, [],
-                    BKeys, Walked, ResAcc);
-trie_match(X, Node, [W | RestW] = Words, BKeys, Walked, ResAcc) ->
+trie_match(X, Node, [], ResAcc0) ->
+    DestinationsArgs = trie_bindings(X, Node),
+    ResAcc = add_matched(DestinationsArgs, ResAcc0),
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [], ResAcc);
+trie_match(X, Node, [W | RestW] = Words, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
-                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, BKeys, Walked, Acc)
-                end, ResAcc, [{W, fun trie_match/6, RestW},
-                              {"*", fun trie_match/6, RestW},
-                              {"#", fun trie_match_skip_any/6, Words}]).
+                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, Acc)
+                end, ResAcc, [{W, fun trie_match/4, RestW},
+                              {"*", fun trie_match/4, RestW},
+                              {"#", fun trie_match_skip_any/4, Words}]).
 
-trie_match_part(X, Node, Search, MatchFun, RestW, BKeys, Walked, ResAcc) ->
+trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
     case trie_child(X, Node, Search) of
-        {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, [Search | Walked], ResAcc);
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any(X, Node, [], BKeys, Walked, ResAcc) ->
-    trie_match(X, Node, [], BKeys, Walked, ResAcc);
-trie_match_skip_any(X, Node, [_ | RestW] = Words, BKeys, Walked, ResAcc) ->
-    trie_match_skip_any(X, Node, RestW, BKeys, Walked,
-                        trie_match(X, Node, Words, BKeys, Walked, ResAcc)).
+trie_match_skip_any(X, Node, [], ResAcc) ->
+    trie_match(X, Node, [], ResAcc);
+trie_match_skip_any(X, Node, [_ | RestW] = Words, ResAcc) ->
+    trie_match_skip_any(X, Node, RestW,
+                        trie_match(X, Node, Words, ResAcc)).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of
@@ -276,8 +272,8 @@ trie_bindings(X, Node) ->
       trie_binding = #trie_binding{exchange_name = X,
                                    node_id       = Node,
                                    destination   = '$1',
-                                   arguments     = '_'}},
-    mnesia:select(?MNESIA_BINDING_TABLE, [{MatchHead, [], ['$1']}]).
+                                   arguments     = '$2'}},
+    mnesia:select(?MNESIA_BINDING_TABLE, [{MatchHead, [], [{{'$1', '$2'}}]}]).
 
 trie_update_node_counts(X, Node, Field, Delta) ->
     E = case mnesia:read(?MNESIA_NODE_TABLE,
@@ -330,34 +326,21 @@ trie_binding_op(X, Node, D, Args, Op) ->
                                            arguments     = Args}},
             write).
 
--spec maybe_add_binding_key(boolean(), [rabbit_types:binding_destination()], [Word :: [byte()]], Acc) ->
-    Acc when Acc :: match_ret().
-maybe_add_binding_key(false, Destinations, _, {DestinationsAcc, QNamesToBindingsAcc}) ->
-    {Destinations ++ DestinationsAcc, QNamesToBindingsAcc};
-maybe_add_binding_key(true, Destinations, Walked, Acc = {DestinationsAcc, QNamesToBindingsAcc}) ->
-    %% This is the only place where app rabbit is aware of app rabbitmq_mqtt.
-    %% Ideally, such a dependency does not exist. In fact, removing MQTT specifics below
-    %% (i.e. feature flag and queue name prefix) works as well. Checking for MQTT
-    %% destination queues is just an optimisation to not unnecessarily add an AMQP 0.9.1
-    %% header for messages sent to other destinations.
-    case rabbit_feature_flags:is_enabled(mqtt_v5) of
-        false ->
-            {Destinations ++ DestinationsAcc, QNamesToBindingsAcc};
-        true ->
-            %% TODO Benchmark. If binary creation is too expensive, implement one of alternatives:
-            %% 1. Create binary lazily only if Destinations include at least one MQTT queue
-            %% 2. Return binding args in trie_bindings/2 and create binary lazily if binding args
-            %%    have Subscription Identifier or Retain As Published flag set.
-            %% 3. Store subscriptions by lists instead of by binary in rabbit_mqtt_processor.erl
-            BindingKey = list_to_binary(lists:join($., lists:reverse(Walked))),
-            lists:foldl(
-              fun(QName = #resource{kind = queue,
-                                    name = <<"mqtt-subscription-", _ClientIdQos/binary>>},
-                  {A0, A1}) ->
-                      {A0, maps:update_with(QName, fun(BindingKeys) ->
-                                                           [BindingKey | BindingKeys]
-                                                   end, [BindingKey], A1)};
-                 (Destination, {A0, A1}) ->
-                      {[Destination | A0], A1}
-              end, Acc, Destinations)
-    end.
+-spec add_matched([{rabbit_types:binding_destination(), BindingArgs :: list()}], match_result()) ->
+    match_result().
+add_matched(DestinationsArgs, Accum) ->
+    lists:foldl(
+      fun({Dest, BindingArgs}, Acc) ->
+              case rabbit_misc:table_lookup(BindingArgs, <<"x-binding-key">>) of
+                  {longstr, BKey} ->
+                      maps:update_with(Dest,
+                                       fun(BKeys) -> BKeys#{BKey => true} end,
+                                       #{BKey => true},
+                                       Acc);
+                  _ ->
+                      case maps:is_key(Dest, Acc) of
+                          true -> Acc;
+                          false -> Acc#{Dest => #{}}
+                      end
+              end
+      end, Accum, DestinationsArgs).

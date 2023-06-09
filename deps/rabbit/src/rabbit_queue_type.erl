@@ -483,7 +483,7 @@ module(QRef, State) ->
     end.
 
 -spec deliver([amqqueue:amqqueue() |
-               {amqqueue:amqqueue(), [rabbit_types:binding_key(), ...]}],
+               {amqqueue:amqqueue(), rabbit_types:unique_binding_keys()}],
               rabbit_types:delivery(),
               stateless | state()) ->
     {ok, state(), actions()} | {error, Reason :: term()}.
@@ -546,17 +546,20 @@ deliver0(Qs, Delivery0, #?STATE{} = State0) ->
 
 queue_and_binding_keys(Q)
   when ?is_amqqueue(Q) ->
-    {Q, []};
+    {Q, #{}};
 queue_and_binding_keys(T = {Q, BindingKeys})
-  when ?is_amqqueue(Q) andalso is_list(BindingKeys) ->
+  when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
     T.
 
--spec add_binding_keys(rabbit_types:delivery(), [rabbit_types:binding_key()]) ->
+-spec add_binding_keys(rabbit_types:delivery(), rabbit_types:unique_binding_keys()) ->
     rabbit_types:delivery().
-add_binding_keys(Delivery, []) ->
+add_binding_keys(Delivery, BindingKeys)
+  when map_size(BindingKeys) =:= 0 ->
     Delivery;
 add_binding_keys(Delivery, BindingKeys) ->
-    L = [{longstr, B} || B <- BindingKeys],
+    L = maps:fold(fun(B, true, Acc) ->
+                          [{longstr, B} | Acc]
+                  end, [], BindingKeys),
     BasicMsg = rabbit_basic:add_header(
                  <<"x-binding-keys">>, array, L,
                  Delivery#delivery.message),
