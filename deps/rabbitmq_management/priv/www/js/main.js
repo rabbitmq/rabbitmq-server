@@ -366,7 +366,7 @@ function update_navigation() {
         }
         if (show(path)) {
           if (val.length < 3 || ( val[2] && ac.canAccessVhosts() )) {
-            l1 += '<li id="' + k + '"><a href="' + nav(path) + '"' +
+            l1 += '<li id="' + navigation_tab_id(k) + '"><a href="' + nav(path) + '"' +
                 (selected ? ' class="selected"' : '') + '>' + k + '</a></li>'
           }
         }
@@ -382,6 +382,10 @@ function update_navigation() {
 
     replace_content('tabs', l1);
     replace_content('rhs', l2);
+}
+
+function navigation_tab_id(value) {
+    return value.toLowerCase().replaceAll(/\s/g, "-")
 }
 
 function nav(pair) {

@@ -43,7 +43,7 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Connections': ['#/connections', "management", true],
                   'Channels':    ['#/channels',    "management", true],
                   'Exchanges':   ['#/exchanges',   "management", true],
-                  'Queues':      ['#/queues',      "management", true],
+                  'Queues and Streams': ['#/queues',      "management", true],
                   'Admin':
                     [{'Users':         ['#/users',              "administrator"],
                       'Virtual Hosts': ['#/vhosts',             "administrator"],
