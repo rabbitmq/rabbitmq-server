@@ -17,7 +17,7 @@
          is_authorized_vhost_visible/2,
          is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
-
+-export([user/1]).
 -export([bad_request/3, bad_request_exception/4, internal_server_error/4,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
 -export([with_decode/4, not_found/3]).
@@ -319,13 +319,28 @@ vhost_from_headers(ReqData) ->
     end.
 
 vhost(ReqData) ->
-    case id(vhost, ReqData) of
+    Value = case id(vhost, ReqData) of
       none  -> vhost_from_headers(ReqData);
-      VHost -> case rabbit_vhost:exists(VHost) of
-                true  -> VHost;
-                false -> not_found
-               end
+      VHost -> VHost
+    end,
+    case Value of
+      none -> none;
+      Name ->
+        case rabbit_vhost:exists(Name) of
+          true  -> Name;
+          false -> not_found
+        end
     end.
+
+user(ReqData) ->
+  case id(user, ReqData) of
+    none     -> not_found;
+    Username ->
+      case rabbit_auth_backend_internal:exists(Username) of
+        true  -> Username;
+        false -> not_found
+      end
+  end.
 
 destination_type(ReqData) ->
     case id(dtype, ReqData) of
