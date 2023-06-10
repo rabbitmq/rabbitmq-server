@@ -11,7 +11,7 @@ const CHANNELS_TAB = By.css('div#menu ul#tabs li#channels')
 const QUEUES_AND_STREAMS_TAB = By.css('div#menu ul#tabs li#queues-and-streams')
 const EXCHANGES_TAB = By.css('div#menu ul#tabs li#exchanges')
 const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
-const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream')
+const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
 module.exports = class BasePage {
   driver
@@ -83,7 +83,7 @@ module.exports = class BasePage {
   async clickOnStreamTab () {
     return this.click(STREAM_CONNECTIONS_TAB)
   }
-  async waitForStreamTab() {
+  async waitForStreamConnectionsTab() {
     return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
   }
 

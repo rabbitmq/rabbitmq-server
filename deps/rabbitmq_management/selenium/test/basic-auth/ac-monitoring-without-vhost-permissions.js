@@ -29,7 +29,7 @@ describe('monitoring user without any vhosts permissions', function () {
     await overview.waitForQueuesTab()
     await overview.waitForExchangesTab()
     await overview.waitForAdminTab()
-    await overview.waitForStreamTab()
+    await overview.waitForStreamConnectionsTab()
   })
   it('can access all Admin menu options', async function () {
     await overview.clickOnAdminTab()
