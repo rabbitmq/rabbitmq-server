@@ -5,13 +5,13 @@ const USER = By.css('li#logout')
 const LOGOUT_FORM = By.css('li#logout form')
 const SELECT_VHOSTS = By.css('select#show-vhost')
 
-const OVERVIEW_TAB = By.css('div#menu ul#tabs li#Overview')
-const CONNECTION_TAB = By.css('div#menu ul#tabs li#Connections')
-const CHANNELS_TAB = By.css('div#menu ul#tabs li#Channels')
-const QUEUES_TAB = By.css('div#menu ul#tabs li#Queues')
-const EXCHANGES_TAB = By.css('div#menu ul#tabs li#Exchanges')
-const ADMIN_TAB = By.css('div#menu ul#tabs li#Admin')
-const STREAM_TAB = By.css('div#menu ul#tabs li#Stream')
+const OVERVIEW_TAB = By.css('div#menu ul#tabs li#overview')
+const CONNECTIONS_TAB = By.css('div#menu ul#tabs li#connections')
+const CHANNELS_TAB = By.css('div#menu ul#tabs li#channels')
+const QUEUES_AND_STREAMS_TAB = By.css('div#menu ul#tabs li#queues-and-streams')
+const EXCHANGES_TAB = By.css('div#menu ul#tabs li#exchanges')
+const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
+const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
 module.exports = class BasePage {
   driver
@@ -42,14 +42,14 @@ module.exports = class BasePage {
   }
 
   async clickOnOverviewTab () {
-    return this.click(CONNECTION_TAB)
+    return this.click(CONNECTIONS_TAB)
   }
 
   async clickOnConnectionsTab () {
-    return this.click(CONNECTION_TAB)
+    return this.click(CONNECTIONS_TAB)
   }
   async waitForConnectionsTab() {
-    return this.waitForDisplayed(CONNECTION_TAB)
+    return this.waitForDisplayed(CONNECTIONS_TAB)
   }
 
   async clickOnAdminTab () {
@@ -74,17 +74,17 @@ module.exports = class BasePage {
   }
 
   async clickOnQueuesTab () {
-    return this.click(QUEUES_TAB)
+    return this.click(QUEUES_AND_STREAMS_TAB)
   }
   async waitForQueuesTab() {
-    return this.waitForDisplayed(QUEUES_TAB)
+    return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
   }
 
   async clickOnStreamTab () {
-    return this.click(STREAM_TAB)
+    return this.click(STREAM_CONNECTIONS_TAB)
   }
-  async waitForStreamTab() {
-    return this.waitForDisplayed(STREAM_TAB)
+  async waitForStreamConnectionsTab() {
+    return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
   }
 
   async getSelectableVhosts() {

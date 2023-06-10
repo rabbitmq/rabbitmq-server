@@ -28,7 +28,7 @@ describe('management user without any vhosts permissions', function () {
     assert.rejects(overview.waitForQueuesTab())
     assert.rejects(overview.waitForExchangesTab())
     assert.rejects(overview.waitForAdminTab())
-    assert.rejects(overview.waitForStreamTab())
+    assert.rejects(overview.waitForStreamConnectionsTab())
   })
 
   it('cannot see nor choose any available vhost', async function () {
