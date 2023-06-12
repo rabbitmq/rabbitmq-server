@@ -756,13 +756,13 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
         {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
-        {OTP, _Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
-            case check_consistency(Node, OTP, Protocol, Status) of
+        {_OTP, _Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
+            case check_consistency(Node, Protocol, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end;
-        {OTP, _Rabbit, Protocol, {ok, Status}} ->
-            case check_consistency(Node, OTP, Protocol) of
+        {_OTP, _Rabbit, Protocol, {ok, Status}} ->
+            case check_consistency(Node, Protocol) of
                 {error, _} = E -> E;
                 ok             -> {ok, Status}
             end
@@ -771,8 +771,6 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
 remote_node_info(Node) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _} = Error   -> Error;
-        %% RabbitMQ prior to 3.6.2
-        {OTP, Rabbit, Status} -> {OTP, Rabbit, unsupported, Status};
         %% RabbitMQ 3.6.2 or later
         {OTP, Rabbit, Protocol, Status} -> {OTP, Rabbit, Protocol, Status}
     end.
@@ -1012,14 +1010,14 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(Node, OTP, ProtocolVersion) ->
+check_consistency(Node, ProtocolVersion) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
+      [check_mnesia_consistency(Node, ProtocolVersion),
        check_rabbit_consistency(Node)]).
 
-check_consistency(Node, OTP, ProtocolVersion, Status) ->
+check_consistency(Node, ProtocolVersion, Status) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
+      [check_mnesia_consistency(Node, ProtocolVersion),
        check_rabbit_consistency(Node),
        check_nodes_consistency(Node, Status)]).
 
@@ -1031,11 +1029,6 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
             {error, {inconsistent_cluster,
                      format_inconsistent_cluster_message(node(), Node)}}
     end.
-
-check_mnesia_or_otp_consistency(_Node, unsupported, OTP) ->
-    rabbit_version:check_otp_consistency(OTP);
-check_mnesia_or_otp_consistency(Node, ProtocolVersion, _) ->
-    check_mnesia_consistency(Node, ProtocolVersion).
 
 check_mnesia_consistency(Node, ProtocolVersion) ->
     % If mnesia is running we will just check protocol version
@@ -1134,7 +1127,7 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) ->
         {_OTP, _RMQ, _Protocol, {error, _} = E} ->
             Fail("~tp", [E]);
         {OTP, RMQ, Protocol, _} ->
-            case check_consistency(Node, OTP, Protocol) of
+            case check_consistency(Node, Protocol) of
                 {error, _} -> Fail("versions ~tp",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}
