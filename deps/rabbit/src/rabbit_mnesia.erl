@@ -750,10 +750,6 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
     case remote_node_info(Node) of
         {badrpc, _Reason} ->
             {error, not_found};
-        {_OTP, Rabbit, DelegateModuleHash, _Status} when is_binary(DelegateModuleHash) ->
-            %% when a delegate module .beam file hash is present
-            %% in the tuple, we are dealing with an old version
-            rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
         {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
         {_OTP, _Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
@@ -1121,9 +1117,6 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) ->
     case remote_node_info(Node) of
         {badrpc, _} = Reason ->
             Fail("~tp", [Reason]);
-        %% old delegate hash check
-        {_OTP, RMQ, Hash, _} when is_binary(Hash) ->
-            Fail("version ~ts", [RMQ]);
         {_OTP, _RMQ, _Protocol, {error, _} = E} ->
             Fail("~tp", [E]);
         {OTP, RMQ, Protocol, _} ->
