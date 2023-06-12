@@ -12,6 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_recent_history.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
     [
@@ -148,6 +149,7 @@ e2e_test(Config) ->
                          routing_key = <<"">>
                         }),
 
+<<<<<<< HEAD
     #'queue.declare_ok'{message_count = Count, queue = Q} =
         amqp_channel:call(Chan, #'queue.declare' {
                                    passive   = true,
@@ -155,6 +157,15 @@ e2e_test(Config) ->
                                   }),
 
     ?assertEqual(MsgCount, Count),
+=======
+    %% Wait for all messages to be queued.
+    ?awaitMatch(#'queue.declare_ok'{message_count = MsgCount, queue = Q},
+                amqp_channel:call(Chan, #'queue.declare' {
+                                           passive   = true,
+                                           queue     = Q
+                                          }),
+                30000),
+>>>>>>> cbd086322a (Test: wait for messages in recent history exchange suite)
 
     amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "1") }),
     amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "2") }),
