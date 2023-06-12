@@ -998,18 +998,20 @@ stop_sync_timer(State) ->
     rabbit_misc:stop_timer(State, #msstate.sync_timer_ref).
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
+                                 clients             = Clients,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
-    CGs = maps:fold(fun (CRef, MsgIds, NS) ->
-                            case sets:is_empty(MsgIds) of
-                                true  -> NS;
-                                false -> [{CRef, MsgIds} | NS]
-                            end
-                    end, [], CTM),
     writer_flush(CurHdl),
-    lists:foldl(fun ({CRef, MsgIds}, StateN) ->
-                        client_confirm(CRef, MsgIds, written, StateN)
-                end, State1, CGs).
+    %% We confirm all pending messages because we know they are
+    %% either on disk when we flush the current write file; or
+    %% were removed by the queue already.
+    maps:foreach(fun (CRef, MsgIds) ->
+        case maps:get(CRef, Clients) of
+            {_CPid, undefined   } -> ok;
+            {_CPid, MsgOnDiskFun} -> MsgOnDiskFun(MsgIds, written)
+        end
+    end, CTM),
+    State1#msstate{cref_to_msg_ids = #{}}.
 
 flying_write(Key, #msstate { flying_ets = FlyingEts }) ->
     case ets:lookup(FlyingEts, Key) of
