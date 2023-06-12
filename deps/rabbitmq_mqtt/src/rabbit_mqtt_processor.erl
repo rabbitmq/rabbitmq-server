@@ -42,6 +42,8 @@
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
 -type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
+-type topic_aliases() :: {Inbound :: #{TopicName :: binary() => pos_integer()},
+                          Outbound :: #{TopicName :: binary() => pos_integer()}}.
 
 -record(auth_state,
         {user :: #user{},
@@ -74,7 +76,8 @@
          connected_at = os:system_time(millisecond) :: pos_integer(),
          send_fun :: send_fun(),
          %% Maximum MQTT packet size in bytes for packets sent from server to client.
-         max_packet_size :: max_packet_size()
+         max_packet_size :: max_packet_size(),
+         topic_alias_maximum_outbound :: non_neg_integer()
          }).
 
 -record(state,
@@ -97,7 +100,7 @@
          %% quorum queues and streams whose soft limit has been exceeded
          queues_soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
          qos0_messages_dropped = 0 :: non_neg_integer(),
-         topic_aliases :: option(topic_aliases())
+         topic_aliases = {#{}, #{}} :: topic_aliases()
         }).
 
 -opaque state() :: #state{}.
@@ -141,6 +144,8 @@ process_connect(
                false  -> noflow
            end,
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
+    TopicAliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
+    TopicAliasMaxOutbound = min(maps:get('Topic-Alias-Maximum', ConnectProps, 0), TopicAliasMax),
     {ok, MaxSessionExpiry} = application:get_env(?APP_NAME, max_session_expiry_interval_secs),
     SessionExpiry =
     case {ProtoVer, CleanStart} of
@@ -210,12 +215,12 @@ process_connect(
                           vhost = VHost,
                           client_id = ClientId,
                           will_msg = WillMsg,
-                          max_packet_size = MaxPacketSize},
+                          max_packet_size = MaxPacketSize,
+                          topic_alias_maximum_outbound = TopicAliasMaxOutbound},
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx},
-               ra_register_state = RaRegisterState,
-               topic_aliases = #{}},
+               ra_register_state = RaRegisterState},
         ok ?= clear_will_msg(S),
         {ok, S}
     end,
@@ -228,15 +233,14 @@ process_connect(
     case Result of
         {ok, SessPresent, State = #state{}} ->
             Props0 = #{'Maximum-QoS' => ?QOS_1,
+                       'Topic-Alias-Maximum' => TopicAliasMax,
                        'Maximum-Packet-Size' => persistent_term:get(
                                                   ?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED),
                        'Shared-Subscription-Available' => 0,
                        'Session-Expiry-Interval' => case SessionExpiry of
                                                         infinity -> ?UINT_MAX;
                                                         Secs -> Secs
-                                                    end,
-                        'Topic-Alias-Maximum' => persistent_term:get(?TOPIC_ALIAS_MAX)
-                      },
+                                                    end},
             Props = case {ClientId0, ProtoVer} of
                         {<<>>, 5} ->
                             %% "If the Client connects using a zero length Client Identifier, the Server
@@ -375,20 +379,11 @@ process_request(?PUBLISH,
                                               retain = Retain,
                                               dup = Dup},
                    variable = #mqtt_packet_publish{packet_id = PacketId,
-                                                   props = Props},
-                   payload = Payload} = Packet,
+                                                   props = Props} = Variable,
+                   payload = Payload},
                 State0 = #state{unacked_client_pubs = U,
-                                cfg = #cfg{proto_ver = ProtoVer,
-                                           client_id = ClientId}}) ->
-    case process_alias(Packet, State0) of
-        {error, invalid_alias} ->
-            ?LOG_WARNING("MQTT invalid topic alias. Disconnecting MQTT client ~ts", [ClientId]),
-            send_disconnect(?RC_TOPIC_ALIAS_INVALID, State0),
-            {stop, {disconnect, server_initiated}, State0};
-        {error, unknown_alias} ->
-            ?LOG_WARNING("MQTT unknown topic alias. Disconnecting MQTT client ~ts", [ClientId]),
-            send_disconnect(?RC_PROTOCOL_ERROR, State0),
-            {stop, {disconnect, server_initiated}, State0};
+                                cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case process_topic_alias_inbound(Variable, State0) of
         {ok, Topic, State1} ->
             EffectiveQos = maybe_downgrade_qos(Qos),
             rabbit_global_counters:messages_received(ProtoVer, 1),
@@ -414,8 +409,11 @@ process_request(?PUBLISH,
                             %% Hence, we ignore this re-send.
                             {ok, State}
                     end
-            end
-        end;
+            end;
+        {error, ReasonCode} ->
+            send_disconnect(ReasonCode, State0),
+            {stop, {disconnect, server_initiated}, State0}
+    end;
 
 process_request(?SUBSCRIBE,
                 #mqtt_packet{
@@ -1236,54 +1234,60 @@ maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
-%% MQTT5 spec 3.3.2.3.4
-%% A Topic Alias of 0 is not permitted [MQTT-3.3.2-8].
-%% A Client MUST NOT send a PUBLISH packet with a Topic Alias greater than the Topic Alias
-%% Maximum value returned by the Server in the CONNACK packet [MQTT-3.3.2-9].
-%% MQTT5 spec 3.3.4
-%% If the receiver does not already have a mapping for this Topic Alias and the packet has
-%% a zero length Topic Name field it is a Protocol Error, the receiver uses DISCONNECT with Reason Code of 0x82.
-process_alias(#mqtt_packet{variable = #mqtt_packet_publish{topic_name = <<>>,
-                                                          props = #{'Topic-Alias' := Alias}}},
-              #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5},
-                     topic_aliases = TopicAliases} = State) ->
-    case Alias  > 0 andalso Alias =< persistent_term:get(?TOPIC_ALIAS_MAX) of
+process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic,
+                                                 props = #{'Topic-Alias' := Alias}},
+                            State = #state{topic_aliases = As = {Aliases, _},
+                                           cfg = #cfg{client_id = ClientId}}) ->
+    AliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
+    case Alias > 0 andalso Alias =< AliasMax of
         true ->
-            case find_alias(Alias, TopicAliases) of
-                {ok, TopicName} ->
-                    {ok, TopicName, State};
-                {error, _} = Err ->
-                    Err
-                end;
+            if Topic =:= <<>> ->
+                   case maps:find(Alias, Aliases) of
+                       {ok, TopicName} ->
+                           {ok, TopicName, State};
+                       error ->
+                           ?LOG_WARNING("Unknown Topic Alias: ~b. Disconnecting MQTT client ~ts",
+                                        [Alias, ClientId]),
+                           {error, ?RC_PROTOCOL_ERROR}
+                   end;
+               is_binary(Topic) ->
+                   Aliases1 = Aliases#{Alias => Topic},
+                   State1 = State#state{topic_aliases = setelement(1, As, Aliases1)},
+                   {ok, Topic, State1}
+            end;
         false ->
-            {error, invalid_alias}
-        end;
-process_alias(#mqtt_packet{
-                          variable = #mqtt_packet_publish{
-                          topic_name = Topic,
-                          props = #{'Topic-Alias' := Alias}
-                        }
-    },
-    State = #state{topic_aliases = TopicAliases,
-                   cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
-    case Alias  > 0 andalso Alias =< persistent_term:get(?TOPIC_ALIAS_MAX) of
-        true ->
-            {ok, Topic, State#state{topic_aliases = maps:put(Alias, Topic, TopicAliases)}};
-        false ->
-            {error, invalid_alias}
-        end;
-process_alias(#mqtt_packet{variable = #mqtt_packet_publish{topic_name = Topic}}, State) ->
+            ?LOG_WARNING("Invalid Topic Alias: ~b. Disconnecting MQTT client ~ts",
+                         [Alias, ClientId]),
+            {error, ?RC_TOPIC_ALIAS_INVALID}
+    end;
+process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic}, State) ->
     {ok, Topic, State}.
 
-find_alias(_Alias, undefined) ->
-    {error, unknown_alias};
-find_alias(Alias, TopicAliases) ->
-    case maps:find(Alias, TopicAliases) of
-        error ->
-            {error, unknown_alias};
-        Return ->
-            Return
-        end.
+process_topic_alias_outbound(Topic, Props, State = #state{cfg = #cfg{topic_alias_maximum_outbound = 0}}) ->
+    {Topic, Props, State};
+process_topic_alias_outbound(Topic, Props, State = #state{topic_aliases = As = {_, Aliases},
+                                                          cfg = #cfg{topic_alias_maximum_outbound = Max}}) ->
+    case Aliases of
+        #{Topic := Alias} ->
+            {<<>>, Props#{'Topic-Alias' => Alias}, State};
+        _ ->
+            MapSize = maps:size(Aliases),
+            case MapSize < Max andalso
+                 %% There's no point in sending a Topic Alias if the Topic Name has a length of only 1 byte
+                 %% because sending a Topic Alias requires (at least) 3 bytes
+                 %% (1 byte for the Property Identifier and 2 bytes for the Topic Alias value)
+                 %% and sending the Topic Name directly also requires 3 bytes
+                 %% (2 bytes String prefix length and 1 byte for the Topic Name).
+                 byte_size(Topic) > 1 of
+                true ->
+                    Alias = MapSize + 1,
+                    Aliases1 = Aliases#{Topic => Alias},
+                    State1 = State#state{topic_aliases = setelement(2, As, Aliases1)},
+                    {Topic, Props#{'Topic-Alias' => Alias}, State1};
+                false ->
+                    {Topic, Props, State}
+            end
+    end.
 
 ensure_queue(QoS, State) ->
     case get_queue(QoS, State) of
@@ -2089,8 +2093,10 @@ maybe_publish_to_client(
   QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     Props0 = amqp_props_to_mqtt_props(PBasic, ProtoVer),
     MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
-    Props = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
-    {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State0),
+    Props1 = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
+    Topic0 = amqp_to_mqtt(RoutingKey),
+    {Topic, Props, State1} = process_topic_alias_outbound(Topic0, Props1, State0),
+    {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State1),
     Packet =
     #mqtt_packet{
        fixed = #mqtt_packet_fixed{
@@ -2100,7 +2106,7 @@ maybe_publish_to_client(
                   retain = retain(Headers, MatchedTopicFilters, State)},
        variable = #mqtt_packet_publish{
                      packet_id = PacketId,
-                     topic_name = amqp_to_mqtt(RoutingKey),
+                     topic_name = Topic,
                      props = Props},
        payload = lists:reverse(FragmentsRev)},
     SettleOp = case send(Packet, State) of

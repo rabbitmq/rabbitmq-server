@@ -312,9 +312,9 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
-%% Topic aliax max
+%% Topic Aliax Maximum
 
-{mapping, "mqtt.topic_alias_max", "rabbitmq_mqtt.topic_alias_max", [
+{mapping, "mqtt.topic_alias_maximum", "rabbitmq_mqtt.topic_alias_maximum", [
     {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {validators, ["non_negative_integer"]}
 ]}.

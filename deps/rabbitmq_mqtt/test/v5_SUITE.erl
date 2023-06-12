@@ -118,9 +118,12 @@ cluster_size_1_tests() ->
      will_delay_properties,
      will_properties,
      retain_properties,
-     invalid_topic_alias,
-     unknown_topic_alias,
-     topic_alias
+     topic_alias_client_to_server,
+     topic_alias_server_to_client,
+     topic_alias_bidirectional,
+     topic_alias_invalid,
+     topic_alias_unknown,
+     topic_alias_disallowed
     ].
 
 cluster_size_3_tests() ->
@@ -1796,46 +1799,162 @@ session_switch_v3_v5(Config, Disconnect) ->
     ok = emqtt:disconnect(C4),
     eventually(?_assertEqual([], all_connection_pids(Config))).
 
-invalid_topic_alias(Config) ->
-    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
-    {C1, Connect} = start_client(ClientId, Config, 0, []),
-    ok, ConnackProps = Connect(C1),
-    ?assertMatch({ok, #{'Topic-Alias-Maximum' := 20}}, ConnackProps),
-    unlink(C1),
-    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
-                    emqtt:publish(C1, Topic, #{'Topic-Alias' => 0}, <<"msg">>, [{qos, 1}])),
-
-    C2 = connect(ClientId, Config),
-    unlink(C2),
-    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
-                    emqtt:publish(C2, Topic, #{'Topic-Alias' => 21}, <<"msg">>, [{qos, 1}])).
-
-unknown_topic_alias(Config) ->
-    C = connect(atom_to_binary(?FUNCTION_NAME), Config),
-    unlink(C),
-    ?assertMatch({error, {disconnected, ?RC_PROTOCOL_ERROR, _}},
-                    emqtt:publish(C, <<>>, #{'Topic-Alias' => 1}, <<"msg">>, [{qos, 1}])).
-
-topic_alias(Config) ->
-    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+topic_alias_client_to_server(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Topic1 = <<"t/1">>,
     Sub = connect(<<ClientId/binary, "_sub">>, Config),
-    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, [{qos, 1}]),
+    QoS1 = [{qos, 1}],
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic1, QoS1),
 
     Pub = connect(<<ClientId/binary, "_pub">>, Config),
-    {ok, _} = emqtt:publish(Pub, Topic, #{'Topic-Alias' => 5}, <<"msg1">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"msg2">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"msg3">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, Topic, #{'Topic-Alias' => 7}, <<"msg4">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"msg5">>, [{qos, 1}]),
-    expect_publishes(Sub, Topic, [<<"msg1">>, <<"msg2">>, <<"msg3">>, <<"msg4">>, <<"msg5">>]),
+    {ok, _} = emqtt:publish(Pub, Topic1, #{'Topic-Alias' => 5}, <<"m1">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"m2">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 5}, <<"m3">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, Topic1, #{'Topic-Alias' => 7}, <<"m4">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"m5">>, QoS1),
+    ok = expect_publishes(Sub, Topic1, [<<"m1">>, <<"m2">>, <<"m3">>, <<"m4">>, <<"m5">>]),
 
-    {ok, _, [0]} = emqtt:subscribe(Sub, <<Topic/binary, "_2">>, [{qos, 0}]),
-    {ok, _} = emqtt:publish(Pub, <<Topic/binary, "_2">>, #{'Topic-Alias' => 2}, <<"msg6">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 2}, <<"msg7">>, [{qos, 1}]),
-    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"msg8">>, [{qos, 1}]),
-    expect_publishes(Sub, <<Topic/binary, "_2">>, [<<"msg6">>, <<"msg7">>, <<"msg8">>]),
+    Topic2 = <<"t/2">>,
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic2, [{qos, 0}]),
+    {ok, _} = emqtt:publish(Pub, Topic2, #{'Topic-Alias' => 2}, <<"m6">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 2}, <<"m7">>, QoS1),
+    {ok, _} = emqtt:publish(Pub, <<>>, #{'Topic-Alias' => 7}, <<"m8">>, QoS1),
+    ok = expect_publishes(Sub, Topic2, [<<"m6">>, <<"m7">>]),
+    ok = expect_publishes(Sub, Topic1, [<<"m8">>]),
+
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
+
+topic_alias_server_to_client(Config) ->
+    Key = mqtt_topic_alias_maximum,
+    DefaultMax = rpc(Config, persistent_term, get, [Key]),
+    %% The Topic Alias Maximum configured on the server:
+    %% 1. defines the Topic Alias Maximum for messages from client to server, and
+    %% 2. serves as an upper bound for the Topic Alias Maximum for messages from server to client
+    TopicAliasMaximum = 2,
+    ok = rpc(Config, persistent_term, put, [Key, TopicAliasMaximum]),
+    ClientId = ?FUNCTION_NAME,
+    {C1, Connect} = start_client(ClientId, Config, 0, [{properties, #{'Topic-Alias-Maximum' => 16#ffff}}]),
+    %% Validate 2.
+    ?assertMatch({ok, #{'Topic-Alias-Maximum' := TopicAliasMaximum}}, Connect(C1)),
+
+    {ok, _, [1]} = emqtt:subscribe(C1, <<"#">>, qos1),
+    {ok, _} = emqtt:publish(C1, <<"t/1">>, <<"m1">>, qos1),
+    A1 = receive {publish, #{payload := <<"m1">>,
+                             topic := <<"t/1">>,
+                             properties := #{'Topic-Alias' := A1a}}} -> A1a
+         after 500 -> ct:fail("Did not receive m1")
+         end,
+
+    %% We don't expect a Topic Alias when the Topic Name consists of a single byte.
+    {ok, _} = emqtt:publish(C1, <<"t">>, <<"m2">>, qos1),
+    receive {publish, #{payload := <<"m2">>,
+                        topic := <<"t">>,
+                        properties := Props1}}
+              when map_size(Props1) =:= 0 -> ok
+    after 500 -> ct:fail("Did not receive m2")
+    end,
+
+    {ok, _} = emqtt:publish(C1, <<"t/2">>, <<"m3">>, qos1),
+    A2 = receive {publish, #{payload := <<"m3">>,
+                             topic := <<"t/2">>,
+                             properties := #{'Topic-Alias' := A2a}}} -> A2a
+         after 500 -> ct:fail("Did not receive m3")
+         end,
+    ?assertEqual([1, 2], lists:sort([A1, A2])),
+
+    {ok, _} = emqtt:publish(C1, <<"t/3">>, <<"m4">>, qos1),
+    %% In the current server implementation, once the Topic Alias cache is full,
+    %% existing aliases won't be replaced. So, we expect to get the Topic Name instead.
+    receive {publish, #{payload := <<"m4">>,
+                        topic := <<"t/3">>,
+                        properties := Props2}}
+              when map_size(Props2) =:= 0 -> ok
+    after 500 -> ct:fail("Did not receive m4")
+    end,
+
+    %% Existing topic aliases should still be sent.
+    ok = emqtt:publish(C1, <<"t/1">>, <<"m5">>, qos0),
+    ok = emqtt:publish(C1, <<"t/2">>, <<"m6">>, qos0),
+    receive {publish, #{payload := <<"m5">>,
+                        topic := <<>>,
+                        properties := #{'Topic-Alias' := A1b}}} ->
+                ?assertEqual(A1, A1b)
+    after 500 -> ct:fail("Did not receive m5")
+    end,
+    receive {publish, #{payload := <<"m6">>,
+                        topic := <<>>,
+                        properties := #{'Topic-Alias' := A2b}}} ->
+                ?assertEqual(A2, A2b)
+    after 500 -> ct:fail("Did not receive m6")
+    end,
+
+    ok = emqtt:disconnect(C1),
+    ok = rpc(Config, persistent_term, put, [Key, DefaultMax]).
+
+%% "The Topic Alias mappings used by the Client and Server are independent from each other.
+%% Thus, when a Client sends a PUBLISH containing a Topic Alias value of 1 to a Server and
+%% the Server sends a PUBLISH with a Topic Alias value of 1 to that Client they will in
+%% general be referring to different Topics." [v5 3.3.2.3.4]
+topic_alias_bidirectional(Config) ->
+    C1 = connect(<<"client 1">>, Config, [{properties, #{'Topic-Alias-Maximum' => 1}}]),
+    C2 = connect(<<"client 2">>, Config),
+    Topic1 = <<"/a/a">>,
+    Topic2 = <<"/b/b">>,
+    {ok, _, [0]} = emqtt:subscribe(C1, Topic1),
+    {ok, _, [0]} = emqtt:subscribe(C2, Topic2),
+    ok = emqtt:publish(C1, Topic2, #{'Topic-Alias' => 1}, <<"m1">>, [{qos, 0}]),
+    ok = emqtt:publish(C2, Topic1, <<"m2">>),
+    ok = emqtt:publish(C1, <<>>, #{'Topic-Alias' => 1}, <<"m3">>, [{qos, 0}]),
+    ok = emqtt:publish(C2, Topic1, <<"m4">>),
+    ok = expect_publishes(C2, Topic2, [<<"m1">>, <<"m3">>]),
+    receive {publish, #{client_pid := C1,
+                        payload := <<"m2">>,
+                        topic := Topic1,
+                        properties := #{'Topic-Alias' := 1}}} -> ok
+    after 500 -> ct:fail("Did not receive m2")
+    end,
+    receive {publish, #{client_pid := C1,
+                        payload := <<"m4">>,
+                        topic := <<>>,
+                        properties := #{'Topic-Alias' := 1}}} -> ok
+    after 500 -> ct:fail("Did not receive m4")
+    end,
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2).
+
+topic_alias_invalid(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    {C1, Connect} = start_client(ClientId, Config, 0, []),
+    ?assertMatch({ok, #{'Topic-Alias-Maximum' := 16}}, Connect(C1)),
+    process_flag(trap_exit, true),
+    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
+                 emqtt:publish(C1, Topic, #{'Topic-Alias' => 17}, <<"msg">>, [{qos, 1}])),
+
+    C2 = connect(ClientId, Config),
+    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
+                 emqtt:publish(C2, Topic, #{'Topic-Alias' => 0}, <<"msg">>, [{qos, 1}])).
+
+topic_alias_unknown(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    unlink(C),
+    ?assertMatch({error, {disconnected, ?RC_PROTOCOL_ERROR, _}},
+                 emqtt:publish(C, <<>>, #{'Topic-Alias' => 1}, <<"msg">>, [{qos, 1}])).
+
+%% A RabbitMQ operator should be able to disallow topic aliases.
+topic_alias_disallowed(Config) ->
+    Key = mqtt_topic_alias_maximum,
+    DefaultMax = rpc(Config, persistent_term, get, [Key]),
+    TopicAliasMaximum = 0,
+    ok = rpc(Config, persistent_term, put, [Key, TopicAliasMaximum]),
+
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0, [{properties, #{'Topic-Alias-Maximum' => 10}}]),
+    ?assertMatch({ok, #{'Topic-Alias-Maximum' := 0}}, Connect(C)),
+    unlink(C),
+    ?assertMatch({error, {disconnected, ?RC_TOPIC_ALIAS_INVALID, _}},
+                 emqtt:publish(C, <<"t">>, #{'Topic-Alias' => 1}, <<"msg">>, [{qos, 1}])),
+
+    ok = rpc(Config, persistent_term, put, [Key, DefaultMax]).
 
 %% -------------------------------------------------------------------
 %% Helpers

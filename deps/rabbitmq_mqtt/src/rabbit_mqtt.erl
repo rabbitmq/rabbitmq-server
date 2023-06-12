@@ -111,24 +111,21 @@ persist_static_configuration() ->
     ?assert(is_integer(MailboxSoftLimit)),
     ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit),
 
+    {ok, TopicAliasMax} = application:get_env(?APP_NAME, topic_alias_maximum),
+    ?assert(is_integer(TopicAliasMax) andalso
+            TopicAliasMax >= 0 andalso
+            TopicAliasMax =< ?TWO_BYTE_INTEGER_MAX),
+    ok = persistent_term:put(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM, TopicAliasMax),
+
     {ok, MaxSizeUnauth} = application:get_env(?APP_NAME, max_packet_size_unauthenticated),
     assert_valid_max_packet_size(MaxSizeUnauth),
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, MaxSizeUnauth),
 
     {ok, MaxSizeAuth} = application:get_env(?APP_NAME, max_packet_size_authenticated),
     assert_valid_max_packet_size(MaxSizeAuth),
-    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth),
-
-    {ok, TopicAliasMax} = application:get_env(?APP_NAME, topic_alias_max),
-    assert_valid_topic_alias_max(TopicAliasMax),
-    ok = persistent_term:put(?TOPIC_ALIAS_MAX, TopicAliasMax).
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
 
 assert_valid_max_packet_size(Val) ->
     ?assert(is_integer(Val) andalso
             Val > 0 andalso
             Val =< ?MAX_PACKET_SIZE).
-
-assert_valid_topic_alias_max(Val) ->
-        ?assert(is_integer(Val) andalso
-            Val > 0 andalso
-            Val =< ?TWO_BYTE_INTEGER_MAX).

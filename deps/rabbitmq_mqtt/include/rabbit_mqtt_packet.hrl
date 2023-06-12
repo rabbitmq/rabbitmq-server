@@ -7,7 +7,7 @@
 
 -define(PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, mqtt_max_packet_size_unauthenticated).
 -define(PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, mqtt_max_packet_size_authenticated).
--define(TOPIC_ALIAS_MAX, mqtt_topic_alias_max).
+-define(PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM, mqtt_topic_alias_maximum).
 
 -type protocol_version() :: 3..5.
 
@@ -253,7 +253,5 @@
 -record(retained_message, {topic :: binary(),
                            mqtt_msg :: mqtt_msg() | mqtt_msg_v0()
                           }).
-
--type topic_aliases() :: map().
 
 -type option(T) :: undefined | T.
