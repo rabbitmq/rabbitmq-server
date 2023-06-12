@@ -1001,7 +1001,7 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  clients             = Clients,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
-    writer_flush(CurHdl),
+    ok = writer_flush(CurHdl),
     %% We confirm all pending messages because we know they are
     %% either on disk when we flush the current write file; or
     %% were removed by the queue already.
