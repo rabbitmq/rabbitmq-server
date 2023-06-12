@@ -31,7 +31,7 @@ define PROJECT_ENV
 	    {max_packet_size_unauthenticated, 65536},
 	    %% 256 MB is upper limit defined by MQTT spec
 	    {max_packet_size_authenticated, 268435455},
-	    {topic_alias_max, 20}
+	    {topic_alias_maximum, 16}
 	  ]
 endef
 
