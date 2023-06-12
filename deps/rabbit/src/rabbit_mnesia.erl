@@ -756,13 +756,13 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
         {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
-        {OTP, Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
-            case check_consistency(Node, OTP, Rabbit, Protocol, Status) of
+        {OTP, _Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
+            case check_consistency(Node, OTP, Protocol, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end;
-        {OTP, Rabbit, Protocol, {ok, Status}} ->
-            case check_consistency(Node, OTP, Rabbit, Protocol) of
+        {OTP, _Rabbit, Protocol, {ok, Status}} ->
+            case check_consistency(Node, OTP, Protocol) of
                 {error, _} = E -> E;
                 ok             -> {ok, Status}
             end
@@ -1012,15 +1012,15 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(Node, OTP, Rabbit, ProtocolVersion) ->
+check_consistency(Node, OTP, ProtocolVersion) ->
     rabbit_misc:sequence_error(
       [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
-       check_rabbit_consistency(Node, Rabbit)]).
+       check_rabbit_consistency(Node)]).
 
-check_consistency(Node, OTP, Rabbit, ProtocolVersion, Status) ->
+check_consistency(Node, OTP, ProtocolVersion, Status) ->
     rabbit_misc:sequence_error(
       [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
-       check_rabbit_consistency(Node, Rabbit),
+       check_rabbit_consistency(Node),
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
@@ -1084,12 +1084,8 @@ with_running_or_clean_mnesia(Fun) ->
             Result
     end.
 
-check_rabbit_consistency(RemoteNode, RemoteVersion) ->
-    rabbit_misc:sequence_error(
-      [rabbit_version:check_version_consistency(
-         rabbit_misc:version(), RemoteVersion, "Rabbit",
-         fun rabbit_misc:version_minor_equivalent/2),
-       rabbit_feature_flags:check_node_compatibility(RemoteNode)]).
+check_rabbit_consistency(RemoteNode) ->
+    rabbit_feature_flags:check_node_compatibility(RemoteNode).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
@@ -1138,7 +1134,7 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) ->
         {_OTP, _RMQ, _Protocol, {error, _} = E} ->
             Fail("~tp", [E]);
         {OTP, RMQ, Protocol, _} ->
-            case check_consistency(Node, OTP, RMQ, Protocol) of
+            case check_consistency(Node, OTP, Protocol) of
                 {error, _} -> Fail("versions ~tp",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}

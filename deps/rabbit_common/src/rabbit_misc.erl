@@ -42,7 +42,7 @@
          pid_change_node/2, node_to_fake_pid/1]).
 -export([hexify/1]).
 -export([version_compare/2, version_compare/3]).
--export([version_minor_equivalent/2, strict_version_minor_equivalent/2]).
+-export([strict_version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1,
@@ -188,7 +188,6 @@
 -spec version_compare
         (rabbit_semver:version_string(), rabbit_semver:version_string(),
          ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean().
--spec version_minor_equivalent(rabbit_semver:version_string(), rabbit_semver:version_string()) -> boolean().
 -spec dict_cons(any(), any(), dict:dict()) -> dict:dict().
 -spec orddict_cons(any(), any(), orddict:orddict()) -> orddict:orddict().
 -spec gb_trees_cons(any(), any(), gb_trees:tree()) -> gb_trees:tree().
@@ -717,60 +716,15 @@ version_compare(A, B) ->
                  end
     end.
 
-%% For versions starting from 3.7.x:
-%% Versions are considered compatible (except for special cases; see
-%% below). The feature flags will determine if they are actually
-%% compatible.
-%%
-%% For versions up-to 3.7.x:
-%% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
-%% versions do not match that pattern, just compare them.
-%%
-%% Special case for 3.6.6 because it introduced a change to the schema.
-%% e.g. 3.6.6 is not compatible with 3.6.5
-%% This special case can be removed once 3.6.x reaches EOL
-version_minor_equivalent(A, B) ->
-    {{MajA, MinA, PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
-    {{MajB, MinB, PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
-
-    case {MajA, MinA, MajB, MinB} of
-        {3, 6, 3, 6} ->
-            if
-                PatchA >= 6 -> PatchB >= 6;
-                PatchA < 6  -> PatchB < 6;
-                true -> false
-            end;
-        _
-          when (MajA < 3 orelse (MajA =:= 3 andalso MinA =< 6))
-               orelse
-               (MajB < 3 orelse (MajB =:= 3 andalso MinB =< 6)) ->
-            MajA =:= MajB andalso MinA =:= MinB;
-        _ ->
-            %% Starting with RabbitMQ 3.7.x, we consider this
-            %% minor release series and all subsequent series to
-            %% be possibly compatible, based on just the version.
-            %% The real compatibility check is deferred to the
-            %% rabbit_feature_flags module in rabbitmq-server.
-            true
-    end.
-
-%% This is the same as above except that e.g. 3.7.x and 3.8.x are
-%% considered incompatible (as if there were no feature flags). This is
-%% useful to check plugin compatibility (`broker_versions_requirement`
-%% field in plugins).
+%% The function below considers that e.g. 3.7.x and 3.8.x are incompatible (as
+%% if there were no feature flags). This is useful to check plugin
+%% compatibility (`broker_versions_requirement` field in plugins).
 
 strict_version_minor_equivalent(A, B) ->
-    {{MajA, MinA, PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
-    {{MajB, MinB, PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
+    {{MajA, MinA, _PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
+    {{MajB, MinB, _PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
 
-    case {MajA, MinA, MajB, MinB} of
-        {3, 6, 3, 6} -> if
-                            PatchA >= 6 -> PatchB >= 6;
-                            PatchA < 6  -> PatchB < 6;
-                            true -> false
-                        end;
-        _            -> MajA =:= MajB andalso MinA =:= MinB
-    end.
+    MajA =:= MajB andalso MinA =:= MinB.
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
