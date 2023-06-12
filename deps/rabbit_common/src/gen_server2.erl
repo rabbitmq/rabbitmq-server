@@ -805,18 +805,7 @@ in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
-    case Req of
-        %% This clause will match only in R16B03.
-        %% Since 17.0 replace_state is not a system message.
-        {replace_state, StateFun} ->
-            GS2State1 = StateFun(GS2State),
-            _ = gen:reply(From, GS2State1),
-            system_continue(Parent, Debug, GS2State1);
-        _ ->
-            %% gen_server puts Hib on the end as the 7th arg, but that version
-            %% of the fun seems not to be documented so leaving out for now.
-            sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State)
-    end;
+    sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
 process_msg({'$with_state', From, Fun},
            GS2State = #gs2_state{state = State}) ->
     reply(From, catch Fun(State)),
