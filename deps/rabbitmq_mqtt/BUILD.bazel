@@ -4,7 +4,6 @@ load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
-    "ENABLE_FEATURE_MAYBE_EXPR",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
@@ -122,7 +121,6 @@ eunit(
         ":test_event_recorder_beam",
         ":test_util_beam",
     ],
-    erl_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
     target = ":test_erlang_app",
 )
 

@@ -22,8 +22,6 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
 
 MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
 
-ENABLE_FEATURE_MAYBE_EXPR = "-enable-feature maybe_expr"
-
 RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
     "-DINSTR_MOD=gm",
 ]
@@ -182,7 +180,6 @@ def rabbitmq_suite(
     ct_test(
         name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
-        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
@@ -242,7 +239,6 @@ def rabbitmq_integration_suite(
         suite_name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
-        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
@@ -265,7 +261,6 @@ def rabbitmq_integration_suite(
         suite_name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG, MIXED_VERSION_CLUSTER_TAG],
-        ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
