@@ -112,13 +112,6 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-26.0-rc3.tar.gz"],
 )
 
-http_archive(
-    name = "io_buildbuddy_buildbuddy_toolchain",
-    sha256 = "a2a5cccec251211e2221b1587af2ce43c36d32a42f5d881737db3b546a536510",
-    strip_prefix = "buildbuddy-toolchain-829c8a574f706de5c96c54ca310f139f4acda7dd",
-    urls = ["https://github.com/buildbuddy-io/buildbuddy-toolchain/archive/829c8a574f706de5c96c54ca310f139f4acda7dd.tar.gz"],
-)
-
 load(
     "@rules_erlang//:rules_erlang.bzl",
     "erlang_config",
