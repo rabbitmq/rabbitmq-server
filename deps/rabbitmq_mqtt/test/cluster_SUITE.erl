@@ -31,17 +31,20 @@
 
 all() ->
     [
-     {group, cluster_size_5}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-     {cluster_size_5, [],
-      [
-       connection_id_tracking,
-       connection_id_tracking_on_nodedown,
-       connection_id_tracking_with_decommissioned_node
-      ]}
+     {v4, [], cluster_size_5()},
+     {v5, [], cluster_size_5()}
+    ].
+cluster_size_5() ->
+    [
+     connection_id_tracking,
+     connection_id_tracking_on_nodedown,
+     connection_id_tracking_with_decommissioned_node
     ].
 
 %% -------------------------------------------------------------------
@@ -63,9 +66,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_5, Config) ->
+init_per_group(Group, Config) ->
     rabbit_ct_helpers:set_config(
-      Config, [{rmq_nodes_count, 5}]).
+      Config, [{rmq_nodes_count, 5},
+               {mqtt_version, Group}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -79,10 +83,11 @@ init_per_testcase(Testcase, Config) ->
                                tcp_port_mqtt_tls_extra]},
         {rmq_nodes_clustered, true}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
       setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps()),
+    util:maybe_skip_v5(Config2).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
