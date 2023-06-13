@@ -142,6 +142,8 @@ dispatcher() ->
      {"/queues/:vhost/:queue/actions",                         rabbit_mgmt_wm_queue_actions, []},
      {"/queues/quorum/:vhost/:queue/replicas/add",             rabbit_mgmt_wm_quorum_queue_replicas_add_member, []},
      {"/queues/quorum/:vhost/:queue/replicas/delete",          rabbit_mgmt_wm_quorum_queue_replicas_delete_member, []},
+     {"/queues/quorum/replicas/on/:node/grow",                 rabbit_mgmt_wm_quorum_queue_replicas_grow, []},
+     {"/queues/quorum/replicas/on/:node/shrink",               rabbit_mgmt_wm_quorum_queue_replicas_shrink, []},
      {"/bindings",                                             rabbit_mgmt_wm_bindings, [all]},
      {"/bindings/:vhost",                                      rabbit_mgmt_wm_bindings, [all]},
      {"/bindings/:vhost/e/:source/:dtype/:destination",        rabbit_mgmt_wm_bindings, [source_destination]},

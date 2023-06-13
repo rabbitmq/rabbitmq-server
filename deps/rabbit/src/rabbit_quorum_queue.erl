@@ -1202,6 +1202,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 shrink_all(Node) ->
+    rabbit_log:info("Asked to remove all quorum queue replicas from node ~ts", [Node]),
     [begin
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: removing member (replica) on node ~w",
@@ -1222,8 +1223,13 @@ shrink_all(Node) ->
 -spec grow(node(), binary(), binary(), all | even) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
+<<<<<<< HEAD
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     Running = rabbit_nodes:all_running(),
+=======
+ grow(Node, VhostSpec, QueueSpec, Strategy) ->
+    Running = rabbit_nodes:list_running(),
+>>>>>>> da1151c45e (Implement {POST, DELETE} /api/queues/quorum/replicas/on/:node/{grow,shrink})
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
