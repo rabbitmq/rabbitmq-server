@@ -110,7 +110,7 @@ close_connection(Pid, Reason) ->
 
 init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
     Self = self(),
-    SendFun = fun (_Sync, Data) ->
+    SendFun = fun(Data) ->
                       Self ! {send, Data},
                       ok
               end,

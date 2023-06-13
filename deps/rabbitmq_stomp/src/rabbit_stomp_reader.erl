@@ -125,12 +125,6 @@ handle_info({Tag, Sock}, State=#reader_state{socket=Sock})
 handle_info({Tag, Sock, Reason}, State=#reader_state{socket=Sock})
         when Tag =:= tcp_error; Tag =:= ssl_error ->
     {stop, {inet_error, Reason}, State};
-handle_info({inet_reply, _Sock, {error, closed}}, State) ->
-    {stop, normal, State};
-handle_info({inet_reply, _, ok}, State) ->
-    {noreply, State, hibernate};
-handle_info({inet_reply, _, Status}, State) ->
-    {stop, Status, State};
 handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), hibernate};
 handle_info({conserve_resources, Conserve}, State) ->
@@ -228,7 +222,7 @@ process_received_bytes(Bytes,
         {more, ParseState1} ->
             {ok, State#reader_state{parse_state = ParseState1}};
         {ok, Frame, Rest} ->
-            case rabbit_stomp_processor:process_frame(Frame, ProcState) of
+            try rabbit_stomp_processor:process_frame(Frame, ProcState) of
                 {ok, NewProcState, Conn} ->
                     PS = rabbit_stomp_frame:initial_state(),
                     NextState = maybe_block(State, Frame),
@@ -239,6 +233,10 @@ process_received_bytes(Bytes,
                 {stop, Reason, NewProcState} ->
                     {stop, Reason,
                      processor_state(NewProcState, State)}
+            catch exit:{send_failed, closed} ->
+                      {stop, normal, State};
+                  exit:{send_failed, Reason} ->
+                      {stop, Reason, State}
             end;
         {error, Reason} ->
             %% The parser couldn't parse data. We log the reason right
@@ -371,16 +369,13 @@ log_tls_alert(Alert, ConnName) ->
 
 processor_args(Configuration, Sock) ->
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    SendFun = fun (sync, IoData) ->
-                      %% no messages emitted
-                      catch rabbit_net:send(RealSocket, IoData);
-                  (async, IoData) ->
-                      %% {inet_reply, _, _} will appear soon
-                      %% We ignore certain errors here, as we will be
-                      %% receiving an asynchronous notification of the
-                      %% same (or a related) fault shortly anyway. See
-                      %% bug 21365.
-                      catch rabbit_net:port_command(RealSocket, IoData)
+    SendFun = fun(IoData) ->
+                      case rabbit_net:send(RealSocket, IoData) of
+                          ok ->
+                              ok;
+                          {error, Reason} ->
+                              exit({send_failed, Reason})
+                      end
               end,
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(RealSocket),
     {SendFun, adapter_info(Sock),
