@@ -77,7 +77,6 @@ start_rabbitmq_server() {
         -syslog logger '[]' \
         -syslog syslog_error_logger false \
         -kernel prevent_overlapping_partitions false \
-        -enable-feature maybe_expr \
         "$@"
 }
 

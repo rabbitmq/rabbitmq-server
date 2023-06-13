@@ -5,7 +5,6 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
-    "ENABLE_FEATURE_MAYBE_EXPR",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
@@ -1322,7 +1321,6 @@ eunit(
         ":test_test_rabbit_event_handler_beam",
         ":test_clustering_utils_beam",
     ],
-    erl_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
     target = ":test_erlang_app",
     test_env = {
         "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
