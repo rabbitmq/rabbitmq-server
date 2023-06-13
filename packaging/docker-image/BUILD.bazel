@@ -45,8 +45,18 @@ CONVENIENCE_PACKAGES = [
     "neovim",
 ]
 
+FIRECRACKER_EXEC_PROPS = {
+    # https://www.buildbuddy.io/docs/rbe-microvms
+    "workload-isolation-type": "firecracker",
+    "init-dockerd": "true",
+    "recycle-runner": "true",
+    # Use the default buildbuddy RBE image
+    "container-image": "",
+}
+
 download_pkgs(
     name = "otp_pkgs",
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image_tar = "@ubuntu2004//image",
     packages = BUILD_DEPS_PACKAGES,
     tags = ["manual"],
@@ -54,6 +64,7 @@ download_pkgs(
 
 download_pkgs(
     name = "rabbitmq_pkgs",
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image_tar = "@ubuntu2004//image",
     packages = REQUIRED_PACKAGES + CONVENIENCE_PACKAGES,
     tags = ["manual"],
@@ -61,6 +72,7 @@ download_pkgs(
 
 install_pkgs(
     name = "otp_pkgs_image",
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image_tar = "@ubuntu2004//image",
     installables_tar = ":otp_pkgs.tar",
     installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
@@ -70,6 +82,7 @@ install_pkgs(
 
 install_pkgs(
     name = "rabbitmq_pkgs_image",
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image_tar = "@ubuntu2004//image",
     installables_tar = ":rabbitmq_pkgs.tar",
     installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
@@ -105,6 +118,7 @@ container_run_and_commit_layer(
         "/usr/local/src/build_install_openssh.sh",
         "rm /usr/local/src/build_install_openssh.sh",
     ],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":openssl_source.tar",
     tags = ["manual"],
 )
@@ -135,6 +149,7 @@ container_run_and_commit_layer(
         "/usr/local/src/build_install_otp.sh",
         "rm /usr/local/src/build_install_otp.sh",
     ],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":otp_source.tar",
     tags = ["manual"],
 )
@@ -178,6 +193,7 @@ container_run_and_commit_layer(
         "/opt/install_rabbitmq.sh",
         "rm /opt/install_rabbitmq.sh",
     ],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":rabbitmq_tarball.tar",
     tags = ["manual"],
 )
@@ -253,6 +269,7 @@ container_image(
 container_test(
     name = "openssl_test",
     configs = ["//packaging/docker-image/test_configs:openssl_ubuntu.yaml"],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":openssl_install_wrapper",
     tags = [
         "docker",
@@ -263,6 +280,7 @@ container_test(
 container_test(
     name = "otp_test",
     configs = ["//packaging/docker-image/test_configs:otp_ubuntu.yaml"],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":otp_install_wrapper",
     tags = [
         "docker",
@@ -273,6 +291,7 @@ container_test(
 container_test(
     name = "rabbitmq_test",
     configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
+    exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":rabbitmq",
     tags = [
         "docker",
