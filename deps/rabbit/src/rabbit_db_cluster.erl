@@ -18,6 +18,7 @@
          members/0,
          disc_members/0,
          node_type/0,
+         check_compatibility/1,
          check_consistency/0,
          cli_cluster_status/0]).
 
@@ -143,6 +144,21 @@ node_type() ->
 
 node_type_using_mnesia() ->
     rabbit_mnesia:node_type().
+
+-spec check_compatibility(RemoteNode) -> ok | {error, Reason} when
+      RemoteNode :: node(),
+      Reason :: any().
+%% @doc Ensures the given remote node is compatible with the node calling this
+%% function.
+
+check_compatibility(RemoteNode) ->
+    case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
+        ok    -> check_compatibility_using_mnesia(RemoteNode);
+        Error -> Error
+    end.
+
+check_compatibility_using_mnesia(RemoteNode) ->
+    rabbit_mnesia:check_mnesia_consistency(RemoteNode).
 
 -spec check_consistency() -> ok.
 %% @doc Ensures the cluster is consistent.

@@ -33,6 +33,7 @@
          %% Operations on the db and utils, mainly used in `rabbit_mnesia_rename' and `rabbit'
          init_db_unchecked/2,
          copy_db/1,
+         check_mnesia_consistency/1,
          check_cluster_consistency/0,
          ensure_mnesia_dir/0,
 
@@ -752,15 +753,20 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
             {error, not_found};
         {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
-        {_OTP, _Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
-            case check_consistency(Node, Protocol, Status) of
-                {error, _} = E -> E;
-                {ok, Res}      -> {ok, Res}
+        {_OTP, _Rabbit, _Protocol, {ok, Status}} when CheckNodesConsistency ->
+            case rabbit_db_cluster:check_compatibility(Node) of
+                ok ->
+                    case check_nodes_consistency(Node, Status) of
+                        ok    -> {ok, Status};
+                        Error -> Error
+                    end;
+                Error ->
+                    Error
             end;
-        {_OTP, _Rabbit, Protocol, {ok, Status}} ->
-            case check_consistency(Node, Protocol) of
-                {error, _} = E -> E;
-                ok             -> {ok, Status}
+        {_OTP, _Rabbit, _Protocol, {ok, Status}} ->
+            case rabbit_db_cluster:check_compatibility(Node) of
+                ok    -> {ok, Status};
+                Error -> Error
             end
     end.
 
@@ -1006,24 +1012,23 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(Node, ProtocolVersion) ->
-    rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node, ProtocolVersion),
-       check_rabbit_consistency(Node)]).
-
-check_consistency(Node, ProtocolVersion, Status) ->
-    rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node, ProtocolVersion),
-       check_rabbit_consistency(Node),
-       check_nodes_consistency(Node, Status)]).
-
-check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
+check_nodes_consistency(Node, {RemoteAllNodes, _, _}) ->
     case rabbit_nodes:me_in_nodes(RemoteAllNodes) of
         true ->
-            {ok, RemoteStatus};
+            ok;
         false ->
             {error, {inconsistent_cluster,
                      format_inconsistent_cluster_message(node(), Node)}}
+    end.
+
+check_mnesia_consistency(Node) ->
+    case remote_node_info(Node) of
+        {badrpc, _} = Reason ->
+            {error, Reason};
+        {_OTP, _RMQ, _ProtocolVersion, {error, _} = Error} ->
+            Error;
+        {_OTP, _RMQ, ProtocolVersion, _Status} ->
+            check_mnesia_consistency(Node, ProtocolVersion)
     end.
 
 check_mnesia_consistency(Node, ProtocolVersion) ->
@@ -1073,9 +1078,6 @@ with_running_or_clean_mnesia(Fun) ->
             Result
     end.
 
-check_rabbit_consistency(RemoteNode) ->
-    rabbit_feature_flags:check_node_compatibility(RemoteNode).
-
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
 %% mnesia tables aren't there because restarted RAM nodes won't have
@@ -1114,17 +1116,13 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) ->
                      "Could not auto-cluster with node ~ts: " ++ Fmt, [Node | Args]),
                    find_reachable_peer_to_cluster_with(Nodes)
            end,
-    case remote_node_info(Node) of
-        {badrpc, _} = Reason ->
+    case rabbit_db_cluster:check_compatibility(Node) of
+        ok ->
+            {ok, Node};
+        {error, {badrpc, _} = Reason} ->
             Fail("~tp", [Reason]);
-        {_OTP, _RMQ, _Protocol, {error, _} = E} ->
-            Fail("~tp", [E]);
-        {OTP, RMQ, Protocol, _} ->
-            case check_consistency(Node, Protocol) of
-                {error, _} -> Fail("versions ~tp",
-                                   [{OTP, RMQ}]);
-                ok         -> {ok, Node}
-            end
+        Error ->
+            Fail("~tp", [Error])
     end.
 
 is_only_clustered_disc_node() ->
