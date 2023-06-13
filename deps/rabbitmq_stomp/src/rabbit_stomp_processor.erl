@@ -46,7 +46,7 @@ adapter_name(State) ->
   #stomp_configuration{},
   {SendFun, AdapterInfo, SSLLoginName, PeerAddr})
     -> #proc_state{}
-  when SendFun :: fun((atom(), binary()) -> term()),
+  when SendFun :: fun((binary()) -> term()),
        AdapterInfo :: #amqp_adapter_info{},
        SSLLoginName :: atom() | binary(),
        PeerAddr :: inet:ip_address().
@@ -1174,7 +1174,7 @@ send_frame(Command, Headers, BodyFragments, State) ->
 
 send_frame(Frame, State = #proc_state{send_fun = SendFun,
                                  trailing_lf = TrailingLF}) ->
-    SendFun(async, rabbit_stomp_frame:serialize(Frame, TrailingLF)),
+    SendFun(rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     State.
 
 send_error_frame(Message, ExtraHeaders, Format, Args, State) ->

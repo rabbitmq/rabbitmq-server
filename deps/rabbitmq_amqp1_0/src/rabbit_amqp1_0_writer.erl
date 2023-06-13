@@ -142,10 +142,6 @@ handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
 handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     rabbit_amqqueue:notify_sent_queue_down(QPid),
     State;
-handle_message({inet_reply, _, ok}, State) ->
-    rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats);
-handle_message({inet_reply, _, Status}, _State) ->
-    exit({writer, send_failed, Status});
 handle_message(emit_stats, State = #wstate{reader = ReaderPid}) ->
     ReaderPid ! ensure_stats,
     rabbit_event:reset_stats_timer(State, #wstate.stats_timer);
@@ -251,30 +247,12 @@ maybe_flush(State = #wstate{pending = Pending}) ->
 
 flush(State = #wstate{pending = []}) ->
     State;
-flush(State = #wstate{sock = Sock, pending = Pending}) ->
-    ok = port_cmd(Sock, lists:reverse(Pending)),
-    State#wstate{pending = []}.
-
-%% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
-%% Status} to obtain the result. That is bad when it is called from
-%% the writer since it requires scanning of the writers possibly quite
-%% large message queue.
-%%
-%% So instead we lift the code from prim_inet:send/2, which is what
-%% gen_tcp:send/2 calls, do the first half here and then just process
-%% the result code in handle_message/2 as and when it arrives.
-%%
-%% This means we may end up happily sending data down a closed/broken
-%% socket, but that's ok since a) data in the buffers will be lost in
-%% any case (so qualitatively we are no worse off than if we used
-%% gen_tcp:send/2), and b) we do detect the changed socket status
-%% eventually, i.e. when we get round to handling the result code.
-%%
-%% Also note that the port has bounded buffers and port_command blocks
-%% when these are full. So the fact that we process the result
-%% asynchronously does not impact flow control.
-port_cmd(Sock, Data) ->
-    true = try rabbit_net:port_command(Sock, Data)
-           catch error:Error -> exit({writer, send_failed, Error})
-           end,
-    ok.
+flush(State0 = #wstate{sock = Sock, pending = Pending}) ->
+    case rabbit_net:send(Sock, lists:reverse(Pending)) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            exit({writer, send_failed, Reason})
+    end,
+    State = State0#wstate{pending = []},
+    rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats).
