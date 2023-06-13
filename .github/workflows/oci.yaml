@@ -62,24 +62,7 @@ jobs:
             build:buildbuddy --disk_cache=
 
             build:buildbuddy --remote_download_toplevel
-
-            build --@io_bazel_rules_docker//transitions:enable=false
           EOF
-
-      - name: Check OTP/Elixir versions used in RBE
-        id: load-info
-        run: |
-          bazelisk build :otp_version :elixir_version \
-            --config=rbe \
-            --platforms=//bazel/platforms:erlang_linux_${{ matrix.otp_version_id }}_platform
-          echo "otp=$(cat bazel-bin/otp_version.txt)" >> $GITHUB_OUTPUT
-          echo "elixir=$(cat bazel-bin/elixir_version.txt)" >> $GITHUB_OUTPUT
-
-      - name: Configure OTP & Elixir
-        uses: erlef/setup-beam@v1.15.3
-        with:
-          otp-version: ${{ steps.load-info.outputs.otp }}
-          elixir-version: ${{ steps.load-info.outputs.elixir }}
 
       - name: Configure otp for the OCI image
         run: |
@@ -91,18 +74,18 @@ jobs:
       - name: Build
         run: |
           bazelisk build //packaging/docker-image:rabbitmq \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Test
         run: |
           OCI_TESTS=$(bazel query 'tests(//packaging/docker-image/...)')
           bazelisk test ${OCI_TESTS} \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Load
         run: |
           bazelisk run //packaging/docker-image:rabbitmq \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Check for Push Credentials
         id: authorized
