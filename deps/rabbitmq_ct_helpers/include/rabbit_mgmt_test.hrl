@@ -2,6 +2,7 @@
 
 -define(OK, 200).
 -define(CREATED, 201).
+-define(ACCEPTED, 202).
 -define(NO_CONTENT, 204).
 -define(SEE_OTHER, 303).
 -define(BAD_REQUEST, 400).
