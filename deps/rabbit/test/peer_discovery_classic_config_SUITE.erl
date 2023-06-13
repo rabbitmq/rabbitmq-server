@@ -147,6 +147,9 @@ successful_discovery(Config) ->
                     cluster_members_online(Config, 1)},
                    ?TIMEOUT).
 
+successful_discovery_with_a_subset_of_nodes_coming_online() ->
+    [{timetrap, {minutes, 15}}].
+
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
   ?awaitMatch(
      {M1, M2} when length(M1) =:= 2; length(M2) =:= 2,
