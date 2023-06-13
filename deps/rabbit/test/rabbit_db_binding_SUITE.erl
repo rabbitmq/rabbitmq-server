@@ -322,10 +322,10 @@ match_routing_key1(_Config) ->
     Exchange2 = #exchange{name = XName2, durable = true},
     Binding = #binding{source = XName1, key = <<"*.*">>, destination = XName2,
                        args = #{foo => bar}},
-    ?assertEqual([], rabbit_db_binding:match_routing_key(XName1, [<<"a.b.c">>], false)),
+    ?assertEqual([], rabbit_db_binding:match_routing_key(XName1, [<<"a.b.c">>])),
     ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange1)),
     ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange2)),
     ?assertMatch(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
-    ?assertEqual([], rabbit_db_binding:match_routing_key(XName1, [<<"a.b.c">>], false)),
-    ?assertEqual([XName2], rabbit_db_binding:match_routing_key(XName1, [<<"a.b">>], false)),
+    ?assertEqual([], rabbit_db_binding:match_routing_key(XName1, [<<"a.b.c">>])),
+    ?assertEqual([XName2], rabbit_db_binding:match_routing_key(XName1, [<<"a.b">>])),
     passed.

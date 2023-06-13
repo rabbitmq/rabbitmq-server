@@ -20,7 +20,7 @@
          fold/2]).
 
 %% Routing. These functions are in the hot code path
--export([match/2, match_routing_key/3]).
+-export([match/2, match_routing_key/2]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -398,11 +398,10 @@ match_in_mnesia(SrcName, Match) ->
 %% match_routing_key().
 %% -------------------------------------------------------------------
 
--spec match_routing_key(Src, RoutingKeys, UseIndex) -> [Dst] when
+-spec match_routing_key(Src, RoutingKeys) -> [Dst] when
       Src :: rabbit_types:binding_source(),
       Dst :: rabbit_types:binding_destination(),
-      RoutingKeys :: [binary() | '_'],
-      UseIndex :: boolean().
+      RoutingKeys :: [binary() | '_'].
 %% @doc Matches all binding records that have `Src' as source of the binding
 %% and that match any routing key in `RoutingKeys'.
 %%
@@ -410,18 +409,10 @@ match_in_mnesia(SrcName, Match) ->
 %%
 %% @private
 
-match_routing_key(SrcName, RoutingKeys, UseIndex) ->
+match_routing_key(SrcName, RoutingKeys) ->
     rabbit_db:run(
-      #{mnesia => fun() -> match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) end
+      #{mnesia => fun() -> route_in_mnesia(SrcName, RoutingKeys) end
        }).
-
-match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
-    case UseIndex of
-        true ->
-            route_v2(?MNESIA_INDEX_TABLE, SrcName, RoutingKeys);
-        _ ->
-            route_in_mnesia_v1(SrcName, RoutingKeys)
-    end.
 
 %% -------------------------------------------------------------------
 %% recover().
@@ -728,13 +719,13 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 %% Routing. Hot code path
 %% -------------------------------------------------------------------------
-route_in_mnesia_v1(SrcName, [RoutingKey]) ->
+route_in_mnesia(SrcName, [RoutingKey]) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
     ets:select(?MNESIA_TABLE, [{MatchHead, [], ['$1']}]);
-route_in_mnesia_v1(SrcName, [_|_] = RoutingKeys) ->
+route_in_mnesia(SrcName, [_|_] = RoutingKeys) ->
     %% Normally we'd call mnesia:dirty_select/2 here, but that is quite
     %% expensive for the same reasons as above, and, additionally, due to
     %% mnesia 'fixing' the table with ets:safe_fixtable/2, which is wholly
@@ -753,36 +744,3 @@ route_in_mnesia_v1(SrcName, [_|_] = RoutingKeys) ->
     Conditions = [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
                                                 RKey <- RoutingKeys]])],
     ets:select(?MNESIA_TABLE, [{MatchHead, Conditions, ['$1']}]).
-
-%% rabbit_router:match_routing_key/2 uses ets:select/2 to get destinations.
-%% ets:select/2 is expensive because it needs to compile the match spec every
-%% time and lookup does not happen by a hash key.
-%%
-%% In contrast, route_v2/2 increases end-to-end message sending throughput
-%% (i.e. from RabbitMQ client to the queue process) by up to 35% by using ets:lookup_element/3.
-%% Only the direct exchange type uses the rabbit_index_route table to store its
-%% bindings by table key tuple {SourceExchange, RoutingKey}.
--spec route_v2(ets:table(), rabbit_types:binding_source(), [rabbit_router:routing_key(), ...]) ->
-    rabbit_router:match_result().
-route_v2(Table, SrcName, [RoutingKey]) ->
-    %% optimization
-    destinations(Table, SrcName, RoutingKey);
-route_v2(Table, SrcName, [_|_] = RoutingKeys) ->
-    lists:flatmap(fun(Key) ->
-                          destinations(Table, SrcName, Key)
-                  end, RoutingKeys).
-
-destinations(Table, SrcName, RoutingKey) ->
-    %% Prefer try-catch block over checking Key existence with ets:member/2.
-    %% The latter reduces throughput by a few thousand messages per second because
-    %% of function db_member_hash in file erl_db_hash.c.
-    %% We optimise for the happy path, that is the binding / table key is present.
-    try
-        ets:lookup_element(Table,
-                           {SrcName, RoutingKey},
-                           #index_route.destination)
-    catch
-        error:badarg ->
-            []
-    end.
-

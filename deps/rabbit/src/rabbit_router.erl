@@ -32,4 +32,4 @@ match_bindings(SrcName, Match) ->
     match_result().
 
 match_routing_key(SrcName, RoutingKeys) ->
-    rabbit_db_binding:match_routing_key(SrcName, RoutingKeys, false).
+    rabbit_db_binding:match_routing_key(SrcName, RoutingKeys).

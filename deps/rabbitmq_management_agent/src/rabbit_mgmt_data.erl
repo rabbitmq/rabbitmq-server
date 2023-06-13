@@ -367,12 +367,11 @@ match_consumer_spec(Id) ->
 match_queue_consumer_spec(Id) ->
     [{{{'$1', '_', '_'}, '_'}, [{'==', {Id}, '$1'}], ['$_']}].
 
-lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
+lookup_element(Table, Key) ->
+    lookup_element(Table, Key, 2).
 
 lookup_element(Table, Key, Pos) ->
-    try ets:lookup_element(Table, Key, Pos)
-    catch error:badarg -> []
-    end.
+    ets:lookup_element(Table, Key, Pos, []).
 
 -spec lookup_smaller_sample(atom(), any()) -> maybe_slide().
 lookup_smaller_sample(Table, Id) ->

@@ -53,7 +53,7 @@ assert_args_equivalence(X, Args) ->
 %% time and lookup does not happen by a hash key.
 %%
 %% In contrast, route_v2/2 increases end-to-end message sending throughput
-%% (i.e. from RabbitMQ client to the queue process) by up to 35% by using ets:lookup_element/3.
+%% (i.e. from RabbitMQ client to the queue process) by up to 35% by using ets:lookup_element/4.
 %% Only the direct exchange type uses the rabbit_index_route table to store its
 %% bindings by table key tuple {SourceExchange, RoutingKey}.
 -spec route_v2(rabbit_types:binding_source(), [rabbit_router:routing_key(), ...]) ->
@@ -67,15 +67,7 @@ route_v2(SrcName, [_|_] = RoutingKeys) ->
                   end, RoutingKeys).
 
 destinations(SrcName, RoutingKey) ->
-    %% Prefer try-catch block over checking Key existence with ets:member/2.
-    %% The latter reduces throughput by a few thousand messages per second because
-    %% of function db_member_hash in file erl_db_hash.c.
-    %% We optimise for the happy path, that is the binding / table key is present.
-    try
-        ets:lookup_element(rabbit_index_route,
-                           {SrcName, RoutingKey},
-                           #index_route.destination)
-    catch
-        error:badarg ->
-            []
-    end.
+    ets:lookup_element(rabbit_index_route,
+                       {SrcName, RoutingKey},
+                       #index_route.destination,
+                       []).
