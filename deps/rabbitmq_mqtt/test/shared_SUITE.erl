@@ -997,7 +997,7 @@ many_qos1_messages(Config) ->
     lists:foreach(fun(P) ->
                           {ok, _} = emqtt:publish(C, Topic, P, qos1)
                   end, Payloads),
-    expect_publishes(C, Topic, Payloads),
+    ok = expect_publishes(C, Topic, Payloads),
     ok = emqtt:disconnect(C).
 
 %% This test is mostly interesting in mixed version mode where feature flag
