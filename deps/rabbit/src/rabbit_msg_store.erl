@@ -589,14 +589,16 @@ read_many_file3(MsgIds, CState = #client_msstate{ file_handles_ets = FileHandles
 
 contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 
--spec remove([rabbit_types:msg_id()], client_msstate()) -> 'ok'.
+-spec remove([rabbit_types:msg_id()], client_msstate()) -> {'ok', [rabbit_types:msg_id()]}.
 
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { flying_ets = FlyingEts,
                                           client_ref = CRef }) ->
     %% If the entry was deleted we act as if it wasn't by using the right default.
-    [ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN}) || {MsgRef, _} <- MsgIds],
-    server_cast(CState, {remove, CRef, MsgIds}).
+    Res = [{MsgId, ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN})}
+        || {MsgRef, MsgId} <- MsgIds],
+    server_cast(CState, {remove, CRef, MsgIds}),
+    {ok, [MsgId || {MsgId, ?FLYING_IS_IGNORED} <- Res]}.
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -838,8 +840,7 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
         ignore ->
             %% A 'remove' has already been issued and eliminated the
             %% 'write'.
-            State1 = blind_confirm(CRef, sets:add_element(MsgId, sets:new([{version,2}])),
-                                   ignored, State),
+            %%
             %% If all writes get eliminated, cur_file_cache_ets could
             %% grow unbounded. To prevent that we delete the cache
             %% entry here, but only if the message isn't in the
@@ -849,31 +850,26 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
             %% current file then the cache entry will be removed by
             %% the normal logic for that in write_message/4 and
             %% maybe_roll_to_new_file/2.
-            case index_lookup(MsgId, State1) of
+            case index_lookup(MsgId, State) of
                 [#msg_location { file = File }]
-                  when File == State1 #msstate.current_file ->
+                  when File == State #msstate.current_file ->
                     ok;
                 _ ->
                     true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0})
             end,
-            noreply(State1)
+            noreply(State)
     end;
 
 handle_cast({remove, CRef, MsgIds}, State) ->
-    {RemovedMsgIds, State1} =
+    State1 =
         lists:foldl(
-          fun ({MsgRef, MsgId}, {Removed, State2}) ->
+          fun ({MsgRef, MsgId}, State2) ->
                   case flying_remove({CRef, MsgRef}, State2) of
-                      process -> {[MsgId | Removed],
-                                  remove_message(MsgId, CRef, State2)};
-                      ignore  -> {Removed, State2}
+                      process -> remove_message(MsgId, CRef, State2);
+                      ignore  -> State2
                   end
-          end, {[], State}, MsgIds),
-    case RemovedMsgIds of
-        [] -> noreply(State1);
-        _  -> noreply(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
-                                    ignored, State1))
-    end;
+          end, State, MsgIds),
+    noreply(State1);
 
 handle_cast({compacted_file, File},
             State = #msstate { file_summary_ets = FileSummaryEts }) ->
@@ -1242,33 +1238,6 @@ record_pending_confirm(CRef, MsgId, State) ->
             end,
             maps:put(CRef, NewMsgIds, CTM)
       end, CRef, State).
-
-client_confirm(CRef, MsgIds, ActionTaken, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTM) ->
-              case maps:find(CRef, CTM) of
-                  {ok, Gs} -> MsgOnDiskFun(sets:intersection(Gs, MsgIds),
-                                           ActionTaken),
-                              MsgIds1 = sets_subtract(Gs, MsgIds),
-                              case sets:is_empty(MsgIds1) of
-                                  true  -> maps:remove(CRef, CTM);
-                                  false -> maps:put(CRef, MsgIds1, CTM)
-                              end;
-                  error    -> CTM
-              end
-      end, CRef, State).
-
-%% Function defined in both rabbit_msg_store and rabbit_variable_queue.
-sets_subtract(Set1, Set2) ->
-    case sets:size(Set2) of
-        1 -> sets:del_element(hd(sets:to_list(Set2)), Set1);
-        _ -> sets:subtract(Set1, Set2)
-    end.
-
-blind_confirm(CRef, MsgIds, ActionTaken, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTM) -> MsgOnDiskFun(MsgIds, ActionTaken), CTM end,
-      CRef, State).
 
 %% Detect whether the MsgId is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death

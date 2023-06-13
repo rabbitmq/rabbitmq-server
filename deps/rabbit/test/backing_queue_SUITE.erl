@@ -261,7 +261,7 @@ msg_store1(_Config) ->
     %% read them all again - this will hit the cache, not disk
     MSCState2 = msg_store_read(MsgIds, MSCState1),
     %% remove them all
-    ok = msg_store_remove(MsgIds, MSCState2),
+    {ok, _} = msg_store_remove(MsgIds, MSCState2),
     %% check first half doesn't exist
     false = msg_store_contains(false, MsgIds1stHalf, MSCState2),
     %% check second half does exist
@@ -299,7 +299,7 @@ msg_store1(_Config) ->
     ok = rabbit_msg_store:client_terminate(
            msg_store_read(MsgIds1stHalf, MSCState6)),
     MSCState7 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
-    ok = msg_store_remove(MsgIds1stHalf, MSCState7),
+    {ok, _} = msg_store_remove(MsgIds1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse msg_ids
@@ -437,7 +437,7 @@ msg_store_remove(MsgIds, MSCState) ->
 msg_store_remove(MsgStore, Ref, MsgIds) ->
     with_msg_store_client(MsgStore, Ref,
                           fun (MSCStateM) ->
-                                  ok = msg_store_remove(MsgIds, MSCStateM),
+                                  {ok, _} = msg_store_remove(MsgIds, MSCStateM),
                                   MSCStateM
                           end).
 
@@ -456,31 +456,31 @@ test_msg_store_confirms(MsgIds, Cap, GenRef, MSCState) ->
     ok = msg_store_write(MsgIds1, MSCState),
     ok = on_disk_await(Cap, MsgIds1),
     %% remove -> _
-    ok = msg_store_remove(MsgIds1, MSCState),
+    {ok, []} = msg_store_remove(MsgIds1, MSCState),
     ok = on_disk_await(Cap, []),
     %% write, remove -> confirmed
     MsgIds2 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
     ok = msg_store_write(MsgIds2, MSCState),
-    ok = msg_store_remove(MsgIds2, MSCState),
-    ok = on_disk_await(Cap, MsgIds2),
+    {ok, ConfirmedMsgIds2} = msg_store_remove(MsgIds2, MSCState),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds2) end, MsgIds2)),
     %% write, remove, write -> confirmed, confirmed
     MsgIds3 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
     ok = msg_store_write(MsgIds3, MSCState),
-    ok = msg_store_remove(MsgIds3, MSCState),
+    {ok, ConfirmedMsgIds3} = msg_store_remove(MsgIds3, MSCState),
     MsgIds4 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
     ok = msg_store_write(MsgIds4, MSCState),
-    ok = on_disk_await(Cap, MsgIds3 ++ MsgIds4),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds3) end, MsgIds3) ++ MsgIds4),
     %% remove, write -> confirmed
-    ok = msg_store_remove(MsgIds4, MSCState),
+    {ok, []} = msg_store_remove(MsgIds4, MSCState),
     MsgIds5 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
     ok = msg_store_write(MsgIds5, MSCState),
     ok = on_disk_await(Cap, MsgIds5),
     %% remove, write, remove -> confirmed
-    ok = msg_store_remove(MsgIds5, MSCState),
+    {ok, []} = msg_store_remove(MsgIds5, MSCState),
     MsgIds6 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
     ok = msg_store_write(MsgIds6, MSCState),
-    ok = msg_store_remove(MsgIds6, MSCState),
-    ok = on_disk_await(Cap, MsgIds6),
+    {ok, ConfirmedMsgIds6} = msg_store_remove(MsgIds6, MSCState),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds6) end, MsgIds6)),
     %% confirmation on timer-based sync
     passed = test_msg_store_confirm_timer(GenRef),
     passed.
@@ -502,7 +502,7 @@ test_msg_store_confirm_timer(GenRef) ->
     MsgIdsChecked = [{GenRef(), MsgId}],
     ok = msg_store_write(MsgIdsChecked, MSCState),
     ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], GenRef, MSCState, false),
-    ok = msg_store_remove(MsgIdsChecked, MSCState),
+    {ok, _} = msg_store_remove(MsgIdsChecked, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
@@ -520,7 +520,7 @@ msg_store_keep_busy_until_confirm(MsgIds, GenRef, MSCState, Blocked) ->
     after After ->
             MsgIds1 = [{GenRef(), MsgId} || MsgId <- MsgIds],
             ok = msg_store_write_flow(MsgIds1, MSCState),
-            ok = msg_store_remove(MsgIds1, MSCState),
+            {ok, _} = msg_store_remove(MsgIds1, MSCState),
             Recurse()
     end.
 
