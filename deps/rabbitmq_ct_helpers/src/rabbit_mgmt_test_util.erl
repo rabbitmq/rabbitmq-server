@@ -165,7 +165,7 @@ http_delete(Config, Path, CodeExp, Body) ->
 
 http_delete(Config, Path, User, Pass, CodeExp, Body) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, 0, delete, Path, [auth_header(User, Pass)], Body),
+        req(Config, 0, delete, Path, [auth_header(User, Pass)], format_for_upload(Body)),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 

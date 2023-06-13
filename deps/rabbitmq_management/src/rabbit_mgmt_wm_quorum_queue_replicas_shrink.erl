@@ -27,7 +27,7 @@ content_types_accepted(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
   NodeToRemove = rabbit_mgmt_util:id(node, ReqData),
-  rabbit_quorum_queue:shrink_all(rabbit_data_coercion:to_atom(NodeToRemove)),
+  _ = rabbit_quorum_queue:shrink_all(rabbit_data_coercion:to_atom(NodeToRemove)),
   {true, ReqData, Context}.
 
 delete_completed(ReqData, Context) ->
