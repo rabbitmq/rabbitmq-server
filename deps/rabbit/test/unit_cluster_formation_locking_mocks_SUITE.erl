@@ -47,25 +47,25 @@ end_per_testcase(_, _) ->
 
 init_with_lock_exits_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),
-    ?assertExit(cannot_acquire_startup_lock, rabbit_mnesia:init_with_lock(2, 10, fun() -> ok end)),
+    ?assertExit(cannot_acquire_startup_lock, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
 init_with_lock_ignore_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),
-    ?assertEqual(ok, rabbit_mnesia:init_with_lock(2, 10, fun() -> ok end)),
+    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
 init_with_lock_not_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> not_supported end),
-    ?assertEqual(ok, rabbit_mnesia:init_with_lock(2, 10, fun() -> ok end)),
+    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
 init_with_lock_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {ok, data} end),
     meck:expect(rabbit_peer_discovery_classic_config, unlock, fun(data) -> ok end),
-    ?assertEqual(ok, rabbit_mnesia:init_with_lock(2, 10, fun() -> ok end)),
+    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.

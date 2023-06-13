@@ -7,6 +7,10 @@
 
 -module(rabbit_mnesia).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([%% Main interface
          init/0,
          join_cluster/2,
@@ -67,7 +71,6 @@
 
 -ifdef(TEST).
 -compile(export_all).
--export([init_with_lock/3]).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -98,7 +101,8 @@ init() ->
                             [dir()]),
             rabbit_peer_discovery:log_configured_backend(),
             rabbit_peer_discovery:maybe_init(),
-            init_with_lock();
+            rabbit_peer_discovery:maybe_create_cluster(
+              fun create_cluster_callback/2);
         false ->
             NodeType = node_type(),
             case is_node_type_permitted(NodeType) of
@@ -121,117 +125,24 @@ init() ->
     ok = rabbit_node_monitor:global_sync(),
     ok.
 
-init_with_lock() ->
-    {Retries, Timeout} = rabbit_peer_discovery:locking_retry_timeout(),
-    init_with_lock(Retries, Timeout, fun run_peer_discovery/0).
-
-init_with_lock(0, _, RunPeerDiscovery) ->
-    case rabbit_peer_discovery:lock_acquisition_failure_mode() of
-        ignore ->
-            rabbit_log:warning("Could not acquire a peer discovery lock, out of retries", []),
-            RunPeerDiscovery(),
-            rabbit_peer_discovery:maybe_register();
-        fail ->
-            exit(cannot_acquire_startup_lock)
-    end;
-init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
-    LockResult = rabbit_peer_discovery:lock(),
-    rabbit_log:debug("rabbit_peer_discovery:lock returned ~tp", [LockResult]),
-    case LockResult of
-        not_supported ->
-            RunPeerDiscovery(),
-            rabbit_peer_discovery:maybe_register();
-        {ok, Data} ->
-            try
-                RunPeerDiscovery(),
-                rabbit_peer_discovery:maybe_register()
-            after
-                rabbit_peer_discovery:unlock(Data)
-            end;
-        {error, _Reason} ->
-            timer:sleep(Timeout),
-            init_with_lock(Retries - 1, Timeout, RunPeerDiscovery)
-    end.
-
--spec run_peer_discovery() -> ok | {[node()], rabbit_db_cluster:node_type()}.
-run_peer_discovery() ->
-    {RetriesLeft, DelayInterval} = rabbit_peer_discovery:discovery_retries(),
-    run_peer_discovery_with_retries(RetriesLeft, DelayInterval).
-
--spec run_peer_discovery_with_retries(non_neg_integer(), non_neg_integer()) -> ok | {[node()], rabbit_db_cluster:node_type()}.
-run_peer_discovery_with_retries(0, _DelayInterval) ->
+create_cluster_callback(none, NodeType) ->
+    DiscNodes = [node()],
+    NodeType1 = case is_node_type_permitted(NodeType) of
+                    false -> disc;
+                    true  -> NodeType
+                end,
+    init_db_and_upgrade(DiscNodes, NodeType1, true, _Retry = true),
+    rabbit_node_monitor:notify_joined_cluster(),
     ok;
-run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
-    FindBadNodeNames = fun
-        (Name, BadNames) when is_atom(Name) -> BadNames;
-        (Name, BadNames)                    -> [Name | BadNames]
-    end,
-    {DiscoveredNodes0, NodeType} =
-        case rabbit_peer_discovery:discover_cluster_nodes() of
-            {error, Reason} ->
-                RetriesLeft1 = RetriesLeft - 1,
-                rabbit_log:error("Peer discovery returned an error: ~tp. Will retry after a delay of ~b ms, ~b retries left...",
-                                [Reason, DelayInterval, RetriesLeft1]),
-                timer:sleep(DelayInterval),
-                run_peer_discovery_with_retries(RetriesLeft1, DelayInterval);
-            {ok, {Nodes, Type} = Config}
-              when is_list(Nodes) andalso (Type == disc orelse Type == disk orelse Type == ram) ->
-                case lists:foldr(FindBadNodeNames, [], Nodes) of
-                    []       -> Config;
-                    BadNames -> e({invalid_cluster_node_names, BadNames})
-                end;
-            {ok, {_, BadType}} when BadType /= disc andalso BadType /= ram ->
-                e({invalid_cluster_node_type, BadType});
-            {ok, _} ->
-                e(invalid_cluster_nodes_conf)
-        end,
-    DiscoveredNodes = lists:usort(DiscoveredNodes0),
-    rabbit_log:info("All discovered existing cluster peers: ~ts",
-                    [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
-    Peers = rabbit_nodes:nodes_excl_me(DiscoveredNodes),
-    case Peers of
-        [] ->
-            rabbit_log:info("Discovered no peer nodes to cluster with. "
-                            "Some discovery backends can filter nodes out based on a readiness criteria. "
-                            "Enabling debug logging might help troubleshoot."),
-            init_db_and_upgrade([node()], disc, false, _Retry = true);
-        _  ->
-            NodeType1 = case is_node_type_permitted(NodeType) of
-                            false -> disc;
-                            true  -> NodeType
-                        end,
-            rabbit_log:info("Peer nodes we can cluster with: ~ts",
-                [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
-            join_discovered_peers(Peers, NodeType1)
-    end.
-
-%% Attempts to join discovered,
-%% reachable and compatible (in terms of Mnesia internal protocol version and such)
-%% cluster peers in order.
-join_discovered_peers(TryNodes, NodeType) ->
-    {RetriesLeft, DelayInterval} = rabbit_peer_discovery:discovery_retries(),
-    join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval).
-
-join_discovered_peers_with_retries(TryNodes, _NodeType, 0, _DelayInterval) ->
-    rabbit_log:info(
-              "Could not successfully contact any node of: ~ts (as in Erlang distribution). "
-               "Starting as a blank standalone node...",
-                [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
-            init_db_and_upgrade([node()], disc, false, _Retry = true);
-join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval) ->
-    case find_reachable_peer_to_cluster_with(rabbit_nodes:nodes_excl_me(TryNodes)) of
-        {ok, Node} ->
-            rabbit_log:info("Node '~ts' selected for auto-clustering", [Node]),
-            {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
-            init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
-            rabbit_node_monitor:notify_joined_cluster();
-        none ->
-            RetriesLeft1 = RetriesLeft - 1,
-            rabbit_log:info("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
-                            [DelayInterval, RetriesLeft1]),
-            timer:sleep(DelayInterval),
-            join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft1, DelayInterval)
-    end.
+create_cluster_callback(RemoteNode, NodeType) ->
+    {ok, {_, DiscNodes, _}} = discover_cluster0(RemoteNode),
+    NodeType1 = case is_node_type_permitted(NodeType) of
+                    false -> disc;
+                    true  -> NodeType
+                end,
+    init_db_and_upgrade(DiscNodes, NodeType1, true, _Retry = true),
+    rabbit_node_monitor:notify_joined_cluster(),
+    ok.
 
 %% Make the node join a cluster. The node will be reset automatically
 %% before we actually cluster it. The nodes provided will be used to
@@ -1149,23 +1060,6 @@ is_virgin_node() ->
             List =:= []
     end.
 
-find_reachable_peer_to_cluster_with([]) ->
-    none;
-find_reachable_peer_to_cluster_with([Node | Nodes]) ->
-    Fail = fun (Fmt, Args) ->
-                   rabbit_log:warning(
-                     "Could not auto-cluster with node ~ts: " ++ Fmt, [Node | Args]),
-                   find_reachable_peer_to_cluster_with(Nodes)
-           end,
-    case rabbit_db_cluster:check_compatibility(Node) of
-        ok ->
-            {ok, Node};
-        {error, {badrpc, _} = Reason} ->
-            Fail("~tp", [Reason]);
-        Error ->
-            Fail("~tp", [Error])
-    end.
-
 is_only_clustered_disc_node() ->
     node_type() =:= disc andalso is_clustered() andalso
         cluster_nodes(disc) =:= [node()].
@@ -1177,17 +1071,6 @@ are_we_clustered_with(Node) ->
 
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
-error_description({invalid_cluster_node_names, BadNames}) ->
-    "In the 'cluster_nodes' configuration key, the following node names "
-        "are invalid: " ++ lists:flatten(io_lib:format("~tp", [BadNames]));
-error_description({invalid_cluster_node_type, BadType}) ->
-    "In the 'cluster_nodes' configuration key, the node type is invalid "
-        "(expected 'disc' or 'ram'): " ++
-        lists:flatten(io_lib:format("~tp", [BadType]));
-error_description(invalid_cluster_nodes_conf) ->
-    "The 'cluster_nodes' configuration key is invalid, it must be of the "
-        "form {[Nodes], Type}, where Nodes is a list of node names and "
-        "Type is either 'disc' or 'ram'";
 error_description(clustering_only_disc_node) ->
     "You cannot cluster a node if it is the only disc node in its existing "
         " cluster. If new nodes joined while this node was offline, use "
