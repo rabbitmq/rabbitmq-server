@@ -7,7 +7,7 @@
 -module(rabbit_mgmt_wm_quorum_queue_replicas_delete_member).
 
 -export([init/2, resource_exists/2, is_authorized/2, allowed_methods/2,
-         content_types_accepted/2, delete_resource/2]).
+         content_types_accepted/2, delete_resource/2, delete_completed/2]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -52,6 +52,9 @@ delete_resource(ReqData, Context) ->
       rabbit_mgmt_util:service_unavailable(Reason, ReqData, Context)
   end.
 
+delete_completed(ReqData, Context) ->
+  %% return 202 Accepted since this is an inherently asynchronous operation
+  {false, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
   rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
