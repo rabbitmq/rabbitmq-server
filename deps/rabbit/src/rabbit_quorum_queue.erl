@@ -1115,13 +1115,9 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
                                              end),
                                   amqqueue:set_pid(Q2, Leader)
                           end,
-<<<<<<< HEAD
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
-=======
-                    _ = rabbit_amqqueue:update(QName, Fun),
                     rabbit_log:info("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
->>>>>>> 6cbab00013 (HTTP API: introduce two endpoints for QQ replica management)
                     ok;
                 {timeout, _} ->
                     _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
@@ -1223,13 +1219,8 @@ shrink_all(Node) ->
 -spec grow(node(), binary(), binary(), all | even) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
-<<<<<<< HEAD
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     Running = rabbit_nodes:all_running(),
-=======
- grow(Node, VhostSpec, QueueSpec, Strategy) ->
-    Running = rabbit_nodes:list_running(),
->>>>>>> da1151c45e (Implement {POST, DELETE} /api/queues/quorum/replicas/on/:node/{grow,shrink})
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
