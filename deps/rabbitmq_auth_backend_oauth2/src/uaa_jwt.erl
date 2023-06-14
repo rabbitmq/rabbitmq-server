@@ -58,6 +58,7 @@ update_jwks_signing_keys() ->
         undefined ->
             {error, no_jwks_url};
         JwksUrl ->
+            rabbit_log:debug("Retrieving signing keys from ~ts", [JwksUrl]),
             case uaa_jwks:get(JwksUrl) of
                 {ok, {_, _, JwksBody}} ->
                     KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
