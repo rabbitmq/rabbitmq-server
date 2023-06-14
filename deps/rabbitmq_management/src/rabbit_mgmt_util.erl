@@ -18,7 +18,7 @@
          is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
 -export([user/1]).
--export([bad_request/3, bad_request_exception/4, internal_server_error/4,
+-export([bad_request/3, service_unavailable/3, bad_request_exception/4, internal_server_error/4,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
 -export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
@@ -767,6 +767,9 @@ a2b(B)                 -> B.
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
+
+service_unavailable(Reason, ReqData, Context) ->
+    halt_response(503, service_unavailable, Reason, ReqData, Context).
 
 not_authenticated(Reason, ReqData, Context) ->
     case is_oauth2_enabled() of
