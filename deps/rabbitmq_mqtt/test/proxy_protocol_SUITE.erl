@@ -14,15 +14,20 @@
 
 all() ->
     [
-        {group, non_parallel_tests}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-        {non_parallel_tests, [], [
-            proxy_protocol,
-            proxy_protocol_tls
-        ]}
+        {v4, [], tests()},
+        {v5, [], tests()}
+    ].
+
+tests() ->
+    [
+     proxy_protocol,
+     proxy_protocol_tls
     ].
 
 init_per_suite(Config) ->
@@ -50,7 +55,9 @@ end_per_suite(Config) ->
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) -> Config.
+init_per_group(Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
+    util:maybe_skip_v5(Config1).
 end_per_group(_, Config) -> Config.
 
 init_per_testcase(Testcase, Config) ->
@@ -64,7 +71,7 @@ proxy_protocol(Config) ->
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-    ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
+    ok = inet:send(Socket, connect_packet(Config)),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     timer:sleep(10),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
@@ -79,7 +86,7 @@ proxy_protocol_tls(Config) ->
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
-    ok = ssl:send(SslSocket, mqtt_3_1_1_connect_packet()),
+    ok = ssl:send(SslSocket, connect_packet(Config)),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     timer:sleep(10),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
@@ -95,6 +102,14 @@ connection_name() ->
 merge_app_env(MqttConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
 
+connect_packet(Config) ->
+    case ?config(mqtt_version, Config) of
+        v5 ->
+            mqtt_5_connect_packet();
+        v4 ->
+            mqtt_3_1_1_connect_packet()
+    end.
+
 mqtt_3_1_1_connect_packet() ->
     <<16,
     24,
@@ -108,6 +123,35 @@ mqtt_3_1_1_connect_packet() ->
     2,
     0,
     60,
+    0,
+    12,
+    84,
+    101,
+    115,
+    116,
+    67,
+    111,
+    110,
+    115,
+    117,
+    109,
+    101,
+    114>>.
+
+mqtt_5_connect_packet() ->
+    <<16,
+    25,
+    0,
+    4,
+    77,
+    81,
+    84,
+    84,
+    5,
+    2,
+    0,
+    60,
+    0,
     0,
     12,
     84,
