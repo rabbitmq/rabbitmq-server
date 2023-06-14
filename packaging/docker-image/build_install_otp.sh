@@ -12,7 +12,7 @@ export ERL_TOP="$OTP_PATH"
 ./otp_build autoconf
 CFLAGS="$(dpkg-buildflags --get CFLAGS)"; export CFLAGS
 # add -rpath to avoid conflicts between our OpenSSL's "libssl.so" and the libssl package by making sure /usr/local/lib is searched first (but only for Erlang/OpenSSL to avoid issues with other tools using libssl; https://github.com/docker-library/rabbitmq/issues/364)
-export CFLAGS="$CFLAGS -Wl,-rpath=/usr/local/lib"
+export CFLAGS="$CFLAGS -Wl,-rpath=/usr/local/lib/$(dpkg-architecture --query DEB_HOST_MULTIARCH)"
 hostArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
 buildArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"
 dpkgArch="$(dpkg --print-architecture)"; dpkgArch="${dpkgArch##*-}"

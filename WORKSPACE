@@ -64,10 +64,10 @@ container_pull(
 )
 
 http_file(
-    name = "openssl-1.1.1g",
-    downloaded_file_path = "openssl-1.1.1g.tar.gz",
-    sha256 = "ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46",
-    urls = ["https://www.openssl.org/source/openssl-1.1.1g.tar.gz"],
+    name = "openssl-3.1.1",
+    downloaded_file_path = "openssl-3.1.1.tar.gz",
+    sha256 = "b3aa61334233b852b63ddb048df181177c2c659eb9d4376008118f9c08d07674",
+    urls = ["https://github.com/openssl/openssl/releases/download/openssl-3.1.1/openssl-3.1.1.tar.gz"],
 )
 
 http_file(
