@@ -17,12 +17,13 @@ BUILD='???' \
 
 # Compile, install OpenSSL, verify that the command-line works & development headers are present
 make -j "$(getconf _NPROCESSORS_ONLN)"
-make install_sw install_ssldirs
+make install
 cd ..
 rm -rf "$OPENSSL_PATH"*
-ldconfig
+echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl-$OPENSSL_VERSION.conf
+ldconfig -v
 # use Debian's CA certificates
 rmdir "$OPENSSL_CONFIG_DIR/certs" "$OPENSSL_CONFIG_DIR/private"
 ln -sf /etc/ssl/certs /etc/ssl/private "$OPENSSL_CONFIG_DIR"
 # smoke test
-openssl version
+openssl version -a

@@ -94,14 +94,14 @@ container_layer(
     name = "openssl_source_layer",
     directory = "/usr/local/src",
     env = {
-        "OPENSSL_VERSION": "1.1.1g",
+        "OPENSSL_VERSION": "3.1.1",
     },
     files = [
-        "build_install_openssh.sh",
+        "build_install_openssl.sh",
     ],
     tags = ["manual"],
     tars = [
-        "@openssl-1.1.1g//file",
+        "@openssl-3.1.1//file",
     ],
 )
 
@@ -115,8 +115,8 @@ container_image(
 container_run_and_commit_layer(
     name = "openssl_layer",
     commands = [
-        "/usr/local/src/build_install_openssh.sh",
-        "rm /usr/local/src/build_install_openssh.sh",
+        "/usr/local/src/build_install_openssl.sh",
+        "rm /usr/local/src/build_install_openssl.sh",
     ],
     exec_properties = FIRECRACKER_EXEC_PROPS,
     image = ":openssl_source.tar",
@@ -182,6 +182,7 @@ container_image(
         "RABBITMQ_LOGS": "-",
     },
     layers = [
+        ":openssl_layer",
         ":otp_layer",
         ":rabbitmq_tarball_layer",
     ],
@@ -217,6 +218,7 @@ container_image(
         "LC_ALL": C_UTF8,
     },
     layers = [
+        ":openssl_layer",
         ":otp_layer",
         ":rabbitmq_layer",
     ],
