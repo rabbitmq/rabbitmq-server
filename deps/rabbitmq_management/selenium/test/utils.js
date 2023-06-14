@@ -36,7 +36,9 @@ module.exports = {
     if (!runLocal) {
       builder = builder.usingServer(seleniumUrl)
     }
-    return builder.forBrowser('chrome').build()
+    driver = builder.forBrowser('chrome').build()
+    driver.manage().setTimeouts( { pageLoad: 35000 } )
+    return driver
   },
 
   goToHome: (driver) => {
