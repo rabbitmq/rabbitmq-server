@@ -53,18 +53,18 @@ check_user_login(Username, AuthProps) ->
                             rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
                             user(ModNUser, {ok, [{Mod, Impl}], []});
                         Else ->
-                            rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
+                            rabbit_log:debug("User '~ts' failed authentication by backend ~ts", [Username, Mod]),
                             Else
                     end;
                 (_, {ok, User}) ->
                     %% We've successfully authenticated. Skip to the end...
                     {ok, User}
             end,
-            {refused, Username, "No modules checked '~s'", [Username]}, Modules)
-        catch 
-            Type:Error:Stacktrace -> 
-                rabbit_log:debug("User '~s' authentication failed with ~s:~p:~n~p", [Username, Type, Error, Stacktrace]),
-                {refused, Username, "User '~s' authentication failed with internal error. "
+            {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
+        catch
+            Type:Error:Stacktrace ->
+                rabbit_log:debug("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
+                {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
 
         end.
