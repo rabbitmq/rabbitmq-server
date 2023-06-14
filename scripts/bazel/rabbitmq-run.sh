@@ -248,8 +248,9 @@ case $CMD in
             while ps -p "$pid" >/dev/null 2>&1; do sleep 1; done
         ;;
     start-cluster)
-        nodes=${NODES:=3}
-        for ((n=0; n < nodes; n++))
+        start_index=${NODES_START_INDEX:=0}
+        nodes=${NODES:=3}+$start_index
+        for ((n=start_index; n < nodes; n++))
         do
             setup_node_env "$n"
 
@@ -280,8 +281,9 @@ case $CMD in
         done
         ;;
     stop-cluster)
-        nodes=${NODES:=3}
-        for ((n=nodes-1; n >= 0; n--))
+        start_index=${NODES_START_INDEX:=0}
+        nodes=${NODES:=3}+$start_index
+        for ((n=nodes-1; n >= start_index; n--))
         do
             "$RABBITMQCTL" -n "rabbit-$n@$HOSTNAME" stop
         done
