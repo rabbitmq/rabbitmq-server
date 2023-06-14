@@ -35,7 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - 25_3
         - 26
     timeout-minutes: 120
     steps:
@@ -82,8 +81,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "25.3"
-          elixir_version: 1.14.5
         - erlang_version: "26.0"
           elixir_version: 1.14.5
     timeout-minutes: 60

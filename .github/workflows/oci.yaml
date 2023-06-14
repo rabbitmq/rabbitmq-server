@@ -22,8 +22,6 @@ jobs:
   # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '26',
   # the following tags will be pushed to Dockerhub:
   #
-  # * 111aaa-otp-min (image OTP 25)
-  # * main-otp-min (image OTP 25)
   # * 111aaa-otp-max (image OTP 26)
   # * main-otp-max (image OTP 26)
 
@@ -33,8 +31,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_tag_suffix: otp-min-bazel
-            otp_version_id: 25_3
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 26
     steps:
