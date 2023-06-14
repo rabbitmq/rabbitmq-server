@@ -15,7 +15,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
--import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
+-import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_post/4, http_delete/3, http_delete/4]).
 -import(rabbit_misc, [pget/2]).
 
 -compile(nowarn_export_all).
@@ -53,7 +53,11 @@ groups() ->
                                vhosts,
                                nodes,
                                overview,
-                               disable_plugin
+                               disable_plugin,
+                               qq_replicas_add,
+                               qq_replicas_delete,
+                               qq_replicas_grow,
+                               qq_replicas_shrink
                               ]}
     ].
 
@@ -222,6 +226,91 @@ ha_queue_with_multiple_consumers(Config) ->
 
     http_delete(Config, "/queues/%2F/ha-queue3", ?NO_CONTENT),
     http_delete(Config, "/policies/%2F/HA", ?NO_CONTENT),
+
+    ok.
+
+qq_replicas_add(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.22">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.22"),
+
+    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
+    Body = [{node, Nodename1}],
+    http_post(Config, "/queues/quorum/%2F/qq.22/replicas/add", Body, ?NO_CONTENT),
+
+    http_delete(Config, "/queues/%2F/qq.22", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_delete(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.23">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.23"),
+
+    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
+    Body = [{node, Nodename1}],
+    http_post(Config, "/queues/quorum/%2F/qq.23/replicas/add", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/quorum/%2F/qq.23/replicas/delete", ?ACCEPTED, Body),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.23", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_grow(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.24">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.24"),
+
+    Nodename1 = rabbit_data_coercion:to_list(get_node_config(Config, 1, nodename)),
+    Body = [
+        {strategy, <<"all">>},
+        {queue_pattern, <<"qq.24">>},
+        {vhost_pattern, <<".*">>}
+    ],
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/grow", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.24", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_shrink(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.24">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.24"),
+
+    Nodename1 = rabbit_data_coercion:to_list(get_node_config(Config, 1, nodename)),
+    Body = [
+        {strategy, <<"all">>},
+        {queue_pattern, <<"qq.24">>},
+        {vhost_pattern, <<".*">>}
+    ],
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/grow", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/shrink", ?ACCEPTED),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.24", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
 
     ok.
 
@@ -790,6 +879,18 @@ queue_declare_durable(Chan, Name) ->
     Declare = #'queue.declare'{queue = Name, durable = true, exclusive = false},
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
     Q.
+
+queue_declare_quorum(Chan, Name) ->
+    Declare = #'queue.declare'{
+        queue = Name,
+        durable = true,
+        arguments = [
+            {<<"x-queue-type">>, longstr, <<"quorum">>}
+        ]
+    },
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
+    Q.
+
 
 queue_bind(Chan, Ex, Q, Key) ->
     Binding = #'queue.bind'{queue = Q,

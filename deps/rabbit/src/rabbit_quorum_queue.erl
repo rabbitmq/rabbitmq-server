@@ -1068,6 +1068,7 @@ get_sys_status(Proc) ->
 
 add_member(VHost, Name, Node, Timeout) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
+    rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
@@ -1080,6 +1081,7 @@ add_member(VHost, Name, Node, Timeout) ->
                     case lists:member(Node, QNodes) of
                         true ->
                           %% idempotent by design
+                          rabbit_log:debug("Quorum ~ts already has a replica on node ~ts", [rabbit_misc:rs(QName), Node]),
                           ok;
                         false ->
                             add_member(Q, Node, Timeout)
@@ -1115,6 +1117,7 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
                           end,
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
+                    rabbit_log:info("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
                     ok;
                 {timeout, _} ->
                     _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
@@ -1125,7 +1128,8 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
                     E
             end;
         E ->
-            E
+          rabbit_log:warning("Could not add a replica of quorum ~ts on node ~ts: ~p", [rabbit_misc:rs(QName), Node, E]),
+          E
     end.
 
 delete_member(VHost, Name, Node) ->
@@ -1194,6 +1198,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 shrink_all(Node) ->
+    rabbit_log:info("Asked to remove all quorum queue replicas from node ~ts", [Node]),
     [begin
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: removing member (replica) on node ~w",
