@@ -259,7 +259,7 @@ join_discovered_peers_with_retries(
        "Starting as a blank standalone node...",
        [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-    CreateClusterCallback(none, disc);
+    init_single_node(CreateClusterCallback);
 join_discovered_peers_with_retries(
   TryNodes, NodeType, RetriesLeft, DelayInterval, CreateClusterCallback) ->
     case find_reachable_peer_to_cluster_with(TryNodes) of
@@ -268,7 +268,7 @@ join_discovered_peers_with_retries(
                "Peer discovery: Node '~ts' selected for auto-clustering",
                [Node],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            CreateClusterCallback(Node, NodeType);
+            create_cluster(Node, NodeType, CreateClusterCallback);
         none ->
             RetriesLeft1 = RetriesLeft - 1,
             ?LOG_INFO(
@@ -297,6 +297,33 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) when Node =/= node() ->
     end;
 find_reachable_peer_to_cluster_with([Node | Nodes]) when Node =:= node() ->
     find_reachable_peer_to_cluster_with(Nodes).
+
+init_single_node(CreateClusterCallback) ->
+    IsVirgin = rabbit_db:is_virgin_node(),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync([], IsVirgin),
+    CreateClusterCallback(none, disc),
+    ok.
+
+create_cluster(RemoteNode, NodeType, CreateClusterCallback) ->
+    %% We want to synchronize feature flags first before we update the cluster
+    %% membership. This is needed to ensure the local list of Mnesia tables
+    %% matches the rest of the cluster for example, in case a feature flag
+    %% adds or removes tables.
+    %%
+    %% For instance, a feature flag may remove a table (so it's gone from the
+    %% cluster). If we were to wait for that table locally before
+    %% synchronizing feature flags, we would wait forever; indeed the feature
+    %% flag being disabled before sync, `rabbit_table:definitions()' would
+    %% return the old table.
+    %%
+    %% Feature flags need to be synced before any change to Mnesia membership.
+    %% If enabling feature flags fails, Mnesia could remain in an inconsistent
+    %% state that prevents later joining the nodes.
+    IsVirgin = rabbit_db:is_virgin_node(),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync([RemoteNode], IsVirgin),
+    CreateClusterCallback(RemoteNode, NodeType),
+    rabbit_node_monitor:notify_joined_cluster(),
+    ok.
 
 %% This module doesn't currently sanity-check the return value of
 %% `Backend:list_nodes()`. Therefore, it could return something invalid:
