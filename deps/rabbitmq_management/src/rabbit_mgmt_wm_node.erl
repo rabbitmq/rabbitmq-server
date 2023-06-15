@@ -63,7 +63,7 @@ node_data(Node, ReqData) ->
     Nodes = proplists:get_value(nodes, S),
     Running = proplists:get_value(running_nodes, S),
     Type = find_type(Node, Nodes),
-    Basic = [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}]],
+    Basic = [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}, {drained, rabbit_maintenance:is_being_drained_local_read(Node)}]],
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
             rabbit_mgmt_db:augment_nodes(Basic, rabbit_mgmt_util:range_ceil(ReqData));
