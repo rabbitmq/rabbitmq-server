@@ -190,6 +190,9 @@
   <% } %>
   <% if (show_column('overview', 'info')) { %>
      <td>
+       <% if (node.being_drained) { %>
+         <abbr class="status-yellow" title="Node was put under maintenance">maintenance mode</abbr>
+       <% } %>
          <abbr title="Message rates"><%= fmt_string(node.rates_mode) %></abbr>
        <% if (node.type == 'disc') { %>
          <abbr title="Broker definitions are held on disc.">disc</abbr>

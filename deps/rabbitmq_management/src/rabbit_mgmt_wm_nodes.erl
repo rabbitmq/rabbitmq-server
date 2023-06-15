@@ -51,5 +51,5 @@ all_nodes_raw() ->
     Nodes = proplists:get_value(nodes, S),
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),
-    [[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}] ||
+    [[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}, {being_drained, rabbit_maintenance:is_being_drained_local_read(Node)}] ||
         Type <- Types, Node <- proplists:get_value(Type, Nodes)].
