@@ -11,7 +11,8 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--export([join/2,
+-export([ensure_feature_flags_are_in_sync/2,
+         join/2,
          forget_member/2]).
 -export([change_node_type/1]).
 -export([is_clustered/0,
@@ -35,6 +36,14 @@
 %% -------------------------------------------------------------------
 %% Cluster formation.
 %% -------------------------------------------------------------------
+
+ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
+    Ret = rabbit_feature_flags:sync_feature_flags_with_cluster(
+            Nodes, NodeIsVirgin),
+    case Ret of
+        ok              -> ok;
+        {error, Reason} -> throw({error, {incompatible_feature_flags, Reason}})
+    end.
 
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),

@@ -42,12 +42,21 @@ init() ->
     ?LOG_DEBUG(
        "DB: this node is virgin: ~ts", [IsVirgin],
        #{domain => ?RMQLOG_DOMAIN_DB}),
+
     ensure_dir_exists(),
+    rabbit_peer_discovery:log_configured_backend(),
+    rabbit_peer_discovery:maybe_init(),
+
+    pre_init(IsVirgin),
+
     case init_using_mnesia() of
         ok ->
             ?LOG_DEBUG(
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
+
+            post_init(IsVirgin),
+
             ok;
         Error ->
             ?LOG_DEBUG(
@@ -55,6 +64,17 @@ init() ->
                #{domain => ?RMQLOG_DOMAIN_DB}),
             Error
     end.
+
+pre_init(IsVirgin) ->
+    Members = rabbit_db_cluster:members(),
+    OtherMembers = rabbit_nodes:nodes_excl_me(Members),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
+
+post_init(false = _IsVirgin) ->
+    rabbit_peer_discovery:maybe_register();
+post_init(true = _IsVirgin) ->
+    %% Registration handled by rabbit_peer_discovery.
+    ok.
 
 init_using_mnesia() ->
     ?LOG_DEBUG(

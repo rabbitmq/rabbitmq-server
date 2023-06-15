@@ -93,16 +93,12 @@ init() ->
             rabbit_log:info("Node database directory at ~ts is empty. "
                             "Assuming we need to join an existing cluster or initialise from scratch...",
                             [dir()]),
-            rabbit_peer_discovery:log_configured_backend(),
-            rabbit_peer_discovery:maybe_init(),
             rabbit_peer_discovery:maybe_create_cluster(
               fun create_cluster_callback/2);
         false ->
             NodeType = node_type(),
             init_db_and_upgrade(cluster_nodes(all), NodeType,
-                                NodeType =:= ram, _Retry = true),
-            rabbit_peer_discovery:maybe_init(),
-            rabbit_peer_discovery:maybe_register()
+                                NodeType =:= ram, _Retry = true)
     end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
@@ -113,12 +109,10 @@ init() ->
 create_cluster_callback(none, NodeType) ->
     DiscNodes = [node()],
     init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
-    rabbit_node_monitor:notify_joined_cluster(),
     ok;
 create_cluster_callback(RemoteNode, NodeType) ->
     {ok, {_, DiscNodes, _}} = discover_cluster0(RemoteNode),
     init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
-    rabbit_node_monitor:notify_joined_cluster(),
     ok.
 
 %% Make the node join a cluster. The node will be reset automatically
@@ -472,23 +466,6 @@ dir() -> mnesia:system_info(directory).
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     NodeIsVirgin = is_virgin_node(),
     rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
-    %% We want to synchronize feature flags first before we wait for
-    %% tables (which is needed to ensure the local view of the tables
-    %% matches the rest of the cluster). The reason is that some
-    %% feature flags may add or remove tables. In this case the list
-    %% of tables returned by `rabbit_table:definitions()' usually
-    %% depends on the state of feature flags but this state is local.
-    %%
-    %% For instance, a feature flag may remove a table (so it's gone
-    %% from the cluster). If we were to wait for that table locally
-    %% before synchronizing feature flags, we would wait forever;
-    %% indeed the feature flag being disabled before sync,
-    %% `rabbit_table:definitions()' would return the old table.
-    %%
-    %% Feature flags need to be synced before any change to Mnesia
-    %% membership. If enabling feature flags fails, Mnesia could remain
-    %% in an inconsistent state that prevents later joining the nodes.
-    ensure_feature_flags_are_in_sync(rabbit_nodes:nodes_excl_me(ClusterNodes), NodeIsVirgin),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -576,14 +553,6 @@ ensure_mnesia_not_running() ->
             ensure_mnesia_not_running();
         Reason when Reason =:= yes; Reason =:= starting ->
             throw({error, mnesia_unexpectedly_running})
-    end.
-
-ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
-    Ret = rabbit_feature_flags:sync_feature_flags_with_cluster(
-            Nodes, NodeIsVirgin),
-    case Ret of
-        ok              -> ok;
-        {error, Reason} -> throw({error, {incompatible_feature_flags, Reason}})
     end.
 
 ensure_schema_integrity() ->
