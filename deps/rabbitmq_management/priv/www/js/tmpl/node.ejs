@@ -13,6 +13,12 @@
 <div class="hider">
   <div class="box">
   <table class="facts facts-l">
+<% if (node.being_drained) { %>
+    <tr>
+      <th>Status</th>
+      <td><abbr class="status-yellow" title="Maintenance mode is in effect">The node was <a href="https://rabbitmq.com/upgrade.html#maintenance-mode">put under maintenance</a></abbr></td>
+    </tr>
+<% } %>
     <tr>
       <th>Uptime</th>
       <td><%= fmt_uptime(node.uptime) %></td>
