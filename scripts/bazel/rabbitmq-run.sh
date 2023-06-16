@@ -222,6 +222,14 @@ export RABBITMQ_SCRIPTS_DIR \
 
 HOSTNAME="$(hostname -s)"
 
+# install pre-built erlang if necessary
+if [[ ! -d '{ERLANG_HOME}' ]]; then
+    printf 'Extracting OTP from {ERLANG_TAR}\n'
+    tar --extract --directory / --file "$BASE_DIR"/'{ERLANG_TAR}'
+    printf "done.\n"
+    export PATH='{ERLANG_HOME}/bin':$PATH
+fi
+
 case $CMD in
     run-broker)
         setup_node_env
