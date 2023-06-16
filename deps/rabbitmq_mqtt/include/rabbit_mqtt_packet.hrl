@@ -158,6 +158,14 @@
 
 -type mqtt_packet() :: #mqtt_packet{}.
 
+-type client_id() :: binary().
+%% "The label attached to an Application Message which is matched
+%% against the Subscriptions known to the Server." [v5 1.2]
+-type topic() :: binary().
+%% "An expression contained in a Subscription to indicate an interest in one
+%% or more topics. A Topic Filter can include wildcard characters." [v5 1.2]
+-type topic_filter() :: binary().
+
 -record(mqtt_packet_connect, {proto_ver :: protocol_version(),
                               will_retain :: boolean(),
                               will_qos :: qos(),
@@ -165,9 +173,9 @@
                               clean_start :: boolean(),
                               keep_alive :: non_neg_integer(),
                               props :: properties(),
-                              client_id :: binary(),
+                              client_id :: client_id(),
                               will_props :: properties(),
-                              will_topic :: option(binary()),
+                              will_topic :: option(topic()),
                               will_payload :: option(binary()),
                               username :: option(binary()),
                               password :: option(binary())
@@ -177,7 +185,7 @@
                               code :: connect_code(),
                               props = #{} :: properties()}).
 
--record(mqtt_packet_publish, {topic_name :: binary(),
+-record(mqtt_packet_publish, {topic_name :: topic(),
                               %% "The Packet Identifier field is only present in
                               %% PUBLISH packets where the QoS level is 1 or 2."
                               packet_id :: option(packet_id()),
@@ -195,8 +203,6 @@
                                  retain_handling = 0 :: 0..2,
                                  id :: option(subscription_identifier())
                                 }).
-
--type topic_filter() :: binary().
 
 -record(mqtt_subscription, {topic_filter :: topic_filter(),
                             options :: #mqtt_subscription_opts{}
@@ -230,7 +236,7 @@
 -type mqtt_msg_v0() :: {RecordName :: mqtt_msg,
                         Retain :: boolean(),
                         Qos :: qos(),
-                        Topic :: binary(),
+                        Topic :: topic(),
                         Dup :: boolean(),
                         Packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
                         Payload :: binary()}.
@@ -238,7 +244,7 @@
 %% MQTT application message starting in 3.13
 -record(mqtt_msg, {retain :: boolean(),
                    qos :: qos(),
-                   topic :: binary(),
+                   topic :: topic(),
                    dup :: boolean(),
                    packet_id :: option(packet_id()) | ?WILL_MSG_QOS_1_CORRELATION,
                    payload :: binary(),
@@ -250,7 +256,7 @@
 -type mqtt_msg() :: #mqtt_msg{}.
 
 %% does not include vhost because vhost is used in the (D)ETS table name
--record(retained_message, {topic :: binary(),
+-record(retained_message, {topic :: topic(),
                            mqtt_msg :: mqtt_msg() | mqtt_msg_v0()
                           }).
 

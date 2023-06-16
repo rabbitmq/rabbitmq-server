@@ -15,11 +15,11 @@
 %%    "The ClientId MUST be a UTF-8 encoded string as defined in Section 1.5.3 [MQTT-3.1.3-4]." [v4 3.1.3.1]
 %% However, for backwards compatibility, we leave the client ID as a list of bytes in the Ra machine state because
 %% feature flag delete_ra_cluster_mqtt_node introduced in 3.12.0 will delete the Ra cluster anyway.
--type client_id() :: [byte()].
+-type client_id_ra() :: [byte()].
 
 -record(machine_state, {
-          client_ids = #{} :: #{client_id() => Connection :: pid()},
-          pids = #{} :: #{Connection :: pid() => [client_id(), ...]},
+          client_ids = #{} :: #{client_id_ra() => Connection :: pid()},
+          pids = #{} :: #{Connection :: pid() => [client_id_ra(), ...]},
           %% add acouple of fields for future extensibility
           reserved_1,
           reserved_2}).
