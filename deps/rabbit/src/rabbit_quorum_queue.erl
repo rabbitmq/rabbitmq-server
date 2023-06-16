@@ -441,62 +441,63 @@ handle_tick(QName,
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
     Self = self(),
-    _ = spawn(
-          fun() ->
-                  try
-                      Reductions = reductions(Name),
-                      rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
-                                                      NumCheckedOut, NumMessages,
-                                                      Reductions),
-                      Util = case NumConsumers of
-                                 0 -> 0;
-                                 _ -> rabbit_fifo:usage(Name)
-                             end,
-                      Keys = ?STATISTICS_KEYS -- [consumers,
-                                                  messages_dlx,
-                                                  message_bytes_dlx,
-                                                  single_active_consumer_pid,
-                                                  single_active_consumer_tag
-                                                 ],
-                      {SacTag, SacPid} = maps:get(single_active_consumer_id,
-                                                  Overview, {'', ''}),
-                      MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
-                      MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
-                      Infos = [{consumers, NumConsumers},
-                               {consumer_capacity, Util},
-                               {consumer_utilisation, Util},
-                               {message_bytes_ready, EnqueueBytes},
-                               {message_bytes_unacknowledged, CheckoutBytes},
-                               {message_bytes, MsgBytes},
-                               {message_bytes_persistent, MsgBytes},
-                               {messages_persistent, NumMessages},
-                               {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
-                               {message_bytes_dlx, MsgBytesDiscarded},
-                               {single_active_consumer_tag, SacTag},
-                               {single_active_consumer_pid, SacPid}
-                               | infos(QName, Keys)],
-                      rabbit_core_metrics:queue_stats(QName, Infos),
-                      ok = repair_leader_record(QName, Self),
-                      ExpectedNodes = rabbit_nodes:list_members(),
-                      case Nodes -- ExpectedNodes of
-                          [] ->
-                              ok;
-                          Stale ->
-                              rabbit_log:info("~ts: stale nodes detected. Purging ~w",
-                                              [rabbit_misc:rs(QName), Stale]),
-                              %% pipeline purge command
-                              {ok, Q} = rabbit_amqqueue:lookup(QName),
-                              ok = ra:pipeline_command(amqqueue:get_pid(Q),
-                                                       rabbit_fifo:make_purge_nodes(Stale)),
+    spawn(
+      fun() ->
+              try
+                  Reductions = reductions(Name),
+                  rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
+                                                  NumCheckedOut, NumMessages,
+                                                  Reductions),
+                  Util = case NumConsumers of
+                             0 -> 0;
+                             _ -> rabbit_fifo:usage(Name)
+                         end,
+                  Keys = ?STATISTICS_KEYS -- [consumers,
+                                              messages_dlx,
+                                              message_bytes_dlx,
+                                              single_active_consumer_pid,
+                                              single_active_consumer_tag
+                                             ],
+                  {SacTag, SacPid} = maps:get(single_active_consumer_id,
+                                              Overview, {'', ''}),
+                  MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
+                  MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
+                  Infos = [{consumers, NumConsumers},
+                           {consumer_capacity, Util},
+                           {consumer_utilisation, Util},
+                           {message_bytes_ready, EnqueueBytes},
+                           {message_bytes_unacknowledged, CheckoutBytes},
+                           {message_bytes, MsgBytes},
+                           {message_bytes_persistent, MsgBytes},
+                           {messages_persistent, NumMessages},
+                           {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
+                           {message_bytes_dlx, MsgBytesDiscarded},
+                           {single_active_consumer_tag, SacTag},
+                           {single_active_consumer_pid, SacPid}
+                           | infos(QName, Keys)],
+                  rabbit_core_metrics:queue_stats(QName, Infos),
+                  ok = repair_leader_record(QName, Self),
+                  ExpectedNodes = rabbit_nodes:list_members(),
+                  case Nodes -- ExpectedNodes of
+                      [] ->
+                          ok;
+                      Stale ->
+                          rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
+                                           [rabbit_misc:rs(QName), Stale]),
+                          %% pipeline purge command
+                          {ok, Q} = rabbit_amqqueue:lookup(QName),
+                          ok = ra:pipeline_command(amqqueue:get_pid(Q),
+                                                   rabbit_fifo:make_purge_nodes(Stale)),
 
-                              ok
-                      end
-                  catch
-                      _:_ ->
                           ok
                   end
-          end),
-    ok.
+              catch
+                  _:Err ->
+                      rabbit_log:debug("~ts: handle tick failed with ~p",
+                             [rabbit_misc:rs(QName), Err]),
+                      ok
+              end
+      end).
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
