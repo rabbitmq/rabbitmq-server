@@ -29,8 +29,10 @@
          sort_partitions/1,
          strip_cr_lf/1,
          consumer_activity_status/2,
+         filter_defined/1,
          filter_spec/1,
-         command_versions/0]).
+         command_versions/0,
+         filtering_supported/0]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -302,6 +304,15 @@ consumer_activity_status(Active, Properties) ->
             waiting
     end.
 
+filter_defined(SubscriptionProperties) when is_map(SubscriptionProperties) ->
+    lists:any(fun(<<"filter.",_/binary>>) ->
+                      true;
+                 (_) ->
+                      false
+              end, maps:keys(SubscriptionProperties));
+filter_defined(_) ->
+    false.
+
 filter_spec(Properties) ->
     Filters = maps:fold(fun(<<"filter.",_/binary>>, V, Acc) ->
                                 [V] ++ Acc;
@@ -323,8 +334,14 @@ filter_spec(Properties) ->
     end.
 
 command_versions() ->
+    PublishMaxVersion = case filtering_supported() of
+                            false ->
+                                ?VERSION_1;
+                            true ->
+                                ?VERSION_2
+                        end,
     [{declare_publisher, ?VERSION_1, ?VERSION_1},
-     {publish, ?VERSION_1, ?VERSION_2},
+     {publish, ?VERSION_1, PublishMaxVersion},
      {query_publisher_sequence, ?VERSION_1, ?VERSION_1},
      {delete_publisher, ?VERSION_1, ?VERSION_1},
      {subscribe, ?VERSION_1, ?VERSION_1},
@@ -340,3 +357,6 @@ command_versions() ->
      {route, ?VERSION_1, ?VERSION_1},
      {partitions, ?VERSION_1, ?VERSION_1},
      {stream_stats, ?VERSION_1, ?VERSION_1}].
+
+filtering_supported() ->
+    rabbit_feature_flags:is_enabled(stream_filtering).
