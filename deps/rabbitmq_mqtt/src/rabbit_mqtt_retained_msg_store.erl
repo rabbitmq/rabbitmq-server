@@ -30,7 +30,7 @@
                  store_state :: term()}).
 -opaque state() :: #?STATE{}.
 
--type expire() :: #{Topic :: binary() :=
+-type expire() :: #{topic() :=
                     {InsertionTimestamp :: integer(),
                      MessageExpiryInterval :: pos_integer()}}.
 
@@ -41,13 +41,13 @@
     {ok, State :: any(), expire()} |
     {error, uninitialized}.
 
--callback insert(Topic :: binary(), mqtt_msg(), State :: any()) ->
+-callback insert(topic(), mqtt_msg(), State :: any()) ->
     ok.
 
--callback lookup(Topic :: binary(), State :: any()) ->
+-callback lookup(topic(), State :: any()) ->
     mqtt_msg() | mqtt_msg_v0() | undefined.
 
--callback delete(Topic :: binary(), State :: any()) ->
+-callback delete(topic(), State :: any()) ->
     ok.
 
 -callback terminate(State :: any()) ->
@@ -73,12 +73,12 @@ start(VHost) ->
     {#?STATE{store_mod = Mod,
              store_state = S}, Expire}.
 
--spec insert(Topic :: binary(), mqtt_msg(), state()) -> ok.
+-spec insert(topic(), mqtt_msg(), state()) -> ok.
 insert(Topic, Msg, #?STATE{store_mod = Mod,
                            store_state = StoreState}) ->
     ok = Mod:insert(Topic, Msg, StoreState).
 
--spec lookup(Topic :: binary(), state()) ->
+-spec lookup(topic(), state()) ->
     mqtt_msg() | undefined.
 lookup(Topic, #?STATE{store_mod = Mod,
                       store_state = StoreState}) ->
@@ -89,7 +89,7 @@ lookup(Topic, #?STATE{store_mod = Mod,
             Other
     end.
 
--spec delete(Topic :: binary(), state()) -> ok.
+-spec delete(topic(), state()) -> ok.
 delete(Topic, #?STATE{store_mod = Mod,
                       store_state = StoreState}) ->
     ok = Mod:delete(Topic, StoreState).

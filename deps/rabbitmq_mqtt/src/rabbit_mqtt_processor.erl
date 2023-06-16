@@ -42,8 +42,8 @@
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
 -type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
--type topic_aliases() :: {Inbound :: #{TopicName :: binary() => pos_integer()},
-                          Outbound :: #{TopicName :: binary() => pos_integer()}}.
+-type topic_aliases() :: {Inbound :: #{topic() => pos_integer()},
+                          Outbound :: #{topic() => pos_integer()}}.
 
 -record(auth_state,
         {user :: #user{},
@@ -67,7 +67,7 @@
          trace_state :: rabbit_trace:state(),
          prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
-         client_id :: binary(),
+         client_id :: client_id(),
          conn_name :: option(binary()),
          ip_addr :: inet:ip_address(),
          port :: inet:port_number(),
@@ -642,8 +642,8 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
             {ok, {UserBin, PassBin}}
     end.
 
--spec ensure_client_id(binary(), boolean(), protocol_version()) ->
-    {ok, binary()} | {error, reason_code()}.
+-spec ensure_client_id(client_id(), boolean(), protocol_version()) ->
+    {ok, client_id()} | {error, reason_code()}.
 ensure_client_id(<<>>, _CleanStart = false, ProtoVer)
   when ProtoVer < 5 ->
     ?LOG_ERROR("MQTT client ID must be provided for non-clean session in MQTT v~b", [ProtoVer]),
@@ -656,7 +656,7 @@ ensure_client_id(ClientId, _, _)
   when is_binary(ClientId) ->
     {ok, ClientId}.
 
--spec register_client_id(rabbit_types:vhost(), binary(), boolean(), properties()) ->
+-spec register_client_id(rabbit_types:vhost(), client_id(), boolean(), properties()) ->
     {ok, RaRegisterState :: undefined | {pending, reference()}} |
     {error, ConnectErrorCode :: pos_integer()}.
 register_client_id(VHost, ClientId, CleanStart, WillProps)
@@ -698,12 +698,12 @@ register_client_id(VHost, ClientId, CleanStart, WillProps)
 %% Once feature flag mqtt_v5 becomes required, the caller should always pass SendWill to this
 %% function (remove_duplicate_client_id_connections/2) so that we can delete this function.
 -spec remove_duplicate_client_id_connections(
-        {rabbit_types:vhost(), binary()}, pid()) -> ok.
+        {rabbit_types:vhost(), client_id()}, pid()) -> ok.
 remove_duplicate_client_id_connections(PgGroup, PidToKeep) ->
     remove_duplicate_client_id_connections(PgGroup, PidToKeep, true).
 
 -spec remove_duplicate_client_id_connections(
-        {rabbit_types:vhost(), binary()}, pid(), boolean()) -> ok.
+        {rabbit_types:vhost(), client_id()}, pid(), boolean()) -> ok.
 remove_duplicate_client_id_connections(PgGroup, PidToKeep, SendWill) ->
     try persistent_term:get(?PG_SCOPE) of
         PgScope ->
@@ -928,7 +928,7 @@ recreate_subscription(TopicFilter, OldBindingArgs, NewBindingArgs, Qos, State) -
             throw(Err)
     end.
 
--spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
+-spec hand_off_to_retainer(pid(), topic(), mqtt_msg()) -> ok.
 hand_off_to_retainer(RetainerPid, Topic0, Msg = #mqtt_msg{payload = Payload}) ->
     Topic = amqp_to_mqtt(Topic0),
     if Payload =:= <<>> ->
@@ -2396,7 +2396,7 @@ publish_to_queues_with_checks(
             {error, access_refused, State}
     end.
 
--spec check_publish_permitted(rabbit_exchange:name(), binary(), state()) ->
+-spec check_publish_permitted(rabbit_exchange:name(), topic(), state()) ->
     ok | {error, access_refused}.
 check_publish_permitted(Exchange, Topic,
                          State = #state{auth_state = #auth_state{

@@ -20,7 +20,7 @@
 
 -define(STATE, ?MODULE).
 -record(?STATE, {store_state :: rabbit_mqtt_retained_msg_store:state(),
-                 expire :: #{Topic :: binary() := TimerRef :: reference()}
+                 expire :: #{topic() := TimerRef :: reference()}
                 }).
 -type state() :: #?STATE{}.
 
@@ -29,16 +29,16 @@
 start_link(VHost) ->
     gen_server:start_link(?MODULE, VHost, []).
 
--spec retain(pid(), binary(), mqtt_msg()) -> ok.
+-spec retain(pid(), topic(), mqtt_msg()) -> ok.
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
     gen_server:cast(Pid, {retain, Topic, Msg}).
 
--spec fetch(pid(), binary()) ->
+-spec fetch(pid(), topic()) ->
     undefined | mqtt_msg().
 fetch(Pid, Topic) ->
     gen_server:call(Pid, {fetch, Topic}, ?TIMEOUT).
 
--spec clear(pid(), binary()) -> ok.
+-spec clear(pid(), topic()) -> ok.
 clear(Pid, Topic) ->
     gen_server:cast(Pid, {clear, Topic}).
 
@@ -119,7 +119,7 @@ handle_info(Info, State) ->
 terminate(_Reason, #?STATE{store_state = StoreState}) ->
     rabbit_mqtt_retained_msg_store:terminate(StoreState).
 
--spec start_timer(integer(), binary()) -> reference().
+-spec start_timer(integer(), topic()) -> reference().
 start_timer(Seconds, Topic)
   when is_binary(Topic) ->
     erlang:start_timer(timer:seconds(Seconds), self(), Topic).

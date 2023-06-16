@@ -43,19 +43,19 @@ recover(Dir, VHost) ->
             {error, uninitialized}
     end.
 
--spec insert(binary(), mqtt_msg(), store_state()) -> ok.
+-spec insert(topic(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{table = T}) ->
   true = ets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}),
   ok.
 
--spec lookup(binary(), store_state()) -> mqtt_msg() | mqtt_msg_v0() | undefined.
+-spec lookup(topic(), store_state()) -> mqtt_msg() | mqtt_msg_v0() | undefined.
 lookup(Topic, #store_state{table = T}) ->
   case ets:lookup(T, Topic) of
     []      -> undefined;
     [#retained_message{mqtt_msg = Msg}] -> Msg
   end.
 
--spec delete(binary(), store_state()) -> ok.
+-spec delete(topic(), store_state()) -> ok.
 delete(Topic, #store_state{table = T}) ->
   true = ets:delete(T, Topic),
   ok.
