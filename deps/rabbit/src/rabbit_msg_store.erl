@@ -118,7 +118,7 @@
 -record(client_msstate,
         { server,
           client_ref,
-          current_file,
+          reader,
           index_state,
           index_module,
           dir,
@@ -164,7 +164,7 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      current_file       :: undefined | {non_neg_integer(), file:fd()},
+                      reader             :: undefined | {non_neg_integer(), file:fd()},
                       index_state        :: any(),
                       index_module       :: atom(),
                       %% Stored as binary() as opposed to file:filename() to save memory.
@@ -418,7 +418,7 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
                                           ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
-                      current_file       = undefined,
+                      reader             = undefined,
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = rabbit_file:filename_to_binary(Dir),
@@ -429,28 +429,22 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
 
 -spec client_terminate(client_msstate()) -> 'ok'.
 
-client_terminate(CState = #client_msstate { client_ref = Ref }) ->
+client_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_call(CState, {client_terminate, Ref}),
-    client_maybe_close_current_file(CState).
+    reader_close(Reader).
 
 -spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
-client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
+client_delete_and_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}),
-    client_maybe_close_current_file(CState).
+    reader_close(Reader).
 
 -spec client_pre_hibernate(client_msstate()) -> client_msstate().
 
-client_pre_hibernate(CState) ->
-    client_maybe_close_current_file(CState),
-    CState#client_msstate{ current_file = undefined }.
-
-client_maybe_close_current_file(#client_msstate{ current_file = CurrentFile }) ->
-    case CurrentFile of
-        undefined -> ok;
-        {_File, Fd} -> ok = file:close(Fd)
-    end.
+client_pre_hibernate(CState = #client_msstate{ reader = Reader }) ->
+    reader_close(Reader),
+    CState#client_msstate{ reader = undefined }.
 
 -spec client_ref(client_msstate()) -> client_ref().
 
@@ -529,9 +523,9 @@ read_many_disk([MsgId|Tail], CState, Acc) ->
 read_many_disk([], _CState, Acc) ->
     Acc.
 
-%% Then we mark the file handle as being open.
 read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
                                                    file_handles_ets = FileHandlesEts,
+                                                   reader           = Reader0,
                                                    client_ref       = Ref }, Acc0, File) ->
     %% Mark file handle open.
     mark_handle_open(FileHandlesEts, File, Ref),
@@ -553,9 +547,8 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             %% Then we can do the consolidation to get the pread LocNums.
             LocNums = consolidate_reads(MsgLocations, []),
             %% Read the data from the file.
-            {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(File)), [binary, read, raw]),
-            {ok, Msgs} = rabbit_msg_file:pread(Fd, LocNums),
-            ok = file:close(Fd),
+            Reader = reader_open(Reader0, Dir, File),
+            {ok, Msgs} = reader_pread(Reader, LocNums),
             %% Before we continue the read_many calls we must remove the
             %% MsgIds we have read from the list and add the messages to
             %% the Acc.
@@ -564,7 +557,7 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             end, {Acc0, []}, Msgs),
             MsgIds = MsgIds0 -- MsgIdsRead,
             %% Unmark opened files and continue.
-            read_many_file3(MsgIds, CState, Acc, File)
+            read_many_file3(MsgIds, CState #client_msstate{ reader = Reader }, Acc, File)
     end.
 
 index_select_from_file(MsgIds, File, #client_msstate { index_module = Index,
@@ -646,11 +639,71 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
             {{ok, Msg}, CState1}
     end.
 
-clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      dying_clients = DyingClients }) ->
-    State #msstate { cref_to_msg_ids = maps:remove(CRef, CTM),
-                     dying_clients = maps:remove(CRef, DyingClients) }.
+read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
+                               total_size = TotalSize }, State = #client_msstate{ reader = Reader0, dir = Dir }) ->
+    Reader = reader_open(Reader0, Dir, File),
+    Msg = case reader_pread(Reader, [{Offset, TotalSize}]) of
+        {ok, [Msg0]} ->
+            Msg0;
+        Other ->
+            {error, {misread, [{old_state, State},
+                               {file_num,  File},
+                               {offset,    Offset},
+                               {msg_id,    MsgId},
+                               {read,      Other},
+                               {proc_dict, get()}
+                              ]}}
+    end,
+    {Msg, State#client_msstate{ reader = Reader }}.
 
+%%----------------------------------------------------------------------------
+%% Reader functions. A reader is a file num + fd tuple.
+%%----------------------------------------------------------------------------
+
+%% The reader tries to keep the FD open for subsequent reads.
+%% When we attempt to read we first check if the opened file
+%% is the one we want. If not we close/open the right one.
+%%
+%% The FD will be closed when the queue hibernates to save
+%% resources.
+reader_open(Reader, Dir, File) ->
+    {ok, Fd} = case Reader of
+        {File, Fd0} ->
+            {ok, Fd0};
+        {_AnotherFile, Fd0} ->
+            ok = file:close(Fd0),
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw]);
+        undefined ->
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw])
+    end,
+    {File, Fd}.
+
+reader_pread({_, Fd}, LocNums) ->
+    case file:pread(Fd, LocNums) of
+        {ok, DataL} -> {ok, reader_pread_parse(DataL)};
+        KO -> KO
+    end.
+
+reader_pread_parse([<<Size:64,
+                      _MsgId:16/binary,
+                      Rest0/bits>>|Tail]) ->
+    BodyBinSize = Size - 16, %% Remove size of MsgId.
+    <<MsgBodyBin:BodyBinSize/binary,
+      255, %% OK marker.
+      Rest/bits>> = Rest0,
+    [binary_to_term(MsgBodyBin)|reader_pread_parse([Rest|Tail])];
+reader_pread_parse([<<>>]) ->
+    [];
+reader_pread_parse([<<>>|Tail]) ->
+    reader_pread_parse(Tail).
+
+reader_close(Reader) ->
+    case Reader of
+        undefined -> ok;
+        {_File, Fd} -> ok = file:close(Fd)
+    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -966,6 +1019,11 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 %% general helper functions
 %%----------------------------------------------------------------------------
 
+clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
+                                      dying_clients = DyingClients }) ->
+    State #msstate { cref_to_msg_ids = maps:remove(CRef, CTM),
+                     dying_clients = maps:remove(CRef, DyingClients) }.
+
 noreply(State) ->
     {State1, Timeout} = next_state(State),
     {noreply, State1, Timeout}.
@@ -1166,34 +1224,6 @@ write_message(MsgId, Msg,
     maybe_roll_to_new_file(CurOffset + TotalSize,
                            State #msstate {
                              current_file_offset = CurOffset + TotalSize }).
-
-read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
-                               total_size = TotalSize }, State = #client_msstate{ current_file = CurrentFile0, dir = Dir }) ->
-    {ok, Hdl} = case CurrentFile0 of
-        {File, Fd} ->
-            {ok, Fd};
-        {_AnotherFile, Fd} ->
-            ok = file:close(Fd),
-            file:open(form_filename(Dir, filenum_to_name(File)),
-                      [binary, read, raw]);
-        undefined ->
-            file:open(form_filename(Dir, filenum_to_name(File)),
-                      [binary, read, raw])
-    end,
-    {ok, {MsgId, Msg}} =
-        case rabbit_msg_file:pread(Hdl, Offset, TotalSize) of
-            {ok, {MsgId, _}} = Obj ->
-                Obj;
-            Rest ->
-                {error, {misread, [{old_state, State},
-                                   {file_num,  File},
-                                   {offset,    Offset},
-                                   {msg_id,    MsgId},
-                                   {read,      Rest},
-                                   {proc_dict, get()}
-                                  ]}}
-        end,
-    {Msg, State#client_msstate{ current_file = {File, Hdl}}}.
 
 contains_message(MsgId, From, State) ->
     MsgLocation = index_lookup_positive_ref_count(MsgId, State),
