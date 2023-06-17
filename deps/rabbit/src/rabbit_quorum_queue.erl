@@ -492,14 +492,15 @@ handle_tick(QName,
                               ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                        rabbit_fifo:make_purge_nodes(Stale)),
 
-                              ok
-                      end
-                  catch
-                      _:_ ->
                           ok
                   end
-          end),
-    ok.
+              catch
+                  _:Err ->
+                      rabbit_log:debug("~ts: handle tick failed with ~p",
+                             [rabbit_misc:rs(QName), Err]),
+                      ok
+              end
+      end).
 
 repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),

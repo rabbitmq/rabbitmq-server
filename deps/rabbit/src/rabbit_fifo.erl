@@ -1030,13 +1030,14 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
         _ ->
             {no_reply, Aux0, Log0}
     end;
-handle_aux(leader, _, {handle_tick, Args},
+handle_aux(leader, _, {handle_tick, [QName, Overview, Nodes]},
            #?AUX{tick_pid = Pid} = Aux, Log, _) ->
     NewPid =
         case process_is_alive(Pid) of
             false ->
                 %% No active TICK pid
-                spawn(rabbit_quorum_queue, handle_tick, Args);
+                %% this function spawns and returns the tick process pid
+                rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
             true ->
                 %% Active TICK pid, do nothing
                 Pid
