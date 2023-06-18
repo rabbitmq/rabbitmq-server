@@ -38,6 +38,7 @@
 -define(RC_UNSPECIFIED_ERROR, 16#80).
 -define(RC_PROTOCOL_ERROR, 16#82).
 -define(RC_SERVER_SHUTTING_DOWN, 16#8B).
+-define(RC_BAD_AUTHENTICATION_METHOD, 16#8C).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 -define(RC_TOPIC_ALIAS_INVALID, 16#94).
 
@@ -123,7 +124,8 @@ cluster_size_1_tests() ->
      topic_alias_bidirectional,
      topic_alias_invalid,
      topic_alias_unknown,
-     topic_alias_disallowed
+     topic_alias_disallowed,
+     extended_auth
     ].
 
 cluster_size_3_tests() ->
@@ -1955,6 +1957,13 @@ topic_alias_disallowed(Config) ->
                  emqtt:publish(C, <<"t">>, #{'Topic-Alias' => 1}, <<"msg">>, [{qos, 1}])),
 
     ok = rpc(Config, persistent_term, put, [Key, DefaultMax]).
+
+extended_auth(Config) ->
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
+                                [{properties, #{'Authentication-Method' => <<"OTP">>,
+                                                'Authentication-Data' => <<"123456">>}}]),
+    unlink(C),
+    ?assertEqual({error, {bad_authentication_method, #{}}}, Connect(C)).
 
 %% -------------------------------------------------------------------
 %% Helpers

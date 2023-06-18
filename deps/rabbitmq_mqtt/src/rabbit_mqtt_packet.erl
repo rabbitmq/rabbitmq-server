@@ -179,6 +179,9 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% has a Remaining Length of 0."
             0 = Length,
             wrap(Fixed, #mqtt_packet_disconnect{}, Rest, ProtoVer);
+        {?AUTH, _Rest}
+          when ProtoVer =:= 5 ->
+            throw(extended_authentication_unsupported);
         {_, TooShortBin}
           when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
