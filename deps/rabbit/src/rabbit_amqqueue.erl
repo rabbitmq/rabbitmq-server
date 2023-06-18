@@ -47,6 +47,7 @@
          list_local_mirrored_classic_without_synchronised_mirrors_for_cli/0,
          list_local_quorum_queues_with_name_matching/1,
          list_local_quorum_queues_with_name_matching/2]).
+-export([is_local_to_node/2, is_local_to_node_set/2]).
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
 -export([delete_immediately_by_resource/1]).
@@ -1120,7 +1121,17 @@ list() ->
     list_with_possible_retry(fun do_list/0).
 
 do_list() ->
+<<<<<<< HEAD
     mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()).
+=======
+    All = mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()),
+    NodesRunning = rabbit_nodes:all_running(),
+    lists:filter(fun (Q) ->
+                         Pid = amqqueue:get_pid(Q),
+                         St = amqqueue:get_state(Q),
+                         St =/= stopped orelse is_local_to_node_set(Pid, NodesRunning)
+                 end, All).
+>>>>>>> deffbdae89 (Closes #8564)
 
 -spec count() -> non_neg_integer().
 
@@ -1295,12 +1306,27 @@ is_local_to_node({_, Leader} = QPid, Node) when ?IS_QUORUM(QPid) ->
 is_local_to_node(_QPid, _Node) ->
     false.
 
+is_local_to_node_set(QPid, Nodes) when is_list(Nodes) ->
+  lists:any(fun(Node) -> is_local_to_node(QPid, Node) end, Nodes);
+is_local_to_node_set(QPid, OneNode) when is_atom(OneNode) ->
+  is_local_to_node(QPid, OneNode).
+
 is_in_virtual_host(Q, VHostName) ->
     VHostName =:= get_resource_vhost_name(amqqueue:get_name(Q)).
 
 -spec list(vhost:name()) -> [amqqueue:amqqueue()].
 list(VHostPath) ->
+<<<<<<< HEAD
     list(VHostPath, rabbit_queue).
+=======
+    All = list(VHostPath, rabbit_queue),
+    NodesRunning = rabbit_nodes:all_running(),
+    lists:filter(fun (Q) ->
+                         Pid = amqqueue:get_pid(Q),
+                         St = amqqueue:get_state(Q),
+                         St =/= stopped orelse is_local_to_node_set(Pid, NodesRunning)
+                 end, All).
+>>>>>>> deffbdae89 (Closes #8564)
 
 list(VHostPath, TableName) ->
     list_with_possible_retry(fun() -> do_list(VHostPath, TableName) end).
@@ -1354,6 +1380,7 @@ list_down(VHostPath) ->
     case rabbit_vhost:exists(VHostPath) of
         false -> [];
         true  ->
+<<<<<<< HEAD
             Present = list(VHostPath),
             Durable = list(VHostPath, rabbit_durable_queue),
             PresentS = sets:from_list([amqqueue:get_name(Q) || Q <- Present]),
@@ -1361,6 +1388,34 @@ list_down(VHostPath) ->
                                              N = amqqueue:get_name(Q),
                                              not sets:is_element(N, PresentS)
                                      end, sets:from_list(Durable)))
+=======
+            Alive = sets:from_list([amqqueue:get_name(Q) || Q <- list(VHostPath)]),
+<<<<<<< HEAD
+            Durable = list(VHostPath, rabbit_durable_queue),
+            NodesRunning = rabbit_nodes:all_running(),
+            lists:filter(fun (Q) ->
+                                 N = amqqueue:get_name(Q),
+                                 Pid = amqqueue:get_pid(Q),
+                                 St = amqqueue:get_state(Q),
+                                 (St =:= stopped andalso not lists:member(node(Pid), NodesRunning))
+                                 orelse
+                                 (not sets:is_element(N, Alive))
+                         end, Durable)
+=======
+            NodesRunning = rabbit_nodes:list_running(),
+            rabbit_db_queue:filter_all_durable(
+              fun (Q) ->
+                      N = amqqueue:get_name(Q),
+                      Pid = amqqueue:get_pid(Q),
+                      St = amqqueue:get_state(Q),
+                      amqqueue:get_vhost(Q) =:= VHostPath
+                          andalso
+                            ((St =:= stopped andalso not is_local_to_node_set(Pid, NodesRunning))
+                             orelse
+                               (not sets:is_element(N, Alive)))
+              end)
+>>>>>>> fab3130e47 (Closes #8564)
+>>>>>>> deffbdae89 (Closes #8564)
     end.
 
 count(VHost) ->
