@@ -76,7 +76,7 @@
          connected_at = os:system_time(millisecond) :: pos_integer(),
          send_fun :: send_fun(),
          %% Maximum MQTT packet size in bytes for packets sent from server to client.
-         max_packet_size :: max_packet_size(),
+         max_packet_size_outbound :: max_packet_size(),
          topic_alias_maximum_outbound :: non_neg_integer()
          }).
 
@@ -177,6 +177,7 @@ process_connect(
     Result0 =
     maybe
         ok ?= check_protocol_version(ProtoVer),
+        ok ?= check_extended_auth(ConnectProps),
         {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
         {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
 
@@ -215,7 +216,7 @@ process_connect(
                           vhost = VHost,
                           client_id = ClientId,
                           will_msg = WillMsg,
-                          max_packet_size = MaxPacketSize,
+                          max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound},
                auth_state = #auth_state{
                                user = User,
@@ -623,6 +624,14 @@ check_protocol_version(5) ->
             ?LOG_ERROR("Rejecting MQTT 5.0 connection because feature flag mqtt_v5 is disabled"),
             {error, ?RC_UNSUPPORTED_PROTOCOL_VERSION}
     end.
+
+check_extended_auth(#{'Authentication-Method' := Method}) ->
+    %% In future, we could support SASL via rabbit_auth_mechanism
+    %% as done by rabbit_reader and rabbit_stream_reader.
+    ?LOG_ERROR("Extended authentication (method ~p) is not supported", [Method]),
+    {error, ?RC_BAD_AUTHENTICATION_METHOD};
+check_extended_auth(_) ->
+    ok.
 
 check_credentials(Username, Password, SslLoginName, PeerIp) ->
     case creds(Username, Password, SslLoginName) of
@@ -1696,7 +1705,7 @@ send_puback(PktId, ReasonCode, State = #state{cfg = #cfg{proto_ver = ProtoVer}})
     ok | {error, packet_too_large}.
 send(Packet, #state{cfg = #cfg{proto_ver = ProtoVer,
                                send_fun = SendFun,
-                               max_packet_size = MaxPacketSize}}) ->
+                               max_packet_size_outbound = MaxPacketSize}}) ->
     send(Packet, proto_atom_to_integer(ProtoVer), SendFun, MaxPacketSize).
 
 -spec send(mqtt_packet(), protocol_version(), send_fun(), max_packet_size()) ->
