@@ -940,8 +940,8 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({timeout, TimerRef, maybe_gc}, State = #msstate{ gc_check_timer = TimerRef }) ->
-    noreply(maybe_gc(State));
+handle_info({timeout, TimerRef, {maybe_gc, Candidates}}, State = #msstate{ gc_check_timer = TimerRef }) ->
+    noreply(maybe_gc(Candidates, State));
 
 %% @todo When a CQ crashes the message store does not remove
 %%       the client information and clean up. This eventually
@@ -1200,8 +1200,8 @@ gc_candidate(File, State = #msstate{ current_file = File }) ->
     State;
 gc_candidate(File, State = #msstate{ gc_candidates  = Candidates,
                                      gc_check_timer = undefined }) ->
-    TimerRef = erlang:start_timer(15000, self(), maybe_gc),
-    State#msstate{ gc_candidates  = Candidates#{ File => true },
+    TimerRef = erlang:start_timer(15000, self(), {maybe_gc, Candidates#{ File => true }}),
+    State#msstate{ gc_candidates  = #{},
                    gc_check_timer = TimerRef };
 gc_candidate(File, State = #msstate{ gc_candidates = Candidates }) ->
     State#msstate{ gc_candidates = Candidates#{ File => true }}.
@@ -1674,11 +1674,10 @@ maybe_roll_to_new_file(_, State) ->
 %% We keep track of files that have seen removes and
 %% check those periodically for compaction. We only
 %% compact files that have less than half valid data.
-maybe_gc(State = #msstate { current_file          = CurrentFile,
-                            gc_pid                = GCPid,
-                            gc_candidates         = Candidates,
+maybe_gc(Candidates,
+         State = #msstate { gc_pid                = GCPid,
                             file_summary_ets      = FileSummaryEts }) ->
-    FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts, CurrentFile),
+    FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts),
     lists:foreach(fun(File) ->
             %% We must lock the file here and not in the GC process to avoid
             %% some concurrency issues that can arise otherwise. The lock is
@@ -1695,28 +1694,27 @@ maybe_gc(State = #msstate { current_file          = CurrentFile,
                                       {#file_summary.locked, true}),
             ok = rabbit_msg_store_gc:compact(GCPid, File)
     end, FilesToCompact),
-    State#msstate{ gc_candidates  = #{},
-                   gc_check_timer = undefined }.
+    State#msstate{ gc_check_timer = undefined }.
 
-find_files_to_compact([], _, _) ->
+find_files_to_compact([], _) ->
     [];
-%% Skip the file currently opened for writing, we will compact
-%% it only once we are done writing to it.
-find_files_to_compact([File|Tail], FileSummaryEts, CurrentFile)
-        when CurrentFile =:= File ->
-    find_files_to_compact(Tail, FileSummaryEts, CurrentFile);
-find_files_to_compact([File|Tail], FileSummaryEts, CurrentFile) ->
-    [#file_summary{ valid_total_size = ValidSize,
-                    file_size        = TotalSize,
-                    locked           = IsLocked }] = ets:lookup(FileSummaryEts, File),
-    %% We compact only if at least half the file is empty.
-    %% We do not compact if the file is locked (a compaction
-    %% was already requested).
-    case (ValidSize * 2 < TotalSize) andalso
-         (ValidSize > 0) andalso
-         not IsLocked of
-        true -> [File|find_files_to_compact(Tail, FileSummaryEts, CurrentFile)];
-        false -> find_files_to_compact(Tail, FileSummaryEts, CurrentFile)
+find_files_to_compact([File|Tail], FileSummaryEts) ->
+    case ets:lookup(FileSummaryEts, File) of
+        [] ->
+            %% File has already been deleted; no need to compact.
+            find_files_to_compact(Tail, FileSummaryEts);
+        [#file_summary{ valid_total_size = ValidSize,
+                        file_size        = TotalSize,
+                        locked           = IsLocked }] ->
+            %% We compact only if at least half the file is empty.
+            %% We do not compact if the file is locked (a compaction
+            %% was already requested).
+            case (ValidSize * 2 < TotalSize) andalso
+                 (ValidSize > 0) andalso
+                 not IsLocked of
+                true -> [File|find_files_to_compact(Tail, FileSummaryEts)];
+                false -> find_files_to_compact(Tail, FileSummaryEts)
+            end
     end.
 
 delete_file_if_empty(File, State = #msstate { current_file = File }) ->
