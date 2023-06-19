@@ -91,11 +91,12 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    reset_using_mnesia().
+    run(
+      #{mnesia => fun reset_using_mnesia/0}).
 
 reset_using_mnesia() ->
-    ?LOG_DEBUG(
-      "DB: resetting node",
+    ?LOG_INFO(
+      "DB: resetting node (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:reset().
 
@@ -104,11 +105,12 @@ reset_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    force_reset_using_mnesia().
+    run(
+      #{mnesia => fun force_reset_using_mnesia/0}).
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(
-      "DB: resetting node forcefully",
+      "DB: resetting node forcefully (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_reset().
 
@@ -120,11 +122,12 @@ force_reset_using_mnesia() ->
 %% state, like if critical members are MIA.
 
 force_load_on_next_boot() ->
-    force_load_on_next_boot_using_mnesia().
+    run(
+      #{mnesia => fun force_load_on_next_boot_using_mnesia/0}).
 
 force_load_on_next_boot_using_mnesia() ->
     ?LOG_DEBUG(
-      "DB: resetting node forcefully",
+      "DB: force load on next boot (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_load_next_boot().
 

@@ -93,7 +93,7 @@ defmodule JoinClusterCommandTest do
     stop_rabbitmq_app()
 
     assert match?(
-             {:badrpc_multi, _, [_]},
+             {:error, {:aborted_feature_flags_compat_check, {:error, {:erpc, :noconnection}}}},
              @command.run([:jake@thedog], context[:opts])
            )
 
