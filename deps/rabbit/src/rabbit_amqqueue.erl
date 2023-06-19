@@ -1390,17 +1390,17 @@ list_down(VHostPath) ->
                                      end, sets:from_list(Durable)))
 =======
             Alive = sets:from_list([amqqueue:get_name(Q) || Q <- list(VHostPath)]),
-<<<<<<< HEAD
             Durable = list(VHostPath, rabbit_durable_queue),
             NodesRunning = rabbit_nodes:all_running(),
             lists:filter(fun (Q) ->
                                  N = amqqueue:get_name(Q),
                                  Pid = amqqueue:get_pid(Q),
                                  St = amqqueue:get_state(Q),
-                                 (St =:= stopped andalso not lists:member(node(Pid), NodesRunning))
+                                 (St =:= stopped andalso not is_local_to_node_set(Pid, NodesRunning))
                                  orelse
                                  (not sets:is_element(N, Alive))
                          end, Durable)
+<<<<<<< HEAD
 =======
             NodesRunning = rabbit_nodes:list_running(),
             rabbit_db_queue:filter_all_durable(
@@ -1416,6 +1416,8 @@ list_down(VHostPath) ->
               end)
 >>>>>>> fab3130e47 (Closes #8564)
 >>>>>>> deffbdae89 (Closes #8564)
+=======
+>>>>>>> 9f1ba29e7c (Resolve a conflict (#8598))
     end.
 
 count(VHost) ->
