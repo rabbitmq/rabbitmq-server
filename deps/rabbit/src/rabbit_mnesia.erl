@@ -13,6 +13,7 @@
 
 -export([%% Main interface
          init/0,
+         can_join_cluster/1,
          join_cluster/2,
          reset/0,
          force_reset/0,
@@ -130,10 +131,10 @@ create_cluster_callback(RemoteNode, NodeType) ->
 %% all in the same cluster, we simply pick the first online node and
 %% we cluster to its cluster.
 
--spec join_cluster(node(), rabbit_db_cluster:node_type())
-                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+-spec can_join_cluster(node())
+                        -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 
-join_cluster(DiscoveryNode, NodeType) ->
+can_join_cluster(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
     case is_only_clustered_disc_node() of
@@ -144,23 +145,8 @@ join_cluster(DiscoveryNode, NodeType) ->
     case rabbit_nodes:me_in_nodes(ClusterNodes) of
         false ->
             case check_cluster_consistency(DiscoveryNode, false) of
-                {ok, _} ->
-                    %% reset the node. this simplifies things and it
-                    %% will be needed in this case - we're joining a new
-                    %% cluster with new nodes which are not in synch
-                    %% with the current node. It also lifts the burden
-                    %% of resetting the node from the user.
-                    reset_gracefully(),
-
-                    %% Join the cluster
-                    rabbit_log:info("Clustering with ~tp as ~tp node",
-                                    [ClusterNodes, NodeType]),
-                    ok = init_db_with_mnesia(ClusterNodes, NodeType,
-                                             true, true, _Retry = true),
-                    rabbit_node_monitor:notify_joined_cluster(),
-                    ok;
-                {error, Reason} ->
-                    {error, Reason}
+                {ok, _} -> {ok, ClusterNodes};
+                Error   -> Error
             end;
         true ->
             %% DiscoveryNode thinks that we are part of a cluster, but
@@ -174,6 +160,26 @@ join_cluster(DiscoveryNode, NodeType) ->
                     rabbit_log:error(Msg),
                     {error, {inconsistent_cluster, Msg}}
             end
+    end.
+
+-spec join_cluster([node()] | node(), rabbit_db_cluster:node_type())
+                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+
+join_cluster(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
+    %% Join the cluster
+    rabbit_log:info("Clustering with ~tp as ~tp node",
+                    [ClusterNodes, NodeType]),
+    ok = init_db_with_mnesia(ClusterNodes, NodeType,
+                             true, true, _Retry = true),
+    ok;
+join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
+    case can_join_cluster(DiscoveryNode) of
+        {ok, ClusterNodes} when is_list(ClusterNodes) ->
+            join_cluster(ClusterNodes, NodeType);
+        {ok, already_member} ->
+            {ok, already_member};
+        Error ->
+            Error
     end.
 
 %% return node to its virgin state, where it is not member of any

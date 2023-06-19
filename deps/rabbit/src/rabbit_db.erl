@@ -92,7 +92,7 @@ reset() ->
     reset_using_mnesia().
 
 reset_using_mnesia() ->
-    ?LOG_DEBUG(
+    ?LOG_INFO(
       "DB: resetting node",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:reset().

@@ -45,6 +45,19 @@ ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
         {error, Reason} -> throw({error, {incompatible_feature_flags, Reason}})
     end.
 
+can_join(RemoteNode) ->
+    ?LOG_INFO(
+       "DB: checking if `~ts` can join cluster using remote node `~ts`",
+       [node(), RemoteNode],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
+        ok    -> can_join_using_mnesia(RemoteNode);
+        Error -> Error
+    end.
+
+can_join_using_mnesia(RemoteNode) ->
+    rabbit_mnesia:can_join_cluster(RemoteNode).
+
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),
       NodeType :: rabbit_db_cluster:node_type(),
@@ -55,13 +68,28 @@ ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
 
 join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
-    ?LOG_DEBUG(
-      "DB: joining cluster using remote node `~ts`", [RemoteNode],
-      #{domain => ?RMQLOG_DOMAIN_DB}),
-    join_using_mnesia(RemoteNode, NodeType).
+    case can_join(RemoteNode) of
+        {ok, ClusterNodes} when is_list(ClusterNodes) ->
+            rabbit_db:reset(),
 
-join_using_mnesia(RemoteNode, NodeType) ->
-    rabbit_mnesia:join_cluster(RemoteNode, NodeType).
+            ?LOG_INFO(
+               "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            case join_using_mnesia(ClusterNodes, NodeType) of
+                ok ->
+                    rabbit_node_monitor:notify_joined_cluster(),
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end;
+        {ok, already_member} ->
+            {ok, already_member};
+        {error, _} = Error ->
+            Error
+    end.
+
+join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
+    rabbit_mnesia:join_cluster(ClusterNodes, NodeType).
 
 -spec forget_member(Node, RemoveWhenOffline) -> ok when
       Node :: node(),
