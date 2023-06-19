@@ -486,13 +486,14 @@ read(MsgId,
             {{ok, Msg}, CState}
     end.
 
--spec read_many([rabbit_types:msg_id()], client_msstate()) -> #{rabbit_types:msg_id() => msg()}.
+-spec read_many([rabbit_types:msg_id()], client_msstate())
+    -> {#{rabbit_types:msg_id() => msg()}, client_msstate()}.
 
 %% We disable read_many when the index module is not ETS for the time being.
 %% We can introduce the new index module callback as a breaking change in 4.0.
-read_many(_, #client_msstate{ index_module = IndexMod })
+read_many(_, CState = #client_msstate{ index_module = IndexMod })
         when IndexMod =/= rabbit_msg_store_ets_index ->
-    #{};
+    {#{}, CState};
 read_many(MsgIds, CState) ->
     file_handle_cache_stats:inc(msg_store_read, length(MsgIds)),
     %% We receive MsgIds in rouhgly the younger->older order so
@@ -507,8 +508,8 @@ read_many_cache([MsgId|Tail], CState = #client_msstate{ cur_file_cache_ets = Cur
         [{MsgId, Msg, _CacheRefCount}] ->
             read_many_cache(Tail, CState, Acc#{MsgId => Msg})
     end;
-read_many_cache([], _CState, Acc) ->
-    Acc.
+read_many_cache([], CState, Acc) ->
+    {Acc, CState}.
 
 %% We will read from disk one file at a time in no particular order.
 read_many_disk([MsgId|Tail], CState, Acc) ->
@@ -520,8 +521,8 @@ read_many_disk([MsgId|Tail], CState, Acc) ->
         not_found   -> read_many_disk(Tail, CState, Acc);
         MsgLocation -> read_many_file2([MsgId|Tail], CState, Acc, MsgLocation#msg_location.file)
     end;
-read_many_disk([], _CState, Acc) ->
-    Acc.
+read_many_disk([], CState, Acc) ->
+    {Acc, CState}.
 
 read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
                                                    file_handles_ets = FileHandlesEts,
@@ -557,7 +558,7 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             end, {Acc0, []}, Msgs),
             MsgIds = MsgIds0 -- MsgIdsRead,
             %% Unmark opened files and continue.
-            read_many_file3(MsgIds, CState #client_msstate{ reader = Reader }, Acc, File)
+            read_many_file3(MsgIds, CState#client_msstate{ reader = Reader }, Acc, File)
     end.
 
 index_select_from_file(MsgIds, File, #client_msstate { index_module = Index,

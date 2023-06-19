@@ -2606,7 +2606,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {List, StoreState3} = case WhatToRead of
+    {List, StoreState3, MCStateP3, MCStateT3} = case WhatToRead of
         messages ->
             %% We try to read messages from disk all at once instead of
             %% 1 by 1 at fetch time. When v1 is used and messages are
@@ -2651,35 +2651,36 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             %%
             %% Because read_many does not use FHC we do not get an updated MCState
             %% like with normal reads.
-            List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+            {List2, MCStateP2} = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
                 true ->
-                    List1;
+                    {List1, MCStateP};
                 false ->
-                    ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
+                    {ShPersistMsgs, MCStateP1} = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
                     case map_size(ShPersistMsgs) of
-                        0 -> List1;
-                        _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
+                        0 -> {List1, MCStateP1};
+                        _ -> {merge_sh_read_msgs(List1, ShPersistMsgs), MCStateP1}
                     end
             end,
-            List3 = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+            {List3, MCStateT2} = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
                 true ->
-                    List2;
+                    {List2, MCStateT};
                 false ->
-                    ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
+                    {ShTransientMsgs, MCStateT1} = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
                     case map_size(ShTransientMsgs) of
-                        0 -> List2;
-                        _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
+                        0 -> {List2, MCStateT1};
+                        _ -> {merge_sh_read_msgs(List2, ShTransientMsgs), MCStateT1}
                     end
             end,
-            {List3, StoreState2};
+            {List3, StoreState2, MCStateP2, MCStateT2};
         metadata_only ->
-            {List0, StoreState}
+            {List0, StoreState, MCStateP, MCStateT}
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
                                  DelsAndAcksFun,
                                  State #vqstate { index_state = IndexState1,
-                                                  store_state = StoreState3 }),
+                                                  store_state = StoreState3,
+                                                  msg_store_clients = {MCStateP3, MCStateT3}}),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
