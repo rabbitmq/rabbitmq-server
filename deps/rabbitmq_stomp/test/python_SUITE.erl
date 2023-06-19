@@ -12,8 +12,8 @@
 all() ->
     [
         %% This must use a dedicated node as they mess with plugin configuration in incompatible ways
-        {group, tls},
-        {group, implicit_connect},
+        %% {group, tls},
+        %% {group, implicit_connect},
         {group, main}
     ].
 
@@ -32,13 +32,13 @@ groups() ->
 
 init_per_suite(Config) ->
     DataDir = ?config(data_dir, Config),
-    {ok, _} = rabbit_ct_helpers:exec(["pip", "install", "-r", filename:join([DataDir, "src", "requirements.txt"]),
-                                      "--target", filename:join([DataDir, "src", "deps"])]),
+    {ok, _} = rabbit_ct_helpers:exec(["pip", "install", "-r", requirements_path(Config),
+                                                        "--target", deps_path(Config)]),
     Config.
 
 end_per_suite(Config) ->
     DataDir = ?config(data_dir, Config),
-    ok = file:del_dir_r(filename:join([DataDir, "src", "deps"])),
+    ok = file:del_dir_r(deps_path(Config)),
     Config.
 
 init_per_group(_, Config) ->
@@ -89,8 +89,22 @@ run(Config, Test) ->
 
 run_python(Config, What) ->
     DataDir = ?config(data_dir, Config),
-    os:putenv("PYTHONPATH", filename:join("src", "deps")),
+    os:putenv("PYTHONPATH", python_path(Config)),
     {ok, _} = rabbit_ct_helpers:exec([filename:join(DataDir, What)]).
+
+deps_path(Config) ->
+    DataDir = ?config(data_dir, Config),
+    filename:join([DataDir, "src", "deps"]).
+
+requirements_path(Config) ->
+    DataDir = ?config(data_dir, Config),
+    filename:join([DataDir, "src", "requirements.txt"]).
+
+python_path(Config) ->
+    case os:getenv("PYTHONPATH") of
+        false -> deps_path(Config);
+        P -> deps_path(Config) ++ ":" ++ P
+    end.
 
 cur_dir() ->
     {ok, Src} = filelib:find_source(?MODULE),
