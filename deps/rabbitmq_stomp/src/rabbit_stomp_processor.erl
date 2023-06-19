@@ -333,7 +333,7 @@ report_missing_id_header(State) ->
           "Header 'id' is required for durable subscriptions", State).
 
 validate_frame(Command, Frame, State)
-  when Command =:= "SUBSCRIBE" orelse Command =:= "UNSUBSCRIBE" ->
+  when Command =:= 'SUBSCRIBE' orelse Command =:= 'UNSUBSCRIBE' ->
     Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
     case {Hdr(?HEADER_DURABLE), Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
         {{ok, "true"}, _, not_found} ->
@@ -812,7 +812,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
     NewState = case maps:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
             send_frame(
-              "MESSAGE",
+              'MESSAGE',
               rabbit_stomp_util:headers(SessionId, Delivery, Properties,
                                         AckMode, Version),
               Body,
@@ -932,11 +932,11 @@ ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
         not_found -> State
     end.
 
-do_receipt("SEND", _, State) ->
+do_receipt('SEND', _, State) ->
     %% SEND frame receipts are handled when messages are confirmed
     State;
 do_receipt(_Frame, ReceiptId, State) ->
-    send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
+    send_frame('RECEIPT', [{"receipt-id", ReceiptId}], "", State).
 
 maybe_record_receipt(Frame, State = #proc_state{channel          = Channel,
                                            pending_receipts = PR}) ->
@@ -1182,7 +1182,7 @@ send_error_frame(Message, ExtraHeaders, Format, Args, State) ->
                      State).
 
 send_error_frame(Message, ExtraHeaders, Detail, State) ->
-    send_frame("ERROR", [{"message", Message},
+    send_frame('ERROR', [{"message", Message},
                          {"content-type", "text/plain"},
                          {"version", string:join(?SUPPORTED_VERSIONS, ",")}] ++
                         ExtraHeaders,
