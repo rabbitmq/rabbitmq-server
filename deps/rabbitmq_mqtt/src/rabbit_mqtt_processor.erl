@@ -395,7 +395,7 @@ process_request(?PUBLISH,
                             dup = Dup,
                             packet_id  = PacketId,
                             payload = Payload,
-                            props = Props},
+                            props = maps:remove('Topic-Alias', Props)},
             case EffectiveQos of
                 ?QOS_0 ->
                     publish_to_queues_with_checks(Msg, State);
@@ -963,14 +963,15 @@ send_retained_message(TopicFilter0, SubscribeQos,
         #mqtt_msg{qos = MsgQos,
                   retain = Retain,
                   payload = Payload,
-                  props = Props} ->
+                  props = Props0} ->
             Qos = effective_qos(MsgQos, SubscribeQos),
+            {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props0, State0),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->
-                                        {undefined, State0};
+                                        {undefined, State1};
                                     ?QOS_1 ->
                                         {PacketId0,
-                                         State0#state{packet_id = increment_packet_id(PacketId0)}}
+                                         State1#state{packet_id = increment_packet_id(PacketId0)}}
                                 end,
             Packet = #mqtt_packet{
                         fixed = #mqtt_packet_fixed{
@@ -983,7 +984,7 @@ send_retained_message(TopicFilter0, SubscribeQos,
                                       packet_id = PacketId,
                                       %% Wildcards are currently not supported when fetching retained
                                       %% messages. Therefore, TopicFilter must must be a topic name.
-                                      topic_name = TopicFilter,
+                                      topic_name = Topic,
                                       props = Props
                                      },
                         payload = Payload},
