@@ -125,6 +125,8 @@ cluster_size_1_tests() ->
      topic_alias_invalid,
      topic_alias_unknown,
      topic_alias_disallowed,
+     topic_alias_in_retained_message,
+     topic_alias_diallowed_retained_message,
      extended_auth
     ].
 
@@ -1958,6 +1960,26 @@ topic_alias_disallowed(Config) ->
 
     ok = rpc(Config, persistent_term, put, [Key, DefaultMax]).
 
+topic_alias_in_retained_message(Config) ->
+    topic_alias_in_retained_message_test(Config, 1, 10, #{'Topic-Alias' => 1}).
+
+topic_alias_diallowed_retained_message(Config) ->
+    topic_alias_in_retained_message_test(Config, 0, 1, #{}).
+
+topic_alias_in_retained_message_test(Config, ClientAliasMax, MsgAlias, ExpectedProps) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config, [{properties, #{'Topic-Alias-Maximum' => ClientAliasMax}}]),
+    {ok, _} = emqtt:publish(C, Topic, #{'Topic-Alias' => MsgAlias}, <<"m1">>, [{retain, true}, {qos, 1}]),
+
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, [{qos, 1}]),
+    receive {publish, #{payload := <<"m1">>,
+                        topic := Topic,
+                        retain := true,
+                        properties := ExpectedProps}} -> ok
+    after 500 -> ct:fail("Did not receive m1")
+    end,
+    ok = emqtt:disconnect(C).
+
 extended_auth(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
                                 [{properties, #{'Authentication-Method' => <<"OTP">>,
@@ -1999,3 +2021,4 @@ assert_nothing_received(Timeout) ->
     receive Unexpected -> ct:fail("Received unexpected message: ~p", [Unexpected])
     after Timeout -> ok
     end.
+
