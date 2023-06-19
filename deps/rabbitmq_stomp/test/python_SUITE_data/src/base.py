@@ -243,9 +243,9 @@ class WaitableListener(ConnectionListener):
         if full:
             if len(self.messages) != 0:
                 print('Messages: {}'.format(self.messages))
-            if len(self.errors) != 0: print('Messages: {}'.format(self.errors))
+            if len(self.errors) != 0: print('Errors: {}'.format(self.errors))
             if len(self.receipts) != 0:
-                print('Messages: {}'.format(self.receipts))
+                print('Receipts: {}'.format(self.receipts))
 
     def _next_msg_no(self):
         self.msg_no += 1
