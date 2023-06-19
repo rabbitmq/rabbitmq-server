@@ -55,6 +55,7 @@ init() ->
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
+            rabbit_node_monitor:update_cluster_status(),
             post_init(IsVirgin),
 
             ok;
@@ -89,7 +90,9 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    reset_using_mnesia().
+    ok = reset_using_mnesia(),
+    ok = rabbit_node_monitor:reset_cluster_status(),
+    ok.
 
 reset_using_mnesia() ->
     ?LOG_INFO(
@@ -102,7 +105,9 @@ reset_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    force_reset_using_mnesia().
+    ok = force_reset_using_mnesia(),
+    ok = rabbit_node_monitor:reset_cluster_status(),
+    ok.
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(

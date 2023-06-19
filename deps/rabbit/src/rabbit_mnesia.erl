@@ -76,10 +76,6 @@
 
 %%----------------------------------------------------------------------------
 
--export_type([cluster_status/0]).
-
--type cluster_status() :: {[node()], [node()], [node()]}.
-
 %%----------------------------------------------------------------------------
 %% Main interface
 %%----------------------------------------------------------------------------
@@ -162,20 +158,29 @@ can_join_cluster(DiscoveryNode) ->
             end
     end.
 
--spec join_cluster([node()] | node(), rabbit_db_cluster:node_type())
-                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+-spec join_cluster
+([node()], rabbit_db_cluster:node_type()) ->
+    {ok, rabbit_db_cluster:cluster_status()} | {error, any()};
+(node(), rabbit_db_cluster:node_type()) ->
+    ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 
 join_cluster(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
     %% Join the cluster
     rabbit_log:info("Clustering with ~tp as ~tp node",
                     [ClusterNodes, NodeType]),
-    ok = init_db_with_mnesia(ClusterNodes, NodeType,
-                             true, true, _Retry = true),
-    ok;
+    init_db_with_mnesia(ClusterNodes, NodeType, true, true, _Retry = true);
 join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
+    %% Code to remain compatible `change_cluster_node_type/1' and with older
+    %% CLI.
     case can_join_cluster(DiscoveryNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
-            join_cluster(ClusterNodes, NodeType);
+            ok = reset_gracefully(),
+            rabbit_node_monitor:reset_cluster_status(),
+
+            {ok, Status} = join_cluster(ClusterNodes, NodeType),
+            rabbit_node_monitor:write_cluster_status(Status),
+            rabbit_node_monitor:notify_joined_cluster(),
+            ok;
         {ok, already_member} ->
             {ok, already_member};
         Error ->
@@ -206,7 +211,8 @@ reset_gracefully() ->
     %% need to check for consistency because we are resetting.
     %% Force=true here so that reset still works when clustered with a
     %% node which is down.
-    init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
+    _ = init_db_with_mnesia(
+          AllNodes, node_type(), false, false, _Retry = false),
     case is_only_clustered_disc_node() of
         true  -> e(resetting_only_disc_node);
         false -> ok
@@ -222,7 +228,6 @@ wipe() ->
     [erlang:disconnect_node(N) || N <- cluster_nodes(all)],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
-    ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
 -spec change_cluster_node_type(rabbit_db_cluster:node_type()) -> 'ok'.
@@ -242,6 +247,7 @@ change_cluster_node_type(Type) ->
                [Node0|_] -> Node0
            end,
     ok = reset(),
+    ok = rabbit_node_monitor:reset_cluster_status(),
     ok = join_cluster(Node, Type).
 
 -spec update_cluster_nodes(node()) -> 'ok'.
@@ -259,7 +265,11 @@ update_cluster_nodes(DiscoveryNode) ->
             rabbit_node_monitor:write_cluster_status(Status),
             rabbit_log:info("Updating cluster nodes from ~tp",
                             [DiscoveryNode]),
-            init_db_with_mnesia(AllNodes, node_type(), true, true, _Retry = false);
+            {ok, Status1} = init_db_with_mnesia(
+                              AllNodes, node_type(),
+                              true, true, _Retry = false),
+            rabbit_node_monitor:write_cluster_status(Status1),
+            ok;
         false ->
             e(inconsistent_cluster)
     end,
@@ -391,7 +401,7 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 %% running.
 
 -spec cluster_status_from_mnesia() -> rabbit_types:ok_or_error2(
-                                              cluster_status(), any()).
+                                              rabbit_db_cluster:cluster_status(), any()).
 
 cluster_status_from_mnesia() ->
     case is_running() of
@@ -497,7 +507,6 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = rabbit_table:ensure_local_copies(NodeType)
     end,
     ensure_schema_integrity(),
-    rabbit_node_monitor:update_cluster_status(),
     ok.
 
 -spec init_db_unchecked([node()], rabbit_db_cluster:node_type()) -> 'ok'.
@@ -523,7 +532,9 @@ init_db_with_mnesia(ClusterNodes, NodeType,
                     CheckOtherNodes, CheckConsistency, Retry) ->
     start_mnesia(CheckConsistency),
     try
-        init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry)
+        init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry),
+        {ok, Status} = cluster_status_from_mnesia(),
+        {ok, Status}
     after
         stop_mnesia()
     end.

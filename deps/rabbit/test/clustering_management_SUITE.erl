@@ -752,11 +752,19 @@ equal(Status0, Status1) ->
     Status0 == Status1.
 
 cluster_status(Node) ->
+    {AllNodes, DiscNodes, RunningNodes} =
+    try
+        erpc:call(Node, rabbit_db_cluster, current_or_last_status, [])
+    catch
+        error:{exception, undef,
+               [{rabbit_db_cluster, current_or_last_status, _, _} | _]} ->
+            erpc:call(Node, rabbit_mnesia, cluster_status, [status])
+    end,
     {rpc:call(Node, rabbit_nodes, list_members, []),
      rpc:call(Node, rabbit_nodes, list_running, []),
-     rpc:call(Node, rabbit_mnesia, cluster_nodes, [all]),
-     rpc:call(Node, rabbit_mnesia, cluster_nodes, [disc]),
-     rpc:call(Node, rabbit_mnesia, cluster_nodes, [running])}.
+     AllNodes,
+     DiscNodes,
+     RunningNodes}.
 
 sort_cluster_status({{badrpc, {'EXIT', {undef, _}}}, {badrpc, {'EXIT', {undef, _}}}, AllM, DiscM, RunningM}) ->
     {undef, undef, lists:sort(AllM), lists:sort(DiscM), lists:sort(RunningM)};

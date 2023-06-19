@@ -13,7 +13,9 @@
 
 -export([ensure_feature_flags_are_in_sync/2,
          join/2,
-         forget_member/2]).
+         forget_member/2,
+         current_status/0,
+         current_or_last_status/0]).
 -export([change_node_type/1]).
 -export([is_clustered/0,
          members/0,
@@ -26,8 +28,12 @@
 -type node_type() :: disc_node_type() | ram_node_type().
 -type disc_node_type() :: disc.
 -type ram_node_type() :: ram.
+-type cluster_status() :: {[node()], [node()], [node()]}.
 
--export_type([node_type/0, disc_node_type/0, ram_node_type/0]).
+-export_type([node_type/0,
+              disc_node_type/0,
+              ram_node_type/0,
+              cluster_status/0]).
 
 -define(
    IS_NODE_TYPE(NodeType),
@@ -44,6 +50,12 @@ ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
         ok              -> ok;
         {error, Reason} -> throw({error, {incompatible_feature_flags, Reason}})
     end.
+
+-spec can_join(RemoteNode) -> Ret when
+      RemoteNode :: node(),
+      Ret :: Ok | Error,
+      Ok :: {ok, [node()]} | {ok, already_member},
+      Error :: {error, {inconsistent_cluster, string()}}.
 
 can_join(RemoteNode) ->
     ?LOG_INFO(
@@ -76,7 +88,8 @@ join(RemoteNode, NodeType)
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
                #{domain => ?RMQLOG_DOMAIN_DB}),
             case join_using_mnesia(ClusterNodes, NodeType) of
-                ok ->
+                {ok, Status} ->
+                    rabbit_node_monitor:write_cluster_status(Status),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
@@ -101,6 +114,35 @@ forget_member(Node, RemoveWhenOffline) ->
 
 forget_member_using_mnesia(Node, RemoveWhenOffline) ->
     rabbit_mnesia:forget_cluster_node(Node, RemoveWhenOffline).
+
+-spec current_status() -> Ret when
+      Ret :: {ok, Status} | {error, Reason},
+      Status :: rabbit_db_cluster:cluster_status(),
+      Reason :: any().
+
+current_status() ->
+    current_status_using_mnesia().
+
+current_status_using_mnesia() ->
+    rabbit_mnesia:cluster_status_from_mnesia().
+
+-spec current_or_last_status() -> Status when
+      Status :: rabbit_db_cluster:cluster_status().
+
+current_or_last_status() ->
+    case current_status() of
+        {ok, Status} ->
+            Status;
+        {error, _} ->
+            {AllNodes, DiscNodes, RunningNodes0} =
+            rabbit_node_monitor:read_cluster_status(),
+
+            %% The cluster status file records the status when the node is
+            %% online, but we know for sure that the node is offline now, so
+            %% we can remove it from the list of running nodes.
+            RunningNodes = rabbit_nodes:nodes_excl_me(RunningNodes0),
+            {AllNodes, DiscNodes, RunningNodes}
+    end.
 
 %% -------------------------------------------------------------------
 %% Cluster update.

@@ -115,7 +115,7 @@ prepare_cluster_status_files() ->
 corrupt_cluster_status_files(F) ->
     throw({error, corrupt_cluster_status_files, F}).
 
--spec write_cluster_status(rabbit_mnesia:cluster_status()) -> 'ok'.
+-spec write_cluster_status(rabbit_db_cluster:cluster_status()) -> 'ok'.
 
 write_cluster_status({All, Disc, Running}) ->
     ClusterStatusFN = cluster_status_filename(),
@@ -132,7 +132,7 @@ write_cluster_status({All, Disc, Running}) ->
         {FN, {error, E2}} -> throw({error, {could_not_write_file, FN, E2}})
     end.
 
--spec read_cluster_status() -> rabbit_mnesia:cluster_status().
+-spec read_cluster_status() -> rabbit_db_cluster:cluster_status().
 
 read_cluster_status() ->
     case {try_read_file(cluster_status_filename()),
@@ -146,7 +146,7 @@ read_cluster_status() ->
 -spec update_cluster_status() -> 'ok'.
 
 update_cluster_status() ->
-    {ok, Status} = rabbit_mnesia:cluster_status_from_mnesia(),
+    {ok, Status} = rabbit_db_cluster:current_status(),
     write_cluster_status(Status).
 
 -spec reset_cluster_status() -> 'ok'.
