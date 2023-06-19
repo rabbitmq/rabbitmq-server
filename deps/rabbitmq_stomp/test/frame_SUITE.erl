@@ -25,7 +25,8 @@ all() ->
     parse_crlf_interframe,
     parse_carriage_return_not_ignored_interframe,
     parse_carriage_return_mid_command,
-    parse_carriage_return_end_command,
+    parse_unknown_command,
+    parse_unknown_command_short,
     parse_resume_mid_command,
     parse_resume_mid_header_key,
     parse_resume_mid_header_val,
@@ -50,11 +51,11 @@ parse_simple_frame_crlf(_) ->
 
 parse_simple_frame_gen(Term) ->
     Headers = [{"header1", "value1"}, {"header2", "value2"}],
-    Content = frame_string("COMMAND",
+    Content = frame_string('CONNECT',
                            Headers,
                            "Body Content",
                            Term),
-    {"COMMAND", Frame, _State} = parse_complete(Content),
+    {'CONNECT', Frame, _State} = parse_complete(Content),
     [?assertEqual({ok, Value},
                   rabbit_stomp_frame:header(Frame, Key)) ||
         {Key, Value} <- Headers],
@@ -62,75 +63,78 @@ parse_simple_frame_gen(Term) ->
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
 
 parse_command_only(_) ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse("CONNECT\n\n\0").
 
 parse_command_prefixed_with_newline(_) ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse("\nCONNECT\n\n\0").
 
 parse_ignore_empty_frames(_) ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\0\0COMMAND\n\n\0").
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse("\0\0CONNECT\n\n\0").
 
 parse_heartbeat_interframe(_) ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse("\nCONNECT\n\n\0").
 
 parse_crlf_interframe(_) ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\r\nCOMMAND\n\n\0").
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse("\r\nCONNECT\n\n\0").
 
 parse_carriage_return_not_ignored_interframe(_) ->
-    {error, {unexpected_chars_between_frames, "\rC"}} = parse("\rCOMMAND\n\n\0").
+    {error, {unexpected_chars_between_frames, "\rC"}} = parse("\rCONNECT\n\n\0").
 
 parse_carriage_return_mid_command(_) ->
     {error, {unexpected_chars_in_command, "\rA"}} = parse("COMM\rAND\n\n\0").
 
-parse_carriage_return_end_command(_) ->
-    {error, {unexpected_chars_in_command, "\r\r"}} = parse("COMMAND\r\r\n\n\0").
+parse_unknown_command(_) ->
+    {error, unknown_command} = parse("CONNECTA\r\r\n\n\0").
+
+parse_unknown_command_short(_) ->
+    {error, unknown_command} = parse("CONNE\n\n\0").
 
 parse_resume_mid_command(_) ->
-    First = "COMM",
-    Second = "AND\n\n\0",
+    First = "CONN",
+    Second = "ECT\n\n\0",
     {more, Resume} = parse(First),
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
+    {ok, #stomp_frame{command = 'CONNECT'}, _Rest} = parse(Second, Resume).
 
 parse_resume_mid_header_key(_) ->
-    First = "COMMAND\nheade",
+    First = "CONNECT\nheade",
     Second = "r1:value1\n\n\0",
     {more, Resume} = parse(First),
-    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+    {ok, Frame = #stomp_frame{command = 'CONNECT'}, _Rest} =
         parse(Second, Resume),
     ?assertEqual({ok, "value1"},
                  rabbit_stomp_frame:header(Frame, "header1")).
 
 parse_resume_mid_header_val(_) ->
-    First = "COMMAND\nheader1:val",
+    First = "CONNECT\nheader1:val",
     Second = "ue1\n\n\0",
     {more, Resume} = parse(First),
-    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+    {ok, Frame = #stomp_frame{command = 'CONNECT'}, _Rest} =
         parse(Second, Resume),
     ?assertEqual({ok, "value1"},
                  rabbit_stomp_frame:header(Frame, "header1")).
 
 parse_resume_mid_body(_) ->
-    First = "COMMAND\n\nABC",
+    First = "CONNECT\n\nABC",
     Second = "DEF\0",
     {more, Resume} = parse(First),
-    {ok, #stomp_frame{command = "COMMAND", body_iolist = Body}, _Rest} =
+    {ok, #stomp_frame{command = 'CONNECT', body_iolist = Body}, _Rest} =
          parse(Second, Resume),
     ?assertEqual([<<"ABC">>, <<"DEF">>], Body).
 
 parse_no_header_stripping(_) ->
-    Content = "COMMAND\nheader: foo \n\n\0",
+    Content = "CONNECT\nheader: foo \n\n\0",
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual(" foo ", Val).
 
 parse_multiple_headers(_) ->
-    Content = "COMMAND\nheader:correct\nheader:incorrect\n\n\0",
+    Content = "CONNECT\nheader:correct\nheader:incorrect\n\n\0",
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual("correct", Val).
 
 header_no_colon(_) ->
-    Content = "COMMAND\n"
+    Content = "CONNECT\n"
               "hdr1:val1\n"
               "hdrerror\n"
               "hdr2:val2\n"
@@ -138,28 +142,28 @@ header_no_colon(_) ->
     ?assertEqual(parse(Content), {error, {header_no_value, "hdrerror"}}).
 
 no_nested_escapes(_) ->
-    Content = "COM\\\\rAND\n"      % no escapes
+    Content = "CONNECT\n"         
               "hdr\\\\rname:"      % one escape
               "hdr\\\\rval\n\n\0", % one escape
     {ok, Frame, _} = parse(Content),
     ?assertEqual(Frame,
-                 #stomp_frame{command = "COM\\\\rAND",
+                 #stomp_frame{command = 'CONNECT',
                               headers = [{"hdr\\rname", "hdr\\rval"}],
                               body_iolist = []}).
 
 header_name_with_cr(_) ->
-    Content = "COMMAND\nhead\rer:val\n\n\0",
+    Content = "CONNECT\nhead\rer:val\n\n\0",
     {error, {unexpected_chars_in_header, "\re"}} = parse(Content).
 
 header_value_with_cr(_) ->
-    Content = "COMMAND\nheader:val\rue\n\n\0",
+    Content = "CONNECT\nheader:val\rue\n\n\0",
     {error, {unexpected_chars_in_header, "\ru"}} = parse(Content).
 
 header_value_with_colon(_) ->
-    Content = "COMMAND\nheader:val:ue\n\n\0",
+    Content = "CONNECT\nheader:val:ue\n\n\0",
     {ok, Frame, _} = parse(Content),
     ?assertEqual(Frame,
-                 #stomp_frame{ command     = "COMMAND",
+                 #stomp_frame{ command     = 'CONNECT',
                                headers     = [{"header", "val:ue"}],
                                body_iolist = []}).
 
@@ -189,10 +193,10 @@ test_frame_serialization(Expected, TrailingLF) ->
     ?assertEqual(Expected, rabbit_misc:format("~ts", [Serialized])).
 
 headers_escaping_roundtrip(_) ->
-    test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n", true).
+    test_frame_serialization("CONNECT\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n", true).
 
 headers_escaping_roundtrip_without_trailing_lf(_) ->
-    test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0", false).
+    test_frame_serialization("CONNECT\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0", false).
 
 parse(Content) ->
     parse(Content, rabbit_stomp_frame:initial_state()).
@@ -206,5 +210,5 @@ parse_complete(Content) ->
 frame_string(Command, Headers, BodyContent, Term) ->
     HeaderString =
         lists:flatten([Key ++ ":" ++ Value ++ Term || {Key, Value} <- Headers]),
-    Command ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0" ++ "\n".
+    atom_to_list(Command) ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0" ++ "\n".
 

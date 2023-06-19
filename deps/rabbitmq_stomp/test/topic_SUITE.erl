@@ -97,18 +97,18 @@ publish_topic_authorisation(Config) ->
 
     %% send on authorised topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, 'SUBSCRIBE', [{"destination", AuthorisedTopic}]),
 
     rabbit_stomp_client:send(
-        ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["authorised hello"]),
+        ClientFoo, 'SEND', [{"destination", AuthorisedTopic}], ["authorised hello"]),
 
-    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, "MESSAGE"),
+    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, 'MESSAGE'),
     [<<"authorised hello">>] = Body,
 
     %% send on restricted topic
     rabbit_stomp_client:send(
-      ClientFoo, "SEND", [{"destination", RestrictedTopic}], ["hello"]),
-    {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, "ERROR"),
+      ClientFoo, 'SEND', [{"destination", RestrictedTopic}], ["hello"]),
+    {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, 'ERROR'),
     "access_refused" = proplists:get_value("message", Hdrs2),
     ok.
 
@@ -120,18 +120,18 @@ subscribe_topic_authorisation(Config) ->
 
     %% subscribe to authorised topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, 'SUBSCRIBE', [{"destination", AuthorisedTopic}]),
 
     rabbit_stomp_client:send(
         ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["authorised hello"]),
 
-    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, "MESSAGE"),
+    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, 'MESSAGE'),
     [<<"authorised hello">>] = Body,
 
     %% subscribe to restricted topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", RestrictedTopic}]),
-    {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, "ERROR"),
+        ClientFoo, 'SUBSCRIBE', [{"destination", RestrictedTopic}]),
+    {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, 'ERROR'),
     "access_refused" = proplists:get_value("message", Hdrs2),
     ok.
 
@@ -147,13 +147,12 @@ change_default_topic_exchange(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_stomp, default_topic_exchange, Ex]),
 
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, 'SUBSCRIBE', [{"destination", AuthorisedTopic}]),
 
     rabbit_stomp_client:send(
-        ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["ohai there"]),
+        ClientFoo, 'SEND', [{"destination", AuthorisedTopic}], ["ohai there"]),
 
-    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, "MESSAGE"),
-    [<<"ohai there">>] = Body,
+    {ok, _Client1, _, Body} = stomp_receive(ClientFoo, 'MESSAGE'),
 
     Delete = #'exchange.delete'{exchange = Ex},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, Delete),

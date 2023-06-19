@@ -160,10 +160,10 @@ initial_state(Configuration,
        default_nack_requeue = application:get_env(rabbitmq_stomp, default_nack_requeue, true)}.
 
 
-command({"STOMP", Frame}, State) ->
+command({'STOMP', Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
-command({"CONNECT", Frame}, State) ->
+command({'CONNECT', Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
 command(Request, State = #proc_state{channel = none,
@@ -350,36 +350,36 @@ validate_frame(_Command, _Frame, State) ->
 %% Frame handlers
 %%----------------------------------------------------------------------------
 
-handle_frame("DISCONNECT", _Frame, State) ->
+handle_frame('DISCONNECT', _Frame, State) ->
     {stop, normal, close_connection(State)};
 
-handle_frame("SUBSCRIBE", Frame, State) ->
-    with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
+handle_frame('SUBSCRIBE', Frame, State) ->
+    with_destination('SUBSCRIBE', Frame, State, fun do_subscribe/4);
 
-handle_frame("UNSUBSCRIBE", Frame, State) ->
+handle_frame('UNSUBSCRIBE', Frame, State) ->
     ConsumerTag = rabbit_stomp_util:consumer_tag(Frame),
     cancel_subscription(ConsumerTag, Frame, State);
 
-handle_frame("SEND", Frame, State) ->
-    without_headers(?HEADERS_NOT_ON_SEND, "SEND", Frame, State,
+handle_frame('SEND', Frame, State) ->
+    without_headers(?HEADERS_NOT_ON_SEND, 'SEND', Frame, State,
         fun (_Command, Frame1, State1) ->
-            with_destination("SEND", Frame1, State1, fun do_send/4)
+            with_destination('SEND', Frame1, State1, fun do_send/4)
         end);
 
-handle_frame("ACK", Frame, State) ->
-    ack_action("ACK", Frame, State, fun create_ack_method/3);
+handle_frame('ACK', Frame, State) ->
+    ack_action('ACK', Frame, State, fun create_ack_method/3);
 
-handle_frame("NACK", Frame, State) ->
-    ack_action("NACK", Frame, State, fun create_nack_method/3);
+handle_frame('NACK', Frame, State) ->
+    ack_action('NACK', Frame, State, fun create_nack_method/3);
 
-handle_frame("BEGIN", Frame, State) ->
-    transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
+handle_frame('BEGIN', Frame, State) ->
+    transactional_action(Frame, 'BEGIN', fun begin_transaction/2, State);
 
-handle_frame("COMMIT", Frame, State) ->
-    transactional_action(Frame, "COMMIT", fun commit_transaction/2, State);
+handle_frame('COMMIT', Frame, State) ->
+    transactional_action(Frame, 'COMMIT', fun commit_transaction/2, State);
 
-handle_frame("ABORT", Frame, State) ->
-    transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
+handle_frame('ABORT', Frame, State) ->
+    transactional_action(Frame, 'ABORT', fun abort_transaction/2, State);
 
 handle_frame(Command, _Frame, State) ->
     error("Bad command",
@@ -600,7 +600,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                      {?HEADER_HEART_BEAT,
                       io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
                      {?HEADER_VERSION, Version}],
-          ok("CONNECTED",
+          ok('CONNECTED',
               case application:get_env(rabbitmq_stomp, hide_server_info, false) of
                 true  -> Headers;
                 false -> [{?HEADER_SERVER, server_header()} | Headers]

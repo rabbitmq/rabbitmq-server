@@ -9,7 +9,10 @@
                               default_passcode,
                               force_default_creds = false,
                               implicit_connect,
-                              ssl_cert_login}).
+                              ssl_cert_login,
+                              max_header_length,
+                              max_headers,
+                              max_body_length}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
 

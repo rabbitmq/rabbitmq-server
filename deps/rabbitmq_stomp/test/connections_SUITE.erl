@@ -100,7 +100,7 @@ messages_not_dropped_on_disconnect(Config) ->
     N1 = N + 1,
     N1 = count_connections(Config),
     [rabbit_stomp_client:send(
-       Client, "SEND", [{"destination", ?DESTINATION}],
+       Client, 'SEND', [{"destination", ?DESTINATION}],
        [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),

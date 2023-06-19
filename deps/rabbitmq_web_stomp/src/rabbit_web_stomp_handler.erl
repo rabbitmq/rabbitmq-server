@@ -305,7 +305,7 @@ handle_data1(Bytes, State = #state{proc_state  = ProcState,
     end.
 
 maybe_block(State = #state{state = blocking, heartbeat = Heartbeat},
-            #stomp_frame{command = "SEND"}) ->
+            #stomp_frame{command = 'SEND'}) ->
     rabbit_heartbeat:pause_monitor(Heartbeat),
     State#state{state = blocked};
 maybe_block(State, _) ->

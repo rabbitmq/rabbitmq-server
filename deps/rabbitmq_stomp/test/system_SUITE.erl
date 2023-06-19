@@ -117,16 +117,16 @@ end_per_testcase0(_, Config) ->
 publish_no_dest_error(Config) ->
     Client = ?config(stomp_client, Config),
     rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "/exchange/non-existent"}], ["hello"]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+      Client, 'SEND', [{"destination", "/exchange/non-existent"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
 publish_unauthorized_error(Config) ->
     ClientFoo = ?config(client_foo, Config),
     rabbit_stomp_client:send(
-      ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
+      ClientFoo, 'SEND', [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, 'ERROR'),
     "access_refused" = proplists:get_value("message", Hdrs),
     ok.
 
@@ -134,8 +134,8 @@ subscribe_error(Config) ->
     Client = ?config(stomp_client, Config),
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
@@ -148,8 +148,8 @@ subscribe(Config) ->
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
-    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% send from amqp
     Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
@@ -157,7 +157,7 @@ subscribe(Config) ->
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
-    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
     ok.
 
 unsubscribe_ack(Config) ->
@@ -169,11 +169,11 @@ unsubscribe_ack(Config) ->
                                                     auto_delete = true}),
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION},
                             {"receipt", "rcpt1"},
                             {"ack", "client"},
                             {"id", "subscription-id"}]),
-    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% send from amqp
     Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
@@ -181,19 +181,19 @@ unsubscribe_ack(Config) ->
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
-    {ok, Client2, Hdrs1, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    {ok, Client2, Hdrs1, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
 
     rabbit_stomp_client:send(
-      Client2, "UNSUBSCRIBE", [{"destination", ?DESTINATION},
+      Client2, 'UNSUBSCRIBE', [{"destination", ?DESTINATION},
                               {"id", "subscription-id"}]),
 
     rabbit_stomp_client:send(
-      Client2, "ACK", [{rabbit_stomp_util:ack_header_name(Version),
+      Client2, 'ACK', [{rabbit_stomp_util:ack_header_name(Version),
                         proplists:get_value(
                           rabbit_stomp_util:msg_header_name(Version), Hdrs1)},
                        {"receipt", "rcpt2"}]),
 
-    {ok, _Client3, Hdrs2, _Body2} = stomp_receive(Client2, "ERROR"),
+    {ok, _Client3, Hdrs2, _Body2} = stomp_receive(Client2, 'ERROR'),
     ?assertEqual("Subscription not found",
                  proplists:get_value("message", Hdrs2)),
     ok.
@@ -208,10 +208,10 @@ subscribe_ack(Config) ->
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION},
                             {"receipt",     "foo"},
                             {"ack",         "client"}]),
-    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% send from amqp
     Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
@@ -219,14 +219,14 @@ subscribe_ack(Config) ->
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
-    {ok, _Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    {ok, _Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
     false = (Version == "1.2") xor proplists:is_defined(?HEADER_ACK, Headers),
 
     MsgHeader = rabbit_stomp_util:msg_header_name(Version),
     AckValue  = proplists:get_value(MsgHeader, Headers),
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
 
-    rabbit_stomp_client:send(Client, "ACK", [{AckHeader, AckValue}]),
+    rabbit_stomp_client:send(Client, 'ACK', [{AckHeader, AckValue}]),
     #'basic.get_empty'{} =
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
@@ -240,14 +240,14 @@ send(Config) ->
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
-    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% send from stomp
     rabbit_stomp_client:send(
-      Client1, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
+      Client1, 'SEND', [{"destination", ?DESTINATION}], ["hello"]),
 
-    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
     ok.
 
 delete_queue_subscribe(Config) ->
@@ -259,14 +259,14 @@ delete_queue_subscribe(Config) ->
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "bah"}]),
-    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+      Client, 'SUBSCRIBE', [{"destination", ?DESTINATION}, {"receipt", "bah"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% delete queue while subscribed
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
 
-    {ok, _Client2, Headers, _} = stomp_receive(Client1, "ERROR"),
+    {ok, _Client2, Headers, _} = stomp_receive(Client1, 'ERROR'),
 
     ?DESTINATION = proplists:get_value("subscription", Headers),
 
@@ -279,7 +279,7 @@ temp_destination_queue(Config) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
-    rabbit_stomp_client:send( Client, "SEND", [{"destination", ?DESTINATION},
+    rabbit_stomp_client:send( Client, 'SEND', [{"destination", ?DESTINATION},
                                                {"reply-to", "/temp-queue/foo"}],
                                               ["ping"]),
     amqp_channel:call(Channel,#'basic.consume'{queue  = ?QUEUE, no_ack = true}),
@@ -291,22 +291,22 @@ temp_destination_queue(Config) ->
     ok = amqp_channel:call(Channel,
                            #'basic.publish'{routing_key = ReplyTo},
                            #amqp_msg{payload = <<"pong">>}),
-    {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, "MESSAGE"),
+    {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, 'MESSAGE'),
     ok.
 
 temp_destination_in_send(Config) ->
     Client = ?config(stomp_client, Config),
-    rabbit_stomp_client:send( Client, "SEND", [{"destination", "/temp-queue/foo"}],
+    rabbit_stomp_client:send( Client, 'SEND', [{"destination", "/temp-queue/foo"}],
                                               ["poing"]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
 
 blank_destination_in_send(Config) ->
     Client = ?config(stomp_client, Config),
-    rabbit_stomp_client:send( Client, "SEND", [{"destination", ""}],
+    rabbit_stomp_client:send( Client, 'SEND', [{"destination", ""}],
                                               ["poing"]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
 
