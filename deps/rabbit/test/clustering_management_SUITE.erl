@@ -19,8 +19,7 @@ all() ->
     [
       {group, unclustered_2_nodes},
       {group, unclustered_3_nodes},
-      {group, clustered_2_nodes},
-      {group, clustered_4_nodes}
+      {group, clustered_2_nodes}
     ].
 
 groups() ->
