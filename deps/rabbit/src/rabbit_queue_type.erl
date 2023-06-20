@@ -483,7 +483,7 @@ module(QRef, State) ->
     end.
 
 -spec deliver([amqqueue:amqqueue() |
-               {amqqueue:amqqueue(), rabbit_types:unique_binding_keys()}],
+               {amqqueue:amqqueue(), rabbit_exchange:route_infos()}],
               rabbit_types:delivery(),
               stateless | state()) ->
     {ok, state(), actions()} | {error, Reason :: term()}.
@@ -498,7 +498,7 @@ deliver(Qs, Delivery, State) ->
 deliver0(Qs, Delivery0, stateless) ->
     ByTypeAndBindingKeys =
     lists:foldl(fun(Elem, Acc) ->
-                        {Q, BKeys} = queue_and_binding_keys(Elem),
+                        {Q, BKeys} = queue_binding_keys(Elem),
                         Mod = amqqueue:get_type(Q),
                         maps:update_with(
                           {Mod, BKeys}, fun(A) ->
@@ -516,7 +516,7 @@ deliver0(Qs, Delivery0, #?STATE{} = State0) ->
     ByTypeAndBindingKeys =
     lists:foldl(
       fun (Elem, Acc) ->
-              {Q, BKeys} = queue_and_binding_keys(Elem),
+              {Q, BKeys} = queue_binding_keys(Elem),
               Mod = amqqueue:get_type(Q),
               QState = case Mod:is_stateful() of
                            true ->
@@ -544,15 +544,16 @@ deliver0(Qs, Delivery0, #?STATE{} = State0) ->
               end, State0, Xs),
     {ok, State, Actions}.
 
-queue_and_binding_keys(Q)
+queue_binding_keys(Q)
   when ?is_amqqueue(Q) ->
     {Q, #{}};
-queue_and_binding_keys(T = {Q, BindingKeys})
+queue_binding_keys({Q, #{binding_keys := BindingKeys}})
   when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
-    T.
+    {Q, BindingKeys};
+queue_binding_keys({Q, _RouteInfos})
+  when ?is_amqqueue(Q) ->
+    {Q, #{}}.
 
--spec add_binding_keys(rabbit_types:delivery(), rabbit_types:unique_binding_keys()) ->
-    rabbit_types:delivery().
 add_binding_keys(Delivery, BindingKeys)
   when map_size(BindingKeys) =:= 0 ->
     Delivery;

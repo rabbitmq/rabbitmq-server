@@ -103,7 +103,7 @@
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
--type binding_keys() :: rabbit_types:unique_binding_keys().
+-type route_infos() :: rabbit_exchange:route_infos().
 
 %%----------------------------------------------------------------------------
 
@@ -320,8 +320,10 @@ lookup_durable_queue(QName) ->
     rabbit_db_queue:get_durable(QName).
 
 -spec lookup_many(rabbit_exchange:route_return()) ->
-    [amqqueue:amqqueue() | {amqqueue:amqqueue(), binding_keys()}].
-lookup_many([])     -> [];                             %% optimisation
+    [amqqueue:amqqueue() | {amqqueue:amqqueue(), route_infos()}].
+lookup_many([]) ->
+    %% optimisation
+    [];
 lookup_many(Names) when is_list(Names) ->
     rabbit_db_queue:get_many(Names).
 
@@ -2003,7 +2005,7 @@ get_quorum_nodes(Q) ->
 
 -spec prepend_extra_bcc(Qs) ->
     Qs when Qs :: [amqqueue:amqqueue() |
-                   {amqqueue:amqqueue(), binding_keys()}].
+                   {amqqueue:amqqueue(), route_infos()}].
 prepend_extra_bcc([]) ->
     [];
 prepend_extra_bcc([Q0] = Qs) ->
@@ -2038,31 +2040,31 @@ prepend_extra_bcc(Qs) ->
           end, Qs),
     lists:usort(BCCQueues) ++ Qs.
 
--spec queue(Q | {Q, binding_keys()}) ->
+-spec queue(Q | {Q, route_infos()}) ->
     Q when Q :: amqqueue:amqqueue().
 queue(Q)
   when ?is_amqqueue(Q) ->
     Q;
-queue({Q, BindingKeys})
-  when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
+queue({Q, RouteInfos})
+  when ?is_amqqueue(Q) andalso is_map(RouteInfos) ->
     Q.
 
--spec queue_name(name() | {name(), binding_keys()}) ->
+-spec queue_name(name() | {name(), route_infos()}) ->
     name().
 queue_name(QName = #resource{kind = queue}) ->
     QName;
-queue_name({QName = #resource{kind = queue}, BindingKeys})
-  when is_map(BindingKeys) ->
+queue_name({QName = #resource{kind = queue}, RouteInfos})
+  when is_map(RouteInfos) ->
     QName.
 
--spec queue_names([Q | {Q, binding_keys()}]) ->
+-spec queue_names([Q | {Q, route_infos()}]) ->
     [name()] when Q :: amqqueue:amqqueue().
 queue_names(Queues)
   when is_list(Queues) ->
     lists:map(fun(Q) when ?is_amqqueue(Q) ->
                       amqqueue:get_name(Q);
-                 ({Q, BindingKeys})
-                   when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
+                 ({Q, RouteInfos})
+                   when ?is_amqqueue(Q) andalso is_map(RouteInfos) ->
                       amqqueue:get_name(Q)
               end, Queues).
 

@@ -7,7 +7,6 @@
 
 -module(rabbit_exchange).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
@@ -21,14 +20,12 @@
 
 %%----------------------------------------------------------------------------
 
--export_type([name/0, type/0, route_opts/0, route_return/0]).
+-export_type([name/0, type/0, route_opts/0, route_infos/0, route_return/0]).
 -type name() :: rabbit_types:exchange_name().
 -type type() :: rabbit_types:exchange_type().
 -type route_opts() :: #{return_binding_keys => boolean()}.
--type route_return() :: [rabbit_amqqueue:name() |
-                         {rabbit_amqqueue:name(),
-                          rabbit_types:unique_binding_keys()}].
--type fun_name() :: atom().
+-type route_infos() :: #{binding_keys => #{rabbit_types:binding_key() => true}}.
+-type route_return() :: [rabbit_amqqueue:name() | {rabbit_amqqueue:name(), route_infos()}].
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +39,7 @@ recover(VHost) ->
     [XName || #exchange{name = XName} <- Xs].
 
 -spec callback
-        (rabbit_types:exchange(), fun_name(), atom(), [any()]) -> 'ok'.
+        (rabbit_types:exchange(), FunName :: atom(), atom(), [any()]) -> 'ok'.
 
 callback(X = #exchange{decorators = Decorators, name = XName}, Fun, Serial, Args) ->
     case Fun of
@@ -365,12 +362,14 @@ route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                                                 not virtual_reply_queue(RK)];
         _ ->
             Decs = rabbit_exchange_decorator:select(route, Decorators),
-            QNamesToBindings = route1(Delivery, Decs, Opts, {[X], XName, #{}}),
+            QNamesToBKeys = route1(Delivery, Decs, Opts, {[X], XName, #{}}),
             case Opts of
                 #{return_binding_keys := true} ->
-                    maps:to_list(QNamesToBindings);
+                    maps:fold(fun(QName, BindingKeys, L) ->
+                                      [{QName, #{binding_keys => BindingKeys}} | L]
+                              end, [], QNamesToBKeys);
                 _ ->
-                    maps:keys(QNamesToBindings)
+                    maps:keys(QNamesToBKeys)
             end
     end.
 

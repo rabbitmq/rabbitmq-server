@@ -14,7 +14,7 @@
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
-              binding/0, binding_source/0, binding_destination/0, unique_binding_keys/0,
+              binding/0, binding_source/0, binding_destination/0,
               exchange/0,
               connection/0, connection_name/0, channel/0, channel_name/0,
               protocol/0, auth_user/0, user/0,
@@ -108,7 +108,6 @@
 -type(binding_destination() :: rabbit_amqqueue_name() | exchange_name()).
 
 -type binding_key() :: binary().
--type unique_binding_keys() :: #{binding_key() => true}.
 
 -type(binding() ::
         #binding{source      :: exchange_name(),

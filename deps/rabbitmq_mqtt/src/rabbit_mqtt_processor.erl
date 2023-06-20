@@ -1614,7 +1614,7 @@ drop_local(QNames, #state{subscriptions = Subs,
                      name = <<"mqtt-subscription-",
                               ClientId0:ClientIdSize/binary,
                               "qos", _:1/binary >>},
-           BindingKeys})
+           #{binding_keys := BindingKeys}})
             when Vhost0 =:= Vhost andalso
                  ClientId0 =:= ClientId ->
               rabbit_misc:maps_any(

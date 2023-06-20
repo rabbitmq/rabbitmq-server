@@ -217,7 +217,7 @@ detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
                     {Cycling, NotCycling} =
                         lists:partition(fun (#resource{name = Queue}) ->
                                                 is_cycle(Queue, Deaths);
-                                            ({#resource{name = Queue}, _BindingKeys}) ->
+                                            ({#resource{name = Queue}, _RouteInfos}) ->
                                                 is_cycle(Queue, Deaths)
                                         end, Queues),
                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
@@ -225,7 +225,7 @@ detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
                     OldQueues1 = [QName || {longstr, QName} <- OldQueues],
                     Cycling1 = lists:map(fun(#resource{name = QName}) ->
                                                  [QName | OldQueues1];
-                                            ({#resource{name = QName}, _BindingKeys}) ->
+                                            ({#resource{name = QName}, _RouteInfos}) ->
                                                  [QName | OldQueues1]
                                          end, Cycling),
                     {NotCycling, Cycling1};
