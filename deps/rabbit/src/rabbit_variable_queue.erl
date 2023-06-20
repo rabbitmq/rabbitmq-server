@@ -618,6 +618,9 @@ fetch(AckRequired, State) ->
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
+%% @todo It may seem like we would benefit from avoiding reading the
+%%       message content from disk. But benchmarks tell a different
+%%       story. So we don't, until a better understanding is gained.
 drop(AckRequired, State) ->
     case queue_out(State) of
         {empty, State1} ->
@@ -1749,6 +1752,12 @@ remove_from_disk(#msg_status {
 %%       (since the index has expiration encoded, it could use binary
 %%       search to find where it should stop reading) and then in a second
 %%       step do the reading with a limit for each read and drop only that.
+%%
+%% @todo We cannot just read the metadata to drop the messages because
+%%       there are messages we are not going to remove. Those messages
+%%       will later on be consumed and their content read; only with
+%%       a less efficient operation. This results in a drop in performance
+%%       for long queues.
 remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
     {MsgProps, QAcc, State1} =
         collect_by_predicate(Pred, ?QUEUE:new(), State),
