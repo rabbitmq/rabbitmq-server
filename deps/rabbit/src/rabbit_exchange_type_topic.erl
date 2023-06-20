@@ -34,11 +34,11 @@ description() ->
 
 serialise_events() -> false.
 
+%% route/2 and route/3 can return duplicate destinations (and duplicate binding keys).
+%% The caller of these functions is responsible for deduplication.
 route(Exchange, Delivery) ->
     route(Exchange, Delivery, #{}).
 
-%% This function can return duplicate destinations and duplicate binding keys.
-%% The caller of this function is responsible for deduplication.
 route(#exchange{name = XName},
       #delivery{message = #basic_message{routing_keys = Routes}},
       Opts) ->
