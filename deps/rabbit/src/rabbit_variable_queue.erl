@@ -618,6 +618,9 @@ fetch(AckRequired, State) ->
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
+%% @todo It may seem like we would benefit from avoiding reading the
+%%       message content from disk. But benchmarks tell a different
+%%       story. So we don't, until a better understanding is gained.
 drop(AckRequired, State) ->
     case queue_out(State) of
         {empty, State1} ->
@@ -638,37 +641,17 @@ ack([SeqId], State) ->
     case remove_pending_ack(true, SeqId, State) of
         {none, _} ->
             {[], State};
-        {#msg_status { msg_id        = MsgId,
-                       is_persistent = IsPersistent,
-                       msg_location  = MsgLocation,
-                       index_on_disk = IndexOnDisk },
-         State1 = #vqstate { index_mod         = IndexMod,
-                             index_state       = IndexState,
-                             store_state       = StoreState0,
-                             msg_store_clients = MSCState,
-                             ack_out_counter   = AckOutCount }} ->
-            {DeletedSegments, IndexState1} = case IndexOnDisk of
-                              true  -> IndexMod:ack([SeqId], IndexState);
-                              false -> {[], IndexState}
-                          end,
-            StoreState1 = case MsgLocation of
-                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
-                ?IN_QUEUE_STORE   -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
-                ?IN_QUEUE_INDEX   -> StoreState0;
-                ?IN_MEMORY        -> StoreState0
-            end,
-            StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
+        {MsgStatus = #msg_status{ msg_id = MsgId },
+         State1 = #vqstate{ ack_out_counter = AckOutCount }} ->
+            State2 = remove_from_disk(MsgStatus, State1),
             {[MsgId],
-             a(State1 #vqstate { index_state      = IndexState1,
-                                 store_state      = StoreState,
-                                 ack_out_counter  = AckOutCount + 1 })}
+             a(State2 #vqstate { ack_out_counter  = AckOutCount + 1 })}
     end;
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, AllMsgIds},
      State1 = #vqstate { index_mod         = IndexMod,
                          index_state       = IndexState,
                          store_state       = StoreState0,
-                         msg_store_clients = MSCState,
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
@@ -684,9 +667,9 @@ ack(AckTags, State) ->
     {DeletedSegments, IndexState1} = IndexMod:ack(IndexOnDiskSeqIds, IndexState),
     StoreState1 = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
     StoreState = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState1, SeqIdsInStore),
-    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
+    State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
     {lists:reverse(AllMsgIds),
-     a(State1 #vqstate { index_state      = IndexState1,
+     a(State2 #vqstate { index_state      = IndexState1,
                          store_state      = StoreState,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
@@ -1702,42 +1685,49 @@ remove(true, MsgStatus = #msg_status {
 %% This function body has the same behaviour as remove_queue_entries/3
 %% but instead of removing messages based on a ?QUEUE, this removes
 %% just one message, the one referenced by the MsgStatus provided.
-remove(false, MsgStatus = #msg_status {
+remove(false, MsgStatus = #msg_status{ seq_id = SeqId },
+              State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId,
+                                out_counter = OutCount }) ->
+    State1 = remove_from_disk(MsgStatus, State),
+
+    State2 = stats_removed(MsgStatus, State1),
+
+    {undefined, maybe_update_rates(
+                  State2 #vqstate {next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
+                                   out_counter         = OutCount + 1 })}.
+
+remove_from_disk(#msg_status {
                 seq_id        = SeqId,
                 msg_id        = MsgId,
                 is_persistent = IsPersistent,
                 msg_location  = MsgLocation,
                 index_on_disk = IndexOnDisk },
-       State = #vqstate {next_deliver_seq_id = NextDeliverSeqId,
-                         out_counter         = OutCount,
-                         index_mod           = IndexMod,
+       State = #vqstate {index_mod           = IndexMod,
                          index_state         = IndexState1,
                          store_state         = StoreState0,
                          msg_store_clients   = MSCState}) ->
-
-    %% Remove from msg_store and queue index, if necessary
-    StoreState1 = case MsgLocation of
-        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]), StoreState0;
-        ?IN_QUEUE_STORE  -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
-        ?IN_QUEUE_INDEX  -> StoreState0;
-        ?IN_MEMORY       -> StoreState0
-    end,
-
     {DeletedSegments, IndexState2} =
         case IndexOnDisk of
             true  -> IndexMod:ack([SeqId], IndexState1);
             false -> {[], IndexState1}
         end,
-
+    {StoreState1, State1} = case MsgLocation of
+        ?IN_SHARED_STORE  ->
+            case msg_store_remove(MSCState, IsPersistent, [{SeqId, MsgId}]) of
+                {ok, []} ->
+                    {StoreState0, State};
+                {ok, [_]} ->
+                    {StoreState0, record_confirms(sets:add_element(MsgId, sets:new([{version,2}])), State)}
+            end;
+        ?IN_QUEUE_STORE   -> {rabbit_classic_queue_store_v2:remove(SeqId, StoreState0), State};
+        ?IN_QUEUE_INDEX   -> {StoreState0, State};
+        ?IN_MEMORY        -> {StoreState0, State}
+    end,
     StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
-
-    State1 = stats_removed(MsgStatus, State),
-
-    {undefined, maybe_update_rates(
-                  State1 #vqstate {next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
-                                   out_counter         = OutCount + 1,
-                                   index_state         = IndexState2,
-                                   store_state         = StoreState })}.
+    State1#vqstate{
+        index_state = IndexState2,
+        store_state = StoreState
+    }.
 
 %% This function exists as a way to improve dropwhile/2
 %% performance. The idea of having this function is to optimise calls
@@ -1762,6 +1752,12 @@ remove(false, MsgStatus = #msg_status {
 %%       (since the index has expiration encoded, it could use binary
 %%       search to find where it should stop reading) and then in a second
 %%       step do the reading with a limit for each read and drop only that.
+%%
+%% @todo We cannot just read the metadata to drop the messages because
+%%       there are messages we are not going to remove. Those messages
+%%       will later on be consumed and their content read; only with
+%%       a less efficient operation. This results in a drop in performance
+%%       for long queues.
 remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
     {MsgProps, QAcc, State1} =
         collect_by_predicate(Pred, ?QUEUE:new(), State),
@@ -1896,12 +1892,12 @@ purge_betas_and_deltas(DelsAndAcksFun, State) ->
     end.
 
 remove_queue_entries(Q, DelsAndAcksFun,
-                     State = #vqstate{next_deliver_seq_id = NextDeliverSeqId0, msg_store_clients = MSCState}) ->
+                     State = #vqstate{next_deliver_seq_id = NextDeliverSeqId0}) ->
     {MsgIdsByStore, NextDeliverSeqId, Acks, State1} =
         ?QUEUE:fold(fun remove_queue_entries1/2,
                     {maps:new(), NextDeliverSeqId0, [], State}, Q),
-    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
-    DelsAndAcksFun(NextDeliverSeqId, Acks, State1).
+    State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
+    DelsAndAcksFun(NextDeliverSeqId, Acks, State2).
 
 remove_queue_entries1(
   #msg_status { msg_id = MsgId, seq_id = SeqId,
@@ -2262,31 +2258,28 @@ remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
 purge_pending_ack(KeepPersistent,
                   State = #vqstate { index_mod         = IndexMod,
                                      index_state       = IndexState,
-                                     store_state       = StoreState0,
-                                     msg_store_clients = MSCState }) ->
+                                     store_state       = StoreState0 }) ->
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1} = purge_pending_ack1(State),
     case KeepPersistent of
-        true  -> remove_transient_msgs_by_id(MsgIdsByStore, MSCState),
-                 State1;
+        true  -> remove_transient_msgs_by_id(MsgIdsByStore, State1);
         false -> {DeletedSegments, IndexState1} =
                      IndexMod:ack(IndexOnDiskSeqIds, IndexState),
                  StoreState1 = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState0, SeqIdsInStore),
                  StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
-                 remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
-                 State1 #vqstate { index_state = IndexState1,
+                 State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
+                 State2 #vqstate { index_state = IndexState1,
                                    store_state = StoreState }
     end.
 
 purge_pending_ack_delete_and_terminate(
   State = #vqstate { index_mod         = IndexMod,
                      index_state       = IndexState,
-                     store_state       = StoreState,
-                     msg_store_clients = MSCState }) ->
+                     store_state       = StoreState }) ->
     {_, MsgIdsByStore, _SeqIdsInStore, State1} = purge_pending_ack1(State),
     StoreState1 = rabbit_classic_queue_store_v2:terminate(StoreState),
     IndexState1 = IndexMod:delete_and_terminate(IndexState),
-    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
-    State1 #vqstate { index_state = IndexState1,
+    State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
+    State2 #vqstate { index_state = IndexState1,
                       store_state = StoreState1 }.
 
 purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
@@ -2303,21 +2296,21 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
 %% true: holds a list of Persistent Message Ids.
 %% false: holds a list of Transient Message Ids.
 %%
-%% When we call maps:to_list/1 we get two sets of msg ids, where
-%% IsPersistent is either true for persistent messages or false for
-%% transient ones. The msg_store_remove/3 function takes this boolean
-%% flag to determine from which store the messages should be removed
-%% from.
-remove_vhost_msgs_by_id(MsgIdsByStore, MSCState) ->
-    [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)],
-    ok.
+%% The msg_store_remove/3 function takes this boolean flag to determine
+%% from which store the messages should be removed from.
+remove_vhost_msgs_by_id(MsgIdsByStore,
+                        State = #vqstate{ msg_store_clients = MSCState }) ->
+    maps:fold(fun(IsPersistent, MsgIds, StateF) ->
+        case msg_store_remove(MSCState, IsPersistent, MsgIds) of
+            {ok, []} ->
+                StateF;
+            {ok, ConfirmMsgIds} ->
+                record_confirms(sets:from_list(ConfirmMsgIds, [{version, 2}]), StateF)
+        end
+    end, State, MsgIdsByStore).
 
-remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
-    case maps:find(false, MsgIdsByStore) of
-        error        -> ok;
-        {ok, MsgIds} -> ok = msg_store_remove(MSCState, false, MsgIds)
-    end.
+remove_transient_msgs_by_id(MsgIdsByStore, State) ->
+    remove_vhost_msgs_by_id(maps:with([false], MsgIdsByStore), State).
 
 accumulate_ack_init() -> {[], maps:new(), [], []}.
 
@@ -2622,7 +2615,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    DeltaSeqLimit, DeltaSeqIdEnd]),
     {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {List, StoreState3} = case WhatToRead of
+    {List, StoreState3, MCStateP3, MCStateT3} = case WhatToRead of
         messages ->
             %% We try to read messages from disk all at once instead of
             %% 1 by 1 at fetch time. When v1 is used and messages are
@@ -2667,35 +2660,36 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             %%
             %% Because read_many does not use FHC we do not get an updated MCState
             %% like with normal reads.
-            List2 = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+            {List2, MCStateP2} = case length(ShPersistReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
                 true ->
-                    List1;
+                    {List1, MCStateP};
                 false ->
-                    ShPersistMsgs = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
+                    {ShPersistMsgs, MCStateP1} = rabbit_msg_store:read_many(ShPersistReads, MCStateP),
                     case map_size(ShPersistMsgs) of
-                        0 -> List1;
-                        _ -> merge_sh_read_msgs(List1, ShPersistMsgs)
+                        0 -> {List1, MCStateP1};
+                        _ -> {merge_sh_read_msgs(List1, ShPersistMsgs), MCStateP1}
                     end
             end,
-            List3 = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
+            {List3, MCStateT2} = case length(ShTransientReads) < ?SHARED_READ_MANY_COUNT_THRESHOLD of
                 true ->
-                    List2;
+                    {List2, MCStateT};
                 false ->
-                    ShTransientMsgs = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
+                    {ShTransientMsgs, MCStateT1} = rabbit_msg_store:read_many(ShTransientReads, MCStateT),
                     case map_size(ShTransientMsgs) of
-                        0 -> List2;
-                        _ -> merge_sh_read_msgs(List2, ShTransientMsgs)
+                        0 -> {List2, MCStateT1};
+                        _ -> {merge_sh_read_msgs(List2, ShTransientMsgs), MCStateT1}
                     end
             end,
-            {List3, StoreState2};
+            {List3, StoreState2, MCStateP2, MCStateT2};
         metadata_only ->
-            {List0, StoreState}
+            {List0, StoreState, MCStateP, MCStateT}
     end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
                                  DelsAndAcksFun,
                                  State #vqstate { index_state = IndexState1,
-                                                  store_state = StoreState3 }),
+                                                  store_state = StoreState3,
+                                                  msg_store_clients = {MCStateP3, MCStateT3}}),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },

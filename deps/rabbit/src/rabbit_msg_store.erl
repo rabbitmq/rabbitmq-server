@@ -14,8 +14,7 @@
          client_pre_hibernate/1, client_ref/1,
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
 
--export([set_maximum_since_use/2,
-         compact_file/2, truncate_file/4, delete_file/2]). %% internal
+-export([compact_file/2, truncate_file/4, delete_file/2]). %% internal
 
 -export([scan_file_for_valid_messages/1]). %% salvage tool
 
@@ -27,23 +26,21 @@
 
 -include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
--define(SYNC_INTERVAL,  25).   %% milliseconds
+%% We flush to disk when the write buffer gets above the max size,
+%% or at an interval to make sure we don't keep the data in memory
+%% too long. Confirms are sent after the data is flushed to disk.
+-define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB.
+-define(SYNC_INTERVAL,                200). %% Milliseconds.
+
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
--define(TRANSFORM_TMP, "transform_tmp").
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
--define(READ_AHEAD_MODE, [read_ahead | ?READ_MODE]).
 -define(WRITE_MODE,      [write]).
 
 -define(FILE_EXTENSION,        ".rdq").
 -define(FILE_EXTENSION_TMP,    ".rdt").
-
--define(HANDLE_CACHE_BUFFER_SIZE, 1048576). %% 1MB
-
- %% i.e. two pairs, so GC does not go idle when busy
--define(MAXIMUM_SIMULTANEOUS_GC_FILES, 4).
 
 %% We keep track of flying messages for writes and removes. The idea is that
 %% when a remove comes in before we could process the write, we skip the
@@ -121,7 +118,7 @@
 -record(client_msstate,
         { server,
           client_ref,
-          current_file,
+          reader,
           index_state,
           index_module,
           dir,
@@ -167,7 +164,7 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      current_file       :: undefined | {non_neg_integer(), file:fd()},
+                      reader             :: undefined | {non_neg_integer(), file:fd()},
                       index_state        :: any(),
                       index_module       :: atom(),
                       %% Stored as binary() as opposed to file:filename() to save memory.
@@ -421,7 +418,7 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
                                           ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
-                      current_file       = undefined,
+                      reader             = undefined,
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = rabbit_file:filename_to_binary(Dir),
@@ -432,28 +429,22 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
 
 -spec client_terminate(client_msstate()) -> 'ok'.
 
-client_terminate(CState = #client_msstate { client_ref = Ref }) ->
+client_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_call(CState, {client_terminate, Ref}),
-    client_maybe_close_current_file(CState).
+    reader_close(Reader).
 
 -spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
-client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
+client_delete_and_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}),
-    client_maybe_close_current_file(CState).
+    reader_close(Reader).
 
 -spec client_pre_hibernate(client_msstate()) -> client_msstate().
 
-client_pre_hibernate(CState) ->
-    client_maybe_close_current_file(CState),
-    CState#client_msstate{ current_file = undefined }.
-
-client_maybe_close_current_file(#client_msstate{ current_file = CurrentFile }) ->
-    case CurrentFile of
-        undefined -> ok;
-        {_File, Fd} -> ok = file:close(Fd)
-    end.
+client_pre_hibernate(CState = #client_msstate{ reader = Reader }) ->
+    reader_close(Reader),
+    CState#client_msstate{ reader = undefined }.
 
 -spec client_ref(client_msstate()) -> client_ref().
 
@@ -495,13 +486,14 @@ read(MsgId,
             {{ok, Msg}, CState}
     end.
 
--spec read_many([rabbit_types:msg_id()], client_msstate()) -> #{rabbit_types:msg_id() => msg()}.
+-spec read_many([rabbit_types:msg_id()], client_msstate())
+    -> {#{rabbit_types:msg_id() => msg()}, client_msstate()}.
 
 %% We disable read_many when the index module is not ETS for the time being.
 %% We can introduce the new index module callback as a breaking change in 4.0.
-read_many(_, #client_msstate{ index_module = IndexMod })
+read_many(_, CState = #client_msstate{ index_module = IndexMod })
         when IndexMod =/= rabbit_msg_store_ets_index ->
-    #{};
+    {#{}, CState};
 read_many(MsgIds, CState) ->
     file_handle_cache_stats:inc(msg_store_read, length(MsgIds)),
     %% We receive MsgIds in rouhgly the younger->older order so
@@ -516,8 +508,8 @@ read_many_cache([MsgId|Tail], CState = #client_msstate{ cur_file_cache_ets = Cur
         [{MsgId, Msg, _CacheRefCount}] ->
             read_many_cache(Tail, CState, Acc#{MsgId => Msg})
     end;
-read_many_cache([], _CState, Acc) ->
-    Acc.
+read_many_cache([], CState, Acc) ->
+    {Acc, CState}.
 
 %% We will read from disk one file at a time in no particular order.
 read_many_disk([MsgId|Tail], CState, Acc) ->
@@ -529,12 +521,12 @@ read_many_disk([MsgId|Tail], CState, Acc) ->
         not_found   -> read_many_disk(Tail, CState, Acc);
         MsgLocation -> read_many_file2([MsgId|Tail], CState, Acc, MsgLocation#msg_location.file)
     end;
-read_many_disk([], _CState, Acc) ->
-    Acc.
+read_many_disk([], CState, Acc) ->
+    {Acc, CState}.
 
-%% Then we mark the file handle as being open.
 read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
                                                    file_handles_ets = FileHandlesEts,
+                                                   reader           = Reader0,
                                                    client_ref       = Ref }, Acc0, File) ->
     %% Mark file handle open.
     mark_handle_open(FileHandlesEts, File, Ref),
@@ -556,9 +548,8 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             %% Then we can do the consolidation to get the pread LocNums.
             LocNums = consolidate_reads(MsgLocations, []),
             %% Read the data from the file.
-            {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(File)), [binary, read, raw]),
-            {ok, Msgs} = rabbit_msg_file:pread(Fd, LocNums),
-            ok = file:close(Fd),
+            Reader = reader_open(Reader0, Dir, File),
+            {ok, Msgs} = reader_pread(Reader, LocNums),
             %% Before we continue the read_many calls we must remove the
             %% MsgIds we have read from the list and add the messages to
             %% the Acc.
@@ -567,7 +558,7 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             end, {Acc0, []}, Msgs),
             MsgIds = MsgIds0 -- MsgIdsRead,
             %% Unmark opened files and continue.
-            read_many_file3(MsgIds, CState, Acc, File)
+            read_many_file3(MsgIds, CState#client_msstate{ reader = Reader }, Acc, File)
     end.
 
 index_select_from_file(MsgIds, File, #client_msstate { index_module = Index,
@@ -592,19 +583,16 @@ read_many_file3(MsgIds, CState = #client_msstate{ file_handles_ets = FileHandles
 
 contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 
--spec remove([rabbit_types:msg_id()], client_msstate()) -> 'ok'.
+-spec remove([rabbit_types:msg_id()], client_msstate()) -> {'ok', [rabbit_types:msg_id()]}.
 
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { flying_ets = FlyingEts,
                                           client_ref = CRef }) ->
     %% If the entry was deleted we act as if it wasn't by using the right default.
-    [ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN}) || {MsgRef, _} <- MsgIds],
-    server_cast(CState, {remove, CRef, MsgIds}).
-
--spec set_maximum_since_use(server(), non_neg_integer()) -> 'ok'.
-
-set_maximum_since_use(Server, Age) when is_pid(Server); is_atom(Server) ->
-    gen_server2:cast(Server, {set_maximum_since_use, Age}).
+    Res = [{MsgId, ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN})}
+        || {MsgRef, MsgId} <- MsgIds],
+    server_cast(CState, {remove, CRef, MsgIds}),
+    {ok, [MsgId || {MsgId, ?FLYING_IS_IGNORED} <- Res]}.
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -652,11 +640,71 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
             {{ok, Msg}, CState1}
     end.
 
-clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      dying_clients = DyingClients }) ->
-    State #msstate { cref_to_msg_ids = maps:remove(CRef, CTM),
-                     dying_clients = maps:remove(CRef, DyingClients) }.
+read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
+                               total_size = TotalSize }, State = #client_msstate{ reader = Reader0, dir = Dir }) ->
+    Reader = reader_open(Reader0, Dir, File),
+    Msg = case reader_pread(Reader, [{Offset, TotalSize}]) of
+        {ok, [Msg0]} ->
+            Msg0;
+        Other ->
+            {error, {misread, [{old_state, State},
+                               {file_num,  File},
+                               {offset,    Offset},
+                               {msg_id,    MsgId},
+                               {read,      Other},
+                               {proc_dict, get()}
+                              ]}}
+    end,
+    {Msg, State#client_msstate{ reader = Reader }}.
 
+%%----------------------------------------------------------------------------
+%% Reader functions. A reader is a file num + fd tuple.
+%%----------------------------------------------------------------------------
+
+%% The reader tries to keep the FD open for subsequent reads.
+%% When we attempt to read we first check if the opened file
+%% is the one we want. If not we close/open the right one.
+%%
+%% The FD will be closed when the queue hibernates to save
+%% resources.
+reader_open(Reader, Dir, File) ->
+    {ok, Fd} = case Reader of
+        {File, Fd0} ->
+            {ok, Fd0};
+        {_AnotherFile, Fd0} ->
+            ok = file:close(Fd0),
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw]);
+        undefined ->
+            file:open(form_filename(Dir, filenum_to_name(File)),
+                      [binary, read, raw])
+    end,
+    {File, Fd}.
+
+reader_pread({_, Fd}, LocNums) ->
+    case file:pread(Fd, LocNums) of
+        {ok, DataL} -> {ok, reader_pread_parse(DataL)};
+        KO -> KO
+    end.
+
+reader_pread_parse([<<Size:64,
+                      _MsgId:16/binary,
+                      Rest0/bits>>|Tail]) ->
+    BodyBinSize = Size - 16, %% Remove size of MsgId.
+    <<MsgBodyBin:BodyBinSize/binary,
+      255, %% OK marker.
+      Rest/bits>> = Rest0,
+    [binary_to_term(MsgBodyBin)|reader_pread_parse([Rest|Tail])];
+reader_pread_parse([<<>>]) ->
+    [];
+reader_pread_parse([<<>>|Tail]) ->
+    reader_pread_parse(Tail).
+
+reader_close(Reader) ->
+    case Reader of
+        undefined -> ok;
+        {_File, Fd} -> ok = file:close(Fd)
+    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -666,9 +714,6 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
     pg:join({?MODULE, VHost, Type}, self()),
-
-    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
-                                             [self()]),
 
     Dir = filename:join(BaseDir, atom_to_list(Type)),
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
@@ -761,12 +806,8 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     {CurOffset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
     rabbit_log:debug("Finished rebuilding index", []),
-    %% read is only needed so that we can seek
-    {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
-                             [read | ?WRITE_MODE]),
-    {ok, CurOffset} = file_handle_cache:position(CurHdl, CurOffset),
-    ok = file_handle_cache:truncate(CurHdl),
-
+    %% Open the most recent file.
+    {ok, CurHdl} = writer_recover(Dir, CurFile, CurOffset),
     {ok, State1 #msstate { current_file_handle = CurHdl,
                            current_file_offset = CurOffset },
      hibernate,
@@ -853,8 +894,7 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
         ignore ->
             %% A 'remove' has already been issued and eliminated the
             %% 'write'.
-            State1 = blind_confirm(CRef, sets:add_element(MsgId, sets:new([{version,2}])),
-                                   ignored, State),
+            %%
             %% If all writes get eliminated, cur_file_cache_ets could
             %% grow unbounded. To prevent that we delete the cache
             %% entry here, but only if the message isn't in the
@@ -864,31 +904,26 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
             %% current file then the cache entry will be removed by
             %% the normal logic for that in write_message/4 and
             %% maybe_roll_to_new_file/2.
-            case index_lookup(MsgId, State1) of
+            case index_lookup(MsgId, State) of
                 [#msg_location { file = File }]
-                  when File == State1 #msstate.current_file ->
+                  when File == State #msstate.current_file ->
                     ok;
                 _ ->
                     true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0})
             end,
-            noreply(State1)
+            noreply(State)
     end;
 
 handle_cast({remove, CRef, MsgIds}, State) ->
-    {RemovedMsgIds, State1} =
+    State1 =
         lists:foldl(
-          fun ({MsgRef, MsgId}, {Removed, State2}) ->
+          fun ({MsgRef, MsgId}, State2) ->
                   case flying_remove({CRef, MsgRef}, State2) of
-                      process -> {[MsgId | Removed],
-                                  remove_message(MsgId, CRef, State2)};
-                      ignore  -> {Removed, State2}
+                      process -> remove_message(MsgId, CRef, State2);
+                      ignore  -> State2
                   end
-          end, {[], State}, MsgIds),
-    case RemovedMsgIds of
-        [] -> noreply(State1);
-        _  -> noreply(client_confirm(CRef, sets:from_list(RemovedMsgIds, [{version, 2}]),
-                                    ignored, State1))
-    end;
+          end, State, MsgIds),
+    noreply(State1);
 
 handle_cast({compacted_file, File},
             State = #msstate { file_summary_ets = FileSummaryEts }) ->
@@ -897,10 +932,6 @@ handle_cast({compacted_file, File},
     %% So this will become a no-op and we can ignore the return value.
     _ = ets:update_element(FileSummaryEts, File,
                            {#file_summary.locked, false}),
-    noreply(State);
-
-handle_cast({set_maximum_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
 handle_info(sync, State) ->
@@ -909,8 +940,8 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({timeout, TimerRef, maybe_gc}, State = #msstate{ gc_check_timer = TimerRef }) ->
-    noreply(maybe_gc(State));
+handle_info({timeout, TimerRef, {maybe_gc, Candidates}}, State = #msstate{ gc_check_timer = TimerRef }) ->
+    noreply(maybe_gc(Candidates, State));
 
 %% @todo When a CQ crashes the message store does not remove
 %%       the client information and clean up. This eventually
@@ -952,7 +983,7 @@ terminate(Reason, State = #msstate { index_state         = IndexState,
     State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
-                              ok = file_handle_cache:close(CurHdl),
+                              ok = writer_close(CurHdl),
                               State2
              end,
     case store_file_summary(FileSummaryEts, Dir) of
@@ -989,6 +1020,11 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 %% general helper functions
 %%----------------------------------------------------------------------------
 
+clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
+                                      dying_clients = DyingClients }) ->
+    State #msstate { cref_to_msg_ids = maps:remove(CRef, CTM),
+                     dying_clients = maps:remove(CRef, DyingClients) }.
+
 noreply(State) ->
     {State1, Timeout} = next_state(State),
     {noreply, State1, Timeout}.
@@ -1017,21 +1053,20 @@ stop_sync_timer(State) ->
     rabbit_misc:stop_timer(State, #msstate.sync_timer_ref).
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
+                                 clients             = Clients,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
-    CGs = maps:fold(fun (CRef, MsgIds, NS) ->
-                            case sets:is_empty(MsgIds) of
-                                true  -> NS;
-                                false -> [{CRef, MsgIds} | NS]
-                            end
-                    end, [], CTM),
-    ok = case CGs of
-             [] -> ok;
-             _  -> file_handle_cache:sync(CurHdl)
-         end,
-    lists:foldl(fun ({CRef, MsgIds}, StateN) ->
-                        client_confirm(CRef, MsgIds, written, StateN)
-                end, State1, CGs).
+    ok = writer_flush(CurHdl),
+    %% We confirm all pending messages because we know they are
+    %% either on disk when we flush the current write file; or
+    %% were removed by the queue already.
+    maps:foreach(fun (CRef, MsgIds) ->
+        case maps:get(CRef, Clients) of
+            {_CPid, undefined   } -> ok;
+            {_CPid, MsgOnDiskFun} -> MsgOnDiskFun(MsgIds, written)
+        end
+    end, CTM),
+    State1#msstate{cref_to_msg_ids = #{}}.
 
 flying_write(Key, #msstate { flying_ets = FlyingEts }) ->
     case ets:lookup(FlyingEts, Key) of
@@ -1165,18 +1200,22 @@ gc_candidate(File, State = #msstate{ current_file = File }) ->
     State;
 gc_candidate(File, State = #msstate{ gc_candidates  = Candidates,
                                      gc_check_timer = undefined }) ->
-    TimerRef = erlang:start_timer(15000, self(), maybe_gc),
-    State#msstate{ gc_candidates  = Candidates#{ File => true },
+    TimerRef = erlang:start_timer(15000, self(), {maybe_gc, Candidates#{ File => true }}),
+    State#msstate{ gc_candidates  = #{},
                    gc_check_timer = TimerRef };
 gc_candidate(File, State = #msstate{ gc_candidates = Candidates }) ->
     State#msstate{ gc_candidates = Candidates#{ File => true }}.
 
 write_message(MsgId, Msg,
-              State = #msstate { current_file_handle = CurHdl,
-                                 current_file        = CurFile,
-                                 current_file_offset = CurOffset,
-                                 file_summary_ets    = FileSummaryEts }) ->
-    {ok, TotalSize} = rabbit_msg_file:append(CurHdl, MsgId, Msg),
+              State0 = #msstate { current_file_handle = CurHdl,
+                                  current_file        = CurFile,
+                                  current_file_offset = CurOffset,
+                                  file_summary_ets    = FileSummaryEts }) ->
+    {MaybeFlush, TotalSize} = writer_append(CurHdl, MsgId, Msg),
+    State = case MaybeFlush of
+        flush -> internal_sync(State0);
+        ok -> State0
+    end,
     ok = index_insert(
            #msg_location { msg_id = MsgId, ref_count = 1, file = CurFile,
                            offset = CurOffset, total_size = TotalSize }, State),
@@ -1186,34 +1225,6 @@ write_message(MsgId, Msg,
     maybe_roll_to_new_file(CurOffset + TotalSize,
                            State #msstate {
                              current_file_offset = CurOffset + TotalSize }).
-
-read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
-                               total_size = TotalSize }, State = #client_msstate{ current_file = CurrentFile0, dir = Dir }) ->
-    {ok, Hdl} = case CurrentFile0 of
-        {File, Fd} ->
-            {ok, Fd};
-        {_AnotherFile, Fd} ->
-            ok = file:close(Fd),
-            file:open(form_filename(Dir, filenum_to_name(File)),
-                      [binary, read, raw]);
-        undefined ->
-            file:open(form_filename(Dir, filenum_to_name(File)),
-                      [binary, read, raw])
-    end,
-    {ok, {MsgId, Msg}} =
-        case rabbit_msg_file:pread(Hdl, Offset, TotalSize) of
-            {ok, {MsgId, _}} = Obj ->
-                Obj;
-            Rest ->
-                {error, {misread, [{old_state, State},
-                                   {file_num,  File},
-                                   {offset,    Offset},
-                                   {msg_id,    MsgId},
-                                   {read,      Rest},
-                                   {proc_dict, get()}
-                                  ]}}
-        end,
-    {Msg, State#client_msstate{ current_file = {File, Hdl}}}.
 
 contains_message(MsgId, From, State) ->
     MsgLocation = index_lookup_positive_ref_count(MsgId, State),
@@ -1259,33 +1270,6 @@ record_pending_confirm(CRef, MsgId, State) ->
             maps:put(CRef, NewMsgIds, CTM)
       end, CRef, State).
 
-client_confirm(CRef, MsgIds, ActionTaken, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTM) ->
-              case maps:find(CRef, CTM) of
-                  {ok, Gs} -> MsgOnDiskFun(sets:intersection(Gs, MsgIds),
-                                           ActionTaken),
-                              MsgIds1 = sets_subtract(Gs, MsgIds),
-                              case sets:is_empty(MsgIds1) of
-                                  true  -> maps:remove(CRef, CTM);
-                                  false -> maps:put(CRef, MsgIds1, CTM)
-                              end;
-                  error    -> CTM
-              end
-      end, CRef, State).
-
-%% Function defined in both rabbit_msg_store and rabbit_variable_queue.
-sets_subtract(Set1, Set2) ->
-    case sets:size(Set2) of
-        1 -> sets:del_element(hd(sets:to_list(Set2)), Set1);
-        _ -> sets:subtract(Set1, Set2)
-    end.
-
-blind_confirm(CRef, MsgIds, ActionTaken, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTM) -> MsgOnDiskFun(MsgIds, ActionTaken), CTM end,
-      CRef, State).
-
 %% Detect whether the MsgId is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
 %% msg, and it has a 0 ref_count we must only alter the ref_count, not
@@ -1313,14 +1297,64 @@ should_mask_action(CRef, MsgId,
 %% file helper functions
 %%----------------------------------------------------------------------------
 
+-record(writer, {
+    fd = file:fd(),
+    %% We are only using this buffer from one pid therefore
+    %% we will not acquire/release locks.
+    buffer = prim_buffer:prim_buffer()
+}).
+
+-define(MAX_BUFFER_SIZE, 1048576). %% 1MB.
+
+writer_open(Dir, Num) ->
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
+                         [append, binary, raw]),
+    {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
+
+writer_recover(Dir, Num, Offset) ->
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
+                         [read, write, binary, raw]),
+    {ok, Offset} = file:position(Fd, Offset),
+    ok = file:truncate(Fd),
+    {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
+
+writer_append(#writer{buffer = Buffer}, MsgId, MsgBody) ->
+    MsgBodyBin = term_to_binary(MsgBody),
+    MsgBodyBinSize = byte_size(MsgBodyBin),
+    EntrySize = MsgBodyBinSize + 16, %% Size of MsgId + MsgBodyBin.
+    %% We send an iovec to the buffer instead of building a binary.
+    prim_buffer:write(Buffer, [
+        <<EntrySize:64>>,
+        MsgId,
+        MsgBodyBin,
+        <<255>> %% OK marker.
+    ]),
+    Res = case prim_buffer:size(Buffer) of
+        Size when Size >= ?MAX_BUFFER_SIZE ->
+            flush;
+        _ ->
+            ok
+    end,
+    {Res, EntrySize + 9}. %% EntrySize + size field + OK marker.
+
+%% Note: the message store no longer fsyncs; it only flushes data
+%% to disk. This is in line with classic queues v2 behavior.
+writer_flush(#writer{fd = Fd, buffer = Buffer}) ->
+    case prim_buffer:size(Buffer) of
+        0 ->
+            ok;
+        Size ->
+            file:write(Fd, prim_buffer:read_iovec(Buffer, Size))
+    end.
+
+writer_close(#writer{fd = Fd}) ->
+    file:close(Fd).
+
 open_file(File, Mode) ->
     file_handle_cache:open_with_absolute_path(
       File, ?BINARY_MODE ++ Mode,
       [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
        {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
-
-open_file(Dir, FileName, Mode) ->
-    open_file(form_filename(Dir, FileName), Mode).
 
 mark_handle_open(FileHandlesEts, File, Ref) ->
     %% This is fine to fail (already exists). Note it could fail with
@@ -1620,9 +1654,9 @@ maybe_roll_to_new_file(
                      file_size_limit     = FileSizeLimit })
   when Offset >= FileSizeLimit ->
     State1 = internal_sync(State),
-    ok = file_handle_cache:close(CurHdl),
+    ok = writer_close(CurHdl),
     NextFile = CurFile + 1,
-    {ok, NextHdl} = open_file(Dir, filenum_to_name(NextFile), ?WRITE_MODE),
+    {ok, NextHdl} = writer_open(Dir, NextFile),
     true = ets:insert_new(FileSummaryEts, #file_summary {
                             file             = NextFile,
                             valid_total_size = 0,
@@ -1640,11 +1674,10 @@ maybe_roll_to_new_file(_, State) ->
 %% We keep track of files that have seen removes and
 %% check those periodically for compaction. We only
 %% compact files that have less than half valid data.
-maybe_gc(State = #msstate { current_file          = CurrentFile,
-                            gc_pid                = GCPid,
-                            gc_candidates         = Candidates,
+maybe_gc(Candidates,
+         State = #msstate { gc_pid                = GCPid,
                             file_summary_ets      = FileSummaryEts }) ->
-    FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts, CurrentFile),
+    FilesToCompact = find_files_to_compact(maps:keys(Candidates), FileSummaryEts),
     lists:foreach(fun(File) ->
             %% We must lock the file here and not in the GC process to avoid
             %% some concurrency issues that can arise otherwise. The lock is
@@ -1661,28 +1694,27 @@ maybe_gc(State = #msstate { current_file          = CurrentFile,
                                       {#file_summary.locked, true}),
             ok = rabbit_msg_store_gc:compact(GCPid, File)
     end, FilesToCompact),
-    State#msstate{ gc_candidates  = #{},
-                   gc_check_timer = undefined }.
+    State#msstate{ gc_check_timer = undefined }.
 
-find_files_to_compact([], _, _) ->
+find_files_to_compact([], _) ->
     [];
-%% Skip the file currently opened for writing, we will compact
-%% it only once we are done writing to it.
-find_files_to_compact([File|Tail], FileSummaryEts, CurrentFile)
-        when CurrentFile =:= File ->
-    find_files_to_compact(Tail, FileSummaryEts, CurrentFile);
-find_files_to_compact([File|Tail], FileSummaryEts, CurrentFile) ->
-    [#file_summary{ valid_total_size = ValidSize,
-                    file_size        = TotalSize,
-                    locked           = IsLocked }] = ets:lookup(FileSummaryEts, File),
-    %% We compact only if at least half the file is empty.
-    %% We do not compact if the file is locked (a compaction
-    %% was already requested).
-    case (ValidSize * 2 < TotalSize) andalso
-         (ValidSize > 0) andalso
-         not IsLocked of
-        true -> [File|find_files_to_compact(Tail, FileSummaryEts, CurrentFile)];
-        false -> find_files_to_compact(Tail, FileSummaryEts, CurrentFile)
+find_files_to_compact([File|Tail], FileSummaryEts) ->
+    case ets:lookup(FileSummaryEts, File) of
+        [] ->
+            %% File has already been deleted; no need to compact.
+            find_files_to_compact(Tail, FileSummaryEts);
+        [#file_summary{ valid_total_size = ValidSize,
+                        file_size        = TotalSize,
+                        locked           = IsLocked }] ->
+            %% We compact only if at least half the file is empty.
+            %% We do not compact if the file is locked (a compaction
+            %% was already requested).
+            case (ValidSize * 2 < TotalSize) andalso
+                 (ValidSize > 0) andalso
+                 not IsLocked of
+                true -> [File|find_files_to_compact(Tail, FileSummaryEts)];
+                false -> find_files_to_compact(Tail, FileSummaryEts)
+            end
     end.
 
 delete_file_if_empty(File, State = #msstate { current_file = File }) ->
