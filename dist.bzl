@@ -238,6 +238,7 @@ def versioned_plugins_dir(**kwargs):
 
 def package_generic_unix(
         name = "package-generic-unix",
+        extension = "tar.xz",
         plugins = None,
         extra_licenses = [],
         package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
@@ -298,7 +299,7 @@ def package_generic_unix(
 
     pkg_tar(
         name = name,
-        extension = "tar.xz",
+        extension = extension,
         package_dir = package_dir,
         visibility = ["//visibility:public"],
         srcs = [
@@ -316,6 +317,7 @@ def package_generic_unix(
 
 def source_archive(
         name = "source_archive",
+        extension = "tar.xz",
         plugins = None):
     source_tree(
         name = "source-tree",
@@ -353,7 +355,7 @@ def source_archive(
 
     pkg_tar(
         name = name,
-        extension = "tar.xz",
+        extension = extension,
         srcs = [
             ":deps-files",
             ":json-files",
