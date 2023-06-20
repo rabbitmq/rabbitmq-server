@@ -270,7 +270,11 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 """,
     ],
     repository = "rabbitmq/osiris",
+<<<<<<< HEAD
     tag = "v1.4.3",
+=======
+    tag = "v1.6.0",
+>>>>>>> 8ab60d7e4c (Osiris v1.6.0)
 )
 
 erlang_package.hex_package(
