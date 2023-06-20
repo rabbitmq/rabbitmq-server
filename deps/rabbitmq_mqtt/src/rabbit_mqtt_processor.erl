@@ -379,13 +379,12 @@ process_request(?PUBLISH,
                    fixed = #mqtt_packet_fixed{qos = Qos,
                                               retain = Retain,
                                               dup = Dup},
-                   variable = #mqtt_packet_publish{packet_id = PacketId,
-                                                   props = Props} = Variable,
+                   variable = Variable = #mqtt_packet_publish{packet_id = PacketId},
                    payload = Payload},
                 State0 = #state{unacked_client_pubs = U,
                                 cfg = #cfg{proto_ver = ProtoVer}}) ->
     case process_topic_alias_inbound(Variable, State0) of
-        {ok, Topic, State1} ->
+        {ok, Topic, Props, State1} ->
             EffectiveQos = maybe_downgrade_qos(Qos),
             rabbit_global_counters:messages_received(ProtoVer, 1),
             State = maybe_increment_publisher(State1),
@@ -395,7 +394,7 @@ process_request(?PUBLISH,
                             dup = Dup,
                             packet_id  = PacketId,
                             payload = Payload,
-                            props = maps:remove('Topic-Alias', Props)},
+                            props = Props},
             case EffectiveQos of
                 ?QOS_0 ->
                     publish_to_queues_with_checks(Msg, State);
@@ -965,6 +964,8 @@ send_retained_message(TopicFilter0, SubscribeQos,
                   payload = Payload,
                   props = Props0} ->
             Qos = effective_qos(MsgQos, SubscribeQos),
+            %% Wildcards are currently not supported when fetching retained
+            %% messages. Therefore, TopicFilter must must be a topic name.
             {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props0, State0),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->
@@ -982,8 +983,6 @@ send_retained_message(TopicFilter0, SubscribeQos,
                                   },
                         variable = #mqtt_packet_publish{
                                       packet_id = PacketId,
-                                      %% Wildcards are currently not supported when fetching retained
-                                      %% messages. Therefore, TopicFilter must must be a topic name.
                                       topic_name = Topic,
                                       props = Props
                                      },
@@ -1245,16 +1244,17 @@ maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
 
 process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic,
-                                                 props = #{'Topic-Alias' := Alias}},
+                                                 props = Props0 = #{'Topic-Alias' := Alias}},
                             State = #state{topic_aliases = As = {Aliases, _},
                                            cfg = #cfg{client_id = ClientId}}) ->
     AliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
     case Alias > 0 andalso Alias =< AliasMax of
         true ->
+            Props = maps:remove('Topic-Alias', Props0),
             if Topic =:= <<>> ->
                    case maps:find(Alias, Aliases) of
                        {ok, TopicName} ->
-                           {ok, TopicName, State};
+                           {ok, TopicName, Props, State};
                        error ->
                            ?LOG_WARNING("Unknown Topic Alias: ~b. Disconnecting MQTT client ~ts",
                                         [Alias, ClientId]),
@@ -1263,15 +1263,15 @@ process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic,
                is_binary(Topic) ->
                    Aliases1 = Aliases#{Alias => Topic},
                    State1 = State#state{topic_aliases = setelement(1, As, Aliases1)},
-                   {ok, Topic, State1}
+                   {ok, Topic, Props, State1}
             end;
         false ->
             ?LOG_WARNING("Invalid Topic Alias: ~b. Disconnecting MQTT client ~ts",
                          [Alias, ClientId]),
             {error, ?RC_TOPIC_ALIAS_INVALID}
     end;
-process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic}, State) ->
-    {ok, Topic, State}.
+process_topic_alias_inbound(#mqtt_packet_publish{topic_name = Topic, props = Props}, State) ->
+    {ok, Topic, Props, State}.
 
 process_topic_alias_outbound(Topic, Props, State = #state{cfg = #cfg{topic_alias_maximum_outbound = 0}}) ->
     {Topic, Props, State};
