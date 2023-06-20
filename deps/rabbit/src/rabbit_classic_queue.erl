@@ -80,15 +80,15 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
                         _   -> Node
                     end
             end,
-    Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
-    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
+    Node2 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node2) of
         {ok, _} ->
             gen_server2:call(
-              rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
+              rabbit_amqqueue_sup_sup:start_queue_process(Node2, Q, declare),
               {init, new}, infinity);
         {error, Error} ->
             {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
-             [rabbit_misc:rs(QName), Node1, Error]}
+             [rabbit_misc:rs(QName), Node2, Error]}
     end.
 
 delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
