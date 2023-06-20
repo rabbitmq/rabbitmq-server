@@ -571,7 +571,10 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rabbit_mgmt_stats_SUITE.beam"],
         app_name = "rabbitmq_management",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbitmq_management_agent:erlang_app", "@proper//:erlang_app"],
+        deps = [
+            "//deps/rabbitmq_management_agent:erlang_app",
+            "@proper//:erlang_app",
+        ],
     )
     erlang_bytecode(
         name = "rabbit_mgmt_test_db_SUITE_beam_files",
@@ -581,7 +584,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["include/rabbit_mgmt.hrl"],
         app_name = "rabbitmq_management",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app", "//deps/rabbitmq_management_agent:erlang_app"],
+        deps = [
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
+            "//deps/rabbitmq_management_agent:erlang_app",
+        ],
     )
     erlang_bytecode(
         name = "rabbit_mgmt_test_unit_SUITE_beam_files",
