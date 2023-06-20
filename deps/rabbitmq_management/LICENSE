@@ -13,4 +13,4 @@ This package makes use of the following third party libraries:
 | Sammy          | https://code.quirkey.com/sammy/                         | MIT           | LICENSE-MIT-Sammy        |
 | jQuery         | https://jquery.com/                                     | MIT           | LICENSE-MIT-jQuery       |
 
-If you have any questions regarding licensing, please contact us at info@rabbitmq.com.
+If you have any questions regarding licensing, please contact us at rabbitmq-core@groups.vmware.com.
