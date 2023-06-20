@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([set/1, delete_all_for_exchange/1, delete/1, match/2]).
+-export([set/1, delete_all_for_exchange/1, delete/1, match/3]).
 
 %% For testing
 -export([clear/0]).
@@ -18,7 +18,8 @@
 -define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
 -define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
 
--type match_result() :: #{rabbit_types:binding_destination() => rabbit_types:unique_binding_keys()}.
+-type match_result() :: [rabbit_types:binding_destination() |
+                         {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
 
 %% -------------------------------------------------------------------
 %% set().
@@ -70,19 +71,21 @@ delete(Bs) when is_list(Bs) ->
 %% -------------------------------------------------------------------
 
 -spec match(rabbit_exchange:name(),
-            rabbit_types:routing_key()) -> match_result().
+            rabbit_types:routing_key(),
+            rabbit_exchange:route_opts()) -> match_result().
 %% @doc Finds the topic bindings matching the given exchange and routing key and returns
-%% the destination of the bindings potentially with the matched bindings.
+%% the destination of the bindings potentially with the matched binding key.
 %%
-%% @returns destinations with matched bindings
+%% @returns destinations with matched binding key
 %%
 %% @private
 
-match(XName, RoutingKey) ->
+match(XName, RoutingKey, Opts) ->
+    BKeys = maps:get(return_binding_keys, Opts, false),
     rabbit_db:run(
       #{mnesia =>
         fun() ->
-                match_in_mnesia(XName, RoutingKey)
+                match_in_mnesia(XName, RoutingKey, BKeys)
         end
        }).
 
@@ -129,9 +132,9 @@ delete_all_for_exchange_in_mnesia(XName) ->
               ok
       end).
 
-match_in_mnesia(XName, RoutingKey) ->
+match_in_mnesia(XName, RoutingKey, BKeys) ->
     Words = split_topic_key(RoutingKey),
-    mnesia:async_dirty(fun trie_match/2, [XName, Words]).
+    mnesia:async_dirty(fun trie_match/3, [XName, Words, BKeys]).
 
 trie_remove_all_nodes(X) ->
     remove_all(?MNESIA_NODE_TABLE,
@@ -189,31 +192,31 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
 
-trie_match(X, Words) ->
-    trie_match(X, root, Words, #{}).
+trie_match(X, Words, BKeys) ->
+    trie_match(X, root, Words, BKeys, []).
 
-trie_match(X, Node, [], ResAcc0) ->
-    DestinationsArgs = trie_bindings(X, Node),
-    ResAcc = add_matched(DestinationsArgs, ResAcc0),
-    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [], ResAcc);
-trie_match(X, Node, [W | RestW] = Words, ResAcc) ->
+trie_match(X, Node, [], BKeys, ResAcc0) ->
+    Destinations = trie_bindings(X, Node, BKeys),
+    ResAcc = add_matched(Destinations, BKeys, ResAcc0),
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/5, [], BKeys, ResAcc);
+trie_match(X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
-                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, Acc)
-                end, ResAcc, [{W, fun trie_match/4, RestW},
-                              {"*", fun trie_match/4, RestW},
-                              {"#", fun trie_match_skip_any/4, Words}]).
+                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, BKeys, Acc)
+                end, ResAcc, [{W, fun trie_match/5, RestW},
+                              {"*", fun trie_match/5, RestW},
+                              {"#", fun trie_match_skip_any/5, Words}]).
 
-trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
+trie_match_part(X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
     case trie_child(X, Node, Search) of
-        {ok, NextNode} -> MatchFun(X, NextNode, RestW, ResAcc);
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any(X, Node, [], ResAcc) ->
-    trie_match(X, Node, [], ResAcc);
-trie_match_skip_any(X, Node, [_ | RestW] = Words, ResAcc) ->
-    trie_match_skip_any(X, Node, RestW,
-                        trie_match(X, Node, Words, ResAcc)).
+trie_match_skip_any(X, Node, [], BKeys, ResAcc) ->
+    trie_match(X, Node, [], BKeys, ResAcc);
+trie_match_skip_any(X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
+    trie_match_skip_any(X, Node, RestW, BKeys,
+                        trie_match(X, Node, Words, BKeys, ResAcc)).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of
@@ -267,13 +270,17 @@ trie_child(X, Node, Word) ->
         []                                     -> error
     end.
 
-trie_bindings(X, Node) ->
+trie_bindings(X, Node, BKeys) ->
+    {Args, ActionTerm} = case BKeys of
+                             false -> {'_', '$1'};
+                             true -> {'$2', {{'$1', '$2'}}}
+                         end,
     MatchHead = #topic_trie_binding{
-      trie_binding = #trie_binding{exchange_name = X,
-                                   node_id       = Node,
-                                   destination   = '$1',
-                                   arguments     = '$2'}},
-    mnesia:select(?MNESIA_BINDING_TABLE, [{MatchHead, [], [{{'$1', '$2'}}]}]).
+                   trie_binding = #trie_binding{exchange_name = X,
+                                                node_id       = Node,
+                                                destination   = '$1',
+                                                arguments     = Args}},
+    mnesia:select(?MNESIA_BINDING_TABLE, [{MatchHead, [], [ActionTerm]}]).
 
 trie_update_node_counts(X, Node, Field, Delta) ->
     E = case mnesia:read(?MNESIA_NODE_TABLE,
@@ -326,21 +333,22 @@ trie_binding_op(X, Node, D, Args, Op) ->
                                            arguments     = Args}},
             write).
 
--spec add_matched([{rabbit_types:binding_destination(), BindingArgs :: list()}], match_result()) ->
+-spec add_matched([rabbit_types:binding_destination() |
+                   {rabbit_types:binding_destination(), BindingArgs :: list()}],
+                  ReturnBindingKeys :: boolean(),
+                  match_result()) ->
     match_result().
-add_matched(DestinationsArgs, Accum) ->
+add_matched(Destinations, false, Acc) ->
+    Destinations ++ Acc;
+add_matched(DestinationsArgs, true, Acc) ->
     lists:foldl(
-      fun({Dest, BindingArgs}, Acc) ->
+      fun({DestQ = #resource{kind = queue}, BindingArgs}, L) ->
               case rabbit_misc:table_lookup(BindingArgs, <<"x-binding-key">>) of
                   {longstr, BKey} ->
-                      maps:update_with(Dest,
-                                       fun(BKeys) -> BKeys#{BKey => true} end,
-                                       #{BKey => true},
-                                       Acc);
+                      [{DestQ, BKey} | L];
                   _ ->
-                      case maps:is_key(Dest, Acc) of
-                          true -> Acc;
-                          false -> Acc#{Dest => #{}}
-                      end
-              end
-      end, Accum, DestinationsArgs).
+                      [DestQ | L]
+              end;
+         ({DestX, _BindingArgs}, L) ->
+              [DestX | L]
+      end, Acc, DestinationsArgs).

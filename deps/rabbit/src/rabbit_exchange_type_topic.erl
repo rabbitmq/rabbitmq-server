@@ -37,25 +37,12 @@ serialise_events() -> false.
 route(Exchange, Delivery) ->
     route(Exchange, Delivery, #{}).
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery(), rabbit_exchange:route_opts()) ->
-    [rabbit_types:binding_destination() |
-     {rabbit_types:binding_destination(), rabbit_types:unique_binding_keys()}].
+%% This function can return duplicate destinations and duplicate binding keys.
+%% The caller of this function is responsible for deduplication.
 route(#exchange{name = XName},
       #delivery{message = #basic_message{routing_keys = Routes}},
       Opts) ->
-    DestinationsToBindings =
-    lists:foldl(fun(RKey, Acc) ->
-                        M = rabbit_db_topic_exchange:match(XName, RKey),
-                        maps:merge_with(fun(_Destination, BindingKeys0, BindingKeys1) ->
-                                                maps:merge(BindingKeys0, BindingKeys1)
-                                        end, M, Acc)
-                end, #{}, Routes),
-    case Opts of
-        #{return_binding_keys := true} ->
-            maps:to_list(DestinationsToBindings);
-        _ ->
-            maps:keys(DestinationsToBindings)
-    end.
+    lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- Routes]).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.

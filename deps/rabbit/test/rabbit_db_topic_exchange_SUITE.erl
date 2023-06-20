@@ -78,10 +78,10 @@ set1(_Config) ->
     Dst = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
     RoutingKey = <<"a.b.c">>,
     Binding = #binding{source = Src, key = RoutingKey, destination = Dst},
-    ?assertEqual(#{}, rabbit_db_topic_exchange:match(Src, RoutingKey)),
+    ?assertEqual([], rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding)),
-    ?assertEqual(#{Dst => #{}}, rabbit_db_topic_exchange:match(Src, RoutingKey)),
+    ?assertEqual([Dst], rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     passed.
 
 delete(Config) ->
@@ -100,11 +100,10 @@ delete1(_Config) ->
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding1)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding2)),
     ?assertEqual(ok, rabbit_db_topic_exchange:set(Binding3)),
-    ?assertEqual(maps:from_keys([Dst1, Dst2, Dst3], #{}),
-                 rabbit_db_topic_exchange:match(Src, RoutingKey)),
+    ?assertEqual(lists:sort([Dst1, Dst2, Dst3]),
+                 lists:sort(rabbit_db_topic_exchange:match(Src, RoutingKey, #{}))),
     ?assertEqual(ok, rabbit_db_topic_exchange:delete([Binding1, Binding2])),
-    ?assertEqual(#{Dst3 => #{}},
-                 rabbit_db_topic_exchange:match(Src, RoutingKey)),
+    ?assertEqual([Dst3], rabbit_db_topic_exchange:match(Src, RoutingKey, #{})),
     passed.
 
 delete_all_for_exchange(Config) ->
@@ -120,14 +119,12 @@ delete_all_for_exchange1(_Config) ->
     set(Src1, RoutingKey, Dst1),
     set(Src1, RoutingKey, Dst2),
     set(Src2, RoutingKey, Dst1),
-    ?assertEqual(maps:from_keys([Dst1, Dst2], #{}),
-                 rabbit_db_topic_exchange:match(Src1, RoutingKey)),
-    ?assertEqual(#{Dst1 => #{}},
-                 rabbit_db_topic_exchange:match(Src2, RoutingKey)),
+    ?assertEqual(lists:sort([Dst1, Dst2]),
+                 lists:sort(rabbit_db_topic_exchange:match(Src1, RoutingKey, #{}))),
+    ?assertEqual([Dst1], rabbit_db_topic_exchange:match(Src2, RoutingKey, #{})),
     ?assertEqual(ok, rabbit_db_topic_exchange:delete_all_for_exchange(Src1)),
-    ?assertEqual(#{}, rabbit_db_topic_exchange:match(Src1, RoutingKey)),
-    ?assertEqual(#{Dst1 => #{}},
-                 rabbit_db_topic_exchange:match(Src2, RoutingKey)),
+    ?assertEqual([], rabbit_db_topic_exchange:match(Src1, RoutingKey, #{})),
+    ?assertEqual([Dst1], rabbit_db_topic_exchange:match(Src2, RoutingKey, #{})),
     passed.
 
 match(Config) ->
@@ -149,14 +146,14 @@ match_0(_Config) ->
     set(Src, <<"#.#">>, Dst5),
     set(Src, <<"a.*">>, Dst6),
     set(Src, <<"a.b.#">>, Dst7),
-    ?assertEqual(maps:from_keys([Dst1, Dst2, Dst3, Dst4, Dst5, Dst7], #{}),
-                 rabbit_db_topic_exchange:match(Src, <<"a.b.c">>)),
-    ?assertEqual(maps:from_keys([Dst3, Dst4, Dst5, Dst6, Dst7], #{}),
-                 rabbit_db_topic_exchange:match(Src, <<"a.b">>)),
-    ?assertEqual(maps:from_keys([Dst4, Dst5], #{}),
-                 rabbit_db_topic_exchange:match(Src, <<"">>)),
-    ?assertEqual(maps:from_keys([Dst3, Dst4, Dst5], #{}),
-                 rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>)),
+    ?assertEqual(lists:sort([Dst1, Dst2, Dst3, Dst4, Dst5, Dst7]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, #{}))),
+    ?assertEqual(lists:sort([Dst3, Dst4, Dst5, Dst6, Dst7]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"a.b">>, #{}))),
+    ?assertEqual(lists:sort([Dst4, Dst5]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"">>, #{}))),
+    ?assertEqual(lists:sort([Dst3, Dst4, Dst5]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>, #{}))),
     passed.
 
 match_return_binding_keys_many_destinations(Config) ->
@@ -184,34 +181,39 @@ match_return_binding_keys_many_destinations0() ->
                            {<<"a.b.#">>, Dst7},
                            {<<"a.b.c">>, Dst8},
                            {<<"#">>, Dst9}]],
-    ?assertEqual(#{Dst1 => #{<<"a.b.c">> => true},
-                   Dst2 => #{<<"a.*.c">> => true},
-                   Dst3 => #{<<"*.#">> => true},
-                   Dst4 => #{<<"#">> => true},
-                   Dst5 => #{<<"#.#">> => true},
-                   Dst7 => #{<<"a.b.#">> => true},
-                   Dst8 => #{<<"a.b.c">> => true},
-                   Dst9 => #{<<"#">> => true}},
-                 rabbit_db_topic_exchange:match(Src, <<"a.b.c">>)),
+    Opts = #{return_binding_keys => true},
+    ?assertEqual(lists:sort(
+                   [{Dst1, <<"a.b.c">>},
+                    {Dst2, <<"a.*.c">>},
+                    {Dst3, <<"*.#">>},
+                    {Dst4, <<"#">>},
+                    {Dst5, <<"#.#">>},
+                    {Dst7, <<"a.b.#">>},
+                    Dst8,
+                    Dst9]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"a.b.c">>, Opts))),
 
-    ?assertEqual(#{Dst3 => #{<<"*.#">> => true},
-                   Dst4 => #{<<"#">> => true},
-                   Dst5 => #{<<"#.#">> => true},
-                   Dst6 => #{<<"a.*">> => true},
-                   Dst7 => #{<<"a.b.#">> => true},
-                   Dst9 => #{<<"#">> => true}},
-                 rabbit_db_topic_exchange:match(Src, <<"a.b">>)),
+    ?assertEqual(lists:sort(
+                   [{Dst3, <<"*.#">>},
+                    {Dst4, <<"#">>},
+                    {Dst5, <<"#.#">>},
+                    {Dst6, <<"a.*">>},
+                    {Dst7, <<"a.b.#">>},
+                    Dst9]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"a.b">>, Opts))),
 
-    ?assertEqual(#{Dst4 => #{<<"#">> => true},
-                   Dst5 => #{<<"#.#">> => true},
-                   Dst9 => #{<<"#">> => true}},
-                 rabbit_db_topic_exchange:match(Src, <<"">>)),
+    ?assertEqual(lists:sort(
+                   [{Dst4, <<"#">>},
+                    {Dst5, <<"#.#">>},
+                    Dst9]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"">>, Opts))),
 
-    ?assertEqual(#{Dst3 => #{<<"*.#">> => true},
-                   Dst4 => #{<<"#">> => true},
-                   Dst5 => #{<<"#.#">> => true},
-                   Dst9 => #{<<"#">> => true}},
-                 rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>)),
+    ?assertEqual(lists:sort(
+                   [{Dst3, <<"*.#">>},
+                    {Dst4, <<"#">>},
+                    {Dst5, <<"#.#">>},
+                    Dst9]),
+                 lists:usort(rabbit_db_topic_exchange:match(Src, <<"zen.rabbit">>, Opts))),
     passed.
 
 match_return_binding_keys_single_destination(Config) ->
@@ -223,13 +225,17 @@ match_return_binding_keys_single_destination0() ->
     Dst = rabbit_misc:r(?VHOST, queue, <<"q">>),
     [set(Src, BKey, Dst, true) ||
      BKey <- [<<"a.b.c">>, <<"a.*.c">>, <<"*.#">>, <<"#">>, <<"#.#">>, <<"a.*">>, <<"a.b.#">>]],
-    ?assertEqual(#{Dst => #{<<"a.b.c">> => true,
-                            <<"a.*.c">> => true,
-                            <<"*.#">> => true,
-                            <<"#">> => true,
-                            <<"#.#">> => true,
-                            <<"a.b.#">> => true}},
-                 rabbit_db_topic_exchange:match(Src, <<"a.b.c">>)),
+    Expected = lists:sort(
+                 [{Dst, <<"a.b.c">>},
+                  {Dst, <<"a.*.c">>},
+                  {Dst, <<"*.#">>},
+                  {Dst, <<"#">>},
+                  {Dst, <<"#.#">>},
+                  {Dst, <<"a.b.#">>}]),
+    Actual = lists:usort(
+               rabbit_db_topic_exchange:match(
+                 Src, <<"a.b.c">>, #{return_binding_keys => true})),
+    ?assertEqual(Expected, Actual),
     passed.
 
 set(Src, BindingKey, Dst) ->
