@@ -350,7 +350,7 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
 route(Exchange, Delivery) ->
     route(Exchange, Delivery, #{}).
 
--spec route (rabbit_types:exchange(), #delivery{}, route_opts()) ->
+-spec route(rabbit_types:exchange(), #delivery{}, route_opts()) ->
     route_return().
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
@@ -420,21 +420,19 @@ process_route(#resource{kind = exchange} = XName,
         false -> {cons_if_present(XName, WorkList),
                   gb_sets:add_element(XName, SeenXs), QNames}
     end;
-process_route({#resource{kind = exchange} = XName, BindingKeys}, Acc)
-  when is_map(BindingKeys) ->
-    process_route(XName, Acc);
 process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames0}) ->
-    QNames = case maps:is_key(QName, QNames0) of
-                 true -> QNames0;
-                 false -> QNames0#{QName => #{}}
+    QNames = case QNames0 of
+                 #{QName := _} -> QNames0;
+                 #{} -> QNames0#{QName => #{}}
              end,
     {WorkList, SeenXs, QNames};
-process_route({#resource{kind = queue} = QName, BindingKeys},
-              {WorkList, SeenXs, QNames0}) ->
+process_route({#resource{kind = queue} = QName, BindingKey},
+              {WorkList, SeenXs, QNames0})
+  when is_binary(BindingKey) ->
     QNames = maps:update_with(QName,
-                              fun(BKeys) -> maps:merge(BindingKeys, BKeys) end,
-                              BindingKeys,
+                              fun(BKeys) -> BKeys#{BindingKey => true} end,
+                              #{BindingKey => true},
                               QNames0),
     {WorkList, SeenXs, QNames}.
 
