@@ -576,6 +576,9 @@ recover(_Vhost, Queues) ->
                    {error, Err1}
                      when Err1 == not_started orelse
                           Err1 == name_not_registered ->
+                       rabbit_log:info("recover: Quorum queue '~ts' configured member was not found on node"
+                                       "Info ~s. Starting member as new member",
+                                       [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
                        % so needs to be started from scratch.
                        Machine = ra_machine(Q0),
