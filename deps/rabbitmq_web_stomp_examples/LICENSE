@@ -5,5 +5,4 @@ priv/stomp.js is a part of stomp-websocket project
 (https://github.com/jmesnil/stomp-websocket) and is released under
 APL2. For the license see LICENSE-APL2-Stomp-Websocket.
 
-If you have any questions regarding licensing, please contact us at
-info@rabbitmq.com.
+If you have any questions regarding licensing, please contact us at rabbitmq-core@groups.vmware.com.
