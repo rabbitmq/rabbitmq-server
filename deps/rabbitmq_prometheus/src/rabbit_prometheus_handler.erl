@@ -10,6 +10,7 @@
 -export([generate_response/2, content_types_provided/2, is_authorized/2]).
 -export([setup/0]).
 
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
@@ -21,14 +22,22 @@
 %% ===================================================================
 
 init(Req, _State) ->
-  {cowboy_rest, Req, #{}}.
+    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
+
 
 content_types_provided(ReqData, Context) ->
     %% Since Prometheus 2.0 Protobuf is no longer supported
     {[{{<<"text">>, <<"plain">>, '*'}, generate_response}], ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    {true, ReqData, Context}.
+    AuthSettings = rabbit_misc:get_env(rabbitmq_prometheus, authentication, []),
+    case proplists:get_value(enabled, AuthSettings) of
+        true ->
+            rabbit_mgmt_util:is_authorized_monitor(ReqData, Context);
+        _ ->
+            {true, ReqData, Context}
+    end.
+
 
 setup() ->
     setup_metrics(telemetry_registry()),

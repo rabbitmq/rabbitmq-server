@@ -142,3 +142,7 @@ end}.
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
 {mapping, "prometheus.filter_aggregated_queue_metrics_pattern", "rabbitmq_prometheus.filter_aggregated_queue_metrics_pattern", [{datatype, string}]}.
+
+%% Authentication options ========================================================
+{mapping, "prometheus.authentication.enabled", "rabbitmq_prometheus.authentication.enabled",
+    [{datatype, {enum, [true, false]}}]}.

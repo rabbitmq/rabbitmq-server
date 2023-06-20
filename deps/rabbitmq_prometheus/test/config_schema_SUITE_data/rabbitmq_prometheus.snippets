@@ -296,5 +296,14 @@
                             {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
                            ]}
     ], [rabbitmq_prometheus]
+   },
+
+  {authentication,
+    "prometheus.authentication.enabled = true",
+    [
+     {rabbitmq_prometheus, [
+                            {authentication, [{enabled, true}]}
+                           ]}
+    ], [rabbitmq_prometheus]
    }
 ].

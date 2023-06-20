@@ -52,6 +52,7 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_management:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@accept//:erlang_app",
