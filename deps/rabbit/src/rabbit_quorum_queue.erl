@@ -576,6 +576,9 @@ recover(_Vhost, Queues) ->
                    {error, Err1}
                      when Err1 == not_started orelse
                           Err1 == name_not_registered ->
+                       rabbit_log:warning("Quorum queue recovery: configured member of ~ts was not found on this node. Starting member as a new one. "
+                                          "Context: ~s",
+                                       [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
                        % so needs to be started from scratch.
                        Machine = ra_machine(Q0),
