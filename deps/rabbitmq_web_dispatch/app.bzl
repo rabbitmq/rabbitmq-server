@@ -25,7 +25,10 @@ def all_beam_files(name = "all_beam_files"):
         app_name = "rabbitmq_web_dispatch",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["@cowboy//:erlang_app"],
+        deps = [
+            "//deps/amqp_client:erlang_app",
+            "@cowboy//:erlang_app",
+        ],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -54,7 +57,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbitmq_web_dispatch",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["@cowboy//:erlang_app"],
+        deps = [
+            "//deps/amqp_client:erlang_app",
+            "@cowboy//:erlang_app",
+        ],
     )
 
 def all_srcs(name = "all_srcs"):
@@ -92,6 +98,7 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+        srcs = ["include/rabbitmq_web_dispatch_records.hrl"],
     )
     filegroup(
         name = "license_files",
