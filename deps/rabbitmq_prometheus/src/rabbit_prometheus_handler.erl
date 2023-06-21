@@ -10,19 +10,24 @@
 -export([generate_response/2, content_types_provided/2, is_authorized/2]).
 -export([setup/0]).
 
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
 -define(SCRAPE_ENCODED_SIZE, telemetry_scrape_encoded_size_bytes).
 
+-define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
+
+-record(context, {user,
+                  password = none,
+                  impl}).
+
 %% ===================================================================
 %% Cowboy Handler Callbacks
 %% ===================================================================
 
 init(Req, _State) ->
-    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
+    {cowboy_rest, Req, #context{}}.
 
 
 content_types_provided(ReqData, Context) ->
@@ -33,7 +38,7 @@ is_authorized(ReqData, Context) ->
     AuthSettings = rabbit_misc:get_env(rabbitmq_prometheus, authentication, []),
     case proplists:get_value(enabled, AuthSettings) of
         true ->
-            rabbit_mgmt_util:is_authorized_monitor(ReqData, Context);
+            is_authorized_monitor(ReqData, Context);
         _ ->
             {true, ReqData, Context}
     end.
@@ -199,3 +204,85 @@ parse_metric_families([B|Bs]) ->
     end;
 parse_metric_families(_) ->
     false.
+
+is_authorized_monitor(ReqData, Context) ->
+    case cowboy_req:method(ReqData) of
+        <<"OPTIONS">> -> {true, ReqData, Context};
+        _             -> is_authorized1(ReqData, Context)
+    end.
+
+is_authorized1(ReqData, Context) ->
+    case cowboy_req:parse_header(<<"authorization">>, ReqData) of
+        {basic, Username, Password} ->
+            is_authorized(ReqData, Context,
+                          Username, Password);
+        _ ->
+            {{false, ?AUTH_REALM}, ReqData, Context}
+    end.
+
+is_authorized(ReqData, Context, Username, Password) ->
+    ErrFun = fun (ResolvedUserName, Msg) ->
+                     rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
+                                        [ResolvedUserName, Msg]),
+                     halt_response(401, not_authorised, Msg, ReqData, Context)
+             end,
+    AuthProps = [{password, Password}],
+    {IP, _} = cowboy_req:peer(ReqData),
+    case rabbit_access_control:check_user_login(Username, AuthProps) of
+        {ok, User = #user{username = ResolvedUsername, tags = Tags}} ->
+            case rabbit_access_control:check_user_loopback(ResolvedUsername, IP) of
+                ok ->
+                    case is_monitor(Tags) of
+                        true  ->
+                            rabbit_core_metrics:auth_attempt_succeeded(IP, ResolvedUsername, http),
+                            {true, ReqData,
+                             Context#context{user     = User,
+                                             password = Password}};
+                        false ->
+                            rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
+                            ErrFun(ResolvedUsername, <<"Not monitor user">>)
+                    end;
+                not_allowed ->
+                    rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
+                    ErrFun(ResolvedUsername, <<"User can only log in via localhost">>)
+            end;
+        {refused, _Username, Msg, Args} ->
+            rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
+            rabbit_log:warning("HTTP access denied: ~ts",
+                               [rabbit_misc:format(Msg, Args)]),
+            ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+            halt_response(401, not_authorized, <<"Not_Authorized">>, ReqData1, Context)
+    end.
+
+halt_response(Code, Type, Reason, ReqData, Context) ->
+    ReasonFormatted = format_reason(Reason),
+    Json = #{<<"error">>  => Type,
+             <<"reason">> => ReasonFormatted},
+    ReqData1 = cowboy_req:reply(Code,
+        #{<<"content-type">> => <<"application/json">>},
+        rabbit_json:encode(Json), ReqData),
+    {stop, ReqData1, Context}.
+
+format_reason(Tuple) when is_tuple(Tuple) ->
+    rabbit_mgmt_format:tuple(Tuple);
+format_reason(Binary) when is_binary(Binary) ->
+    Binary;
+format_reason(Other) ->
+    case is_string(Other) of
+        true ->  print("~ts", [Other]);
+        false -> print("~tp", [Other])
+    end.
+
+is_string(List) when is_list(List) ->
+    lists:all(
+        fun(El) -> is_integer(El) andalso El > 0 andalso El < 16#10ffff end,
+        List);
+is_string(_) -> false.
+
+print(Fmt, Val) when is_list(Val) ->
+    list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
+print(Fmt, Val) ->
+    print(Fmt, [Val]).
+
+is_monitor(T)     -> intersects(T, [administrator, monitoring]).
+intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).

@@ -566,18 +566,18 @@ basic_auth(Config) ->
     AuthHeader = rabbit_mgmt_test_util:auth_header("guest", "guest"),
     http_get(Config, [{"accept-encoding", "deflate"}, AuthHeader], 200),
 
-    rabbit_mgmt_test_util:http_put(Config, "/users/monitor", [{password, <<"monitor">>},
-                                                              {tags, <<"monitoring">>}], {group, '2xx'}),
+    rabbit_ct_broker_helpers:add_user(Config, <<"monitor">>),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"monitor">>, [monitoring]),
     MonAuthHeader = rabbit_mgmt_test_util:auth_header("monitor", "monitor"),
     http_get(Config, [{"accept-encoding", "deflate"}, MonAuthHeader], 200),
 
-    rabbit_mgmt_test_util:http_put(Config, "/users/management", [{password, <<"management">>},
-                                                              {tags, <<"management">>}], {group, '2xx'}),
+    rabbit_ct_broker_helpers:add_user(Config, <<"management">>),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"management">>, [management]),
     MgmtAuthHeader = rabbit_mgmt_test_util:auth_header("management", "management"),
     http_get(Config, [{"accept-encoding", "deflate"}, MgmtAuthHeader], 401),
 
-    rabbit_mgmt_test_util:http_delete(Config, "/users/monitor", {group, '2xx'}),
-    rabbit_mgmt_test_util:http_delete(Config, "/users/management", {group, '2xx'}).
+    rabbit_ct_broker_helpers:delete_user(Config, <<"monitor">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"management">>).
 
 
 http_get(Config, ReqHeaders, CodeExp) ->
