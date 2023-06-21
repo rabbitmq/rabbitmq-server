@@ -96,6 +96,7 @@ cluster_size_1_tests() ->
      subscription_options_modify_qos0,
      session_upgrade_v3_v5_qos1,
      session_upgrade_v3_v5_qos0,
+     session_upgrade_v3_v5_amqp091_pub,
      compatibility_v3_v5,
      session_upgrade_v3_v5_unsubscribe,
      session_upgrade_v4_v5_no_queue_bind_permission,
@@ -1088,6 +1089,29 @@ assert_received_no_duplicates0(Received) ->
               %% Check that we received at least one message.
               ?assertNotEqual(0, maps:size(Received))
     end.
+
+session_upgrade_v3_v5_amqp091_pub(Config) ->
+    Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    Subv3 = connect(ClientId, Config, [{proto_ver, v3} | non_clean_sess_opts()]),
+    ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(Subv3))),
+    {ok, _, [1]} = emqtt:subscribe(Subv3, Topic, 1),
+    ok = emqtt:disconnect(Subv3),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = <<"amq.topic">>,
+                                       routing_key = Topic},
+                      #amqp_msg{payload = Payload}),
+
+    Subv5 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
+    ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
+    receive {publish, #{payload := Payload,
+                        qos := 1,
+                        client_pid := Subv5}} -> ok
+    after 1000 -> ct:fail("did not receive message")
+    end,
+    ok = emqtt:disconnect(Subv5),
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
 
 compatibility_v3_v5(Config) ->
     Cv3 = connect(<<"client v3">>, Config, [{proto_ver, v3}]),

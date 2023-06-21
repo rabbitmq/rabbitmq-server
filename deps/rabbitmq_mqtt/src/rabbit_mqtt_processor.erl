@@ -2216,7 +2216,10 @@ amqp_props_to_mqtt_props(
              content_type = ContentType,
              correlation_id = CorrelationId
             }, ?MQTT_PROTO_V5) ->
-    SourceProtocolIsMqtt = lists:keymember(<<"x-mqtt-publish-qos">>, 1, Headers),
+    SourceProtocolIsMqtt = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
+                               {byte, _Qos} -> true;
+                               undefined -> false
+                           end,
     P0 = if is_binary(Expiration) andalso
             is_integer(TimestampSeconds) andalso
             %% Only if source protocol is MQTT we know that timestamp was set by the server
