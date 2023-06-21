@@ -186,13 +186,6 @@ folder_size(Dir) ->
     filelib:fold_files(Dir, ".*", true,
                        fun(F,Acc) -> filelib:file_size(F) + Acc end, 0).
 
-<<<<<<< HEAD
-get_global_folder_size(Config) ->
-    BaseDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mnesia, dir, []),
-    folder_size(BaseDir).
-
-=======
->>>>>>> 7f07a9c230 (Test: verify just vhost folder, not whole directory)
 vhost_dir(Vhost, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_vhost, msg_store_dir_path, [Vhost]).
