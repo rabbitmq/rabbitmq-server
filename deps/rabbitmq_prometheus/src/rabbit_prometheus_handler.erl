@@ -255,34 +255,12 @@ is_authorized(ReqData, Context, Username, Password) ->
     end.
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
-    ReasonFormatted = format_reason(Reason),
     Json = #{<<"error">>  => Type,
-             <<"reason">> => ReasonFormatted},
+             <<"reason">> => Reason},
     ReqData1 = cowboy_req:reply(Code,
         #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
     {stop, ReqData1, Context}.
-
-format_reason(Tuple) when is_tuple(Tuple) ->
-    rabbit_mgmt_format:tuple(Tuple);
-format_reason(Binary) when is_binary(Binary) ->
-    Binary;
-format_reason(Other) ->
-    case is_string(Other) of
-        true ->  print("~ts", [Other]);
-        false -> print("~tp", [Other])
-    end.
-
-is_string(List) when is_list(List) ->
-    lists:all(
-        fun(El) -> is_integer(El) andalso El > 0 andalso El < 16#10ffff end,
-        List);
-is_string(_) -> false.
-
-print(Fmt, Val) when is_list(Val) ->
-    list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
-print(Fmt, Val) ->
-    print(Fmt, [Val]).
 
 is_monitor(T)     -> intersects(T, [administrator, monitoring]).
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
