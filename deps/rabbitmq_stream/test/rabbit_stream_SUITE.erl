@@ -64,44 +64,42 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(Group, Config)
-  when Group == single_node orelse Group == single_node_1 ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{rmq_nodes_clustered, false},
-                         {rabbitmq_ct_tls_verify, verify_none},
-                         {rabbitmq_stream, verify_none}
-                        ]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      [fun(StepConfig) ->
-               rabbit_ct_helpers:merge_app_env(StepConfig,
-                                               {rabbit,
-                                                [{core_metrics_gc_interval,
-                                                  1000}]})
-       end,
-       fun(StepConfig) ->
-               rabbit_ct_helpers:merge_app_env(StepConfig,
-                                               {rabbitmq_stream,
-                                                [{connection_negotiation_step_timeout,
-                                                  500}]})
-       end]
-      ++ rabbit_ct_broker_helpers:setup_steps());
+    when Group == single_node orelse Group == single_node_1 ->
+    Config1 =
+        rabbit_ct_helpers:set_config(Config,
+                                     [{rmq_nodes_clustered, false},
+                                      {rabbitmq_ct_tls_verify, verify_none},
+                                      {rabbitmq_stream, verify_none}]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      [fun(StepConfig) ->
+                                          rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                                          {rabbit,
+                                                                           [{core_metrics_gc_interval,
+                                                                             1000}]})
+                                       end,
+                                       fun(StepConfig) ->
+                                          rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                                          {rabbitmq_stream,
+                                                                           [{connection_negotiation_step_timeout,
+                                                                             500}]})
+                                       end]
+                                      ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{rmq_nodes_clustered, true},
-                         {rmq_nodes_count, 3},
-                         {rmq_nodename_suffix, Group},
-                         {tcp_ports_base},
-                         {rabbitmq_ct_tls_verify, verify_none}
-                        ]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      [fun(StepConfig) ->
-               rabbit_ct_helpers:merge_app_env(StepConfig,
-                                               {aten,
-                                                [{poll_interval,
-                                                  1000}]})
-       end]
-      ++ rabbit_ct_broker_helpers:setup_steps());
+    Config1 =
+        rabbit_ct_helpers:set_config(Config,
+                                     [{rmq_nodes_clustered, true},
+                                      {rmq_nodes_count, 3},
+                                      {rmq_nodename_suffix, Group},
+                                      {tcp_ports_base},
+                                      {rabbitmq_ct_tls_verify, verify_none}]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      [fun(StepConfig) ->
+                                          rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                                          {aten,
+                                                                           [{poll_interval,
+                                                                             1000}]})
+                                       end]
+                                      ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(_, Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).
 
@@ -111,22 +109,28 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config,
-                                      0,
-                                      application,
-                                      set_env,
-                                      [rabbitmq_stream, request_timeout, 2000]),
+init_per_testcase(close_connection_on_consumer_update_timeout =
+                      TestCase,
+                  Config) ->
+    ok =
+        rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     application,
+                                     set_env,
+                                     [rabbitmq_stream, request_timeout, 2000]),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
 init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, TestCase).
 
-end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config,
-                                      0,
-                                      application,
-                                      set_env,
-                                      [rabbitmq_stream, request_timeout, 60000]),
+end_per_testcase(close_connection_on_consumer_update_timeout =
+                     TestCase,
+                 Config) ->
+    ok =
+        rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     application,
+                                     set_env,
+                                     [rabbitmq_stream, request_timeout, 60000]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -375,8 +379,8 @@ close_connection_on_consumer_update_timeout(Config) ->
     Transport = gen_tcp,
     Port = get_stream_port(Config),
     {ok, S} =
-    Transport:connect("localhost", Port,
-                      [{active, false}, {mode, binary}]),
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),
@@ -384,7 +388,10 @@ close_connection_on_consumer_update_timeout(Config) ->
     C3 = test_create_stream(Transport, S, Stream, C2),
 
     SubId = 42,
-    C4 = test_subscribe(Transport, S, SubId, Stream,
+    C4 = test_subscribe(Transport,
+                        S,
+                        SubId,
+                        Stream,
                         #{<<"single-active-consumer">> => <<"true">>,
                           <<"name">> => <<"foo">>},
                         C3),
@@ -392,8 +399,8 @@ close_connection_on_consumer_update_timeout(Config) ->
     ?assertMatch({request, _, {consumer_update, SubId, true}}, Cmd),
     closed = wait_for_socket_close(Transport, S, 10),
     {ok, Sb} =
-    Transport:connect("localhost", Port,
-                      [{active, false}, {mode, binary}]),
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
     Cb0 = rabbit_stream_core:init(0),
     Cb1 = test_peer_properties(Transport, Sb, Cb0),
     Cb2 = test_authenticate(Transport, Sb, Cb1),
@@ -417,6 +424,7 @@ java(Config) ->
     StreamPortNode2 = get_stream_port(Config, 1),
     StreamPortTlsNode1 = get_stream_port_tls(Config, 0),
     StreamPortTlsNode2 = get_stream_port_tls(Config, 1),
+    AmqpPortNode1 = get_amqp_port(Config),
     Node1Name = get_node_name(Config, 0),
     Node2Name = get_node_name(Config, 1),
     RabbitMqCtl = get_rabbitmqctl(Config),
@@ -432,6 +440,7 @@ java(Config) ->
                                 {"NODE2_STREAM_PORT=~b", [StreamPortNode2]},
                                 {"NODE2_STREAM_PORT_TLS=~b",
                                  [StreamPortTlsNode2]},
+                                {"NODE1_AMQP_PORT=~b", [AmqpPortNode1]},
                                 {"RABBITMQCTL=~tp", [RabbitMqCtl]}]),
     {ok, _} = MakeResult.
 
@@ -451,6 +460,9 @@ get_stream_port_tls(Config) ->
 get_stream_port_tls(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node,
                                              tcp_port_stream_tls).
+
+get_amqp_port(Config) ->
+   rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp).
 
 get_node_name(Config) ->
     get_node_name(Config, 0).
@@ -475,8 +487,7 @@ test_server(Transport, Stream, Config) ->
             ssl ->
                 [{active, false}, {mode, binary}, {verify, verify_none}]
         end,
-    {ok, S} =
-        Transport:connect("localhost", Port, Opts),
+    {ok, S} = Transport:connect("localhost", Port, Opts),
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),

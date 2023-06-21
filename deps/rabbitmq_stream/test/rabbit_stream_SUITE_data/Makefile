@@ -7,6 +7,7 @@ MVN_FLAGS += -Dhostname=$(HOSTNAME) \
 			 -Dnode2.name=$(NODE2_NAME) \
 			 -Dnode2.stream.port=$(NODE2_STREAM_PORT) \
 			 -Dnode2.stream.port.tls=$(NODE2_STREAM_PORT_TLS) \
+			 -Dnode1.amqp.port=$(NODE1_AMQP_PORT) \
 			 -Drabbitmqctl.bin=$(RABBITMQCTL)
 
 .PHONY: tests clean

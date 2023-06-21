@@ -40,8 +40,7 @@
 
 start(_Type, _Args) ->
     rabbit_stream_metrics:init(),
-    rabbit_global_counters:init([{protocol, stream}],
-                                ?PROTOCOL_COUNTERS),
+    rabbit_global_counters:init([{protocol, stream}], ?PROTOCOL_COUNTERS),
     rabbit_global_counters:init([{protocol, stream},
                                  {queue_type, ?STREAM_QUEUE_TYPE}]),
     rabbit_stream_sup:start_link().
@@ -130,8 +129,10 @@ kill_connection(ConnectionName) ->
                          {ConnectionPid,
                           #{<<"connection_name">> := ConnectionNameBin}} ->
                              exit(ConnectionPid, kill);
-                         {ConnectionPid, _ClientProperties} -> ok
-                     after 1000 -> ok
+                         {ConnectionPid, _ClientProperties} ->
+                             ok
+                     after 1000 ->
+                         ok
                      end
                   end,
                   pg_local:get_members(rabbit_stream_connections)).

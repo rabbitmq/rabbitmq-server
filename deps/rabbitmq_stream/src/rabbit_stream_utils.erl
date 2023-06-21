@@ -26,8 +26,9 @@
          check_write_permitted/3,
          check_read_permitted/3,
          extract_stream_list/2,
-         sort_partitions/1,
+         sort_partitions/2,
          strip_cr_lf/1,
+         partition_name/2,
          consumer_activity_status/2,
          command_versions/0]).
 
@@ -221,8 +222,8 @@ extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>,
                     Streams) ->
     extract_stream_list(Rest, [Stream | Streams]).
 
--spec sort_partitions([#binding{}]) -> [#binding{}].
-sort_partitions(Partitions) ->
+-spec sort_partitions(#exchange{}, [#binding{}]) -> [#binding{}].
+sort_partitions(#exchange{type = direct}, Partitions) ->
     lists:sort(fun(#binding{args = Args1}, #binding{args = Args2}) ->
                   Arg1 =
                       rabbit_misc:table_lookup(Args1,
@@ -234,15 +235,27 @@ sort_partitions(Partitions) ->
                       {{_, Order1}, {_, Order2}} ->
                           rabbit_data_coercion:to_integer(Order1)
                           =< rabbit_data_coercion:to_integer(Order2);
-                      {undefined, {_, _Order2}} -> false;
-                      {{_, _Order1}, undefined} -> true;
-                      _ -> true
+                      {undefined, {_, _Order2}} ->
+                          false;
+                      {{_, _Order1}, undefined} ->
+                          true;
+                      _ ->
+                          true
                   end
+               end,
+               Partitions);
+sort_partitions(#exchange{type = 'x-super-stream'}, Partitions) ->
+    lists:sort(fun(#binding{key = Key1}, #binding{key = Key2}) ->
+                  binary_to_integer(Key1) =< binary_to_integer(Key2)
                end,
                Partitions).
 
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
+
+partition_name(SuperStream, Suffix0) when is_binary(SuperStream) ->
+    Suffix = rabbit_data_coercion:to_binary(Suffix0),
+    <<SuperStream/binary, "-", Suffix/binary>>.
 
 consumer_activity_status(Active, Properties) ->
     case {rabbit_stream_reader:single_active_consumer(Properties), Active}

@@ -111,6 +111,8 @@ credentials_obfuscation:
 ct_helper:
 - ct_helper
 - ct_helper_error_h
+cth_styledout:
+- cth_styledout
 cuttlefish:
 - conf_parse
 - cuttlefish
@@ -314,6 +316,10 @@ jose:
 - jose_jws_alg_rsa_pkcs1_v1_5
 - jose_jws_alg_rsa_pss
 - jose_jwt
+katana_code:
+- ktn_code
+- ktn_dodger
+- ktn_io_string
 meck:
 - meck
 - meck_args_matcher
@@ -326,6 +332,8 @@ meck:
 - meck_proc
 - meck_ret_spec
 - meck_util
+murmerl3:
+- murmerl3
 my_plugin:
 - my_plugin
 observer_cli:
@@ -1083,6 +1091,7 @@ rabbitmq_stream:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand
+- rabbit_exchange_type_super_stream
 - rabbit_stream
 - rabbit_stream_connection_sup
 - rabbit_stream_manager
@@ -1179,6 +1188,15 @@ ranch:
 - ranch_sup
 - ranch_tcp
 - ranch_transport
+rebar3_format:
+- default_formatter
+- erlfmt_formatter
+- otp_formatter
+- rebar3_ast_formatter
+- rebar3_format
+- rebar3_format_prv
+- rebar3_formatter
+- sr_formatter
 recon:
 - recon
 - recon_alloc

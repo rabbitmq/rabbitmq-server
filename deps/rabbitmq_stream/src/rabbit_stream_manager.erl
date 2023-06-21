@@ -29,6 +29,7 @@
 -export([start_link/1,
          create/4,
          delete/3,
+         create_super_stream/1,
          create_super_stream/6,
          delete_super_stream/3,
          lookup_leader/2,
@@ -39,7 +40,22 @@
          partitions/2,
          partition_index/3]).
 
+         %% obsolete use create_super_stream/1
+         % create_super_stream/3,
+         %% obsolete use create_super_stream/1
+
 -record(state, {configuration}).
+
+-type super_stream_spec() ::
+    #{name := binary(),
+      vhost := binary(),
+      username := binary(),
+      partitions_source :=
+          {partition_count, pos_integer()} | {routing_keys, [binary()]},
+      arguments => map(),
+      exchange_type => binary()}.
+
+                            %<<"direct">> | <<"x-super-stream">>,
 
 start_link(Conf) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Conf], []).
@@ -74,10 +90,62 @@ create_super_stream(VirtualHost,
                     Arguments,
                     RoutingKeys,
                     Username) ->
+    Options =
+        #{partitions => Partitions,
+          args => Arguments,
+          routing_keys => RoutingKeys,
+          username => Username},
+    create_super_stream(VirtualHost, Name, Options).
+
+-spec create_super_stream(binary(), binary(), map()) ->
+                             ok | {error, term()}.
+create_super_stream(VirtualHost, Name,
+                    #{username := Username} = Options) ->
+    Type = maps:get(exchange_type, Options, <<"direct">>),
+    Partitions = maps:get(partitions, Options, []),
+    Arguments = maps:get(args, Options, #{}),
+    RoutingKeys = maps:get(routing_keys, Options, []),
     gen_server:call(?MODULE,
                     {create_super_stream,
                      VirtualHost,
                      Name,
+                     Type,
+                     Partitions,
+                     Arguments,
+                     RoutingKeys,
+                     Username}).
+
+-spec create_super_stream(super_stream_spec()) ->
+                             ok | {error, term()}.
+create_super_stream(#{exchange_type := <<"x-super-stream">>,
+                      partitions_source := {routing_keys, _}}) ->
+    {error, unsupported_specification};
+create_super_stream(#{name := Name,
+                      vhost := VHost,
+                      username := Username,
+                      partitions_source := PartitionSource} =
+                        Spec) ->
+    Type = maps:get(exchange_type, Spec, <<"direct">>),
+    Arguments = maps:get(arguments, Spec, #{}),
+    {Partitions, RoutingKeys} =
+        case PartitionSource of
+            {partition_count, Count} ->
+                Streams =
+                    [rabbit_stream_utils:partition_name(Name, K)
+                     || K <- lists:seq(0, Count - 1)],
+                Keys = [integer_to_binary(K) || K <- lists:seq(0, Count - 1)],
+                {Streams, Keys};
+            {routing_keys, Keys} ->
+                Streams =
+                    [rabbit_stream_utils:partition_name(Name, K) || K <- Keys],
+                {Streams, Keys}
+        end,
+
+    gen_server:call(?MODULE,
+                    {create_super_stream,
+                     VHost,
+                     Name,
+                     Type,
                      Partitions,
                      Arguments,
                      RoutingKeys,
@@ -212,6 +280,7 @@ handle_call({delete, VirtualHost, Reference, Username}, _From,
 handle_call({create_super_stream,
              VirtualHost,
              Name,
+             Type,
              Partitions,
              Arguments,
              RoutingKeys,
@@ -221,7 +290,8 @@ handle_call({create_super_stream,
         {error, Reason} ->
             {reply, {error, Reason}, State};
         ok ->
-            case declare_super_stream_exchange(VirtualHost, Name, Username) of
+            case declare_super_stream_exchange(VirtualHost,
+                                               Name, Type, Username) of
                 ok ->
                     RollbackOperations =
                         [fun() ->
@@ -260,6 +330,7 @@ handle_call({create_super_stream,
                             BindingsResult =
                                 add_super_stream_bindings(VirtualHost,
                                                           Name,
+                                                          Type,
                                                           Partitions,
                                                           RoutingKeys,
                                                           Username),
@@ -447,46 +518,8 @@ handle_call({partition_index, VirtualHost, SuperStream, Stream},
                      "super stream ~tp (virtual host ~tp)",
                      [Stream, SuperStream, VirtualHost]),
     Res = try
-              _ = rabbit_exchange:lookup_or_die(ExchangeName),
-              UnorderedBindings =
-                  _ = [Binding
-                   || Binding = #binding{destination = #resource{name = Q} = D}
-                          <- rabbit_binding:list_for_source(ExchangeName),
-                      is_resource_stream_queue(D), Q == Stream],
-              OrderedBindings =
-                  rabbit_stream_utils:sort_partitions(UnorderedBindings),
-              rabbit_log:debug("Bindings: ~tp", [OrderedBindings]),
-              case OrderedBindings of
-                  [] ->
-                      {error, stream_not_found};
-                  Bindings ->
-                      Binding = lists:nth(1, Bindings),
-                      #binding{args = Args} = Binding,
-                      case rabbit_misc:table_lookup(Args,
-                                                    <<"x-stream-partition-order">>)
-                      of
-                          {_, Order} ->
-                              Index = rabbit_data_coercion:to_integer(Order),
-                              {ok, Index};
-                          _ ->
-                              Pattern = <<"-">>,
-                              Size = byte_size(Pattern),
-                              case string:find(Stream, Pattern, trailing) of
-                                  nomatch ->
-                                      {ok, -1};
-                                  <<Pattern:Size/binary, Rest/binary>> ->
-                                      try
-                                          Index = binary_to_integer(Rest),
-                                          {ok, Index}
-                                      catch
-                                          error:_ ->
-                                              {ok, -1}
-                                      end;
-                                  _ ->
-                                      {ok, -1}
-                              end
-                      end
-              end
+              partition_index(rabbit_exchange:lookup_or_die(ExchangeName),
+                              Stream)
           catch
               exit:Error ->
                   rabbit_log:error("Error while looking up exchange ~tp, ~tp",
@@ -618,14 +651,14 @@ delete_stream(VirtualHost, Reference, Username) ->
 super_stream_partitions(VirtualHost, SuperStream) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     try
-        _ = rabbit_exchange:lookup_or_die(ExchangeName),
+        Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
         UnorderedBindings =
             [Binding
              || Binding = #binding{destination = D}
                     <- rabbit_binding:list_for_source(ExchangeName),
                 is_resource_stream_queue(D)],
         OrderedBindings =
-            rabbit_stream_utils:sort_partitions(UnorderedBindings),
+            rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
         {ok,
          lists:foldl(fun (#binding{destination =
                                        #resource{kind = queue, name = Q}},
@@ -700,7 +733,7 @@ check_already_existing_queue0(VirtualHost, [Q | T], _Error) ->
               rabbit_misc:format("~ts is not a correct name for a queue", [Q])}}
     end.
 
-declare_super_stream_exchange(VirtualHost, Name, Username) ->
+declare_super_stream_exchange(VirtualHost, Name, Type, Username) ->
     case rabbit_stream_utils:enforce_correct_name(Name) of
         {ok, CorrectName} ->
             Args =
@@ -708,7 +741,8 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
                                             <<"x-super-stream">>,
                                             bool,
                                             true),
-            CheckedType = rabbit_exchange:check_type(<<"direct">>),
+            CheckedType = rabbit_exchange:check_type(Type),
+            rabbit_log:debug("CheckedType ~p", [CheckedType]),
             ExchangeName = rabbit_misc:r(VirtualHost, exchange, CorrectName),
             X = case rabbit_exchange:lookup(ExchangeName) of
                     {ok, FoundX} ->
@@ -744,6 +778,7 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
 
 add_super_stream_bindings(VirtualHost,
                           Name,
+                          Type,
                           Partitions,
                           RoutingKeys,
                           Username) ->
@@ -752,6 +787,7 @@ add_super_stream_bindings(VirtualHost,
         lists:foldl(fun ({Partition, RoutingKey}, {ok, Order}) ->
                             case add_super_stream_binding(VirtualHost,
                                                           Name,
+                                                          Type,
                                                           Partition,
                                                           RoutingKey,
                                                           Order,
@@ -775,6 +811,7 @@ add_super_stream_bindings(VirtualHost,
 
 add_super_stream_binding(VirtualHost,
                          SuperStream,
+                         ExchangeType,
                          Partition,
                          RoutingKey,
                          Order,
@@ -787,10 +824,15 @@ add_super_stream_binding(VirtualHost,
     QueueName = rabbit_misc:r(VirtualHost, queue, QueueNameBin),
     Pid = self(),
     Arguments =
-        rabbit_misc:set_table_value([],
-                                    <<"x-stream-partition-order">>,
-                                    long,
-                                    Order),
+        case ExchangeType of
+            <<"direct">> ->
+                rabbit_misc:set_table_value([],
+                                            <<"x-stream-partition-order">>,
+                                            long,
+                                            Order);
+            _ ->
+                []
+        end,
     case rabbit_binding:add(#binding{source = ExchangeName,
                                      destination = QueueName,
                                      key = RoutingKey,
@@ -908,3 +950,47 @@ is_resource_stream_queue(#resource{kind = queue} = Resource) ->
     end;
 is_resource_stream_queue(_) ->
     false.
+
+partition_index(#exchange{name = ExchangeName, type = ExchangeType} =
+                    Exchange,
+                Stream) ->
+    UnorderedBindings =
+        [Binding
+         || Binding = #binding{destination = #resource{name = Q} = D}
+                <- rabbit_binding:list_for_source(ExchangeName),
+            is_resource_stream_queue(D), Q == Stream],
+    case UnorderedBindings of
+        [] ->
+            {error, stream_not_found};
+        _ when ExchangeType =:= direct ->
+            Bindings =
+                rabbit_stream_utils:sort_partitions(Exchange,
+                                                    UnorderedBindings),
+            Binding = lists:nth(1, Bindings),
+            #binding{args = Args} = Binding,
+            case rabbit_misc:table_lookup(Args, <<"x-stream-partition-order">>)
+            of
+                {_, Order} ->
+                    Index = rabbit_data_coercion:to_integer(Order),
+                    {ok, Index};
+                _ ->
+                    Pattern = <<"-">>,
+                    Size = byte_size(Pattern),
+                    case string:find(Stream, Pattern, trailing) of
+                        nomatch ->
+                            {ok, -1};
+                        <<Pattern:Size/binary, Rest/binary>> ->
+                            try
+                                Index = binary_to_integer(Rest),
+                                {ok, Index}
+                            catch
+                                error:_ ->
+                                    {ok, -1}
+                            end;
+                        _ ->
+                            {ok, -1}
+                    end
+            end;
+        [#binding{key = Key}] when ExchangeType =:= 'x-super-stream' ->
+            {ok, binary_to_integer(Key)}
+    end.

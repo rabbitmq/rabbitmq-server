@@ -22,9 +22,10 @@ endef
 
 
 LOCAL_DEPS = ssl
-DEPS = rabbit rabbitmq_stream_common osiris ranch
+DEPS = rabbit rabbitmq_stream_common osiris ranch murmerl3
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 
+dep_murmerl3 = git https://github.com/rabbitmq/murmerl3 master
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
