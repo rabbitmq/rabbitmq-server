@@ -49,8 +49,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config.
 
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+end_per_suite(Config) -> Config.
 
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
@@ -103,7 +102,7 @@ java(Config) ->
     run_test(Config, ["tests", "ssltests"]).
 
 java_v5(Config) ->
-    run_test(Config, ["v5tests"]).
+    run_test(Config, ["v5tests", "v5ssltests"]).
 
 run_test(Config, Target) ->
     CertsDir = rabbit_ct_helpers:get_config(Config, rmq_certsdir),

@@ -28,6 +28,9 @@ v5tests:
     # @mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test#subscribeMultiple test
 	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test test
 
+v5ssltests:
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5SSLTest test
+
 clean:
 	@mvnw clean
 
