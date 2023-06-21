@@ -265,7 +265,7 @@ public class MqttV5Test implements MqttCallback {
 
         publish(client, topic, 0, payload);
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         assertEquals(0, receivedMessages.get(0).getQos());
         disconnect(client);
     }
@@ -280,7 +280,7 @@ public class MqttV5Test implements MqttCallback {
         publish(client, topic, 1, payload);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         assertEquals(0, receivedMessages.get(0).getQos());
 
         client.unsubscribe(topic);
@@ -306,14 +306,14 @@ public class MqttV5Test implements MqttCallback {
         MqttMessage msg2 = receivedMessages.get(1);
         MqttMessage msg3 = receivedMessages.get(1);
 
-        assertArrayEquals(msg1.getPayload(), payload);
+        assertArrayEquals(payload, msg1.getPayload());
         assertEquals(0, msg1.getQos());
 
-        assertArrayEquals(msg2.getPayload(), payload);
+        assertArrayEquals(payload, msg2.getPayload());
         assertEquals(1, msg2.getQos());
 
         // Downgraded QoS 2 to QoS 1
-        assertArrayEquals(msg3.getPayload(), payload);
+        assertArrayEquals(payload, msg3.getPayload());
         assertEquals(1, msg3.getQos());
 
         disconnect(client);
@@ -451,7 +451,7 @@ public class MqttV5Test implements MqttCallback {
         disconnect(client);
     }
 
-        @Test public void nonCleanSession(TestInfo info) throws MqttException, InterruptedException {
+    @Test public void nonCleanSession(TestInfo info) throws MqttException, InterruptedException {
         String clientIdBase = clientId(info);
         MqttConnectionOptions client_opts = new TestMqttConnectOptions();
         client_opts.setCleanStart(false);
@@ -468,11 +468,10 @@ public class MqttV5Test implements MqttCallback {
         client.connect(client_opts);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         disconnect(client);
     }
 
-    // TODO: failing
     @Test public void qos1AndCleanStartFalse()
             throws MqttException, IOException, TimeoutException, InterruptedException {
         testQueuePropertiesWithCleanStartFalse("qos1-no-clean-session-v5", 1, true, false);
@@ -599,7 +598,7 @@ public class MqttV5Test implements MqttCallback {
         sockets.get(0).close();
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
     }
@@ -663,7 +662,7 @@ public class MqttV5Test implements MqttCallback {
         client2.subscribe(retainedTopic, 1);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), willPayload);
+        assertArrayEquals(willPayload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
     }
