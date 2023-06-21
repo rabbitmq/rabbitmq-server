@@ -9,7 +9,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -110,16 +109,23 @@ storage_deleted_on_vhost_delete(Config) ->
     Vhost1 = ?config(vhost1, Config),
     Channel1 = ?config(channel1, Config),
     Queue1 = declare_durable_queue(Channel1),
-    FolderSize = get_folder_size(Vhost1, Config),
+    FolderSize = get_global_folder_size(Config),
 
     publish_persistent_messages(index, Channel1, Queue1),
     publish_persistent_messages(store, Channel1, Queue1),
-    ?awaitMatch(true, get_folder_size(Vhost1, Config) > FolderSize, 30000),
+    FolderSizeAfterPublish = get_global_folder_size(Config),
+
+    %% Total storage size increased
+    true = (FolderSize < FolderSizeAfterPublish),
 
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, Vhost1),
 
+    %% Total memory reduced
+    FolderSizeAfterDelete = get_global_folder_size(Config),
+    true = (FolderSizeAfterPublish > FolderSizeAfterDelete),
+
     %% There is no Vhost1 folder
-    ?awaitMatch(0, get_folder_size(Vhost1, Config), 30000).
+    0 = get_folder_size(Vhost1, Config).
 
 
 single_vhost_storage_delete_is_safe(Config) ->
@@ -185,6 +191,10 @@ get_folder_size(Vhost, Config) ->
 folder_size(Dir) ->
     filelib:fold_files(Dir, ".*", true,
                        fun(F,Acc) -> filelib:file_size(F) + Acc end, 0).
+
+get_global_folder_size(Config) ->
+    BaseDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit, data_dir, []),
+    folder_size(BaseDir).
 
 vhost_dir(Vhost, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
