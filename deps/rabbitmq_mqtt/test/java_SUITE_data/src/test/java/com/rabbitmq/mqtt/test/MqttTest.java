@@ -322,7 +322,7 @@ public class MqttTest implements MqttCallback {
 
         publish(client, topic, 0, payload);
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         assertEquals(0, receivedMessages.get(0).getQos());
         disconnect(client);
     }
@@ -337,7 +337,7 @@ public class MqttTest implements MqttCallback {
         publish(client, topic, 1, payload);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         assertEquals(0, receivedMessages.get(0).getQos());
 
         client.unsubscribe(topic);
@@ -363,14 +363,14 @@ public class MqttTest implements MqttCallback {
         MqttMessage msg2 = receivedMessages.get(1);
         MqttMessage msg3 = receivedMessages.get(1);
 
-        assertArrayEquals(msg1.getPayload(), payload);
+        assertArrayEquals(payload, msg1.getPayload());
         assertEquals(0, msg1.getQos());
 
-        assertArrayEquals(msg2.getPayload(), payload);
+        assertArrayEquals(payload, msg2.getPayload());
         assertEquals(1, msg2.getQos());
 
         // Downgraded QoS 2 to QoS 1
-        assertArrayEquals(msg3.getPayload(), payload);
+        assertArrayEquals(payload, msg3.getPayload());
         assertEquals(1, msg3.getQos());
 
         disconnect(client);
@@ -501,7 +501,7 @@ public class MqttTest implements MqttCallback {
         client.connect(client_opts);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         disconnect(client);
     }
 
@@ -524,7 +524,7 @@ public class MqttTest implements MqttCallback {
 
         // Message has been delivered but connection has failed.
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
 
         assertFalse(client.isConnected());
 
@@ -538,7 +538,7 @@ public class MqttTest implements MqttCallback {
 
         // Message has been redelivered after session resume
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         assertTrue(client.isConnected());
         disconnect(client);
 
@@ -650,7 +650,7 @@ public class MqttTest implements MqttCallback {
         sockets.get(0).close();
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), payload);
+        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
     }
@@ -713,7 +713,7 @@ public class MqttTest implements MqttCallback {
         client2.subscribe(retainedTopic, 1);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(receivedMessages.get(0).getPayload(), willPayload);
+        assertArrayEquals(willPayload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
     }
