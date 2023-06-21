@@ -24,8 +24,6 @@ ssltests:
 	@mvnw -q $(MVN_FLAGS) -Dtest=MqttSSLTest test
 
 v5tests:
-	# MQTT v5 tests; to focus
-    # @mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test#subscribeMultiple test
 	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test test
 
 v5ssltests:

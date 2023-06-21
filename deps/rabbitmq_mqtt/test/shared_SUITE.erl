@@ -195,7 +195,7 @@ init_per_group(Group, Config0) ->
 end_per_group(G, Config)
   when G =:= cluster_size_1;
        G =:= cluster_size_3 ->
-    rabbit_ct_helpers:run_teardown_steps(
+    rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps());

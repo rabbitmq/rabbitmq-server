@@ -28,7 +28,7 @@ all() ->
 
 groups() ->
     [
-      {v3, [], [java]},
+      {v3, [], [java_v3]},
       {v5, [], [java_v5]}
     ].
 
@@ -49,7 +49,8 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config.
 
-end_per_suite(Config) -> Config.
+end_per_suite(Config) ->
+    Config.
 
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
@@ -98,7 +99,7 @@ end_per_testcase(Testcase, Config) ->
 %% Testsuite cases
 %% -------------------------------------------------------------------
 
-java(Config) ->
+java_v3(Config) ->
     run_test(Config, ["tests", "ssltests"]).
 
 java_v5(Config) ->
