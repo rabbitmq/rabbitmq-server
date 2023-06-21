@@ -19,8 +19,8 @@
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
 
 -record(context, {user,
-                  password = none,
-                  impl}).
+                  password = none}).
+
 
 %% ===================================================================
 %% Cowboy Handler Callbacks
@@ -255,12 +255,12 @@ is_authorized(ReqData, Context, Username, Password) ->
     end.
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
-    Json = #{<<"error">>  => Type,
+    Json = #{<<"error">> => Type,
              <<"reason">> => Reason},
     ReqData1 = cowboy_req:reply(Code,
         #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
     {stop, ReqData1, Context}.
 
-is_monitor(T)     -> intersects(T, [administrator, monitoring]).
+is_monitor(T) -> intersects(T, [administrator, monitoring]).
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
