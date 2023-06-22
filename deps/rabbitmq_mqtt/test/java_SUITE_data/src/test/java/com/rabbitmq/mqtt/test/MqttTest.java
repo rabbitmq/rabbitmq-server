@@ -226,35 +226,19 @@ public class MqttTest implements MqttCallback {
     }
 
     // rabbitmq/rabbitmq-mqtt#37: QoS 1, clean session = false
-    @Test public void qos1AndCleanSessionUnset()
-            throws MqttException, IOException, TimeoutException, InterruptedException {
-        testQueuePropertiesWithCleanSessionUnset("qos1-no-clean-session", 1, true, false);
-    }
-
-    protected void testQueuePropertiesWithCleanSessionSet(String cid, int qos, boolean durable, boolean autoDelete)
-            throws IOException, MqttException, TimeoutException, InterruptedException {
-        testQueuePropertiesWithCleanSession(true, cid, qos, durable, autoDelete);
-    }
-
-    protected void testQueuePropertiesWithCleanSessionUnset(String cid, int qos, boolean durable, boolean autoDelete)
-            throws IOException, MqttException, TimeoutException, InterruptedException {
-        testQueuePropertiesWithCleanSession(false, cid, qos, durable, autoDelete);
-    }
-
-    protected void testQueuePropertiesWithCleanSession(boolean cleanSession, String cid, int qos,
-                                                       boolean durable, boolean autoDelete)
+    @Test public void qos1AndCleanSessionUnset(TestInfo info)
             throws MqttException, IOException, TimeoutException {
-        MqttClient c = newClient(brokerUrl, cid);
+        MqttClient c = newClient(info);
         MqttConnectOptions opts = new TestMqttConnectOptions();
-        opts.setCleanSession(cleanSession);
+        opts.setCleanSession(false);
         c.connect(opts);
 
         setUpAmqp();
         Channel tmpCh = conn.createChannel();
 
-        String q = "mqtt-subscription-" + cid + "qos" + qos;
+        String q = "mqtt-subscription-" + "test-qos1AndCleanSessionUnset" + "qos1";
 
-        c.subscribe(topic, qos);
+        c.subscribe(topic, 1);
         // there is no server-sent notification about subscription
         // success so we inject a delay
         waitForTestDelay();
@@ -267,7 +251,7 @@ public class MqttTest implements MqttCallback {
             // then assert on properties
             Map<String, Object> args = new HashMap<>();
             args.put("x-expires", 86400000);
-            tmpCh.queueDeclare(q, durable, autoDelete, false, args);
+            tmpCh.queueDeclare(q, true, false, false, args);
         } finally {
             if (c.isConnected()) {
                 c.disconnect(3000);
