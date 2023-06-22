@@ -246,8 +246,6 @@ public class MqttTest implements MqttCallback {
             throws MqttException, IOException, TimeoutException {
         MqttClient c = newClient(brokerUrl, cid);
         MqttConnectOptions opts = new TestMqttConnectOptions();
-        opts.setUserName("guest");
-        opts.setPassword("guest".toCharArray());
         opts.setCleanSession(cleanSession);
         c.connect(opts);
 
@@ -658,7 +656,6 @@ public class MqttTest implements MqttCallback {
     @Test public void willIsRetained(TestInfo info) throws MqttException, InterruptedException, IOException {
         String clientIdBase = clientId(info);
         MqttConnectOptions client2_opts = new TestMqttConnectOptions();
-        client2_opts.setCleanSession(true);
         MqttClient client2 = newConnectedClient(clientIdBase + "-2", client2_opts);
         client2.setCallback(this);
 

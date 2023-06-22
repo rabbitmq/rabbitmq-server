@@ -487,8 +487,6 @@ public class MqttV5Test implements MqttCallback {
             throws MqttException, IOException, TimeoutException {
         MqttClient c = newClient(brokerUrl, cid);
         MqttConnectionOptions opts = new TestMqttConnectOptions();
-        opts.setUserName("guest");
-        opts.setPassword("guest".getBytes());
         opts.setCleanStart(cleanStart);
         opts.setSessionExpiryInterval(10L);
         c.connect(opts);
@@ -601,12 +599,16 @@ public class MqttV5Test implements MqttCallback {
         assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient = newConnectedClient(clientIdBase + "-1", cleanupOpts);
+        disconnect(cleanupClient);
     }
 
     @Test public void willIsRetained(TestInfo info) throws MqttException, InterruptedException, IOException {
         String clientIdBase = clientId(info);
         MqttConnectionOptions client2_opts = new TestMqttConnectOptions();
-        client2_opts.setCleanStart(true);
         MqttClient client2 = newConnectedClient(clientIdBase + "-2", client2_opts);
         client2.setCallback(this);
 
