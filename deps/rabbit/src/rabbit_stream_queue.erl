@@ -74,7 +74,7 @@
                  start_offset = 0 :: non_neg_integer(),
                  listening_offset = 0 :: non_neg_integer(),
                  log :: undefined | osiris_log:state(),
-                 reader_options :: osiris:reader_options()}).
+                 reader_options :: map()}).
 
 -record(stream_client, {stream_id :: string(),
                         name :: term(),
