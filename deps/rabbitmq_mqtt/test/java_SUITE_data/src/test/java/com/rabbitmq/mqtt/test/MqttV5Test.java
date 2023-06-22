@@ -470,6 +470,13 @@ public class MqttV5Test implements MqttCallback {
         waitAtMost(() -> receivedMessagesSize() == 1);
         assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         disconnect(client);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1", cleanupOpts);
+        cleanupClient1.disconnect();
+        MqttClient cleanupClient2 = newConnectedClient(clientIdBase + "-2", cleanupOpts);
+        cleanupClient2.disconnect();
     }
 
     @Test public void qos1AndCleanStartFalse()
@@ -795,6 +802,11 @@ public class MqttV5Test implements MqttCallback {
         waitForTestDelay();
         assertEquals(0, receivedMessages.size());
         disconnect(client2);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient = newConnectedClient("last-will-not-sent-on-restricted-topic", cleanupOpts);
+        cleanupClient.disconnect();
     }
 
     @Test public void topicAuthorisationVariableExpansion(TestInfo info) throws Exception {
