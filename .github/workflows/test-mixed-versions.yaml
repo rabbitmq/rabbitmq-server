@@ -33,7 +33,7 @@ jobs:
     name: Prepare Artifacts
     runs-on: ubuntu-20.04
     env:
-      # otp-min
+      # otp-min, must also match the subdir in the secondary_umbrella.bzl
       otp_version_id: 25_3
     steps:
     - name: CHECKOUT REPOSITORY
@@ -105,7 +105,7 @@ jobs:
         mkdir ${OUTPUT_DIR}
         cp \
           bazel-bin/package-generic-unix.tar.xz \
-          ${OUTPUT_DIR}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
+          ${OUTPUT_DIR}/rbe-${{ env.otp_version_id }}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
     - name: UPLOAD THE ARCHIVE TO S3
       if: env.exists != 'true'
       uses: jakejarvis/s3-sync-action@v0.5.1
