@@ -17,7 +17,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.15.3
+      uses: erlef/setup-beam@v1.16
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
@@ -50,7 +50,7 @@ jobs:
       with:
         path: rabbitmq
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.15.3
+      uses: erlef/setup-beam@v1.16
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
@@ -87,7 +87,7 @@ jobs:
       with:
         path: rabbitmq-server
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.15.3
+      uses: erlef/setup-beam@v1.16
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
