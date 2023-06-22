@@ -470,35 +470,29 @@ public class MqttV5Test implements MqttCallback {
         waitAtMost(() -> receivedMessagesSize() == 1);
         assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         disconnect(client);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1", cleanupOpts);
+        cleanupClient1.disconnect();
+        MqttClient cleanupClient2 = newConnectedClient(clientIdBase + "-2", cleanupOpts);
+        cleanupClient2.disconnect();
     }
 
-    @Test public void qos1AndCleanStartFalse()
-            throws MqttException, IOException, TimeoutException, InterruptedException {
-        testQueuePropertiesWithCleanStartFalse("qos1-no-clean-session-v5", 1, true, false);
-    }
-
-    protected void testQueuePropertiesWithCleanStartFalse(String cid, int qos, boolean durable, boolean autoDelete)
-            throws IOException, MqttException, TimeoutException, InterruptedException {
-        testQueuePropertiesWithCleanStart(false, cid, qos, durable, autoDelete);
-    }
-
-    protected void testQueuePropertiesWithCleanStart(boolean cleanStart, String cid, int qos,
-                                                     boolean durable, boolean autoDelete)
+    @Test public void qos1AndCleanSessionUnset(TestInfo info)
             throws MqttException, IOException, TimeoutException {
-        MqttClient c = newClient(brokerUrl, cid);
+        MqttClient c = newClient(info);
         MqttConnectionOptions opts = new TestMqttConnectOptions();
-        opts.setUserName("guest");
-        opts.setPassword("guest".getBytes());
-        opts.setCleanStart(cleanStart);
+        opts.setCleanStart(false);
         opts.setSessionExpiryInterval(10L);
         c.connect(opts);
 
         setUpAmqp();
         Channel tmpCh = conn.createChannel();
 
-        String q = "mqtt-subscription-" + cid + "qos" + qos;
+        String q = "mqtt-subscription-" + "test-qos1AndCleanSessionUnset" + "qos1";
 
-        c.subscribe(topic, qos);
+        c.subscribe(topic, 1);
         // there is no server-sent notification about subscription
         // success so we inject a delay
         waitForTestDelay();
@@ -511,7 +505,7 @@ public class MqttV5Test implements MqttCallback {
             // then assert on properties
             Map<String, Object> args = new HashMap<>();
             args.put("x-expires", 10000);
-            tmpCh.queueDeclare(q, durable, false, autoDelete, args);
+            tmpCh.queueDeclare(q, true, false, false, args);
         } finally {
             if (c.isConnected()) {
                 c.disconnect(3000);
@@ -601,12 +595,16 @@ public class MqttV5Test implements MqttCallback {
         assertArrayEquals(payload, receivedMessages.get(0).getPayload());
         client2.unsubscribe(topic);
         disconnect(client2);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient = newConnectedClient(clientIdBase + "-1", cleanupOpts);
+        disconnect(cleanupClient);
     }
 
     @Test public void willIsRetained(TestInfo info) throws MqttException, InterruptedException, IOException {
         String clientIdBase = clientId(info);
         MqttConnectionOptions client2_opts = new TestMqttConnectOptions();
-        client2_opts.setCleanStart(true);
         MqttClient client2 = newConnectedClient(clientIdBase + "-2", client2_opts);
         client2.setCallback(this);
 
@@ -793,6 +791,11 @@ public class MqttV5Test implements MqttCallback {
         waitForTestDelay();
         assertEquals(0, receivedMessages.size());
         disconnect(client2);
+
+        // clean up with clean start true
+        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttClient cleanupClient = newConnectedClient("last-will-not-sent-on-restricted-topic", cleanupOpts);
+        cleanupClient.disconnect();
     }
 
     @Test public void topicAuthorisationVariableExpansion(TestInfo info) throws Exception {
