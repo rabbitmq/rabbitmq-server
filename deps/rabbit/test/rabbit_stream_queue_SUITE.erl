@@ -234,6 +234,15 @@ init_per_testcase(TestCase, Config)
         _ ->
             init_test_case(TestCase, Config)
     end;
+init_per_testcase(TestCase, Config)
+  when TestCase == filtering ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "filtering should not be used in mixed-version clusters"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+
 init_per_testcase(TestCase, Config) ->
     init_test_case(TestCase, Config).
 
