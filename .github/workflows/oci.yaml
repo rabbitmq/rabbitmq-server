@@ -198,7 +198,7 @@ jobs:
           echo "::set-output name=elixir::$(cat bazel-bin/elixir_version.txt)"
 
       - name: Configure OTP & Elixir
-        uses: erlef/setup-beam@v1.15
+        uses: erlef/setup-beam@v1.16
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}

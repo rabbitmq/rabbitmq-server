@@ -84,7 +84,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: CONFIGURE OTP & ELIXIR
-      uses: erlef/setup-beam@v1.15
+      uses: erlef/setup-beam@v1.16
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
