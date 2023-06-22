@@ -1139,29 +1139,38 @@ cli_list_queues(Config) ->
     ok = emqtt:disconnect(C).
 
 maintenance(Config) ->
-    C0 = connect(<<"client-0">>, Config, 0, []),
-    C1a = connect(<<"client-1a">>, Config, 1, []),
-    C1b = connect(<<"client-1b">>, Config, 1, []),
-    ClientsNode1 = [C1a, C1b],
+    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
+        false ->
+            %% When either file rabbit_mqtt_collector changes or different OTP versions
+            %% are used for compilation, the rabbit_mqtt_collector module version will
+            %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
+            {skip, "Anonymous fun as used in ra:leader_query/2 errors when executing "
+             "remotely with a different module version"};
+        true ->
+            C0 = connect(<<"client-0">>, Config, 0, []),
+            C1a = connect(<<"client-1a">>, Config, 1, []),
+            C1b = connect(<<"client-1b">>, Config, 1, []),
+            ClientsNode1 = [C1a, C1b],
 
-    timer:sleep(500),
+            timer:sleep(500),
 
-    ok = drain_node(Config, 2),
-    ok = revive_node(Config, 2),
-    timer:sleep(500),
-    [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
+            ok = drain_node(Config, 2),
+            ok = revive_node(Config, 2),
+            timer:sleep(500),
+            [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
 
-    process_flag(trap_exit, true),
-    ok = drain_node(Config, 1),
-    [await_exit(Pid) || Pid <- ClientsNode1],
-    [assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN) || _ <- ClientsNode1],
-    ok = revive_node(Config, 1),
-    ?assert(erlang:is_process_alive(C0)),
+            process_flag(trap_exit, true),
+            ok = drain_node(Config, 1),
+            [await_exit(Pid) || Pid <- ClientsNode1],
+            [assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN) || _ <- ClientsNode1],
+            ok = revive_node(Config, 1),
+            ?assert(erlang:is_process_alive(C0)),
 
-    ok = drain_node(Config, 0),
-    await_exit(C0),
-    assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN),
-    ok = revive_node(Config, 0).
+            ok = drain_node(Config, 0),
+            await_exit(C0),
+            assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN),
+            ok = revive_node(Config, 0)
+    end.
 
 keepalive(Config) ->
     KeepaliveSecs = 1,
