@@ -153,8 +153,8 @@ rabbitmq_integration_suite(
         ":test_util_beam",
     ],
     flaky = True,
-    sharding_method = "case",
     shard_count = 6,
+    sharding_method = "case",
     runtime_deps = [
         "@emqtt//:erlang_app",
     ],
@@ -190,11 +190,11 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "java_SUITE",
-    sharding_method = "group",
-    shard_count = 2,
     additional_beam = [
         ":test_util_beam",
     ],
+    shard_count = 2,
+    sharding_method = "group",
 )
 
 rabbitmq_suite(
