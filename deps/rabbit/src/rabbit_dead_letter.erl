@@ -115,8 +115,6 @@ group_by_queue_and_reason(Tables) ->
           end, {sets:new([{version, 2}]), []}, Tables),
     Grouped.
 
-update_x_death_header(Info, undefined) ->
-    update_x_death_header(Info, []);
 update_x_death_header(Info, Headers) ->
     X = x_death_event_key(Info, <<"exchange">>),
     Q = x_death_event_key(Info, <<"queue">>),
