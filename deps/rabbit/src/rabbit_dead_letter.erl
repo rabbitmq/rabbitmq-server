@@ -43,23 +43,23 @@ make_msg(Msg = #basic_message{content       = Content,
     Headers1 = if Headers =:= undefined -> [];
                   is_list(Headers) -> Headers
                end,
-    {DeathRoutingKeys, Headers2} =
-        case RK of
-            undefined -> {RoutingKeys, Headers1};
-            _         -> {[RK], lists:keydelete(<<"CC">>, 1, Headers1)}
-        end,
     ReasonBin = atom_to_binary(Reason),
     TimeSec = os:system_time(second),
     PerMsgTTL = per_msg_ttl_header(Props),
     %% The first routing key is the one specified in the
     %% basic.publish; all others are CC or BCC keys.
-    RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers2)],
+    RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers1)],
     RKs1 = [{longstr, Key} || Key <- RKs],
     Info = [{<<"reason">>,       longstr,   ReasonBin},
             {<<"queue">>,        longstr,   QName},
             {<<"time">>,         timestamp, TimeSec},
             {<<"exchange">>,     longstr,   Exchange#resource.name},
             {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
+    {DeathRoutingKeys, Headers2} =
+        case RK of
+            undefined -> {RoutingKeys, Headers1};
+            _         -> {[RK], lists:keydelete(<<"CC">>, 1, Headers1)}
+        end,
     Headers3 = update_x_death_header(Info, Headers2),
     {Expiration, Headers5} =
         case lists:keytake(<<"x-dead-letter-expiration">>, 1, Headers3) of
@@ -115,8 +115,6 @@ group_by_queue_and_reason(Tables) ->
           end, {sets:new([{version, 2}]), []}, Tables),
     Grouped.
 
-update_x_death_header(Info, undefined) ->
-    update_x_death_header(Info, []);
 update_x_death_header(Info, Headers) ->
     X = x_death_event_key(Info, <<"exchange">>),
     Q = x_death_event_key(Info, <<"queue">>),
