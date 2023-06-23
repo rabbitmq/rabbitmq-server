@@ -35,10 +35,10 @@ is_authorized(ReqData, Context) ->
     AuthSettings = rabbit_misc:get_env(rabbitmq_prometheus, authentication, []),
     case proplists:get_value(enabled, AuthSettings) of
         true ->
-            rabbit_web_dispatch_util:is_authorized_monitor(ReqData,
-                                                           Context,
-                                                           #auth_settings{basic_auth_enabled = true,
-                                                                         auth_realm = ?AUTH_REALM});
+            rabbit_web_dispatch_access_control:is_authorized_monitor(ReqData,
+                                                                     Context,
+                                                                     #auth_settings{basic_auth_enabled = true,
+                                                                                    auth_realm = ?AUTH_REALM});
         _ ->
             {true, ReqData, Context}
     end.
