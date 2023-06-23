@@ -38,7 +38,6 @@
 -define(RC_UNSPECIFIED_ERROR, 16#80).
 -define(RC_PROTOCOL_ERROR, 16#82).
 -define(RC_SERVER_SHUTTING_DOWN, 16#8B).
--define(RC_BAD_AUTHENTICATION_METHOD, 16#8C).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 -define(RC_TOPIC_ALIAS_INVALID, 16#94).
 
@@ -655,8 +654,8 @@ subscription_option_retain_as_published(Config) ->
                         retain := true}} -> ok
     after 1000 -> ct:fail("did not receive m1")
     end,
-    ok = emqtt:publish(C1, <<"t/1">>, <<>>, [{retain, true}]),
-    ok = emqtt:publish(C1, <<"t/2">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(C1, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C1, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
 
@@ -684,8 +683,8 @@ subscription_option_retain_as_published_wildcards(Config) ->
                         retain := true}} -> ok
     after 1000 -> ct:fail("did not receive m2")
     end,
-    ok = emqtt:publish(C, <<"t/1">>, <<>>, [{retain, true}]),
-    ok = emqtt:publish(C, <<"t/2">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(C, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C).
 
 subscription_option_retain_handling(Config) ->
@@ -726,9 +725,9 @@ subscription_option_retain_handling(Config) ->
     ok = expect_publishes(C2, <<"t/1">>, [<<"m1">>]),
     assert_nothing_received(),
 
-    ok = emqtt:publish(C2, <<"t/1">>, <<>>, [{retain, true}]),
-    ok = emqtt:publish(C2, <<"t/2">>, <<>>, [{retain, true}]),
-    ok = emqtt:publish(C2, <<"t/3">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(C2, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C2, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C2, <<"t/3">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C2).
 
 subscription_identifier(Config) ->
@@ -899,7 +898,7 @@ subscription_options_persisted(Config) ->
     after 1000 -> ct:fail("did not receive m2")
     end,
     assert_nothing_received(),
-    ok = emqtt:publish(C2, <<"t2">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(C2, <<"t2">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C2).
 
 %% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a Non‑shared
@@ -967,7 +966,7 @@ subscription_options_modify(Config) ->
     end,
 
     assert_nothing_received(),
-    ok = emqtt:publish(C, Topic, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(C, Topic, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C).
 
 %% "If a Server receives a SUBSCRIBE packet containing a Topic Filter that is identical to a
@@ -1135,7 +1134,7 @@ compatibility_v3_v5(Config) ->
                properties := #{'Subscription-Identifier' := 99}}} -> ok
     after 1000 -> ct:fail("did not receive from v3")
     end,
-    ok = emqtt:publish(Cv3, <<"v5">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(Cv3, <<"v5">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(Cv3),
     ok = emqtt:disconnect(Cv5).
 
@@ -1593,8 +1592,9 @@ will_delay_message_expiry_publish_properties(Config) ->
                         properties := #{'Message-Expiry-Interval' := MEI}}} ->
                 %% Since the point in time the Message was published,
                 %% it has been waiting in the Server for 2 seconds to be consumed.
-                assert_message_expiry_interval(20 - 2, MEI)
-    after 300 -> ct:fail("did not receive Will Message")
+                assert_message_expiry_interval(20 - 2, MEI);
+            Other -> ct:fail("received unexpected message: ~p", [Other])
+    after 500 -> ct:fail("did not receive Will Message")
     end,
     ok = emqtt:disconnect(Sub2).
 
@@ -1694,8 +1694,8 @@ retain_properties(Config) ->
                properties := Props}} -> ok
     after 500 -> ct:fail("did not receive m2")
     end,
-    ok = emqtt:publish(Sub, <<"t/1">>, <<>>, [{retain, true}]),
-    ok = emqtt:publish(Sub, <<"t/2">>, <<>>, [{retain, true}]),
+    {ok, _} = emqtt:publish(Sub, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Sub, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(Sub).
 
 %% "In the case of a Server shutdown or failure, the Server MAY defer publication of Will Messages
