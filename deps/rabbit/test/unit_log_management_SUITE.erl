@@ -12,6 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -71,7 +72,7 @@ app_management(Config) ->
       ?MODULE, app_management1, [Config]).
 
 app_management1(_Config) ->
-    wait_for_application(rabbit),
+    ?awaitMatch(true, lists:keymember(rabbit, 1, application:which_applications()), 30000),
     %% Starting, stopping and diagnostics.  Note that we don't try
     %% 'report' when the rabbit app is stopped and that we enable
     %% tracing for the duration of this function.
@@ -91,22 +92,6 @@ no_exceptions(Mod, Fun, Args) ->
     try erlang:apply(Mod, Fun, Args) of _ -> ok
     catch Type:Ex -> {Type, Ex}
     end.
-
-wait_for_application(Application) ->
-    wait_for_application(Application, 5000).
-
-wait_for_application(_, Time) when Time =< 0 ->
-    {error, timeout};
-wait_for_application(Application, Time) ->
-    Interval = 100,
-    case lists:keyfind(Application, 1, application:which_applications()) of
-        false ->
-            timer:sleep(Interval),
-            wait_for_application(Application, Time - Interval);
-        _ -> ok
-    end.
-
-
 
 %% -------------------------------------------------------------------
 %% Log management.
@@ -245,8 +230,9 @@ non_empty_files(Files) ->
 test_logs_working(LogFiles) ->
     ok = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
-    timer:sleep(1000),
-    lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
+    ?awaitMatch(true,
+                lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
+               30000),
     ok.
 
 set_permissions(Path, Mode) ->
