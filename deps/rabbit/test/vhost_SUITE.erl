@@ -7,11 +7,14 @@
 
 -module(vhost_SUITE).
 
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
+
+-define(AWAIT_TIMEOUT, 30000).
 
 all() ->
     [
@@ -129,21 +132,20 @@ single_node_vhost_deletion_forces_connection_closure(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
 
     [_Conn2] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    timer:sleep(200),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)).
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT).
 
 vhost_failure_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
@@ -152,21 +154,20 @@ vhost_failure_forces_connection_closure(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
 
     [_Conn2] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
-    timer:sleep(200),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)).
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT).
 
 
 vhost_failure_forces_connection_closure_on_failure_node(Config) ->
@@ -176,25 +177,24 @@ vhost_failure_forces_connection_closure_on_failure_node(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
 
     [_Conn20] = open_connections(Config, [{0, VHost2}]),
     [_Conn21] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(2, count_connections_in(Config, VHost2)),
+    ?awaitMatch(2, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, 0, VHost2),
-    timer:sleep(200),
     %% Vhost2 connection on node 1 is still alive
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
     %% Vhost1 connection on node 0 is still alive
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)).
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT).
 
 
 cluster_vhost_deletion_forces_connection_closure(Config) ->
@@ -204,21 +204,20 @@ cluster_vhost_deletion_forces_connection_closure(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT),
 
     [_Conn2] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    timer:sleep(200),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)).
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT_TIMEOUT).
 
 node_starts_with_dead_vhosts(Config) ->
     VHost1 = <<"vhost1">>,
@@ -244,10 +243,11 @@ node_starts_with_dead_vhosts(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(3000),
-
-    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
+    ?awaitMatch(
+       true,
+       rabbit_ct_broker_helpers:rpc(Config, 1,
+                                    rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+       ?AWAIT_TIMEOUT).
 
 node_starts_with_dead_vhosts_with_mirrors(Config) ->
     VHost1 = <<"vhost1">>,
@@ -274,7 +274,15 @@ node_starts_with_dead_vhosts_with_mirrors(Config) ->
               0, <<"queues">>, <<"acting-user">>]),
 
     %% Wait for the queue to start a mirror
-    timer:sleep(500),
+    ?awaitMatch([_],
+                begin
+                    {ok, Q0} = rabbit_ct_broker_helpers:rpc(
+                                Config, 0,
+                                 rabbit_amqqueue, lookup,
+                                 [rabbit_misc:r(VHost1, queue, QName)], infinity),
+                    amqqueue:get_sync_slave_pids(Q0)
+                end,
+                ?AWAIT_TIMEOUT),
 
     rabbit_ct_client_helpers:publish(Chan, QName, 10),
 
@@ -299,7 +307,9 @@ node_starts_with_dead_vhosts_with_mirrors(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(3000),
+    ?awaitMatch(true,
+                rabbit_ct_broker_helpers:rpc(Config, 1, rabbit, is_running, []),
+                ?AWAIT_TIMEOUT),
 
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
                         rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
@@ -435,27 +445,23 @@ open_connections(Config, NodesAndVHosts) ->
         network -> open_unmanaged_connection;
         direct  -> open_unmanaged_connection_direct
     end,
-    Conns = lists:map(fun
+    lists:map(fun
       ({Node, VHost}) ->
           rabbit_ct_client_helpers:OpenConnectionFun(Config, Node,
             VHost);
       (Node) ->
           rabbit_ct_client_helpers:OpenConnectionFun(Config, Node)
-      end, NodesAndVHosts),
-    timer:sleep(500),
-    Conns.
+      end, NodesAndVHosts).
 
 close_connections(Conns) ->
     lists:foreach(fun
       (Conn) ->
           rabbit_ct_client_helpers:close_connection(Conn)
-      end, Conns),
-    timer:sleep(500).
+      end, Conns).
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
 count_connections_in(Config, VHost, NodeIndex) ->
-    timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  count_tracked_items_in, [{vhost, VHost}]).
