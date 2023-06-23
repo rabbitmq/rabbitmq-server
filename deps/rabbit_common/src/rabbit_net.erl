@@ -269,15 +269,21 @@ socket_ends(Sock, Direction) when ?IS_SSL(Sock);
         {_, {error, _Reason} = Error} ->
             Error
     end;
-socket_ends({rabbit_proxy_socket, _, ProxyInfo}, _) ->
-    #{
-      src_address := FromAddress,
-      src_port := FromPort,
-      dest_address := ToAddress,
-      dest_port := ToPort
-     } = ProxyInfo,
-    {ok, {rdns(FromAddress), FromPort,
-          rdns(ToAddress),   ToPort}}.
+socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
+    case ProxyInfo of
+        %% LOCAL header: we take the IP/ports from the socket.
+        #{command := local} ->
+            socket_ends(Sock, Direction);
+        %% PROXY header: use the IP/ports from the proxy header.
+        #{
+          src_address := FromAddress,
+          src_port := FromPort,
+          dest_address := ToAddress,
+          dest_port := ToPort
+         } ->
+            {ok, {rdns(FromAddress), FromPort,
+                  rdns(ToAddress),   ToPort}}
+    end.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
