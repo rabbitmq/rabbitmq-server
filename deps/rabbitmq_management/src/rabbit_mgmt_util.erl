@@ -74,49 +74,49 @@
 %%--------------------------------------------------------------------
 
 is_authorized(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized(ReqData,
                                            Context,
                                            auth_config()).
 
 is_authorized_admin(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_admin(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_admin(ReqData,
                                                  Context,
                                                  auth_config()).
 
 is_authorized_admin(ReqData, Context, Token) ->
     AuthConfig = auth_config(),
-    rabbit_web_dispatch_util:is_authorized(
+    rabbit_web_dispatch_access_control:is_authorized(
       ReqData, Context,
       AuthConfig#auth_settings.oauth_client_id,
       Token, <<"Not administrator user">>,
       fun(#user{tags = Tags}) ->
-              rabbit_web_dispatch_util:is_admin(Tags)
+              rabbit_web_dispatch_access_control:is_admin(Tags)
       end, AuthConfig).
 
 is_authorized_admin(ReqData, Context, Username, Password) ->
-    rabbit_web_dispatch_util:is_authorized_admin(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_admin(ReqData,
                                                  Context,
                                                  Username,
                                                  Password,
                                                  auth_config()).
 
 is_authorized_monitor(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_monitor(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_monitor(ReqData,
                                                    Context,
                                                    auth_config()).
 
 is_authorized_vhost(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_vhost(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_vhost(ReqData,
                                                  Context,
                                                  auth_config()).
 
 is_authorized_vhost_visible(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_vhost_visible(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_vhost_visible(ReqData,
                                                          Context,
                                                          auth_config()).
 
 is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_vhost_visible_for_monitoring(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_vhost_visible_for_monitoring(ReqData,
                                                                         Context,
                                                                         auth_config()).
 
@@ -163,7 +163,7 @@ get_authz_data(ReqData) ->
 %% their own stuff. Monitors can see other users' and delete their
 %% own. Admins can do it all.
 is_authorized_user(ReqData, Context, Item) ->
-    rabbit_web_dispatch_util:is_authorized_user(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_user(ReqData,
                                                 Context,
                                                 Item,
                                                 auth_config()).
@@ -171,13 +171,13 @@ is_authorized_user(ReqData, Context, Item) ->
 %% For policies / parameters. Like is_authorized_vhost but you have to
 %% be a policymaker.
 is_authorized_policies(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_policies(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_policies(ReqData,
                                                     Context,
                                                     auth_config()).
 
 %% For global parameters. Must be policymaker.
 is_authorized_global_parameters(ReqData, Context) ->
-    rabbit_web_dispatch_util:is_authorized_global_parameters(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_global_parameters(ReqData,
                                                              Context,
                                                              auth_config()).
 
@@ -189,14 +189,14 @@ is_authorized_global_parameters(ReqData, Context) ->
 
 is_authorized_user(ReqData, Context, Username, Password) ->
 
-    rabbit_web_dispatch_util:is_authorized_user(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_user(ReqData,
                                                 Context,
                                                 Username,
                                                 Password,
                                                 auth_config()).
 
 is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
-    rabbit_web_dispatch_util:is_authorized_user(ReqData,
+    rabbit_web_dispatch_access_control:is_authorized_user(ReqData,
                                                 Context,
                                                 Username,
                                                 Password,
@@ -204,10 +204,10 @@ is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
                                                 auth_config()).
 
 vhost_from_headers(ReqData) ->
-    rabbit_web_dispatch_util:vhost_from_headers(ReqData).
+    rabbit_web_dispatch_access_control:vhost_from_headers(ReqData).
 
 vhost(ReqData) ->
-    rabbit_web_dispatch_util:vhost(ReqData).
+    rabbit_web_dispatch_access_control:vhost(ReqData).
 
 user(ReqData) ->
   case id(user, ReqData) of
@@ -650,7 +650,7 @@ service_unavailable(Reason, ReqData, Context) ->
 
 
 not_authorised(Reason, ReqData, Context) ->
-    rabbit_web_dispatch_util:not_authorised(Reason, ReqData, Context).
+    rabbit_web_dispatch_access_control:not_authorised(Reason, ReqData, Context).
 
 not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
@@ -674,14 +674,14 @@ redirect_to_home(ReqData, Reason, Context) ->
     {stop, ReqData1, Context}.
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
-    rabbit_web_dispatch_util:halt_response(Code,
+    rabbit_web_dispatch_access_control:halt_response(Code,
                                            Type,
                                            Reason,
                                            ReqData,
                                            Context).
 
 id(Key, ReqData) ->
-    rabbit_web_dispatch_util:id(Key, ReqData).
+    rabbit_web_dispatch_access_control:id(Key, ReqData).
 
 read_complete_body(Req) ->
     read_complete_body(Req, <<"">>).
@@ -905,7 +905,7 @@ all_or_one_vhost(ReqData, Fun) ->
 
 filter_vhost(List, ReqData, Context) ->
     User = #user{tags = Tags} = Context#context.user,
-    Fn   = case rabbit_web_dispatch_util:is_admin(Tags) of
+    Fn   = case rabbit_web_dispatch_access_control:is_admin(Tags) of
                true  -> fun list_visible_vhosts_names/2;
                false -> fun list_login_vhosts_names/2
            end,
@@ -971,7 +971,7 @@ post_respond({stop, ReqData, Context}) ->
 post_respond({JSON, ReqData, Context}) ->
     {true, cowboy_req:set_resp_body(JSON, ReqData), Context}.
 
-is_monitor(T) -> rabbit_web_dispatch_util:is_monitor(T).
+is_monitor(T) -> rabbit_web_dispatch_access_control:is_monitor(T).
 
 %% The distinction between list_visible_vhosts and list_login_vhosts
 %% is there to ensure that monitors can always learn of the
