@@ -1135,6 +1135,7 @@ rabbitmq_web_dispatch:
 - rabbit_cowboy_redirect
 - rabbit_cowboy_stream_h
 - rabbit_web_dispatch
+- rabbit_web_dispatch_access_control
 - rabbit_web_dispatch_app
 - rabbit_web_dispatch_listing_handler
 - rabbit_web_dispatch_registry
