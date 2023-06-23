@@ -9,6 +9,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              ra_name/1]).
@@ -179,11 +180,14 @@ quorum_unaffected_after_vhost_failure(Config) ->
                                             arguments = Args,
                                             durable = true
                                            }),
-    timer:sleep(300),
-
-    Info0 = rpc:call(A, rabbit_quorum_queue, infos,
-                     [rabbit_misc:r(<<"/">>, queue, QName)]),
-    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info0, []))),
+    ?awaitMatch(
+       Servers,
+       begin
+           Info0 = rpc:call(A, rabbit_quorum_queue, infos,
+                            [rabbit_misc:r(<<"/">>, queue, QName)]),
+           lists:sort(proplists:get_value(online, Info0, []))
+       end,
+       60000),
 
     %% Crash vhost on both nodes
     {ok, SupA} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
@@ -191,9 +195,14 @@ quorum_unaffected_after_vhost_failure(Config) ->
     {ok, SupB} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
     exit(SupB, foo),
 
-    Info = rpc:call(A, rabbit_quorum_queue, infos,
-                    [rabbit_misc:r(<<"/">>, queue, QName)]),
-    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
+    ?awaitMatch(
+       Servers,
+       begin
+           Info = rpc:call(A, rabbit_quorum_queue, infos,
+                            [rabbit_misc:r(<<"/">>, queue, QName)]),
+           lists:sort(proplists:get_value(online, Info, []))
+       end,
+       60000).
 
 recover_follower_after_standalone_restart(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of

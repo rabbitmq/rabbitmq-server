@@ -7,6 +7,7 @@
 
 -module(per_vhost_queue_limit_SUITE).
 
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -15,6 +16,8 @@
 
 -import(rabbit_ct_client_helpers, [open_unmanaged_connection/3,
                                    close_connection_and_channel/2]).
+
+-define(AWAIT_TIMEOUT, 30000).
 
 all() ->
     [
@@ -119,29 +122,29 @@ end_per_testcase(Testcase, Config) ->
 most_basic_single_node_queue_count(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     Conn     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_exclusive_queues(Ch, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost)),
+    ?awaitMatch(10, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn, Ch),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 single_node_single_vhost_queue_count(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     Conn     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_exclusive_queues(Ch, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost)),
+    ?awaitMatch(10, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     declare_durable_queues(Ch, 10),
-    ?assertEqual(20, count_queues_in(Config, VHost)),
+    ?awaitMatch(20, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     delete_durable_queues(Ch, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost)),
+    ?awaitMatch(10, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn, Ch),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 single_node_multiple_vhosts_queue_count(Config) ->
@@ -150,8 +153,8 @@ single_node_multiple_vhosts_queue_count(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost1),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
@@ -159,17 +162,17 @@ single_node_multiple_vhosts_queue_count(Config) ->
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
     declare_exclusive_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
     declare_durable_queues(Ch1, 10),
-    ?assertEqual(20, count_queues_in(Config, VHost1)),
+    ?awaitMatch(20, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
     delete_durable_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
     declare_exclusive_queues(Ch2, 30),
-    ?assertEqual(30, count_queues_in(Config, VHost2)),
+    ?awaitMatch(30, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn1, Ch1),
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn2, Ch2),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
@@ -183,7 +186,7 @@ single_node_single_vhost_zero_limit(Config) ->
 single_node_single_vhost_limit_with_durable_named_queue(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
 
     set_vhost_queue_limit(Config, VHost, 3),
     Conn     = open_unmanaged_connection(Config, 0, VHost),
@@ -219,7 +222,7 @@ single_node_single_vhost_zero_limit_with_durable_named_queue(Config) ->
 single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
 
     set_vhost_queue_limit(Config, VHost, 3),
     Conn     = open_unmanaged_connection(Config, 0, VHost),
@@ -243,7 +246,7 @@ single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
 single_node_single_vhost_zero_limit_with(Config, QueueDeclare) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
@@ -272,7 +275,7 @@ single_node_single_vhost_zero_limit_with(Config, QueueDeclare) ->
 single_node_single_vhost_limit_with_queue_ttl(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
@@ -297,7 +300,10 @@ single_node_single_vhost_limit_with_queue_ttl(Config) ->
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
     %% wait for the queues to expire
-    timer:sleep(3000),
+    ?awaitMatch(
+       [],
+       rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+       ?AWAIT_TIMEOUT),
 
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"">>,
@@ -309,7 +315,7 @@ single_node_single_vhost_limit_with_queue_ttl(Config) ->
 single_node_single_vhost_limit_with_redeclaration(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost)),
+    ?awaitMatch(0, count_queues_in(Config, VHost), ?AWAIT_TIMEOUT),
 
     set_vhost_queue_limit(Config, VHost, 3),
     Conn1     = open_unmanaged_connection(Config, 0, VHost),
@@ -367,55 +373,55 @@ single_node_single_vhost_limit_with_redeclaration(Config) ->
 most_basic_cluster_queue_count(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     declare_exclusive_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     Conn2     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
     declare_exclusive_queues(Ch2, 15),
-    ?assertEqual(25, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(25, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(25, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(25, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn1, Ch1),
     close_connection_and_channel(Conn2, Ch2),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 cluster_node_restart_queue_count(Config) ->
     VHost = <<"queue-limits">>,
     set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     declare_exclusive_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:restart_broker(Config, 0),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
+    ?awaitMatch(0, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
 
     Conn2     = open_unmanaged_connection(Config, 1, VHost),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
     declare_exclusive_queues(Ch2, 15),
-    ?assertEqual(15, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(15, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(15, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(15, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     declare_durable_queues(Ch2, 10),
-    ?assertEqual(25, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(25, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(25, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(25, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:restart_broker(Config, 1),
 
-    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(10, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 
@@ -425,28 +431,28 @@ cluster_multiple_vhosts_queue_count(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost1),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     declare_exclusive_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost1, 0)),
-    ?assertEqual(10, count_queues_in(Config, VHost1, 1)),
-    ?assertEqual(0,  count_queues_in(Config, VHost2, 0)),
-    ?assertEqual(0,  count_queues_in(Config, VHost2, 1)),
+    ?awaitMatch(10, count_queues_in(Config, VHost1, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(10, count_queues_in(Config, VHost1, 1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0,  count_queues_in(Config, VHost2, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0,  count_queues_in(Config, VHost2, 1), ?AWAIT_TIMEOUT),
 
     Conn2     = open_unmanaged_connection(Config, 0, VHost2),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
     declare_exclusive_queues(Ch2, 15),
-    ?assertEqual(15, count_queues_in(Config, VHost2, 0)),
-    ?assertEqual(15, count_queues_in(Config, VHost2, 1)),
+    ?awaitMatch(15, count_queues_in(Config, VHost2, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(15, count_queues_in(Config, VHost2, 1), ?AWAIT_TIMEOUT),
     close_connection_and_channel(Conn1, Ch1),
     close_connection_and_channel(Conn2, Ch2),
-    ?assertEqual(0, count_queues_in(Config, VHost1, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost1, 1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost2, 1)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost1, 1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2, 0), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2, 1), ?AWAIT_TIMEOUT),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
@@ -460,8 +466,8 @@ cluster_multiple_vhosts_limit_with(Config, WatermarkLimit) ->
     VHost2 = <<"queue-limits2">>,
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     set_vhost_queue_limit(Config, VHost1, 3),
     set_vhost_queue_limit(Config, VHost2, 3),
@@ -510,8 +516,8 @@ cluster_multiple_vhosts_limit_with_durable_named_queue(Config) ->
     VHost2 = <<"queue-limits2">>,
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     set_vhost_queue_limit(Config, VHost1, 3),
     set_vhost_queue_limit(Config, VHost2, 3),
@@ -574,8 +580,8 @@ cluster_multiple_vhosts_zero_limit_with(Config, QueueDeclare) ->
     VHost2 = <<"queue-limits2">>,
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
-    ?assertEqual(0, count_queues_in(Config, VHost1)),
-    ?assertEqual(0, count_queues_in(Config, VHost2)),
+    ?awaitMatch(0, count_queues_in(Config, VHost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_queues_in(Config, VHost2), ?AWAIT_TIMEOUT),
 
     Conn1     = open_unmanaged_connection(Config, 0, VHost1),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
@@ -640,7 +646,6 @@ set_vhost_queue_limit(Config, NodeIndex, VHost, Count) ->
 count_queues_in(Config, VHost) ->
     count_queues_in(Config, VHost, 0).
 count_queues_in(Config, VHost, NodeIndex) ->
-    timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_amqqueue,
                                  count, [VHost]).

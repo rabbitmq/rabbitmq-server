@@ -26,6 +26,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -203,7 +204,7 @@ declare_policy_exactly(Config) ->
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rabbit_ct_broker_helpers:control_action(sync_queue, Node0,
                                             [binary_to_list(Q)], [{"-p", "/"}]),
-    wait_for_sync(Config, Node0, QueueRes, 1),
+    ?awaitMatch(true, synced(Config, Node0, QueueRes, 1), 60000),
 
     {ok, Queue} = rabbit_ct_broker_helpers:rpc(Config, Node0,
                                                rabbit_amqqueue, lookup, [QueueRes]),
@@ -458,18 +459,6 @@ verify_client_local(Config, Q) ->
 set_location_policy(Config, Name, Strategy) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
       Name, <<".*">>, <<"queues">>, [{<<"queue-master-locator">>, Strategy}]).
-
-wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen) ->
-    wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, 600).
-
-wait_for_sync(_, _, _, _, 0) ->
-    throw(sync_timeout);
-wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N) ->
-    case synced(Config, Nodename, Q, ExpectedSSPidLen) of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N-1)
-    end.
 
 synced(Config, Nodename, Q, ExpectedSSPidLen) ->
     Args = [<<"/">>, [name, synchronised_slave_pids]],

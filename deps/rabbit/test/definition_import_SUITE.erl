@@ -7,6 +7,7 @@
 
 -module(definition_import_SUITE).
 
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -245,8 +246,7 @@ import_case13a(Config) ->
     %% We expect that importing an existing queue (i.e. same vhost and name)
     %% but with different arguments and different properties is a no-op.
     import_file_case(Config, "case13a"),
-    timer:sleep(1000),
-    ?assertMatch({ok, Q}, queue_lookup(Config, VHost, QueueName)).
+    ?awaitMatch({ok, Q}, queue_lookup(Config, VHost, QueueName), 30000).
 
 import_case14(Config) -> import_file_case(Config, "case14").
 %% contains a user with tags as a list

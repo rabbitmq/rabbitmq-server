@@ -828,7 +828,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/definition_import_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "direct_exchange_routing_v2_SUITE_beam_files",
@@ -872,7 +872,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/dynamic_qq_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "eager_sync_SUITE_beam_files",
@@ -1059,7 +1059,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/per_user_connection_tracking_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "per_vhost_connection_limit_SUITE_beam_files",
@@ -1095,7 +1095,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/per_vhost_queue_limit_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "policy_SUITE_beam_files",
@@ -1166,7 +1166,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/queue_master_location_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "queue_parallel_SUITE_beam_files",
@@ -1674,7 +1674,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/unit_log_management_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "unit_operator_policy_SUITE_beam_files",
@@ -1776,7 +1776,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/vhost_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "rabbit_cuttlefish_SUITE_beam_files",

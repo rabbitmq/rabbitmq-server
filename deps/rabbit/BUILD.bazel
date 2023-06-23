@@ -368,7 +368,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-    flaky = True,
     shard_count = 7,
 )
 
@@ -1022,7 +1021,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/test_rabbit_event_handler.beam",
     ],
-    flaky = True,
 )
 
 rabbitmq_suite(
