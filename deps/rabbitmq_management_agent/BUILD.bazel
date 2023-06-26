@@ -72,6 +72,7 @@ rabbitmq_app(
     deps = [
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
         "@ranch//:erlang_app",
     ],
 )
