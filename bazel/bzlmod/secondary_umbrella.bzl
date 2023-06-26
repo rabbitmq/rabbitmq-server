@@ -30,10 +30,6 @@ def secondary_umbrella():
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
         strip_prefix = "rabbitmq_server-3.10.14",
         urls = [
-<<<<<<< HEAD
-            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.10.14.tar.xz",
-=======
-            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
->>>>>>> 89f668a7bb (Avoid secondary umbrella archive collisions in actions (backport #8653) (#8669))
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25/package-generic-unix-for-mixed-version-testing-v3.10.14.tar.xz",
         ],
     )

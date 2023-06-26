@@ -31,12 +31,6 @@ jobs:
   ensure-mixed-version-archive:
     name: Prepare Artifacts
     runs-on: ubuntu-20.04
-<<<<<<< HEAD
-    env:
-      # must be a version supported by builds on both this and the secondary umbrella branch
-      otp_version_id: 25
-=======
->>>>>>> 89f668a7bb (Avoid secondary umbrella archive collisions in actions (backport #8653) (#8669))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
