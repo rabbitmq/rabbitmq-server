@@ -14,6 +14,7 @@
 -type property_name() :: atom().
 -type property_value() :: any().
 -type properties() :: #{property_name() := property_value()}.
+-type user_property() :: [{binary(), binary()}].
 
 -define(TWO_BYTE_INTEGER_MAX, 16#FFFF).
 %% Packet identifier is a non zero two byte integer.

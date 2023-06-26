@@ -37,6 +37,7 @@
         [
          client_id,
          conn_name,
+         user_property,
          connection_state,
          ssl_login_name,
          recv_cnt,

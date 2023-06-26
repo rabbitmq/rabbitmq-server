@@ -68,6 +68,8 @@
          prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
          client_id :: client_id(),
+         %% User Property set in the CONNECT packet.
+         user_prop :: user_property(),
          conn_name :: option(binary()),
          ip_addr :: inet:ip_address(),
          port :: inet:port_number(),
@@ -215,6 +217,7 @@ process_connect(
                           retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                           vhost = VHost,
                           client_id = ClientId,
+                          user_prop = maps:get('User-Property', ConnectProps, []),
                           will_msg = WillMsg,
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound},
@@ -2539,10 +2542,18 @@ info(messages_unacknowledged, #state{unacked_server_pubs = Val}) ->
     maps:size(Val);
 info(node, _) -> node();
 info(client_id, #state{cfg = #cfg{client_id = Val}}) -> Val;
+info(user_property, #state{cfg = #cfg{user_prop = Val}}) -> Val;
 info(vhost, #state{cfg = #cfg{vhost = Val}}) -> Val;
 %% for rabbitmq_management/priv/www/js/tmpl/connection.ejs
-info(client_properties, #state{cfg = #cfg{client_id = Val}}) ->
-    [{client_id, longstr, Val}];
+info(client_properties, #state{cfg = #cfg{client_id = ClientId,
+                                          user_prop = Prop}}) ->
+    L = [{client_id, longstr, ClientId}],
+    if Prop =:= [] ->
+           L;
+       Prop =/= [] ->
+           Tab = rabbit_misc:to_amqp_table(maps:from_list(Prop)),
+           [{user_property, table, Tab} | L]
+    end;
 info(channel_max, _) -> 0;
 %% Maximum packet size supported only in MQTT 5.0.
 info(frame_max, _) -> 0;
