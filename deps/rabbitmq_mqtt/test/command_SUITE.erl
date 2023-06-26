@@ -26,7 +26,8 @@ groups() ->
     [
      {unit, [], [merge_defaults]},
      {v4, [], [run]},
-     {v5, [], [run]}
+     {v5, [], [run,
+               user_property]}
     ].
 
 suite() ->
@@ -140,6 +141,22 @@ run(Config) ->
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2),
     ok = emqtt:disconnect(C3).
+
+user_property(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts = #{node => Node, timeout => 10_000, verbose => false},
+    ClientId = <<"my-client">>,
+    UserProp = [{<<"name 1">>, <<"value 1">>},
+                {<<"name 2">>, <<"value 2">>},
+                %% "The same name is allowed to appear more than once." [v5 3.1.2.11.8]
+                {<<"name 2">>, <<"value 3">>}],
+    C = connect(ClientId, Config, 1, [{properties, #{'User-Property' => UserProp}}]),
+    rabbit_ct_helpers:eventually(
+      ?_assertEqual(
+         [[{client_id, ClientId},
+           {user_property, UserProp}]],
+         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>, <<"user_property">>], Opts)))),
+    ok = emqtt:disconnect(C).
 
 start_amqp_connection(Type, Node, Port) ->
     amqp_connection:start(amqp_params(Type, Node, Port)).
