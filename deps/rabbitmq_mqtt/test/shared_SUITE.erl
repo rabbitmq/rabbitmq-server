@@ -1314,7 +1314,7 @@ block(Config) ->
 block_only_publisher(Config) ->
     Topic = atom_to_binary(?FUNCTION_NAME),
 
-    Opts = [{ack_timeout, 1}],
+    Opts = [{ack_timeout, 2}],
     Con = connect(<<"background-connection">>, Config, Opts),
     Sub = connect(<<"subscriber-connection">>, Config, Opts),
     Pub = connect(<<"publisher-connection">>, Config, Opts),
