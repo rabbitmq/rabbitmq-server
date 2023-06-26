@@ -2177,7 +2177,8 @@ mqtt_props_to_amqp_props(Props, Qos, Retain) ->
                  P3#'P_basic'{correlation_id = Corr};
              #{'Correlation-Data' := Corr}
                when byte_size(Corr) > ?AMQP_091_SHORT_STR_MAX_SIZE ->
-                 P3#'P_basic'{headers = [{<<"x-correlation">>, longstr, Corr} | P3#'P_basic'.headers]};
+                 P3#'P_basic'{headers = [{<<"x-correlation-id">>, longstr, Corr}
+                                         | P3#'P_basic'.headers]};
              _ ->
                  P3
          end,
@@ -2267,8 +2268,8 @@ amqp_props_to_mqtt_props(
              C when is_list(C) ->
                  P3#{'Correlation-Data' => list_to_binary(C)};
              _ ->
-                 case rabbit_basic:header(<<"x-correlation">>, Headers) of
-                     {<<"x-correlation">>, longstr, C}
+                 case rabbit_basic:header(<<"x-correlation-id">>, Headers) of
+                     {<<"x-correlation-id">>, longstr, C}
                        when is_binary(C) ->
                          P3#{'Correlation-Data' => C};
                      _ ->
