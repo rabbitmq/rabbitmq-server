@@ -99,7 +99,7 @@ get_global_counters(Config, Proto, Node, QType) ->
              rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_global_counters, overview, [])).
 
 get_events(Node) ->
-    timer:sleep(300), %% events are sent and processed asynchronously
+    timer:sleep(500), %% events are sent and processed asynchronously
     Result = gen_event:call({rabbit_event, Node}, event_recorder, take_state),
     ?assert(is_list(Result)),
     Result.

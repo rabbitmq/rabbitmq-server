@@ -506,7 +506,7 @@ events(Config) ->
     Qos = 0,
     MqttTopic = <<"my/topic">>,
     AmqpTopic = <<"my.topic">>,
-    {ok, _, _} = emqtt:subscribe(C, MqttTopic, Qos),
+    {ok, _, [Qos]} = emqtt:subscribe(C, MqttTopic, Qos),
 
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
