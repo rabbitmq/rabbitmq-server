@@ -111,7 +111,12 @@ proxy_protocol_v2_local(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, ["mqtt"], ranch_proxy_header:header(ProxyInfo)),
     {ok, _} = rfc6455_client:open(WS),
-    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+    Frame = emqttc_serialiser:serialise(
+        ?CONNECT_PACKET(#mqtt_packet_connect{
+            client_id = <<"web-mqtt-tests-proxy-protocol">>,
+            username  = <<"guest">>,
+            password  = <<"guest">>})),
+    rfc6455_client:send_binary(WS, Frame),
     {binary, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
