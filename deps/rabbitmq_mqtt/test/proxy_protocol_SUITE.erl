@@ -97,7 +97,7 @@ proxy_protocol_v2_local(Config) ->
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, ranch_proxy_header:header(ProxyInfo)),
-    ok = inet:send(Socket, mqtt_3_1_1_connect_packet()),
+    ok = inet:send(Socket, mqtt_3_1_1_connect_frame()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     timer:sleep(10),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
