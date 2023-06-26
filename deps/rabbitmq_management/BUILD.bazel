@@ -190,6 +190,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbitmq_ct_helpers:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
         "@proper//:erlang_app",
     ],
 )
@@ -198,6 +199,7 @@ rabbitmq_integration_suite(
     name = "rabbit_mgmt_test_db_SUITE",
     deps = [
         "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
     ],
 )
 
@@ -211,6 +213,7 @@ rabbitmq_suite(
     size = "small",
     deps = [
         "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
         "@proper//:erlang_app",
     ],
 )

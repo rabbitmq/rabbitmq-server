@@ -5,12 +5,8 @@
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--record(context, {user,
-                  password = none,
-                  impl}). % storage for a context of the resource handler
+-include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 -record(range, {first :: integer(),
                 last  :: integer(),
                 incr  :: integer()}).
-
-
