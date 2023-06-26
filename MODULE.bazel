@@ -111,6 +111,12 @@ elixir_config.internal_elixir_from_github_release(
     version = "1.14.5",
 )
 
+elixir_config.internal_elixir_from_github_release(
+    name = "1_15",
+    sha256 = "0f4df7574a5f300b5c66f54906222cd46dac0df7233ded165bc8e80fd9ffeb7a",
+    version = "1.15.0",
+)
+
 use_repo(
     elixir_config,
     "elixir_config",
@@ -134,6 +140,7 @@ register_toolchains(
     "@elixir_config//external:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
+    "@elixir_config//1_15:toolchain",
 )
 
 erlang_package = use_extension(
