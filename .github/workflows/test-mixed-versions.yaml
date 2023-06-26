@@ -26,9 +26,12 @@ jobs:
   ensure-mixed-version-archive:
     name: Prepare Artifacts
     runs-on: ubuntu-20.04
+<<<<<<< HEAD
     env:
       # must be a version supported by builds on both this and the secondary umbrella branch
       otp_version_id: 24
+=======
+>>>>>>> 683dba9fa3 (Avoid secondary umbrella archive collisions in actions (backport #8653) (backport #8669) (#8679))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
@@ -54,9 +57,13 @@ jobs:
         fi
         echo "exists=${exists}" | tee $GITHUB_ENV
 
+        OTP_VERSION_ID=${ARCHIVE_URL#*secondary-umbrellas/rbe-}
+        OTP_VERSION_ID=${OTP_VERSION_ID%*/package-generic-unix-for-mixed-version-testing-v*.tar.xz}
+        echo "otp_version_id=${OTP_VERSION_ID}" | tee -a $GITHUB_OUTPUT
+
         VERSION=${ARCHIVE_URL#*package-generic-unix-for-mixed-version-testing-v}
         VERSION=${VERSION%*.tar.xz}
-        echo "version=${VERSION}" | tee $GITHUB_OUTPUT
+        echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
     - name: CHECKOUT REPOSITORY (MIXED VERSION)
       if: env.exists != 'true'
       uses: actions/checkout@v3
@@ -91,15 +98,15 @@ jobs:
 
         sed -i"_orig" -E "/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ steps.check.outputs.version }}/" rabbitmq.bzl
         bazelisk build :package-generic-unix \
-          --config=rbe-${{ env.otp_version_id }} \
+          --config=rbe-${{ steps.check.outputs.otp_version_id }} \
           --test_build \
           --verbose_failures
 
         OUTPUT_DIR=${{ github.workspace }}/output
-        mkdir ${OUTPUT_DIR}
+        mkdir -p ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}
         cp \
           bazel-bin/package-generic-unix.tar.xz \
-          ${OUTPUT_DIR}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
+          ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
     - name: UPLOAD THE ARCHIVE TO S3
       if: env.exists != 'true'
       uses: jakejarvis/s3-sync-action@v0.5.1

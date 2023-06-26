@@ -28,8 +28,14 @@ def secondary_umbrella():
         name = "rabbitmq-server-generic-unix-3.9",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+<<<<<<< HEAD
         strip_prefix = "rabbitmq_server-3.9.27",
         urls = [
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.9.27.tar.xz",
+=======
+        strip_prefix = "rabbitmq_server-3.10.24",
+        urls = [
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25/package-generic-unix-for-mixed-version-testing-v3.10.24.tar.xz",
+>>>>>>> 683dba9fa3 (Avoid secondary umbrella archive collisions in actions (backport #8653) (backport #8669) (#8679))
         ],
     )
