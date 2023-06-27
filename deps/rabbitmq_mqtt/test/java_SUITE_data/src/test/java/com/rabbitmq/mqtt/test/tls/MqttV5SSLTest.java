@@ -47,7 +47,7 @@ public class MqttV5SSLTest implements MqttCallback {
   }
 
   // override 10s limit
-  private class MyConnOpts extends MqttConnectionOptions {
+  private static class MyConnOpts extends MqttConnectionOptions {
     private int keepAliveInterval = 60;
 
     @Override
