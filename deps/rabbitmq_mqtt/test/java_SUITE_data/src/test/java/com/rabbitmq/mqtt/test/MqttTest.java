@@ -52,9 +52,7 @@ public class MqttTest implements MqttCallback {
   private final byte[] payload = "payload".getBytes();
   private final String topic = "test-topic";
   private final String retainedTopic = "test-retained-topic";
-  private int testDelay = 2000;
 
-  private volatile long lastReceipt;
   private volatile boolean expectConnectionFailure;
   private volatile boolean failOnDelivery = false;
 
@@ -80,14 +78,12 @@ public class MqttTest implements MqttCallback {
   }
 
   // override the 10s limit
-  private class TestMqttConnectOptions extends MqttConnectOptions {
+  private static class TestMqttConnectOptions extends MqttConnectOptions {
     private int keepAliveInterval = 60;
-    private final String user_name = "guest";
-    private final String password = "guest";
 
     public TestMqttConnectOptions() {
-      super.setUserName(user_name);
-      super.setPassword(password.toCharArray());
+      super.setUserName("guest");
+      super.setPassword("guest".toCharArray());
       super.setCleanSession(true);
       super.setKeepAliveInterval(60);
       // PublishMultiple overwhelms Paho defaults
@@ -214,8 +210,7 @@ public class MqttTest implements MqttCallback {
 
       // ---8<---
       // Copy/pasted from readMqttWireMessage() in MqttInputStream.java.
-      ByteArrayOutputStream bais = new ByteArrayOutputStream();
-      byte first = in.readByte();
+      in.readByte();
       // ---8<---
 
       fail("Error expected if CONNECT is not first packet");
@@ -548,6 +543,7 @@ public class MqttTest implements MqttCallback {
     client_opts.setPassword("".toCharArray());
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         publish(client, topic, 0, payload);
         publish(client, topic, 1, payload);
         publish(client, topic, 2, payload);
@@ -584,6 +580,9 @@ public class MqttTest implements MqttCallback {
 =======
     MqttClient client = newClient(info);
     try {
+=======
+    try (MqttClient client = newClient(info)) {
+>>>>>>> 9a6bf31e9a (Small cleaning up in MQTT Java tests)
       client.connect(client_opts);
       fail("Authentication failure expected");
     } catch (MqttException ex) {
@@ -1421,7 +1420,6 @@ public class MqttTest implements MqttCallback {
   }
 
   public void messageArrived(String topic, MqttMessage message) throws Exception {
-    lastReceipt = System.currentTimeMillis();
     receivedMessages.add(message);
     if (failOnDelivery) {
       throw new Exception("unexpected delivery on topic " + topic);
@@ -1436,6 +1434,7 @@ public class MqttTest implements MqttCallback {
 
   private void waitForTestDelay() {
     try {
+      int testDelay = 2000;
       Thread.sleep(testDelay);
     } catch (InterruptedException e) {
       throw new RuntimeException(e);

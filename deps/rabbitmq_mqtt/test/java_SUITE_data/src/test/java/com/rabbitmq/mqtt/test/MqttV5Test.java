@@ -12,7 +12,6 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.eclipse.paho.mqttv5.common.packet.MqttReturnCode.RETURN_CODE_BAD_USERNAME_OR_PASSWORD;
 
 import com.rabbitmq.client.*;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -55,7 +54,6 @@ public class MqttV5Test implements MqttCallback {
   private final byte[] payload = "payload".getBytes();
   private final String topic = "test-topic";
   private final String retainedTopic = "test-retained-topic";
-  private int testDelay = 2000;
 
   private Connection conn;
   private Channel ch;
@@ -78,14 +76,12 @@ public class MqttV5Test implements MqttCallback {
   }
 
   // override the 10s limit
-  private class TestMqttConnectOptions extends MqttConnectionOptions {
+  private static class TestMqttConnectOptions extends MqttConnectionOptions {
     private int keepAliveInterval = 60;
-    private final String user_name = "guest";
-    private final String password = "guest";
 
     public TestMqttConnectOptions() {
-      super.setUserName(user_name);
-      super.setPassword(password.getBytes());
+      super.setUserName("guest");
+      super.setPassword("guest".getBytes());
       super.setTopicAliasMaximum(0);
       super.setKeepAliveInterval(keepAliveInterval);
     }
@@ -211,8 +207,7 @@ public class MqttV5Test implements MqttCallback {
 
       // ---8<---
       // Copy/pasted from readMqttWireMessage() in MqttInputStream.java.
-      ByteArrayOutputStream bais = new ByteArrayOutputStream();
-      byte first = in.readByte();
+      in.readByte();
       // ---8<---
 
       fail("Error expected if CONNECT is not first packet");
@@ -823,7 +818,7 @@ public class MqttV5Test implements MqttCallback {
   }
 
   @Test
-  public void topicAuthorisationVariableExpansion(TestInfo info) throws Exception {
+  public void topicAuthorisationVariableExpansion() throws Exception {
     final String client_id = "client-id-variable-expansion";
     MqttClient client = newConnectedClient(client_id);
     client.setCallback(this);
@@ -894,7 +889,7 @@ public class MqttV5Test implements MqttCallback {
   // [MQTT-3.1.3-6]
   // RabbitMQ allows a Client to supply a ClientId that has a length of zero bytes.
   @Test
-  public void emptyClientId(TestInfo info) throws MqttException, InterruptedException {
+  public void emptyClientId() throws MqttException, InterruptedException {
     String emptyClientId = "";
     MqttClient client = newConnectedClient(emptyClientId);
     MqttClient client2 = newConnectedClient(emptyClientId);
@@ -955,6 +950,7 @@ public class MqttV5Test implements MqttCallback {
 
   private void waitForTestDelay() {
     try {
+      int testDelay = 2000;
       Thread.sleep(testDelay);
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
