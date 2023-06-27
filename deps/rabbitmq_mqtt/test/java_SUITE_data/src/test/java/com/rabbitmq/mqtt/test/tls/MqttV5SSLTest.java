@@ -7,7 +7,10 @@
 
 package com.rabbitmq.mqtt.test.tls;
 
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.mqttv5.client.*;
+import org.eclipse.paho.mqttv5.common.MqttException;
+import org.eclipse.paho.mqttv5.common.MqttMessage;
+import org.eclipse.paho.mqttv5.common.packet.MqttProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,26 +19,25 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.eclipse.paho.client.mqttv3.MqttException.REASON_CODE_FAILED_AUTHENTICATION;
+import static org.eclipse.paho.mqttv5.common.packet.MqttReturnCode.RETURN_CODE_BAD_USERNAME_OR_PASSWORD;
 
 /**
- * MQTT v3.1 tests
- *
+ * MQTT v5 TLS test
  */
 
-public class MqttSSLTest implements MqttCallback {
+public class MqttV5SSLTest implements MqttCallback {
 
     private final String brokerUrl = "ssl://" + getHost() + ":" + getPort();
     private String clientId;
     private String clientId2;
     private MqttClient client;
     private MqttClient client2;
-    private MqttConnectOptions conOpt;
+    private MqttConnectionOptions conOpt;
 
     private volatile List<MqttMessage> receivedMessages;
-    private volatile boolean expectConnectionFailure;
 
     private static String getPort() {
         Object port = System.getProperty("mqtt.ssl.port");
@@ -50,7 +52,7 @@ public class MqttSSLTest implements MqttCallback {
     }
 
     // override 10s limit
-    private class MyConnOpts extends MqttConnectOptions {
+    private class MyConnOpts extends MqttConnectionOptions {
         private int keepAliveInterval = 60;
 
         @Override
@@ -75,7 +77,6 @@ public class MqttSSLTest implements MqttCallback {
         conOpt.setSocketFactory(MutualAuth.getSSLContextWithoutCert().getSocketFactory());
         setConOpts(conOpt);
         receivedMessages = Collections.synchronizedList(new ArrayList<MqttMessage>());
-        expectConnectionFailure = false;
     }
 
     @AfterEach
@@ -98,8 +99,8 @@ public class MqttSSLTest implements MqttCallback {
     }
 
 
-    private void setConOpts(MqttConnectOptions conOpts) {
-        conOpts.setCleanSession(true);
+    private void setConOpts(MqttConnectionOptions conOpts) {
+        conOpts.setCleanStart(true);
         conOpts.setKeepAliveInterval(60);
     }
 
@@ -109,6 +110,7 @@ public class MqttSSLTest implements MqttCallback {
             conOpt.setSocketFactory(MutualAuth.getSSLContextWithClientCert().getSocketFactory());
             client.connect(conOpt);
         } catch (Exception e) {
+            e.printStackTrace();
             fail("Exception: " + e.getMessage());
         }
     }
@@ -120,7 +122,7 @@ public class MqttSSLTest implements MqttCallback {
             client.connect(conOpt);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            assertThat(ex.getReasonCode()).isEqualTo(REASON_CODE_FAILED_AUTHENTICATION);
+            assertThat(ex.getReasonCode()).isEqualTo(RETURN_CODE_BAD_USERNAME_OR_PASSWORD);
         } catch (Exception e) {
             fail("Exception: " + e.getMessage());
         }
@@ -128,32 +130,37 @@ public class MqttSSLTest implements MqttCallback {
 
     @Test public void invalidPassword() {
         conOpt.setUserName("invalid-user");
-        conOpt.setPassword("invalid-password".toCharArray());
+        conOpt.setPassword("invalid-password".getBytes());
         try {
             client.connect(conOpt);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            assertThat(ex.getReasonCode()).isEqualTo(REASON_CODE_FAILED_AUTHENTICATION);
+            assertThat(ex.getReasonCode()).isEqualTo(RETURN_CODE_BAD_USERNAME_OR_PASSWORD);
         } catch (Exception e) {
             fail("Exception: " + e.getMessage());
         }
     }
 
-
-    public void connectionLost(Throwable cause) {
-        if (!expectConnectionFailure) {
-            fail("Connection unexpectedly lost");
-        }
-    }
-
-    public void messageArrived(String topic, MqttMessage message) {
+    public void messageArrived(String topic, MqttMessage message) throws Exception {
         receivedMessages.add(message);
     }
 
-    public void deliveryComplete(IMqttDeliveryToken token) {
+    public void disconnected(MqttDisconnectResponse mqttDisconnectResponse) {
     }
 
-    private MqttConnectOptions options() {
+    public void mqttErrorOccurred(MqttException e) {
+    }
+
+    public void deliveryComplete(IMqttToken iMqttToken) {
+    }
+
+    public void connectComplete(boolean b, String s) {
+    }
+
+    public void authPacketArrived(int i, MqttProperties mqttProperties) {
+    }
+
+    private MqttConnectionOptions options() {
         return new MyConnOpts();
     }
 }
