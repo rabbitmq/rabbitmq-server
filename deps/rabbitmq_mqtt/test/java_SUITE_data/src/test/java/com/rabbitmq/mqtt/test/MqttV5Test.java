@@ -16,10 +16,7 @@ import org.eclipse.paho.mqttv5.common.MqttMessage;
 import org.eclipse.paho.mqttv5.common.packet.MqttProperties;
 import org.eclipse.paho.mqttv5.common.packet.MqttWireMessage;
 import org.eclipse.paho.mqttv5.common.packet.MqttPingReq;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.*;
 
 import javax.net.SocketFactory;
 import java.io.ByteArrayOutputStream;
@@ -38,8 +35,10 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
+import static java.util.Collections.singletonMap;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.eclipse.paho.mqttv5.common.packet.MqttReturnCode.RETURN_CODE_BAD_USERNAME_OR_PASSWORD;
-import static org.junit.jupiter.api.Assertions.*;
 
 /***
  *  MQTT v5 tests
@@ -65,19 +64,18 @@ public class MqttV5Test implements MqttCallback {
 
     private static int getPort() {
         Object port = System.getProperty("mqtt.port", "1883");
-        assertNotNull(port);
+        assertThat(port).isNotNull();
         return Integer.parseInt(port.toString());
     }
 
     private static int getThirdPort() {
         Object port = System.getProperty("mqtt.port.3", "1883");
-        assertNotNull(port);
         return Integer.parseInt(port.toString());
     }
 
     private static int getAmqpPort() {
         Object port = System.getProperty("amqp.port", "5672");
-        assertNotNull(port);
+        assertThat(port).isNotNull();
         return Integer.parseInt(port.toString());
     }
 
@@ -121,8 +119,18 @@ public class MqttV5Test implements MqttCallback {
         return new MqttClient(uri, client_id, null);
     }
 
+    private MqttClient newConnectedClient(TestInfo testInfo) throws MqttException {
+        return newConnectedClient(clientId(testInfo), options());
+    }
+
     private MqttClient newConnectedClient(TestInfo testInfo, MqttConnectionOptions conOpt) throws MqttException {
         return newConnectedClient(clientId(testInfo), conOpt);
+    }
+
+    private MqttClient newConnectedClient(String client_id) throws MqttException {
+        MqttClient client = newClient(brokerUrl, client_id);
+        client.connect(options());
+        return client;
     }
 
     private MqttClient newConnectedClient(String client_id, MqttConnectionOptions conOpt) throws MqttException {
@@ -210,14 +218,14 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void invalidUser(TestInfo info) throws MqttException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setUserName("invalid-user");
         MqttClient client = newClient(info);
         try {
             client.connect(client_opts);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            assertEquals(RETURN_CODE_BAD_USERNAME_OR_PASSWORD, ex.getReasonCode());
+            assertThat(ex.getReasonCode()).isEqualTo(RETURN_CODE_BAD_USERNAME_OR_PASSWORD);
         } finally {
             if (client.isConnected()) {
                 disconnect(client);
@@ -226,7 +234,7 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void invalidPassword(TestInfo info) throws MqttException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setUserName("invalid-user");
         client_opts.setPassword("invalid-password".getBytes());
         MqttClient client = newClient(info);
@@ -234,7 +242,7 @@ public class MqttV5Test implements MqttCallback {
             client.connect(client_opts);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            assertEquals(RETURN_CODE_BAD_USERNAME_OR_PASSWORD, ex.getReasonCode());
+            assertThat(ex.getReasonCode()).isEqualTo(RETURN_CODE_BAD_USERNAME_OR_PASSWORD);
         } finally {
             if (client.isConnected()) {
                 disconnect(client);
@@ -243,7 +251,7 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void emptyPassword(TestInfo info) throws MqttException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setPassword("".getBytes());
 
         MqttClient client = newClient(info);
@@ -251,37 +259,35 @@ public class MqttV5Test implements MqttCallback {
             client.connect(client_opts);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            assertEquals(RETURN_CODE_BAD_USERNAME_OR_PASSWORD, ex.getReasonCode());
+            assertThat(ex.getReasonCode()).isEqualTo(RETURN_CODE_BAD_USERNAME_OR_PASSWORD);
         }
     }
 
 
     @Test public void subscribeQos0(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newClient(info);
-        client.connect(client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe(topic, 0);
 
         publish(client, topic, 0, payload);
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
-        assertEquals(0, receivedMessages.get(0).getQos());
+        MqttMessage message = firstMessage();
+        assertThat(message.getPayload()).isEqualTo(payload);
+        assertThat(message.getQos()).isEqualTo(0);
         disconnect(client);
     }
 
     @Test public void subscribeUnsubscribe(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newClient(info);
-        client.connect(client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe(topic, 0);
 
         publish(client, topic, 1, payload);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
-        assertEquals(0, receivedMessages.get(0).getQos());
+        MqttMessage message = firstMessage();
+        assertThat(message.getPayload()).isEqualTo(payload);
+        assertThat(message.getQos()).isEqualTo(0);
 
         client.unsubscribe(topic);
         publish(client, topic, 0, payload);
@@ -290,9 +296,7 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void subscribeQos1(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newClient(info);
-        client.connect(client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe(topic, 1);
 
@@ -302,28 +306,26 @@ public class MqttV5Test implements MqttCallback {
 
         waitAtMost(() -> receivedMessagesSize() == 3);
 
-        MqttMessage msg1 = receivedMessages.get(0);
-        MqttMessage msg2 = receivedMessages.get(1);
-        MqttMessage msg3 = receivedMessages.get(1);
+        MqttMessage msg1 = message(0);
+        MqttMessage msg2 = message(1);
+        MqttMessage msg3 = message(2);
 
-        assertArrayEquals(payload, msg1.getPayload());
-        assertEquals(0, msg1.getQos());
+        assertThat(msg1.getPayload()).isEqualTo(payload);
+        assertThat(msg1.getQos()).isEqualTo(0);
 
-        assertArrayEquals(payload, msg2.getPayload());
-        assertEquals(1, msg2.getQos());
+        assertThat(msg2.getPayload()).isEqualTo(payload);
+        assertThat(msg2.getQos()).isEqualTo(1);
 
         // Downgraded QoS 2 to QoS 1
-        assertArrayEquals(payload, msg3.getPayload());
-        assertEquals(1, msg3.getQos());
+        assertThat(msg3.getPayload()).isEqualTo(payload);
+        assertThat(msg3.getQos()).isEqualTo(1);
 
         disconnect(client);
     }
 
     @Test public void subscribeReceivesRetainedMessagesWithMatchingQoS(TestInfo info)
             throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newClient(info);
-        client.connect(client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         clearRetained(client, retainedTopic);
         client.subscribe(retainedTopic, 1);
@@ -339,9 +341,8 @@ public class MqttV5Test implements MqttCallback {
 
         client.subscribe(retainedTopic, 1);
         waitAtMost(() -> receivedMessagesSize() == 1);
-        final MqttMessage retainedMsg = receivedMessages.get(0);
-        assertEquals(new String(lastMsg.getPayload()),
-                     new String(retainedMsg.getPayload()));
+        final MqttMessage retainedMsg = firstMessage();
+        assertThat(retainedMsg.getPayload()).isEqualTo(lastMsg.getPayload());
 
         disconnect(client);
     }
@@ -349,8 +350,7 @@ public class MqttV5Test implements MqttCallback {
 
     @Test public void subscribeReceivesRetainedMessagesWithDowngradedQoS(TestInfo info)
             throws MqttException, InterruptedException {
-        MqttConnectionOptions clientOpts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, clientOpts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         clearRetained(client, retainedTopic);
         client.subscribe(retainedTopic, 1);
@@ -358,7 +358,7 @@ public class MqttV5Test implements MqttCallback {
         publishRetained(client, retainedTopic, 1, "retain 1".getBytes(StandardCharsets.UTF_8));
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        MqttMessage lastMsg = receivedMessages.get(0);
+        MqttMessage lastMsg = firstMessage();
 
         client.unsubscribe(retainedTopic);
         receivedMessages.clear();
@@ -366,18 +366,16 @@ public class MqttV5Test implements MqttCallback {
         client.subscribe(retainedTopic, subscribeQoS);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        final MqttMessage retainedMsg = receivedMessages.get(0);
-        assertEquals(new String(lastMsg.getPayload()),
-                            new String(retainedMsg.getPayload()));
-        assertEquals(subscribeQoS, retainedMsg.getQos());
+        final MqttMessage retainedMsg = firstMessage();
+        assertThat(retainedMsg.getPayload()).isEqualTo(lastMsg.getPayload());
+        assertThat(retainedMsg.getQos()).isEqualTo(subscribeQoS);
 
         disconnect(client);
     }
 
     @Test public void publishWithEmptyMessageClearsRetained(TestInfo info)
             throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         clearRetained(client, retainedTopic);
         client.subscribe(retainedTopic, 1);
@@ -397,8 +395,7 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void topics(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe("/+/test-topic/#", 1);
         String[] cases = new String[]{"/pre/test-topic2", "/test-topic", "/a/test-topic/b/c/d", "/frob/test-topic"};
@@ -408,7 +405,7 @@ public class MqttV5Test implements MqttCallback {
         }
         waitAtMost(() -> receivedMessagesSize() == expected.size());
         for (MqttMessage m : receivedMessages){
-            expected.contains(new String(m.getPayload()));
+            assertThat(expected).contains(new String(m.getPayload()));
         }
         disconnect(client);
     }
@@ -417,8 +414,7 @@ public class MqttV5Test implements MqttCallback {
         final String amqp091Topic = "spBv1___0.MACLab.DDATA.Opto22.CLX";
         final String sparkplugTopic = "spBv1.0/MACLab/+/Opto22/CLX";
 
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe(sparkplugTopic, 1);
 
@@ -431,7 +427,7 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void cleanSession(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setCleanStart(false);
         MqttClient client = newConnectedClient(info, client_opts);
         client.subscribe(topic, 1);
@@ -453,7 +449,7 @@ public class MqttV5Test implements MqttCallback {
 
     @Test public void nonCleanSession(TestInfo info) throws MqttException, InterruptedException {
         String clientIdBase = clientId(info);
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setCleanStart(false);
         client_opts.setSessionExpiryInterval(10L);
         MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
@@ -468,11 +464,11 @@ public class MqttV5Test implements MqttCallback {
         client.connect(client_opts);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
+        assertThat(firstMessage().getPayload()).isEqualTo(payload);
         disconnect(client);
 
         // clean up with clean start true
-        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
+        MqttConnectionOptions cleanupOpts = options();
         MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1", cleanupOpts);
         cleanupClient1.disconnect();
         MqttClient cleanupClient2 = newConnectedClient(clientIdBase + "-2", cleanupOpts);
@@ -503,9 +499,8 @@ public class MqttV5Test implements MqttCallback {
             // first ensure the queue exists
             tmpCh.queueDeclarePassive(q);
             // then assert on properties
-            Map<String, Object> args = new HashMap<>();
-            args.put("x-expires", 10000);
-            tmpCh.queueDeclare(q, true, false, false, args);
+            tmpCh.queueDeclare(q, true, false, false,
+                singletonMap("x-expires", 10000));
         } finally {
             if (c.isConnected()) {
                 c.disconnect(3000);
@@ -519,36 +514,33 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void multipleClientIds(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         // uses duplicate client ID
-        MqttClient client2 = newConnectedClient(info, client_opts);
+        MqttClient client2 = newConnectedClient(info);
         // the older connection with this client ID will be closed
         waitAtMost(() -> !client.isConnected());
         disconnect(client2);
     }
 
     @Test public void multipleClusterClientIds(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
-        MqttClient client3 = newClient(brokerThreeUrl, info);
-        client3.connect(client_opts);
-        waitAtMost(() -> !client.isConnected());
-        disconnect(client3);
+        MqttClient client1 = newConnectedClient(info);
+        MqttClient client2 = newClient(brokerThreeUrl, info);
+        client2.connect(options());
+        waitAtMost(() -> !client1.isConnected());
+        disconnect(client2);
     }
 
     @Test public void ping(TestInfo info) throws MqttException, InterruptedException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
         client_opts.setKeepAliveInterval(1);
         MqttClient client = newConnectedClient(info, client_opts);
-        waitAtMost(() -> client.isConnected());
+        waitAtMost(client::isConnected);
         disconnect(client);
     }
 
     @Test public void will(TestInfo info) throws MqttException, InterruptedException, IOException {
         String clientIdBase = clientId(info);
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
+        MqttClient client2 = newConnectedClient(clientIdBase + "-2");
         client2.subscribe(topic, 1);
         client2.setCallback(this);
 
@@ -580,7 +572,7 @@ public class MqttV5Test implements MqttCallback {
         MqttClient client = newClient(clientIdBase + "-1");
         MqttTopic willTopic = client.getTopic(topic);
 
-        MqttConnectionOptions opts = new TestMqttConnectOptions();
+        MqttConnectionOptions opts = options();
         opts.setSocketFactory(testFactory);
         MqttMessage msg = new MqttMessage(payload, 0, false, null);
         opts.setWill(willTopic.toString(), msg);
@@ -588,24 +580,22 @@ public class MqttV5Test implements MqttCallback {
 
         client.connect(opts);
 
-        assertTrue(sockets.size() >= 1);
+        assertThat(sockets).hasSizeGreaterThan(0);
         sockets.get(0).close();
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(payload, receivedMessages.get(0).getPayload());
+        assertThat(firstMessage().getPayload()).isEqualTo(payload);
         client2.unsubscribe(topic);
         disconnect(client2);
 
         // clean up with clean start true
-        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
-        MqttClient cleanupClient = newConnectedClient(clientIdBase + "-1", cleanupOpts);
+        MqttClient cleanupClient = newConnectedClient(clientIdBase + "-1");
         disconnect(cleanupClient);
     }
 
     @Test public void willIsRetained(TestInfo info) throws MqttException, InterruptedException, IOException {
         String clientIdBase = clientId(info);
-        MqttConnectionOptions client2_opts = new TestMqttConnectOptions();
-        MqttClient client2 = newConnectedClient(clientIdBase + "-2", client2_opts);
+        MqttClient client2 = newConnectedClient(clientIdBase + "-2");
         client2.setCallback(this);
 
         clearRetained(client2, retainedTopic);
@@ -649,29 +639,28 @@ public class MqttV5Test implements MqttCallback {
 
         client.connect(client_opts);
 
-        assertEquals(1, sockets.size());
+        assertThat(sockets).hasSize(1);
         sockets.get(0).close();
 
         // let last will propagate after disconnection
         waitForTestDelay();
 
-        client2.connect(client2_opts);
+        client2.connect(options());
         client2.setCallback(this);
         client2.subscribe(retainedTopic, 1);
 
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertArrayEquals(willPayload, receivedMessages.get(0).getPayload());
+        assertThat(firstMessage().getPayload()).isEqualTo(willPayload);
         client2.unsubscribe(topic);
         disconnect(client2);
     }
 
     @Test public void subscribeMultiple(TestInfo info) throws MqttException {
         String clientIdBase = clientId(info);
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
+        MqttClient client = newConnectedClient(clientIdBase + "-1");
         publish(client, "/test-topic/1", 1, "msq1-qos1".getBytes());
 
-        MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
+        MqttClient client2 = newConnectedClient(clientIdBase + "-2");
         client2.setCallback(this);
         client2.subscribe("/test-topic/#", 1);
         client2.subscribe("/test-topic/#", 1);
@@ -682,8 +671,7 @@ public class MqttV5Test implements MqttCallback {
         publish(client, topic, 0, "msq4-qos0".getBytes());
         publish(client, topic, 1, "msq4-qos1".getBytes());
 
-
-        assertEquals(3, receivedMessages.size());
+        assertThat(receivedMessages).hasSize(3);
         disconnect(client);
         disconnect(client2);
     }
@@ -695,16 +683,13 @@ public class MqttV5Test implements MqttCallback {
                 // avoid reusing the client in this test as a shared
                 // client cannot handle connection churn very well. MK.
                 String cid = "test-sub-qos-" + subQos + "-pub-qos-" + pubQos;
-                MqttConnectionOptions client_opts = new TestMqttConnectOptions();
                 MqttClient client = newClient(brokerUrl, cid);
-                client.connect(client_opts);
+                client.connect(options());
                 client.subscribe(topic, subQos);
                 client.setCallback(this);
-                long start = System.currentTimeMillis();
                 for (int i=0; i<pubCount; i++){
                     publish(client, topic, pubQos, payload);
                 }
-
                 waitAtMost(() -> receivedMessagesSize() == pubCount);
                 client.disconnect(5000);
                 receivedMessages.clear();
@@ -713,13 +698,12 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void topicAuthorisationPublish(TestInfo info) throws Exception {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe("some/test-topic", 1);
         publish(client, "some/test-topic", 1, "content".getBytes());
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertTrue(client.isConnected());
+        assertThat(client.isConnected()).isTrue();
         try {
             publish(client, "forbidden-topic", 1, "content".getBytes());
             fail("Publishing on a forbidden topic, an exception should have been thrown");
@@ -730,20 +714,17 @@ public class MqttV5Test implements MqttCallback {
     }
 
     @Test public void topicAuthorisationSubscribe(TestInfo info) throws Exception {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe("some/test-topic", 1);
-        assertTrue(client.isConnected());
+        assertThat(client.isConnected()).isTrue();
 
         client.subscribe("forbidden-topic", 1);
         waitAtMost(() -> !client.isConnected()); // Subscribing on a forbidden topic, connection should be closed
     }
 
     @Test public void lastWillNotSentOnRestrictedTopic(TestInfo info) throws Exception {
-        MqttConnectionOptions client2_opts = new TestMqttConnectOptions();
-
-        MqttClient client2 = newConnectedClient(info, client2_opts);
+        MqttClient client2 = newConnectedClient(info);
         // topic authorized for subscription, restricted for publishing
         String lastWillTopic = "last-will";
         client2.subscribe(lastWillTopic, 1);
@@ -774,7 +755,7 @@ public class MqttV5Test implements MqttCallback {
             }
         };
 
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
+        MqttConnectionOptions client_opts = options();
 
         MqttClient client = newClient("last-will-not-sent-on-restricted-topic");
         client_opts.setSocketFactory(testFactory);
@@ -784,30 +765,28 @@ public class MqttV5Test implements MqttCallback {
         client_opts.setCleanStart(false);
         client.connect(client_opts);
 
-        assertEquals(1, sockets.size());
+        assertThat(sockets).hasSize(1);
         sockets.get(0).close();
 
         // let some time after disconnection
         waitForTestDelay();
-        assertEquals(0, receivedMessages.size());
+        assertThat(receivedMessages).isEmpty();
         disconnect(client2);
 
         // clean up with clean start true
-        MqttConnectionOptions cleanupOpts = new TestMqttConnectOptions();
-        MqttClient cleanupClient = newConnectedClient("last-will-not-sent-on-restricted-topic", cleanupOpts);
+        MqttClient cleanupClient = newConnectedClient("last-will-not-sent-on-restricted-topic");
         cleanupClient.disconnect();
     }
 
     @Test public void topicAuthorisationVariableExpansion(TestInfo info) throws Exception {
         final String client_id = "client-id-variable-expansion";
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(client_id, client_opts);
+        MqttClient client = newConnectedClient(client_id);
         client.setCallback(this);
         String topicWithExpandedVariables = "guest/" + client_id + "/a";
         client.subscribe(topicWithExpandedVariables, 1);
         publish(client, topicWithExpandedVariables, 1, "content".getBytes());
         waitAtMost(() -> receivedMessagesSize() == 1);
-        assertTrue(client.isConnected());
+        assertThat(client.isConnected()).isTrue();
         try {
             publish(client, "guest/WrongClientId/a", 1, "content".getBytes());
             fail("Publishing on a forbidden topic, an exception should have been thrown");
@@ -823,8 +802,7 @@ public class MqttV5Test implements MqttCallback {
         ch.queueBind(queue, "amq.topic", topic);
 
         byte[] interopPayload = "interop-body".getBytes();
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         publish(client, topic, 1, interopPayload);
         disconnect(client);
 
@@ -837,15 +815,14 @@ public class MqttV5Test implements MqttCallback {
                 latch.countDown();
             }
         });
-        assertTrue(latch.await(EXPECT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
-        assertEquals(new String(interopPayload), new String(messageBody.get()));
-        assertNull(ch.basicGet(queue, true));
+        assertThat(latch.await(EXPECT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+        assertThat(messageBody.get()).isEqualTo(interopPayload);
+        assertThat(ch.basicGet(queue, true)).isNull();
         tearDownAmqp();
     }
 
     @Test public void interopA2M(TestInfo info) throws MqttException, IOException, InterruptedException, TimeoutException {
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttClient client = newConnectedClient(info);
         client.setCallback(this);
         client.subscribe(topic, 1);
 
@@ -862,9 +839,8 @@ public class MqttV5Test implements MqttCallback {
     // RabbitMQ allows a Client to supply a ClientId that has a length of zero bytes.
     @Test public void emptyClientId(TestInfo info) throws MqttException, InterruptedException {
         String emptyClientId = "";
-        MqttConnectionOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(emptyClientId, client_opts);
-        MqttClient client2 = newConnectedClient(emptyClientId, client_opts);
+        MqttClient client = newConnectedClient(emptyClientId);
+        MqttClient client2 = newConnectedClient(emptyClientId);
         client.setCallback(this);
         client2.setCallback(this);
         client.subscribe("/test-topic/#", 1);
@@ -945,5 +921,17 @@ public class MqttV5Test implements MqttCallback {
             waitedTime += waitTime;
         }
         fail("Waited " + EXPECT_TIMEOUT.get(ChronoUnit.SECONDS) + " second(s), condition never got true");
+    }
+
+    private MqttMessage firstMessage() {
+        return message(0);
+    }
+
+    private MqttMessage message(int index) {
+        return this.receivedMessages.get(index);
+    }
+
+    private MqttConnectionOptions options() {
+        return new TestMqttConnectOptions();
     }
 }
