@@ -70,8 +70,13 @@ handle_cast(init, State = #state{config = Config0}) ->
         %% rabbitmq/rabbitmq-shovel#54 for context.
         gen_server2:cast(self(), connect_dest),
         {noreply, State#state{config = Config}}
+<<<<<<< HEAD
     catch _:_ ->
       rabbit_log_shovel:error("Shovel ~s could not connect to source", [human_readable_name(maps:get(name, Config0))]),
+=======
+    catch E:R ->
+      rabbit_log_shovel:error("Shovel ~ts could not connect to source: ~p ~p", [human_readable_name(maps:get(name, Config0)), E, R]),
+>>>>>>> 54ed70fb03 (Include error reason in shovel log)
       {stop, shutdown, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
@@ -80,8 +85,13 @@ handle_cast(connect_dest, State = #state{config = Config0}) ->
         rabbit_log_shovel:debug("Shovel ~s connected to destination", [human_readable_name(maps:get(name, Config))]),
         gen_server2:cast(self(), init_shovel),
         {noreply, State#state{config = Config}}
+<<<<<<< HEAD
     catch _:_ ->
       rabbit_log_shovel:error("Shovel ~s could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
+=======
+    catch E:R ->
+      rabbit_log_shovel:error("Shovel ~ts could not connect to destination: ~p ~p", [human_readable_name(maps:get(name, Config0)), E, R]),
+>>>>>>> 54ed70fb03 (Include error reason in shovel log)
       {stop, shutdown, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
