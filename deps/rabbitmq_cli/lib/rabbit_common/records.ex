@@ -8,6 +8,10 @@ defmodule RabbitCommon.Records do
   require Record
   import Record, only: [defrecord: 2, extract: 2]
 
+  # Elixir 1.15 compiler optimizations require that we explicitly
+  # add the rabbit_common code path
+  :true = :code.add_path(:filename.join(:os.getenv(~c"DEPS_DIR"), ~c"rabbit_common/ebin"))
+
   # Important: amqqueue records must not be used directly since they are versioned
   #            for mixed version cluster compatibility. Convert records
   #            to maps on the server end to access the fields of those records. MK.
