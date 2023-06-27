@@ -122,11 +122,6 @@ export ERL_COMPILER_OPTIONS=deterministic
 for archive in {archives}; do
     "${{ABS_ELIXIR_HOME}}"/bin/mix archive.install --force $ORIGINAL_DIR/$archive
 done
-for d in {precompiled_deps}; do
-    mkdir -p _build/${{MIX_ENV}}/lib/$d
-    ln -s ${{DEPS_DIR}}/$d/ebin _build/${{MIX_ENV}}/lib/$d
-    ln -s ${{DEPS_DIR}}/$d/include _build/${{MIX_ENV}}/lib/$d
-done
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix escript.build
