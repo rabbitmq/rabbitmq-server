@@ -6,8 +6,10 @@
 //
 package com.rabbitmq.mqtt.test.tls;
 
-import java.io.FileInputStream;
+import static java.nio.file.Files.newInputStream;
+
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -33,11 +35,10 @@ public class MutualAuth {
       throws NoSuchAlgorithmException, CertificateException, IOException, KeyStoreException {
     String keystorePath = System.getProperty("test-keystore.ca");
     char[] trustPhrase = getStringProperty("test-keystore.password").toCharArray();
-    MutualAuth dummy = new MutualAuth();
 
     // Server TrustStore
     KeyStore tks = KeyStore.getInstance("JKS");
-    tks.load(new FileInputStream(keystorePath), trustPhrase);
+    tks.load(newInputStream(Paths.get(keystorePath)), trustPhrase);
 
     TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
     tmf.init(tks);
@@ -51,12 +52,11 @@ public class MutualAuth {
 
     String p12Path = System.getProperty("test-client-cert.path");
 
-    MutualAuth dummy = new MutualAuth();
     try {
       SSLContext sslContext = getVanillaSSLContext();
       // Client Keystore
       KeyStore ks = KeyStore.getInstance("PKCS12");
-      ks.load(new FileInputStream(p12Path), clientPhrase);
+      ks.load(newInputStream(Paths.get(p12Path)), clientPhrase);
       KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
       kmf.init(ks, clientPhrase);
 
@@ -69,7 +69,6 @@ public class MutualAuth {
   }
 
   private static SSLContext getVanillaSSLContext() throws NoSuchAlgorithmException {
-    SSLContext result = null;
     List<String> xs = Arrays.asList("TLSv1.2", "TLSv1.1", "TLSv1");
     for (String x : xs) {
       try {
