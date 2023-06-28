@@ -316,9 +316,7 @@ death_queue_names(#?MODULE{deaths = Deaths}) ->
         undefined ->
             [];
         #deaths{records = Records} ->
-            [Q || {Q, _} <- maps:keys(Records)]
-            %% Should we avoid returning duplicate queue names?
-            % proplists:get_keys(maps:keys(Records))
+            proplists:get_keys(maps:keys(Records))
     end;
 death_queue_names(BasicMsg) ->
     mc_compat:death_queue_names(BasicMsg).
