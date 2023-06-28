@@ -366,9 +366,13 @@ run_prelaunch_second_phase() ->
     %% 4. Clustering.
     ok = rabbit_prelaunch_cluster:setup(Context),
 
-    %% Start Mnesia now that everything is ready.
-    ?LOG_DEBUG("Starting Mnesia"),
-    ok = mnesia:start(),
+    _ = rabbit_db:run(
+          #{mnesia => fun() ->
+                              %% Start Mnesia now that everything is ready.
+                              ?LOG_DEBUG("Starting Mnesia"),
+                              ok = mnesia:start()
+                      end,
+            khepri => fun() -> ok end}),
 
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),

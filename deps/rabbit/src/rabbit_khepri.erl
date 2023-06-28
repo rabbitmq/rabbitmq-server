@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2021-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_khepri).
@@ -16,6 +16,7 @@
 
 -export([setup/0,
          setup/1,
+         can_join_cluster/1,
          add_member/2,
          remove_member/1,
          members/0,
@@ -25,7 +26,7 @@
          get_store_id/0,
          transfer_leadership/1,
 
-
+         is_empty/0,
          create/2,
          adv_create/2,
          update/2,
@@ -167,6 +168,23 @@ wait_for_leader(Timeout, Retries) ->
             wait_for_leader(Timeout, Retries -1);
         {error, Reason} ->
             throw(Reason)
+    end.
+
+can_join_cluster(DiscoveryNode) when is_atom(DiscoveryNode) ->
+    ThisNode = node(),
+    try
+        ClusterNodes = erpc:call(
+                         DiscoveryNode,
+                         rabbit_khepri, locally_known_nodes, []),
+        case lists:member(ThisNode, ClusterNodes) of
+            false ->
+                {ok, ClusterNodes};
+            true ->
+                {ok, already_member}
+        end
+    catch
+        _:Reason ->
+            {error, Reason}
     end.
 
 add_member(JoiningNode, JoinedNode)
@@ -311,6 +329,10 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
     %% Check if the node is part of the cluster. We query the local Ra server
     %% only, in case the cluster can't elect a leader right now.
     CurrentNodes = locally_known_nodes(),
+    case CurrentNodes of
+        [] -> rabbit_mnesia:e(not_a_cluster_node);
+        _  -> ok
+    end,
     case lists:member(NodeToRemove, CurrentNodes) of
         true ->
             %% Ensure the remote node is reachable before we remove it.
@@ -326,7 +348,7 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                "member of it: ~p",
                [NodeToRemove, ?RA_CLUSTER_NAME, lists:sort(CurrentNodes)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok
+            rabbit_mnesia:e(not_a_cluster_node)
     end.
 
 remove_reachable_member(NodeToRemove) ->
@@ -541,7 +563,7 @@ check_cluster_consistency() ->
                (_Node, {ok, Status})  -> {ok, Status}
            end, {error, not_found}, nodes_excl_me(nodes()))
     of
-        {ok, {RemoteAllNodes, _Running}} ->
+        {ok, {RemoteAllNodes, _DiscNodes, _Running}} ->
             case ordsets:is_subset(ordsets:from_list(nodes()),
                                    ordsets:from_list(RemoteAllNodes)) of
                 true  ->
@@ -597,7 +619,8 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
 remote_node_info(Node) ->
     rpc:call(Node, ?MODULE, node_info, []).
 
-check_nodes_consistency(Node, {RemoteAllNodes, _RemoteRunningNodes}) ->
+check_nodes_consistency(
+  Node, {RemoteAllNodes, _DiscNodes, _RemoteRunningNodes}) ->
     case me_in_nodes(RemoteAllNodes) of
         true ->
             ok;
@@ -623,7 +646,7 @@ cluster_status_from_khepri() ->
         {ok, _} ->
             All = locally_known_nodes(),
             Running = lists:filter(fun(N) -> rabbit_nodes:is_running(N) end, All),
-            {ok, {All, Running}};
+            {ok, {All, All, Running}};
         _ ->
             {error, khepri_not_running}
     end.
@@ -639,6 +662,8 @@ cluster_status_from_khepri() ->
 %%
 %% They are some additional functions too, because they are useful in
 %% RabbitMQ. They might be moved to Khepri in the future.
+
+is_empty() -> khepri:is_empty(?STORE_ID).
 
 create(Path, Data) -> khepri:create(?STORE_ID, Path, Data).
 adv_create(Path, Data) -> khepri_adv:create(?STORE_ID, Path, Data).

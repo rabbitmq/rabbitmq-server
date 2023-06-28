@@ -82,7 +82,7 @@ can_join(RemoteNode) ->
             LocalKhepriUse = rabbit_khepri:use_khepri(),
             RemoteKhepriUse = rabbit_khepri:use_khepri(RemoteNode),
             case LocalKhepriUse orelse RemoteKhepriUse of
-                true  -> {ok, [RemoteNode]};
+                true  -> can_join_using_khepri(RemoteNode);
                 false -> can_join_using_mnesia(RemoteNode)
             end;
         Error ->
@@ -91,6 +91,9 @@ can_join(RemoteNode) ->
 
 can_join_using_mnesia(RemoteNode) ->
     rabbit_mnesia:can_join_cluster(RemoteNode).
+
+can_join_using_khepri(RemoteNode) ->
+    rabbit_khepri:can_join_cluster(RemoteNode).
 
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),
@@ -105,7 +108,6 @@ join(RemoteNode, NodeType)
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
             rabbit_db:reset(),
-            ensure_feature_flags_are_in_sync(ClusterNodes, false),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
@@ -179,10 +181,16 @@ forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
       Reason :: any().
 
 current_status() ->
-    current_status_using_mnesia().
+    rabbit_db:run(
+      #{mnesia => fun() -> current_status_using_mnesia() end,
+        khepri => fun() -> current_status_using_khepri() end
+       }).
 
 current_status_using_mnesia() ->
     rabbit_mnesia:cluster_status_from_mnesia().
+
+current_status_using_khepri() ->
+    rabbit_khepri:cluster_status_from_khepri().
 
 -spec current_or_last_status() -> Status when
       Status :: rabbit_db_cluster:cluster_status().
@@ -332,8 +340,15 @@ node_type_using_khepri() ->
 
 check_compatibility(RemoteNode) ->
     case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
-        ok    -> check_compatibility_using_mnesia(RemoteNode);
-        Error -> Error
+        ok ->
+            rabbit_db:run(
+              #{mnesia =>
+                fun() -> check_compatibility_using_mnesia(RemoteNode) end,
+                khepri =>
+                fun() -> ok end
+               });
+        Error ->
+            Error
     end.
 
 check_compatibility_using_mnesia(RemoteNode) ->

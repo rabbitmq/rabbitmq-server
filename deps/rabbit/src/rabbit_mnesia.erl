@@ -50,7 +50,9 @@
          schema_info/1,
 
          start_mnesia/1,
-         stop_mnesia/0
+         stop_mnesia/0,
+
+         e/1
         ]).
 
 %% Mnesia queries

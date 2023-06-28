@@ -384,7 +384,9 @@ init([]) ->
     %% happen.
     process_flag(trap_exit, true),
     _ = net_kernel:monitor_nodes(true, [nodedown_reason]),
-    {ok, _} = mnesia:subscribe(system),
+    _ = rabbit_db:run(
+          #{mnesia => fun() -> {ok, _} = mnesia:subscribe(system) end,
+            khepri => fun() -> ok end}),
     %% If the node has been restarted, Mnesia can trigger a system notification
     %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
     %% the inconsistent database event never arriving, we being monitoring all running
@@ -614,29 +616,12 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
-                                                   node_guids = GUIDs}) ->
+handle_info({nodedown, Node, Info}, State) ->
     rabbit_log:info("node ~tp down: ~tp",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
-    Check = fun (N, CheckGUID, DownGUID) ->
-                    cast(N, {check_partial_partition,
-                             Node, node(), DownGUID, CheckGUID, MyGUID})
-            end,
-    _ = case maps:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
-                              -- [node(), Node],
-                          [case maps:find(N, GUIDs) of
-                               {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
-                               error           -> ok
-                           end || N <- Alive];
-        error          -> ok
-    end,
-    case rabbit_khepri:is_enabled(non_blocking) of
-        true ->
-            {noreply, State};
-        false ->
-            {noreply, handle_dead_node(Node, State)}
-    end;
+    _ = rabbit_db:run(
+          #{mnesia => fun() -> handle_nodedown_using_mnesia(Node, State) end,
+            khepri => fun() -> {noreply, State} end});
 
 handle_info({nodeup, Node, _Info}, State) ->
     rabbit_log:info("node ~tp up", [Node]),
@@ -707,6 +692,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Functions that call the module specific hooks when nodes go up/down
 %%----------------------------------------------------------------------------
+
+handle_nodedown_using_mnesia(Node, State = #state{guid       = MyGUID,
+                                                  node_guids = GUIDs}) ->
+    Check = fun (N, CheckGUID, DownGUID) ->
+                    cast(N, {check_partial_partition,
+                             Node, node(), DownGUID, CheckGUID, MyGUID})
+            end,
+    _ = case maps:find(Node, GUIDs) of
+        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
+                              -- [node(), Node],
+                          [case maps:find(N, GUIDs) of
+                               {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
+                               error           -> ok
+                           end || N <- Alive];
+        error          -> ok
+    end,
+    {noreply, handle_dead_node(Node, State)}.
 
 handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% In general in rabbit_node_monitor we care about whether the
@@ -812,13 +814,19 @@ wait_for_cluster_recovery(Condition) ->
                  wait_for_cluster_recovery(Condition)
     end.
 
-handle_dead_rabbit(Node, State = #state{partitions = Partitions,
-                                        autoheal   = Autoheal}) ->
+handle_dead_rabbit(Node, State) ->
     %% TODO: This may turn out to be a performance hog when there are
     %% lots of nodes.  We really only need to execute some of these
     %% statements on *one* node, rather than all of them.
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
+    State1 = rabbit_db:run(
+               #{mnesia => fun() -> on_node_down_using_mnesia(Node, State) end,
+                 khepri => fun() -> State end}),
+    ensure_ping_timer(State1).
+
+on_node_down_using_mnesia(Node, State = #state{partitions = Partitions,
+                                               autoheal   = Autoheal}) ->
     ok = rabbit_mnesia:on_node_down(Node),
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
@@ -831,9 +839,8 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(
-      State#state{partitions = Partitions1,
-                  autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}).
+    State#state{partitions = Partitions1,
+                autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}.
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
@@ -848,6 +855,11 @@ ensure_keepalive_timer(State) ->
 handle_live_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_up(Node),
     ok = rabbit_alarm:on_node_up(Node),
+    _ = rabbit_db:run(
+          #{mnesia => fun() -> on_node_up_using_mnesia(Node) end,
+            khepri => fun() -> ok end}).
+
+on_node_up_using_mnesia(Node) ->
     ok = rabbit_mnesia:on_node_up(Node).
 
 maybe_autoheal(State = #state{partitions = []}) ->

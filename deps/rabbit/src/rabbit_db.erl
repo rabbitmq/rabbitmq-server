@@ -44,15 +44,6 @@
 %% @doc Initializes the DB layer.
 
 init() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> init_in_mnesia() end,
-        khepri => fun() ->
-                          init_in_khepri(),
-                          init_in_mnesia()
-                  end
-       }).
-
-init_in_mnesia() ->
     IsVirgin = is_virgin_node(),
     ?LOG_DEBUG(
        "DB: this node is virgin: ~ts", [IsVirgin],
@@ -64,7 +55,12 @@ init_in_mnesia() ->
 
     pre_init(IsVirgin),
 
-    case init_using_mnesia() of
+    Ret = rabbit_db:run(
+            #{mnesia => fun() -> init_using_mnesia() end,
+              khepri => fun() -> init_using_khepri() end
+             }),
+
+    case Ret of
         ok ->
             ?LOG_DEBUG(
                "DB: initialization successeful",
@@ -100,6 +96,17 @@ init_using_mnesia() ->
     ok = rabbit_mnesia:init(),
     ?assertEqual(rabbit:data_dir(), mnesia_dir()),
     rabbit_sup:start_child(mnesia_sync).
+
+init_using_khepri() ->
+    case rabbit_khepri:members() of
+        [] ->
+            timer:sleep(1000),
+            init_using_khepri();
+        Members ->
+            ?LOG_WARNING(
+               "Found the following metadata store members: ~p", [Members],
+               #{domain => ?RMQLOG_DOMAIN_DB})
+    end.
 
 -spec reset() -> Ret when
       Ret :: ok.
@@ -160,11 +167,12 @@ force_load_on_next_boot() ->
     run(
       #{mnesia => fun() -> force_load_on_next_boot_using_mnesia() end,
         khepri => fun() ->
-                          %% TODO force load using Khepri might need to be implemented
-                          %% for disaster recovery scenarios where just a minority of
-                          %% nodes are accessible. Potentially, it could also be replaced
-                          %% with a way to export all the data.
-                          force_load_on_next_boot_using_mnesia()
+                          %% TODO force load using Khepri might need to be
+                          %% implemented for disaster recovery scenarios where
+                          %% just a minority of nodes are accessible.
+                          %% Potentially, it could also be replaced with a way
+                          %% to export all the data.
+                          ok
                   end
        }).
 
@@ -181,15 +189,6 @@ recover_mnesia_tables() ->
     Tables = [Table || {Table, _} <- rabbit_table:definitions()],
     _ = [mnesia:change_table_access_mode(Table, read_write) || Table <- Tables],
     ok.
-
-init_in_khepri() ->
-    case rabbit_khepri:members() of
-        [] ->
-            timer:sleep(1000),
-            init_in_khepri();
-        Members ->
-            rabbit_log:warning("Found the following metadata store members: ~p", [Members])
-    end.
 
 %% -------------------------------------------------------------------
 %% is_virgin_node().
@@ -218,17 +217,26 @@ is_virgin_node() ->
 %% @returns `true' if the node is virgin, `false' if it is not, or `undefined'
 %% if the given node is remote and we couldn't determine it.
 
+is_virgin_node(Node) when Node =:= node() ->
+    run(
+      #{mnesia => fun() -> is_virgin_node_using_mnesia() end,
+        khepri => fun() -> is_virgin_node_using_khepri() end
+       });
 is_virgin_node(Node) when is_atom(Node) ->
-    is_virgin_node_with_mnesia(Node).
-
-is_virgin_node_with_mnesia(Node) when Node =:= node() ->
-    rabbit_mnesia:is_virgin_node();
-is_virgin_node_with_mnesia(Node) ->
     try
         erpc:call(Node, rabbit_mnesia, is_virgin_node, [], ?TIMEOUT)
     catch
         _:_ ->
             undefined
+    end.
+
+is_virgin_node_using_mnesia() ->
+    rabbit_mnesia:is_virgin_node().
+
+is_virgin_node_using_khepri() ->
+    case rabbit_khepri:is_empty() of
+        {error, _} -> true;
+        IsEmpty    -> IsEmpty
     end.
 
 %% -------------------------------------------------------------------
