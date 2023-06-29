@@ -31,6 +31,7 @@ groups() ->
           set_empty_properties_using_map,
           headers,
           exchange,
+          missing_dest_exchange,
           restart,
           change_definition,
           autodelete,
@@ -261,6 +262,36 @@ exchange(Config) ->
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>)
       end).
+
+
+missing_dest_exchange(Config) ->
+    with_ch(Config,
+        fun (Ch) ->
+            amqp_channel:call(
+            Ch, #'queue.declare'{queue = <<"src">>,
+                                 durable = true}),
+            amqp_channel:call(
+              Ch, #'queue.declare'{queue = <<"dest">>,
+                                   durable = true}),
+            amqp_channel:call(
+              Ch, #'queue.bind'{queue = <<"src">>,
+                                exchange = <<"amq.direct">>,
+                                routing_key = <<"src-key">>}),
+            shovel_test_utils:set_param(Config,
+                        <<"test">>, [{<<"src-queue">>, <<"src">>},
+                                        {<<"dest-exchange">>, <<"dest-ex">>},
+                                        {<<"dest-exchange-key">>, <<"dest-key">>},
+                                        {<<"src-prefetch-count">>, 1}]),
+            publish(Ch, <<"amq.direct">>, <<"src-key">>, <<"hello">>),
+            expect_empty(Ch, <<"src">>),
+            amqp_channel:call(
+              Ch, #'exchange.declare'{exchange = <<"dest-ex">>}),
+            amqp_channel:call(
+              Ch, #'queue.bind'{queue = <<"dest">>,
+                                exchange = <<"dest-ex">>,
+                                routing_key = <<"dest-key">>}),
+            publish_expect(Ch, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
+end).
 
 restart(Config) ->
     with_ch(Config,
