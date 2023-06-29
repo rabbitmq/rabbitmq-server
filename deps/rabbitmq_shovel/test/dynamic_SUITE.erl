@@ -262,13 +262,13 @@ missing_dest_exchange(Config) ->
     with_ch(Config,
         fun (Ch) ->
             amqp_channel:call(
-            Ch, #'queue.declare'{queue = <<"src">>, % E: record 'queue.declare' undefined
-                                    durable = true}),
+            Ch, #'queue.declare'{queue = <<"src">>,
+                                 durable = true}),
             amqp_channel:call(
-            Ch, #'queue.declare'{queue = <<"dest">>, % E: record 'queue.declare' undefined
-                                    durable = true}),
+              Ch, #'queue.declare'{queue = <<"dest">>,
+                                   durable = true}),
             amqp_channel:call(
-            Ch, #'queue.bind'{queue = <<"src">>, % E: record 'queue.bind' undefined
+              Ch, #'queue.bind'{queue = <<"src">>,
                                 exchange = <<"amq.direct">>,
                                 routing_key = <<"src-key">>}),
             shovel_test_utils:set_param(Config,
@@ -279,9 +279,9 @@ missing_dest_exchange(Config) ->
             publish(Ch, <<"amq.direct">>, <<"src-key">>, <<"hello">>),
             expect_empty(Ch, <<"src">>),
             amqp_channel:call(
-            Ch, #'exchange.declare'{exchange = <<"dest-ex">>}), % E: record 'exchange.declare' undefined
+              Ch, #'exchange.declare'{exchange = <<"dest-ex">>}),
             amqp_channel:call(
-            Ch, #'queue.bind'{queue = <<"dest">>, % E: record 'queue.bind' undefined
+              Ch, #'queue.bind'{queue = <<"dest">>,
                                 exchange = <<"dest-ex">>,
                                 routing_key = <<"dest-key">>}),
             publish_expect(Ch, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
