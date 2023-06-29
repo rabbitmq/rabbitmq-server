@@ -202,7 +202,7 @@ handle_source({'EXIT', Conn, Reason},
               #{source := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 
-handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {inbound_link_or_channel_closure, Reason}};
 
 handle_source(_Msg, _State) ->
@@ -260,7 +260,7 @@ handle_dest({'EXIT', Conn, Reason},
             #{dest := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 
-handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
 
 handle_dest(_Msg, _State) ->
