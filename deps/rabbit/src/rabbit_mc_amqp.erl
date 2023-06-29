@@ -18,6 +18,8 @@
          serialize/2
         ]).
 
+-import(rabbit_misc, [maps_put_truthy/3]).
+
 -type message_section() ::
     #'v1_0.header'{} |
     #'v1_0.delivery_annotations'{} |
@@ -135,8 +137,16 @@ convert(TargetProto, #msg{header = Header,
                           properties = P,
                           application_properties = AP,
                           data = Data}) ->
-    Sections = [Header, MA, P, AP, Data],
-    TargetProto:init_amqp(Sections).
+    Sects = lists_prepend_t(
+              Header,
+              lists_prepend_t(
+                MA,
+                lists_prepend_t(
+                  P,
+                  lists_prepend_t(
+                    AP,
+                    Data)))),
+    TargetProto:init_amqp(Sects).
 
 protocol_state(_S, _Anns, _Deaths) ->
     undefined.
@@ -293,28 +303,30 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
-    Anns = maps_put_t(durable, Durable,
-                      maps_put_t(priority, Priority,
-                                 maps_put_t(timestamp, Timestamp,
-                                            maps_put_t(ttl, Ttl, #{})))),
-    Content = MA#'v1_0.message_annotations'.content,
-    lists:foldl(
-      fun ({{symbol, <<"x-routing-key">>},
-            {utf8, Key}}, Acc) ->
-              Acc#{routing_keys => [Key]};
-          ({{symbol, <<"x-exchange">>},
-            {utf8, Exchange}}, Acc) ->
-              Acc#{exchange => Exchange};
-          (_, Acc) ->
-              Acc
-      end, Anns, Content).
+    Anns = maps_put_truthy(durable, Durable,
+                           maps_put_truthy(priority, Priority,
+                                           maps_put_truthy(timestamp, Timestamp,
+                                                           maps_put_truthy(ttl, Ttl, #{})))),
+    case MA of
+        undefined ->
+            Anns;
+        #'v1_0.message_annotations'{content = Content} ->
+            lists:foldl(
+              fun ({{symbol, <<"x-routing-key">>},
+                    {utf8, Key}}, Acc) ->
+                      Acc#{routing_keys => [Key]};
+                  ({{symbol, <<"x-exchange">>},
+                    {utf8, Exchange}}, Acc) ->
+                      Acc#{exchange => Exchange};
+                  (_, Acc) ->
+                      Acc
+              end, Anns, Content)
+    end.
 
-maps_put_t(_K, undefined, M) ->
-    M;
-maps_put_t(_K, false, M) ->
-    M;
-maps_put_t(K, V, M) ->
-    maps:put(K, V, M).
+lists_prepend_t(undefined, L) ->
+    L;
+lists_prepend_t(Val, L) ->
+    [Val | L].
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

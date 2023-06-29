@@ -78,11 +78,12 @@
 -export([raw_read_file/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
--export([maps_any/2]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
 -export([is_valid_shortstr/1]).
+
+-export([maps_any/2, maps_put_truthy/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1609,3 +1610,12 @@ is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
     is_utf8_no_null(Rem);
 is_utf8_no_null(_) ->
     false.
+
+-spec maps_put_truthy(Key, Value, Map) -> Map when
+      Map :: #{Key => Value}.
+maps_put_truthy(_K, undefined, M) ->
+    M;
+maps_put_truthy(_K, false, M) ->
+    M;
+maps_put_truthy(K, V, M) ->
+    maps:put(K, V, M).

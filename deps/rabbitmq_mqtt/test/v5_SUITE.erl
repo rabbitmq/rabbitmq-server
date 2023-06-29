@@ -1218,8 +1218,7 @@ publish_property_payload_format_indicator(Config) ->
     {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 0}, <<"m1">>, [{qos, 1}]),
     {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 1}, <<"m2">>, [{qos, 1}]),
     receive {publish, #{payload := <<"m1">>,
-                        properties := Props}} ->
-                ?assertEqual(0, maps:size(Props))
+                        properties := #{'Payload-Format-Indicator' := 0}}} -> ok
     after 1000 -> ct:fail("did not receive m1")
     end,
     receive {publish, #{payload := <<"m2">>,
