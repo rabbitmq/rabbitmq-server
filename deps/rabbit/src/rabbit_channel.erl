@@ -68,6 +68,8 @@
 %% Mgmt HTTP API refactor
 -export([handle_method/6]).
 
+-import(rabbit_misc, [maps_put_truthy/3]).
+
 -record(conf, {
           %% starting | running | flow | closing
           state,
@@ -2897,9 +2899,3 @@ maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
 is_global_qos_permitted() ->
     rabbit_deprecated_features:is_permitted(global_qos).
 
-maps_put_truthy(_K, undefined, M) ->
-    M;
-maps_put_truthy(_K, false, M) ->
-    M;
-maps_put_truthy(K, V, M) ->
-    maps:put(K, V, M).
