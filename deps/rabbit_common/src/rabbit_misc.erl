@@ -83,11 +83,6 @@
 -export([is_even/1, is_odd/1]).
 -export([is_valid_shortstr/1]).
 
--export([maps_any/2,
-         maps_put_truthy/3,
-         maps_put_falsy/3
-        ]).
-
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
@@ -1613,21 +1608,3 @@ is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
     is_utf8_no_null(Rem);
 is_utf8_no_null(_) ->
     false.
-
--spec maps_put_truthy(Key, Value, Map) -> Map when
-      Map :: #{Key => Value}.
-maps_put_truthy(_K, undefined, M) ->
-    M;
-maps_put_truthy(_K, false, M) ->
-    M;
-maps_put_truthy(K, V, M) ->
-    maps:put(K, V, M).
-
--spec maps_put_falsy(Key, Value, Map) -> Map when
-      Map :: #{Key => Value}.
-maps_put_falsy(K, undefined, M) ->
-    maps:put(K, undefined, M);
-maps_put_falsy(K, false, M) ->
-    maps:put(K, false, M);
-maps_put_falsy(_K, _V, M) ->
-    M.
