@@ -53,17 +53,6 @@ get_annotation(exchange, #basic_message{exchange_name = Ex}) ->
     Ex#resource.name;
 get_annotation(id, #basic_message{id = Id}) ->
     Id.
-% get_annotation(binding_keys = Key,
-%                #basic_message{content =
-%                               #content{properties =
-%                                        #'P_basic'{headers = H}}}) ->
-%     case H of
-%         undefined -> H;
-%         _ -> case rabbit_misc:table_lookup(H, Key) of
-%                  {array, BKeys} -> [BKey || {longstr, BKey} <- BKeys];
-%                  Undefined -> Undefined
-%              end
-%     end.
 
 set_annotation(id, Value, #basic_message{} = Msg) ->
     Msg#basic_message{id = Value};
@@ -93,11 +82,6 @@ set_annotation(<<"x-", _/binary>> = Key, Value,
     C = C0#content{properties = B#'P_basic'{headers = H},
                    properties_bin = none},
     Msg#basic_message{content = C}.
-% set_annotation(binding_keys, BindingKeys, #basic_message{} = Msg) ->
-%     L = maps:fold(fun(B, true, Acc) ->
-%                           [{longstr, B} | Acc]
-%                   end, [], BindingKeys),
-%     rabbit_basic:add_header(<<"x-binding-keys">>, array, L, Msg).
 
 is_persistent(#basic_message{content = Content}) ->
     get_property(durable, Content).

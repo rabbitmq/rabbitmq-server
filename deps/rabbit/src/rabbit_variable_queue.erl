@@ -1285,9 +1285,18 @@ msg_status(Version, IsPersistent, IsDelivered, SeqId,
                 persist_to    = determine_persist_to(Version, Msg, MsgProps, IndexMaxSize),
                 msg_props     = MsgProps}.
 
-beta_msg_status({Msg,
-                 SeqId, MsgLocation, MsgProps, IsPersistent})
-  when element(1, Msg) == mc ->
+beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent})
+  when is_binary(MsgId) orelse
+       MsgId =:= undefined ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
+    MS0#msg_status{msg_id       = MsgId,
+                   msg          = undefined,
+                   persist_to   = case is_tuple(MsgLocation) of
+                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
+                                      false -> msg_store
+                                  end,
+                   msg_location = MsgLocation};
+beta_msg_status({Msg, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MsgId = mc:get_annotation(id, Msg),
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
@@ -1300,18 +1309,7 @@ beta_msg_status({Msg,
                    msg_location = case MsgLocation of
                                       rabbit_queue_index -> memory;
                                       _ -> MsgLocation
-                                  end};
-
-beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent})
-  when is_binary(MsgId) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
-    MS0#msg_status{msg_id       = MsgId,
-                   msg          = undefined,
-                   persist_to   = case is_tuple(MsgLocation) of
-                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
-                                      false -> msg_store
-                                  end,
-                   msg_location = MsgLocation}.
+                                  end}.
 
 beta_msg_status0(SeqId, MsgProps, IsPersistent) ->
   #msg_status{seq_id        = SeqId,
