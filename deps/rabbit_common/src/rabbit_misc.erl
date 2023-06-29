@@ -10,7 +10,6 @@
 -ignore_xref([{maps, get, 2}]).
 
 -include("rabbit.hrl").
--include("rabbit_framing.hrl").
 -include("rabbit_misc.hrl").
 
 -include_lib("kernel/include/file.hrl").
@@ -83,6 +82,7 @@
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
+-export([is_valid_shortstr/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1594,3 +1594,18 @@ is_even(N) ->
 -spec is_odd(integer()) -> boolean().
 is_odd(N) ->
     (N band 1) =:= 1.
+
+-spec is_valid_shortstr(term()) -> boolean().
+is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
+    is_utf8_no_null(Bin);
+is_valid_shortstr(_) ->
+    false.
+
+is_utf8_no_null(<<>>) ->
+    true;
+is_utf8_no_null(<<0, _/binary>>) ->
+    false;
+is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
+    is_utf8_no_null(Rem);
+is_utf8_no_null(_) ->
+    false.

@@ -115,7 +115,7 @@ init_amqp(Sections) when is_list(Sections) ->
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     UserId1 = unwrap(UserId0),
-    UserId = case valid_shortstr(UserId1) of
+    UserId = case rabbit_misc:is_valid_shortstr(UserId1) of
                  true ->
                      UserId1;
                  false ->
@@ -594,18 +594,6 @@ uuid_to_string(<<TL:32, TM:16, THV:16, CSR:8, CSL:8, N:48>>) ->
     list_to_binary(
       io_lib:format(<<"run:uuid:~8.16.0b-~4.16.0b-~4.16.0b-~2.16.0b~2.16.0b-~12.16.0b">>,
                     [TL, TM, THV, CSR, CSL, N])).
-
-valid_shortstr(B) when byte_size(B) < 256 ->
-    is_utf8_no_null(B);
-valid_shortstr(_) ->
-    false.
-
-is_utf8_no_null(<<>>) ->
-    true;
-is_utf8_no_null(<<0, _/binary>>) ->
-    false;
-is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
-    is_utf8_no_null(Rem).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
