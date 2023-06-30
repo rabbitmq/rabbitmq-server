@@ -12,6 +12,27 @@
   <description>Fetches test dependencies only.</description>
   <url>https://www.rabbitmq.com</url>
 
+<<<<<<< HEAD
+=======
+  <properties>
+    <paho.v5.version>[1.2.5,)</paho.v5.version>
+    <paho.v3.version>[1.2.5,)</paho.v3.version>
+    <amqp-client.version>5.18.0</amqp-client.version>
+    <junit.version>5.9.3</junit.version>
+    <assertj.version>3.24.2</assertj.version>
+    <logback.version>1.2.11</logback.version>
+    <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+    <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
+    <groovy.version>2.4.21</groovy.version>
+    <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+    <spotless.version>2.37.0</spotless.version>
+    <google-java-format.version>1.17.0</google-java-format.version>
+    <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
+    <test-keystore.password>bunnychow</test-keystore.password>
+    <groovy-scripts.dir>${basedir}/src/test/scripts</groovy-scripts.dir>
+  </properties>
+
+>>>>>>> 87d8460751 (Add logback dependency to MQTT Java test project)
   <dependencies>
     <dependency>
       <groupId>org.eclipse.paho</groupId>
@@ -31,6 +52,22 @@
       <version>5.5.2</version>
       <scope>test</scope>
     </dependency>
+<<<<<<< HEAD
+=======
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+>>>>>>> 87d8460751 (Add logback dependency to MQTT Java test project)
   </dependencies>
 
   <properties>
