@@ -385,7 +385,7 @@ generate_warnings1(FeatureName, FeatureProps, Msgs) ->
               rabbit_misc:format(
                 "Feature `~ts` is deprecated.~n"
                 "By default, this feature can still be used for now.~n"
-                "Its use will not be permitted by default in a future minor"
+                "Its use will not be permitted by default in a future minor "
                 "RabbitMQ version and the feature will be removed from a"
                 "future major RabbitMQ version; actual versions to be"
                 "determined.~n"
