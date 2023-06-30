@@ -18,6 +18,7 @@
     <amqp-client.version>5.18.0</amqp-client.version>
     <junit.version>5.9.3</junit.version>
     <assertj.version>3.24.2</assertj.version>
+    <logback.version>1.2.12</logback.version>
     <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
@@ -58,6 +59,12 @@
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
       <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
       <scope>test</scope>
     </dependency>
 
@@ -124,7 +131,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>keytool-maven-plugin</artifactId>
-          <version>1.5</version>
+          <version>1.7</version>
           <executions>
             <execution>
               <id>generate-test-ca-keystore</id>
