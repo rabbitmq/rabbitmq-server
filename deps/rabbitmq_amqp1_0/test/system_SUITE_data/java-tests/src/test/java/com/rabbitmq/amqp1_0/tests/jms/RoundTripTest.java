@@ -5,18 +5,9 @@ package com.rabbitmq.amqp1_0.tests.jms;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import java.util.*;
-//import javax.jms.Connection;
-//import javax.jms.ConnectionFactory;
-//import javax.jms.DeliveryMode;
-//import javax.jms.Destination;
-//import javax.jms.Message;
-//import javax.jms.MessageConsumer;
-//import javax.jms.MessageProducer;
-//import javax.jms.Session;
-//import javax.jms.TextMessage;
-import javax.naming.Context;
 import jakarta.jms.*;
+import java.util.*;
+import javax.naming.Context;
 import org.junit.jupiter.api.Test;
 
 /** Unit test for simple App. */
@@ -38,22 +29,23 @@ public class RoundTripTest {
     ConnectionFactory factory = (ConnectionFactory) context.lookup("myFactoryLookup");
     Destination queue = (Destination) context.lookup("myQueueLookup");
 
-    Connection connection = factory.createConnection("guest", "guest");
-    connection.start();
+    try (Connection connection = factory.createConnection("guest", "guest")) {
+      connection.start();
 
-    Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+      Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-    MessageProducer messageProducer = session.createProducer(queue);
-    MessageConsumer messageConsumer = session.createConsumer(queue);
+      MessageProducer messageProducer = session.createProducer(queue);
+      MessageConsumer messageConsumer = session.createConsumer(queue);
 
-    TextMessage message = session.createTextMessage("Hello world!");
-    messageProducer.send(
-        message,
-        DeliveryMode.NON_PERSISTENT,
-        Message.DEFAULT_PRIORITY,
-        Message.DEFAULT_TIME_TO_LIVE);
-    TextMessage receivedMessage = (TextMessage) messageConsumer.receive(2000L);
+      TextMessage message = session.createTextMessage("Hello world!");
+      messageProducer.send(
+          message,
+          DeliveryMode.NON_PERSISTENT,
+          Message.DEFAULT_PRIORITY,
+          Message.DEFAULT_TIME_TO_LIVE);
+      TextMessage receivedMessage = (TextMessage) messageConsumer.receive(2000L);
 
-    assertEquals(message.getText(), receivedMessage.getText());
+      assertEquals(message.getText(), receivedMessage.getText());
+    }
   }
 }
