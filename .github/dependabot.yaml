@@ -32,6 +32,9 @@ updates:
     schedule:
       interval: "daily"
     target-branch: "main"
+    ignore:
+      - dependency-name: "ch.qos.logback:logback-classic"
+        versions: [ "[1.3,)" ]
   - package-ecosystem: "maven"
     directory: "deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
     schedule:
