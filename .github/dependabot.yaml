@@ -6,13 +6,6 @@ updates:
     schedule:
       interval: "daily"
     target-branch: "main"
-<<<<<<< HEAD
-    labels:
-      - backport-v3.11.x
-      - backport-v3.10.x
-      - backport-v3.9.x
-      - backport-v3.8.x
-=======
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -76,4 +69,3 @@ updates:
     schedule:
       interval: "daily"
     target-branch: "main"
->>>>>>> 8e4db79459 (Add dependabot for Java test projects)
