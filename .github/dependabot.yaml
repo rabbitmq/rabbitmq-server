@@ -26,3 +26,46 @@ updates:
     schedule:
       interval: "daily"
     target-branch: "v3.8.x"
+  # Maintain dependencies for Java test projects
+  - package-ecosystem: "maven"
+    directory: "/deps/rabbitmq_mqtt/test/java_SUITE_data"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
+    ignore:
+      - dependency-name: "ch.qos.logback:logback-classic"
+        versions: [ "[1.3,)" ]
+  - package-ecosystem: "maven"
+    directory: "deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
+    ignore:
+      - dependency-name: "ch.qos.logback:logback-classic"
+        versions: [ "[1.3,)" ]
+  - package-ecosystem: "maven"
+    directory: "deps/rabbitmq_stream_management/test/http_SUITE_data"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
+    ignore:
+      - dependency-name: "ch.qos.logback:logback-classic"
+        versions: [ "[1.3,)" ]
+  - package-ecosystem: "maven"
+    directory: "deps/rabbitmq_amqp1_0/test/system_SUITE_data/java-tests"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
+    ignore:
+      - dependency-name: "ch.qos.logback:logback-classic"
+        versions: [ "[1.3,)" ]
+  - package-ecosystem: "maven"
+    directory: "deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
+  - package-ecosystem: "maven"
+    directory: "deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
+    schedule:
+      interval: "daily"
+    target-branch: "main"
