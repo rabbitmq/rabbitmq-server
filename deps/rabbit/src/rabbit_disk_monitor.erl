@@ -168,7 +168,7 @@ handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = true
 
 handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = false}) ->
   _ = start_timer(set_disk_limits(State, State#state.limit)),
-  rabbit_log:info("Free disk space monitor was enabled"),
+  rabbit_log:info("Free disk space monitor was manually enabled"),
   {reply, ok, State#state{enabled = true}};
 
 handle_call({set_enabled, _Enabled = false}, _From, State) ->
