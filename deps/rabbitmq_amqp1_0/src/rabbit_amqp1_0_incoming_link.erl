@@ -17,7 +17,7 @@
 %% Just make these constant for the time being.
 -define(INCOMING_CREDIT, 65536).
 
--record(incoming_link, {name, exchange, routing_key,
+-record(incoming_link, {name, exchange, routing_key, mandatory,
                         delivery_id = undefined,
                         delivery_count = 0,
                         send_settle_mode = undefined,
@@ -53,6 +53,7 @@ attach(#'v1_0.attach'{name = Name,
                            SndSettleMode == ?V_1_0_SENDER_SETTLE_MODE_MIXED ->
                         amqp_channel:register_confirm_handler(BCh, self()),
                         rabbit_amqp1_0_channel:call(BCh, #'confirm.select'{}),
+                        amqp_channel:register_return_handler(BCh, self()),
                         true
                 end,
             Flow = #'v1_0.flow'{ handle = Handle,
@@ -69,7 +70,8 @@ attach(#'v1_0.attach'{name = Name,
               initial_delivery_count = undefined, % must be, I am the receiver
               role = ?RECV_ROLE}, %% server is receiver
             IncomingLink1 =
-                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode},
+                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode,
+                                           mandatory = Confirm},
             {ok, [Attach, Flow], IncomingLink1, Confirm};
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
@@ -142,7 +144,8 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
            end,
     rabbit_amqp1_0_channel:cast_flow(
       BCh, #'basic.publish'{exchange    = X,
-                            routing_key = RKey}, Msg),
+                            routing_key = RKey,
+                            mandatory = true}, Msg),
     {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                   C when C =< 0 ->
                                       {true,  ?INCOMING_CREDIT div 2};
@@ -206,6 +209,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                     dest, DCh, Dest, DeclareParams,
                                     RouteState)
                           end),
+                    maybe_ensure_queue(Dest, DCh),
                     {XName, RK} = rabbit_routing_util:parse_routing(Dest),
                     {ok, Target, Link#incoming_link{
                                    route_state = RouteState1,
@@ -221,6 +225,20 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _Else ->
             {error, {address_not_utf8_string, Address}}
     end.
+
+maybe_ensure_queue({amqqueue, Q}, Ch) ->
+    try
+        rabbit_amqp1_0_channel:convert_error(
+          fun () ->
+                  Method = #'queue.declare'{queue = list_to_binary(Q),
+                                            passive = true},
+                  amqp_channel:call(Ch, Method)
+          end)
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED} ->
+              ok
+    end;
+maybe_ensure_queue(_, _) ->
+    ok.
 
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
     #'v1_0.flow'{handle         = Handle,
