@@ -94,9 +94,9 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   end
 end
 
-  # Elixir 1.15 compiler optimizations require that we explicitly
-  # add the csv code path
-  :true = :code.add_path(:filename.join([~c"_build", Atom.to_charlist(Mix.env()), ~c"lib/csv/ebin"]))
+# Elixir 1.15 compiler optimizations require that we explicitly
+# add the csv code path
+true = :code.add_path(:filename.join([~c"_build", Atom.to_charlist(Mix.env()), ~c"lib/csv/ebin"]))
 
 defimpl CSV.Encode, for: PID do
   def encode(pid, env \\ []) do
