@@ -2208,12 +2208,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
-<<<<<<< HEAD
-            ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
-=======
             ok = process_routing_mandatory(ExtendedReturnCallback, Mandatory, Qs, MsgSeqNo, Message, State0),
-            QueueNames = rabbit_amqqueue:queue_names(Qs),
->>>>>>> d8f77c5882 (Settle unroutable message with released state)
             State1 = process_routing_confirm(Confirm, QueueNames, MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
@@ -2257,12 +2252,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
             rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
-<<<<<<< HEAD
-            ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
-=======
             ok = process_routing_mandatory(ExtendedReturnCallback, Mandatory, Qs, MsgSeqNo, Message, State0),
-            QueueNames = rabbit_amqqueue:queue_names(Qs),
->>>>>>> d8f77c5882 (Settle unroutable message with released state)
             State1 = process_routing_confirm(Confirm, QueueNames,
                                              MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
