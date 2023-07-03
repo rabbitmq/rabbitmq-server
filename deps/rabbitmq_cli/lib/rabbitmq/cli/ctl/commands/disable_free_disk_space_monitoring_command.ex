@@ -56,5 +56,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DisableFreeDiskSpaceMonitoringCommand do
 
   def description(), do: "Disables free disk space monitoring on a node"
 
-  def banner(_, %{node: node_name}), do: "Disabling free disk space monitoring on node..."
+  def banner(_, %{node: node_name}),
+    do: "Disabling free disk space monitoring on node #{node_name}..."
 end
