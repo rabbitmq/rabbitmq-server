@@ -448,8 +448,8 @@ erlang_dev_package.hex_package(
 erlang_dev_package.hex_package(
     name = "x509",
     build_file = "@rabbitmq-server//bazel:BUILD.x509",
-    sha256 = "5ff9c79e77d64a62ccffd90aaeb23e8f5b6e47844ef7bc8fed931ecf238662e0",
-    version = "0.7.0",
+    sha256 = "3604125d6a0171da6e8a935810b58c999fccab0e3d20b2ed28d97fa2d9e2f6b4",
+    version = "0.8.7",
 )
 
 use_repo(
