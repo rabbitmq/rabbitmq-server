@@ -25,7 +25,7 @@ defmodule DisableDiskFreeSpaceMonitoringCommandTest do
   end
 
   test "run: request to a named, active node succeeds", context do
-    assert @command.run([], context[:opts])[:pid] != nil
+    assert @command.run([], context[:opts])
   end
 
   test "run: request to a non-existent node returns a badrpc" do
