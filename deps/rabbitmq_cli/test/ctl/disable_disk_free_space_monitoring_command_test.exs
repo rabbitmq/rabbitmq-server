@@ -1,14 +1,14 @@
-status_command_test.exs## This Source Code Form is subject to the terms of the Mozilla Public
+## This Source Code Form is subject to the terms of the Mozilla Public
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule StatusCommandTest do
+defmodule DisableDiskFreeSpaceMonitoringCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.StatusCommand
+  @command RabbitMQ.CLI.Ctl.Commands.DisableDiskFreeSpaceMonitoringCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -34,6 +34,6 @@ defmodule StatusCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Status of node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~ ~r/Disabling free disk space monitoring on node/
   end
 end

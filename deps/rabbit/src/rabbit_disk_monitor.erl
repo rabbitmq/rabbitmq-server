@@ -161,10 +161,15 @@ handle_call({set_min_check_interval, MinInterval}, _From, State) ->
 handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
     {reply, ok, set_max_check_interval(MaxInterval, State)};
 
-handle_call({set_enabled, _Enabled = true}, _From, State) ->
+handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = true}) ->
     _ = start_timer(set_disk_limits(State, State#state.limit)),
-    rabbit_log:info("Free disk space monitor was enabled"),
+    rabbit_log:info("Free disk space monitor is already enabled"),
     {reply, ok, State#state{enabled = true}};
+
+handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = false}) ->
+  _ = start_timer(set_disk_limits(State, State#state.limit)),
+  rabbit_log:info("Free disk space monitor was enabled"),
+  {reply, ok, State#state{enabled = true}};
 
 handle_call({set_enabled, _Enabled = false}, _From, State) ->
     _ = erlang:cancel_timer(State#state.timer),
