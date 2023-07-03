@@ -176,6 +176,12 @@ defmodule RabbitMQCtl.MixfileBase do
               path: Path.join(deps_dir, "dialyxir"), runtime: false
             },
             {
+              :rabbit,
+              path: Path.join(deps_dir, "rabbit"),
+              compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+              override: true
+            },
+            {
               :temp,
               path: Path.join(deps_dir, "temp")
             },
