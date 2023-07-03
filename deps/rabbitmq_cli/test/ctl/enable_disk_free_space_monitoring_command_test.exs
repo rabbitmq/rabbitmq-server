@@ -1,4 +1,5 @@
-status_command_test.exs## This Source Code Form is subject to the terms of the Mozilla Public
+## This Source Code Form is subject to the terms of the Mozilla Public
+status_command_test.exs
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
@@ -34,6 +35,7 @@ defmodule EnableDiskFreeSpaceMonitoringCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/\[Re\-\]enabling free disk space monitoring on node/
+    assert @command.banner([], context[:opts]) =~
+             ~r/\[Re\-\]enabling free disk space monitoring on node/
   end
 end

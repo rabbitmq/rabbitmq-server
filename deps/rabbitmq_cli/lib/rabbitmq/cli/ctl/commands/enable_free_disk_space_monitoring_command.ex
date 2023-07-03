@@ -56,5 +56,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFreeDiskSpaceMonitoringCommand do
 
   def description(), do: "[Re-]enables free disk space monitoring on a node"
 
-  def banner(_, %{node: node_name}), do: "[Re-]enabling free disk space monitoring on node #{node_name}..."
+  def banner(_, %{node: node_name}),
+    do: "[Re-]enabling free disk space monitoring on node #{node_name}..."
 end
