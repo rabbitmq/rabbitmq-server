@@ -13,10 +13,10 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   # API
   #
 
-  # Elixir 1.15 compiler optimizations require that we explicitly
-  # add the public_key code path
-  [public_key] = :filelib.wildcard(:filename.join(:code.lib_dir(), ~c"public_key-*/ebin"))
-  true = :code.add_path(public_key)
+  # TODO: Remove when we require Elixir 1.15
+  if function_exported?(Mix, :ensure_application!, 1) do
+    Mix.ensure_application!(:public_key)
+  end
 
   defrecord :certificate,
             :Certificate,
