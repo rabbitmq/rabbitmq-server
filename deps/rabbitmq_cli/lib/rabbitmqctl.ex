@@ -628,7 +628,7 @@ defmodule RabbitMQCtl do
   ## {:fun, fun} - run a custom function to enable distribution.
   ## custom mode is usefult for commands which should have specific node name.
   ## Runs code if distribution is successful, or not needed.
-  @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
+  @spec maybe_with_distribution(module(), options(), (-> command_result())) :: command_result()
   defp maybe_with_distribution(command, options, code) do
     try do
       maybe_with_distribution_without_catch(command, options, code)

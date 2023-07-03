@@ -155,7 +155,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   defp wait_for_pid_funs(node_name, app_names, timeout, quiet) do
-    app_names_formatted = :io_lib.format('~p', [app_names])
+    app_names_formatted = :io_lib.format(~c"~p", [app_names])
 
     [
       log_param(
