@@ -171,10 +171,15 @@ handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = fals
   rabbit_log:info("Free disk space monitor was manually enabled"),
   {reply, ok, State#state{enabled = true}};
 
-handle_call({set_enabled, _Enabled = false}, _From, State) ->
+handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = true}) ->
     _ = erlang:cancel_timer(State#state.timer),
     rabbit_log:info("Free disk space monitor was manually disabled"),
     {reply, ok, State#state{enabled = false}};
+
+handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = false}) ->
+  _ = erlang:cancel_timer(State#state.timer),
+  rabbit_log:info("Free disk space monitor is already disabled"),
+  {reply, ok, State#state{enabled = false}};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
