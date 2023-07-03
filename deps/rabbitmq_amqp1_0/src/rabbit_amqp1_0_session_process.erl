@@ -130,6 +130,24 @@ handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
         F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
     {noreply, state(Session1, State)};
 
+handle_info({#'basic.return'{}, {DTag, _Msg}}, State = #state{writer_pid = WriterPid,
+                                                              session    = Session}) ->
+    {Reply, Session1} = rabbit_amqp1_0_session:return(DTag, Session),
+    case Reply of
+        undefined ->
+            ok;
+        _ ->
+            rabbit_amqp1_0_writer:send_command(
+              WriterPid,
+              rabbit_amqp1_0_session:flow_fields(Reply, Session)
+             )
+    end,
+    {noreply, state(Session1, State)};
+
+handle_info({#'basic.return'{}, _Msg}, State = #state{session = Session}) ->
+    rabbit_log:warning("AMQP 1.0 message return without publishing sequence"),
+    {noreply, state(Session, State)};
+
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, State};

@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -24,6 +25,7 @@ groups() ->
           roundtrip,
           roundtrip_to_amqp_091,
           default_outcome,
+          no_routes_is_released,
           outcomes,
           fragmentation,
           message_annotations,
@@ -151,6 +153,14 @@ roundtrip_to_amqp_091(Config) ->
 default_outcome(Config) ->
     run(Config, [
         {dotnet, "default_outcome"}
+      ]).
+
+no_routes_is_released(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"no_routes_is_released">>,
+                                              durable = true}),
+    run(Config, [
+        {dotnet, "no_routes_is_released"}
       ]).
 
 outcomes(Config) ->
