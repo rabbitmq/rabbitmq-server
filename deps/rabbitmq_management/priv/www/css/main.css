@@ -230,7 +230,7 @@ div.form-popup-help {
 }
 p.warning, div.form-popup-warn { background: #FF9; }
 
-div.form-popup-options { z-index: 3; }
+div.form-popup-options { z-index: 3; overflow:auto; max-height:95%; }
 
 div.form-popup-warn span,
 div.form-popup-info span,
