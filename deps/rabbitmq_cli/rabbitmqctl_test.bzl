@@ -100,18 +100,8 @@ export ERL_COMPILER_OPTIONS=deterministic
 for archive in {archives}; do
     "${{ABS_ELIXIR_HOME}}"/bin/mix archive.install --force $INITIAL_DIR/$archive
 done
-for d in {precompiled_deps}; do
-    mkdir -p _build/${{MIX_ENV}}/lib/$d
-    ln -s ${{DEPS_DIR}}/$d/ebin _build/${{MIX_ENV}}/lib/$d
-    ln -s ${{DEPS_DIR}}/$d/include _build/${{MIX_ENV}}/lib/$d
-done
 "${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
 "${{ABS_ELIXIR_HOME}}"/bin/mix compile
-
-# due to https://github.com/elixir-lang/elixir/issues/7699 we
-# "run" the tests, but skip them all, in order to trigger
-# compilation of all *_test.exs files before we actually run them
-"${{ABS_ELIXIR_HOME}}"/bin/mix test --exclude test
 
 export TEST_TMPDIR=${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
@@ -173,11 +163,6 @@ for %%a in ({archives}) do (
     set ARCH=%TEST_SRCDIR%/%TEST_WORKSPACE%/%%a
     set ARCH=%ARCH:/=\\%
     "{elixir_home}\\bin\\mix" archive.install --force %ARCH% || goto :error
-)
-for %%d in ({precompiled_deps}) do (
-    mkdir _build\\%MIX_ENV%\\lib\\%%d
-    robocopy %DEPS_DIR%\\%%d\\ebin _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
-    robocopy %DEPS_DIR%\\%%d\\include _build\\%MIX_ENV%\\lib\\%%d /E /NFL /NDL /NJH /NJS /nc /ns /np
 )
 "{elixir_home}\\bin\\mix" deps.compile || goto :error
 "{elixir_home}\\bin\\mix" compile || goto :error

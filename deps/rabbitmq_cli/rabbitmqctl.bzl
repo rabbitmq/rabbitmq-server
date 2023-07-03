@@ -38,19 +38,35 @@ def deps_dir_contents(ctx, deps, dir):
     files = []
     for dep in deps:
         lib_info = dep[ErlangAppInfo]
-        for src in lib_info.include + lib_info.beam + lib_info.srcs:
+        files_by_path = {}
+        for src in lib_info.include + lib_info.srcs:
             if not src.is_directory:
                 rp = additional_file_dest_relative_path(dep.label, src)
+                files_by_path[rp] = src
+            else:
+                fail("unexpected directory in", lib_info)
+        for rp, src in files_by_path.items():
+            f = ctx.actions.declare_file(path_join(
+                dir,
+                lib_info.app_name,
+                rp,
+            ))
+            ctx.actions.symlink(
+                output = f,
+                target_file = src,
+            )
+            files.extend([f, src])
+        for beam in lib_info.beam:
+            if not beam.is_directory:
                 f = ctx.actions.declare_file(path_join(
-                    dir,
-                    lib_info.app_name,
-                    rp,
-                ))
+                    dir, lib_info.app_name, "ebin", beam.basename))
                 ctx.actions.symlink(
                     output = f,
-                    target_file = src,
+                    target_file = beam,
                 )
-                files.extend([src, f])
+                files.extend([f, beam])
+            else:
+                fail("unexpected directory in", lib_info)
     return files
 
 def _impl(ctx):
