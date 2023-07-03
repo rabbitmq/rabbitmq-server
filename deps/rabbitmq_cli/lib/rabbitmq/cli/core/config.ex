@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Core.Config do
 
   def normalise(:longnames, true), do: :longnames
   def normalise(:longnames, "true"), do: :longnames
-  def normalise(:longnames, 'true'), do: :longnames
+  def normalise(:longnames, ~c"true"), do: :longnames
   def normalise(:longnames, "\"true\""), do: :longnames
   def normalise(:longnames, _val), do: :shortnames
   def normalise(_, value), do: value

@@ -356,13 +356,13 @@ defmodule ListPluginsCommandTest do
         name: :mock_rabbitmq_plugins_01,
         enabled: :not_enabled,
         running: false,
-        version: '0.2.0'
+        version: ~c"0.2.0"
       },
       %{
         name: :mock_rabbitmq_plugins_02,
         enabled: :not_enabled,
         running: false,
-        version: '0.2.0'
+        version: ~c"0.2.0"
       },
       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}
@@ -395,14 +395,14 @@ defmodule ListPluginsCommandTest do
         name: :mock_rabbitmq_plugins_01,
         enabled: :not_enabled,
         running: false,
-        version: '0.2.0'
+        version: ~c"0.2.0"
       },
       %{
         name: :mock_rabbitmq_plugins_02,
         enabled: :enabled,
         running: true,
-        version: '0.1.0',
-        running_version: '0.1.0'
+        version: ~c"0.1.0",
+        running_version: ~c"0.1.0"
       },
       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}
@@ -425,14 +425,14 @@ defmodule ListPluginsCommandTest do
         name: :mock_rabbitmq_plugins_01,
         enabled: :not_enabled,
         running: false,
-        version: '0.2.0'
+        version: ~c"0.2.0"
       },
       %{
         name: :mock_rabbitmq_plugins_02,
         enabled: :enabled,
         running: true,
-        version: '0.2.0',
-        running_version: '0.1.0'
+        version: ~c"0.2.0",
+        running_version: ~c"0.1.0"
       },
       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}

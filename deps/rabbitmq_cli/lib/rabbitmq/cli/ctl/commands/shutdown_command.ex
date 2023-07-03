@@ -84,7 +84,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   #
 
   def addressing_local_node?(_, remote_hostname) when remote_hostname == :localhost, do: true
-  def addressing_local_node?(_, remote_hostname) when remote_hostname == 'localhost', do: true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == ~c"localhost", do: true
   def addressing_local_node?(_, remote_hostname) when remote_hostname == "localhost", do: true
 
   def addressing_local_node?(local_hostname, remote_hostname) do
