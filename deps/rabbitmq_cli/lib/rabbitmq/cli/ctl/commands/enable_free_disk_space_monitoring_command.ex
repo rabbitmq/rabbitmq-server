@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFreeDiskSpaceMonitoringCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 
-  def usage, do: "status [--unit <unit>]"
+  def usage, do: "enable_free_disk_space_monitoring [--unit <unit>]"
 
   def usage_doc_guides() do
     [
