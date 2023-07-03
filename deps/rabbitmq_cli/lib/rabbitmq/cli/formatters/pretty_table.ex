@@ -14,7 +14,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
 
   # Elixir 1.15 compiler optimizations require that we explicitly
   # add the stdout_formatter code path
-  :true = :code.add_path(:filename.join(:os.getenv(~c"DEPS_DIR"), ~c"stdout_formatter/ebin"))
+  true = :code.add_path(:filename.join(:os.getenv(~c"DEPS_DIR"), ~c"stdout_formatter/ebin"))
 
   defrecord :table,
             extract(:table,

@@ -44,7 +44,7 @@ defmodule ClearGlobalParameterCommandTest do
     assert @command.run(
              [context[:key]],
              context[:opts]
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do

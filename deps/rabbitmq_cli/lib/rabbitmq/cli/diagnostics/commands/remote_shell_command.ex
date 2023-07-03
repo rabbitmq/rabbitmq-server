@@ -47,11 +47,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
   defp start_shell_on_otp_25(node_name) do
     _ = Supervisor.terminate_child(:kernel_sup, :user)
     Process.flag(:trap_exit, true)
-    user_drv = :user_drv.start(['tty_sl -c -e', {node_name, :shell, :start, []}])
+    user_drv = :user_drv.start([~c"tty_sl -c -e", {node_name, :shell, :start, []}])
     Process.link(user_drv)
 
     receive do
-      {'EXIT', _user_drv, _} ->
+      {~c"EXIT", _user_drv, _} ->
         {:ok, "Disconnected from #{node_name}."}
     end
   end
