@@ -1,0 +1,15 @@
+diff --git a/lib/amqp/core.ex b/lib/amqp/core.ex
+index a7302aa..abf2be6 100644
+--- a/lib/amqp/core.ex
++++ b/lib/amqp/core.ex
+@@ -3,6 +3,10 @@ defmodule AMQP.Core do
+ 
+   require Record
+ 
++  # Elixir 1.15 compiler optimizations require that we explicitly
++  # add the rabbit_common code path
++  true = :code.add_path(:filename.join(:os.getenv(~c"DEPS_DIR"), ~c"rabbit_common/ebin"))
++
+   Record.defrecord(
+     :p_basic,
+     :P_basic,
