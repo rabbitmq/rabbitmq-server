@@ -71,6 +71,7 @@ module AmqpClient =
 
 [<AutoOpen>]
 module Test =
+
     let assertEqual a b =
         if a <> b then
             failwith (sprintf "Expected: %A\r\nGot: %A" a b)
@@ -130,6 +131,33 @@ module Test =
         if cond = null then
             receiver.Close()
         assertEqual cond errorName
+
+    let no_routes_is_released uri =
+        // tests that a message sent to an exchange that resolves no routes for the
+        // binding key returns the Released outcome, rather than Accepted
+        use ac = connect uri
+        let address = "/exchange/no_routes_is_released"
+        let sender = SenderLink(ac.Session, "released-sender", address)
+        let trySet (mre: AutoResetEvent) =
+            try mre.Set() |> ignore with _ -> ()
+
+        let mutable outcome = null
+        use mre = new System.Threading.AutoResetEvent(false)
+
+        let msg = new Message("hi"B,
+                              Header = Header(Ttl = 500u),
+                              Properties = new Properties(Subject = "no_routes"))
+        let cb = new OutcomeCallback (fun l m o x -> outcome <- o; trySet mre)
+        sender.Send(msg, cb, null)
+        mre.WaitOne(1000) |> ignore
+
+        match outcome with
+        | :? Released ->
+            ()
+        | _ ->
+            failwith (sprintf "Expected: Released\r\nGot: %A" outcome)
+
+        ()
 
     let roundtrip uri =
         use c = connect uri
@@ -522,6 +550,9 @@ let main argv =
         0
     | [AsLower "streams"; uri] ->
         streams uri
+        0
+    | [AsLower "no_routes_is_released"; uri] ->
+        no_routes_is_released uri
         0
     | _ ->
         printfn "test %A not found. usage: <test> <uri>" argv
