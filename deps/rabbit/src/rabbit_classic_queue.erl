@@ -117,7 +117,7 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
 
 is_recoverable(Q) when ?is_amqqueue(Q) ->
     Node = node(),
-    Node =:= node(amqqueue:get_pid(Q)) andalso
+    Node =:= amqqueue:qnode(Q) andalso
     %% Terminations on node down will not remove the rabbit_queue
     %% record if it is a mirrored queue (such info is now obtained from
     %% the policy). Thus, we must check if the local pid is alive
