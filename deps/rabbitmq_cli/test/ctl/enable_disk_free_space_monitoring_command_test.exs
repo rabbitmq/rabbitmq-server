@@ -8,7 +8,7 @@ defmodule EnableDiskFreeSpaceMonitoringCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.EnableDiskFreeSpaceMonitoringCommand
+  @command RabbitMQ.CLI.Ctl.Commands.EnableFreeDiskSpaceMonitoringCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
