@@ -1,4 +1,4 @@
--module(rabbit_mc_amqp).
+-module(mc_amqp).
 -behaviour(mc).
 
 % -include_lib("rabbit_common/include/rabbit_framing.hrl").

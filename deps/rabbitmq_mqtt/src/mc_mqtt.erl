@@ -1,4 +1,4 @@
--module(rabbit_mqtt_mc).
+-module(mc_mqtt).
 -behaviour(mc).
 
 -include("rabbit_mqtt_packet.hrl").
@@ -107,7 +107,7 @@ init_amqp(Sections)
 
 convert(?MODULE, Msg) ->
     Msg;
-convert(rabbit_mc_amqp, #mqtt_msg{qos = Qos,
+convert(mc_amqp, #mqtt_msg{qos = Qos,
                                   props = Props,
                                   payload = Payload}) ->
     Header = #'v1_0.header'{durable = Qos > 0},
@@ -142,7 +142,7 @@ convert(rabbit_mc_amqp, #mqtt_msg{qos = Qos,
                    _ ->
                        [Header, AmqpProps, AppData]
                end,
-    rabbit_mc_amqp:init_amqp(Sections);
+    mc_amqp:init_amqp(Sections);
 convert(_TargetProto, #mqtt_msg{}) ->
     not_implemented.
 

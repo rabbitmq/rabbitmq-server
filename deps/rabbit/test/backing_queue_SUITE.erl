@@ -1609,7 +1609,7 @@ publish_and_confirm(Q, Payload, Count) ->
                                          Payload),
               Content = BMsg#basic_message.content,
               Ex = BMsg#basic_message.exchange_name,
-              Msg = rabbit_mc_amqp_legacy:message(Ex, <<>>, Content),
+              Msg = mc_amqpl:message(Ex, <<>>, Content),
               Options = #{correlation => Seq},
               {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Msg,
                                                               Options, Acc0),
@@ -1870,4 +1870,4 @@ message(IsPersistent, PayloadFun, N) ->
                                                                   false -> 1
                                                               end},
                              PayloadFun(N)),
-    rabbit_mc_amqp_legacy:message(Ex, <<>>, Content, #{id => Id}).
+    mc_amqpl:message(Ex, <<>>, Content, #{id => Id}).

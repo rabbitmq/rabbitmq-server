@@ -54,7 +54,7 @@ route(X = #exchange{arguments = Args}, Msg) ->
             end,
     %% Federation uses AMQP 0.9.1 internally at the moment so this
     %% conversion may need to happen anyway
-    LegacyMsg = mc:convert(rabbit_mc_amqp_legacy, Msg),
+    LegacyMsg = mc:convert(mc_amqpl, Msg),
     Content = mc:protocol_state(LegacyMsg),
     Headers = rabbit_basic:extract_headers(Content),
     case rabbit_federation_util:should_forward(Headers, MaxHops, DName, DVhost) of

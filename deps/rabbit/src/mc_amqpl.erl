@@ -1,4 +1,4 @@
--module(rabbit_mc_amqp_legacy).
+-module(mc_amqpl).
 -behaviour(mc).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -69,12 +69,11 @@ init_amqp(Sections) when is_list(Sections) ->
           end, {undefined, undefined, undefined, undefined, []},
           Sections),
 
-        {Payload, Type0} = case Body of
+    {Payload, Type0} = case Body of
                            [#'v1_0.data'{content = Bin}] ->
                                {Bin, undefined};
                            _ ->
                                %% anything else needs to be encoded
-
                                {[amqp10_framing:encode_bin(X) || X <- Body],
                                 ?AMQP10_TYPE}
                        end,
@@ -232,8 +231,8 @@ serialize(_, _) ->
 
 convert(?MODULE, C) ->
     C;
-convert(rabbit_mc_amqp, #content{properties = Props,
-                                 payload_fragments_rev = Payload}) ->
+convert(mc_amqp, #content{properties = Props,
+                          payload_fragments_rev = Payload}) ->
     #'P_basic'{message_id = MsgId,
                expiration = Expiration,
                delivery_mode = DelMode,
@@ -314,8 +313,8 @@ convert(rabbit_mc_amqp, #content{properties = Props,
                  Section
          end,
 
-    rabbit_mc_amqp:init_amqp([P, AP, MA,
-                              #'v1_0.data'{content = lists:reverse(Payload)}]);
+    mc_amqp:init_amqp([P, AP, MA,
+                       #'v1_0.data'{content = lists:reverse(Payload)}]);
 convert(_, _C) ->
     not_implemented.
 

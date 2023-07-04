@@ -427,9 +427,9 @@ test_topic_expect_match(X, List) ->
               BinKey = list_to_binary(Key),
               Message = rabbit_basic:message(X#exchange.name, BinKey,
                                              #'P_basic'{}, <<>>),
-              Msg = rabbit_mc_amqp_legacy:message(X#exchange.name,
-                                                  BinKey,
-                                                  Message#basic_message.content),
+              Msg = mc_amqpl:message(X#exchange.name,
+                                     BinKey,
+                                     Message#basic_message.content),
               Res = rabbit_exchange_type_topic:route(X, Msg),
               ExpectedRes = lists:map(
                               fun (Q) -> #resource{virtual_host = <<"/">>,

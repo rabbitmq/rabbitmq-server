@@ -1067,10 +1067,10 @@ stream_entries(_QName, _Name, _LocalPid, Str, Msgs) ->
 binary_to_msg(#resource{virtual_host = _VHost,
                         kind = queue,
                         name = _QName}, Data) ->
-    mc:init(rabbit_mc_amqp, amqp10_framing:decode_bin(Data), #{}).
+    mc:init(mc_amqp, amqp10_framing:decode_bin(Data), #{}).
 
 msg_to_iodata(Msg0) ->
-    Msg = mc:convert(rabbit_mc_amqp, Msg0),
+    Msg = mc:convert(mc_amqp, Msg0),
     mc:serialize(Msg).
 
 capabilities() ->
