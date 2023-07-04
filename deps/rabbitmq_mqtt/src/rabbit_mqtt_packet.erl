@@ -8,7 +8,6 @@
 -module(rabbit_mqtt_packet).
 
 -include("rabbit_mqtt_packet.hrl").
--include("rabbit_mqtt.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([init_state/0, parse/2, serialise/2]).
@@ -119,6 +118,11 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             {ReasonCode, Props} = case PacketBin of
                                       <<>> ->
                                           {?RC_SUCCESS, #{}};
+                                      <<Rc>> when ProtoVer =:= 5 ->
+                                          %% "If the Remaining Length is less than 4 there is
+                                          %% no Property Length and the value of 0 is used."
+                                          %% [v5 3.4.2.2.1]
+                                          {Rc, #{}};
                                       <<Rc, PropsBin/binary>> when ProtoVer =:= 5 ->
                                           {Props0, <<>>} = parse_props(PropsBin, ProtoVer),
                                           {Rc, Props0}
