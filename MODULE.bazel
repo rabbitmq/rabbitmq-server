@@ -107,8 +107,8 @@ elixir_config.internal_elixir_from_github_release(
 
 elixir_config.internal_elixir_from_github_release(
     name = "1_15",
-    sha256 = "0f4df7574a5f300b5c66f54906222cd46dac0df7233ded165bc8e80fd9ffeb7a",
-    version = "1.15.0",
+    sha256 = "3cfadca57c3092ccbd3ec3f17e5eab529bbd2946f50e4941a903c55c39e3c5f5",
+    version = "1.15.2",
 )
 
 use_repo(
