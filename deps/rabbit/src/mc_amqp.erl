@@ -14,7 +14,7 @@
          routing_headers/2,
          get_property/2,
          convert/2,
-         protocol_state/3,
+         protocol_state/2,
          serialize/2
         ]).
 
@@ -146,9 +146,12 @@ convert(TargetProto, #msg{header = Header,
                   lists_prepend_t(
                     AP,
                     Data)))),
-    TargetProto:init_amqp(Sects).
+    %% init_amqp expects a flat list of amqp sections
+    %% and the body could be a list itself (or an amqp_value)
+    Sections = lists:flatten(Sects),
+    TargetProto:init_amqp(Sections).
 
-protocol_state(_S, _Anns, _Deaths) ->
+protocol_state(_S, _Anns) ->
     undefined.
 
 serialize(#msg{header = Header,
@@ -254,22 +257,28 @@ decode([], Acc) ->
 decode([#'v1_0.header'{} = H | Rem], Msg) ->
     decode(Rem, Msg#msg{header = H});
 decode([#'v1_0.message_annotations'{} = MA | Rem], Msg) ->
-
     decode(Rem, Msg#msg{message_annotations = MA});
 decode([#'v1_0.properties'{} = P | Rem], Msg) ->
     decode(Rem, Msg#msg{properties = P});
 decode([#'v1_0.application_properties'{} = AP | Rem], Msg) ->
     decode(Rem, Msg#msg{application_properties = AP});
-decode([#'v1_0.data'{} = D | Rem], #msg{data = Datas} = Msg) ->
-    decode(Rem, Msg#msg{data = Datas ++ [D]});
-decode([#'v1_0.amqp_sequence'{} = D | Rem], #msg{data = Datas} = Msg) ->
-    decode(Rem, Msg#msg{data = Datas ++ [D]});
-decode([#'v1_0.amqp_value'{} = D | Rem], #msg{data = Datas} = Msg) ->
-    decode(Rem, Msg#msg{data = Datas ++ [D]}).
+decode([#'v1_0.data'{} = D | Rem], #msg{data = Body} = Msg)
+  when is_list(Body) ->
+    decode(Rem, Msg#msg{data = Body ++ [D]});
+decode([#'v1_0.amqp_sequence'{} = D | Rem], #msg{data = Body} = Msg)
+  when is_list(Body) ->
+    decode(Rem, Msg#msg{data = Body ++ [D]});
+decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
+    %% an amqp value can only be a singleton
+    decode(Rem, Msg#msg{data = B}).
 
 add_message_annotations(Anns, MA0) ->
     Content = maps:fold(
-                fun (K, {T, V}, Acc) ->
+                fun
+                    (K, {T, V}, Acc) when is_atom(T) ->
+                        map_add(symbol, K, T, V, Acc);
+                    (K, V, Acc) ->
+                        {T, _} = wrap(V),
                         map_add(symbol, K, T, V, Acc)
                 end,
                 case MA0 of

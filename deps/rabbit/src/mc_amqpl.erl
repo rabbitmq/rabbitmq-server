@@ -15,7 +15,7 @@
          % get_property/2,
          % set_property/3,
          convert/2,
-         protocol_state/3,
+         protocol_state/2,
          message/3,
          message/4,
          message/5,
@@ -60,17 +60,18 @@ init_amqp(Sections) when is_list(Sections) ->
               (#'v1_0.footer'{}, Acc) ->
                   %% footer not currently used
                   Acc;
-              (BodySect, Acc) when
-                    is_record(BodySect, 'v1_0.data') orelse
-                    is_record(BodySect, 'v1_0.amqp_sequence') orelse
-                    is_record(BodySect, 'v1_0.amqp_value')  ->
+              (undefined, Acc) ->
+                  Acc;
+              (BodySection, Acc) ->
                   Body = element(5, Acc),
-                  setelement(5, Acc, [BodySect | Body])
+                  setelement(5, Acc, [BodySection | Body])
           end, {undefined, undefined, undefined, undefined, []},
           Sections),
 
     {Payload, Type0} = case Body of
-                           [#'v1_0.data'{content = Bin}] ->
+                           [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
+                               {[Bin], undefined};
+                           [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
                                {Bin, undefined};
                            _ ->
                                %% anything else needs to be encoded
@@ -319,7 +320,7 @@ convert(_, _C) ->
     not_implemented.
 
 protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
-               Anns, Deaths) ->
+               Anns) ->
     %% Add any x- annotations as headers
     %% TODO: conversion is very primitive for now
     H0 = case H00 of
@@ -327,10 +328,11 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
              _ ->
                  H00
          end,
+    Deaths = maps:get(deaths, Anns, undefined),
     Headers0 = maps:fold(
-                 fun (<<"x-", _>> = Key, Val, H) when is_integer(Val) ->
+                 fun (<<"x-", _/binary>> = Key, Val, H) when is_integer(Val) ->
                          [{Key, long, Val} | H];
-                     (<<"x-", _>> = Key, Val, H) when is_binary(Val) ->
+                     (<<"x-", _/binary>> = Key, Val, H) when is_binary(Val) ->
                          [{Key, longstr, Val} | H];
                      (<<"timestamp_in_ms">> = Key, Val, H) when is_integer(Val) ->
                          %% TODO We might want to drop this backwards compat header with
@@ -597,7 +599,12 @@ is_x_header(<<"x-", _/binary>>) ->
 is_x_header(_) ->
     false.
 
+%% headers that are added as annotations during conversions
 is_x_basic_header(<<"x-basic-", _/binary>>) ->
+    true;
+is_x_basic_header(<<"x-routing-key">>) ->
+    true;
+is_x_basic_header(<<"x-exchange">>) ->
     true;
 is_x_basic_header(_) ->
     false.
