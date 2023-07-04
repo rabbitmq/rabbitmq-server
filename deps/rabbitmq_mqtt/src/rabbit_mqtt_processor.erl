@@ -1760,7 +1760,11 @@ maybe_send_will(
             #resource{name = QNameBin} = amqqueue:get_name(Q),
             Anns0 = #{exchange => ?DEFAULT_EXCHANGE_NAME,
                       routing_keys => [QNameBin],
-                      ttl => Ttl},
+                      ttl => Ttl,
+                      %% Persist message regardless of Will QoS since there is no noticable
+                      %% performance benefit if that single message is transient. This ensures that
+                      %% delayed Will Messages are not lost after a broker restart.
+                      durable => true},
             Anns = case Props of
                        #{'Message-Expiry-Interval' := MEI} ->
                            Anns0#{dead_letter_ttl => timer:seconds(MEI)};
