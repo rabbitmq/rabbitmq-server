@@ -78,6 +78,38 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmqctl_check_formatted_test(
+    name = "check_formatted",
+    size = "small",
+    srcs = [
+        ".formatter.exs",
+        "config/config.exs",
+        "mix.exs",
+    ] + glob([
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    data = glob(["test/fixtures/**/*"]),
+    target_compatible_with = select({
+        "@platforms//os:macos": [
+            "@platforms//os:macos",
+            "@elixir_config//:elixir_1_15",
+        ],
+        "//conditions:default": [
+            "@platforms//os:linux",
+            "@elixir_config//:elixir_1_15",
+        ],
+    }),
+)
+
+test_suite(
+    name = "rabbitmqctl_check_formatted",
+    tests = ["check_formatted"],
+)
+
+>>>>>>> 7d9ea24eb2 (Run cli format check on elixir 1.15 only)
 plt(
     name = "deps_plt",
     apps = [
