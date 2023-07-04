@@ -96,6 +96,7 @@ elixir_config = module_extension(
 )
 
 def _rbe(ctx):
+    root_rbe_repo_props = []
     rbe_repo_props = []
     for mod in ctx.modules:
         for repo in mod.tags.git_repository:
@@ -106,17 +107,29 @@ def _rbe(ctx):
                 props["tag"] = repo.tag
             if repo.branch != "":
                 props["branch"] = repo.branch
-            if not props in rbe_repo_props:
+            if mod.is_root:
+                if not props in root_rbe_repo_props:
+                    root_rbe_repo_props.append(props)
+            elif not props in rbe_repo_props:
                 rbe_repo_props.append(props)
 
-    if len(rbe_repo_props) > 1:
-        fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
+    if len(root_rbe_repo_props) > 1:
+        fail("Multiple definitions for @rbe exist in root module: {}".format(rbe_repo_props))
 
-    if len(rbe_repo_props) > 0:
+    if len(root_rbe_repo_props) > 0:
         git_repository(
             name = "rbe",
-            **rbe_repo_props[0]
+            **root_rbe_repo_props[0]
         )
+    else:
+        if len(rbe_repo_props) > 1:
+            fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
+
+        if len(rbe_repo_props) > 0:
+            git_repository(
+                name = "rbe",
+                **rbe_repo_props[0]
+            )
 
 git_repository_tag = tag_class(attrs = {
     "remote": attr.string(),
