@@ -10,7 +10,7 @@ defmodule RabbitCommon.Records do
 
   # Elixir 1.15 compiler optimizations require that we explicitly
   # add the rabbit_common code path
-  true = :code.add_path(:filename.join(:os.getenv(~c"DEPS_DIR"), ~c"rabbit_common/ebin"))
+  true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit_common", "ebin"]))
 
   # Important: amqqueue records must not be used directly since they are versioned
   #            for mixed version cluster compatibility. Convert records
