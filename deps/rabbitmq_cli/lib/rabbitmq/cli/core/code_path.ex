@@ -61,9 +61,9 @@ defmodule RabbitMQ.CLI.Core.CodePath do
 
     case :erl_prim_loader.list_dir(app_dir) do
       {:ok, list} ->
-        case Enum.member?(list, 'ebin') do
+        case Enum.member?(list, ~c"ebin") do
           true ->
-            ebin_dir = :filename.join(app_dir, 'ebin')
+            ebin_dir = :filename.join(app_dir, ~c"ebin")
             Code.append_path(ebin_dir)
 
           false ->

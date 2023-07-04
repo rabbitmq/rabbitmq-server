@@ -57,7 +57,7 @@ defmodule CheckPortConnectivityCommandTest do
   # note: it's run/2 that filters out non-local alarms
   test "output: when check failed to connect to a port, returns a failure", context do
     failure =
-      {:listener, :rabbit@mercurio, :lolz, 'mercurio', {0, 0, 0, 0, 0, 0, 0, 0}, 7_761_613,
+      {:listener, :rabbit@mercurio, :lolz, ~c"mercurio", {0, 0, 0, 0, 0, 0, 0, 0}, 7_761_613,
        [backlog: 128, nodelay: true]}
 
     assert match?({:error, _}, @command.output({false, [failure]}, context[:opts]))
