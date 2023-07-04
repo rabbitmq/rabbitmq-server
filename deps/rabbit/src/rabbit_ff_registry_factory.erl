@@ -18,7 +18,8 @@
          initialize_registry/1,
          initialize_registry/3,
          acquire_state_change_lock/0,
-         release_state_change_lock/0]).
+         release_state_change_lock/0,
+         reset_registry/0]).
 
 -ifdef(TEST).
 -export([registry_loading_lock/0,
@@ -784,3 +785,15 @@ do_purge_old_registry(Mod) ->
         true  -> ok;
         false -> do_purge_old_registry(Mod)
     end.
+
+-spec reset_registry() -> ok.
+
+reset_registry() ->
+    ?LOG_DEBUG(
+       "Feature flags: resetting loaded registry",
+       [],
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    _ = code:purge(rabbit_ff_registry),
+    _ = code:delete(rabbit_ff_registry),
+    ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+    ok.
