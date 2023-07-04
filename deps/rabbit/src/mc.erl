@@ -42,10 +42,9 @@
 -record(?MODULE, {protocol :: protocol(),
                   %% protocol specific data term
                   data :: proto_state(),
-                  %% any annotations set or processed by the broker itself
-                  %% e.g. exchange, routing keys
-                  annotations = #{} :: annotations(),
-                  deaths :: undefined | #deaths{}
+                  %% any annotations done by the broker itself
+                  %% such as recording the exchange / routing keys used
+                  annotations = #{} :: annotations()
                  }).
 
 -opaque state() :: #?MODULE{} | mc_compat:state().
@@ -88,8 +87,7 @@
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
--callback protocol_state(proto_state(), annotations(),
-                         undefined | #deaths{}) ->
+-callback protocol_state(proto_state(), annotations()) ->
     term().
 
 %% serialize the data into the protocol's binary format
@@ -249,9 +247,8 @@ convert(Proto, BasicMsg) ->
 -spec protocol_state(state()) -> term().
 protocol_state(#?MODULE{protocol = Proto,
                         annotations = Anns,
-                        data = Data,
-                        deaths = Deaths}) ->
-    Proto:protocol_state(Data, Anns, Deaths);
+                        data = Data}) ->
+    Proto:protocol_state(Data, Anns);
 protocol_state(BasicMsg) ->
     mc_compat:protocol_state(BasicMsg).
 
@@ -265,15 +262,14 @@ prepare(State) ->
 record_death(Reason, SourceQueue,
              #?MODULE{protocol = _Mod,
                       data = _Data,
-                      annotations = Anns0,
-                      deaths = Ds0} = State)
+                      annotations = Anns0} = State)
   when is_atom(Reason) andalso is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
     Exchange = maps:get(exchange, Anns0),
     RoutingKeys = maps:get(routing_keys, Anns0),
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
-    case Ds0 of
+    case maps:get(deaths, Anns0, undefined) of
         undefined ->
             Ds = #deaths{last = Key,
                          first = Key,
@@ -286,9 +282,8 @@ record_death(Reason, SourceQueue,
                           <<"x-first-death-queue">> => SourceQueue,
                           <<"x-first-death-exchange">> => Exchange},
 
-            State#?MODULE{deaths = Ds,
-                          annotations = Anns};
-        #deaths{records = Rs} ->
+            State#?MODULE{annotations = Anns#{deaths => Ds}};
+        #deaths{records = Rs} = Ds0 ->
             Death = #death{count = C} = maps:get(Key, Rs,
                                                  #death{ttl = Ttl,
                                                         exchange = Exchange,
@@ -296,21 +291,22 @@ record_death(Reason, SourceQueue,
                                                         timestamp = Timestamp}),
             Ds = Ds0#deaths{last = Key,
                             records = Rs#{Key => Death#death{count = C + 1}}},
-            State#?MODULE{deaths = Ds}
+            State#?MODULE{annotations = Anns0#{deaths => Ds}}
     end;
 record_death(Reason, SourceQueue, BasicMsg) ->
     mc_compat:record_death(Reason, SourceQueue, BasicMsg).
 
 
 -spec is_death_cycle(rabbit_misc:resource_name(), state()) -> boolean().
-is_death_cycle(TargetQueue, #?MODULE{deaths = Deaths}) ->
+is_death_cycle(TargetQueue, #?MODULE{annotations = Anns}) ->
+    Deaths = maps:get(deaths, Anns, #deaths{}),
     is_cycle(TargetQueue, maps:keys(Deaths#deaths.records));
 is_death_cycle(TargetQueue, BasicMsg) ->
     mc_compat:is_death_cycle(TargetQueue, BasicMsg).
 
 -spec death_queue_names(state()) -> [rabbit_misc:resource_name()].
-death_queue_names(#?MODULE{deaths = Deaths}) ->
-    case Deaths of
+death_queue_names(#?MODULE{annotations = Anns}) ->
+    case maps:get(deaths, Anns, undefined) of
         undefined ->
             [];
         #deaths{records = Records} ->
@@ -321,10 +317,11 @@ death_queue_names(BasicMsg) ->
 
 -spec last_death(state()) ->
     undefined | {death_key(), #death{}}.
-last_death(#?MODULE{deaths = undefined}) ->
+last_death(#?MODULE{annotations = Anns})
+  when not is_map_key(deaths, Anns) ->
     undefined;
-last_death(#?MODULE{deaths = #deaths{last = Last,
-                                     records = Rs}}) ->
+last_death(#?MODULE{annotations = #{deaths := #deaths{last = Last,
+                                                      records = Rs}}}) ->
     {Last, maps:get(Last, Rs)};
 last_death(BasicMsg) ->
     mc_compat:last_death(BasicMsg).
