@@ -1552,7 +1552,7 @@ publish_to_queues(
 
     Anns = #{exchange => ExchangeNameBin,
              routing_keys => [mqtt_to_amqp(Topic)]},
-    Msg0 = mc:init(rabbit_mqtt_mc, MqttMsg, Anns),
+    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
@@ -1770,7 +1770,7 @@ maybe_send_will(
                        _ ->
                            Anns0
                    end,
-            Msg = mc:init(rabbit_mqtt_mc, MqttMsg, Anns),
+            Msg = mc:init(mc_mqtt, MqttMsg, Anns),
             case check_publish_permitted(DefaultX, Topic, State) of
                 ok ->
                     ok = rabbit_queue_type:publish_at_most_once(DefaultX, Msg),
@@ -2018,7 +2018,7 @@ deliver_to_client(Msgs, Ack, State) ->
 
 deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery0,
                       AckRequired, State0) ->
-    MqttMc = mc:convert(rabbit_mqtt_mc, Mc),
+    MqttMc = mc:convert(mc_mqtt, Mc),
     Delivery = setelement(5, Delivery0, MqttMc),
     #mqtt_msg{qos = PublisherQos} = mc:protocol_state(MqttMc),
     SubscriberQoS = case AckRequired of

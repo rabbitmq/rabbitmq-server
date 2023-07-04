@@ -39,7 +39,7 @@
              ]).
 
 size(#basic_message{content = Content}) ->
-    rabbit_mc_amqp_legacy:size(Content).
+    mc_amqpl:size(Content).
 
 is(#basic_message{}) ->
     true;
@@ -102,22 +102,22 @@ message_id(#basic_message{content = Content}) ->
     get_property(message_id, Content).
 
 set_ttl(Value, #basic_message{content = Content0} = Msg) ->
-    Content = rabbit_mc_amqp_legacy:set_property(ttl, Value, Content0),
+    Content = mc_amqpl:set_property(ttl, Value, Content0),
     Msg#basic_message{content = Content}.
 
 x_header(Key,#basic_message{content = Content}) ->
-    element(1, rabbit_mc_amqp_legacy:x_header(Key, Content)).
+    element(1, mc_amqpl:x_header(Key, Content)).
 
 routing_headers(#basic_message{content = Content}, Opts) ->
-    rabbit_mc_amqp_legacy:routing_headers(Content, Opts).
+    mc_amqpl:routing_headers(Content, Opts).
 
-convert(rabbit_mc_amqp_legacy, #basic_message{} = BasicMsg) ->
+convert(mc_amqpl, #basic_message{} = BasicMsg) ->
     BasicMsg;
 convert(Proto, #basic_message{} = BasicMsg) ->
     %% at this point we have to assume this message will no longer travel between nodes
     %% and potentially end up on a node that doesn't yet understand message containers
     %% create legacy mc, then convert and return this
-    mc:convert(Proto, rabbit_mc_amqp_legacy:from_basic_message(BasicMsg)).
+    mc:convert(Proto, mc_amqpl:from_basic_message(BasicMsg)).
 
 protocol_state(#basic_message{content = Content}) ->
     Content.
