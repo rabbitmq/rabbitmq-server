@@ -11,7 +11,7 @@
          x_header/2,
          routing_headers/2,
          convert/2,
-         protocol_state/3,
+         protocol_state/2,
          serialize/2
         ]).
 
@@ -171,7 +171,7 @@ x_header(_Key, #mqtt_msg{} = Msg) ->
 routing_headers(#mqtt_msg{}, _Opts) ->
     #{}.
 
-protocol_state(Msg = #mqtt_msg{}, _Anns, _Deaths) ->
+protocol_state(Msg = #mqtt_msg{}, _Anns) ->
     Msg.
 
 serialize(#mqtt_msg{}, _Anns) ->
