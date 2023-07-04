@@ -71,7 +71,7 @@
 -callback init(term()) ->
     {proto_state(), annotations()}.
 
--callback init_amqp([rabbit_mc_amqp:message_section()]) -> proto_state().
+-callback init_amqp([mc_amqp:message_section()]) -> proto_state().
 
 -callback size(proto_state()) ->
     {MetadataSize :: non_neg_integer(),
@@ -234,8 +234,8 @@ convert(TargetProto, #?MODULE{protocol = Proto,
     case Proto:convert(TargetProto, Data) of
         not_implemented ->
             %% convert to 1.0 then try again
-            AmqpData = Proto:convert(rabbit_mc_amqp, Data),
-            TargetData = rabbit_mc_amqp:convert(TargetProto, AmqpData),
+            AmqpData = Proto:convert(mc_amqp, Data),
+            TargetData = mc_amqp:convert(TargetProto, AmqpData),
             %% init the target from a list of amqp sections
             State#?MODULE{protocol = TargetProto,
                           data = TargetData};

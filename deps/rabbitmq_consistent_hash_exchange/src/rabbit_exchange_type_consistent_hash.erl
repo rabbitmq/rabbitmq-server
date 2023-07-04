@@ -263,7 +263,7 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
 value_to_hash(undefined, Msg) ->
     mc:get_annotation(routing_keys, Msg);
 value_to_hash({header, Header}, Msg0) ->
-    Msg = mc:convert(rabbit_mc_amqp_legacy, Msg0),
+    Msg = mc:convert(mc_amqpl, Msg0),
     #content{} = Content = mc:protocol_state(Msg),
     Headers = rabbit_basic:extract_headers(Content),
     case Headers of
