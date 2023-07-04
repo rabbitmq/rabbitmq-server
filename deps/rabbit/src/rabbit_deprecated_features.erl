@@ -497,6 +497,11 @@ is_permitted_in_configuration(FeatureName, Default) ->
     Settings = application:get_env(rabbit, permit_deprecated_features, #{}),
     case maps:get(FeatureName, Settings, undefined) of
         undefined ->
+            ?LOG_DEBUG(
+               "Deprecated features: `~ts`: `permit_deprecated_features` "
+               "map unset in configuration, using default",
+               [FeatureName],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             Default;
         Default ->
             PermittedStr = case Default of

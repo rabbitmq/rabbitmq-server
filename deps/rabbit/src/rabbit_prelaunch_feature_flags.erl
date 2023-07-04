@@ -19,6 +19,13 @@ setup(#{feature_flags_file := FFFile}) ->
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case filelib:ensure_dir(FFFile) of
         ok ->
+            %% On boot, we know that there should be no registry loaded at
+            %% first. There could be a loaded registry around during a
+            %% stop_app/start_app, so reset it here. This ensures that e.g.
+            %% any change to the configuration file w.r.t. deprecated features
+            %% are taken into account.
+            rabbit_ff_registry_factory:reset_registry(),
+
             ?LOG_DEBUG(
                "Initializing feature flags registry", [],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
