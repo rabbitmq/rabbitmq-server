@@ -79,6 +79,12 @@
 %% Main interface
 %%----------------------------------------------------------------------------
 
+-rabbit_deprecated_feature(
+   {ram_node_type,
+    #{deprecation_phase => permitted_by_default,
+      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-ram-nodes"
+     }}).
+
 -spec init() -> 'ok'.
 
 init() ->
@@ -94,8 +100,17 @@ init() ->
             init_with_lock();
         false ->
             NodeType = node_type(),
-            init_db_and_upgrade(cluster_nodes(all), NodeType,
-                                NodeType =:= ram, _Retry = true),
+            case is_node_type_permitted(NodeType) of
+                false ->
+                    rabbit_log:info(
+                      "RAM nodes are deprecated and not permitted. This "
+                      "node will be converted to a disc node."),
+                    init_db_and_upgrade(cluster_nodes(all), disc,
+                                        true, _Retry = true);
+                true ->
+                    init_db_and_upgrade(cluster_nodes(all), NodeType,
+                                        NodeType =:= ram, _Retry = true)
+            end,
             rabbit_peer_discovery:maybe_init(),
             rabbit_peer_discovery:maybe_register()
     end,
@@ -180,9 +195,13 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
                             "Enabling debug logging might help troubleshoot."),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
+            NodeType1 = case is_node_type_permitted(NodeType) of
+                            false -> disc;
+                            true  -> NodeType
+                        end,
             rabbit_log:info("Peer nodes we can cluster with: ~ts",
                 [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
-            join_discovered_peers(Peers, NodeType)
+            join_discovered_peers(Peers, NodeType1)
     end.
 
 %% Attempts to join discovered,
@@ -250,10 +269,15 @@ join_cluster(DiscoveryNode, NodeType) ->
                     %% of resetting the node from the user.
                     reset_gracefully(),
 
+                    NodeType1 = case is_node_type_permitted(NodeType) of
+                                    false -> disc;
+                                    true  -> NodeType
+                                end,
+
                     %% Join the cluster
                     rabbit_log:info("Clustering with ~tp as ~tp node",
-                                    [ClusterNodes, NodeType]),
-                    ok = init_db_with_mnesia(ClusterNodes, NodeType,
+                                    [ClusterNodes, NodeType1]),
+                    ok = init_db_with_mnesia(ClusterNodes, NodeType1,
                                              true, true, _Retry = true),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
@@ -320,6 +344,7 @@ wipe() ->
 -spec change_cluster_node_type(rabbit_db_cluster:node_type()) -> 'ok'.
 
 change_cluster_node_type(Type) ->
+    ensure_node_type_is_permitted(Type),
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
     case is_clustered() of
@@ -549,6 +574,20 @@ node_type() ->
         false -> ram
     end.
 
+is_node_type_permitted(ram) ->
+    rabbit_deprecated_features:is_permitted(ram_node_type);
+is_node_type_permitted(_NodeType) ->
+    true.
+
+ensure_node_type_is_permitted(NodeType) ->
+    case is_node_type_permitted(NodeType) of
+        true ->
+            ok;
+        false ->
+            Warning = rabbit_deprecated_features:get_warning(ram_node_type),
+            throw({error, Warning})
+    end.
+
 -spec dir() -> file:filename().
 
 dir() -> mnesia:system_info(directory).
@@ -562,6 +601,8 @@ dir() -> mnesia:system_info(directory).
 %% nodes in the cluster already. It also updates the cluster status
 %% file.
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
+    ensure_node_type_is_permitted(NodeType),
+
     NodeIsVirgin = is_virgin_node(),
     rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
     %% We want to synchronize feature flags first before we wait for

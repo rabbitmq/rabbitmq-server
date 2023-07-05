@@ -23,7 +23,10 @@
          end_per_testcase/2,
 
          when_global_qos_is_permitted_by_default/1,
-         when_global_qos_is_not_permitted_from_conf/1
+         when_global_qos_is_not_permitted_from_conf/1,
+
+         join_when_ram_node_type_is_permitted_by_default/1,
+         join_when_ram_node_type_is_not_permitted_from_conf/1
         ]).
 
 suite() ->
@@ -31,14 +34,18 @@ suite() ->
 
 all() ->
     [
-     {group, global_qos}
+     {group, global_qos},
+     {group, ram_node_type}
     ].
 
 groups() ->
     [
      {global_qos, [],
       [when_global_qos_is_permitted_by_default,
-       when_global_qos_is_not_permitted_from_conf]}
+       when_global_qos_is_not_permitted_from_conf]},
+     {ram_node_type, [],
+      [join_when_ram_node_type_is_permitted_by_default,
+       join_when_ram_node_type_is_not_permitted_from_conf]}
     ].
 
 %% -------------------------------------------------------------------
@@ -57,6 +64,9 @@ end_per_suite(Config) ->
 
 init_per_group(global_qos, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
+init_per_group(ram_node_type, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2},
+                                          {rmq_nodes_clustered, false}]);
 init_per_group(_Group, Config) ->
     Config.
 
@@ -69,6 +79,13 @@ init_per_testcase(
                 Config,
                 {rabbit,
                  [{permit_deprecated_features, #{global_qos => false}}]}),
+    init_per_testcase1(Testcase, Config1);
+init_per_testcase(
+  join_when_ram_node_type_is_not_permitted_from_conf = Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features, #{ram_node_type => false}}]}),
     init_per_testcase1(Testcase, Config1);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase1(Testcase, Config).
@@ -151,6 +168,95 @@ is_prefetch_limited(ServerCh) ->
     ct:pal("Server channel (~p) state: ~p", [ServerCh, ChState]),
     LimiterState = element(3, ChState),
     element(3, LimiterState).
+
+%% -------------------------------------------------------------------
+%% RAM node type.
+%% -------------------------------------------------------------------
+
+join_when_ram_node_type_is_permitted_by_default(Config) ->
+    [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
+                       Config, nodename),
+
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    ok = rabbit_control_helper:command_with_output(
+           join_cluster, NodeA,
+           [atom_to_list(NodeB)], [{"--ram", true}]),
+    ok = rabbit_control_helper:command(start_app, NodeA),
+
+    ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
+    ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
+    ?assertEqual([NodeB], get_disc_nodes(Config, NodeA)),
+    ?assertEqual([NodeB], get_disc_nodes(Config, NodeB)),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `ram_node_type`: Feature `ram_node_type` is deprecated",
+          "By default, this feature can still be used for now."])),
+
+    %% Change the advanced configuration file to turn off RAM node type.
+    ConfigFilename0 = rabbit_ct_broker_helpers:get_node_config(
+                        Config, NodeA, erlang_node_config_filename),
+    ConfigFilename = ConfigFilename0 ++ ".config",
+    {ok, [ConfigContent0]} = file:consult(ConfigFilename),
+    ConfigContent1 = rabbit_ct_helpers:merge_app_env_in_erlconf(
+                       ConfigContent0,
+                       {rabbit, [{permit_deprecated_features,
+                                  #{ram_node_type => false}}]}),
+    ConfigContent2 = lists:flatten(io_lib:format("~p.~n", [ConfigContent1])),
+    ok = file:write_file(ConfigFilename, ConfigContent2),
+    ?assertEqual({ok, [ConfigContent1]}, file:consult(ConfigFilename)),
+
+    %% Restart the node and see if it was correctly converted to a disc node.
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    Ret = rabbit_control_helper:command(start_app, NodeA),
+
+    case Ret of
+        ok ->
+            ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
+            ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
+            ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeA)),
+            ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeB));
+        {error, 69,
+         <<"Error:\n{:rabbit, {:incompatible_feature_flags, ", _/binary>>} ->
+            {skip, "Incompatible feature flags between nodes A and B"}
+    end.
+
+join_when_ram_node_type_is_not_permitted_from_conf(Config) ->
+    [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
+                       Config, nodename),
+
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    Ret = rabbit_control_helper:command_with_output(
+            join_cluster, NodeA,
+            [atom_to_list(NodeB)], [{"--ram", true}]),
+    case Ret of
+        ok ->
+            ok = rabbit_control_helper:command(start_app, NodeA),
+
+            ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
+            ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
+            ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeA)),
+            ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeB)),
+
+            ?assert(
+               log_file_contains_message(
+                 Config, NodeA,
+                 ["Deprecated features: `ram_node_type`: Feature `ram_node_type` is deprecated",
+                  "Its use is not permitted per the configuration"]));
+        {error, 69, <<"Error:\nincompatible_feature_flags">>} ->
+            {skip, "Incompatible feature flags between nodes A and B"}
+    end.
+
+get_all_nodes(Config, Node) ->
+    lists:sort(
+      rabbit_ct_broker_helpers:rpc(
+        Config, Node, rabbit_mnesia, cluster_nodes, [all])).
+
+get_disc_nodes(Config, Node) ->
+    lists:sort(
+      rabbit_ct_broker_helpers:rpc(
+        Config, Node, rabbit_mnesia, cluster_nodes, [disc])).
 
 %% -------------------------------------------------------------------
 %% Helpers.
