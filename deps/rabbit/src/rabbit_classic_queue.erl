@@ -121,7 +121,7 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
             {ok, 0}
     end.
 
-is_recoverable(Q) when ?is_amqqueue(Q) ->
+is_recoverable(Q) when ?is_amqqueue(Q) and ?amqqueue_is_classic(Q) ->
     Node = node(),
     Node =:= amqqueue:qnode(Q) andalso
     %% Terminations on node down will not remove the rabbit_queue
