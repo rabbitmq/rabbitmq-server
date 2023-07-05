@@ -1293,9 +1293,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                 {Opts, SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
         end,
     % rabbit_feature_flags:is_enabled(message_containers),
-    Message = mc_amqpl:message(ExchangeName,
-                               RoutingKey,
-                               DecodedContent),
+    Message0 = mc_amqpl:message(ExchangeName,
+                                RoutingKey,
+                                DecodedContent),
+    Message = rabbit_message_interceptor:intercept(Message0),
     QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
     [rabbit_channel:deliver_reply(RK, Message) ||
      {virtual_reply_queue, RK} <- QNames],
