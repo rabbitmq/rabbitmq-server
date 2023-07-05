@@ -553,9 +553,11 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             %% Before we continue the read_many calls we must remove the
             %% MsgIds we have read from the list and add the messages to
             %% the Acc.
-            {Acc, MsgIdsRead} = lists:foldl(fun(Msg = #basic_message{id = MsgIdRead}, {Acc1, MsgIdsAcc}) ->
-                {Acc1#{MsgIdRead => Msg}, [MsgIdRead|MsgIdsAcc]}
-            end, {Acc0, []}, Msgs),
+            {Acc, MsgIdsRead} = lists:foldl(
+                                  fun(Msg, {Acc1, MsgIdsAcc}) ->
+                                          MsgIdRead = mc:get_annotation(id, Msg),
+                                          {Acc1#{MsgIdRead => Msg}, [MsgIdRead|MsgIdsAcc]}
+                                  end, {Acc0, []}, Msgs),
             MsgIds = MsgIds0 -- MsgIdsRead,
             %% Unmark opened files and continue.
             read_many_file3(MsgIds, CState#client_msstate{ reader = Reader }, Acc, File)
