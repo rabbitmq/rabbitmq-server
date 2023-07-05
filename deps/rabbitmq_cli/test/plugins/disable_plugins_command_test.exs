@@ -264,7 +264,7 @@ defmodule DisablePluginsCommandTest do
   end
 
   test "formats enabled plugins mismatch errors", context do
-    err = {:enabled_plugins_mismatch, '/tmp/a/cli/path', '/tmp/a/server/path'}
+    err = {:enabled_plugins_mismatch, ~c"/tmp/a/cli/path", ~c"/tmp/a/server/path"}
 
     assert {:error, ExitCodes.exit_dataerr(),
             "Could not update enabled plugins file at /tmp/a/cli/path: target node #{context[:opts][:node]} uses a different path (/tmp/a/server/path)"} ==

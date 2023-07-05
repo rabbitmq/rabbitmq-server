@@ -19,7 +19,7 @@ rules_pkg_dependencies()
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.10.5",
+    tag = "3.11.1",
 )
 
 load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
@@ -181,6 +181,11 @@ elixir_config(
             name = "1_14",
             sha256 = "2ea249566c67e57f8365ecdcd0efd9b6c375f57609b3ac2de326488ac37c8ebd",
             version = "1.14.5",
+        ),
+        internal_elixir_from_github_release(
+            name = "1_15",
+            sha256 = "3cfadca57c3092ccbd3ec3f17e5eab529bbd2946f50e4941a903c55c39e3c5f5",
+            version = "1.15.2",
         ),
     ],
     rabbitmq_server_workspace = "@",

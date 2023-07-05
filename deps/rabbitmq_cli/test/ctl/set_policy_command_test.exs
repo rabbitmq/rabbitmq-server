@@ -129,7 +129,7 @@ defmodule SetPolicyCommandTest do
              context[:opts]
            ) ==
              {:error_string,
-              'Validation failed\n\n[{<<"foo">>,<<"bar">>}] are not recognised policy settings\n'}
+              ~c"Validation failed\n\n[{<<\"foo\">>,<<\"bar\">>}] are not recognised policy settings\n"}
 
     assert list_policies(context[:vhost]) == []
   end
@@ -139,7 +139,7 @@ defmodule SetPolicyCommandTest do
     assert @command.run(
              [context[:key], context[:pattern], context[:value]],
              context[:opts]
-           ) == {:error_string, 'Validation failed\n\nno policy provided\n'}
+           ) == {:error_string, ~c"Validation failed\n\nno policy provided\n"}
 
     assert list_policies(context[:vhost]) == []
   end
