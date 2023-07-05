@@ -349,13 +349,26 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                       Headers0
               end,
 
-    B = case Anns of
-            #{timestamp := Timestamp} ->
-                B0#'P_basic'{timestamp = Timestamp div 1000,
-                             headers = Headers};
-            _ ->
-                B0#'P_basic'{headers = Headers}
-        end,
+    Timestamp = case Anns of
+                    #{timestamp := Ts} ->
+                        Ts div 1000;
+                    _ ->
+                        undefined
+                end,
+    Expiration = case Anns of
+                     #{ttl := undefined} ->
+                         undefined;
+                     #{ttl := Ttl} ->
+                         %% not sure this will ever happen
+                         %% as we only ever unset the expiry
+                         integer_to_binary(Ttl);
+                     _ ->
+                         B0#'P_basic'.expiration
+                 end,
+
+    B = B0#'P_basic'{timestamp = Timestamp,
+                     expiration = Expiration,
+                     headers = Headers},
 
     C#content{properties = B,
               properties_bin = none}.
