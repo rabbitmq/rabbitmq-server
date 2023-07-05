@@ -32,11 +32,14 @@
 -include("mc.hrl").
 
 -type str() :: atom() | string() | binary().
-
--type ann_key() :: str().
--type ann_value() :: str() | integer() | float() | [ann_value()].
+-type internal_ann_key() :: atom().
+-type x_ann_key() :: binary().
+-type x_ann_value() :: str() | integer() | float() | [x_ann_value()].
 -type protocol() :: module().
--type annotations() :: #{ann_key() => ann_value()}.
+-type annotations() :: #{internal_ann_key() => term(),
+                         x_ann_key() => x_ann_value()}.
+-type ann_key() :: internal_ann_key() | x_ann_key().
+-type ann_value() :: term().
 
 %% the protocol module must implement the mc behaviour
 -record(?MODULE, {protocol :: protocol(),
@@ -162,7 +165,7 @@ x_header(Key, #?MODULE{protocol = Proto,
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
 
--spec routing_headers(state(), [x_header | complex_types]) ->
+-spec routing_headers(state(), [x_headers | complex_types]) ->
     #{binary() => property_value()}.
 routing_headers(#?MODULE{protocol = Proto,
                          annotations = Anns,
@@ -298,9 +301,10 @@ record_death(Reason, SourceQueue, BasicMsg) ->
 
 
 -spec is_death_cycle(rabbit_misc:resource_name(), state()) -> boolean().
-is_death_cycle(TargetQueue, #?MODULE{annotations = Anns}) ->
-    Deaths = maps:get(deaths, Anns, #deaths{}),
+is_death_cycle(TargetQueue, #?MODULE{annotations = #{deaths := Deaths}}) ->
     is_cycle(TargetQueue, maps:keys(Deaths#deaths.records));
+is_death_cycle(_TargetQueue, #?MODULE{}) ->
+    false;
 is_death_cycle(TargetQueue, BasicMsg) ->
     mc_compat:is_death_cycle(TargetQueue, BasicMsg).
 
