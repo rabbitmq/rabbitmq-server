@@ -929,9 +929,9 @@ credential_validator.regexp = ^abc\\d+",
   %%
 
   {deprecated_features_cmq,
-   "deprecated_features.permit.classic_mirrored_queues = false",
+   "deprecated_features.permit.classic_queue_mirroring = false",
    [{rabbit, [
-      {permit_deprecated_features, #{classic_mirrored_queues => false}}
+      {permit_deprecated_features, #{classic_queue_mirroring => false}}
      ]}],
    []},
 

@@ -9,6 +9,8 @@
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
+-include_lib("stdlib/include/assert.hrl").
+
 -include("amqqueue.hrl").
 
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
@@ -26,7 +28,8 @@
 
 -export([get_replicas/1, transfer_leadership/2, migrate_leadership_to_existing_replica/2]).
 
--export([prevent_startup_when_mirroring_is_disabled_but_configured/0]).
+%% Deprecated feature callback.
+-export([are_cmqs_used/1]).
 
 %% for testing only
 -export([module/1]).
@@ -34,6 +37,41 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(HA_NODES_MODULE, rabbit_mirror_queue_mode_nodes).
+
+-rabbit_deprecated_feature(
+   {classic_queue_mirroring,
+    #{deprecation_phase => permitted_by_default,
+      messages =>
+      #{when_permitted =>
+        "Classic mirrored queues are deprecated.\n"
+        "By default, they can still be used for now.\n"
+        "Their use will not be permitted by default in the next minor"
+        "RabbitMQ version (if any) and they will be removed from "
+        "RabbitMQ 4.0.0.\n"
+        "To continue using classic mirrored queues when they are not "
+        "permitted by default, set the following parameter in your "
+        "configuration:\n"
+        "    \"deprecated_features.permit.classic_queue_mirroring = true\"\n"
+        "To test RabbitMQ as if they were removed, set this in your "
+        "configuration:\n"
+        "    \"deprecated_features.permit.classic_queue_mirroring = false\"",
+
+        when_denied =>
+        "Classic mirrored queues are deprecated.\n"
+        "Their use is not permitted per the configuration (overriding the "
+        "default, which is permitted):\n"
+        "    \"deprecated_features.permit.classic_queue_mirroring = false\"\n"
+        "Their use will not be permitted by default in the next minor "
+        "RabbitMQ version (if any) and they will be removed from "
+        "RabbitMQ 4.0.0.\n"
+        "To continue using classic mirrored queues when they are not "
+        "permitted by default, set the following parameter in your "
+        "configuration:\n"
+        "    \"deprecated_features.permit.classic_queue_mirroring = true\""
+       },
+      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-classic-queue-mirroring",
+      callbacks => #{is_feature_used => {?MODULE, are_cmqs_used}}
+     }}).
 
 -rabbit_boot_step(
    {?MODULE,
@@ -730,62 +768,32 @@ maybe_drop_master_after_sync(Q) when ?is_amqqueue(Q) ->
 
 %%----------------------------------------------------------------------------
 
-mirroring_policies() ->
-    Policies = rabbit_policy:list_as_maps(),
-    OpPolicies = rabbit_policy:list_op_as_maps(),
-    IsMirroringPolicy = fun
-        (#{definition := #{<<"ha-mode">> := _}}) ->
-            true;
-        (_) ->
-            false
-    end,
-    {lists:filter(IsMirroringPolicy, Policies), lists:filter(IsMirroringPolicy, OpPolicies)}.
-
-report_vhosts_using_mirroring(MirrorPolicies, PolicyType) ->
-    PerVhost = lists:foldr(
-                 fun (#{vhost := VHost, name := Name}, Acc) ->
-                         maps:update_with(
-                           VHost,
-                           fun (Message) -> <<Name/binary, ", ", Message/binary>> end,
-                           <<"Virtual host ", VHost/binary, " has ", PolicyType/binary,
-                             " policies that configure mirroring: ", Name/binary>>,
-                           Acc)
-                 end,
-                 #{}, MirrorPolicies),
-    lists:foreach(
-      fun (Msg) -> rabbit_log:error("~ts", [Msg]) end,
-      maps:values(PerVhost)).
-
-prevent_startup_when_mirroring_is_disabled_but_configured() ->
-    case are_cmqs_permitted() of
-        true ->
-            ok;
-        false ->
-            Error = {error, {failed_to_deny_deprecated_features, [classic_mirrored_queues]}},
-            case mirroring_policies() of
-                {[], []} ->
-                    ok;
-                {Pols, []} ->
-                    report_vhosts_using_mirroring(Pols, <<"user">>),
-                    exit(Error);
-                {[], OpPols} ->
-                    report_vhosts_using_mirroring(OpPols, <<"operator">>),
-                    exit(Error);
-                {Pols, OpPols} ->
-                    report_vhosts_using_mirroring(Pols, <<"user">>),
-                    report_vhosts_using_mirroring(OpPols, <<"operator">>),
-                    exit(Error)
-            end
-    end.
-
 are_cmqs_permitted() ->
-    %% FeatureName = classic_mirrored_queues,
-    %% rabbit_deprecated_features:is_permitted(FeatureName).
-    case application:get_env(rabbit, permitted_deprecated_features) of
-        {ok, #{classic_mirrored_queues := false}} ->
-            false;
-        _ -> true
+    FeatureName = classic_queue_mirroring,
+    rabbit_deprecated_features:is_permitted(FeatureName).
+
+are_cmqs_used(_) ->
+    try
+        LocalPolicies = rabbit_policy:list(),
+        LocalOpPolicies = rabbit_policy:list_op(),
+        has_ha_policies(LocalPolicies ++ LocalOpPolicies)
+    catch
+        exit:{aborted, {no_exists, _}} ->
+            %% This node is being initialized for the first time. Therefore it
+            %% must have no policies.
+            ?assert(rabbit_mnesia:is_running()),
+            false
     end.
+
+has_ha_policies(Policies) ->
+    lists:any(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              does_policy_configure_cmq(KeyList)
+      end, Policies).
+
+does_policy_configure_cmq(KeyList) ->
+    lists:keymember(<<"ha-mode">>, 1, KeyList).
 
 validate_policy(KeyList) ->
     Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
@@ -801,7 +809,12 @@ validate_policy(KeyList) ->
         {_, none, none, none, none, none, none} ->
             ok;
         {false, _, _, _, _, _, _} ->
-            {error, "Classic queue mirroring is disabled via node configuration", []};
+            %% If the policy configures classic mirrored queues and this
+            %% feature is disabled, we consider this policy not valid and deny
+            %% it.
+            FeatureName = classic_queue_mirroring,
+            Warning = rabbit_deprecated_features:get_warning(FeatureName),
+            {error, "~ts", [Warning]};
         {_, none, _, _, _, _, _} ->
             {error, "ha-mode must be specified to specify ha-params, "
              "ha-sync-mode or ha-promote-on-shutdown", []};

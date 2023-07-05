@@ -26,7 +26,10 @@
          when_global_qos_is_not_permitted_from_conf/1,
 
          join_when_ram_node_type_is_permitted_by_default/1,
-         join_when_ram_node_type_is_not_permitted_from_conf/1
+         join_when_ram_node_type_is_not_permitted_from_conf/1,
+
+         set_policy_when_cmq_is_permitted_by_default/1,
+         set_policy_when_cmq_is_not_permitted_from_conf/1
         ]).
 
 suite() ->
@@ -35,7 +38,8 @@ suite() ->
 all() ->
     [
      {group, global_qos},
-     {group, ram_node_type}
+     {group, ram_node_type},
+     {group, classic_queue_mirroring}
     ].
 
 groups() ->
@@ -45,7 +49,10 @@ groups() ->
        when_global_qos_is_not_permitted_from_conf]},
      {ram_node_type, [],
       [join_when_ram_node_type_is_permitted_by_default,
-       join_when_ram_node_type_is_not_permitted_from_conf]}
+       join_when_ram_node_type_is_not_permitted_from_conf]},
+     {classic_queue_mirroring, [],
+      [set_policy_when_cmq_is_permitted_by_default,
+       set_policy_when_cmq_is_not_permitted_from_conf]}
     ].
 
 %% -------------------------------------------------------------------
@@ -67,6 +74,8 @@ init_per_group(global_qos, Config) ->
 init_per_group(ram_node_type, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2},
                                           {rmq_nodes_clustered, false}]);
+init_per_group(classic_queue_mirroring, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(_Group, Config) ->
     Config.
 
@@ -86,6 +95,14 @@ init_per_testcase(
                 Config,
                 {rabbit,
                  [{permit_deprecated_features, #{ram_node_type => false}}]}),
+    init_per_testcase1(Testcase, Config1);
+init_per_testcase(
+  set_policy_when_cmq_is_not_permitted_from_conf = Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features,
+                   #{classic_queue_mirroring => false}}]}),
     init_per_testcase1(Testcase, Config1);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase1(Testcase, Config).
@@ -257,6 +274,62 @@ get_disc_nodes(Config, Node) ->
     lists:sort(
       rabbit_ct_broker_helpers:rpc(
         Config, Node, rabbit_mnesia, cluster_nodes, [disc])).
+
+%% -------------------------------------------------------------------
+%% Classic queue mirroring.
+%% -------------------------------------------------------------------
+
+set_policy_when_cmq_is_permitted_by_default(Config) ->
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:set_ha_policy(
+         Config, 0, <<".*">>, <<"all">>)),
+
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `classic_queue_mirroring`: Classic mirrored queues are deprecated.",
+          "By default, they can still be used for now."])),
+
+    %% Change the advanced configuration file to turn off classic queue
+    %% mirroring.
+    ConfigFilename0 = rabbit_ct_broker_helpers:get_node_config(
+                        Config, NodeA, erlang_node_config_filename),
+    ConfigFilename = ConfigFilename0 ++ ".config",
+    {ok, [ConfigContent0]} = file:consult(ConfigFilename),
+    ConfigContent1 = rabbit_ct_helpers:merge_app_env_in_erlconf(
+                       ConfigContent0,
+                       {rabbit, [{permit_deprecated_features,
+                                  #{classic_queue_mirroring => false}}]}),
+    ConfigContent2 = lists:flatten(io_lib:format("~p.~n", [ConfigContent1])),
+    ok = file:write_file(ConfigFilename, ConfigContent2),
+    ?assertEqual({ok, [ConfigContent1]}, file:consult(ConfigFilename)),
+
+    %% Restart the node and see if it was correctly converted to a disc node.
+    ok = rabbit_control_helper:command(stop_app, NodeA),
+    ?assertMatch(
+       {error, 69,
+        <<"Error:\n{:rabbit, {{:failed_to_deny_deprecated_features, "
+        "[:classic_queue_mirroring]}", _/binary>>},
+       rabbit_control_helper:command(start_app, NodeA)).
+
+set_policy_when_cmq_is_not_permitted_from_conf(Config) ->
+    ?assertError(
+       {badmatch,
+        {error_string,
+         "Validation failed\n\nClassic mirrored queues are deprecated." ++ _}},
+       rabbit_ct_broker_helpers:set_ha_policy(
+         Config, 0, <<".*">>, <<"all">>)),
+
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `classic_queue_mirroring`: Classic mirrored queues are deprecated.",
+          "Their use is not permitted per the configuration"])).
 
 %% -------------------------------------------------------------------
 %% Helpers.
