@@ -554,7 +554,7 @@ reductions(Name) ->
             0
     end.
 
-is_recoverable(Q) ->
+is_recoverable(Q) when ?is_amqqueue(Q) and ?amqqueue_is_quorum(Q) ->
     Node = node(),
     Nodes = get_nodes(Q),
     lists:member(Node, Nodes).
