@@ -329,7 +329,8 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                  H00
          end,
     Deaths = maps:get(deaths, Anns, undefined),
-    Headers0 = maps:fold(
+    Headers0 = deaths_to_headers(Deaths, H0),
+    Headers1 = maps:fold(
                  fun (<<"x-", _/binary>> = Key, Val, H) when is_integer(Val) ->
                          [{Key, long, Val} | H];
                      (<<"x-", _/binary>> = Key, Val, H) when is_binary(Val) ->
@@ -341,14 +342,16 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                          [{Key, long, Val} | H];
                      (_, _, Acc) ->
                          Acc
-                 end, deaths_to_headers(Deaths, H0), Anns),
-    Headers = case Headers0 of
+                 end, Headers0, Anns),
+    Headers = case Headers1 of
                   [] ->
                       undefined;
                   _ ->
-                      Headers0
+                      %% Dedup
+                      lists:usort(fun({Key1, _, _}, {Key2, _, _}) ->
+                                          Key1 =< Key2
+                                  end, Headers1)
               end,
-
     Timestamp = case Anns of
                     #{timestamp := Ts} ->
                         Ts div 1000;
