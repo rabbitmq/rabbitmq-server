@@ -387,11 +387,6 @@ erlang_dev_package = use_extension(
 erlang_dev_package.hex_package(
     name = "amqp",
     build_file = "@rabbitmq-server//bazel:BUILD.amqp",
-<<<<<<< HEAD
-=======
-    patch_args = ["-p1"],
-    patches = ["@rabbitmq-server//bazel:amqp.patch"],
->>>>>>> c837b5232d (Adopt elixir 1.13.4)
     sha256 = "b6d926770e4508e30e3e9e476c57b6c8aeda44f7715663bdc38935620ce5be6f",
     version = "2.1.1",
 )
