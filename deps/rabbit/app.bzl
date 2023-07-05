@@ -43,7 +43,7 @@ def all_beam_files(name = "all_beam_files"):
                 "src/rabbit_tracking.erl",
             ],
         ),
-        hdrs = ["public_and_private_hdrs"],
+        hdrs = [":public_and_private_hdrs"],
         app_name = "rabbit",
         beam = [":behaviours"],
         dest = "ebin",
@@ -145,8 +145,8 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "private_hdrs",
         srcs = [
-            "src/rabbit_feature_flags.hrl",
             "src/mc.hrl",
+            "src/rabbit_feature_flags.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
             "src/rabbit_fifo_v0.hrl",
