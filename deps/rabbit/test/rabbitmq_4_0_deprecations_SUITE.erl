@@ -29,7 +29,10 @@
          join_when_ram_node_type_is_not_permitted_from_conf/1,
 
          set_policy_when_cmq_is_permitted_by_default/1,
-         set_policy_when_cmq_is_not_permitted_from_conf/1
+         set_policy_when_cmq_is_not_permitted_from_conf/1,
+
+         when_transient_nonexcl_is_permitted_by_default/1,
+         when_transient_nonexcl_is_not_permitted_from_conf/1
         ]).
 
 suite() ->
@@ -39,7 +42,8 @@ all() ->
     [
      {group, global_qos},
      {group, ram_node_type},
-     {group, classic_queue_mirroring}
+     {group, classic_queue_mirroring},
+     {group, transient_nonexcl_queues}
     ].
 
 groups() ->
@@ -52,7 +56,10 @@ groups() ->
        join_when_ram_node_type_is_not_permitted_from_conf]},
      {classic_queue_mirroring, [],
       [set_policy_when_cmq_is_permitted_by_default,
-       set_policy_when_cmq_is_not_permitted_from_conf]}
+       set_policy_when_cmq_is_not_permitted_from_conf]},
+     {transient_nonexcl_queues, [],
+      [when_transient_nonexcl_is_permitted_by_default,
+       when_transient_nonexcl_is_not_permitted_from_conf]}
     ].
 
 %% -------------------------------------------------------------------
@@ -75,6 +82,8 @@ init_per_group(ram_node_type, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2},
                                           {rmq_nodes_clustered, false}]);
 init_per_group(classic_queue_mirroring, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
+init_per_group(transient_nonexcl_queues, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(_Group, Config) ->
     Config.
@@ -103,6 +112,14 @@ init_per_testcase(
                 {rabbit,
                  [{permit_deprecated_features,
                    #{classic_queue_mirroring => false}}]}),
+    init_per_testcase1(Testcase, Config1);
+init_per_testcase(
+    when_transient_nonexcl_is_not_permitted_from_conf = Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features,
+                   #{transient_nonexcl_queues => false}}]}),
     init_per_testcase1(Testcase, Config1);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase1(Testcase, Config).
@@ -330,6 +347,54 @@ set_policy_when_cmq_is_not_permitted_from_conf(Config) ->
          Config, NodeA,
          ["Deprecated features: `classic_queue_mirroring`: Classic mirrored queues are deprecated.",
           "Their use is not permitted per the configuration"])).
+
+%% -------------------------------------------------------------------
+%% Transient non-exclusive queues.
+%% -------------------------------------------------------------------
+
+when_transient_nonexcl_is_permitted_by_default(Config) ->
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+
+    QName = list_to_binary(atom_to_list(?FUNCTION_NAME)),
+    ?assertEqual(
+       {'queue.declare_ok', QName, 0, 0},
+       amqp_channel:call(
+         Ch,
+         #'queue.declare'{queue = QName,
+                          durable = false,
+                          exclusive = false})),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
+          "By default, this feature can still be used for now."])).
+
+when_transient_nonexcl_is_not_permitted_from_conf(Config) ->
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+
+    QName = list_to_binary(atom_to_list(?FUNCTION_NAME)),
+    ?assertExit(
+       {{shutdown,
+         {connection_closing,
+          {server_initiated_close, 541,
+           <<"INTERNAL_ERROR - Feature `transient_nonexcl_queues` is "
+             "deprecated.", _/binary>>}}}, _},
+       amqp_channel:call(
+         Ch,
+         #'queue.declare'{queue = QName,
+                          durable = false,
+                          exclusive = false})),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
+          "Its use is not permitted per the configuration"])).
 
 %% -------------------------------------------------------------------
 %% Helpers.
