@@ -1276,10 +1276,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_write_permitted_on_topic(Exchange, User, RoutingKey, AuthzContext),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent0 = #content {properties = Props} =
+    DecodedContent = #content {properties = Props} =
         maybe_set_fast_reply_to(
           rabbit_binary_parser:ensure_content_decoded(Content), State),
-    DecodedContent = rabbit_message_interceptor:intercept(DecodedContent0),
     check_user_id_header(Props, State),
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
@@ -1294,9 +1293,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                 {Opts, SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
         end,
     % rabbit_feature_flags:is_enabled(message_containers),
-    Message = mc_amqpl:message(ExchangeName,
-                               RoutingKey,
-                               DecodedContent),
+    Message0 = mc_amqpl:message(ExchangeName,
+                                RoutingKey,
+                                DecodedContent),
+    Message = rabbit_message_interceptor:intercept(Message0),
     QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
     [rabbit_channel:deliver_reply(RK, Message) ||
      {virtual_reply_queue, RK} <- QNames],
