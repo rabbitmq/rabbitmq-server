@@ -20,6 +20,8 @@
 -define(COUNT_TIME, [io_sync, io_seek]).
 -define(COUNT_TIME_BYTES, [io_read, io_write]).
 
+-import(rabbit_misc, [safe_ets_update_counter/3, safe_ets_update_counter/4]).
+
 init() ->
     _ = ets:new(?TABLE, [public, named_table, {write_concurrency,true}]),
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME_BYTES,
@@ -31,21 +33,28 @@ init() ->
 
 update(Op, Bytes, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    _ = ets:update_counter(?TABLE, {Op, count}, 1),
-    _ = ets:update_counter(?TABLE, {Op, bytes}, Bytes),
-    _ = ets:update_counter(?TABLE, {Op, time}, Time),
+    _ = safe_ets_update_counter(?TABLE, {Op, count}, 1),
+    _ = safe_ets_update_counter(?TABLE, {Op, bytes}, Bytes),
+    _ = safe_ets_update_counter(?TABLE, {Op, time}, Time),
     Res.
 
 update(Op, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    _ = ets:update_counter(?TABLE, {Op, count}, 1),
-    _ = ets:update_counter(?TABLE, {Op, time}, Time),
+    _ = safe_ets_update_counter(?TABLE, {Op, count}, 1),
+    _ = safe_ets_update_counter(?TABLE, {Op, time}, Time),
     Res.
 
 update(Op) ->
-    ets:update_counter(?TABLE, {Op, count}, 1),
+    _ = safe_ets_update_counter(?TABLE, {Op, count}, 1),
     ok.
 
+<<<<<<< HEAD
+=======
+inc(Op, Count) ->
+    _ = safe_ets_update_counter(?TABLE, {Op, count}, Count),
+    ok.
+
+>>>>>>> d5d8689f54 (FHC: use safe versions of ets update functions)
 get() ->
     lists:sort(ets:tab2list(?TABLE)).
 

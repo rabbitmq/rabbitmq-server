@@ -1324,16 +1324,10 @@ run_pending_action({contains, MsgId, From}, State) ->
 run_pending_action({remove, MsgId, CRef}, State) ->
     remove_message(MsgId, CRef, State).
 
-safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
-    try
-        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
-    catch error:badarg -> FailThunk()
-    end.
-
 update_msg_cache(CacheEts, MsgId, Msg) ->
     case ets:insert_new(CacheEts, {MsgId, Msg, 1}) of
         true  -> ok;
-        false -> safe_ets_update_counter(
+        false -> rabbit_misc:safe_ets_update_counter(
                    CacheEts, MsgId, {3, +1}, fun (_) -> ok end,
                    fun () -> update_msg_cache(CacheEts, MsgId, Msg) end)
     end.
