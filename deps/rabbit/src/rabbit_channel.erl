@@ -236,6 +236,12 @@
 
 %%----------------------------------------------------------------------------
 
+-rabbit_deprecated_feature(
+   {global_qos,
+    #{deprecation_phase => permitted_by_default,
+      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-global-qos"
+     }}).
+
 -spec start_link
         (channel_number(), pid(), pid(), pid(), string(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
@@ -506,8 +512,9 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
              true   -> flow;
              false  -> noflow
            end,
-    {ok, {Global, Prefetch}} = application:get_env(rabbit, default_consumer_prefetch),
+    {ok, {Global0, Prefetch}} = application:get_env(rabbit, default_consumer_prefetch),
     Limiter0 = rabbit_limiter:new(LimiterPid),
+    Global = Global0 andalso is_global_qos_permitted(),
     Limiter = case {Global, Prefetch} of
                   {true, 0} ->
                       rabbit_limiter:unlimit_prefetch(Limiter0);
@@ -1559,30 +1566,44 @@ handle_method(#'basic.qos'{global         = false,
                                         limiter = Limiter1}};
 
 handle_method(#'basic.qos'{global         = true,
-                           prefetch_count = 0},
-              _, State = #ch{limiter = Limiter}) ->
-    Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
-    case rabbit_limiter:is_active(Limiter) of
-        true  -> rabbit_amqqueue:deactivate_limit_all(
-                   classic_consumer_queue_pids(State#ch.consumer_mapping), self());
-        false -> ok
-    end,
-    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
+                           prefetch_count = 0} = Method,
+              Content,
+              State = #ch{limiter = Limiter}) ->
+    case is_global_qos_permitted() of
+        true ->
+            Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
+            case rabbit_limiter:is_active(Limiter) of
+                true  -> rabbit_amqqueue:deactivate_limit_all(
+                           classic_consumer_queue_pids(State#ch.consumer_mapping), self());
+                false -> ok
+            end,
+            {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
+        false ->
+            Method1 = Method#'basic.qos'{global = false},
+            handle_method(Method1, Content, State)
+    end;
 
 handle_method(#'basic.qos'{global         = true,
-                           prefetch_count = PrefetchCount},
-              _, State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
-    %% TODO ?QUEUE:len(UAMQ) is not strictly right since that counts
-    %% unacked messages from basic.get too. Pretty obscure though.
-    Limiter1 = rabbit_limiter:limit_prefetch(Limiter,
-                                             PrefetchCount, ?QUEUE:len(UAMQ)),
-    case ((not rabbit_limiter:is_active(Limiter)) andalso
-          rabbit_limiter:is_active(Limiter1)) of
-        true  -> rabbit_amqqueue:activate_limit_all(
-                   classic_consumer_queue_pids(State#ch.consumer_mapping), self());
-        false -> ok
-    end,
-    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
+                           prefetch_count = PrefetchCount} = Method,
+              Content,
+              State = #ch{limiter = Limiter, unacked_message_q = UAMQ}) ->
+    case is_global_qos_permitted() of
+        true ->
+            %% TODO ?QUEUE:len(UAMQ) is not strictly right since that counts
+            %% unacked messages from basic.get too. Pretty obscure though.
+            Limiter1 = rabbit_limiter:limit_prefetch(Limiter,
+                                                     PrefetchCount, ?QUEUE:len(UAMQ)),
+            case ((not rabbit_limiter:is_active(Limiter)) andalso
+                  rabbit_limiter:is_active(Limiter1)) of
+                true  -> rabbit_amqqueue:activate_limit_all(
+                           classic_consumer_queue_pids(State#ch.consumer_mapping), self());
+                false -> ok
+            end,
+            {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
+        false ->
+            Method1 = Method#'basic.qos'{global = false},
+            handle_method(Method1, Content, State)
+    end;
 
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ,
@@ -2943,3 +2964,6 @@ maybe_decrease_global_publishers(#ch{publishing_mode = false}) ->
     ok;
 maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
     rabbit_global_counters:publisher_deleted(amqp091).
+
+is_global_qos_permitted() ->
+    rabbit_deprecated_features:is_permitted(global_qos).

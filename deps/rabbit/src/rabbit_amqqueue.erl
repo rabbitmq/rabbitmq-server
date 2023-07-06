@@ -107,6 +107,12 @@
 
 %%----------------------------------------------------------------------------
 
+-rabbit_deprecated_feature(
+   {transient_nonexcl_queues,
+    #{deprecation_phase => permitted_by_default,
+      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-transient-non-exclusive-queues"
+     }}).
+
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
          active, activity_status, arguments]).
@@ -223,7 +229,14 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                              VHost,
                              #{user => ActingUser},
                              Type),
-            rabbit_queue_type:declare(Q, Node);
+            case is_queue_args_combination_permitted(Q) of
+                true ->
+                    rabbit_queue_type:declare(Q, Node);
+                false ->
+                    Warning = rabbit_deprecated_features:get_warning(
+                                transient_nonexcl_queues),
+                    {protocol_error, internal_error, "~ts", [Warning]}
+            end;
         false ->
             {protocol_error, internal_error,
              "Cannot declare a queue '~ts' of type '~ts' on node '~ts': "
@@ -721,8 +734,11 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
           when is_binary(DefaultQueueType) andalso
                not HasQTypeArg ->
             Type = rabbit_queue_type:discover(DefaultQueueType),
-            case rabbit_queue_type:is_compatible(Type, Durable,
-                                                 Exclusive, AutoDelete) of
+            IsPermitted = is_queue_args_combination_permitted(
+                            Durable, Exclusive),
+            IsCompatible = rabbit_queue_type:is_compatible(
+                             Type, Durable, Exclusive, AutoDelete),
+            case IsPermitted andalso IsCompatible of
                 true ->
                     %% patch up declare arguments with x-queue-type if there
                     %% is a vhost default set the queue is druable and not exclusive
@@ -2074,3 +2090,16 @@ get_bcc_queue(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
     rabbit_amqqueue:lookup(BCCQueueName).
+
+is_queue_args_combination_permitted(Q) ->
+    Durable = amqqueue:is_durable(Q),
+    Exclusive = is_exclusive(Q),
+    is_queue_args_combination_permitted(Durable, Exclusive).
+
+is_queue_args_combination_permitted(Durable, Exclusive) ->
+    case not Durable andalso not Exclusive of
+        false ->
+            true;
+        true ->
+            rabbit_deprecated_features:is_permitted(transient_nonexcl_queues)
+    end.

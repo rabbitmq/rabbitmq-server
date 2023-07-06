@@ -7,12 +7,21 @@
 
 -module(rabbit_mgmt_features).
 
--export([is_op_policy_updating_disabled/0]).
+-export([is_op_policy_updating_disabled/0,
+         are_stats_enabled/0]).
 
 is_op_policy_updating_disabled() ->
     case get_restriction([operator_policy_changes, disabled]) of
         true -> true;
         _ -> false
+    end.
+
+are_stats_enabled() ->
+    DisabledFromConf = application:get_env(
+      rabbitmq_management, disable_management_stats, false),
+    case DisabledFromConf of
+        true -> false;
+        _    -> rabbit_mgmt_agent_config:is_metrics_collector_permitted()
     end.
 
 %% Private

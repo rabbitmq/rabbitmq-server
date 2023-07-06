@@ -193,12 +193,6 @@
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
 
--rabbit_boot_step({deprecate_cmqs,
-                   [{description, "checks whether mirrored queues are disabled"},
-                    {mfa, {rabbit_mirror_queue_misc, prevent_startup_when_mirroring_is_disabled_but_configured, []}},
-                    {requires, [database]},
-                    {enables, [recovery]}]}).
-
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
