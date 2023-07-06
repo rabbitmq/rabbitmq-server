@@ -1100,7 +1100,8 @@ session_upgrade_v3_v5_amqp091_pub(Config) ->
     amqp_channel:call(Ch,
                       #'basic.publish'{exchange = <<"amq.topic">>,
                                        routing_key = Topic},
-                      #amqp_msg{payload = Payload}),
+                      #amqp_msg{payload = Payload,
+                                props = #'P_basic'{delivery_mode = 2}}),
 
     Subv5 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
     ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
