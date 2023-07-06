@@ -336,9 +336,6 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                      (<<"x-", _/binary>> = Key, Val, H) when is_binary(Val) ->
                          [{Key, longstr, Val} | H];
                      (<<"timestamp_in_ms">> = Key, Val, H) when is_integer(Val) ->
-                         %% TODO We might want to drop this backwards compat header with
-                         %% https://github.com/rabbitmq/rabbitmq-message-timestamp
-                         %% and instead only set timestamp in rabbit_message_interceptor
                          [{Key, long, Val} | H];
                      (_, _, Acc) ->
                          Acc
