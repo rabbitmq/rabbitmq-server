@@ -1599,13 +1599,14 @@ drop_local(QNames, #state{subscriptions = Subs,
 drop_local(QNames, _) ->
     QNames.
 
-deliver_to_queues(Message,
+deliver_to_queues(Message0,
                   Options,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    Message = compat(Message0, State0),
     case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(ProtoVer, length(Qs)),
@@ -2022,9 +2023,9 @@ deliver_to_client(Msgs, Ack, State) ->
 
 deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery0,
                       AckRequired, State0) ->
-    MqttMc = mc:convert(mc_mqtt, Mc),
-    Delivery = setelement(5, Delivery0, MqttMc),
-    #mqtt_msg{qos = PublisherQos} = mc:protocol_state(MqttMc),
+    McMqtt = mc:convert(mc_mqtt, Mc),
+    Delivery = setelement(5, Delivery0, McMqtt),
+    #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     SubscriberQoS = case AckRequired of
                         true -> ?QOS_1;
                         false -> ?QOS_0
@@ -2564,3 +2565,17 @@ format_status(
       ra_register_state => RaRegisterState,
       queues_soft_limit_exceeded => QSLE,
       qos0_messages_dropped => Qos0MsgsDropped}.
+
+-spec compat(mc:state(), state()) -> mc:state().
+compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
+    case rabbit_feature_flags:is_enabled(message_containers) of
+        true ->
+            McMqtt;
+        false = FFState ->
+            #mqtt_msg{qos = Qos} = mc:protocol_state(McMqtt),
+            [RoutingKey] = mc:get_annotation(routing_keys, McMqtt),
+            McLegacy = mc:convert(mc_amqpl, McMqtt),
+            Content = mc:protocol_state(McLegacy),
+            BasicMsg = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),
+            rabbit_basic:add_header(<<"x-mqtt-publish-qos">>, byte, Qos, BasicMsg)
+    end.
