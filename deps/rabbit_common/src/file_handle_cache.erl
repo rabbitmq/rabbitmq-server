@@ -1158,7 +1158,7 @@ handle_call({open, Pid, Requested, EldestUnusedSince}, From,
     case needs_reduce(State #fhc_state { open_count = Count + Requested }) of
         true  -> case ets:lookup(Clients, Pid) of
                      [#cstate { opened = 0 }] ->
-                       safe_ets_update_element(
+                         _ = safe_ets_update_element(
                                   Clients, Pid, {#cstate.blocked, true}),
                          {noreply,
                           reduce(State #fhc_state {
