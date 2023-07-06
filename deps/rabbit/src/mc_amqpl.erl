@@ -258,6 +258,7 @@ convert(mc_amqp, #content{properties = Props,
                   undefined -> [];
                   _ -> Headers0
               end,
+    H = #'v1_0.header'{durable = DelMode =:= 2},
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
             undefined ->
                 #'v1_0.properties'{message_id = wrap(utf8, MsgId),
@@ -314,8 +315,8 @@ convert(mc_amqp, #content{properties = Props,
                  Section
          end,
 
-    mc_amqp:init_amqp([P, AP, MA,
-                       #'v1_0.data'{content = lists:reverse(Payload)}]);
+    Sections = [H, P, AP, MA, #'v1_0.data'{content = lists:reverse(Payload)}],
+    mc_amqp:init_amqp(Sections);
 convert(_, _C) ->
     not_implemented.
 
@@ -378,7 +379,7 @@ message(ExchangeName, RoutingKey, Content) ->
     message(ExchangeName, RoutingKey, Content, #{}).
 
 -spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}, map()) ->
-    mc:state() | rabbit_types:message().
+    mc:state().
 message(XName, RoutingKey, Content, Anns) ->
     message(XName, RoutingKey, Content, Anns,
             rabbit_feature_flags:is_enabled(message_containers)).

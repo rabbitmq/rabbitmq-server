@@ -129,6 +129,7 @@ cluster_size_1_tests() ->
 
 cluster_size_3_tests() ->
     [
+     pubsub,
      queue_down_qos1,
      consuming_classic_mirrored_queue_down,
      consuming_classic_queue_down,
@@ -674,6 +675,45 @@ global_counters(Config) ->
                                messages_unroutable_dropped_total => 1,
                                messages_unroutable_returned_total => 1},
                              get_global_counters(Config, ProtoVer))).
+
+pubsub(Config) ->
+    Topic0 = <<"t/0">>,
+    Topic1 = <<"t/1">>,
+    C0 = connect(<<"c0">>, Config, 0, []),
+    C1 = connect(<<"c1">>, Config, 1, []),
+    {ok, _, [1]} = emqtt:subscribe(C0, Topic0, qos1),
+    {ok, _, [1]} = emqtt:subscribe(C1, Topic1, qos1),
+
+    {ok, _} = emqtt:publish(C0, Topic1, <<"m1">>, qos1),
+    receive {publish, #{client_pid := C1,
+                        qos := 1,
+                        payload := <<"m1">>}} -> ok
+    after 1000 -> ct:fail("missing m1")
+    end,
+
+    ok = emqtt:publish(C0, Topic1, <<"m2">>, qos0),
+    receive {publish, #{client_pid := C1,
+                        qos := 0,
+                        payload := <<"m2">>}} -> ok
+    after 1000 -> ct:fail("missing m2")
+    end,
+
+    {ok, _} = emqtt:publish(C1, Topic0, <<"m3">>, qos1),
+    receive {publish, #{client_pid := C0,
+                        qos := 1,
+                        payload := <<"m3">>}} -> ok
+    after 1000 -> ct:fail("missing m3")
+    end,
+
+    ok = emqtt:publish(C1, Topic0, <<"m4">>, qos0),
+    receive {publish, #{client_pid := C0,
+                        qos := 0,
+                        payload := <<"m4">>}} -> ok
+    after 1000 -> ct:fail("missing m4")
+    end,
+
+    ok = emqtt:disconnect(C0),
+    ok = emqtt:disconnect(C1).
 
 queue_down_qos1(Config) ->
     {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),

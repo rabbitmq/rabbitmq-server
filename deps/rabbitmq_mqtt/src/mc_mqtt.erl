@@ -46,7 +46,7 @@ init(Msg = #mqtt_msg{qos = Qos,
 
 init_amqp(Sections)
   when is_list(Sections) ->
-    {_Header, MsgAnns, AmqpProps, PayloadRev} =
+    {Header, MsgAnns, AmqpProps, PayloadRev} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
@@ -68,18 +68,12 @@ init_amqp(Sections)
               Bin = amqp10_framing:encode_bin(BodySect),
               setelement(4, Acc, [Bin | element(4, Acc)])
       end, {undefined, undefined, undefined, []}, Sections),
-
-    %%TODO Up to 3.12 non-MQTT publishes are assumed to be QoS 1 regardless of delivery_mode
-    %% https://github.com/rabbitmq/rabbitmq-server/blob/75a953ce286a10aca910c098805a4f545989af38/deps/rabbitmq_mqtt/src/rabbit_mqtt_processor.erl#L2075-L2076
-    %% Should we keep that behaviour?
-    Qos = ?QOS_1,
-    % Qos = case Header of
-    %           #'v1_0.header'{durable = true} ->
-    %               ?QOS_1;
-    %           _ ->
-    %               ?QOS_0
-    %       end,
-
+    Qos = case Header of
+              #'v1_0.header'{durable = true} ->
+                  ?QOS_1;
+              _ ->
+                  ?QOS_0
+          end,
     Props0 = case MsgAnns of
                  #'v1_0.message_annotations'{
                     content = #{{symbol, <<"x-opt-reply-to-topic">>} := {utf8, Topic}}} ->
@@ -108,8 +102,8 @@ init_amqp(Sections)
 convert(?MODULE, Msg) ->
     Msg;
 convert(mc_amqp, #mqtt_msg{qos = Qos,
-                                  props = Props,
-                                  payload = Payload}) ->
+                           props = Props,
+                           payload = Payload}) ->
     Header = #'v1_0.header'{durable = Qos > 0},
     ContentType = case Props of
                       #{'Content-Type' := ContType} ->
