@@ -58,8 +58,8 @@ init_amqp(Sections)
               Acc;
          (#'v1_0.footer'{}, Acc) ->
               Acc;
-         (#'v1_0.data'{content = L}, Acc) ->
-              setelement(4, Acc, [L | element(4, Acc)]);
+         (#'v1_0.data'{content = C}, Acc) ->
+              setelement(4, Acc, [C | element(4, Acc)]);
          (BodySect, Acc)
            when is_record(BodySect, 'v1_0.amqp_sequence') orelse
                 is_record(BodySect, 'v1_0.amqp_value') ->
@@ -93,11 +93,12 @@ init_amqp(Sections)
                 _ ->
                     Props1
             end,
+    Payload = lists:flatten(lists:reverse(PayloadRev)),
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
               props = Props,
-              payload = lists:reverse(PayloadRev)}.
+              payload = Payload}.
 
 convert(?MODULE, Msg) ->
     Msg;
@@ -126,7 +127,7 @@ convert(mc_amqp, #mqtt_msg{qos = Qos,
              end,
     AmqpProps = #'v1_0.properties'{content_type = ContentType,
                                    correlation_id = CorrId},
-    AppData = #'v1_0.data'{content = [Payload]},
+    AppData = #'v1_0.data'{content = Payload},
     Sections = case Props of
                    #{'Response-Topic' := Topic} ->
                        MsgAnns = #'v1_0.message_annotations'{
