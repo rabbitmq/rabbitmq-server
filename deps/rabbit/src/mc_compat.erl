@@ -70,16 +70,24 @@ set_annotation(<<"x-", _/binary>> = Key, Value,
             _ when is_binary(Value) ->
                 longstr
         end,
-    H00 = case H0 of
+    H1 = case H0 of
               undefined ->
                   [];
               _ ->
                   H0
           end,
-
-    H = [{Key, T, Value} | H00],
-
+    H2 = [{Key, T, Value} | H1],
+    H =  lists:usort(fun({Key1, _, _}, {Key2, _, _}) ->
+                             Key1 =< Key2
+                     end, H2),
     C = C0#content{properties = B#'P_basic'{headers = H},
+                   properties_bin = none},
+    Msg#basic_message{content = C};
+set_annotation(<<"timestamp_in_ms">> = Name, Value, #basic_message{} = Msg) ->
+    rabbit_basic:add_header(Name, long, Value, Msg);
+set_annotation(timestamp, Millis,
+               #basic_message{content = #content{properties = B} = C0} = Msg) ->
+    C = C0#content{properties = B#'P_basic'{timestamp = Millis div 1000},
                    properties_bin = none},
     Msg#basic_message{content = C}.
 
