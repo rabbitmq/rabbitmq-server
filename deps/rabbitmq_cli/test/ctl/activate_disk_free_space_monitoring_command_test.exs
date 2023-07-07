@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule EnableDiskFreeSpaceMonitoringCommandTest do
+defmodule ActivateDiskFreeSpaceMonitoringCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.EnableFreeDiskSpaceMonitoringCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ActivateFreeDiskSpaceMonitoringCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -35,6 +35,6 @@ defmodule EnableDiskFreeSpaceMonitoringCommandTest do
 
   test "banner", context do
     assert @command.banner([], context[:opts]) =~
-             ~r/\[Re\-\]enabling free disk space monitoring on node/
+             ~r/\[Re\-\]activating free disk space monitoring on node/
   end
 end

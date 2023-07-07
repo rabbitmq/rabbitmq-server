@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.DisableFreeDiskSpaceMonitoringCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.ActivateFreeDiskSpaceMonitoringCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -36,14 +36,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DisableFreeDiskSpaceMonitoringCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_disk_monitor, :set_enabled, [false], timeout)
+    :rabbit_misc.rpc_call(node_name, :rabbit_disk_monitor, :set_enabled, [true], timeout)
   end
 
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 
-  def usage, do: "disable_free_disk_space_monitoring"
+  def usage, do: "activate_free_disk_space_monitoring"
 
   def usage_doc_guides() do
     [
@@ -54,8 +54,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DisableFreeDiskSpaceMonitoringCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Disables free disk space monitoring on a node"
+  def description(), do: "[Re-]activates free disk space monitoring on a node"
 
   def banner(_, %{node: node_name}),
-    do: "Disabling free disk space monitoring on node #{node_name}..."
+    do: "[Re-]activating free disk space monitoring on node #{node_name}..."
 end
