@@ -407,8 +407,8 @@ cluster_node_list_on_node(Config) ->
 
     rabbit_ct_broker_helpers:stop_broker(Config, 1),
 
-    ?awaitMatch(2, length(all_connections(Config)), 1000),
-    ?assertEqual(0, length(connections_on_node(Config, 0, B))),
+    ?awaitMatch(2, length(all_connections(Config)), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, length(connections_on_node(Config, 0, B)), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn3, Conn5]),
     ?awaitMatch(0, length(all_connections(Config, 0)), ?AWAIT, ?INTERVAL),
@@ -714,7 +714,6 @@ kill_connections(Conns) ->
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
 count_connections_in(Config, VHost, NodeIndex) ->
-    timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  count_tracked_items_in, [{vhost, VHost}]).

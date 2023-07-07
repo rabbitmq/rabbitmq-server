@@ -416,6 +416,7 @@ add_replicas(Config) ->
                           [<<"/">>, Q, Server1])),
 
     timer:sleep(1000),
+    check_leader_and_replicas(Config, [Server0, Server1]),
 
     %% it is almost impossible to reliably catch this situation.
     %% increasing number of messages published and the data size could help
@@ -424,6 +425,8 @@ add_replicas(Config) ->
                  rpc:call(Server0, rabbit_stream_queue, add_replica,
                           [<<"/">>, Q, Server2])),
     timer:sleep(1000),
+    check_leader_and_replicas(Config, [Server0, Server1, Server2]),
+
     %% validate we can read the last entry
     qos(Ch, 10, false),
     amqp_channel:subscribe(
@@ -998,22 +1001,23 @@ consume_timestamp_last_offset(Config) ->
 
     %% Subscribe from now/future
     Offset = erlang:system_time(second) + 60,
+    CTag = <<"consume_timestamp_last_offset">>,
     amqp_channel:subscribe(
       Ch1,
       #'basic.consume'{queue = Q,
                        no_ack = false,
-                       consumer_tag = <<"ctag">>,
+                       consumer_tag = CTag,
                        arguments = [{<<"x-stream-offset">>, timestamp, Offset}]},
       self()),
     receive
-        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
+        #'basic.consume_ok'{consumer_tag = CTag} ->
             ok
     after 5000 ->
             exit(missing_consume_ok)
     end,
 
     receive
-        {_,
+        {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S}]}}}
           when S < 100 ->
             exit({unexpected_offset, S})
@@ -1770,12 +1774,10 @@ max_age(Config) ->
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
     amqp_channel:wait_for_confirms(Ch, 5),
 
-    timer:sleep(5000),
+    %% Let's give it some margin if some messages fall between segments
+    quorum_queue_utils:wait_for_min_messages(Config, Q, 100),
+    quorum_queue_utils:wait_for_max_messages(Config, Q, 150),
 
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
-    qos(Ch1, 200, false),
-    subscribe(Ch1, Q, false, 0),
-    ?assertEqual(100, length(receive_batch())),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 replica_recovery(Config) ->
@@ -1834,7 +1836,6 @@ leader_failover(Config) ->
     publish_confirm(Ch1, Q, [<<"msg">> || _ <- lists:seq(1, 100)]),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
-    timer:sleep(30000),
 
     rabbit_ct_helpers:await_condition(
       fun () ->
@@ -1842,7 +1843,7 @@ leader_failover(Config) ->
 
               NewLeader = proplists:get_value(leader, Info),
               NewLeader =/= Server1
-      end),
+      end, 45000),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -2082,7 +2083,8 @@ leader_locator_balanced_maintenance(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 select_nodes_with_least_replicas(Config) ->
-    [Server1 | _ ] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1 | _ ] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Servers = lists:usort(Servers0),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
@@ -2102,8 +2104,9 @@ select_nodes_with_least_replicas(Config) ->
               end, Qs),
 
     %% We expect that the second stream chose nodes where the first stream does not have replicas.
-    ?assertEqual(lists:usort(Servers),
-                 lists:usort(Q1Members ++ QMembers)),
+    ?awaitMatch(Servers,
+                lists:usort(Q1Members ++ QMembers),
+                30000),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, [Qs]).
 
 leader_locator_policy(Config) ->
@@ -2209,13 +2212,15 @@ max_age_policy(Config) ->
            Config, 0, PolicyName, <<"max_age_policy.*">>, <<"queues">>,
            [{<<"max-age">>, <<"1Y">>}]),
 
-    Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
-
-    ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
-    ?assertEqual('', proplists:get_value(operator_policy, Info)),
-    ?assertEqual([{<<"max-age">>, <<"1Y">>}],
-                 proplists:get_value(effective_policy_definition, Info)),
-
+    %% Policies are asynchronous, must wait until it has been applied everywhere
+    ensure_retention_applied(Config, Server),
+    ?awaitMatch(
+       {PolicyName, '', [{<<"max-age">>, <<"1Y">>}]},
+       begin
+           Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
+           {proplists:get_value(policy, Info), proplists:get_value(operator_policy, Info), proplists:get_value(effective_policy_definition, Info)}
+       end,
+       30000),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 

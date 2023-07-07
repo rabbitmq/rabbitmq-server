@@ -188,13 +188,14 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx, Config)}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx_2, Config)}),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dlx_exchange, Config)}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, 0, ?config(policy, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_queues() ->
+    [rabbit_amqqueue:delete(Q, false, false, <<"tests">>) || Q <- rabbit_amqqueue:list()].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Dead letter exchanges
@@ -850,7 +851,15 @@ dead_letter_policy(Config) ->
                                              <<"queues">>,
                                              [{<<"dead-letter-exchange">>, DLXExchange},
                                               {<<"dead-letter-routing-key">>, DLXQName}]),
-    timer:sleep(1000),
+    ?awaitMatch([_ | _],
+                begin
+                    {ok, Q0} = rabbit_ct_broker_helpers:rpc(
+                                 Config, 0,
+                                 rabbit_amqqueue, lookup,
+                                 [rabbit_misc:r(<<"/">>, queue, QName)], infinity),
+                    amqqueue:get_policy(Q0)
+                end,
+                30000),
     %% Nack the second message
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag2,
                                         multiple     = false,
@@ -1319,7 +1328,12 @@ dead_letter_headers_first_death_route(Config) ->
     %% Send and reject the 3rd message.
     P3 = <<"msg3">>,
     publish(Ch, QName2, [P3]),
-    timer:sleep(1000),
+    case group_name(Config) of
+        at_most_once ->
+            wait_for_messages(Config, [[QName2, <<"1">>, <<"1">>, <<"0">>]]);
+        at_least_once ->
+            wait_for_messages(Config, [[QName2, <<"2">>, <<"1">>, <<"0">>]])
+    end,
     [DTag] = consume(Ch, QName2, [P3]),
     amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag,
                                           requeue      = false}),
