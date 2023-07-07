@@ -7,16 +7,29 @@
 
 -module(rabbit_peer_discovery).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 %%
 %% API
 %%
 
--export([maybe_init/0, discover_cluster_nodes/0, backend/0, node_type/0,
+-export([maybe_init/0, maybe_create_cluster/1, discover_cluster_nodes/0,
+         backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
          register/0, unregister/0, maybe_register/0, maybe_unregister/0,
          lock/0, unlock/1, discovery_retries/0]).
 -export([append_node_prefix/1, node_prefix/0, locking_retry_timeout/0,
          lock_acquisition_failure_mode/0]).
+
+-ifdef(TEST).
+-export([maybe_create_cluster/3]).
+-endif.
+
+-type create_cluster_callback() :: fun((node(),
+                                        rabbit_db_cluster:node_type())
+                                       -> ok).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
 
@@ -101,6 +114,216 @@ maybe_init() ->
             ok
     end.
 
+maybe_create_cluster(CreateClusterCallback) ->
+    {Retries, Timeout} = locking_retry_timeout(),
+    maybe_create_cluster(Retries, Timeout, CreateClusterCallback).
+
+maybe_create_cluster(0, _, CreateClusterCallback)
+  when is_function(CreateClusterCallback, 2) ->
+    case lock_acquisition_failure_mode() of
+        ignore ->
+            ?LOG_WARNING(
+               "Peer discovery: Could not acquire a peer discovery lock, "
+               "out of retries", [],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            run_peer_discovery(CreateClusterCallback),
+            maybe_register();
+        fail ->
+            exit(cannot_acquire_startup_lock)
+    end;
+maybe_create_cluster(Retries, Timeout, CreateClusterCallback)
+  when is_function(CreateClusterCallback, 2) ->
+    LockResult = lock(),
+    ?LOG_DEBUG(
+       "Peer discovery: rabbit_peer_discovery:lock/0 returned ~tp",
+       [LockResult],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    case LockResult of
+        not_supported ->
+            run_peer_discovery(CreateClusterCallback),
+            maybe_register();
+        {ok, Data} ->
+            try
+                run_peer_discovery(CreateClusterCallback),
+                maybe_register()
+            after
+                unlock(Data)
+            end;
+        {error, _Reason} ->
+            timer:sleep(Timeout),
+            maybe_create_cluster(
+              Retries - 1, Timeout, CreateClusterCallback)
+    end.
+
+-spec run_peer_discovery(CreateClusterCallback) -> Ret when
+      CreateClusterCallback :: create_cluster_callback(),
+      Ret :: ok | {Nodes, NodeType},
+      Nodes :: [node()],
+      NodeType :: rabbit_db_cluster:node_type().
+
+run_peer_discovery(CreateClusterCallback) ->
+    {RetriesLeft, DelayInterval} = discovery_retries(),
+    run_peer_discovery_with_retries(
+      RetriesLeft, DelayInterval, CreateClusterCallback).
+
+-spec run_peer_discovery_with_retries(
+        Retries, DelayInterval, CreateClusterCallback) -> ok when
+      CreateClusterCallback :: create_cluster_callback(),
+      Retries :: non_neg_integer(),
+      DelayInterval :: non_neg_integer().
+
+run_peer_discovery_with_retries(
+  0, _DelayInterval, _CreateClusterCallback) ->
+    ok;
+run_peer_discovery_with_retries(
+  RetriesLeft, DelayInterval, CreateClusterCallback) ->
+    FindBadNodeNames = fun
+        (Name, BadNames) when is_atom(Name) -> BadNames;
+        (Name, BadNames)                    -> [Name | BadNames]
+    end,
+    {DiscoveredNodes0, NodeType} =
+        case discover_cluster_nodes() of
+            {error, Reason} ->
+                RetriesLeft1 = RetriesLeft - 1,
+                ?LOG_ERROR(
+                   "Peer discovery: Failed to discover nodes: ~tp. "
+                   "Will retry after a delay of ~b ms, ~b retries left...",
+                   [Reason, DelayInterval, RetriesLeft1],
+                   #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                timer:sleep(DelayInterval),
+                run_peer_discovery_with_retries(
+                  RetriesLeft1, DelayInterval, CreateClusterCallback);
+            {ok, {Nodes, Type} = Config}
+              when is_list(Nodes) andalso
+                   (Type == disc orelse Type == disk orelse Type == ram) ->
+                case lists:foldr(FindBadNodeNames, [], Nodes) of
+                    []       -> Config;
+                    BadNames -> e({invalid_cluster_node_names, BadNames})
+                end;
+            {ok, {_, BadType}} when BadType /= disc andalso BadType /= ram ->
+                e({invalid_cluster_node_type, BadType});
+            {ok, _} ->
+                e(invalid_cluster_nodes_conf)
+        end,
+    DiscoveredNodes = lists:usort(DiscoveredNodes0),
+    ?LOG_INFO(
+       "Peer discovery: All discovered existing cluster peers: ~ts",
+       [format_discovered_nodes(DiscoveredNodes)],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    Peers = rabbit_nodes:nodes_excl_me(DiscoveredNodes),
+    case Peers of
+        [] ->
+            ?LOG_INFO(
+               "Peer discovery: Discovered no peer nodes to cluster with. "
+               "Some discovery backends can filter nodes out based on a "
+               "readiness criteria. "
+               "Enabling debug logging might help troubleshoot.",
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            CreateClusterCallback(none, disc);
+        _  ->
+            ?LOG_INFO(
+               "Peer discovery: Peer nodes we can cluster with: ~ts",
+               [format_discovered_nodes(Peers)],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            join_discovered_peers(Peers, NodeType, CreateClusterCallback)
+    end.
+
+-spec e(any()) -> no_return().
+
+e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
+
+error_description({invalid_cluster_node_names, BadNames}) ->
+    "In the 'cluster_nodes' configuration key, the following node names "
+        "are invalid: " ++ lists:flatten(io_lib:format("~tp", [BadNames]));
+error_description({invalid_cluster_node_type, BadType}) ->
+    "In the 'cluster_nodes' configuration key, the node type is invalid "
+        "(expected 'disc' or 'ram'): " ++
+        lists:flatten(io_lib:format("~tp", [BadType]));
+error_description(invalid_cluster_nodes_conf) ->
+    "The 'cluster_nodes' configuration key is invalid, it must be of the "
+        "form {[Nodes], Type}, where Nodes is a list of node names and "
+        "Type is either 'disc' or 'ram'".
+
+%% Attempts to join discovered, reachable and compatible (in terms of Mnesia
+%% internal protocol version and such) cluster peers in order.
+join_discovered_peers(TryNodes, NodeType, CreateClusterCallback) ->
+    {RetriesLeft, DelayInterval} = discovery_retries(),
+    join_discovered_peers_with_retries(
+      TryNodes, NodeType, RetriesLeft, DelayInterval, CreateClusterCallback).
+
+join_discovered_peers_with_retries(
+  TryNodes, _NodeType, 0, _DelayInterval, CreateClusterCallback) ->
+    ?LOG_INFO(
+       "Peer discovery: Could not successfully contact any node of: ~ts "
+       "(as in Erlang distribution). "
+       "Starting as a blank standalone node...",
+       [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    init_single_node(CreateClusterCallback);
+join_discovered_peers_with_retries(
+  TryNodes, NodeType, RetriesLeft, DelayInterval, CreateClusterCallback) ->
+    case find_reachable_peer_to_cluster_with(TryNodes) of
+        {ok, Node} ->
+            ?LOG_INFO(
+               "Peer discovery: Node '~ts' selected for auto-clustering",
+               [Node],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            create_cluster(Node, NodeType, CreateClusterCallback);
+        none ->
+            RetriesLeft1 = RetriesLeft - 1,
+            ?LOG_INFO(
+               "Peer discovery: Trying to join discovered peers failed. "
+               "Will retry after a delay of ~b ms, ~b retries left...",
+               [DelayInterval, RetriesLeft1],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            timer:sleep(DelayInterval),
+            join_discovered_peers_with_retries(
+              TryNodes, NodeType, RetriesLeft1, DelayInterval,
+              CreateClusterCallback)
+    end.
+
+find_reachable_peer_to_cluster_with([]) ->
+    none;
+find_reachable_peer_to_cluster_with([Node | Nodes]) when Node =/= node() ->
+    case rabbit_db_cluster:check_compatibility(Node) of
+        ok ->
+            {ok, Node};
+        Error ->
+            ?LOG_WARNING(
+               "Peer discovery: Could not auto-cluster with node ~ts: ~0p",
+               [Node, Error],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            find_reachable_peer_to_cluster_with(Nodes)
+    end;
+find_reachable_peer_to_cluster_with([Node | Nodes]) when Node =:= node() ->
+    find_reachable_peer_to_cluster_with(Nodes).
+
+init_single_node(CreateClusterCallback) ->
+    IsVirgin = rabbit_db:is_virgin_node(),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync([], IsVirgin),
+    CreateClusterCallback(none, disc),
+    ok.
+
+create_cluster(RemoteNode, NodeType, CreateClusterCallback) ->
+    %% We want to synchronize feature flags first before we update the cluster
+    %% membership. This is needed to ensure the local list of Mnesia tables
+    %% matches the rest of the cluster for example, in case a feature flag
+    %% adds or removes tables.
+    %%
+    %% For instance, a feature flag may remove a table (so it's gone from the
+    %% cluster). If we were to wait for that table locally before
+    %% synchronizing feature flags, we would wait forever; indeed the feature
+    %% flag being disabled before sync, `rabbit_table:definitions()' would
+    %% return the old table.
+    %%
+    %% Feature flags need to be synced before any change to Mnesia membership.
+    %% If enabling feature flags fails, Mnesia could remain in an inconsistent
+    %% state that prevents later joining the nodes.
+    IsVirgin = rabbit_db:is_virgin_node(),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync([RemoteNode], IsVirgin),
+    CreateClusterCallback(RemoteNode, NodeType),
+    rabbit_node_monitor:notify_joined_cluster(),
+    ok.
 
 %% This module doesn't currently sanity-check the return value of
 %% `Backend:list_nodes()`. Therefore, it could return something invalid:

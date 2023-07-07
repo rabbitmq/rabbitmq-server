@@ -42,12 +42,23 @@ init() ->
     ?LOG_DEBUG(
        "DB: this node is virgin: ~ts", [IsVirgin],
        #{domain => ?RMQLOG_DOMAIN_DB}),
+
     ensure_dir_exists(),
-    case init_using_mnesia() of
+    rabbit_peer_discovery:log_configured_backend(),
+    rabbit_peer_discovery:maybe_init(),
+
+    pre_init(IsVirgin),
+
+    Ret = run(
+            #{mnesia => fun init_using_mnesia/0}),
+    case Ret of
         ok ->
             ?LOG_DEBUG(
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
+
+            post_init(IsVirgin),
+
             ok;
         Error ->
             ?LOG_DEBUG(
@@ -55,6 +66,17 @@ init() ->
                #{domain => ?RMQLOG_DOMAIN_DB}),
             Error
     end.
+
+pre_init(IsVirgin) ->
+    Members = rabbit_db_cluster:members(),
+    OtherMembers = rabbit_nodes:nodes_excl_me(Members),
+    rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
+
+post_init(false = _IsVirgin) ->
+    rabbit_peer_discovery:maybe_register();
+post_init(true = _IsVirgin) ->
+    %% Registration handled by rabbit_peer_discovery.
+    ok.
 
 init_using_mnesia() ->
     ?LOG_DEBUG(
@@ -69,11 +91,12 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    reset_using_mnesia().
+    run(
+      #{mnesia => fun reset_using_mnesia/0}).
 
 reset_using_mnesia() ->
-    ?LOG_DEBUG(
-      "DB: resetting node",
+    ?LOG_INFO(
+      "DB: resetting node (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:reset().
 
@@ -82,11 +105,12 @@ reset_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    force_reset_using_mnesia().
+    run(
+      #{mnesia => fun force_reset_using_mnesia/0}).
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(
-      "DB: resetting node forcefully",
+      "DB: resetting node forcefully (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_reset().
 
@@ -98,11 +122,12 @@ force_reset_using_mnesia() ->
 %% state, like if critical members are MIA.
 
 force_load_on_next_boot() ->
-    force_load_on_next_boot_using_mnesia().
+    run(
+      #{mnesia => fun force_load_on_next_boot_using_mnesia/0}).
 
 force_load_on_next_boot_using_mnesia() ->
     ?LOG_DEBUG(
-      "DB: resetting node forcefully",
+      "DB: force load on next boot (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_load_next_boot().
 
@@ -115,8 +140,11 @@ force_load_on_next_boot_using_mnesia() ->
 %% @see is_virgin_node/1.
 
 is_virgin_node() ->
-    ThisNode = node(),
-    is_virgin_node(ThisNode).
+    run(
+      #{mnesia => fun is_virgin_node_using_mnesia/0}).
+
+is_virgin_node_using_mnesia() ->
+    rabbit_mnesia:is_virgin_node().
 
 -spec is_virgin_node(Node) -> IsVirgin | undefined when
       Node :: node(),
@@ -129,14 +157,11 @@ is_virgin_node() ->
 %% @returns `true' if the node is virgin, `false' if it is not, or `undefined'
 %% if the given node is remote and we couldn't determine it.
 
+is_virgin_node(Node) when Node =:= node() ->
+    is_virgin_node();
 is_virgin_node(Node) when is_atom(Node) ->
-    is_virgin_node_with_mnesia(Node).
-
-is_virgin_node_with_mnesia(Node) when Node =:= node() ->
-    rabbit_mnesia:is_virgin_node();
-is_virgin_node_with_mnesia(Node) ->
     try
-        erpc:call(Node, rabbit_mnesia, is_virgin_node, [], ?TIMEOUT)
+        erpc:call(Node, ?MODULE, is_virgin_node, [], ?TIMEOUT)
     catch
         _:_ ->
             undefined
@@ -149,7 +174,8 @@ is_virgin_node_with_mnesia(Node) ->
 %% @returns the directory path.
 
 dir() ->
-    mnesia_dir().
+    run(
+      #{mnesia => fun mnesia_dir/0}).
 
 mnesia_dir() ->
     rabbit_mnesia:dir().
@@ -183,9 +209,9 @@ ensure_dir_exists() ->
 run(Funs)
   when is_map(Funs) andalso is_map_key(mnesia, Funs) ->
     #{mnesia := MnesiaFun} = Funs,
-    run_with_mnesia(MnesiaFun).
+    run_using_mnesia(MnesiaFun).
 
-run_with_mnesia(Fun) ->
+run_using_mnesia(Fun) ->
     Fun().
 
 list_in_mnesia(Table, Match) ->
