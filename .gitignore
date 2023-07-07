@@ -87,6 +87,7 @@ rabbitmq-server-*.tar.xz
 rabbitmq-server-*.zip
 
 traces*
+deps/rabbitmq_stomp/test/python_SUITE_data/src/deps
 callgrand*
 
 /user.bazelrc

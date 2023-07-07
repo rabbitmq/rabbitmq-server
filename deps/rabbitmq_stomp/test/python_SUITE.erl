@@ -30,6 +30,17 @@ groups() ->
         ]}
     ].
 
+init_per_suite(Config) ->
+    DataDir = ?config(data_dir, Config),
+    {ok, _} = rabbit_ct_helpers:exec(["pip", "install", "-r", requirements_path(Config),
+                                                        "--target", deps_path(Config)]),
+    Config.
+
+end_per_suite(Config) ->
+    DataDir = ?config(data_dir, Config),
+    ok = file:del_dir_r(deps_path(Config)),
+    Config.
+
 init_per_group(_, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [
@@ -64,7 +75,6 @@ tls_connections(Config) ->
 
 
 run(Config, Test) ->
-    DataDir = ?config(data_dir, Config),
     CertsDir = rabbit_ct_helpers:get_config(Config, rmq_certsdir),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     StompPortTls = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp_tls),
@@ -75,8 +85,26 @@ run(Config, Test) ->
     os:putenv("STOMP_PORT_TLS", integer_to_list(StompPortTls)),
     os:putenv("RABBITMQ_NODENAME", atom_to_list(NodeName)),
     os:putenv("SSL_CERTS_PATH", CertsDir),
-    {ok, _} = rabbit_ct_helpers:exec([filename:join(DataDir, Test)]).
+    run_python(Config, Test).
 
+run_python(Config, What) ->
+    DataDir = ?config(data_dir, Config),
+    os:putenv("PYTHONPATH", python_path(Config)),
+    {ok, _} = rabbit_ct_helpers:exec([filename:join(DataDir, What)]).
+
+deps_path(Config) ->
+    DataDir = ?config(data_dir, Config),
+    filename:join([DataDir, "src", "deps"]).
+
+requirements_path(Config) ->
+    DataDir = ?config(data_dir, Config),
+    filename:join([DataDir, "src", "requirements.txt"]).
+
+python_path(Config) ->
+    case os:getenv("PYTHONPATH") of
+        false -> deps_path(Config);
+        P -> deps_path(Config) ++ ":" ++ P
+    end.
 
 cur_dir() ->
     {ok, Src} = filelib:find_source(?MODULE),
