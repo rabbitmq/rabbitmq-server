@@ -25,8 +25,8 @@
                         timeout]).
 
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
-                       conserve_resources, recv_outstanding, stats_timer,
-                       parent, connection, heartbeat_sup, heartbeat,
+                       conserve_resources, recv_outstanding, max_frame_length, frame_length,
+                       stats_timer, parent, connection, heartbeat_sup, heartbeat,
                        timeout_sec %% heartbeat timeout value used, 0 means
                                    %% heartbeats are disabled
                       }).
@@ -69,6 +69,7 @@ init([SupHelperPid, Ref, Configuration]) ->
             _ = register_resource_alarm(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
+            MaxFrameLength = application:get_env(rabbitmq_stomp, max_frame_length, 192 * 1024),
             erlang:send_after(LoginTimeout, self(), login_timeout),
 
             gen_server2:enter_loop(?MODULE, [],
@@ -80,6 +81,8 @@ init([SupHelperPid, Ref, Configuration]) ->
                                 processor_state    = ProcState,
                                 heartbeat_sup      = SupHelperPid,
                                 heartbeat          = {none, none},
+                                max_frame_length   = MaxFrameLength,
+                                frame_length       = 0,
                                 state              = running,
                                 conserve_resources = false,
                                 recv_outstanding   = false})), #reader_state.stats_timer),
@@ -222,23 +225,41 @@ process_received_bytes([], State) ->
     {ok, State};
 process_received_bytes(Bytes,
                        State = #reader_state{
-                         processor_state = ProcState,
-                         parse_state     = ParseState}) ->
+                         max_frame_length = MaxFrameLength,
+                         frame_length     = FrameLength,
+                         processor_state  = ProcState,
+                         parse_state      = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            {ok, State#reader_state{parse_state = ParseState1}};
+            FrameLength1 = FrameLength + byte_size(Bytes),
+            case FrameLength1 > MaxFrameLength of
+                true ->
+                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameLength}}}, State),
+                    {stop, normal, State};
+                false ->
+                    {ok, State#reader_state{parse_state = ParseState1,
+                                            frame_length = FrameLength1}}
+            end;
         {ok, Frame, Rest} ->
-            case rabbit_stomp_processor:process_frame(Frame, ProcState) of
-                {ok, NewProcState, Conn} ->
-                    PS = rabbit_stomp_frame:initial_state(),
-                    NextState = maybe_block(State, Frame),
-                    process_received_bytes(Rest, NextState#reader_state{
-                        processor_state = NewProcState,
-                        parse_state     = PS,
-                        connection      = Conn});
-                {stop, Reason, NewProcState} ->
-                    {stop, Reason,
-                     processor_state(NewProcState, State)}
+            FrameLength1 = FrameLength + byte_size(Bytes) - byte_size(Rest),
+            case FrameLength1 > MaxFrameLength of
+                true ->
+                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameLength}}}, State),
+                    {stop, normal, State};
+                false ->
+                    case rabbit_stomp_processor:process_frame(Frame, ProcState) of
+                        {ok, NewProcState, Conn} ->
+                            PS = rabbit_stomp_frame:initial_state(),
+                            NextState = maybe_block(State, Frame),
+                            process_received_bytes(Rest, NextState#reader_state{
+                                                           frame_length    = 0,
+                                                           processor_state = NewProcState,
+                                                           parse_state     = PS,
+                                                           connection      = Conn});
+                        {stop, Reason, NewProcState} ->
+                            {stop, Reason,
+                             processor_state(NewProcState, State)}
+                    end
             end;
         {error, Reason} ->
             %% The parser couldn't parse data. We log the reason right

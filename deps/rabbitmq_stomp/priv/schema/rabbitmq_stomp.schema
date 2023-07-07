@@ -238,3 +238,12 @@ end}.
 
 {mapping, "stomp.default_nack_requeue", "rabbitmq_stomp.default_nack_requeue",
     [{datatype, {enum, [true, false]}}]}.
+
+
+
+%% Maximum frame size.
+%%
+%% Defaults to 192Kb.
+
+{mapping, "stomp.max_frame_size", "rabbitmq_stomp.max_frame_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
