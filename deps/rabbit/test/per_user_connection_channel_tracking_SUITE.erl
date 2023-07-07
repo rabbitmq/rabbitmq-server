@@ -96,16 +96,8 @@ init_per_testcase(Testcase, Config) ->
     Config.
 
 end_per_testcase(Testcase, Config) ->
-<<<<<<< HEAD
     clear_all_connection_tracking_tables(Config),
     clear_all_channel_tracking_tables(Config),
-=======
-    Vhost = proplists:get_value(rmq_vhost, Config),
-    Username = proplists:get_value(rmq_username, Config),
-    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
-    rabbit_ct_broker_helpers:add_user(Config, Username),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, Username, Vhost),
->>>>>>> ab80a096bd (Tests: more resilient time-dependent tests)
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 clear_all_connection_tracking_tables(Config) ->
@@ -635,23 +627,6 @@ cluster_node_removed(Config) ->
     [?awaitMatch(true, is_process_alive(Ch), ?A_TOUT) || Ch <- Chans1],
 
     rabbit_ct_broker_helpers:forget_cluster_node(Config, 0, 1),
-<<<<<<< HEAD
-    timer:sleep(200),
-    NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
-
-    DroppedConnTrackingTables =
-        rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedConnTrackingTables],
-
-    DroppedChTrackingTables =
-        rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedChTrackingTables],
-=======
->>>>>>> ab80a096bd (Tests: more resilient time-dependent tests)
 
     ?awaitMatch(false, is_process_alive(Conn2), ?A_TOUT),
     [?awaitMatch(false, is_process_alive(Ch), ?A_TOUT) || Ch <- Chans2],
