@@ -135,7 +135,7 @@ handle_call(Request, From, State) ->
     rabbit_log:info("~ts received unhandled call from ~tp: ~tp", [?MODULE, From, Request]),
     {noreply, State}.
 
-handle_cast({dlx_event, _LeaderPid, {machine, lookup_topology}},
+handle_cast({dlx_event, _LeaderPid, lookup_topology},
             #state{queue_ref = _} = State0) ->
     State = lookup_topology(State0),
     redeliver_and_ack(State);
