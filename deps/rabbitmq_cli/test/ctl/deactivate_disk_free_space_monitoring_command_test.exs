@@ -34,6 +34,7 @@ defmodule DeactivateDiskFreeSpaceMonitoringCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Deactivating free disk space monitoring on node/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Deactivating free disk space monitoring on node/
   end
 end
