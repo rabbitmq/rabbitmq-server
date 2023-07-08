@@ -67,7 +67,7 @@ end_per_testcase(Test, Config) ->
 main(Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
-      application, set_env, [rabbitmq_stomp, max_frame_length, 17 * 1024 * 1024]),
+      application, set_env, [rabbitmq_stomp, max_frame_size, 17 * 1024 * 1024]),
     run(Config, filename:join("src", "main_runner.py")).
 
 implicit_connect(Config) ->

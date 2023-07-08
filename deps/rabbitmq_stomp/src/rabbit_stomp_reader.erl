@@ -25,7 +25,7 @@
                         timeout]).
 
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
-                       conserve_resources, recv_outstanding, max_frame_length, frame_length,
+                       conserve_resources, recv_outstanding, max_frame_size, frame_length,
                        stats_timer, parent, connection, heartbeat_sup, heartbeat,
                        timeout_sec %% heartbeat timeout value used, 0 means
                                    %% heartbeats are disabled
@@ -69,7 +69,7 @@ init([SupHelperPid, Ref, Configuration]) ->
             _ = register_resource_alarm(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
-            MaxFrameLength = application:get_env(rabbitmq_stomp, max_frame_length, 192 * 1024),
+            MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, 192 * 1024),
             erlang:send_after(LoginTimeout, self(), login_timeout),
 
             gen_server2:enter_loop(?MODULE, [],
@@ -81,7 +81,7 @@ init([SupHelperPid, Ref, Configuration]) ->
                                 processor_state    = ProcState,
                                 heartbeat_sup      = SupHelperPid,
                                 heartbeat          = {none, none},
-                                max_frame_length   = MaxFrameLength,
+                                max_frame_size     = MaxFrameSize,
                                 frame_length       = 0,
                                 state              = running,
                                 conserve_resources = false,
@@ -225,16 +225,16 @@ process_received_bytes([], State) ->
     {ok, State};
 process_received_bytes(Bytes,
                        State = #reader_state{
-                         max_frame_length = MaxFrameLength,
+                         max_frame_size = MaxFrameSize,
                          frame_length     = FrameLength,
                          processor_state  = ProcState,
                          parse_state      = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             FrameLength1 = FrameLength + byte_size(Bytes),
-            case FrameLength1 > MaxFrameLength of
+            case FrameLength1 > MaxFrameSize of
                 true ->
-                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameLength}}}, State),
+                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameSize}}}, State),
                     {stop, normal, State};
                 false ->
                     {ok, State#reader_state{parse_state = ParseState1,
@@ -242,9 +242,9 @@ process_received_bytes(Bytes,
             end;
         {ok, Frame, Rest} ->
             FrameLength1 = FrameLength + byte_size(Bytes) - byte_size(Rest),
-            case FrameLength1 > MaxFrameLength of
+            case FrameLength1 > MaxFrameSize of
                 true ->
-                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameLength}}}, State),
+                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameSize}}}, State),
                     {stop, normal, State};
                 false ->
                     case rabbit_stomp_processor:process_frame(Frame, ProcState) of

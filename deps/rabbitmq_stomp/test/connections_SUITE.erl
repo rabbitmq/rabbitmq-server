@@ -180,7 +180,7 @@ login_timeout(Config) ->
 frame_size(Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
-      application, set_env, [rabbitmq_stomp, max_frame_length, 80]),
+      application, set_env, [rabbitmq_stomp, max_frame_size, 80]),
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
                                                [{"heart-beat", "5000,7000"}]),
@@ -199,7 +199,7 @@ frame_size(Config) ->
 frame_size_huge(Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
-      application, set_env, [rabbitmq_stomp, max_frame_length, 700]),
+      application, set_env, [rabbitmq_stomp, max_frame_size, 700]),
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
                                                [{"heart-beat", "5000,7000"}]),
