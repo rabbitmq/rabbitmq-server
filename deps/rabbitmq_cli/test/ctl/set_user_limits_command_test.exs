@@ -115,7 +115,7 @@ defmodule SetUserLimitsCommandTest do
     assert @command.run(
              [context[:user], "{\"foo\":\"bar\"}"],
              context[:opts]
-           ) == {:error_string, 'Unrecognised terms [{<<"foo">>,<<"bar">>}] in user-limits'}
+           ) == {:error_string, ~c"Unrecognised terms [{<<\"foo\">>,<<\"bar\">>}] in user-limits"}
 
     assert get_user_limits(context[:user]) == %{}
   end

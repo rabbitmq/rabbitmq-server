@@ -12,6 +12,10 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   require Record
   import Record
 
+  # Elixir 1.15 compiler optimizations require that we explicitly
+  # add the stdout_formatter code path
+  true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "stdout_formatter", "ebin"]))
+
   defrecord :table,
             extract(:table,
               from_lib: "stdout_formatter/include/stdout_formatter.hrl"
