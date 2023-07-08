@@ -24,12 +24,24 @@
 -define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state,
                         timeout]).
 
--record(reader_state, {socket, conn_name, parse_state, processor_state, state,
-                       conserve_resources, recv_outstanding, max_frame_size, frame_length,
-                       stats_timer, parent, connection, heartbeat_sup, heartbeat,
-                       timeout_sec %% heartbeat timeout value used, 0 means
-                                   %% heartbeats are disabled
-                      }).
+-record(reader_state, {
+    socket,
+    conn_name,
+    parse_state,
+    processor_state,
+    state,
+    conserve_resources,
+    recv_outstanding,
+    max_frame_size,
+    current_frame_size,
+    stats_timer,
+    parent,
+    connection,
+    heartbeat_sup, heartbeat,
+    %% heartbeat timeout value used, 0 means
+    %% heartbeats are disabled
+    timeout_sec
+}).
 
 %%----------------------------------------------------------------------------
 
@@ -82,7 +94,7 @@ init([SupHelperPid, Ref, Configuration]) ->
                                 heartbeat_sup      = SupHelperPid,
                                 heartbeat          = {none, none},
                                 max_frame_size     = MaxFrameSize,
-                                frame_length       = 0,
+                                current_frame_size = 0,
                                 state              = running,
                                 conserve_resources = false,
                                 recv_outstanding   = false})), #reader_state.stats_timer),
@@ -226,7 +238,7 @@ process_received_bytes([], State) ->
 process_received_bytes(Bytes,
                        State = #reader_state{
                          max_frame_size = MaxFrameSize,
-                         frame_length     = FrameLength,
+                         current_frame_size = FrameLength,
                          processor_state  = ProcState,
                          parse_state      = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
@@ -238,7 +250,7 @@ process_received_bytes(Bytes,
                     {stop, normal, State};
                 false ->
                     {ok, State#reader_state{parse_state = ParseState1,
-                                            frame_length = FrameLength1}}
+                                            current_frame_size = FrameLength1}}
             end;
         {ok, Frame, Rest} ->
             FrameLength1 = FrameLength + byte_size(Bytes) - byte_size(Rest),
@@ -252,7 +264,7 @@ process_received_bytes(Bytes,
                             PS = rabbit_stomp_frame:initial_state(),
                             NextState = maybe_block(State, Frame),
                             process_received_bytes(Rest, NextState#reader_state{
-                                                           frame_length    = 0,
+                                                           current_frame_size = 0,
                                                            processor_state = NewProcState,
                                                            parse_state     = PS,
                                                            connection      = Conn});
