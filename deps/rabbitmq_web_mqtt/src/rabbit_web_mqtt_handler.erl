@@ -253,11 +253,18 @@ terminate(Reason, Request, #state{} = State) ->
 terminate(_Reason, _Request,
           {SendWill, #state{conn_name = ConnName,
                             proc_state = PState,
-                            keepalive = KState} = State}) ->
+                            keepalive = KState,
+                            should_use_fhc = ShouldUseFHC} = State}) ->
     ?LOG_INFO("Web MQTT closing connection ~ts", [ConnName]),
     maybe_emit_stats(State),
     _ = rabbit_mqtt_keepalive:cancel_timer(KState),
-    ok = file_handle_cache:release(),
+    case ShouldUseFHC of
+      true  ->
+        ok = file_handle_cache:release();
+      false -> ok;
+      undefined ->
+        ok = file_handle_cache:release()
+    end,
     case PState of
         connect_packet_unprocessed ->
             ok;
