@@ -81,8 +81,14 @@ rabbitmqctl_check_formatted_test(
     ]),
     data = glob(["test/fixtures/**/*"]),
     target_compatible_with = select({
-        "@platforms//os:macos": ["@platforms//os:macos"],
-        "//conditions:default": ["@platforms//os:linux"],
+        "@platforms//os:macos": [
+            "@platforms//os:macos",
+            "@elixir_config//:elixir_1_15",
+        ],
+        "//conditions:default": [
+            "@platforms//os:linux",
+            "@elixir_config//:elixir_1_15",
+        ],
     }),
 )
 

@@ -122,8 +122,8 @@ defmodule HelpersTest do
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_03), rabbitmq_home: rabbitmq_home}
 
-    desc = 'A mock RabbitMQ plugin to be used in tests'
-    vsn = '0.1.0'
+    desc = ~c"A mock RabbitMQ plugin to be used in tests"
+    vsn = ~c"0.1.0"
 
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn}) ==
              false
@@ -138,8 +138,8 @@ defmodule HelpersTest do
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_04), rabbitmq_home: rabbitmq_home}
 
-    desc = 'A mock RabbitMQ plugin to be used in tests'
-    vsn = 'rolling'
+    desc = ~c"A mock RabbitMQ plugin to be used in tests"
+    vsn = ~c"rolling"
 
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn}) ==
              false

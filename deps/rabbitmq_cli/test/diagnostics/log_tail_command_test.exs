@@ -117,7 +117,7 @@ defmodule LogTailCommandTest do
 
     Enum.map(logs, fn log ->
       case log do
-        '<stdout>' -> :ok
+        ~c"<stdout>" -> :ok
         _ -> File.write(log, "")
       end
     end)
