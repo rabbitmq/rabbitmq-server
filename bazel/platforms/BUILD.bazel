@@ -71,13 +71,8 @@ platform(
 >>>>>>> ba57c77a62 (Add elixir 1.15 and use with otp 26)
     name = "erlang_linux_git_master_platform",
     constraint_values = [
-<<<<<<< HEAD
         "@erlang_config//:erlang_26_unknown",
-        "@elixir_config//:elixir_1_14",
-=======
-        "@erlang_config//:erlang_27_unknown",
         "@elixir_config//:elixir_1_15",
->>>>>>> 21978a3234 (Add elixir 1.15 and use with otp 26)
     ],
     parents = ["@rbe//config:platform"],
 )
