@@ -391,8 +391,15 @@ mf_totals(Callback, Name, Type, Help, Size) ->
         )
     ).
 
+has_value_p('NaN') ->
+    false;
+has_value_p(undefined) ->
+    false;
+has_value_p(_) ->
+    true.
+
 collect_metrics(_, {Type, Fun, Items}) ->
-    [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
+    [metric(Type, labels(Item), V) || {Item, V} <- [{Item, Fun(Item)} || Item <- Items], has_value_p(V)].
 
 labels(Item) ->
     label(element(1, Item)).
