@@ -81,7 +81,7 @@ init([SupHelperPid, Ref, Configuration]) ->
             _ = register_resource_alarm(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
-            MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, 4 * 1024 * 1024),
+            MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
             erlang:send_after(LoginTimeout, self(), login_timeout),
 
             gen_server2:enter_loop(?MODULE, [],
