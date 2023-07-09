@@ -79,6 +79,9 @@
 -export([raw_read_file/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
+-export([maps_any/2]).
+-export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
+         safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1319,6 +1322,166 @@ is_regular_file(Name) ->
         _ -> false
     end.
 
+-spec safe_ets_update_counter(Table, Key, UpdateOp) -> Result when
+      Table :: ets:table(),
+      Key :: term(),
+      UpdateOp :: {Pos, Incr}
+      | {Pos, Incr, Threshold, SetValue},
+      Pos :: integer(),
+      Incr :: integer(),
+      Threshold :: integer(),
+      SetValue :: integer(),
+      Result :: integer();
+    (Table, Key, [UpdateOp]) -> [Result] when
+      Table :: ets:table(),
+      Key :: term(),
+      UpdateOp :: {Pos, Incr}
+      | {Pos, Incr, Threshold, SetValue},
+      Pos :: integer(),
+      Incr :: integer(),
+      Threshold :: integer(),
+      SetValue :: integer(),
+      Result :: integer();
+    (Table, Key, Incr) -> Result when
+      Table :: ets:table(),
+      Key :: term(),
+      Incr :: integer(),
+      Result :: integer().
+safe_ets_update_counter(Tab, Key, UpdateOp) ->
+  try
+    ets:update_counter(Tab, Key, UpdateOp)
+  catch error:badarg:E ->
+    rabbit_log:debug("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
+    ok
+  end.
+
+-spec safe_ets_update_counter(Table, Key, UpdateOp, OnFailure) -> Result when
+    Table :: ets:table(),
+    Key :: term(),
+    UpdateOp :: {Pos, Incr}
+    | {Pos, Incr, Threshold, SetValue},
+    Pos :: integer(),
+    Incr :: integer(),
+    Threshold :: integer(),
+    SetValue :: integer(),
+    Result :: integer(),
+    OnFailure :: fun(() -> any());
+  (Table, Key, [UpdateOp], OnFailure) -> [Result] when
+    Table :: ets:table(),
+    Key :: term(),
+    UpdateOp :: {Pos, Incr}
+    | {Pos, Incr, Threshold, SetValue},
+    Pos :: integer(),
+    Incr :: integer(),
+    Threshold :: integer(),
+    SetValue :: integer(),
+    Result :: integer(),
+    OnFailure :: fun(() -> any());
+  (Table, Key, Incr, OnFailure) -> Result when
+    Table :: ets:table(),
+    Key :: term(),
+    Incr :: integer(),
+    Result :: integer(),
+    OnFailure :: fun(() -> any()).
+safe_ets_update_counter(Tab, Key, UpdateOp, OnFailure) ->
+  safe_ets_update_counter(Tab, Key, UpdateOp, fun(_) -> ok end, OnFailure).
+
+-spec safe_ets_update_counter(Table, Key, UpdateOp, OnSuccess, OnFailure) -> Result when
+    Table :: ets:table(),
+    Key :: term(),
+    UpdateOp :: {Pos, Incr}
+    | {Pos, Incr, Threshold, SetValue},
+    Pos :: integer(),
+    Incr :: integer(),
+    Threshold :: integer(),
+    SetValue :: integer(),
+    Result :: integer(),
+    OnSuccess :: fun((boolean()) -> any()),
+    OnFailure :: fun(() -> any());
+  (Table, Key, [UpdateOp], OnSuccess, OnFailure) -> [Result] when
+    Table :: ets:table(),
+    Key :: term(),
+    UpdateOp :: {Pos, Incr}
+    | {Pos, Incr, Threshold, SetValue},
+    Pos :: integer(),
+    Incr :: integer(),
+    Threshold :: integer(),
+    SetValue :: integer(),
+    Result :: integer(),
+    OnSuccess :: fun((boolean()) -> any()),
+    OnFailure :: fun(() -> any());
+  (Table, Key, Incr, OnSuccess, OnFailure) -> Result when
+  Table :: ets:table(),
+  Key :: term(),
+  Incr :: integer(),
+  Result :: integer(),
+  OnSuccess :: fun((integer()) -> any()),
+  OnFailure :: fun(() -> any()).
+safe_ets_update_counter(Tab, Key, UpdateOp, OnSuccess, OnFailure) ->
+  try
+    OnSuccess(ets:update_counter(Tab, Key, UpdateOp))
+  catch error:badarg:E ->
+    rabbit_log:debug("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
+    OnFailure()
+  end.
+
+
+-spec safe_ets_update_element(Table, Key, ElementSpec :: {Pos, Value}) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term();
+  (Table, Key, ElementSpec :: [{Pos, Value}]) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term().
+safe_ets_update_element(Tab, Key, ElementSpec) ->
+  try
+    ets:update_element(Tab, Key, ElementSpec)
+  catch error:badarg:E ->
+    rabbit_log:debug("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
+    false
+  end.
+
+-spec safe_ets_update_element(Table, Key, ElementSpec :: {Pos, Value}, OnFailure) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term(),
+    OnFailure :: fun(() -> any());
+  (Table, Key, ElementSpec :: [{Pos, Value}], OnFailure) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term(),
+    OnFailure :: fun(() -> any()).
+safe_ets_update_element(Tab, Key, ElementSpec, OnFailure) ->
+  safe_ets_update_element(Tab, Key, ElementSpec, fun(_) -> ok end, OnFailure).
+
+-spec safe_ets_update_element(Table, Key, ElementSpec :: {Pos, Value}, OnSuccess, OnFailure) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term(),
+    OnSuccess :: fun((boolean()) -> any()),
+    OnFailure :: fun(() -> any());
+  (Table, Key, ElementSpec :: [{Pos, Value}], OnSuccess, OnFailure) -> boolean() when
+    Table :: ets:table(),
+    Key :: term(),
+    Pos :: pos_integer(),
+    Value :: term(),
+    OnSuccess :: fun((boolean()) -> any()),
+    OnFailure :: fun(() -> any()).
+safe_ets_update_element(Tab, Key, ElementSpec, OnSuccess, OnFailure) ->
+  try
+    OnSuccess(ets:update_element(Tab, Key, ElementSpec))
+  catch error:badarg:E ->
+    rabbit_log:debug("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
+    OnFailure(),
+    false
+  end.
+
 %% not exported by supervisor
 -type supervisor_child_id() :: term().
 -type supervisor_sup_ref() :: (Name :: atom())
@@ -1449,3 +1612,23 @@ find_powershell() ->
         PwshExe ->
             PwshExe
     end.
+
+%% Returns true if Pred(Key, Value) returns true for at least one Key to Value association in Map.
+%% The Pred function must return a boolean.
+-spec maps_any(Pred, Map) -> boolean() when
+    Pred :: fun((Key, Value) -> boolean()),
+    Map :: #{Key => Value}.
+maps_any(Pred, Map)
+when is_function(Pred, 2) andalso is_map(Map) ->
+  I = maps:iterator(Map),
+  maps_any_1(Pred, maps:next(I)).
+
+maps_any_1(_Pred, none) ->
+  false;
+maps_any_1(Pred, {K, V, I}) ->
+  case Pred(K, V) of
+      true ->
+          true;
+      false ->
+          maps_any_1(Pred, maps:next(I))
+  end.

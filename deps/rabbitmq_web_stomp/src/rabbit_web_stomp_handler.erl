@@ -9,6 +9,8 @@
 -behaviour(cowboy_websocket).
 -behaviour(cowboy_sub_protocol).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -41,8 +43,11 @@
     peername,
     auth_hd,
     stats_timer,
-    connection
+    connection,
+    should_use_fhc :: rabbit_types:option(boolean())
 }).
+
+-define(APP, rabbitmq_web_stomp).
 
 %% cowboy_sub_protcol
 upgrade(Req, Env, Handler, HandlerState) ->
@@ -80,6 +85,11 @@ init(Req0, Opts) ->
     end,
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+    ShouldUseFHC = application:get_env(?APP, enable_file_handle_cache, true),
+    case ShouldUseFHC of
+      true  -> ?LOG_INFO("Web STOMP: file handle cache use is enabled");
+      false -> ?LOG_INFO("Web STOMP: file handle cache use is disabled")
+    end,
     {?MODULE, Req, #state{
         frame_type         = proplists:get_value(type, Opts, text),
         heartbeat_sup      = KeepaliveSup,
@@ -89,11 +99,18 @@ init(Req0, Opts) ->
         conserve_resources = false,
         socket             = SockInfo,
         peername           = PeerAddr,
-        auth_hd            = cowboy_req:header(<<"authorization">>, Req)
+        auth_hd            = cowboy_req:header(<<"authorization">>, Req),
+        should_use_fhc     = ShouldUseFHC
     }, WsOpts}.
 
-websocket_init(State) ->
-    ok = file_handle_cache:obtain(),
+websocket_init(State = #state{should_use_fhc = ShouldUseFHC}) ->
+    case ShouldUseFHC of
+      true  ->
+        ok = file_handle_cache:obtain();
+      false -> ok;
+      undefined ->
+        ok = file_handle_cache:obtain()
+    end,
     process_flag(trap_exit, true),
     {ok, ProcessorState} = init_processor_state(State),
     {ok, rabbit_event:init_stats_timer(
@@ -314,9 +331,15 @@ maybe_block(State, _) ->
 stop(State) ->
     stop(State, 1000, "STOMP died").
 
-stop(State = #state{proc_state = ProcState}, CloseCode, Error0) ->
+stop(State = #state{proc_state = ProcState, should_use_fhc = ShouldUseFHC}, CloseCode, Error0) ->
     maybe_emit_stats(State),
-    ok = file_handle_cache:release(),
+    case ShouldUseFHC of
+      true  ->
+        ok = file_handle_cache:release();
+      false -> ok;
+      undefined ->
+        ok = file_handle_cache:release()
+    end,
     _ = rabbit_stomp_processor:flush_and_die(ProcState),
     Error1 = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error1}], State}.

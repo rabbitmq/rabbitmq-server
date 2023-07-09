@@ -9,7 +9,11 @@
 
 -include("rabbit.hrl").
 
--export_type([maybe/1, info/0, infos/0, info_key/0, info_keys/0,
+-export_type([
+              %% deprecated
+              maybe/1,
+              option/1,
+              info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
@@ -28,6 +32,8 @@
               permission_atom/0, rabbit_amqqueue_name/0, binding_key/0, channel_number/0,
               exchange_name/0, exchange_type/0, guid/0, routing_key/0]).
 
+-type(option(T) :: T | 'none' | 'undefined').
+%% Deprecated, 'maybe' is a keyword in modern Erlang
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
@@ -49,11 +55,11 @@
 -type(decoded_content() ::
         #content{class_id              :: rabbit_framing:amqp_class_id(),
                  properties            :: rabbit_framing:amqp_property_record(),
-                 properties_bin        :: maybe(binary()),
+                 properties_bin        :: option(binary()),
                  payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
         #content{class_id       :: rabbit_framing:amqp_class_id(),
-                 properties     :: maybe(rabbit_framing:amqp_property_record()),
+                 properties     :: option(rabbit_framing:amqp_property_record()),
                  properties_bin        :: binary(),
                  payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
