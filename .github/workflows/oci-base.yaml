@@ -36,9 +36,9 @@ jobs:
         id: authorized
         run: |
           if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "::set-output name=PUSH::true"
+            echo "PUSH=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=PUSH::false"
+            echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to DockerHub
