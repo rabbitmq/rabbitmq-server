@@ -1231,16 +1231,10 @@ contains_message(MsgId, From, State) ->
     gen_server2:reply(From, MsgLocation =/= not_found),
     State.
 
-safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
-    try
-        SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
-    catch error:badarg -> FailThunk()
-    end.
-
 update_msg_cache(CacheEts, MsgId, Msg) ->
     case ets:insert_new(CacheEts, {MsgId, Msg, 1}) of
         true  -> ok;
-        false -> safe_ets_update_counter(
+        false -> rabbit_misc:safe_ets_update_counter(
                    CacheEts, MsgId, {3, +1}, fun (_) -> ok end,
                    fun () -> update_msg_cache(CacheEts, MsgId, Msg) end)
     end.
