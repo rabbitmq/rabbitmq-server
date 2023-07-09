@@ -79,12 +79,9 @@
 -export([raw_read_file/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
-<<<<<<< HEAD
-=======
 -export([maps_any/2]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
->>>>>>> d5d8689f54 (FHC: use safe versions of ets update functions)
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1615,3 +1612,23 @@ find_powershell() ->
         PwshExe ->
             PwshExe
     end.
+
+%% Returns true if Pred(Key, Value) returns true for at least one Key to Value association in Map.
+%% The Pred function must return a boolean.
+-spec maps_any(Pred, Map) -> boolean() when
+    Pred :: fun((Key, Value) -> boolean()),
+    Map :: #{Key => Value}.
+maps_any(Pred, Map)
+when is_function(Pred, 2) andalso is_map(Map) ->
+  I = maps:iterator(Map),
+  maps_any_1(Pred, maps:next(I)).
+
+maps_any_1(_Pred, none) ->
+  false;
+maps_any_1(Pred, {K, V, I}) ->
+  case Pred(K, V) of
+      true ->
+          true;
+      false ->
+          maps_any_1(Pred, maps:next(I))
+  end.

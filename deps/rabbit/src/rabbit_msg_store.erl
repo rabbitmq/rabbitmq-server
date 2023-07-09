@@ -593,7 +593,7 @@ client_read2(false, _Right,
     %% It's entirely possible that everything we're doing from here on
     %% is for the wrong file, or a non-existent file, as a GC may have
     %% finished.
-    safe_ets_update_counter(
+    rabbit_misc:safe_ets_update_counter(
       FileSummaryEts, File, {#file_summary.readers, +1},
       fun (_) -> client_read3(MsgLocation, Defer, CState) end,
       fun () -> read(MsgId, CState) end).

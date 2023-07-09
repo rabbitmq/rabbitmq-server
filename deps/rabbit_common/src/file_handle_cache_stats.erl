@@ -9,7 +9,7 @@
 
 %% stats about read / write operations that go through the fhc.
 
--export([init/0, update/3, update/2, update/1, get/0]).
+-export([init/0, update/3, update/2, update/1, get/0, inc/2]).
 
 -define(TABLE, ?MODULE).
 
@@ -48,13 +48,10 @@ update(Op) ->
     _ = safe_ets_update_counter(?TABLE, {Op, count}, 1),
     ok.
 
-<<<<<<< HEAD
-=======
 inc(Op, Count) ->
     _ = safe_ets_update_counter(?TABLE, {Op, count}, Count),
     ok.
 
->>>>>>> d5d8689f54 (FHC: use safe versions of ets update functions)
 get() ->
     lists:sort(ets:tab2list(?TABLE)).
 

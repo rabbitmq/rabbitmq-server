@@ -28,11 +28,7 @@
          upgrade/5,
          takeover/7]).
 
-<<<<<<< HEAD
--type option(T) :: undefined | T.
-=======
 -define(APP, rabbitmq_web_mqtt).
->>>>>>> 1402183bc2 (Introduce a way to disable FHC use in web_mqtt)
 
 -record(state, {
           socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
@@ -41,9 +37,9 @@
                                                      rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
-          stats_timer :: option(rabbit_event:state()),
+          stats_timer :: rabbit_types:option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-          conn_name :: option(binary()),
+          conn_name :: rabbit_types:option(binary()),
           should_use_fhc :: rabbit_types:option(boolean())
         }).
 
