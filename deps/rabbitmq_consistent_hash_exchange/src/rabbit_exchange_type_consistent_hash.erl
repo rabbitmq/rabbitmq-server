@@ -13,7 +13,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
@@ -61,7 +61,7 @@ serialise_events() -> false.
 
 route(#exchange{name = Name,
                 arguments = Args},
-      Msg) ->
+      Msg, _Options) ->
     case rabbit_db_ch_exchange:get(Name) of
         undefined ->
             [];

@@ -21,7 +21,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
@@ -38,7 +38,7 @@ description() ->
 
 serialise_events() -> false.
 
-route(X = #exchange{arguments = Args}, Msg) ->
+route(X = #exchange{arguments = Args}, Msg, _Opts) ->
     %% This arg was introduced in the same release as this exchange type;
     %% it must be set
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),

@@ -13,7 +13,7 @@
 
 -import(rabbit_misc, [table_lookup/2]).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2, create/2, delete/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
 -export([setup_schema/0, disable_plugin/0]).
@@ -45,7 +45,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name      = XName,
-                arguments = Args}, Message) ->
+                arguments = Args}, Message, _Options) ->
     Length = table_lookup(Args, <<"x-recent-history-length">>),
     maybe_cache_msg(XName, Message, Length),
     rabbit_router:match_routing_key(XName, ['_']).
