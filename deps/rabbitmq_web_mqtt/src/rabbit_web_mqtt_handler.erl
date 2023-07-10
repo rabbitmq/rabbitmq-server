@@ -81,7 +81,7 @@ init(Req, Opts) ->
                 false ->
                     no_supported_sub_protocol(Protocol, Req);
                 true ->
-                    ShouldUseFHC = application:get_env(?APP, enable_file_handle_cache, true),
+                    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
                     case ShouldUseFHC of
                       true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
                       false -> ?LOG_INFO("Web MQTT: file handle cache use is disabled")

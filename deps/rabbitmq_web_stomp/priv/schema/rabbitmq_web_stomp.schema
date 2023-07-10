@@ -194,7 +194,7 @@ end}.
 %% File Handle Cache
 %%
 
-{mapping, "web_stomp.enable_file_handle_cache", "rabbitmq_web_stomp.enable_file_handle_cache",
+{mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",
     [
         {datatype, {enum, [true, false]}}
     ]}.

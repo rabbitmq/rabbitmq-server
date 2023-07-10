@@ -186,7 +186,7 @@ end}.
 %% File Handle Cache
 %%
 
-{mapping, "web_mqtt.enable_file_handle_cache", "rabbitmq_web_mqtt.enable_file_handle_cache",
+{mapping, "web_mqtt.use_file_handle_cache", "rabbitmq_web_mqtt.use_file_handle_cache",
     [
         {datatype, {enum, [true, false]}}
     ]}.
