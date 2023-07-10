@@ -2,7 +2,9 @@
 -behaviour(mc).
 
 -include("rabbit_mqtt_packet.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
          init/1,
@@ -138,6 +140,53 @@ convert(mc_amqp, #mqtt_msg{qos = Qos,
                        [Header, AmqpProps, AppData]
                end,
     mc_amqp:init_amqp(Sections);
+convert(mc_amqpl, #mqtt_msg{qos = Qos,
+                            props = Props,
+                            payload = Payload}) ->
+    DelMode = case Qos of
+                  ?QOS_0 -> 1;
+                  ?QOS_1 -> 2
+              end,
+    ContentType = case Props of
+                      #{'Content-Type' := ContType} -> ContType;
+                      _ -> undefined
+                  end,
+    Hs0 = case Props of
+              #{'Response-Topic' := Topic} ->
+                  [{<<"x-opt-reply-to-topic">>, longstr, rabbit_mqtt_util:mqtt_to_amqp(Topic)}];
+              _ ->
+                  []
+          end,
+    {CorrId, Hs} = case Props of
+                       #{'Correlation-Data' := Corr} ->
+                           case mc_util:is_valid_shortstr(Corr) of
+                               true ->
+                                   {Corr, Hs0};
+                               false ->
+                                   {undefined, [{<<"x-correlation-id">>, longstr, Corr} | Hs0]}
+                           end;
+                       _ ->
+                           {undefined, Hs0}
+                   end,
+    Expiration = case Props of
+                     #{'Message-Expiry-Interval' := Seconds} ->
+                         integer_to_binary(timer:seconds(Seconds));
+                     _ ->
+                         undefined
+                 end,
+    BP = #'P_basic'{content_type = ContentType,
+                    headers = Hs,
+                    delivery_mode = DelMode,
+                    correlation_id = CorrId,
+                    expiration = Expiration},
+    PFR = case is_binary(Payload) of
+              true -> [Payload];
+              false -> lists:reverse(Payload)
+          end,
+    #content{class_id = 60,
+             properties = BP,
+             properties_bin = none,
+             payload_fragments_rev = PFR};
 convert(_TargetProto, #mqtt_msg{}) ->
     not_implemented.
 
