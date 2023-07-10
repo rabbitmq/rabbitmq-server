@@ -42,16 +42,16 @@
     [{max_connections, 5000}]}],
   [rabbitmq_web_stomp]},
 
-  {enable_file_handle_cache_is_disabled,
-   "web_stomp.enable_file_handle_cache = false",
+  {use_file_handle_cache_is_off,
+   "web_stomp.use_file_handle_cache = false",
    [{rabbitmq_web_stomp,
-     [{enable_file_handle_cache, false}]}],
+     [{use_file_handle_cache, false}]}],
    [rabbitmq_web_stomp]},
 
-  {enable_file_handle_cache_is_enabled,
-   "web_stomp.enable_file_handle_cache = true",
+  {use_file_handle_cache_is_on,
+   "web_stomp.use_file_handle_cache = true",
    [{rabbitmq_web_stomp,
-     [{enable_file_handle_cache, true}]}],
+     [{use_file_handle_cache, true}]}],
    [rabbitmq_web_stomp]},
 
  {ssl_listener,
