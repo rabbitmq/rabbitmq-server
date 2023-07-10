@@ -117,6 +117,7 @@ cluster_size_1_tests() ->
      ,clean_session_node_kill
      ,rabbit_status_connection_count
      ,trace
+     ,trace_large_message
      ,max_packet_size_unauthenticated
      ,max_packet_size_authenticated
      ,default_queue_type
@@ -1549,6 +1550,35 @@ trace(Config) ->
 
     delete_queue(Ch, TraceQ),
     [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
+
+trace_large_message(Config) ->
+    TraceQ = <<"trace-queue">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    declare_queue(Ch, TraceQ, []),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = TraceQ,
+                                             exchange = <<"amq.rabbitmq.trace">>,
+                                             routing_key = <<"deliver.*">>}),
+    C = connect(<<"my-client">>, Config),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_on"]),
+    {ok, _, [0]} = emqtt:subscribe(C, <<"/my/topic">>),
+    Payload0 = binary:copy(<<"x">>, 1_000_000),
+    Payload = <<Payload0/binary, "y">>,
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = <<"amq.topic">>,
+                                       routing_key = <<".my.topic">>},
+                      #amqp_msg{payload = Payload}),
+    ok = expect_publishes(C, <<"/my/topic">>, [Payload]),
+    timer:sleep(10),
+    ?assertMatch(
+       {#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-my-clientqos0">>},
+        #amqp_msg{payload = Payload}},
+       amqp_channel:call(Ch, #'basic.get'{queue = TraceQ})
+      ),
+
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_off"]),
+    delete_queue(Ch, TraceQ),
+    ok = emqtt:disconnect(C).
 
 max_packet_size_unauthenticated(Config) ->
     ClientId = ?FUNCTION_NAME,
