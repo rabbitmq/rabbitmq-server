@@ -135,20 +135,21 @@ handle_call(Request, From, State) ->
     rabbit_log:info("~ts received unhandled call from ~tp: ~tp", [?MODULE, From, Request]),
     {noreply, State}.
 
-handle_cast({queue_event, QRef, {_From, {machine, lookup_topology}}},
-            #state{queue_ref = QRef} = State0) ->
+handle_cast({dlx_event, _LeaderPid, lookup_topology},
+            #state{queue_ref = _} = State0) ->
     State = lookup_topology(State0),
     redeliver_and_ack(State);
-handle_cast({queue_event, QRef, {From, Evt}},
-            #state{queue_ref = QRef,
+handle_cast({dlx_event, LeaderPid, Evt},
+            #state{queue_ref = _QRef,
                    dlx_client_state = DlxState0} = State0) ->
     %% received dead-letter message from source queue
-    {ok, DlxState, Actions} = rabbit_fifo_dlx_client:handle_ra_event(From, Evt, DlxState0),
+    {ok, DlxState, Actions} = rabbit_fifo_dlx_client:handle_ra_event(LeaderPid, Evt, DlxState0),
     State1 = State0#state{dlx_client_state = DlxState},
     State = handle_queue_actions(Actions, State1),
     {noreply, State};
 handle_cast({queue_event, QRef, Evt},
             #state{queue_type_state = QTypeState0} = State0) ->
+
     case rabbit_queue_type:handle_event(QRef, Evt, QTypeState0) of
         {ok, QTypeState1, Actions} ->
             %% received e.g. confirm from target queue

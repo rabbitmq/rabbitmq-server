@@ -236,7 +236,7 @@ delivery_effects(CPid, Msgs0) ->
               Msgs = lists:zipwith(fun (Cmd, {Reason, MsgId}) ->
                                            {MsgId, {Reason, rabbit_fifo:get_msg(Cmd)}}
                                    end, Log, RsnIds),
-              [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
+              [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
 
 -spec state_enter(ra_server:ra_state() | eol, rabbit_types:r('queue'), dead_letter_handler(), state()) ->
@@ -308,7 +308,7 @@ update_config(at_least_once, at_least_once, _, State) ->
             {State, []};
         Pid ->
             %% Notify rabbit_fifo_dlx_worker about potentially updated policies.
-            {State, [{send_msg, Pid, lookup_topology, ra_event}]}
+            {State, [{send_msg, Pid, {dlx_event, self(), lookup_topology}, cast}]}
     end;
 update_config(SameDLH, SameDLH, _, State) ->
     {State, []};

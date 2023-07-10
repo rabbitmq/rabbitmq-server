@@ -589,7 +589,8 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     ok = publish_confirm(Ch, SourceQ),
     RaName = ra_name(SourceQ),
     eventually(?_assertMatch([{2, 2}], %% 2 messages with 1 byte each
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+                             dirty_query([Server], RaName,
+                                         fun rabbit_fifo:query_stat_dlx/1))),
     %% Now, we have 2 expired messages in the source quorum queue's discards queue.
     %% Now that we are over the limit we expect publishes to be rejected.
     ?assertEqual(fail, publish_confirm(Ch, SourceQ)),
