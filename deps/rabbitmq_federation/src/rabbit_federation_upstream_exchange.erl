@@ -38,7 +38,7 @@ description() ->
 
 serialise_events() -> false.
 
-route(X = #exchange{arguments = Args}, Msg) ->
+route(X = #exchange{arguments = Args}, Msg, _Opts) ->
     %% This arg was introduced in the same release as this exchange type;
     %% it must be set
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),

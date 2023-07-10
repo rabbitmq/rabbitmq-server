@@ -467,7 +467,7 @@ stream_message(Msg, _FilteringSupported = true) ->
     case mc:x_header(<<"x-stream-filter-value">>, Msg) of
         undefined ->
             MsgData;
-        {utf8, Value} ->
+        Value ->
             {Value, MsgData}
     end;
 stream_message(Msg, _FilteringSupported = false) ->

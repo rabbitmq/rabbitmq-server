@@ -23,8 +23,10 @@
 
 %% The no_return is there so that we can have an "invalid" exchange
 %% type (see rabbit_exchange_type_invalid).
--callback route(rabbit_types:exchange(), mc:state()) ->
-    rabbit_router:match_result().
+%% NB: This callback is deprecated in favour of route/3
+%% and will be removed in the future
+% -callback route(rabbit_types:exchange(), mc:state()) ->
+%     rabbit_router:match_result().
 
 -callback route(rabbit_types:exchange(), mc:state(), rabbit_exchange:route_opts()) ->
     [rabbit_types:binding_destination() |

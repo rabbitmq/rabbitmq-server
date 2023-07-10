@@ -89,7 +89,7 @@ description() -> [ {name, <<"jms-selector">>}
 serialise_events() -> false.
 
 % Route messages
-route(#exchange{name = XName}, Msg) ->
+route(#exchange{name = XName}, Msg, _Opts) ->
     RKs = mc:get_annotation(routing_keys, Msg),
     Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
     case get_binding_funs_x(XName) of

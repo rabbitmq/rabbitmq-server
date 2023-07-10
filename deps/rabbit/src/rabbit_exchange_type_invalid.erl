@@ -27,6 +27,8 @@ description() ->
 serialise_events() -> false.
 
 -spec route(rabbit_types:exchange(), mc:state()) -> no_return().
+route(Exchange, Msg) ->
+    route(Exchange, Msg, #{}).
 
 -spec route(rabbit_types:exchange(), mc:state(), map()) -> no_return().
 route(#exchange{name = Name, type = Type}, _, _Opts) ->

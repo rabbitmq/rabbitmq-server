@@ -32,6 +32,9 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = Name}, Msg) ->
+    route(#exchange{name = Name}, Msg, #{}).
+
+route(#exchange{name = Name}, Msg, _Opts) ->
     %% TODO: find a way not to extract x headers unless necessary
     Headers = mc:routing_headers(Msg, [x_headers]),
 
