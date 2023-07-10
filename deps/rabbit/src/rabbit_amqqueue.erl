@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -834,26 +834,27 @@ check_arguments_key(QueueName, QueueType, Args, InvalidArgs) ->
                   end, Args).
 
 declare_args() ->
-    [{<<"x-expires">>,                 fun check_expires_arg/2},
-     {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
-     {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
+    [{<<"x-expires">>, fun check_expires_arg/2},
+     {<<"x-message-ttl">>, fun check_message_ttl_arg/2},
+     {<<"x-dead-letter-exchange">>, fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
-     {<<"x-dead-letter-strategy">>,    fun check_dlxstrategy_arg/2},
-     {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
-     {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
-     {<<"x-max-in-memory-length">>,    fun check_non_neg_int_arg/2},
-     {<<"x-max-in-memory-bytes">>,     fun check_non_neg_int_arg/2},
-     {<<"x-max-priority">>,            fun check_max_priority_arg/2},
-     {<<"x-overflow">>,                fun check_overflow/2},
-     {<<"x-queue-mode">>,              fun check_queue_mode/2},
-     {<<"x-queue-version">>,           fun check_queue_version/2},
-     {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
-     {<<"x-queue-type">>,              fun check_queue_type/2},
-     {<<"x-quorum-initial-group-size">>,     fun check_initial_cluster_size_arg/2},
-     {<<"x-max-age">>,                 fun check_max_age_arg/2},
-     {<<"x-stream-max-segment-size-bytes">>,        fun check_non_neg_int_arg/2},
-     {<<"x-initial-cluster-size">>,    fun check_initial_cluster_size_arg/2},
-     {<<"x-queue-leader-locator">>,    fun check_queue_leader_locator_arg/2}].
+     {<<"x-dead-letter-strategy">>, fun check_dlxstrategy_arg/2},
+     {<<"x-max-length">>, fun check_non_neg_int_arg/2},
+     {<<"x-max-length-bytes">>, fun check_non_neg_int_arg/2},
+     {<<"x-max-in-memory-length">>, fun check_non_neg_int_arg/2},
+     {<<"x-max-in-memory-bytes">>, fun check_non_neg_int_arg/2},
+     {<<"x-max-priority">>, fun check_max_priority_arg/2},
+     {<<"x-overflow">>, fun check_overflow/2},
+     {<<"x-queue-mode">>, fun check_queue_mode/2},
+     {<<"x-queue-version">>, fun check_queue_version/2},
+     {<<"x-single-active-consumer">>, fun check_single_active_consumer_arg/2},
+     {<<"x-queue-type">>, fun check_queue_type/2},
+     {<<"x-quorum-initial-group-size">>, fun check_initial_cluster_size_arg/2},
+     {<<"x-max-age">>, fun check_max_age_arg/2},
+     {<<"x-stream-max-segment-size-bytes">>, fun check_non_neg_int_arg/2},
+     {<<"x-stream-filter-size-bytes">>, fun check_non_neg_int_arg/2},
+     {<<"x-initial-cluster-size">>, fun check_initial_cluster_size_arg/2},
+     {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2},

@@ -209,6 +209,9 @@ var HELP = {
     'queue-stream-max-segment-size-bytes':
       'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
 
+    'queue-stream-max-segment-size-bytes':
+      'Size of the filter data attached to each stream chunk.<br/>(Sets the x-stream-filter-size-bytes argument.)',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 

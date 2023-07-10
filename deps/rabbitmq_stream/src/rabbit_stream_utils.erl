@@ -18,7 +18,7 @@
 
 %% API
 -export([enforce_correct_name/1,
-         write_messages/4,
+         write_messages/5,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -29,7 +29,10 @@
          sort_partitions/1,
          strip_cr_lf/1,
          consumer_activity_status/2,
-         command_versions/0]).
+         filter_defined/1,
+         filter_spec/1,
+         command_versions/0,
+         filtering_supported/0]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -54,9 +57,9 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-write_messages(_ClusterLeader, undefined, _PublisherId, <<>>) ->
+write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
     ok;
-write_messages(ClusterLeader,
+write_messages(?VERSION_1 = V, ClusterLeader,
                undefined,
                PublisherId,
                <<PublishingId:64,
@@ -64,14 +67,13 @@ write_messages(ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
     ok =
         osiris:write(ClusterLeader,
                      undefined,
                      {PublisherId, PublishingId},
                      Message),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
-write_messages(ClusterLeader,
+    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+write_messages(?VERSION_1 = V, ClusterLeader,
                undefined,
                PublisherId,
                <<PublishingId:64,
@@ -83,7 +85,6 @@ write_messages(ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
     ok =
         osiris:write(ClusterLeader,
                      undefined,
@@ -93,10 +94,8 @@ write_messages(ClusterLeader,
                       CompressionType,
                       UncompressedSize,
                       Batch}),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
-write_messages(_ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
-    ok;
-write_messages(ClusterLeader,
+    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
                <<PublishingId:64,
@@ -104,10 +103,9 @@ write_messages(ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
     ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest);
-write_messages(ClusterLeader,
+    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
                <<PublishingId:64,
@@ -119,7 +117,6 @@ write_messages(ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
     ok =
         osiris:write(ClusterLeader,
                      PublisherRef,
@@ -129,7 +126,59 @@ write_messages(ClusterLeader,
                       CompressionType,
                       UncompressedSize,
                       Batch}),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest).
+    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               undefined,
+               PublisherId,
+               <<PublishingId:64,
+                 -1:16/signed,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok =
+        osiris:write(ClusterLeader,
+                     undefined,
+                     {PublisherId, PublishingId},
+                     Message),
+    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               undefined,
+               PublisherId,
+               <<PublishingId:64,
+                 FilterValueLength:16, FilterValue:FilterValueLength/binary,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok =
+        osiris:write(ClusterLeader,
+                     undefined,
+                     {PublisherId, PublishingId},
+                     {FilterValue, Message}),
+    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               PublisherRef,
+               PublisherId,
+               <<PublishingId:64,
+                 -1:16/signed,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
+    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+write_messages(?VERSION_2 = V, ClusterLeader,
+               PublisherRef,
+               PublisherId,
+               <<PublishingId:64,
+                 FilterValueLength:16, FilterValue:FilterValueLength/binary,
+                 0:1,
+                 MessageSize:31,
+                 Message:MessageSize/binary,
+                 Rest/binary>>) ->
+    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, {FilterValue, Message}),
+    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
@@ -255,9 +304,44 @@ consumer_activity_status(Active, Properties) ->
             waiting
     end.
 
+filter_defined(SubscriptionProperties) when is_map(SubscriptionProperties) ->
+    lists:any(fun(<<"filter.",_/binary>>) ->
+                      true;
+                 (_) ->
+                      false
+              end, maps:keys(SubscriptionProperties));
+filter_defined(_) ->
+    false.
+
+filter_spec(Properties) ->
+    Filters = maps:fold(fun(<<"filter.",_/binary>>, V, Acc) ->
+                                [V] ++ Acc;
+                           (_, _, Acc) ->
+                                Acc
+                        end, [], Properties),
+    case Filters of
+        [] ->
+            #{};
+        _ ->
+            MatchUnfiltered = case Properties of
+                                  #{<<"match-unfiltered">> := <<"true">>} ->
+                                      true;
+                                  _ ->
+                                      false
+                              end,
+            #{filter_spec =>
+              #{filters => Filters, match_unfiltered => MatchUnfiltered}}
+    end.
+
 command_versions() ->
+    PublishMaxVersion = case filtering_supported() of
+                            false ->
+                                ?VERSION_1;
+                            true ->
+                                ?VERSION_2
+                        end,
     [{declare_publisher, ?VERSION_1, ?VERSION_1},
-     {publish, ?VERSION_1, ?VERSION_1},
+     {publish, ?VERSION_1, PublishMaxVersion},
      {query_publisher_sequence, ?VERSION_1, ?VERSION_1},
      {delete_publisher, ?VERSION_1, ?VERSION_1},
      {subscribe, ?VERSION_1, ?VERSION_1},
@@ -273,3 +357,6 @@ command_versions() ->
      {route, ?VERSION_1, ?VERSION_1},
      {partitions, ?VERSION_1, ?VERSION_1},
      {stream_stats, ?VERSION_1, ?VERSION_1}].
+
+filtering_supported() ->
+    rabbit_feature_flags:is_enabled(stream_filtering).

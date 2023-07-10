@@ -95,7 +95,8 @@
          outstanding_requests :: #{integer() => #request{}},
          deliver_version :: rabbit_stream_core:command_version(),
          request_timeout :: pos_integer(),
-         outstanding_requests_timer :: undefined | erlang:reference()}).
+         outstanding_requests_timer :: undefined | erlang:reference(),
+         filtering_supported :: boolean()}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -257,7 +258,8 @@ init([KeepaliveSup,
                                    correlation_id_sequence = 0,
                                    outstanding_requests = #{},
                                    request_timeout = RequestTimeout,
-                                   deliver_version = DeliverVersion},
+                                   deliver_version = DeliverVersion,
+                                   filtering_supported = rabbit_stream_utils:filtering_supported()},
             State =
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
@@ -269,6 +271,13 @@ init([KeepaliveSup,
                 application:get_env(rabbitmq_stream,
                                     connection_negotiation_step_timeout,
                                     10_000),
+                Config = #configuration{
+                            initial_credits = InitialCredits,
+                            credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
+                            frame_max = FrameMax,
+                            heartbeat = Heartbeat,
+                            connection_negotiation_step_timeout = ConnectionNegotiationStepTimeout
+                           },
             % gen_statem process has its start_link call not return until the init function returns.
             % This is problematic, because we won't be able to call ranch:handshake/2
             % from the init callback as this would cause a deadlock to happen.
@@ -280,20 +289,7 @@ init([KeepaliveSup,
                                   #statem_data{transport = Transport,
                                                connection = Connection,
                                                connection_state = State,
-                                               config =
-                                                   #configuration{initial_credits
-                                                                      =
-                                                                      InitialCredits,
-                                                                  credits_required_for_unblocking
-                                                                      =
-                                                                      CreditsRequiredBeforeUnblocking,
-                                                                  frame_max =
-                                                                      FrameMax,
-                                                                  heartbeat =
-                                                                      Heartbeat,
-                                                                  connection_negotiation_step_timeout
-                                                                      =
-                                                                      ConnectionNegotiationStepTimeout}});
+                                               config = Config});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             rabbit_log_connection:warning("Closing connection because of ~tp ~tp",
@@ -1309,15 +1305,15 @@ handle_inbound_data(Transport,
                 {Connection, State#stream_connection_state{data = CoreState}},
                 Commands).
 
-publishing_ids_from_messages(<<>>) ->
+publishing_ids_from_messages(_, <<>>) ->
     [];
-publishing_ids_from_messages(<<PublishingId:64,
+publishing_ids_from_messages(?VERSION_1 = V, <<PublishingId:64,
                                0:1,
                                MessageSize:31,
                                _Message:MessageSize/binary,
                                Rest/binary>>) ->
-    [PublishingId | publishing_ids_from_messages(Rest)];
-publishing_ids_from_messages(<<PublishingId:64,
+    [PublishingId | publishing_ids_from_messages(V, Rest)];
+publishing_ids_from_messages(?VERSION_1 = V, <<PublishingId:64,
                                1:1,
                                _CompressionType:3,
                                _Unused:4,
@@ -1326,7 +1322,15 @@ publishing_ids_from_messages(<<PublishingId:64,
                                BatchSize:32,
                                _Batch:BatchSize/binary,
                                Rest/binary>>) ->
-    [PublishingId | publishing_ids_from_messages(Rest)].
+    [PublishingId | publishing_ids_from_messages(V, Rest)];
+publishing_ids_from_messages(?VERSION_2 = V, <<PublishingId:64,
+                               FilterValueLength:16, _FilterValue:FilterValueLength/binary,
+                               0:1,
+                               MessageSize:31,
+                               _Message:MessageSize/binary,
+                               Rest/binary>>) ->
+    [PublishingId | publishing_ids_from_messages(V, Rest)].
+%% TODO handle filter value with sub-batching
 
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
@@ -1740,6 +1744,43 @@ handle_frame_post_auth(Transport,
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
+                       Connection,
+                       State,
+                       {publish, PublisherId, MessageCount, Messages}) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {publish, ?VERSION_1, PublisherId, MessageCount, Messages});
+handle_frame_post_auth(Transport,
+                       #stream_connection{filtering_supported = false,
+                                          publishers = Publishers,
+                                          socket = S} = Connection,
+                       State,
+                       {publish_v2, PublisherId, MessageCount, Messages}) ->
+    case Publishers of
+        #{PublisherId := #publisher{message_counters = Counters}} ->
+            increase_messages_received(Counters, MessageCount),
+            increase_messages_errored(Counters, MessageCount),
+            ok;
+        _ ->
+            ok
+    end,
+    rabbit_global_counters:increase_protocol_counter(stream,
+                                                     ?PRECONDITION_FAILED,
+                                                     1),
+    PublishingIds = publishing_ids_from_messages(?VERSION_2, Messages),
+    Command = {publish_error,
+               PublisherId,
+               ?RESPONSE_CODE_PRECONDITION_FAILED,
+               PublishingIds},
+    Frame = rabbit_stream_core:frame(Command),
+    send(Transport, S, Frame),
+    {Connection, State};
+handle_frame_post_auth(Transport,
+                       Connection,
+                       State,
+                       {publish_v2, PublisherId, MessageCount, Messages}) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {publish, ?VERSION_2, PublisherId, MessageCount, Messages});
+handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
                                           virtual_host = VirtualHost,
@@ -1747,7 +1788,7 @@ handle_frame_post_auth(Transport,
                                           publishers = Publishers} =
                            Connection,
                        State,
-                       {publish, PublisherId, MessageCount, Messages}) ->
+                       {publish, Version, PublisherId, MessageCount, Messages}) ->
     case Publishers of
         #{PublisherId := Publisher} ->
             #publisher{stream = Stream,
@@ -1766,14 +1807,14 @@ handle_frame_post_auth(Transport,
                                                            User, #{})
             of
                 ok ->
-                    rabbit_stream_utils:write_messages(Leader,
+                    rabbit_stream_utils:write_messages(Version, Leader,
                                                        Reference,
                                                        PublisherId,
                                                        Messages),
                     sub_credits(Credits, MessageCount),
                     {Connection, State};
                 error ->
-                    PublishingIds = publishing_ids_from_messages(Messages),
+                    PublishingIds = publishing_ids_from_messages(Version, Messages),
                     Command =
                         {publish_error,
                          PublisherId,
@@ -1788,7 +1829,7 @@ handle_frame_post_auth(Transport,
                     {Connection, State}
             end;
         _ ->
-            PublishingIds = publishing_ids_from_messages(Messages),
+            PublishingIds = publishing_ids_from_messages(Version, Messages),
             Command =
                 {publish_error,
                  PublisherId,
@@ -1884,15 +1925,42 @@ handle_frame_post_auth(Transport,
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
-                       #stream_connection{name = ConnName,
-                                          socket = Socket,
-                                          stream_subscriptions =
-                                              StreamSubscriptions,
-                                          virtual_host = VirtualHost,
-                                          user = User,
-                                          send_file_oct = SendFileOct,
-                                          transport = ConnTransport} =
-                           Connection,
+                       #stream_connection{filtering_supported = false} = Connection,
+                       State,
+                       {request, CorrelationId,
+                        {subscribe,
+                         SubscriptionId, _, _, _, Properties}} = Request) ->
+    case rabbit_stream_utils:filter_defined(Properties) of
+        true ->
+            rabbit_log:warning("Cannot create subcription ~tp, it defines a filter "
+                               "and filtering is not active",
+                               [SubscriptionId]),
+            response(Transport,
+                     Connection,
+                     subscribe,
+                     CorrelationId,
+                     ?RESPONSE_CODE_PRECONDITION_FAILED),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?PRECONDITION_FAILED,
+                                                             1),
+            {Connection, State};
+        false ->
+            handle_frame_post_auth(Transport, {ok, Connection}, State, Request)
+    end;
+handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
+                       {request, _,
+                        {subscribe,
+                         _, _, _, _, _}} = Request) ->
+    handle_frame_post_auth(Transport, {ok, Connection}, State, Request);
+handle_frame_post_auth(Transport,
+                       {ok, #stream_connection{
+                               name = ConnName,
+                               socket = Socket,
+                               stream_subscriptions = StreamSubscriptions,
+                               virtual_host = VirtualHost,
+                               user = User,
+                               send_file_oct = SendFileOct,
+                               transport = ConnTransport} = Connection},
                        #stream_connection_state{consumers = Consumers} = State,
                        {request, CorrelationId,
                         {subscribe,
@@ -2806,15 +2874,14 @@ init_reader(ConnectionTransport,
             Properties,
             OffsetSpec) ->
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
-    Options =
-        #{transport => ConnectionTransport,
-          chunk_selector => get_chunk_selector(Properties)},
+    Options = maps:merge(#{transport => ConnectionTransport,
+                           chunk_selector => get_chunk_selector(Properties)},
+                         rabbit_stream_utils:filter_spec(Properties)),
     {ok, Segment} =
         osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
     rabbit_log:debug("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
-
 
 single_active_consumer(#consumer{configuration =
                                  #consumer_configuration{properties = Properties}}) ->

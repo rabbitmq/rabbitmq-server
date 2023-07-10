@@ -698,6 +698,7 @@ subscribe(S, SubId, Stream, SubProperties, C) ->
                                        SubId,
                                        Stream,
                                        SubProperties,
+                                       ?RESPONSE_CODE_OK,
                                        C).
 
 subscribe(S, SubId, Stream, C) ->

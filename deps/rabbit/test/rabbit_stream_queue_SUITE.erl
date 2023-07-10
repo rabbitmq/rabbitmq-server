@@ -88,6 +88,7 @@ all_tests() ->
      declare_invalid_properties,
      declare_server_named,
      declare_invalid_arg,
+     declare_invalid_filter_size,
      consume_invalid_arg,
      declare_queue,
      delete_queue,
@@ -125,7 +126,9 @@ all_tests() ->
      queue_info,
      tracking_status,
      restart_stream,
-     dead_letter_target
+     dead_letter_target,
+     filter_spec,
+     filtering
     ].
 
 %% -------------------------------------------------------------------
@@ -231,6 +234,15 @@ init_per_testcase(TestCase, Config)
         _ ->
             init_test_case(TestCase, Config)
     end;
+init_per_testcase(TestCase, Config)
+  when TestCase == filtering ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "filtering should not be used in mixed-version clusters"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+
 init_per_testcase(TestCase, Config) ->
     init_test_case(TestCase, Config).
 
@@ -261,7 +273,11 @@ declare_args(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-length-bytes">>, long, 2_000_000}])),
+                                 {<<"x-max-length-bytes">>, long, 2_000_000},
+                                 {<<"x-max-age">>, longstr, <<"10D">>},
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 5_000_000},
+                                 {<<"x-stream-filter-size-bytes">>, long, 32}
+                                ])),
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -330,6 +346,17 @@ declare_invalid_arg(Config) ->
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
        declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                        {<<"x-overflow">>, longstr, <<"reject-publish">>}])).
+
+declare_invalid_filter_size(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - Invalid value for  x-stream-filter-size-bytes">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                       {<<"x-stream-filter-size-bytes">>, long, 256}])).
 
 consume_invalid_arg(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -2232,7 +2259,8 @@ update_retention_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 200}
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 200},
+                                 {<<"x-stream-filter-size-bytes">>, long, 32}
                                 ])),
     check_leader_and_replicas(Config, Servers),
 
@@ -2374,7 +2402,91 @@ dead_letter_target(Config) ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+filter_spec(_) ->
+    [begin
+         FilterSpec = rabbit_stream_queue:filter_spec(Args),
+         ?assert(maps:is_key(filter_spec, FilterSpec)),
+         #{filter_spec := #{filters := Filters, match_unfiltered := MatchUnfiltered}} = FilterSpec,
+         ?assertEqual(lists:sort(ExpectedFilters), lists:sort(Filters)),
+         ?assertEqual(ExpectedMatchUnfiltered, MatchUnfiltered)
+     end || {Args, ExpectedFilters, ExpectedMatchUnfiltered} <-
+            [{[{<<"x-stream-filter">>,array,[{longstr,<<"apple">>},{longstr,<<"banana">>}]}],
+              [<<"apple">>, <<"banana">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>}],
+              [<<"apple">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>}, {<<"sac">>,bool,true}],
+              [<<"apple">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>},{<<"x-stream-match-unfiltered">>,bool,true}],
+              [<<"apple">>], true}
+            ]],
+    ?assertEqual(#{}, rabbit_stream_queue:filter_spec([{<<"foo">>,longstr,<<"bar">>}])),
+    ?assertEqual(#{}, rabbit_stream_queue:filter_spec([])),
+    ok.
+
+filtering(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ChPublish = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(ChPublish, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(ChPublish, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(ChPublish, self()),
+    Publish = fun(FilterValue) ->
+                      lists:foreach(fun(_) ->
+                                            Headers = [{<<"x-stream-filter-value">>, longstr, FilterValue}],
+                                            Msg = #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                                                               headers = Headers},
+                                                            payload = <<"foo">>},
+                                            ok = amqp_channel:cast(ChPublish,
+                                                                   #'basic.publish'{routing_key = Q},
+                                                                   Msg)
+                                    end,lists:seq(0, 100))
+              end,
+    Publish(<<"apple">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    Publish(<<"banana">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    Publish(<<"apple">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    amqp_channel:close(ChPublish),
+    ChConsume = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(ChConsume, #'basic.qos'{global = false,
+                                                           prefetch_count = 10})),
+
+    CTag = <<"ctag">>,
+    amqp_channel:subscribe(ChConsume, #'basic.consume'{queue = Q,
+                                                       no_ack = false,
+                                                       consumer_tag = CTag,
+                                                       arguments = [{<<"x-stream-offset">>, long, 0},
+                                                                    {<<"x-stream-filter">>, longstr, <<"banana">>}]},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = CTag} ->
+            ok
+    end,
+
+    receive_filtered_batch(ChConsume, 0, 100),
+    amqp_channel:close(ChConsume),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 %%----------------------------------------------------------------------------
+
+receive_filtered_batch(_, Count, ExpectedSize) when Count =:= ExpectedSize ->
+    Count;
+receive_filtered_batch(Ch, Count, ExpectedSize) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, #amqp_msg{}} ->
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                    multiple     = false}),
+            receive_filtered_batch(Ch, Count + 1, ExpectedSize)
+    after 10000 ->
+              flush(),
+              exit({not_enough_messages, Count})
+    end.
 
 delete_queues(Qs) when is_list(Qs) ->
     lists:foreach(fun delete_testcase_queue/1, Qs).

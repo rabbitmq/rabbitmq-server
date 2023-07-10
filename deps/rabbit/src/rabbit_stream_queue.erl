@@ -47,7 +47,8 @@
 -export([update_stream_conf/2]).
 -export([readers/1]).
 
--export([parse_offset_arg/1]).
+-export([parse_offset_arg/1,
+         filter_spec/1]).
 
 -export([status/2,
          tracking_status/2,
@@ -72,7 +73,8 @@
                  max :: non_neg_integer(),
                  start_offset = 0 :: non_neg_integer(),
                  listening_offset = 0 :: non_neg_integer(),
-                 log :: undefined | osiris_log:state()}).
+                 log :: undefined | osiris_log:state(),
+                 reader_options :: map()}).
 
 -record(stream_client, {stream_id :: string(),
                         name :: term(),
@@ -83,7 +85,8 @@
                         soft_limit :: non_neg_integer(),
                         slow = false :: boolean(),
                         readers = #{} :: #{term() => #stream{}},
-                        writer_id :: binary()
+                        writer_id :: binary(),
+                        filtering_supported :: boolean()
                        }).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
@@ -110,7 +113,9 @@ declare(Q0, _Node) when ?amqqueue_is_stream(Q0) ->
            [fun rabbit_queue_type_util:check_auto_delete/1,
             fun rabbit_queue_type_util:check_exclusive/1,
             fun rabbit_queue_type_util:check_non_durable/1,
-            fun rabbit_stream_queue:check_max_segment_size_bytes/1],
+            fun check_max_segment_size_bytes/1,
+            fun check_filter_size/1
+           ],
            Q0) of
         ok ->
             create_stream(Q0);
@@ -126,6 +131,18 @@ check_max_segment_size_bytes(Q) ->
         {_Type, Val} when Val > ?MAX_STREAM_MAX_SEGMENT_SIZE ->
             {protocol_error, precondition_failed, "Exceeded max value for x-stream-max-segment-size-bytes",
              []};
+        _ ->
+            ok
+    end.
+
+check_filter_size(Q) ->
+    Args = amqqueue:get_arguments(Q),
+    case rabbit_misc:table_lookup(Args, <<"x-stream-filter-size-bytes">>) of
+        undefined ->
+            ok;
+        {_Type, Val} when Val > 255 orelse Val < 16 ->
+            {protocol_error, precondition_failed,
+             "Invalid value for  x-stream-filter-size-bytes", []};
         _ ->
             ok
     end.
@@ -219,7 +236,8 @@ consume(Q, #{no_ack := true}, _)
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
     {error, global_qos_not_supported_for_queue_type};
-consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
+consume(Q, Spec,
+        #stream_client{filtering_supported = FilteringSupported} = QState0) when ?amqqueue_is_stream(Q) ->
     %% Messages should include the offset as a custom header.
     case check_queue_exists_in_local_node(Q) of
         ok ->
@@ -244,7 +262,14 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                     %% really it should be sent by the stream queue process like classic queues
                     %% do
                     maybe_send_reply(ChPid, OkMsg),
-                    begin_stream(QState0, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
+                    FilterSpec = filter_spec(Args),
+                    case {FilterSpec, FilteringSupported} of
+                        {#{filter_spec := _}, false} ->
+                            {protocol_error, precondition_failed, "Filtering is not supported", []};
+                        _ ->
+                            begin_stream(QState0, ConsumerTag, OffsetSpec,
+                                         ConsumerPrefetchCount, FilterSpec)
+                    end
             end;
         Err ->
             Err
@@ -278,6 +303,35 @@ parse_offset_arg({_, V}) ->
 parse_offset_arg(V) ->
     {error, {invalid_offset_arg, V}}.
 
+filter_spec(Args) ->
+    Filters = case lists:keysearch(<<"x-stream-filter">>, 1, Args) of
+                  {value, {_, array, FilterValues}} ->
+                      lists:foldl(fun({longstr, V}, Acc) ->
+                                          [V] ++ Acc;
+                                     (_, Acc) ->
+                                          Acc
+                                  end, [], FilterValues);
+                  {value, {_, longstr, FilterValue}} ->
+                      [FilterValue];
+                  _ ->
+                      undefined
+              end,
+    MatchUnfiltered = case lists:keysearch(<<"x-stream-match-unfiltered">>, 1, Args) of
+                          {value, {_, bool, Match}} when is_list(Filters) ->
+                              Match;
+                          _ when is_list(Filters) ->
+                              false;
+                          _ ->
+                              undefined
+                      end,
+    case MatchUnfiltered of
+        undefined ->
+            #{};
+        MU ->
+            #{filter_spec =>
+              #{filters => Filters, match_unfiltered => MU}}
+    end.
+
 get_local_pid(#stream_client{local_pid = Pid} = State)
   when is_pid(Pid) ->
     {Pid, State};
@@ -295,14 +349,14 @@ get_local_pid(#stream_client{stream_id = StreamId,
     end.
 
 begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
-             Tag, Offset, Max) ->
+             Tag, Offset, Max, Options) ->
     {LocalPid, State} = get_local_pid(State0),
     case LocalPid of
         undefined ->
             {error, no_local_stream_replica_available};
         _ ->
             CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-            {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
+            {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options),
             NextOffset = osiris_log:next_offset(Seg0) - 1,
             osiris:register_offset_listener(LocalPid, NextOffset),
             %% TODO: avoid double calls to the same process
@@ -317,7 +371,8 @@ begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
                            start_offset = StartOffset,
                            listening_offset = NextOffset,
                            log = Seg0,
-                           max = Max},
+                           max = Max,
+                           reader_options = Options},
             {ok, State#stream_client{local_pid = LocalPid,
                                      readers = Readers0#{Tag => Str0}}}
     end.
@@ -369,7 +424,8 @@ deliver(QSs, #delivery{message = Msg, confirm = Confirm} = Delivery) ->
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               LeaderPid = amqqueue:get_pid(Q),
-              ok = osiris:write(LeaderPid, msg_to_iodata(Msg)),
+              ok = osiris:write(LeaderPid,
+                                stream_message(Msg, filtering_supported())),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
               {S, As} = deliver(Confirm, Delivery, S0),
@@ -383,8 +439,10 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                        next_seq = Seq,
                        correlation = Correlation0,
                        soft_limit = SftLmt,
-                       slow = Slow0} = State) ->
-    ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg)),
+                       slow = Slow0,
+                       filtering_supported = FilteringSupported} = State) ->
+    ok = osiris:write(LeaderPid, WriterId, Seq,
+                      stream_message(Msg, FilteringSupported)),
     Correlation = case MsgId of
                       undefined ->
                           Correlation0;
@@ -400,6 +458,25 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
     {State#stream_client{next_seq = Seq + 1,
                          correlation = Correlation,
                          slow = Slow}, Actions}.
+
+stream_message(Msg, _FilteringSupported = true) ->
+    MsgData = msg_to_iodata(Msg),
+    case filter_header(Msg) of
+        {_, longstr, Value} ->
+            {Value, MsgData};
+        _ ->
+            MsgData
+    end;
+stream_message(Msg, _FilteringSupported = false) ->
+    msg_to_iodata(Msg).
+
+filter_header(Msg) ->
+    basic_header(<<"x-stream-filter-value">>, Msg).
+
+basic_header(Key, #basic_message{content = Content}) ->
+    Headers = rabbit_basic:extract_headers(Content),
+    rabbit_basic:header(Key, Headers).
+
 
 -spec dequeue(_, _, _, _, client()) -> no_return().
 dequeue(_, _, _, _, #stream_client{name = Name}) ->
@@ -448,12 +525,14 @@ handle_event(_QName, {stream_local_member_change, Pid}, #stream_client{local_pid
 handle_event(_QName, {stream_local_member_change, Pid}, State = #stream_client{name = QName,
                                                                        readers = Readers0}) ->
     rabbit_log:debug("Local member change event for ~tp", [QName]),
-    Readers1 = maps:fold(fun(T, #stream{log = Log0} = S0, Acc) ->
+    Readers1 = maps:fold(fun(T, #stream{log = Log0, reader_options = Options} = S0, Acc) ->
                                  Offset = osiris_log:next_offset(Log0),
                                  osiris_log:close(Log0),
                                  CounterSpec = {{?MODULE, QName, self()}, []},
-                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~tp at offset ~tp", [T, Offset]),
-                                 {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec),
+                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~tp at offset ~tp "
+                                                  " with options ~tp",
+                                                  [T, Offset, Options]),
+                                 {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec, Options),
                                  NextOffset = osiris_log:next_offset(Log1) - 1,
                                  rabbit_log:debug("Registering offset listener at offset ~tp", [NextOffset]),
                                  osiris:register_offset_listener(Pid, NextOffset),
@@ -761,7 +840,8 @@ init(Q) when ?is_amqqueue(Q) ->
                                 name = amqqueue:get_name(Q),
                                 leader = Leader,
                                 writer_id = WriterId,
-                                soft_limit = SoftLimit}};
+                                soft_limit = SoftLimit,
+                                filtering_supported = filtering_supported()}};
         {ok, stream_not_found, _} ->
             {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
@@ -865,34 +945,29 @@ delete_replica(VHost, Name, Node) ->
 make_stream_conf(Q) ->
     QName = amqqueue:get_name(Q),
     Name = stream_name(QName),
-    %% MaxLength = args_policy_lookup(<<"max-length">>, policy_precedence/2, Q),
-    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
-    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
     Formatter = {?MODULE, format_osiris_event, [QName]},
-    Retention = lists:filter(fun({_, R}) ->
-                                     R =/= undefined
-                             end, [{max_bytes, MaxBytes},
-                                   {max_age, MaxAge}]),
-    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
-                   #{reference => QName,
-                     name => Name,
-                     retention => Retention,
-                     event_formatter => Formatter,
-                     epoch => 1}).
+    update_stream_conf(Q, #{reference => QName,
+                            name => Name,
+                            event_formatter => Formatter,
+                            epoch => 1}).
 
 update_stream_conf(undefined, #{} = Conf) ->
     Conf;
 update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>,
+                                             fun policy_precedence/2, Q),
+    FilterSizeBytes = args_policy_lookup(<<"stream-filter-size-bytes">>,
+                                         fun policy_precedence/2, Q),
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
-    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
-                   Conf#{retention => Retention}).
+    add_if_defined(
+      filter_size, FilterSizeBytes,
+      add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
+                     Conf#{retention => Retention})).
 
 add_if_defined(_, undefined, Map) ->
     Map;
@@ -1047,7 +1122,8 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
 
 resend_all(#stream_client{leader = LeaderPid,
                           writer_id = WriterId,
-                          correlation = Corrs} = State) ->
+                          correlation = Corrs,
+                          filtering_supported = FilteringSupported} = State) ->
     Msgs = lists:sort(maps:values(Corrs)),
     case Msgs of
         [] -> ok;
@@ -1056,7 +1132,8 @@ resend_all(#stream_client{leader = LeaderPid,
                              [Seq, maps:size(Corrs)])
     end,
     [begin
-         ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg))
+         ok = osiris:write(LeaderPid, WriterId, Seq,
+                           stream_message(Msg, FilteringSupported))
      end || {Seq, Msg} <- Msgs],
     State.
 
@@ -1089,3 +1166,6 @@ list_with_minimum_quorum() ->
                  end, rabbit_amqqueue:list_local_stream_queues()).
 
 is_stateful() -> true.
+
+filtering_supported() ->
+    rabbit_feature_flags:is_enabled(stream_filtering).

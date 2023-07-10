@@ -50,6 +50,7 @@ end_per_testcase(_TestCase, _Config) ->
 
 roundtrip(_Config) ->
     test_roundtrip({publish, 42, 1, <<"payload">>}),
+    test_roundtrip({publish_v2, 42, 1, <<"payload">>}),
     test_roundtrip({publish_confirm, 42, [1, 2, 3]}),
 
     test_roundtrip({publish_error,

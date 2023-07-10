@@ -44,6 +44,7 @@ register() ->
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"max-age">>},
                           {policy_validator, <<"stream-max-segment-size-bytes">>},
+                          {policy_validator, <<"stream-filter-size-bytes">>},
                           {policy_validator, <<"queue-leader-locator">>},
                           {policy_validator, <<"initial-cluster-size">>},
                           {operator_policy_validator, <<"expires">>},
@@ -195,7 +196,13 @@ validate_policy0(<<"stream-max-segment-size-bytes">>, Value)
   when is_integer(Value), Value >= 0, Value =< ?MAX_STREAM_MAX_SEGMENT_SIZE ->
     ok;
 validate_policy0(<<"stream-max-segment-size-bytes">>, Value) ->
-    {error, "~tp is not a valid segment size", [Value]}.
+    {error, "~tp is not a valid segment size", [Value]};
+
+validate_policy0(<<"stream-filter-size-bytes">>, Value)
+  when is_integer(Value), Value >= 16, Value =< 255 ->
+    ok;
+validate_policy0(<<"stream-filter-size-bytes">>, Value) ->
+    {error, "~tp is not a valid filter size. Valid range is 16-255", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
