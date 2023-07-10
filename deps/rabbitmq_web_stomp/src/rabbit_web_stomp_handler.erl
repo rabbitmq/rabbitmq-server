@@ -85,7 +85,7 @@ init(Req0, Opts) ->
     end,
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-    ShouldUseFHC = application:get_env(?APP, enable_file_handle_cache, true),
+    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
     case ShouldUseFHC of
       true  -> ?LOG_INFO("Web STOMP: file handle cache use is enabled");
       false -> ?LOG_INFO("Web STOMP: file handle cache use is disabled")
