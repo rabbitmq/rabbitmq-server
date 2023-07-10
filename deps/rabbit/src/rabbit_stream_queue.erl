@@ -464,22 +464,14 @@ deliver0(MsgId, Msg,
 
 stream_message(Msg, _FilteringSupported = true) ->
     MsgData = msg_to_iodata(Msg),
-    case filter_header(Msg) of
-        {_, longstr, Value} ->
-            {Value, MsgData};
-        _ ->
-            MsgData
+    case mc:x_header(<<"x-stream-filter-value">>, Msg) of
+        undefined ->
+            MsgData;
+        Value ->
+            {Value, MsgData}
     end;
 stream_message(Msg, _FilteringSupported = false) ->
     msg_to_iodata(Msg).
-
-filter_header(Msg) ->
-    basic_header(<<"x-stream-filter-value">>, Msg).
-
-basic_header(Key, #basic_message{content = Content}) ->
-    Headers = rabbit_basic:extract_headers(Content),
-    rabbit_basic:header(Key, Headers).
-
 
 -spec dequeue(_, _, _, _, client()) -> no_return().
 dequeue(_, _, _, _, #stream_client{name = Name}) ->

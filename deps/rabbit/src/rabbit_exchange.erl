@@ -20,6 +20,8 @@
 
 %%----------------------------------------------------------------------------
 
+-deprecated([{route, 2, "Use route/3 instead"}]).
+
 -export_type([name/0, type/0, route_opts/0, route_infos/0, route_return/0]).
 -type name() :: rabbit_types:exchange_name().
 -type type() :: rabbit_types:exchange_type().
