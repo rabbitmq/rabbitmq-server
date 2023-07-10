@@ -9,7 +9,6 @@
 -module(dead_lettering_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
@@ -1043,6 +1042,7 @@ dead_letter_headers_cycle(Config) ->
     publish(Ch, QName, [P]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
                                         multiple     = false,
                                         requeue      = false}),
@@ -1053,6 +1053,7 @@ dead_letter_headers_cycle(Config) ->
     {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
     ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
 
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
                                         multiple     = false,
                                         requeue      = false}),
