@@ -589,7 +589,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "per_vhost_connection_limit_SUITE",
     size = "medium",
-    flaky = True,
 )
 
 rabbitmq_integration_suite(
@@ -652,7 +651,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-    flaky = True,
     shard_count = 6,
 )
 
@@ -667,7 +665,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-    flaky = True,
     shard_count = 6,
 )
 
@@ -794,7 +791,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-    flaky = True,
     shard_count = 12,
     deps = [
         "@proper//:erlang_app",
