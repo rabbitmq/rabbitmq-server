@@ -124,7 +124,7 @@ disable_plugin() ->
 %%private
 maybe_cache_msg(XName, Message, Length) ->
     case mc:x_header(<<"x-recent-history-no-store">>, Message) of
-        true ->
+        {boolean, true} ->
             ok;
         _ ->
             cache_msg(XName, Message, Length)

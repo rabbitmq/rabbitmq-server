@@ -1611,7 +1611,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
-<<<<<<< HEAD
         name = "quorum_queue_member_reconciliation_SUITE_beam_files",
         testonly = True,
         srcs = ["test/quorum_queue_member_reconciliation_SUITE.erl"],
@@ -1619,7 +1618,8 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
-=======
+    )
+    erlang_bytecode(
         name = "message_containers_SUITE_beam_files",
         testonly = True,
         srcs = ["test/message_containers_SUITE.erl"],
@@ -1627,5 +1627,13 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
->>>>>>> d8da40afd2 (Refactor away from using the delivery{} record)
+    )
+    erlang_bytecode(
+        name = "mc_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/mc_SUITE.erl"],
+        outs = ["test/mc_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
     )

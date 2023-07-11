@@ -2215,7 +2215,7 @@ determine_persist_to(Version,
 persist_to(#msg_status{persist_to = To}) -> To.
 
 prepare_to_store(Msg) ->
-    mc:prepare(Msg).
+    mc:prepare(store, Msg).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks

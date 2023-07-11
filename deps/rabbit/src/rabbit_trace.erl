@@ -153,7 +153,7 @@ trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
 
             Key = <<RKPrefix/binary, ".", RKSuffix/binary>>,
             Content = Content0#content{properties =
-                                       #'P_basic'{headers = msg_to_table(XName, RoutingKeys, Props )
+                                       #'P_basic'{headers = msg_to_table(XName, RoutingKeys, Props)
                                                   ++ Extra}},
 
             TraceMsg = mc:init(mc_amqpl, Content, #{exchange => ?XNAME,
