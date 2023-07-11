@@ -100,6 +100,54 @@ convert_from(mc_amqp, Sections) ->
               dup = false,
               props = Props,
               payload = Payload};
+convert_from(mc_amqpl, #content{properties = PBasic,
+                                payload_fragments_rev = Payload}) ->
+    #'P_basic'{expiration = Expiration,
+               delivery_mode = DelMode,
+               headers = Headers0,
+               correlation_id = CorrId,
+               content_type = ContentType} = PBasic,
+    Qos = case DelMode of
+              2 -> ?QOS_1;
+              _ -> ?QOS_0
+          end,
+    P0 = case is_binary(ContentType) of
+             true -> #{'Content-Type' => ContentType};
+             false -> #{}
+         end,
+    Headers = case Headers0 of
+                  undefined -> [];
+                  _ -> Headers0
+              end,
+    P1 = case lists:keyfind(<<"x-opt-reply-to-topic">>, 1, Headers) of
+             {_, longstr, Topic} ->
+                 P0#{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)};
+             _ ->
+                 P0
+         end,
+    P2 = case is_binary(CorrId) of
+             true ->
+                 P1#{'Correlation-Data' => CorrId};
+             false ->
+                 case lists:keyfind(<<"x-correlation-id">>, 1, Headers) of
+                     {_, longstr, Corr} ->
+                         P1#{'Correlation-Data' => Corr};
+                     _ ->
+                         P1
+                 end
+         end,
+    P = case is_binary(Expiration) of
+            true ->
+                Millis = binary_to_integer(Expiration),
+                P2#{'Message-Expiry-Interval' => Millis div 1000};
+            false ->
+                P2
+        end,
+    #mqtt_msg{retain = false,
+              qos = Qos,
+              dup = false,
+              payload = lists:reverse(Payload),
+              props = P};
 convert_from(_SourceProto, _) ->
     not_implemented.
 
