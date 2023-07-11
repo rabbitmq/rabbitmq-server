@@ -39,8 +39,8 @@
              ]).
 
 %% mc implementation
-init(#content{} = Content) ->
-    %% TODO: header routes
+init(#content{} = Content0) ->
+    Content = rabbit_binary_parser:ensure_content_decoded(Content0),
     %% project essential properties into annotations
     Anns = essential_properties(Content),
     {strip_header(Content, ?DELETED_HEADER), Anns}.
@@ -119,7 +119,7 @@ init_amqp(Sections) when is_list(Sections) ->
     Headers0 = [to_091(unwrap(K), V) || {K, V} <- AP],
     %% Add remaining message annotations as headers?
     XHeaders = [to_091(K, V) || {{_, K}, V} <- MA,
-                                not is_x_basic_header(K)],
+                                not is_internal_header(K)],
     {Headers1, MsgId091} = message_id(MsgId, <<"x-message-id">>, Headers0),
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
@@ -138,7 +138,7 @@ init_amqp(Sections) when is_list(Sections) ->
                     user_id = UserId,
                     headers = case XHeaders ++ Headers of
                                   [] -> undefined;
-                                  AllHeaders -> AllHeaders 
+                                  AllHeaders -> AllHeaders
                               end,
                     reply_to = unwrap(ReplyTo0),
                     type = Type,
@@ -197,28 +197,6 @@ routing_headers(#content{properties = #'P_basic'{headers = Headers}}, Opts) ->
          ({Key, _T,  Value}, Acc) ->
               Acc#{Key => Value}
       end, #{}, Headers).
-
-
-
-% get_property(durable,
-%              #content{properties = #'P_basic'{delivery_mode = Mode}} = C) ->
-%     {Mode == 2, C};
-% get_property(ttl, #content{properties = Props} = C) ->
-%     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
-%     {MsgTTL, C};
-% get_property(priority, #content{properties = #'P_basic'{priority = P}} = C) ->
-%     {P, C};
-% get_property(timestamp, #content{properties = Props} = C) ->
-%     #'P_basic'{timestamp = Timestamp} = Props,
-%     case Timestamp of
-%         undefined ->
-%             {undefined, C};
-%         _ ->
-%             %% timestamp should be in ms
-%             {Timestamp * 1000, C}
-%     end;
-% get_property(_P, C) ->
-%     {undefined, C}.
 
 set_property(ttl, undefined, #content{properties = Props} = C) ->
     %% TODO: impl rest, just what is needed for dead lettering for now
@@ -323,7 +301,6 @@ convert(_, _C) ->
 protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                Anns) ->
     %% Add any x- annotations as headers
-    %% TODO: conversion is very primitive for now
     H0 = case H00 of
              undefined -> [];
              _ ->
@@ -421,10 +398,9 @@ from_basic_message(#basic_message{content = Content,
 
 deaths_to_headers(undefined, Headers) ->
     Headers;
-deaths_to_headers(#deaths{first = {FirstQueue, FirstReason} = FirstKey,
+deaths_to_headers(#deaths{%first = {FirstQueue, FirstReason} = FirstKey,
                           records = Records},
                   Headers0) ->
-    #death{exchange = FirstEx} = maps:get(FirstKey, Records),
     Infos = maps:fold(
               fun ({QName, Reason}, #death{timestamp = Ts,
                                            exchange = Ex,
@@ -452,15 +428,7 @@ deaths_to_headers(#deaths{first = {FirstQueue, FirstReason} = FirstKey,
                                 {<<"routing-keys">>, array, RKeys}] ++ PerMsgTTL}
                        | Acc]
               end, [], Records),
-
-    Headers = rabbit_misc:set_table_value(
-                Headers0, <<"x-death">>, array, Infos),
-    % Headers = rabbit_basic:prepend_table_header(
-    %             <<"x-death">>, Infos, Headers0),
-    [{<<"x-first-death-reason">>, longstr, atom_to_binary(FirstReason, utf8)},
-     {<<"x-first-death-queue">>, longstr, FirstQueue},
-     {<<"x-first-death-exchange">>, longstr, FirstEx}
-     | Headers].
+    rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
 
 
 
@@ -552,15 +520,39 @@ to_091(Key, {uint, V}) -> {Key, unsignedint, V};
 to_091(Key, {int, V}) -> {Key, signedint, V};
 to_091(Key, {double, V}) -> {Key, double, V};
 to_091(Key, {float, V}) -> {Key, float, V};
-%% NB: header values can never be shortstr!
 to_091(Key, {timestamp, V}) -> {Key, timestamp, V div 1000};
 to_091(Key, {binary, V}) -> {Key, binary, V};
 to_091(Key, {boolean, V}) -> {Key, bool, V};
 to_091(Key, true) -> {Key, bool, true};
 to_091(Key, false) -> {Key, bool, false};
-%% TODO
 to_091(Key, undefined) -> {Key, void, undefined};
-to_091(Key, null) -> {Key, void, undefined}.
+to_091(Key, null) -> {Key, void, undefined};
+to_091(Key, {list, L}) ->
+    {Key, array, [to_091(V) || V <- L]};
+to_091(Key, {map, M}) ->
+    {Key, table, [to_091(unwrap(K), V) || {K, V} <- M]}.
+
+to_091({utf8, V}) -> {longstr, V};
+to_091({long, V}) -> {long, V};
+to_091({byte, V}) -> {byte, V};
+to_091({ubyte, V}) -> {unsignedbyte, V};
+to_091({short, V}) -> {short, V};
+to_091({ushort, V}) -> {unsignedshort, V};
+to_091({uint, V}) -> {unsignedint, V};
+to_091({int, V}) -> {signedint, V};
+to_091({double, V}) -> {double, V};
+to_091({float, V}) -> {float, V};
+to_091({timestamp, V}) -> {timestamp, V div 1000};
+to_091({binary, V}) -> {binary, V};
+to_091({boolean, V}) -> {bool, V};
+to_091(true) -> {bool, true};
+to_091(false) -> {bool, false};
+to_091(undefined) -> {void, undefined};
+to_091(null) -> {void, undefined};
+to_091({list, L}) ->
+    {array, [to_091(V) || V <- L]};
+to_091({map, M}) ->
+    {table, [to_091(unwrap(K), V) || {K, V} <- M]}.
 
 message_id({uuid, UUID}, _HKey, H0) ->
     {H0, mc_util:uuid_to_string(UUID)};
@@ -614,13 +606,15 @@ is_x_header(_) ->
     false.
 
 %% headers that are added as annotations during conversions
-is_x_basic_header(<<"x-basic-", _/binary>>) ->
+is_internal_header(<<"x-basic-", _/binary>>) ->
     true;
-is_x_basic_header(<<"x-routing-key">>) ->
+is_internal_header(<<"x-routing-key">>) ->
     true;
-is_x_basic_header(<<"x-exchange">>) ->
+is_internal_header(<<"x-exchange">>) ->
     true;
-is_x_basic_header(_) ->
+is_internal_header(<<"x-death">>) ->
+    true;
+is_internal_header(_) ->
     false.
 
 amqp10_section_header(Header, Headers) ->

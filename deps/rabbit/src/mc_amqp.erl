@@ -3,7 +3,7 @@
 
 % -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
-% -include("mc.hrl").
+-include("mc.hrl").
 % -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
@@ -119,10 +119,23 @@ get_property(ttl, Msg) ->
             Ttl;
         _ ->
             %% fallback in case the source protocol was AMQP 0.9.1
-            case message_annotation(<<"x-basic-expiration">>, Msg, 2) of
+            case message_annotation(<<"x-basic-expiration">>, Msg, undefined) of
                 {utf8, Expiration}  ->
                     {ok, Ttl} = rabbit_basic:parse_expiration(Expiration),
                     Ttl;
+                _ ->
+                    undefined
+            end
+    end;
+get_property(priority, Msg) ->
+    case Msg of
+        #msg{header = #'v1_0.header'{priority = Priority}} ->
+            Priority;
+        _ ->
+            %% fallback in case the source protocol was AMQP 0.9.1
+            case message_annotation(<<"x-basic-priority">>, Msg, undefined) of
+                {_, Priority}  ->
+                    Priority;
                 _ ->
                     undefined
             end
@@ -307,15 +320,64 @@ wrap(Val) when is_integer(Val) ->
     %% assume string value
     {uint, Val}.
 
+
+key_find(K, [{{_, K}, {_, V}} | _]) ->
+    V;
+key_find(K, [_ | Rem]) ->
+    key_find(K, Rem);
+key_find(_K, []) ->
+    undefined.
+
+recover_deaths([], Acc) ->
+    Acc;
+recover_deaths([{map, Kvs} | Rem], Acc) ->
+    Queue = key_find(<<"queue">>, Kvs),
+    Reason = key_find(<<"reason">>, Kvs),
+    Ttl = case key_find(<<"original-expiration">>, Kvs) of
+              undefined ->
+                  undefined;
+              Exp ->
+                  binary_to_integer(Exp)
+          end,
+    RKeys = [RK || {_, RK} <- key_find(<<"routing-keys">>, Kvs)],
+    recover_deaths(Rem,
+                   Acc#{{Queue, Reason} =>
+                        #death{timestamp = key_find(<<"time">>, Kvs),
+                               exchange = key_find(<<"exchange">>, Kvs),
+                               count = key_find(<<"count">>, Kvs),
+                               ttl = Ttl,
+                               routing_keys = RKeys}}).
+
 recover_annotations(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
-    Anns = maps_put_truthy(durable, Durable,
-                           maps_put_truthy(priority, Priority,
-                                           maps_put_truthy(timestamp, Timestamp,
-                                                           maps_put_truthy(ttl, Ttl, #{})))),
+
+    Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
+                 {list, DeathMaps}  ->
+                     %% TODO: make safer
+                     FstQ = message_annotation(<<"x-first-death-queue">>, Msg, <<>>),
+                     FstR = message_annotation(<<"x-first-death-reason">>, Msg, <<>>),
+                     LastQ = message_annotation(<<"x-last-death-queue">>, Msg, <<>>),
+                     LastR = message_annotation(<<"x-last-death-reason">>, Msg, <<>>),
+                     #deaths{first = {FstQ, FstR},
+                             last = {LastQ, LastR},
+                             records = recover_deaths(DeathMaps, #{})};
+                 _ ->
+                     undefined
+             end,
+    Anns = maps_put_truthy(
+             durable, Durable,
+             maps_put_truthy(
+               priority, Priority,
+               maps_put_truthy(
+                 timestamp, Timestamp,
+                 maps_put_truthy(
+                   ttl, Ttl,
+                   maps_put_truthy(
+                     deaths, Deaths, #{})
+                  )))),
     case MA of
         undefined ->
             Anns;

@@ -294,7 +294,11 @@ record_death(Reason, SourceQueue,
                                                         timestamp = Timestamp}),
             Ds = Ds0#deaths{last = Key,
                             records = Rs#{Key => Death#death{count = C + 1}}},
-            State#?MODULE{annotations = Anns0#{deaths => Ds}}
+            Anns = Anns0#{deaths => Ds,
+                          <<"x-last-death-reason">> => atom_to_binary(Reason),
+                          <<"x-last-death-queue">> => SourceQueue,
+                          <<"x-last-death-exchange">> => Exchange},
+            State#?MODULE{annotations = Anns}
     end;
 record_death(Reason, SourceQueue, BasicMsg) ->
     mc_compat:record_death(Reason, SourceQueue, BasicMsg).
