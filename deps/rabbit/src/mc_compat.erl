@@ -354,6 +354,10 @@ last_death(#basic_message{content = Content}) ->
             undefined
     end.
 
+get_property(P, #content{properties = none} = Content) ->
+    %% this is inefficient but will only apply to old messages that are
+    %% not containerized
+    get_property(P, rabbit_binary_parser:ensure_content_decoded(Content));
 get_property(durable,
              #content{properties = #'P_basic'{delivery_mode = Mode}}) ->
     Mode == 2;
@@ -373,32 +377,3 @@ get_property(timestamp, #content{properties = Props}) ->
     end;
 get_property(_P, _C) ->
     undefined.
-
-
-% detect_cycles(rejected, _Msg, Queues) ->
-%     {Queues, []};
-
-% detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
-%     #content{properties = #'P_basic'{headers = Headers}} =
-%         rabbit_binary_parser:ensure_content_decoded(Content),
-%     NoCycles = {Queues, []},
-%     case Headers of
-%         undefined ->
-%             NoCycles;
-%         _ ->
-%             case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
-%                 {array, Deaths} ->
-%                     {Cycling, NotCycling} =
-%                         lists:partition(fun (#resource{name = Queue}) ->
-%                                                 is_cycle(Queue, Deaths)
-%                                         end, Queues),
-%                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
-%                                     {table, D} <- Deaths],
-%                     OldQueues1 = [QName || {longstr, QName} <- OldQueues],
-%                     {NotCycling, [[QName | OldQueues1] ||
-%                                      #resource{name = QName} <- Cycling]};
-%                 _ ->
-%                     NoCycles
-%             end
-%     end.
-
