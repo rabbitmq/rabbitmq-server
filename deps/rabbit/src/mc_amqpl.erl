@@ -620,7 +620,7 @@ is_internal_header(_) ->
 
 amqp10_section_header(Header, Headers) ->
     case lists:keyfind(Header, 1, Headers) of
-        {value, {_, _, Data}} when is_binary(Data) ->
+        {_, _, Data} when is_binary(Data) ->
             [Section] = amqp10_framing:decode_bin(Data),
             Section ;
         _ ->
