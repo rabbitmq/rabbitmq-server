@@ -8,11 +8,11 @@
 
 -export([
          init/1,
-         init_amqp/1,
          size/1,
          x_header/2,
          routing_headers/2,
-         convert/2,
+         convert_to/2,
+         convert_from/2,
          protocol_state/2,
          serialize/2
         ]).
@@ -46,8 +46,7 @@ init(Msg = #mqtt_msg{qos = Qos,
            end,
     {Msg, Anns}.
 
-init_amqp(Sections)
-  when is_list(Sections) ->
+convert_from(mc_amqp, Sections) ->
     {Header, MsgAnns, AmqpProps, PayloadRev} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
@@ -100,13 +99,15 @@ init_amqp(Sections)
               qos = Qos,
               dup = false,
               props = Props,
-              payload = Payload}.
+              payload = Payload};
+convert_from(_SourceProto, _) ->
+    not_implemented.
 
-convert(?MODULE, Msg) ->
+convert_to(?MODULE, Msg) ->
     Msg;
-convert(mc_amqp, #mqtt_msg{qos = Qos,
-                           props = Props,
-                           payload = Payload}) ->
+convert_to(mc_amqp, #mqtt_msg{qos = Qos,
+                              props = Props,
+                              payload = Payload}) ->
     Header = #'v1_0.header'{durable = Qos > 0},
     ContentType = case Props of
                       #{'Content-Type' := ContType} ->
@@ -139,10 +140,10 @@ convert(mc_amqp, #mqtt_msg{qos = Qos,
                    _ ->
                        [Header, AmqpProps, AppData]
                end,
-    mc_amqp:init_amqp(Sections);
-convert(mc_amqpl, #mqtt_msg{qos = Qos,
-                            props = Props,
-                            payload = Payload}) ->
+    mc_amqp:convert_from(mc_amqp, Sections);
+convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
+                               props = Props,
+                               payload = Payload}) ->
     DelMode = case Qos of
                   ?QOS_0 -> 1;
                   ?QOS_1 -> 2
@@ -187,7 +188,7 @@ convert(mc_amqpl, #mqtt_msg{qos = Qos,
              properties = BP,
              properties_bin = none,
              payload_fragments_rev = PFR};
-convert(_TargetProto, #mqtt_msg{}) ->
+convert_to(_TargetProto, #mqtt_msg{}) ->
     not_implemented.
 
 size(#mqtt_msg{payload = Payload,

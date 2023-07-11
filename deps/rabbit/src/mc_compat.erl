@@ -21,7 +21,7 @@
          x_header/2,
          routing_headers/2,
          %%%
-         convert/2,
+         convert_to/2,
          protocol_state/1,
          %serialize/1,
          %prepare/1,
@@ -119,9 +119,9 @@ x_header(Key,#basic_message{content = Content}) ->
 routing_headers(#basic_message{content = Content}, Opts) ->
     mc_amqpl:routing_headers(Content, Opts).
 
-convert(mc_amqpl, #basic_message{} = BasicMsg) ->
+convert_to(mc_amqpl, #basic_message{} = BasicMsg) ->
     BasicMsg;
-convert(Proto, #basic_message{} = BasicMsg) ->
+convert_to(Proto, #basic_message{} = BasicMsg) ->
     %% at this point we have to assume this message will no longer travel between nodes
     %% and potentially end up on a node that doesn't yet understand message containers
     %% create legacy mc, then convert and return this

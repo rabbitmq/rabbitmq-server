@@ -73,8 +73,6 @@
 -callback init(term()) ->
     {proto_state(), annotations()}.
 
--callback init_amqp([mc_amqp:message_section()]) -> proto_state().
-
 -callback size(proto_state()) ->
     {MetadataSize :: non_neg_integer(),
      PayloadSize :: non_neg_integer()}.
@@ -85,8 +83,12 @@
 -callback routing_headers(proto_state(), [x_headers | complex_types]) ->
     #{binary() => term()}.
 
-%% all protocols must be able to convert to amqp (1.0)
--callback convert(protocol(), proto_state()) ->
+%% all protocols must be able to convert to mc_amqp (AMQP 1.0)
+-callback convert_to(Target :: protocol(), proto_state()) ->
+    proto_state() | not_implemented.
+
+%% all protocols must be able to convert from mc_amqp (AMQP 1.0)
+-callback convert_from(Source :: protocol(), proto_state()) ->
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
@@ -230,22 +232,25 @@ set_ttl(Value, BasicMsg) ->
 -spec convert(protocol(), state()) -> state().
 convert(Proto, #?MODULE{protocol = Proto} = State) ->
     State;
-convert(TargetProto, #?MODULE{protocol = Proto,
+convert(TargetProto, #?MODULE{protocol = SourceProto,
                               data = Data} = State) ->
-    case Proto:convert(TargetProto, Data) of
-        not_implemented ->
-            %% convert to 1.0 then try again
-            AmqpData = Proto:convert(mc_amqp, Data),
-            TargetData = mc_amqp:convert(TargetProto, AmqpData),
-            %% init the target from a list of amqp sections
-            State#?MODULE{protocol = TargetProto,
-                          data = TargetData};
-        TargetState ->
-            State#?MODULE{protocol = TargetProto,
-                          data = TargetState}
-    end;
+    TargetState =
+        case SourceProto:convert_to(TargetProto, Data) of
+            not_implemented ->
+                case TargetProto:convert_from(SourceProto, Data) of
+                    not_implemented ->
+                        AmqpData = SourceProto:convert_to(mc_amqp, Data),
+                        mc_amqp:convert_to(TargetProto, AmqpData);
+                    TargetState0 ->
+                        TargetState0
+                end;
+            TargetState0 ->
+                TargetState0
+        end,
+    State#?MODULE{protocol = TargetProto,
+                  data = TargetState};
 convert(Proto, BasicMsg) ->
-    mc_compat:convert(Proto, BasicMsg).
+    mc_compat:convert_to(Proto, BasicMsg).
 
 -spec protocol_state(state()) -> term().
 protocol_state(#?MODULE{protocol = Proto,

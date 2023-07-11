@@ -8,12 +8,12 @@
 
 -export([
          init/1,
-         init_amqp/1,
          size/1,
          x_header/2,
          routing_headers/2,
          get_property/2,
-         convert/2,
+         convert_to/2,
+         convert_from/2,
          protocol_state/2,
          serialize/2
         ]).
@@ -66,8 +66,10 @@ init(#msg{} = Msg) ->
     Anns = recover_annotations(Msg),
     {Msg, Anns}.
 
-init_amqp(Sections) ->
-    element(1, init(Sections)).
+convert_from(?MODULE, Sections) ->
+    element(1, init(Sections));
+convert_from(_SourceProto, _) ->
+    not_implemented.
 
 size(#msg{data = BodySections}) ->
     %% TODO how to estimate anything but data sections?
@@ -143,13 +145,13 @@ get_property(priority, Msg) ->
 get_property(_P, _Msg) ->
     undefined.
 
-convert(?MODULE, Msg) ->
+convert_to(?MODULE, Msg) ->
     Msg;
-convert(TargetProto, #msg{header = Header,
-                          message_annotations = MA,
-                          properties = P,
-                          application_properties = AP,
-                          data = Data}) ->
+convert_to(TargetProto, #msg{header = Header,
+                             message_annotations = MA,
+                             properties = P,
+                             application_properties = AP,
+                             data = Data}) ->
     Sects = lists_prepend_t(
               Header,
               lists_prepend_t(
@@ -159,10 +161,10 @@ convert(TargetProto, #msg{header = Header,
                   lists_prepend_t(
                     AP,
                     Data)))),
-    %% init_amqp expects a flat list of amqp sections
+    %% convert_from(mc_amqp, Sections) expects a flat list of amqp sections
     %% and the body could be a list itself (or an amqp_value)
     Sections = lists:flatten(Sects),
-    TargetProto:init_amqp(Sections).
+    TargetProto:convert_from(?MODULE, Sections).
 
 protocol_state(_S, _Anns) ->
     undefined.
