@@ -22,5 +22,5 @@ is_utf8_no_null(_) ->
 -spec uuid_to_string(binary()) -> binary().
 uuid_to_string(<<TL:32, TM:16, THV:16, CSR:8, CSL:8, N:48>>) ->
     list_to_binary(
-      io_lib:format(<<"run:uuid:~8.16.0b-~4.16.0b-~4.16.0b-~2.16.0b~2.16.0b-~12.16.0b">>,
+      io_lib:format(<<"urn:uuid:~8.16.0b-~4.16.0b-~4.16.0b-~2.16.0b~2.16.0b-~12.16.0b">>,
                     [TL, TM, THV, CSR, CSL, N])).

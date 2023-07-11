@@ -10,11 +10,13 @@
          init/1,
          size/1,
          x_header/2,
+         property/2,
          routing_headers/2,
          convert_to/2,
          convert_from/2,
          protocol_state/2,
-         serialize/2
+         serialize/2,
+         prepare/2
         ]).
 
 init(Msg = #mqtt_msg{qos = Qos,
@@ -244,7 +246,7 @@ size(#mqtt_msg{payload = Payload,
                props = Props}) ->
     PropsSize = maps:fold(fun size_prop/3, 0, Props),
     MetadataSize = PropsSize + byte_size(Topic),
-    {MetadataSize, byte_size(Payload)}.
+    {MetadataSize, iolist_size(Payload)}.
 
 size_prop(K, Val, Sum)
   when K =:= 'Content-Type' orelse
@@ -258,8 +260,11 @@ size_prop('User-Property', L, Sum) ->
 size_prop(_, _, Sum) ->
     Sum.
 
-x_header(_Key, #mqtt_msg{} = Msg) ->
-    {undefined, Msg}.
+x_header(_Key, #mqtt_msg{}) ->
+    undefined.
+
+property(_Key, #mqtt_msg{}) ->
+    undefined.
 
 routing_headers(#mqtt_msg{}, _Opts) ->
     #{}.
@@ -269,6 +274,9 @@ protocol_state(Msg = #mqtt_msg{}, _Anns) ->
 
 serialize(#mqtt_msg{}, _Anns) ->
     [].
+
+prepare(_For, #mqtt_msg{} = Msg) ->
+    Msg.
 
 correlation_id({uuid, UUID}) ->
     mc_util:uuid_to_string(UUID);

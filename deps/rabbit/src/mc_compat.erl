@@ -24,13 +24,15 @@
          convert_to/2,
          protocol_state/1,
          %serialize/1,
-         %prepare/1,
+         prepare/2,
          record_death/3,
          is_death_cycle/2,
          %deaths/1,
          last_death/1,
          death_queue_names/1
          ]).
+
+-export([get_property/2]).
 
 -type state() :: rabbit_types:message().
 
@@ -104,17 +106,27 @@ priority(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 correlation_id(#basic_message{content = Content}) ->
-    get_property(?FUNCTION_NAME, Content).
+    case get_property(?FUNCTION_NAME, Content) of
+        undefined ->
+            undefined;
+        Corr ->
+            {utf8, Corr}
+    end.
 
 message_id(#basic_message{content = Content}) ->
-    get_property(message_id, Content).
+    case get_property(?FUNCTION_NAME, Content) of
+        undefined ->
+            undefined;
+        MsgId ->
+            {utf8, MsgId}
+    end.
 
 set_ttl(Value, #basic_message{content = Content0} = Msg) ->
     Content = mc_amqpl:set_property(ttl, Value, Content0),
     Msg#basic_message{content = Content}.
 
 x_header(Key,#basic_message{content = Content}) ->
-    element(1, mc_amqpl:x_header(Key, Content)).
+    mc_amqpl:x_header(Key, Content).
 
 routing_headers(#basic_message{content = Content}, Opts) ->
     mc_amqpl:routing_headers(Content, Opts).
@@ -129,6 +141,12 @@ convert_to(Proto, #basic_message{} = BasicMsg) ->
 
 protocol_state(#basic_message{content = Content}) ->
     Content.
+
+prepare(read, #basic_message{content = Content} = Msg) ->
+    Msg#basic_message{content =
+        rabbit_binary_parser:ensure_content_decoded(Content)};
+prepare(store, Msg) ->
+    Msg.
 
 record_death(Reason, SourceQueue,
              #basic_message{content = Content,
@@ -375,5 +393,11 @@ get_property(timestamp, #content{properties = Props}) ->
             %% timestamp should be in ms
             Timestamp * 1000
     end;
+get_property(correlation_id,
+             #content{properties = #'P_basic'{correlation_id = Corr}}) ->
+    Corr;
+get_property(message_id,
+             #content{properties = #'P_basic'{message_id = MsgId}}) ->
+     MsgId;
 get_property(_P, _C) ->
     undefined.

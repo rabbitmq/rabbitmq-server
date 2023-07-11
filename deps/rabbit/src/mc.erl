@@ -21,7 +21,7 @@
          convert/2,
          protocol_state/1,
          serialize/1,
-         prepare/1,
+         prepare/2,
          record_death/3,
          is_death_cycle/2,
          % deaths/1,
@@ -66,6 +66,12 @@
                           integer() |
                           float() |
                           boolean().
+-type tagged_prop() :: {uuid, binary()} |
+                       {utf8, binary()} |
+                       {binary, binary()} |
+                       {boolean, boolean()} |
+                       {ulong | long, integer()} |
+                       undefined.
 
 %% behaviour callbacks for protocol specific implementation
 %% returns a map of additional annotations to merge into the
@@ -78,10 +84,13 @@
      PayloadSize :: non_neg_integer()}.
 
 -callback x_header(binary(), proto_state()) ->
-    {property_value(), proto_state()}.
+    tagged_prop().
 
 -callback routing_headers(proto_state(), [x_headers | complex_types]) ->
     #{binary() => term()}.
+
+-callback property(atom(), proto_state()) ->
+    tagged_prop().
 
 %% all protocols must be able to convert to mc_amqp (AMQP 1.0)
 -callback convert_to(Target :: protocol(), proto_state()) ->
@@ -98,6 +107,9 @@
 %% serialize the data into the protocol's binary format
 -callback serialize(proto_state(), annotations()) ->
     iodata().
+
+-callback prepare(read | store, proto_state()) ->
+    proto_state().
 
 %%% API
 
@@ -150,7 +162,7 @@ set_annotation(Key, Value, BasicMessage) ->
     mc_compat:set_annotation(Key, Value, BasicMessage).
 
 -spec x_header(Key :: binary(), state()) ->
-    property_value() | undefined.
+    tagged_prop().
 x_header(Key, #?MODULE{protocol = Proto,
                        annotations = Anns,
                        data = Data}) ->
@@ -158,11 +170,10 @@ x_header(Key, #?MODULE{protocol = Proto,
     %% we need to check that first
     case Anns of
         #{Key := Value} ->
-            Value;
+            guess_type(Value);
         _ ->
             %% if not we have to call into the protocol specific handler
-            {Result, _} = Proto:x_header(Key, Data),
-            Result
+            Proto:x_header(Key, Data)
     end;
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
@@ -211,15 +222,27 @@ priority(#?MODULE{annotations = Anns}) ->
 priority(BasicMsg) ->
     mc_compat:priority(BasicMsg).
 
--spec correlation_id(state()) -> undefined | binary().
-correlation_id(#?MODULE{annotations = Anns}) ->
-    maps:get(correlation_id, Anns, undefined);
+-spec correlation_id(state()) ->
+    {uuid, binary()} |
+    {utf8, binary()} |
+    {binary, binary()} |
+    {ulong, integer()} |
+    undefined.
+correlation_id(#?MODULE{protocol = Proto,
+                        data = Data}) ->
+    Proto:property(?FUNCTION_NAME, Data);
 correlation_id(BasicMsg) ->
     mc_compat:correlation_id(BasicMsg).
 
--spec message_id(state()) -> undefined | binary().
-message_id(#?MODULE{annotations = Anns}) ->
-    maps:get(message_id, Anns, undefined);
+-spec message_id(state()) ->
+    {uuid, binary()} |
+    {utf8, binary()} |
+    {binary, binary()} |
+    {ulong, integer()} |
+    undefined.
+message_id(#?MODULE{protocol = Proto,
+                    data = Data}) ->
+    Proto:property(?FUNCTION_NAME, Data);
 message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
 
@@ -233,7 +256,8 @@ set_ttl(Value, BasicMsg) ->
 convert(Proto, #?MODULE{protocol = Proto} = State) ->
     State;
 convert(TargetProto, #?MODULE{protocol = SourceProto,
-                              data = Data} = State) ->
+                              data = Data0} = State) ->
+    Data = SourceProto:prepare(read, Data0),
     TargetState =
         case SourceProto:convert_to(TargetProto, Data) of
             not_implemented ->
@@ -259,10 +283,6 @@ protocol_state(#?MODULE{protocol = Proto,
     Proto:protocol_state(Data, Anns);
 protocol_state(BasicMsg) ->
     mc_compat:protocol_state(BasicMsg).
-
--spec prepare(state()) -> state().
-prepare(State) ->
-    State.
 
 -spec record_death(rabbit_dead_letter:reason(),
                    SourceQueue :: rabbit_misc:resource_name(),
@@ -345,6 +365,13 @@ serialize(#?MODULE{protocol = Proto,
                    data = Data}) ->
     Proto:serialize(Data, Anns).
 
+-spec prepare(read | store, state()) -> state().
+prepare(For, #?MODULE{protocol = Proto,
+                      data = Data} = State) ->
+    State#?MODULE{data = Proto:prepare(For, Data)};
+prepare(For, State) ->
+    mc_compat:prepare(For, State).
+
 %% INTERNAL
 
 %% if there is a death with a source queue that is the same as the target
@@ -360,6 +387,11 @@ is_cycle(Queue, [{Queue, Reason} | _])
     true;
 is_cycle(Queue, [_ | Rem]) ->
     is_cycle(Queue, Rem).
+
+guess_type(V) when is_binary(V) ->
+    {utf8, V};
+guess_type(V) when is_integer(V) ->
+    {long, V}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
