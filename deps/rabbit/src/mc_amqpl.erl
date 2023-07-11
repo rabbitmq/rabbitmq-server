@@ -11,8 +11,6 @@
          size/1,
          x_header/2,
          routing_headers/2,
-         % get_property/2,
-         % set_property/3,
          convert_to/2,
          convert_from/2,
          protocol_state/2,
@@ -20,9 +18,12 @@
          message/4,
          message/5,
          from_basic_message/1,
+         property/2,
          set_property/3,
-         serialize/2
+         serialize/2,
+         prepare/2
         ]).
+
 
 -import(rabbit_misc, [maps_put_truthy/3]).
 
@@ -31,6 +32,8 @@
 -define(AMQP10_PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
 -define(AMQP10_APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
 -define(AMQP10_MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
+-define(PROTOMOD, rabbit_framing_amqp_0_9_1).
+-define(CLASS_ID, 60).
 
 -opaque state() :: #content{}.
 
@@ -149,8 +152,7 @@ convert_from(mc_amqp, Sections) ->
                     content_encoding = unwrap(ContentEncoding),
                     timestamp = unwrap(Timestamp)
                    },
-
-    #content{class_id = 60,
+    #content{class_id = ?CLASS_ID,
              properties = BP,
              properties_bin = none,
              payload_fragments_rev = Payload};
@@ -172,14 +174,32 @@ size(#content{properties_bin = PropsBin,
                end,
     {MetaSize, iolist_size(Payload)}.
 
-x_header(_Key, #content{properties = #'P_basic'{headers = undefined}} = C) ->
-    {undefined, C};
-x_header(Key, #content{properties = #'P_basic'{headers = Headers}} = C) ->
+x_header(_Key, #content{properties = #'P_basic'{headers = undefined}}) ->
+    undefined;
+x_header(Key, #content{properties = #'P_basic'{headers = Headers}}) ->
     case rabbit_misc:table_lookup(Headers, Key) of
         undefined ->
-            {undefined, C};
-        {_Type, Value} ->
-            {Value, C}
+            undefined;
+        {Type, Value} ->
+            from_091(Type, Value)
+    end;
+x_header(Key, #content{properties = none} = Content0) ->
+    Content = rabbit_binary_parser:ensure_content_decoded(Content0),
+    x_header(Key, Content).
+
+property(Prop, Content) ->
+    case mc_compat:get_property(Prop, Content) of
+        undefined ->
+            undefined;
+        V when is_binary(V) ->
+            %% assume string
+            {utf8, V};
+        V when is_integer(V) ->
+            %% assume string
+            {long, V};
+        _ ->
+            %% TODO: not clear there will be other properties
+            undefined
     end.
 
 routing_headers(#content{properties = #'P_basic'{headers = undefined}}, _Opts) ->
@@ -188,20 +208,28 @@ routing_headers(#content{properties = #'P_basic'{headers = Headers}}, Opts) ->
     IncludeX = lists:member(x_headers, Opts),
     %% TODO: filter out complex AMQP legacy values such as array and table?
     lists:foldl(
-      fun({<<"x-", _/binary>> = Key, _T, Value}, Acc) ->
+      fun({<<"x-", _/binary>> = Key, T, Value}, Acc) ->
               case IncludeX of
                   true ->
-                      Acc#{Key => Value};
+                      Acc#{Key => routing_value(T, Value)};
                   false ->
                       Acc
               end;
-         ({Key, _T,  Value}, Acc) ->
-              Acc#{Key => Value}
-      end, #{}, Headers).
+         ({Key, T,  Value}, Acc) ->
+              Acc#{Key => routing_value(T, Value)}
+      end, #{}, Headers);
+routing_headers(#content{properties = none} = Content, Opts) ->
+    routing_headers(prepare(read, Content), Opts).
+
+routing_value(timestamp, V) ->
+    V * 1000;
+routing_value(_, V) ->
+    V.
 
 set_property(ttl, undefined, #content{properties = Props} = C) ->
     %% TODO: impl rest, just what is needed for dead lettering for now
-    C#content{properties = Props#'P_basic'{expiration = undefined}};
+    C#content{properties = Props#'P_basic'{expiration = undefined},
+              properties_bin = none};
 set_property(_P, _V, Msg) ->
     %% TODO: impl at least ttl set (needed for dead lettering)
     Msg.
@@ -209,10 +237,16 @@ set_property(_P, _V, Msg) ->
 serialize(_, _) ->
     <<>>.
 
+prepare(read, Content) ->
+    rabbit_binary_parser:ensure_content_decoded(Content);
+prepare(store, Content) ->
+    rabbit_binary_parser:clear_decoded_content(
+      rabbit_binary_generator:ensure_content_encoded(Content, ?PROTOMOD)).
+
 convert_to(?MODULE, Content) ->
     Content;
-convert_to(mc_amqp, #content{properties = Props,
-                             payload_fragments_rev = Payload}) ->
+convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
+    #content{properties = Props} = prepare(read, Content),
     #'P_basic'{message_id = MsgId,
                expiration = Expiration,
                delivery_mode = DelMode,
@@ -237,7 +271,11 @@ convert_to(mc_amqp, #content{properties = Props,
                   undefined -> [];
                   _ -> Headers0
               end,
-    H = #'v1_0.header'{durable = DelMode =:= 2},
+    %% TODO: only add header section if at least once of the fields
+    %% needs to be set
+    H = #'v1_0.header'{durable = DelMode =:= 2,
+                       %% TODO: check Priority is a ubyte?
+                       priority = wrap(ubyte, Priority)},
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
             undefined ->
                 #'v1_0.properties'{message_id = wrap(utf8, MsgId),
@@ -350,7 +388,9 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                      headers = Headers},
 
     C#content{properties = B,
-              properties_bin = none}.
+              properties_bin = none};
+protocol_state(Content0, Anns) ->
+    protocol_state(prepare(read, Content0), Anns).
 
 -spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) -> mc:state().
 message(ExchangeName, RoutingKey, Content) ->
@@ -399,9 +439,7 @@ from_basic_message(#basic_message{content = Content,
 
 deaths_to_headers(undefined, Headers) ->
     Headers;
-deaths_to_headers(#deaths{%first = {FirstQueue, FirstReason} = FirstKey,
-                          records = Records},
-                  Headers0) ->
+deaths_to_headers(#deaths{records = Records}, Headers0) ->
     Infos = maps:fold(
               fun ({QName, Reason}, #death{timestamp = Ts,
                                            exchange = Ex,
@@ -436,13 +474,13 @@ deaths_to_headers(#deaths{%first = {FirstQueue, FirstReason} = FirstKey,
 strip_header(#content{properties = #'P_basic'{headers = undefined}}
              = DecodedContent, _Key) ->
     DecodedContent;
-strip_header(#content{properties = Props0 = #'P_basic'{headers = Headers}}
+strip_header(#content{properties = Props0 = #'P_basic'{headers = Headers0}}
              = Content, Key) ->
-    case lists:keysearch(Key, 1, Headers) of
+    case lists:keytake(Key, 1, Headers0) of
         false ->
             Content;
-        {value, Found} ->
-            Props = Props0#'P_basic'{headers = lists:delete(Found, Headers)},
+        {value, _Found, Headers} ->
+            Props = Props0#'P_basic'{headers = Headers},
             rabbit_binary_generator:clear_encoded_content(
               Content#content{properties = Props})
     end.
@@ -457,10 +495,16 @@ wrap(Type, Val) ->
 % unwrap({_Type, V}) ->
 %     V.
 
-%% TODO: add `array` and `table`
-from_091(longstr, V) when is_binary(V) ->
-    %% this is a gamble, not all longstr are text but many are
-    {utf8, V};
+from_091(longstr, V) ->
+    case mc_util:is_valid_shortstr(V) of
+        true ->
+            {utf8, V};
+        false ->
+            %%  if a string is longer than 255 bytes we just assume it is binary
+            %%  it _may_ still be valid utf8 but checking this is going to be
+            %%  excessively slow
+            {binary, V}
+    end;
 from_091(long, V) -> {long, V};
 from_091(unsignedbyte, V) -> {ubyte, V};
 from_091(short, V) -> {short, V};

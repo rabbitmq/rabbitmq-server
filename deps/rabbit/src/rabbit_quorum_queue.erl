@@ -904,8 +904,9 @@ deliver0(QName, Correlation, Msg, QState0) ->
     rabbit_fifo_client:enqueue(QName, Correlation,
                                Msg, QState0).
 
-deliver(QSs, Msg, Options) ->
+deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
+    Msg = mc:prepare(store, Msg0),
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
@@ -1707,20 +1708,6 @@ notify_decorators(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
-
-%% remove any data that a quorum queue doesn't need
-% prepare_content(#content{properties = none} = Content) ->
-%     Content;
-% prepare_content(#content{protocol = none} = Content) ->
-%     Content;
-% prepare_content(#content{properties = #'P_basic'{expiration = undefined} = Props,
-%                          protocol = Proto} = Content) ->
-%     Content#content{properties = none,
-%                     properties_bin = Proto:encode_properties(Props)};
-% prepare_content(Content) ->
-%     %% expiration is set. Therefore, leave properties decoded so that
-%     %% rabbit_fifo can directly parse it without having to decode again.
-%     Content.
 
 ets_lookup_element(Tbl, Key, Pos, Default) ->
     try ets:lookup_element(Tbl, Key, Pos) of

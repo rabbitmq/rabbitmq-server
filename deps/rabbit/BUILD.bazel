@@ -784,6 +784,15 @@ rabbitmq_suite(
 )
 
 rabbitmq_suite(
+    name = "mc_SUITE",
+    size = "medium",
+    deps = [
+        "//deps/amqp10_common:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
     name = "rabbit_stream_coordinator_SUITE",
     deps = [
         "//deps/rabbit_common:erlang_app",

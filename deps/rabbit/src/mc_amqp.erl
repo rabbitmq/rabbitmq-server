@@ -10,12 +10,14 @@
          init/1,
          size/1,
          x_header/2,
+         property/2,
          routing_headers/2,
          get_property/2,
          convert_to/2,
          convert_from/2,
          protocol_state/2,
-         serialize/2
+         serialize/2,
+         prepare/2
         ]).
 
 -import(rabbit_misc, [maps_put_truthy/3]).
@@ -39,6 +41,8 @@
 -type amqp10_data() :: %#'v1_0.data'{} |
                        [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
                        #'v1_0.amqp_value'{}.
+%% TODO: no need to keep section records, only contents really needed
+%% for DA / MA and APs
 -record(msg,
         {
          header :: opt(#'v1_0.header'{}),
@@ -86,8 +90,14 @@ size(#msg{data = BodySections}) ->
     {MetaSize, BodySize}.
 
 x_header(Key, Msg) ->
-    {_Type, Value} = message_annotation(Key, Msg, undefined),
-    Value.
+    message_annotation(Key, Msg, undefined).
+
+property(correlation_id, #msg{properties = #'v1_0.properties'{correlation_id = Corr}}) ->
+    Corr;
+property(message_id, #msg{properties = #'v1_0.properties'{message_id = MsgId}}) ->
+     MsgId;
+property(_Prop, #msg{}) ->
+    undefined.
 
 routing_headers(Msg, Opts) ->
     IncludeX = lists:member(x_header, Opts),
@@ -115,9 +125,30 @@ get_property(durable, Msg) ->
                     false
             end
     end;
+get_property(timestamp, Msg) ->
+    case Msg of
+        #msg{properties = #'v1_0.properties'{creation_time = {timestamp, Ts}}} ->
+            Ts;
+        _ ->
+            undefined
+    end;
+get_property(correlation_id, Msg) ->
+    case Msg of
+        #msg{properties = #'v1_0.properties'{correlation_id = {_Type, CorrId}}} ->
+            CorrId;
+        _ ->
+            undefined
+    end;
+get_property(message_id, Msg) ->
+    case Msg of
+        #msg{properties = #'v1_0.properties'{message_id = {_Type, CorrId}}} ->
+            CorrId;
+        _ ->
+            undefined
+    end;
 get_property(ttl, Msg) ->
     case Msg of
-        #msg{header = #'v1_0.header'{ttl = Ttl}} ->
+        #msg{header = #'v1_0.header'{ttl = {_, Ttl}}} ->
             Ttl;
         _ ->
             %% fallback in case the source protocol was AMQP 0.9.1
@@ -131,7 +162,7 @@ get_property(ttl, Msg) ->
     end;
 get_property(priority, Msg) ->
     case Msg of
-        #msg{header = #'v1_0.header'{priority = Priority}} ->
+        #msg{header = #'v1_0.header'{priority = {ubyte, Priority}}} ->
             Priority;
         _ ->
             %% fallback in case the source protocol was AMQP 0.9.1
@@ -194,6 +225,9 @@ serialize(#msg{header = Header,
      encode_bin(AP),
      encode_bin(Data)].
 
+prepare(_For, Msg) ->
+    Msg.
+
 %% internal
 %%
 
@@ -247,7 +281,7 @@ message_annotations_as_simple_map(#msg{message_annotations = undefined}) ->
 message_annotations_as_simple_map(
   #msg{message_annotations = #'v1_0.message_annotations'{content = Content}}) ->
     %% the section record format really is terrible
-    lists:foldl(fun ({{symbol, K},{_T, V}}, Acc)
+    lists:foldl(fun ({{symbol, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
                         Acc#{K => V};
                     (_, Acc)->
@@ -260,9 +294,12 @@ application_properties_as_simple_map(
   #msg{application_properties = #'v1_0.application_properties'{content = Content}},
   M) ->
     %% the section record format really is terrible
-    lists:foldl(fun ({{symbol, K}, {_T, V}}, Acc)
+    lists:foldl(fun
+                    ({{utf8, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
                         Acc#{K => V};
+                    ({{utf8, K}, undefined}, Acc) ->
+                        Acc#{K => undefined};
                     (_, Acc)->
                         Acc
                 end, M, Content).
@@ -277,12 +314,16 @@ decode([#'v1_0.properties'{} = P | Rem], Msg) ->
     decode(Rem, Msg#msg{properties = P});
 decode([#'v1_0.application_properties'{} = AP | Rem], Msg) ->
     decode(Rem, Msg#msg{application_properties = AP});
+decode([#'v1_0.delivery_annotations'{} = MA | Rem], Msg) ->
+    decode(Rem, Msg#msg{delivery_annotations = MA});
 decode([#'v1_0.data'{} = D | Rem], #msg{data = Body} = Msg)
   when is_list(Body) ->
     decode(Rem, Msg#msg{data = Body ++ [D]});
 decode([#'v1_0.amqp_sequence'{} = D | Rem], #msg{data = Body} = Msg)
   when is_list(Body) ->
     decode(Rem, Msg#msg{data = Body ++ [D]});
+decode([#'v1_0.footer'{} = H | Rem], Msg) ->
+    decode(Rem, Msg#msg{footer = H});
 decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     %% an amqp value can only be a singleton
     decode(Rem, Msg#msg{data = B}).
@@ -334,7 +375,7 @@ recover_deaths([], Acc) ->
     Acc;
 recover_deaths([{map, Kvs} | Rem], Acc) ->
     Queue = key_find(<<"queue">>, Kvs),
-    Reason = key_find(<<"reason">>, Kvs),
+    Reason = binary_to_atom(key_find(<<"reason">>, Kvs)),
     Ttl = case key_find(<<"original-expiration">>, Kvs) of
               undefined ->
                   undefined;
@@ -354,17 +395,20 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
+    CorrelationId = get_property(correlation_id, Msg),
+    MessageId = get_property(message_id, Msg),
     Ttl = get_property(ttl, Msg),
 
     Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
                  {list, DeathMaps}  ->
-                     %% TODO: make safer
-                     FstQ = message_annotation(<<"x-first-death-queue">>, Msg, <<>>),
-                     FstR = message_annotation(<<"x-first-death-reason">>, Msg, <<>>),
-                     LastQ = message_annotation(<<"x-last-death-queue">>, Msg, <<>>),
-                     LastR = message_annotation(<<"x-last-death-reason">>, Msg, <<>>),
-                     #deaths{first = {FstQ, FstR},
-                             last = {LastQ, LastR},
+                     %% TODO: make more correct?
+                     Def = {utf8, <<>>},
+                     {utf8, FstQ} = message_annotation(<<"x-first-death-queue">>, Msg, Def),
+                     {utf8, FstR} = message_annotation(<<"x-first-death-reason">>, Msg, Def),
+                     {utf8, LastQ} = message_annotation(<<"x-last-death-queue">>, Msg, Def),
+                     {utf8, LastR} = message_annotation(<<"x-last-death-reason">>, Msg, Def),
+                     #deaths{first = {FstQ, binary_to_atom(FstR)},
+                             last = {LastQ, binary_to_atom(LastR)},
                              records = recover_deaths(DeathMaps, #{})};
                  _ ->
                      undefined
@@ -378,8 +422,12 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
                  maps_put_truthy(
                    ttl, Ttl,
                    maps_put_truthy(
-                     deaths, Deaths, #{})
-                  )))),
+                     deaths, Deaths,
+                     maps_put_truthy(
+                       correlation_id, CorrelationId,
+                       maps_put_truthy(
+                         message_id, MessageId,
+                         #{}))))))),
     case MA of
         undefined ->
             Anns;

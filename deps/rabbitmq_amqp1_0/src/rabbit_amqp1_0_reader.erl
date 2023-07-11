@@ -420,6 +420,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
         end,
     HostnameVal = case Hostname of
                     undefined -> undefined;
+                    null -> undefined;
                     {utf8, Val} -> Val
                   end,
     rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~ts, extracted vhost = ~ts, idle_timeout = ~tp" ,
