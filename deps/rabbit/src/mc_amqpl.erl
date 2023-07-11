@@ -8,13 +8,13 @@
 
 -export([
          init/1,
-         init_amqp/1,
          size/1,
          x_header/2,
          routing_headers/2,
          % get_property/2,
          % set_property/3,
-         convert/2,
+         convert_to/2,
+         convert_from/2,
          protocol_state/2,
          message/3,
          message/4,
@@ -45,7 +45,7 @@ init(#content{} = Content0) ->
     Anns = essential_properties(Content),
     {strip_header(Content, ?DELETED_HEADER), Anns}.
 
-init_amqp(Sections) when is_list(Sections) ->
+convert_from(mc_amqp, Sections) ->
     {H, MAnn, P, AProp, Body} =
         lists:foldl(
           fun
@@ -153,8 +153,9 @@ init_amqp(Sections) when is_list(Sections) ->
     #content{class_id = 60,
              properties = BP,
              properties_bin = none,
-             payload_fragments_rev = Payload}.
-
+             payload_fragments_rev = Payload};
+convert_from(_SourceProto, _) ->
+    not_implemented.
 
 size(#content{properties_bin = PropsBin,
               properties = Props,
@@ -208,10 +209,10 @@ set_property(_P, _V, Msg) ->
 serialize(_, _) ->
     <<>>.
 
-convert(?MODULE, C) ->
-    C;
-convert(mc_amqp, #content{properties = Props,
-                          payload_fragments_rev = Payload}) ->
+convert_to(?MODULE, Content) ->
+    Content;
+convert_to(mc_amqp, #content{properties = Props,
+                             payload_fragments_rev = Payload}) ->
     #'P_basic'{message_id = MsgId,
                expiration = Expiration,
                delivery_mode = DelMode,
@@ -294,8 +295,8 @@ convert(mc_amqp, #content{properties = Props,
          end,
 
     Sections = [H, P, AP, MA, #'v1_0.data'{content = lists:reverse(Payload)}],
-    mc_amqp:init_amqp(Sections);
-convert(_, _C) ->
+    mc_amqp:convert_from(mc_amqp, Sections);
+convert_to(_TargetProto, _Content) ->
     not_implemented.
 
 protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
