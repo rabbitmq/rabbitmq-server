@@ -109,9 +109,17 @@ join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
 %% @doc Removes `Node' from the cluster.
 
 forget_member(Node, RemoveWhenOffline) ->
-    rabbit_db:run(
-      #{mnesia =>
-        fun() -> forget_member_using_mnesia(Node, RemoveWhenOffline) end}).
+    case rabbit:is_running(Node) of
+        false ->
+            rabbit_db:run(
+              #{mnesia => fun() ->
+                                  forget_member_using_mnesia(
+                                    Node, RemoveWhenOffline)
+                          end
+               });
+        true ->
+            {error, {failed_to_remove_node, Node, rabbit_still_running}}
+    end.
 
 forget_member_using_mnesia(Node, RemoveWhenOffline) ->
     rabbit_mnesia:forget_cluster_node(Node, RemoveWhenOffline).
