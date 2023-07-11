@@ -58,6 +58,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
       end
 
     case ret do
+      {:error, {:failed_to_remove_node, ^atom_name, :rabbit_still_running}} ->
+        {:error,
+         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
       {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
         {:error,
          "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
