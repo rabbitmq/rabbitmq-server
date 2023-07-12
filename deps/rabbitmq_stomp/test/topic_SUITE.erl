@@ -152,6 +152,8 @@ change_default_topic_exchange(Config) ->
     rabbit_stomp_client:send(
         ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
 
+    timer:sleep(500),
+
     1 = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [#resource{virtual_host= <<"/">>, kind = exchange, name = Ex}])),
 
     rabbit_stomp_client:send(
