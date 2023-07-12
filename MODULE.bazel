@@ -268,6 +268,7 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+<<<<<<< HEAD
     patch_cmds = [
         """VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
@@ -276,6 +277,9 @@ echo "Injecting ${VERSION} into BUILD.bazel..."
 sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
 """,
     ],
+=======
+    build_file = "@rabbitmq-server//bazel:BUILD.osiris",
+>>>>>>> ca1806dbcd (Check additional applications when comparing bazel and make results (#8209))
     repository = "rabbitmq/osiris",
     tag = "v1.6.0",
 )
