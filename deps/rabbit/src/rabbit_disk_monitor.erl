@@ -337,12 +337,12 @@ get_disk_free(Dir, {win32, _}, not_used) ->
                   _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
                   list_to_integer(FreeBytesAvailableToCallerStr)
             catch _:{timeout, _}:_ ->
-                  %% could not compute the result
-                  'NaN';
+                    %% could not compute the result
+                    'NaN';
                   _:Reason:_ ->
-                  rabbit_log:warning("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
-                  %% could not compute the result
-                  'NaN'
+                    rabbit_log:warning("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
+                    %% could not compute the result
+                    'NaN'
              end
     end.
 
