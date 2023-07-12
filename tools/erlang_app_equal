@@ -28,8 +28,15 @@ compare(LeftMetadata, RightMetadata) ->
                       "Warning:\t 'id' does not match (~p != ~p)~n", [LeftId, RightId])
     end,
 
-    LeftPropsMap = proplists:to_map(proplists:delete(id, LeftProps)),
-    RightPropsMap = proplists:to_map(proplists:delete(id, RightProps)),
+    FilterEmptyRegistered = fun
+        (registered, []) -> false;
+        (_, _) -> true
+    end,
+
+    LeftPropsMap = maps:filter(FilterEmptyRegistered,
+                               proplists:to_map(proplists:delete(id, LeftProps))),
+    RightPropsMap = maps:filter(FilterEmptyRegistered,
+                                proplists:to_map(proplists:delete(id, RightProps))),
     assert_equal(
         lists:sort(maps:keys(LeftPropsMap)),
         lists:sort(maps:keys(RightPropsMap)),
