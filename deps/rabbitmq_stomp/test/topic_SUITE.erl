@@ -137,17 +137,24 @@ subscribe_topic_authorisation(Config) ->
 
 change_default_topic_exchange(Config) ->
     Channel = ?config(amqp_channel, Config),
-    ClientFoo = ?config(client_foo, Config),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     Ex = <<"my-topic-exchange">>,
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_stomp, default_topic_exchange, Ex]),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, StompPort),
     AuthorisedTopic = "/topic/user.AuthorisedTopic",
 
     Declare = #'exchange.declare'{exchange = Ex, type = <<"topic">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, Declare),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_stomp, default_topic_exchange, Ex]),
+    0 = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [#resource{virtual_host= <<"/">>, kind = exchange, name = Ex}])),
 
     rabbit_stomp_client:send(
         ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+
+    timer:sleep(500),
+
+    1 = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [#resource{virtual_host= <<"/">>, kind = exchange, name = Ex}])),
 
     rabbit_stomp_client:send(
         ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["ohai there"]),
@@ -158,6 +165,7 @@ change_default_topic_exchange(Config) ->
     Delete = #'exchange.delete'{exchange = Ex},
     #'exchange.delete_ok'{} = amqp_channel:call(Channel, Delete),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env, [rabbitmq_stomp, default_topic_exchange]),
+    rabbit_stomp_client:disconnect(ClientFoo),
     ok.
 
 

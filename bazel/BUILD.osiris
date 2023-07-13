@@ -1,0 +1,144 @@
+load("@rules_erlang//:erlang_app.bzl", "erlang_app", "test_erlang_app")
+load("@rules_erlang//:xref2.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "dialyze", "plt")
+load("@rules_erlang//:eunit2.bzl", "eunit")
+load("@rules_erlang//:ct.bzl", "assert_suites2", "ct_suite")
+
+NAME = "osiris"
+
+VERSION = "1.5.1"
+
+DESCRIPTION = "New project"
+
+APP_ENV = """[
+	{data_dir, "/tmp/osiris"},
+	{port_range, {6000, 6500}},
+	{max_segment_size_chunks, 256000},
+	{replication_transport, tcp},
+	{replica_forced_gc_default_interval, 4999}
+]"""
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@seshat//:erlang_app",
+]
+
+erlang_app(
+    app_description = DESCRIPTION,
+    app_env = APP_ENV,
+    app_name = NAME,
+    app_version = VERSION,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+test_erlang_app(
+    app_description = DESCRIPTION,
+    app_env = APP_ENV,
+    app_name = NAME,
+    app_version = VERSION,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref()
+
+PLT_APPS = DEFAULT_PLT_APPS + [
+    "compiler",
+    "crypto",
+    "tools",
+    "runtime_tools",
+    "mnesia",
+    "public_key",
+    "asn1",
+    "ssl",
+    "inets",
+]
+
+plt(
+    name = "deps_plt",
+    apps = PLT_APPS,
+    for_target = ":erlang_app",
+)
+
+dialyze(
+    name = "dialyze",
+    size = "small",
+    dialyzer_opts = [
+        "-Werror_handling",
+        "-Wunmatched_returns",
+    ],
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+plt(
+    name = "test_deps_plt",
+    apps = PLT_APPS + [
+        "eunit",
+        "common_test",
+        "debugger",
+        "xmerl",
+        "ftp",
+        "ssh",
+        "snmp",
+        "wx",
+        "syntax_tools",
+    ],
+    for_target = ":test_erlang_app",
+)
+
+dialyze(
+    name = "dialyze_tests",
+    size = "small",
+    beam = [
+        f.replace("test/", "").replace(".erl", "_beam_files")
+        for f in glob(["test/*_SUITE.erl"])
+    ],
+    dialyzer_opts = [
+        "-Werror_handling",
+        "-Wunmatched_returns",
+    ],
+    plt = ":test_deps_plt",
+)
+
+eunit(
+    name = "eunit",
+    eunit_opts = [
+        "no_tty",
+        "{report, {eunit_progress, [colored, profile]}}",
+    ],
+    target = ":test_erlang_app",
+    deps = [
+        "@eunit_formatters//:erlang_app",
+    ],
+)
+
+[ct_suite(
+    name = f.replace("test/", "").replace(".erl", ""),
+) for f in glob(
+    ["test/*_SUITE.erl"],
+    exclude = ["test/osiris_SUITE.erl"],
+)]
+
+ct_suite(
+    name = "osiris_SUITE",
+    data = [
+        "@tls_gen//:basic",
+    ],
+    test_env = {
+        "DEPS_DIR": "$TEST_SRCDIR/$TEST_WORKSPACE/external",
+    },
+)
+
+assert_suites2()

@@ -26,13 +26,13 @@
     </developers>
 
     <properties>
-        <stream-client.version>[0.7.0-SNAPSHOT,)</stream-client.version>
-        <junit.jupiter.version>5.9.0</junit.jupiter.version>
+        <stream-client.version>0.11.0</stream-client.version>
+        <junit.jupiter.version>5.9.3</junit.jupiter.version>
         <assertj.version>3.24.2</assertj.version>
         <logback.version>1.2.12</logback.version>
         <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
-        <spotless.version>2.24.0</spotless.version>
+        <spotless.version>2.37.0</spotless.version>
         <google-java-format.version>1.17.0</google-java-format.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
@@ -114,16 +114,5 @@
         </plugins>
 
     </build>
-
-    <repositories>
-
-        <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-            <snapshots><enabled>true</enabled></snapshots>
-            <releases><enabled>false</enabled></releases>
-        </repository>
-
-    </repositories>
 
 </project>
