@@ -192,11 +192,16 @@ handle_info({Delivery = #'basic.deliver'{},
              DeliveryCtx},
              State) ->
     ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
-                                                        Props,
-                                                        Payload,
-                                                        DeliveryCtx,
-                                                        ProcState),
+    case rabbit_stomp_processor:send_delivery(Delivery,
+                                              Props,
+                                              Payload,
+                                              DeliveryCtx,
+                                              ProcState) of
+        {ok, NewProcState, _} ->
+            {noreply, processor_state(NewProcState, State), hibernate};
+        {stop, Reason, NewProcState} ->
+            {stop, Reason, processor_state(NewProcState, State)}
+    end,
     {noreply, processor_state(NewProcState, State), hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
@@ -326,9 +331,9 @@ terminate(Reason, undefined) ->
     log_reason(Reason, undefined),
     {stop, Reason};
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
-  maybe_emit_stats(State),
-  log_reason(Reason, State),
-  _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    maybe_emit_stats(State),
+    log_reason(Reason, State),
+    _ = rabbit_stomp_processor:flush_and_die(ProcState),
     {stop, Reason}.
 
 code_change(_OldVsn, State, _Extra) ->
