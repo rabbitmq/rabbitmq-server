@@ -148,7 +148,7 @@ process_connect(
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
     TopicAliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
     TopicAliasMaxOutbound = min(maps:get('Topic-Alias-Maximum', ConnectProps, 0), TopicAliasMax),
-    {ok, MaxSessionExpiry} = application:get_env(?APP_NAME, max_session_expiry_interval_secs),
+    {ok, MaxSessionExpiry} = application:get_env(?APP_NAME, max_session_expiry_interval_seconds),
     SessionExpiry =
     case {ProtoVer, CleanStart} of
         {5, _} ->
@@ -157,7 +157,7 @@ process_connect(
                 ?UINT_MAX ->
                     %% "If the Session Expiry Interval is 0xFFFFFFFF (UINT_MAX),
                     %% the Session does not expire."
-                    min(infinity, MaxSessionExpiry);
+                    MaxSessionExpiry;
                 Seconds ->
                     min(Seconds, MaxSessionExpiry)
             end;
@@ -569,7 +569,7 @@ process_request(?DISCONNECT,
             State0;
         _ ->
             %% "The session expiry interval can be modified at disconnect."
-            {ok, MaxSEI} = application:get_env(?APP_NAME, max_session_expiry_interval_secs),
+            {ok, MaxSEI} = application:get_env(?APP_NAME, max_session_expiry_interval_seconds),
             NewSEI = min(RequestedSEI, MaxSEI),
             lists:foreach(fun(QName) ->
                                   update_session_expiry_interval(QName, NewSEI)
