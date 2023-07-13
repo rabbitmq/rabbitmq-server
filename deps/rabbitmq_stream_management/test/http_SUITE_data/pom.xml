@@ -27,7 +27,7 @@
 
     <properties>
         <stream-client.version>0.11.0</stream-client.version>
-        <junit.jupiter.version>5.9.0</junit.jupiter.version>
+        <junit.jupiter.version>5.9.3</junit.jupiter.version>
         <assertj.version>3.24.2</assertj.version>
         <logback.version>1.2.12</logback.version>
         <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
