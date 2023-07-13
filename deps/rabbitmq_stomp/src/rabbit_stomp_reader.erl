@@ -201,8 +201,7 @@ handle_info({Delivery = #'basic.deliver'{},
             {noreply, processor_state(NewProcState, State), hibernate};
         {stop, Reason, NewProcState} ->
             {stop, Reason, processor_state(NewProcState, State)}
-    end,
-    {noreply, processor_state(NewProcState, State), hibernate};
+    end;
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
