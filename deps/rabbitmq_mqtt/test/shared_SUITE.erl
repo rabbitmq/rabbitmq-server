@@ -824,7 +824,7 @@ delete_create_queue(Config) ->
 
 session_expiry(Config) ->
     App = rabbitmq_mqtt,
-    Par = max_session_expiry_interval_secs,
+    Par = max_session_expiry_interval_seconds,
     Seconds = 1,
     {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
     ok = rpc(Config, application, set_env, [App, Par, Seconds]),
