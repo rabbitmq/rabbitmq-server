@@ -67,7 +67,7 @@ defmodule ClearOperatorPolicyCommandTest do
     assert @command.run(
              [context[:key]],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   test "run: an unreachable node throws a badrpc" do
@@ -96,7 +96,7 @@ defmodule ClearOperatorPolicyCommandTest do
     assert @command.run(
              [context[:key]],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @vhost

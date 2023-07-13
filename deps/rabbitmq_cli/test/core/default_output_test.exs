@@ -21,8 +21,8 @@ defmodule DefaultOutputTest do
   end
 
   test "enumerable is passed as stream" do
-    assert match?({:stream, 'list'}, ExampleCommand.output({:ok, 'list'}, %{}))
-    assert match?({:stream, 'list'}, ExampleCommand.output('list', %{}))
+    assert match?({:stream, ~c"list"}, ExampleCommand.output({:ok, ~c"list"}, %{}))
+    assert match?({:stream, ~c"list"}, ExampleCommand.output(~c"list", %{}))
 
     assert match?({:stream, [1, 2, 3]}, ExampleCommand.output({:ok, [1, 2, 3]}, %{}))
     assert match?({:stream, [1, 2, 3]}, ExampleCommand.output([1, 2, 3], %{}))
@@ -53,13 +53,13 @@ defmodule DefaultOutputTest do
   test "error_string is converted to string" do
     assert match?(
              {:error, "I am charlist"},
-             ExampleCommand.output({:error_string, 'I am charlist'}, %{})
+             ExampleCommand.output({:error_string, ~c"I am charlist"}, %{})
            )
   end
 
   test "error is formatted" do
     {:error, "I am formatted \"string\""} =
-      ExampleCommand.output({:error, 'I am formatted ~p', ['string']}, %{})
+      ExampleCommand.output({:error, ~c"I am formatted ~p", [~c"string"]}, %{})
   end
 
   test "non atom value is ok" do

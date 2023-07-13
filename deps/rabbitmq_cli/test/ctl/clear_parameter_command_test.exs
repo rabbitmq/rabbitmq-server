@@ -65,7 +65,7 @@ defmodule ClearParameterCommandTest do
     assert @command.run(
              [context[:component_name], context[:key]],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
@@ -94,7 +94,7 @@ defmodule ClearParameterCommandTest do
     assert @command.run(
              [context[:component_name], context[:key]],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
 
     assert list_parameters(context[:vhost]) == []
   end
@@ -106,7 +106,7 @@ defmodule ClearParameterCommandTest do
     assert @command.run(
              [context[:component_name], context[:key]],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost

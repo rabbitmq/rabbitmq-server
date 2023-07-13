@@ -91,7 +91,7 @@ defmodule SetParameterCommandTest do
              context[:opts]
            ) ==
              {:error_string,
-              'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
+              ~c"Validation failed\n\ncomponent #{context[:component_name]} not found\n"}
 
     assert list_parameters(context[:vhost]) == []
   end
@@ -124,7 +124,8 @@ defmodule SetParameterCommandTest do
     assert @command.run(
              [context[:component_name], context[:key], context[:value]],
              context[:opts]
-           ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
+           ) ==
+             {:error_string, ~c"Validation failed\n\nKey \"uri\" not found in reconnect-delay\n"}
 
     assert list_parameters(context[:vhost]) == []
   end

@@ -108,7 +108,7 @@ defmodule SetVhostLimitsCommandTest do
              context[:opts]
            ) ==
              {:error_string,
-              'Validation failed\n\nUnrecognised terms [{<<"foo">>,<<"bar">>}] in limits\n'}
+              ~c"Validation failed\n\nUnrecognised terms [{<<\"foo\">>,<<\"bar\">>}] in limits\n"}
 
     assert get_vhost_limits(context[:vhost]) == %{}
   end

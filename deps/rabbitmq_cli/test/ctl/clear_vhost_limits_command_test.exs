@@ -83,7 +83,7 @@ defmodule ClearVhostLimitsCommandTest do
     assert @command.run(
              [],
              vhost_opts
-           ) == {:error_string, 'Parameter does not exist'}
+           ) == {:error_string, ~c"Parameter does not exist"}
   end
 
   @tag vhost: @vhost
