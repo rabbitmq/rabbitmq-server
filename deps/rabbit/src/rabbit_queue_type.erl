@@ -6,6 +6,9 @@
 %%
 
 -module(rabbit_queue_type).
+
+-behaviour(rabbit_registry_class).
+
 -include("amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -48,6 +51,11 @@
          arguments/2,
          notify_decorators/1
          ]).
+
+-export([
+         added_to_rabbit_registry/2,
+         removed_from_rabbit_registry/1
+        ]).
 
 -type queue_name() :: rabbit_amqqueue:name().
 -type queue_state() :: term().
@@ -225,7 +233,11 @@ discover(<<"quorum">>) ->
 discover(<<"classic">>) ->
     rabbit_classic_queue;
 discover(<<"stream">>) ->
-    rabbit_stream_queue.
+    rabbit_stream_queue;
+discover(Other) when is_binary(Other) ->
+    T = rabbit_registry:binary_to_type(Other),
+    {ok, Mod} = rabbit_registry:lookup_module(queue, T),
+    Mod.
 
 feature_flag_name(<<"quorum">>) ->
     quorum_queue;
@@ -617,6 +629,13 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
         {protocol_error, _, _, _} = Err ->
             Err
     end.
+
+
+-spec added_to_rabbit_registry(atom(), atom()) -> ok.
+added_to_rabbit_registry(_Type, _ModuleName) -> ok.
+
+-spec removed_from_rabbit_registry(atom()) -> ok.
+removed_from_rabbit_registry(_Type) -> ok.
 
 get_ctx(QOrQref, State) ->
     get_ctx_with(QOrQref, State, undefined).
