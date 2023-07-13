@@ -1167,6 +1167,129 @@ or:
           Hashes <code>plaintext-password</code> according to the currently configured password hashing algorithm.
         </td>
       </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections</td>
+        <td>
+            A list of all open stream connections.
+            Use <a href="#pagination">pagination parameters</a> to filter connections.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i></td>
+        <td>
+            A list of all open stream connections in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i></td>
+        <td>
+            An individual stream connection.
+            DELETEing it will close the stream connection.
+            Optionally set the "X-Reason" header when DELETEing to provide a reason.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i>/publishers</td>
+        <td>
+            The list of publishers of a given stream connection.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i>/consumers</td>
+        <td>
+            The list of consumers of a given stream connection.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers</td>
+        <td>
+            The list of stream publishers.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers/<i>vhost</i></td>
+        <td>
+            The list of stream publishers in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers/<i>vhost</i>/<i>stream</i></td>
+        <td>
+            The list of stream publishers in a specific virtual host for a specific stream.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/consumers</td>
+        <td>
+            The list of stream consumers.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/consumers/<i>vhost</i></td>
+        <td>
+            The list of stream consumers in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
     </table>
 
 
