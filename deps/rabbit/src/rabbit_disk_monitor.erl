@@ -282,6 +282,7 @@ internal_update(State = #state{limit   = Limit,
                                os      = OS,
                                port    = Port}) ->
     CurrentFree = get_disk_free(Dir, OS, Port),
+    %% note: 'NaN' is considered to be less than a number
     NewAlarmed = CurrentFree < Limit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -321,19 +322,28 @@ get_disk_free(Dir, {win32, _}, not_used) ->
                 end,
             % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
             % https://github.com/erlang/otp/issues/6156
-            [DriveInfoStr] = lists:filter(F, os_mon_sysinfo:get_disk_info()),
+            try
+                  % Note: DriveInfoStr is in this format
+                  % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
+                  Lines = os_mon_sysinfo:get_disk_info(),
+                  [DriveInfoStr] = lists:filter(F, Lines),
+                  [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
 
-            % Note: DriveInfoStr is in this format
-            % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
-
-            % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
-            % lib/os_mon/c_src/win32sysinfo.c:
-            % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
-            %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
-            ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
-             _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
-            list_to_integer(FreeBytesAvailableToCallerStr)
+                  % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
+                  % lib/os_mon/c_src/win32sysinfo.c:
+                  % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
+                  %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
+                  ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
+                  _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
+                  list_to_integer(FreeBytesAvailableToCallerStr)
+            catch _:{timeout, _}:_ ->
+                    %% could not compute the result
+                    'NaN';
+                  _:Reason:_ ->
+                    rabbit_log:warning("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
+                    %% could not compute the result
+                    'NaN'
+             end
     end.
 
 parse_free_unix(Str) ->
