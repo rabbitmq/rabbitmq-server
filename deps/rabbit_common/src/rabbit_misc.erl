@@ -82,6 +82,7 @@
 -export([maps_any/2]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
+-export([is_even/1, is_odd/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1586,3 +1587,10 @@ maps_any_1(Pred, {K, V, I}) ->
         false ->
             maps_any_1(Pred, maps:next(I))
     end.
+
+-spec is_even(integer()) -> boolean().
+is_even(N) ->
+    (N band 1) =:= 0.
+-spec is_odd(integer()) -> boolean().
+is_odd(N) ->
+    (N band 1) =:= 1.

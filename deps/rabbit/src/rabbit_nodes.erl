@@ -282,14 +282,17 @@ do_filter_reachable(Members) ->
       Members).
 
 -spec is_running(Node) -> IsRunning when
-      Node :: node(),
+      Node :: node() | [node()],
       IsRunning :: boolean().
 %% @doc Indicates if the given node is running.
 %%
 %% @see filter_running/1.
 
 is_running(Node) when is_atom(Node) ->
-    [Node] =:= filter_running([Node]).
+    [Node] =:= filter_running([Node]);
+is_running(Nodes) when is_list(Nodes) ->
+    lists:sort(Nodes) =:= lists:sort(filter_running(Nodes)).
+
 
 -spec list_running() -> Nodes when
       Nodes :: [node()].

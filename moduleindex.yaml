@@ -736,6 +736,7 @@ rabbit:
 - rabbit_queue_type_util
 - rabbit_quorum_memory_manager
 - rabbit_quorum_queue
+- rabbit_quorum_queue_periodic_membership_reconciliation
 - rabbit_ra_registry
 - rabbit_ra_systems
 - rabbit_reader
