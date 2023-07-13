@@ -85,7 +85,7 @@ adapter_name(State) ->
 -spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
 
 -spec send_delivery(#'basic.deliver'{}, term(), term(), term(),
-                    #proc_state{}) -> #proc_state{}.
+                    #proc_state{}) -> process_frame_result().
 
 %%----------------------------------------------------------------------------
 
@@ -459,8 +459,8 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
                                   "No more messages will be delivered for ~tp.~n",
                                   [Description],
                                   State),
-            tidy_canceled_subscription(ConsumerTag, Subscription,
-                                       undefined, State),
+            _ = tidy_canceled_subscription(ConsumerTag, Subscription,
+                                           undefined, State),
             {stop, normal, NewState}
     end.
 
