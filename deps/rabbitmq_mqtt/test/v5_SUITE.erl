@@ -1328,7 +1328,7 @@ publish_property_mqtt_to_amqp091(Config) ->
                                   correlation_id = Correlation,
                                   delivery_mode = 2,
                                   headers = Headers}}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
-    {<<"x-reply-to-topic">>, longstr, AmqpResponseTopic} = rabbit_basic:header(<<"x-reply-to-topic">>, Headers),
+    {<<"x-opt-reply-to-topic">>, longstr, AmqpResponseTopic} = rabbit_basic:header(<<"x-opt-reply-to-topic">>, Headers),
     ReplyPayload = <<"{\"my\" : \"reply\"}">>,
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
                                            routing_key = AmqpResponseTopic},

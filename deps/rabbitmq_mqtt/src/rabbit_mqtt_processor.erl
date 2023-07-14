@@ -2167,7 +2167,7 @@ mqtt_props_to_amqp_props(Props, Qos, Retain) ->
                  %% the binary queue name in AMQP 0.9.1: "One of the standard message properties is
                  %% Reply-To, which is designed specifically for carrying the name of reply queues."
                  %% Therefore, we add a custom header.
-                 P2#'P_basic'{headers = [{<<"x-reply-to-topic">>, longstr,
+                 P2#'P_basic'{headers = [{<<"x-opt-reply-to-topic">>, longstr,
                                           %% Convert such that an AMQP consumer can respond.
                                           mqtt_to_amqp(Topic)} |
                                          P2#'P_basic'.headers]};
@@ -2258,8 +2258,8 @@ amqp_props_to_mqtt_props(
              _ ->
                  P1
          end,
-    P3 = case rabbit_basic:header(<<"x-reply-to-topic">>, Headers) of
-             {<<"x-reply-to-topic">>, longstr, Topic}
+    P3 = case rabbit_basic:header(<<"x-opt-reply-to-topic">>, Headers) of
+             {<<"x-opt-reply-to-topic">>, longstr, Topic}
                when is_binary(Topic) ->
                  P2#{'Response-Topic' => amqp_to_mqtt(Topic)};
              _ ->
