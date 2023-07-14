@@ -147,9 +147,10 @@ trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
         _ ->
             RoutingKeys = mc:get_annotation(routing_keys, Msg0),
             %% for now convert into amqp legacy
-            Msg = mc:convert(mc_amqpl, Msg0),
+            Msg = mc:prepare(read, mc:convert(mc_amqpl, Msg0)),
             %% check exchange name in case it is same as target
-            #content{properties = Props} = Content0 = mc:protocol_state(Msg),
+            #content{properties = Props} = Content0 =
+                mc:protocol_state(Msg),
 
             Key = <<RKPrefix/binary, ".", RKSuffix/binary>>,
             Content = Content0#content{properties =

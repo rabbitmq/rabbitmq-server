@@ -140,7 +140,7 @@ convert_to(Proto, #basic_message{} = BasicMsg) ->
     mc:convert(Proto, mc_amqpl:from_basic_message(BasicMsg)).
 
 protocol_state(#basic_message{content = Content}) ->
-    Content.
+    rabbit_binary_parser:ensure_content_decoded(Content).
 
 prepare(read, #basic_message{content = Content} = Msg) ->
     Msg#basic_message{content =

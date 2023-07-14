@@ -1579,7 +1579,7 @@ peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
             Msg = mc:set_annotation(<<"x-delivery-count">>, Count, Msg0),
             XName = mc:get_annotation(exchange, Msg),
             RoutingKeys = mc:get_annotation(routing_keys, Msg),
-            AmqpLegacyMsg = mc:convert(mc_amqpl, Msg),
+            AmqpLegacyMsg = mc:prepare(read, mc:convert(mc_amqpl, Msg)),
             Content = mc:protocol_state(AmqpLegacyMsg),
             {ok, rabbit_basic:peek_fmt_message(XName, RoutingKeys, Content)};
         {error, Err} ->
