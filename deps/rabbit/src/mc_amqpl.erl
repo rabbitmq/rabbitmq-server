@@ -374,6 +374,8 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                 end,
     Expiration = case Anns of
                      #{ttl := undefined} ->
+                         %% this resets the TTL, only done bt dead lettering
+                         %% publishes
                          undefined;
                      #{ttl := Ttl} ->
                          %% not sure this will ever happen
@@ -390,6 +392,9 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
     C#content{properties = B,
               properties_bin = none};
 protocol_state(Content0, Anns) ->
+    %% TODO: refactor to detect _if_ the properties even need decoding
+    %% It is possible that no additional annotations or proorties need to be
+    %% changed
     protocol_state(prepare(read, Content0), Anns).
 
 -spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) -> mc:state().
@@ -433,7 +438,7 @@ from_basic_message(#basic_message{content = Content,
                _ ->
                    #{id => Id}
            end,
-    message(Ex, RKey, Content, Anns, true).
+    message(Ex, RKey, prepare(read, Content), Anns, true).
 
 %% Internal
 
