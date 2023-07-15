@@ -173,16 +173,6 @@ rabbitmq_integration_suite(
     name = "rabbit_mgmt_only_http_SUITE",
 )
 
-rabbitmq_integration_suite(
-    name = "rabbit_mgmt_rabbitmqadmin_SUITE",
-    additional_beam = [
-        "test/rabbit_mgmt_runtime_parameters_util.beam",
-    ],
-    data = [
-        ":bin/rabbitmqadmin",
-    ],
-)
-
 rabbitmq_suite(
     name = "rabbit_mgmt_stats_SUITE",
     size = "small",
