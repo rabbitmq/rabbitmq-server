@@ -35,6 +35,7 @@
          get_appropriate_warning_when_denied/1,
          get_appropriate_warning_when_disconnected/1,
          get_appropriate_warning_when_removed/1,
+         deprecated_feature_enabled_if_feature_flag_depends_on_it/1,
 
          feature_is_unused/1,
          feature_is_used/1
@@ -65,7 +66,8 @@ groups() ->
              get_appropriate_warning_when_permitted,
              get_appropriate_warning_when_denied,
              get_appropriate_warning_when_disconnected,
-             get_appropriate_warning_when_removed
+             get_appropriate_warning_when_removed,
+             deprecated_feature_enabled_if_feature_flag_depends_on_it
             ],
     [
      {cluster_size_1, [], Tests},
@@ -97,10 +99,14 @@ end_per_group(_Group, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
+    NodesCount = ?config(nodes_count, Config),
+    NodenamePrefix = list_to_atom(
+                       lists:flatten(
+                         io_lib:format("~s-cs~b", [Testcase, NodesCount]))),
     rabbit_ct_helpers:run_steps(
       Config,
       [fun(Cfg) ->
-               feature_flags_v2_SUITE:start_slave_nodes(Cfg, Testcase)
+               feature_flags_v2_SUITE:start_slave_nodes(Cfg, NodenamePrefix)
        end]).
 
 end_per_testcase(_Testcase, Config) ->
@@ -630,4 +636,93 @@ get_appropriate_warning_when_removed(Config) ->
                       rabbit_deprecated_features:get_warning(FeatureName)),
                    ok
            end)
+         || Node <- AllNodes].
+
+deprecated_feature_enabled_if_feature_flag_depends_on_it(Config) ->
+    [FirstNode | _] = AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => permitted_by_default},
+
+                     my_feature_flag =>
+                     #{provided_by => rabbit,
+                       stability => experimental,
+                       depends_on => [FeatureName]}},
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assert(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    ok = feature_flags_v2_SUITE:run_on_node(
+           FirstNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:enable(my_feature_flag)),
+                   ok
+           end),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(my_feature_flag)),
+
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assertNot(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end )
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_ff_registry_factory:reset_registry()),
+                   ok
+           end )
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_ff_registry_factory:initialize_registry()),
+                   ok
+           end )
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(my_feature_flag)),
+
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assertNot(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end )
          || Node <- AllNodes].
