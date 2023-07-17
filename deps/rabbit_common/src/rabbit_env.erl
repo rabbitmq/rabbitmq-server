@@ -31,7 +31,8 @@
 
 -ifdef(TEST).
 -export([parse_conf_env_file_output2/2,
-         value_is_yes/1]).
+         value_is_yes/1,
+         parse_conf_env_file_output_win32/2]).
 -endif.
 
 %% Vary from OTP version to version.
@@ -1687,6 +1688,7 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
            {"CONF_ENV_FILE_PHASE", "rabbtimq-prelaunch"}
           ],
 
+<<<<<<< HEAD
     Args = ["/Q", "/C", ConfEnvFileNoQuotes, "&&", "echo", Marker, "&&", "set"],
     Opts = [{args, Args},
             {env, Env},
@@ -1696,6 +1698,51 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
             exit_status],
     Port = erlang:open_port({spawn_executable, Cmd}, Opts),
     collect_conf_env_file_output(Context, Port, "\"" ++ Marker ++ "\" ", <<>>).
+=======
+    TempBatchFileContent = [<<"@echo off\r\n">>,
+                            <<"chcp 65001 >nul\r\n">>,
+                            <<"call \"">>, ConfEnvFile3, <<"\"\r\n">>,
+                            <<"if ERRORLEVEL 1 exit /B 1\r\n">>,
+                            <<"echo ">>, Marker, <<"\r\n">>,
+                            <<"set\r\n">>],
+    TempPath = get_temp_path_win32(),
+    TempBatchFileName = rabbit_misc:format("rabbitmq-env-conf-runner-~s.bat", [os:getpid()]),
+    TempBatchFilePath = normalize_path(TempPath, TempBatchFileName),
+    ok = file:write_file(TempBatchFilePath, TempBatchFileContent),
+    try
+        Args = ["/Q", "/C", TempBatchFilePath],
+        Opts = [{args, Args}, {env, Env},
+                hide, binary, stderr_to_stdout, exit_status],
+        Port = erlang:open_port({spawn_executable, Cmd}, Opts),
+        collect_conf_env_file_output(Context, Port, Marker, <<>>)
+    after
+        file:delete(TempBatchFilePath)
+    end.
+
+get_main_config_file_without_extension(Context) ->
+    DefaultMainConfigFile = get_default_main_config_file(Context),
+    RE = "\\.(conf|config)$",
+    Replacement = "",
+    Options = [unicode, {return, list}],
+    re:replace(DefaultMainConfigFile, RE, Replacement, Options).
+
+get_temp_path_win32() ->
+    % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppatha
+    EnvVars = ["TMP", "TEMP", "USERPROFILE"],
+    Fallback = normalize_path(os:getenv("SystemRoot", "C:/Windows"), "Temp"),
+    F = fun(E) ->
+                case os:getenv(E) of
+                    false -> false;
+                    Var -> {is_dir(Var), Var}
+                end
+        end,
+    case lists:filtermap(F, EnvVars) of
+        [] ->
+            Fallback;
+        TmpDirs when is_list(TmpDirs) ->
+            hd(TmpDirs)
+    end.
+>>>>>>> b01072984a (Fix `rabbitmq-env-conf.bat` parsing)
 
 vars_list_marker() ->
     % Note:
@@ -1742,8 +1789,13 @@ parse_conf_env_file_output(Context, Marker, [Marker | Lines]) ->
 parse_conf_env_file_output(Context, Marker, [_ | Lines]) ->
     parse_conf_env_file_output(Context, Marker, Lines).
 
-parse_conf_env_file_output1(Context, Lines) ->
-    Vars = parse_conf_env_file_output2(Lines, #{}),
+parse_conf_env_file_output1(#{os_type := {OSType, _}} = Context, Lines) ->
+    Vars = case OSType of
+               win32 ->
+                   parse_conf_env_file_output_win32(Lines, #{});
+               _ ->
+                   parse_conf_env_file_output2(Lines, #{})
+           end,
     %% Re-export variables.
     lists:foreach(
       fun(Var) ->
@@ -1761,6 +1813,24 @@ parse_conf_env_file_output1(Context, Lines) ->
               end
       end, lists:sort(maps:keys(Vars))),
     Context.
+
+parse_conf_env_file_output_win32([], Vars) ->
+    Vars;
+parse_conf_env_file_output_win32([Line | Lines], Vars) ->
+    case string:split(Line, "=") of
+        [Var, Val0] ->
+            Val1 = string:trim(Val0),
+            Val2 = string:trim(Val1, both, [$"]),
+            Vars1 = Vars#{Var => Val2},
+            parse_conf_env_file_output_win32(Lines, Vars1);
+        _ ->
+            %% Parsing failed somehow.
+            ?LOG_WARNING(
+               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line: ~tp",
+               [Line],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            parse_conf_env_file_output_win32(Lines, Vars)
+    end.
 
 parse_conf_env_file_output2([], Vars) ->
     Vars;
