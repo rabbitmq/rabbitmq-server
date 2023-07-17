@@ -23,6 +23,7 @@ all() ->
 
 all_tests() ->
     [
+     amqpl_defaults,
      amqpl_amqp_bin_amqpl,
      stuff
     ].
@@ -63,10 +64,25 @@ stuff(_Config) ->
     ct:pal("~p", [MAEnc]),
     ct:pal("~p", [amqp10_framing:decode(MAEnc)]),
 
-
     % amqp10_framing:decode(Desc),
+    ok.
 
+amqpl_defaults(_Config) ->
+    Props = #'P_basic'{},
+    Payload = [<<"data">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqpl, Content, Anns),
 
+    ?assertEqual(undefined, mc:priority(Msg)),
+    ?assertEqual(false, mc:is_persistent(Msg)),
+    ?assertEqual(undefined, mc:timestamp(Msg)),
+    ?assertEqual(undefined, mc:correlation_id(Msg)),
+    ?assertEqual(undefined, mc:message_id(Msg)),
+    ?assertEqual(undefined, mc:ttl(Msg)),
+    ?assertEqual(undefined, mc:x_header("x-fruit", Msg)),
 
     ok.
 
