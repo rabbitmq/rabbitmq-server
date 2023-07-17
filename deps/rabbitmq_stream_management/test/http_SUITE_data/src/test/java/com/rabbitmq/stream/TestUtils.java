@@ -257,4 +257,11 @@ public class TestUtils {
   static Condition<Object> isNull() {
     return new Condition<>(Objects::isNull, "null");
   }
+
+  static Client.ChunkListener credit() {
+    return (client, subscriptionId, offset, messageCount, dataSize) -> {
+      client.credit(subscriptionId, 1);
+      return null;
+    };
+  }
 }
