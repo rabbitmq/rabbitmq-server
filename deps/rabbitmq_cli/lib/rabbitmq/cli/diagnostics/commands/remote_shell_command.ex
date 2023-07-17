@@ -18,19 +18,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
     if :erlang.function_exported(:shell, :start_interactive, 1) do
       start_shell_on_otp_26_plus(node_name)
     else
-<<<<<<< HEAD
-      _ = Supervisor.terminate_child(:kernel_sup, :user)
-      Process.flag(:trap_exit, true)
-      user_drv = :user_drv.start([~c"tty_sl -c -e", {node_name, :shell, :start, []}])
-      Process.link(user_drv)
-
-      receive do
-        {~c"EXIT", _user_drv, _} ->
-          {:ok, "Disconnected from #{node_name}."}
-      end
-=======
       start_shell_on_otp_25(node_name)
->>>>>>> 45ba92e096 (Sync remote_shell with main for OTP 25/26 compat)
     end
   end
 

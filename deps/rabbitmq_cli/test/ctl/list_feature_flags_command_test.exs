@@ -21,20 +21,12 @@ defmodule ListFeatureFlagsCommandTest do
 
     new_feature_flags = %{
       @flag1 => %{
-<<<<<<< HEAD
-        desc: "My feature flag #1",
-=======
         desc: ~c"My feature flag #1",
->>>>>>> 65a3f77932 (Run 'mix format' with elixir 1.15.2)
         provided_by: :ListFeatureFlagsCommandTest,
         stability: :stable
       },
       @flag2 => %{
-<<<<<<< HEAD
-        desc: "My feature flag #2",
-=======
         desc: ~c"My feature flag #2",
->>>>>>> 65a3f77932 (Run 'mix format' with elixir 1.15.2)
         provided_by: :ListFeatureFlagsCommandTest,
         stability: :stable
       }

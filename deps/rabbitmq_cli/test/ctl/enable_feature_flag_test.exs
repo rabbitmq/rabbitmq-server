@@ -19,11 +19,7 @@ defmodule EnableFeatureFlagCommandTest do
 
     new_feature_flags = %{
       @feature_flag => %{
-<<<<<<< HEAD
-        desc: "My feature flag",
-=======
         desc: ~c"My feature flag",
->>>>>>> 65a3f77932 (Run 'mix format' with elixir 1.15.2)
         provided_by: :EnableFeatureFlagCommandTest,
         stability: :stable
       }
