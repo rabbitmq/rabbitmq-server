@@ -218,4 +218,11 @@ public class TestUtils {
           expectedResponse);
     }
   }
+
+  static Client.ChunkListener credit() {
+    return (client, subscriptionId, offset, messageCount, dataSize) -> {
+      client.credit(subscriptionId, 1);
+      return null;
+    };
+  }
 }

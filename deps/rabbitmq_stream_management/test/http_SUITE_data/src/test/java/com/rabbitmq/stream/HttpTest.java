@@ -140,11 +140,6 @@ public class HttpTest {
         .collect(Collectors.toList());
   }
 
-  static List<Map<String, Object>> entities(
-      List<Map<String, Object>> entities, Predicate<Map<String, Object>> filter) {
-    return entities.stream().filter(filter).collect(Collectors.toList());
-  }
-
   static Map<String, Object> entity(
       List<Map<String, Object>> entities, Predicate<Map<String, Object>> filter) {
     return entities.stream().filter(filter).findFirst().orElse(Collections.emptyMap());
@@ -558,9 +553,7 @@ public class HttpTest {
         cf.get(
             new ClientParameters()
                 .clientProperty("connection_name", connectionProvidedName)
-                .chunkListener(
-                    (client1, subscriptionId, offset, messageCount, dataSize) ->
-                        client1.credit(subscriptionId, 1))
+                .chunkListener(TestUtils.credit())
                 .shutdownListener(shutdownContext -> closed.set(true)));
 
     client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10, subscriptionProperties);
