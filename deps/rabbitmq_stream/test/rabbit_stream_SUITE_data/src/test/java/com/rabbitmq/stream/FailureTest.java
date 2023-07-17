@@ -16,9 +16,8 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.*;
 import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
-import static com.rabbitmq.stream.TestUtils.waitAtMost;
-import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -164,7 +163,7 @@ public class FailureTest {
             new Client.ClientParameters()
                 .port(TestUtils.streamPortNode1())
                 .messageListener(
-                    (subscriptionId, offset, chunkTimestamp, committedChunkId, msg) -> {
+                    (subscriptionId, offset, chunkTimestamp, committedChunkId, context, msg) -> {
                       bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
                       consumeLatch.countDown();
                     }));
@@ -341,11 +340,14 @@ public class FailureTest {
         cf.get(
             new Client.ClientParameters()
                 .port(m.getReplicas().get(0).getPort())
-                .chunkListener(
-                    (client1, subscriptionId, offset, messageCount, dataSize) ->
-                        client1.credit(subscriptionId, 1))
+                .chunkListener(credit())
                 .messageListener(
-                    (subscriptionId, offset, chunkTimestamp, committedChunkId, message) -> {
+                    (subscriptionId,
+                        offset,
+                        chunkTimestamp,
+                        committedChunkId,
+                        context,
+                        message) -> {
                       consumed.add(message);
                       generations.add((Long) message.getApplicationProperties().get("generation"));
                       if (consumed.size() == confirmed.size()) {
@@ -447,7 +449,7 @@ public class FailureTest {
     Set<Long> generations = ConcurrentHashMap.newKeySet();
     Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
     Client.MessageListener messageListener =
-        (subscriptionId, offset, chunkTimestamp, committedChunkId, message) -> {
+        (subscriptionId, offset, chunkTimestamp, committedChunkId, context, message) -> {
           consumed.add(message);
           generations.add((Long) message.getApplicationProperties().get("generation"));
           consumedIds.add(message.getProperties().getMessageIdAsLong());
@@ -471,9 +473,7 @@ public class FailureTest {
                           new Client.ClientParameters()
                               .port(newReplicaPort)
                               .shutdownListener(shutdownListenerReference.get())
-                              .chunkListener(
-                                  (client1, subscriptionId, offset, messageCount, dataSize) ->
-                                      client1.credit(subscriptionId, 1))
+                              .chunkListener(credit())
                               .messageListener(messageListener));
 
                   newConsumer.subscribe(
@@ -494,9 +494,7 @@ public class FailureTest {
             new Client.ClientParameters()
                 .port(replica.getPort())
                 .shutdownListener(shutdownListener)
-                .chunkListener(
-                    (client1, subscriptionId, offset, messageCount, dataSize) ->
-                        client1.credit(subscriptionId, 1))
+                .chunkListener(credit())
                 .messageListener(messageListener));
 
     Client.Response response =
