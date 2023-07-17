@@ -25,7 +25,10 @@
         ]).
 
 
--import(rabbit_misc, [maps_put_truthy/3]).
+-import(rabbit_misc,
+        [maps_put_truthy/3,
+         maps_put_falsy/3
+         ]).
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(AMQP10_TYPE, <<"amqp-1.0">>).
@@ -624,8 +627,6 @@ essential_properties(#content{} = C) ->
     %% TODO: ensure content decoded
     #'P_basic'{delivery_mode = Mode,
                priority = Priority,
-               correlation_id = CorrId,
-               message_id = MsgId,
                timestamp = TimestampRaw} = Props = C#content.properties,
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     Timestamp = case TimestampRaw of
@@ -642,13 +643,9 @@ essential_properties(#content{} = C) ->
         ttl, MsgTTL,
         maps_put_truthy(
           timestamp, Timestamp,
-          maps_put_truthy(
+          maps_put_falsy(
             durable, Durable,
-            maps_put_truthy(
-              correlation_id, CorrId,
-              maps_put_truthy(
-                message_id, MsgId,
-                #{})))))).
+            #{})))).
 
 is_x_header(<<"x-", _/binary>>) ->
     true;

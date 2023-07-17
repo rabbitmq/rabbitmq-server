@@ -20,7 +20,10 @@
          prepare/2
         ]).
 
--import(rabbit_misc, [maps_put_truthy/3]).
+-import(rabbit_misc,
+        [maps_put_truthy/3,
+         maps_put_falsy/3
+        ]).
 
 -type message_section() ::
     #'v1_0.header'{} |
@@ -395,8 +398,6 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
-    CorrelationId = get_property(correlation_id, Msg),
-    MessageId = get_property(message_id, Msg),
     Ttl = get_property(ttl, Msg),
 
     Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
@@ -413,7 +414,7 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
                  _ ->
                      undefined
              end,
-    Anns = maps_put_truthy(
+    Anns = maps_put_falsy(
              durable, Durable,
              maps_put_truthy(
                priority, Priority,
@@ -423,11 +424,7 @@ recover_annotations(#msg{message_annotations = MA} = Msg) ->
                    ttl, Ttl,
                    maps_put_truthy(
                      deaths, Deaths,
-                     maps_put_truthy(
-                       correlation_id, CorrelationId,
-                       maps_put_truthy(
-                         message_id, MessageId,
-                         #{}))))))),
+                     #{}))))),
     case MA of
         undefined ->
             Anns;
