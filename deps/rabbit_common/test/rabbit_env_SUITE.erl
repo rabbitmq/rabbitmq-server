@@ -58,7 +58,8 @@
          check_log_process_env/1,
          check_log_context/1,
          check_get_used_env_vars/1,
-         check_parse_conf_env_file_output/1
+         check_parse_conf_env_file_output/1,
+         check_parse_conf_env_file_output_win32/1
         ]).
 
 all() ->
@@ -101,7 +102,8 @@ all() ->
      check_log_process_env,
      check_log_context,
      check_get_used_env_vars,
-     check_parse_conf_env_file_output
+     check_parse_conf_env_file_output,
+     check_parse_conf_env_file_output_win32
     ].
 
 suite() ->
@@ -1104,6 +1106,26 @@ get_default_nodename() ->
               "rabbit@\\1",
               [{return, list}]),
     list_to_atom(NodeS).
+
+check_parse_conf_env_file_output_win32(_) ->
+    ?assertEqual(
+       #{},
+       rabbit_env:parse_conf_env_file_output_win32(
+         [],
+         #{}
+        )),
+    ?assertEqual(
+       #{"UNQUOTED" => "a",
+         "UNICODE" => [39, 43, 43, 32, 1550, 32, 39],
+         "DOUBLE_QUOTED" => "c"},
+       rabbit_env:parse_conf_env_file_output_win32(
+         %% a relatively rarely used Unicode character
+         ["++ ؎ ",
+          "UNQUOTED=a",
+          "UNICODE='++ ؎ '",
+          "DOUBLE_QUOTED=\"c\""],
+         #{}
+        )).
 
 check_parse_conf_env_file_output(_) ->
     ?assertEqual(
