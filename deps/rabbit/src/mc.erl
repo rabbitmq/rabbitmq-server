@@ -199,7 +199,7 @@ routing_headers(BasicMsg, Opts) ->
 
 -spec is_persistent(state()) -> boolean().
 is_persistent(#?MODULE{annotations = Anns}) ->
-    maps:get(durable, Anns, false);
+    maps:get(durable, Anns, true);
 is_persistent(BasicMsg) ->
     mc_compat:is_persistent(BasicMsg).
 
