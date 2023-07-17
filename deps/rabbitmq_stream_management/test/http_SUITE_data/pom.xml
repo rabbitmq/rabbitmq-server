@@ -26,7 +26,7 @@
     </developers>
 
     <properties>
-        <stream-client.version>0.11.0</stream-client.version>
+        <stream-client.version>[0.12.0-SNAPSHOT,)</stream-client.version>
         <junit.jupiter.version>5.9.3</junit.jupiter.version>
         <assertj.version>3.24.2</assertj.version>
         <logback.version>1.2.12</logback.version>
@@ -130,5 +130,16 @@
         </plugins>
 
     </build>
+
+    <repositories>
+
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <snapshots><enabled>true</enabled></snapshots>
+            <releases><enabled>false</enabled></releases>
+        </repository>
+
+    </repositories>
 
 </project>
