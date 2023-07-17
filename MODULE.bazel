@@ -31,7 +31,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.10.5",
+    version = "3.11.1",
 )
 
 bazel_dep(
@@ -105,6 +105,12 @@ elixir_config.internal_elixir_from_github_release(
     version = "1.14.5",
 )
 
+elixir_config.internal_elixir_from_github_release(
+    name = "1_15",
+    sha256 = "3cfadca57c3092ccbd3ec3f17e5eab529bbd2946f50e4941a903c55c39e3c5f5",
+    version = "1.15.2",
+)
+
 use_repo(
     elixir_config,
     "elixir_config",
@@ -126,6 +132,7 @@ register_toolchains(
     "@elixir_config//external:toolchain",
     "@elixir_config//1_13:toolchain",
     "@elixir_config//1_14:toolchain",
+    "@elixir_config//1_15:toolchain",
 )
 
 erlang_package = use_extension(
@@ -389,6 +396,8 @@ erlang_dev_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.amqp",
     sha256 = "b6d926770e4508e30e3e9e476c57b6c8aeda44f7715663bdc38935620ce5be6f",
     version = "2.1.1",
+    patch_args = ["-p1"],
+    patches = ["@rabbitmq-server//bazel:amqp.patch"],
 )
 
 erlang_dev_package.git_package(
@@ -440,8 +449,8 @@ erlang_dev_package.hex_package(
 erlang_dev_package.hex_package(
     name = "x509",
     build_file = "@rabbitmq-server//bazel:BUILD.x509",
-    sha256 = "5ff9c79e77d64a62ccffd90aaeb23e8f5b6e47844ef7bc8fed931ecf238662e0",
-    version = "0.7.0",
+    sha256 = "3604125d6a0171da6e8a935810b58c999fccab0e3d20b2ed28d97fa2d9e2f6b4",
+    version = "0.8.7",
 )
 
 use_repo(

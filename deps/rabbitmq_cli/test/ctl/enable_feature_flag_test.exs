@@ -19,7 +19,7 @@ defmodule EnableFeatureFlagCommandTest do
 
     new_feature_flags = %{
       @feature_flag => %{
-        desc: "My feature flag",
+        desc: ~c"My feature flag",
         provided_by: :EnableFeatureFlagCommandTest,
         stability: :stable
       }
