@@ -26,6 +26,7 @@
     </developers>
 
     <properties>
+<<<<<<< HEAD
         <stream-client.version>[0.7.0-SNAPSHOT,)</stream-client.version>
         <junit.jupiter.version>5.9.0</junit.jupiter.version>
         <assertj.version>3.23.1</assertj.version>
@@ -33,7 +34,20 @@
         <maven.compiler.plugin.version>3.10.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
         <spotless.version>2.24.0</spotless.version>
+<<<<<<< HEAD
         <google-java-format.version>1.15.0</google-java-format.version>
+=======
+=======
+        <stream-client.version>[0.12.0-SNAPSHOT,)</stream-client.version>
+        <junit.jupiter.version>5.9.3</junit.jupiter.version>
+        <assertj.version>3.24.2</assertj.version>
+        <logback.version>1.2.12</logback.version>
+        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+        <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+        <spotless.version>2.37.0</spotless.version>
+>>>>>>> c594c77049 (Adapt stream Java tests to client 0.12.0 snapshot)
+        <google-java-format.version>1.17.0</google-java-format.version>
+>>>>>>> 422be98e73 (Adapt stream Java tests to client 0.12.0 snapshot)
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
