@@ -1681,13 +1681,6 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                 Msg = message(IsPersistent, PayloadFun, N),
                 rabbit_variable_queue:publish(
                   Msg,
-                  % rabbit_basic:message(
-                  %   rabbit_misc:r(<<>>, exchange, <<>>),
-                  %   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                  %                                        true  -> 2;
-                  %                                        false -> 1
-                  %                                    end},
-                  %   PayloadFun(N)),
                   PropFun(N, #message_properties{size = 10}),
                   false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).

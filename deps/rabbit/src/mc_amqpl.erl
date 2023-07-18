@@ -6,6 +6,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("mc.hrl").
 
+%% mc
 -export([
          init/1,
          size/1,
@@ -14,16 +15,19 @@
          convert_to/2,
          convert_from/2,
          protocol_state/2,
-         message/3,
-         message/4,
-         message/5,
-         from_basic_message/1,
          property/2,
          set_property/3,
          serialize/2,
          prepare/2
         ]).
 
+%% utility functions
+-export([
+         message/3,
+         message/4,
+         message/5,
+         from_basic_message/1
+        ]).
 
 -import(rabbit_misc,
         [maps_put_truthy/3,
@@ -624,7 +628,6 @@ message_id(undefined, _HKey, H) ->
     {H, undefined}.
 
 essential_properties(#content{} = C) ->
-    %% TODO: ensure content decoded
     #'P_basic'{delivery_mode = Mode,
                priority = Priority,
                timestamp = TimestampRaw} = Props = C#content.properties,

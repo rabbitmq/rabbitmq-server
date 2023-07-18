@@ -33,7 +33,7 @@
 
 -type str() :: atom() | string() | binary().
 -type internal_ann_key() :: atom().
--type x_ann_key() :: binary().
+-type x_ann_key() :: binary(). %% should begin with x- or ideally x-opt-
 -type x_ann_value() :: str() | integer() | float() | [x_ann_value()].
 -type protocol() :: module().
 -type annotations() :: #{internal_ann_key() => term(),
@@ -74,40 +74,55 @@
                        undefined.
 
 %% behaviour callbacks for protocol specific implementation
+
+%% protocol specific init function
 %% returns a map of additional annotations to merge into the
-%% protocol generic annotations map
+%% protocol generic annotations map, e.g. ttl, priority and durable
 -callback init(term()) ->
     {proto_state(), annotations()}.
 
+%% the size of the payload and other meta data respectively
 -callback size(proto_state()) ->
     {MetadataSize :: non_neg_integer(),
      PayloadSize :: non_neg_integer()}.
 
+%% retrieve and x- header from the protocol data
+%% the return value should be tagged with and AMQP 1.0 type
 -callback x_header(binary(), proto_state()) ->
     tagged_prop().
 
--callback routing_headers(proto_state(), [x_headers | complex_types]) ->
-    #{binary() => term()}.
-
+%% retrieve a property field from the protocol data
+%% e.g. message_id, correlation_id
 -callback property(atom(), proto_state()) ->
     tagged_prop().
 
+%% return a map of header values used for message routing,
+%% optionally include x- headers and / or complex types (i.e. tables, arrays etc)
+-callback routing_headers(proto_state(), [x_headers | complex_types]) ->
+    #{binary() => term()}.
+
+%% Convert state to another protocol
 %% all protocols must be able to convert to mc_amqp (AMQP 1.0)
 -callback convert_to(Target :: protocol(), proto_state()) ->
     proto_state() | not_implemented.
 
+%% Convert from another protocol
 %% all protocols must be able to convert from mc_amqp (AMQP 1.0)
 -callback convert_from(Source :: protocol(), proto_state()) ->
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
+%% typically used by connection / channel type process at consumer delivery
+%% time
 -callback protocol_state(proto_state(), annotations()) ->
     term().
 
-%% serialize the data into the protocol's binary format
+%% Optional: serialize the data into the protocol's binary format
+%% Currently only done my mc_amqp when writing to a stream
 -callback serialize(proto_state(), annotations()) ->
     iodata().
 
+%% prepare the data for either reading or storage
 -callback prepare(read | store, proto_state()) ->
     proto_state().
 
@@ -163,9 +178,10 @@ set_annotation(Key, Value, BasicMessage) ->
 
 -spec x_header(Key :: binary(), state()) ->
     tagged_prop().
-x_header(Key, #?MODULE{protocol = Proto,
-                       annotations = Anns,
-                       data = Data}) ->
+x_header(<<"x-", _/binary>> = Key,
+         #?MODULE{protocol = Proto,
+                  annotations = Anns,
+                  data = Data}) ->
     %% x-headers may be have been added to the annotations map so
     %% we need to check that first
     case Anns of
@@ -175,6 +191,9 @@ x_header(Key, #?MODULE{protocol = Proto,
             %% if not we have to call into the protocol specific handler
             Proto:x_header(Key, Data)
     end;
+x_header(_Key, #?MODULE{}) ->
+    %% key does not begin with x-
+    undefined;
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
 
