@@ -89,6 +89,8 @@ join(RemoteNode, NodeType)
                       fun() -> join_using_mnesia(ClusterNodes, NodeType) end}),
             case Ret of
                 ok ->
+                    rabbit_feature_flags:copy_feature_states_after_reset(
+                      RemoteNode),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
