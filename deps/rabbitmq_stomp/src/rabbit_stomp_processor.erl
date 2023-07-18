@@ -511,8 +511,7 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
-                         State = #proc_state{channel = Channel,
-                                             auth_login = Username}) ->
+                         State = #proc_state{auth_login = Username}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
@@ -1245,7 +1244,7 @@ ensure_binding(QueueBin, {"", Queue}, _State) ->
     %% queue with its own name
     QueueBin = list_to_binary(Queue),
     ok;
-ensure_binding(Queue, {Exchange, RoutingKey}, State = #proc_state{auth_login = Username}) ->
+ensure_binding(Queue, {Exchange, RoutingKey}, _State = #proc_state{auth_login = Username}) ->
     {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
     Binding = #binding{source = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
                        destination = rabbit_misc:r(DefaultVHost, queue, Queue),
