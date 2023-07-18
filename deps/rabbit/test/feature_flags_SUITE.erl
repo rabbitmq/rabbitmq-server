@@ -27,6 +27,7 @@
          registry_concurrent_reloads/1,
          try_to_deadlock_in_registry_reload_1/1,
          try_to_deadlock_in_registry_reload_2/1,
+         registry_reset/1,
          enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
          enable_feature_flag_when_ff_file_is_unwritable/1,
@@ -104,7 +105,8 @@ groups() ->
        registry_general_usage,
        registry_concurrent_reloads,
        try_to_deadlock_in_registry_reload_1,
-       try_to_deadlock_in_registry_reload_2
+       try_to_deadlock_in_registry_reload_2,
+       registry_reset
       ]},
      {feature_flags_v2, [], Groups}
     ].
@@ -220,6 +222,8 @@ init_per_testcase(Testcase, Config) ->
               end,
     case ?config(tc_group_properties, Config1) of
         [{name, registry} | _] ->
+            rabbit_feature_flags:clear_injected_test_feature_flags(),
+            rabbit_feature_flags:reset_registry(),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config1),
                                              rabbit_misc:format(
                                                "feature_flags-~ts",
@@ -778,6 +782,37 @@ try_to_deadlock_in_registry_reload_2(_Config) ->
       end, Procs),
 
     ok.
+
+registry_reset(_Config) ->
+    %% At first, the registry must be uninitialized.
+    ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    FeatureFlags = #{ff_a =>
+                     #{desc        => "Feature flag A",
+                       provided_by => ?MODULE,
+                       stability   => stable},
+                     ff_b =>
+                     #{desc        => "Feature flag B",
+                       provided_by => ?MODULE,
+                       stability   => stable}},
+    rabbit_feature_flags:inject_test_feature_flags(FeatureFlags),
+
+    %% After initialization, it must know about the feature flags
+    %% declared in this testsuite. They must be disabled however.
+    rabbit_ff_registry_factory:initialize_registry(),
+    ?assert(rabbit_ff_registry:is_registry_initialized()),
+    ?assertMatch([ff_a, ff_b], ?list_ff(all)),
+
+    ?assertEqual(ok, rabbit_feature_flags:reset_registry()),
+
+    %% After a reset, the registry is uninitialized.
+    ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    %% But after another initialization, it still knows about the injected
+    %% feature flags.
+    rabbit_ff_registry_factory:initialize_registry(),
+    ?assert(rabbit_ff_registry:is_registry_initialized()),
+    ?assertMatch([ff_a, ff_b], ?list_ff(all)).
 
 enable_feature_flag_in_a_healthy_situation(Config) ->
     FeatureName = ff_from_testsuite,

@@ -91,8 +91,9 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    run(
-      #{mnesia => fun reset_using_mnesia/0}).
+    Ret = run(
+            #{mnesia => fun reset_using_mnesia/0}),
+    post_reset(Ret).
 
 reset_using_mnesia() ->
     ?LOG_INFO(
@@ -105,8 +106,9 @@ reset_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    run(
-      #{mnesia => fun force_reset_using_mnesia/0}).
+    Ret = run(
+            #{mnesia => fun force_reset_using_mnesia/0}),
+    post_reset(Ret).
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(
@@ -130,6 +132,16 @@ force_load_on_next_boot_using_mnesia() ->
       "DB: force load on next boot (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_load_next_boot().
+
+post_reset(ok) ->
+    rabbit_feature_flags:reset_registry(),
+    ok;
+post_reset({error, _} = Error) ->
+    Error.
+
+%% -------------------------------------------------------------------
+%% is_virgin_node().
+%% -------------------------------------------------------------------
 
 -spec is_virgin_node() -> IsVirgin when
       IsVirgin :: boolean().

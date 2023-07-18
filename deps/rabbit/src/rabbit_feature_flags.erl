@@ -116,10 +116,12 @@
          running_remote_nodes/0,
          does_node_support/3,
          inject_test_feature_flags/1, inject_test_feature_flags/2,
+         clear_injected_test_feature_flags/0,
          query_supported_feature_flags/0,
          does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
-         uses_callbacks/1]).
+         uses_callbacks/1,
+         reset_registry/0]).
 
 -ifdef(TEST).
 -export([override_nodes/1,
@@ -811,6 +813,10 @@ inject_test_feature_flags(FeatureFlags, InitReg) ->
         false -> ok
     end.
 
+clear_injected_test_feature_flags() ->
+    _ = persistent_term:erase(?PT_TESTSUITE_ATTRS),
+    ok.
+
 module_attributes_from_testsuite() ->
     persistent_term:get(?PT_TESTSUITE_ATTRS, []).
 
@@ -1293,3 +1299,12 @@ sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
 
 refresh_feature_flags_after_app_load() ->
     rabbit_ff_controller:refresh_after_app_load().
+
+-spec reset_registry() -> ok.
+%% @doc Resets the feature flags registry.
+%%
+%% The registry will be automatically reloaded with the next use of it, after
+%% reading the recorded state from disc.
+
+reset_registry() ->
+    rabbit_ff_registry_factory:reset_registry().
