@@ -24,6 +24,7 @@ all() ->
 all_tests() ->
     [
      amqpl_defaults,
+     amqpl_table_x_header,
      amqpl_amqp_bin_amqpl,
      stuff
     ].
@@ -86,6 +87,33 @@ amqpl_defaults(_Config) ->
 
     ok.
 
+amqpl_table_x_header(_Config) ->
+    Tbl = [{<<"type">>, longstr, <<"apple">>},
+           {<<"count">>, long, 99}],
+
+    Props = #'P_basic'{headers = [
+                                  {<<"x-fruit">>, table, Tbl},
+                                  {<<"fruit">>, table, Tbl}
+                                 ]},
+    Payload = [<<"data">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqpl, Content, Anns),
+
+    %% x-header values come back AMQP 1.0 ish formatted
+    ?assertMatch({map,
+                  [{{symbol, <<"type">>}, {utf8, <<"apple">>}},
+                   {{symbol, <<"count">>}, {long, 99}}]},
+                 mc:x_header(<<"x-fruit">>, Msg)),
+    %% non x-headers should not show up
+    ?assertEqual(undefined, mc:x_header(<<"fruit">>, Msg)),
+
+    ct:pal("routing headers ~p", [mc:routing_headers(Msg, [x_header])]),
+
+    ok.
+
 amqpl_amqp_bin_amqpl(_Config) ->
     %% incoming amqpl converted to amqp, serialized / deserialized then converted
     %% back to amqpl.
@@ -103,7 +131,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
                                   {<<"a-double">>, double, 1.0},
                                   {<<"a-float">>, float, 1.0},
                                   {<<"a-void">>, void, undefined},
-                                  {<<"a-binary">>, binary, <<"data">>}
+                                  {<<"a-binary">>, binary, <<"data">>},
+                                  {<<"x-stream-filter">>, longstr, <<"apple">>}
                                  ],
                        delivery_mode = 2,
                        priority = 98,
@@ -130,6 +159,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"corr">>}, mc:correlation_id(Msg)),
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg)),
     ?assertEqual(1, mc:ttl(Msg)),
+    ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
 
     RoutingHeaders = mc:routing_headers(Msg, []),
 
@@ -144,6 +174,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"corr">>}, mc:correlation_id(Msg10)),
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg10)),
     ?assertEqual(1, mc:ttl(Msg10)),
+    ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg10)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
@@ -154,6 +185,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"corr">>}, mc:correlation_id(MsgL2)),
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(MsgL2)),
     ?assertEqual(1, mc:ttl(MsgL2)),
+    ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, MsgL2)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(MsgL2, [])),
 
 
