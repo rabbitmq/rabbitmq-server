@@ -29,7 +29,7 @@
                 config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
-                trailing_lf, auth_mechanism, auth_login,
+                trailing_lf, authz_context, auth_mechanism, auth_login,
                 default_topic_exchange, default_nack_requeue}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
@@ -234,8 +234,8 @@ process_request(ProcessFun, SuccessFun, State) ->
                {{shutdown,
                  {server_initiated_close, ReplyCode, Explanation}}, _}} ->
                   amqp_death(ReplyCode, Explanation, State);
-              {'EXIT', {amqp_error, access_refused, Msg, _}} ->
-                  amqp_death(access_refused, Msg, State);
+              {'EXIT', {amqp_error, Name, Msg, _}} ->
+                  amqp_death(Name, Msg, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error",
                               Reason, State);
@@ -280,7 +280,8 @@ process_connect(Implicit, Frame,
                                 protocol = {ProtoName, Version}}, Version,
                               StateN#proc_state{frame_transformer = FT,
                                                 auth_mechanism = Auth,
-                                                auth_login = Username}),
+                                                auth_login = Username,
+                                                authz_context = #{}}), %% TODO: client_id? else?
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -510,14 +511,13 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
-                         State = #proc_state{channel = Channel}) ->
+                         State = #proc_state{channel = Channel,
+                                             auth_login = Username}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
-            amqp_channel:call(Channel,
-                              #'queue.delete'{queue  = list_to_binary(QName),
-                                              nowait = false}),
+            delete_queue(list_to_binary(QName), Username),
             ok(State);
         false ->
             ok(State)
@@ -660,8 +660,7 @@ do_subscribe(Destination, DestHdr, Frame,
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
     case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
         {ok, Queue, RouteState1} ->
-            {ok, ConsumerTag, Description} =
-                rabbit_stomp_util:consumer_tag(Frame),
+            {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
             case Prefetch of
                 undefined -> ok;
                 _         -> amqp_channel:call(
@@ -693,8 +692,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                                   exclusive    = false,
                                                   arguments    = Arguments},
                                                self()),
-                        ok = rabbit_routing_util:ensure_binding(
-                               Queue, ExchangeAndKey, Channel)
+                        ok = ensure_binding(Queue, ExchangeAndKey, State)
                     catch exit:Err ->
                             %% it's safe to delete this queue, it
                             %% was server-named and declared by us
@@ -740,9 +738,10 @@ check_subscription_access(Destination = {topic, _Topic},
 check_subscription_access(_, _) ->
     authorized.
 
-maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
+maybe_clean_up_queue(Queue, #proc_state{connection = Connection,
+                                       auth_login = Username}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    catch delete_queue(Queue, Username),
     catch amqp_channel:close(Channel),
     ok.
 
@@ -1131,7 +1130,7 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
-amqp_death(access_refused = ErrorName, Explanation, State) ->
+amqp_death(ErrorName, Explanation, State) when is_atom(ErrorName) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
@@ -1217,3 +1216,49 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% amq.topic, so it must have been specified in the
     %% message headers
     Exchange.
+
+delete_queue(QName, Username) ->
+    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+    Queue = rabbit_misc:r(DefaultVHost, queue, QName),
+    case rabbit_amqqueue:with(
+           Queue,
+           fun (Q) ->
+                   rabbit_queue_type:delete(Q, false, false, Username)
+           end,
+           fun (not_found) ->
+                   ok;
+               ({absent, Q, crashed}) ->
+                   rabbit_classic_queue:delete_crashed(Q, Username);
+               ({absent, Q, stopped}) ->
+                   rabbit_classic_queue:delete_crashed(Q, Username);
+               ({absent, _Q, _Reason}) ->
+                   ok
+           end) of
+        {ok, _N} ->
+            ok;
+        ok ->
+            ok
+    end.
+
+ensure_binding(QueueBin, {"", Queue}, _State) ->
+    %% i.e., we should only be asked to bind to the default exchange a
+    %% queue with its own name
+    QueueBin = list_to_binary(Queue),
+    ok;
+ensure_binding(Queue, {Exchange, RoutingKey}, State = #proc_state{auth_login = Username}) ->
+    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+    Binding = #binding{source = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
+                       destination = rabbit_misc:r(DefaultVHost, queue, Queue),
+                       key = list_to_binary(RoutingKey)},
+    case rabbit_binding:add(Binding, Username) of
+        {error, {resources_missing, [{not_found, Name} | _]}} ->
+            rabbit_amqqueue:not_found(Name);
+        {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
+            rabbit_amqqueue:absent(Q, Reason);
+        {error, {binding_invalid, Fmt, Args}} ->
+            rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
+        {error, #amqp_error{} = Error} ->
+            rabbit_misc:protocol_error(Error);
+        ok ->
+            ok
+    end.
