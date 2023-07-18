@@ -1,4 +1,3 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -2197,14 +2196,6 @@ determine_persist_to(Version,
          true  -> msg_store;
          false ->
              Est = MetaSize + BodySize,
-             % Est = case is_binary(PropsBin) of
-             %                true  -> BodySize + size(PropsBin);
-             %                false -> #'P_basic'{headers = Hs} = Props,
-             %                         case Hs of
-             %                             undefined -> 0;
-             %                             _         -> length(Hs)
-             %                         end * ?HEADER_GUESS_SIZE + BodySize
-             %            end,
              case Est >= IndexMaxSize of
                  true                     -> msg_store;
                  false when Version =:= 1 -> queue_index;

@@ -4,7 +4,6 @@
 % -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include("mc.hrl").
-% -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
          init/1,
@@ -70,7 +69,10 @@ init(Sections) when is_list(Sections) ->
     Msg = decode(Sections, #msg{}),
     init(Msg);
 init(#msg{} = Msg) ->
-    Anns = recover_annotations(Msg),
+    %% TODO: as the essential annotations, durable, priority, ttl and delivery_count
+    %% is all we are interested in it isn't necessary to keep hold of the
+    %% incoming AMQP header inside the state
+    Anns = essential_properties(Msg),
     {Msg, Anns}.
 
 convert_from(?MODULE, Sections) ->
@@ -120,7 +122,7 @@ get_property(durable, Msg) ->
             %% TODO: is there another boolean format with a tag?
             Durable;
         _ ->
-            %% fallback in case the source protocol was AMQP 0.9.1
+            %% fallback in case the source protocol was old AMQP 0.9.1
             case message_annotation(<<"x-basic-delivery-mode">>, Msg, 2) of
                 {ubyte, 2} ->
                     true;
@@ -349,7 +351,11 @@ add_message_annotations(Anns, MA0) ->
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
-map_add(KeyType, Key, Type, Value, Acc) ->
+map_add(KeyType, Key, Type, Value, Acc0) ->
+    TaggedKey = wrap(KeyType, Key),
+    %% TODO: optimise, keydelete always builds a new list even when key is not
+    %% found
+    Acc = lists:keydelete(TaggedKey, 1, Acc0),
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
 
 wrap(_Type, undefined) ->
@@ -394,7 +400,7 @@ recover_deaths([{map, Kvs} | Rem], Acc) ->
                                ttl = Ttl,
                                routing_keys = RKeys}}).
 
-recover_annotations(#msg{message_annotations = MA} = Msg) ->
+essential_properties(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
