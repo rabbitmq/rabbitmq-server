@@ -100,6 +100,7 @@ join(RemoteNode, NodeType)
     end.
 
 join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
+    ok = rabbit_mnesia:reset_gracefully(),
     rabbit_mnesia:join_cluster(ClusterNodes, NodeType).
 
 -spec forget_member(Node, RemoveWhenOffline) -> ok when
