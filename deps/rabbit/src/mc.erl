@@ -178,7 +178,7 @@ set_annotation(Key, Value, BasicMessage) ->
 
 -spec x_header(Key :: binary(), state()) ->
     tagged_prop().
-x_header(<<"x-", _/binary>> = Key,
+x_header(Key,
          #?MODULE{protocol = Proto,
                   annotations = Anns,
                   data = Data}) ->
@@ -191,9 +191,6 @@ x_header(<<"x-", _/binary>> = Key,
             %% if not we have to call into the protocol specific handler
             Proto:x_header(Key, Data)
     end;
-x_header(_Key, #?MODULE{}) ->
-    %% key does not begin with x-
-    undefined;
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
 
