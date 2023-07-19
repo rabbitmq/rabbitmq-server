@@ -23,6 +23,7 @@
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -record(proc_state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
@@ -35,6 +36,8 @@
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
 -define(FLUSH_TIMEOUT, 60000).
+
+-define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 adapter_name(State) ->
   #proc_state{adapter_info = #amqp_adapter_info{name = Name}} = State,
@@ -892,10 +895,8 @@ ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
         {ok, RQ} ->
             {binary_to_list(RQ), State};
         error ->
-            #'queue.declare_ok'{queue = Queue} =
-                amqp_channel:call(Channel,
-                                  #'queue.declare'{auto_delete = true,
-                                                   exclusive   = true}),
+            {ok, Queue} = create_queue(State),
+
 
             ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
             #'basic.consume_ok'{} =
@@ -1216,6 +1217,34 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% message headers
     Exchange.
 
+create_queue(_State = #proc_state{authz_context = AuthzCtx, auth_login = User}) ->
+
+    {ok, VHost} = application:get_env(rabbitmq_stomp, default_vhost),
+    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
+    QName = rabbit_misc:r(VHost, queue, QNameBin),
+
+        %% configure access to queue required for queue.declare
+        ok = check_resource_access(User, QName, configure, AuthzCtx),
+        case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+            false ->
+                rabbit_core_metrics:queue_declared(QName),
+
+                case rabbit_amqqueue:declare(QName, _Durable = false, _AutoDelete = true,
+                                             [], self(), #{user => User}) of
+                    {new, Q} when ?is_amqqueue(Q) ->
+                        rabbit_core_metrics:queue_created(QName),
+                        {ok, Q};
+                    Other ->
+                        log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
+                        {error, queue_declare}
+                end;
+            {true, Limit} ->
+                log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
+                          rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
+                          none),
+                {error, queue_limit_exceeded}
+        end.
+
 delete_queue(QName, Username) ->
     {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
     Queue = rabbit_misc:r(DefaultVHost, queue, QName),
@@ -1260,4 +1289,27 @@ ensure_binding(Queue, {Exchange, RoutingKey}, _State = #proc_state{auth_login = 
             rabbit_misc:protocol_error(Error);
         ok ->
             ok
+    end.
+
+check_resource_access(User, Resource, Perm, Context) ->
+    V = {Resource, Context, Perm},
+    Cache = case get(permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    case lists:member(V, Cache) of
+        true ->
+            ok;
+        false ->
+            try rabbit_access_control:check_resource_access(User, Resource, Perm, Context) of
+                ok ->
+                    CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+                    put(permission_cache, [V | CacheTail]),
+                    ok
+            catch
+                exit:#amqp_error{name = access_refused,
+                                 explanation = Msg} ->
+                    log_error(access_refused, Msg, none),
+                    {error, access_refused}
+            end
     end.
