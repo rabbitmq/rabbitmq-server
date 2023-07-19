@@ -177,8 +177,11 @@ record_death(Reason, SourceQueue,
                       content = Content2}.
 
 x_death_event_key(Info, Key) ->
+    x_death_event_key(Info, Key, undefined).
+
+x_death_event_key(Info, Key, Def) ->
     case lists:keysearch(Key, 1, Info) of
-        false -> undefined;
+        false -> Def;
         {value, {Key, _KeyType, Val}} -> Val
     end.
 
@@ -361,11 +364,12 @@ last_death(#basic_message{content = Content}) ->
         {array, [{table, Info} | _]} ->
             X = x_death_event_key(Info, <<"exchange">>),
             Q = x_death_event_key(Info, <<"queue">>),
-            % R = x_death_event_key(Info, <<"reason">>),
+            T = x_death_event_key(Info, <<"time">>, 0),
             Keys = x_death_event_key(Info, <<"routing_keys">>),
             Count = x_death_event_key(Info, <<"count">>),
             {Q, #death{exchange = X,
-                       timestamp = 0,
+                       anns = #{first_time => T * 1000,
+                                last_time => T * 1000},
                        routing_keys = Keys,
                        count = Count}};
         _ ->

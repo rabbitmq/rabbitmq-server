@@ -40,8 +40,7 @@
                          is_boolean(V)).
 
 -type opt(T) :: T | undefined.
--type amqp10_data() :: %#'v1_0.data'{} |
-                       [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
+-type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
                        #'v1_0.amqp_value'{}.
 %% TODO: no need to keep section records, only contents really needed
 %% for DA / MA and APs
@@ -385,19 +384,21 @@ recover_deaths([], Acc) ->
 recover_deaths([{map, Kvs} | Rem], Acc) ->
     Queue = key_find(<<"queue">>, Kvs),
     Reason = binary_to_atom(key_find(<<"reason">>, Kvs)),
-    Ttl = case key_find(<<"original-expiration">>, Kvs) of
+    DA0 = case key_find(<<"original-expiration">>, Kvs) of
               undefined ->
-                  undefined;
+                  #{};
               Exp ->
-                  binary_to_integer(Exp)
+                  #{ttl => binary_to_integer(Exp)}
           end,
     RKeys = [RK || {_, RK} <- key_find(<<"routing-keys">>, Kvs)],
+    Ts = key_find(<<"time">>, Kvs),
+    DA = DA0#{first_time => Ts,
+              last_time => Ts},
     recover_deaths(Rem,
                    Acc#{{Queue, Reason} =>
-                        #death{timestamp = key_find(<<"time">>, Kvs),
+                        #death{anns = DA,
                                exchange = key_find(<<"exchange">>, Kvs),
                                count = key_find(<<"count">>, Kvs),
-                               ttl = Ttl,
                                routing_keys = RKeys}}).
 
 essential_properties(#msg{message_annotations = MA} = Msg) ->
