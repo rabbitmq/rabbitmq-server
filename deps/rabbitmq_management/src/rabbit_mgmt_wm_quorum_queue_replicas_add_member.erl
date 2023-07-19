@@ -38,11 +38,17 @@ accept_content(ReqData, Context) ->
   QName = rabbit_mgmt_util:id(queue, ReqData),
   Res = rabbit_mgmt_util:with_decode(
     [node], ReqData, Context,
-    fun([NewReplicaNode], _Body, _ReqData) ->
+    fun([NewReplicaNode], Body, _ReqData) ->
+      Membership = maps:get(<<"membership">>, Body, promotable),
       rabbit_amqqueue:with(
         rabbit_misc:r(VHost, queue, QName),
         fun(_Q) ->
-          rabbit_quorum_queue:add_member(VHost, QName, rabbit_data_coercion:to_atom(NewReplicaNode), ?TIMEOUT)
+                rabbit_quorum_queue:add_member(
+                  VHost,
+                  QName,
+                  rabbit_data_coercion:to_atom(NewReplicaNode),
+                  rabbit_data_coercion:to_atom(Membership),
+                  ?TIMEOUT)
         end)
     end),
   case Res of
