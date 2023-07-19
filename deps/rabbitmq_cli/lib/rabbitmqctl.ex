@@ -26,10 +26,18 @@ defmodule RabbitMQCtl do
 
   @spec main(list()) :: no_return()
   def main(["--auto-complete" | []]) do
+    # silence Erlang/OTP's standard library warnings, it's acceptable for CLI tools,
+    # see rabbitmq/rabbitmq-server#8912
+    _ = :logger.set_primary_config(:level, :error)
+
     handle_shutdown(:ok)
   end
 
   def main(unparsed_command) do
+    # silence Erlang/OTP's standard library warnings, it's acceptable for CLI tools,
+    # see rabbitmq/rabbitmq-server#8912
+    _ = :logger.set_primary_config(:level, :error)
+
     exec_command(unparsed_command, &process_output/3)
     |> handle_shutdown
   end
