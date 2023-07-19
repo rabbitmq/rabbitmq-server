@@ -452,21 +452,26 @@ from_basic_message(#basic_message{content = Content,
 deaths_to_headers(undefined, Headers) ->
     Headers;
 deaths_to_headers(#deaths{records = Records}, Headers0) ->
-    Infos = maps:fold(
-              fun ({QName, Reason}, #death{timestamp = Ts,
-                                           exchange = Ex,
-                                           count = Count,
-                                           ttl = Ttl,
-                                           routing_keys = RoutingKeys},
+    %% sort records by the last timestamp
+    List = lists:sort(
+             fun({_, #death{anns = #{last_time := L1}}},
+                 {_, #death{anns = #{last_time := L2}}}) ->
+                     L1 > L2
+             end, maps:to_list(Records)),
+    Infos = lists:foldl(
+              fun ({{QName, Reason}, #death{anns = #{first_time := Ts} = DA,
+                                            exchange = Ex,
+                                            count = Count,
+                                            routing_keys = RoutingKeys}},
                    Acc) ->
                       %% The first routing key is the one specified in the
                       %% basic.publish; all others are CC or BCC keys.
                       RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers0)],
                       RKeys = [{longstr, Key} || Key <- RKs],
                       ReasonBin = atom_to_binary(Reason, utf8),
-                      PerMsgTTL = case Ttl of
+                      PerMsgTTL = case maps:get(ttl, DA, undefined) of
                                       undefined -> [];
-                                      _ when is_integer(Ttl) ->
+                                      Ttl when is_integer(Ttl) ->
                                           Expiration = integer_to_binary(Ttl),
                                           [{<<"original-expiration">>, longstr,
                                             Expiration}]
@@ -478,7 +483,7 @@ deaths_to_headers(#deaths{records = Records}, Headers0) ->
                                 {<<"exchange">>, longstr, Ex},
                                 {<<"routing-keys">>, array, RKeys}] ++ PerMsgTTL}
                        | Acc]
-              end, [], Records),
+              end, [], List),
     rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
 
 

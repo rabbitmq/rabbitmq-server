@@ -24,7 +24,6 @@
          prepare/2,
          record_death/3,
          is_death_cycle/2,
-         % deaths/1,
          last_death/1,
          death_queue_names/1
          ]).
@@ -313,28 +312,36 @@ record_death(Reason, SourceQueue,
     RoutingKeys = maps:get(routing_keys, Anns0),
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
+
+    DeathAnns = rabbit_misc:maps_put_truthy(ttl, Ttl, #{first_time => Timestamp,
+                                                        last_time => Timestamp}),
     case maps:get(deaths, Anns0, undefined) of
         undefined ->
             Ds = #deaths{last = Key,
                          first = Key,
                          records = #{Key => #death{count = 1,
-                                                   ttl = Ttl,
                                                    exchange = Exchange,
                                                    routing_keys = RoutingKeys,
-                                                   timestamp = Timestamp}}},
+                                                   anns = DeathAnns}}},
             Anns = Anns0#{<<"x-first-death-reason">> => atom_to_binary(Reason),
                           <<"x-first-death-queue">> => SourceQueue,
-                          <<"x-first-death-exchange">> => Exchange},
+                          <<"x-first-death-exchange">> => Exchange,
+                          <<"x-last-death-reason">> => atom_to_binary(Reason),
+                          <<"x-last-death-queue">> => SourceQueue,
+                          <<"x-last-death-exchange">> => Exchange
+                         },
 
             State#?MODULE{annotations = Anns#{deaths => Ds}};
         #deaths{records = Rs} = Ds0 ->
-            Death = #death{count = C} = maps:get(Key, Rs,
-                                                 #death{ttl = Ttl,
-                                                        exchange = Exchange,
+            Death = #death{count = C,
+                           anns = DA} = maps:get(Key, Rs,
+                                                 #death{exchange = Exchange,
                                                         routing_keys = RoutingKeys,
-                                                        timestamp = Timestamp}),
+                                                        anns = DeathAnns}),
             Ds = Ds0#deaths{last = Key,
-                            records = Rs#{Key => Death#death{count = C + 1}}},
+                            records = Rs#{Key =>
+                                          Death#death{count = C + 1,
+                                                      anns = DA#{last_time => Timestamp}}}},
             Anns = Anns0#{deaths => Ds,
                           <<"x-last-death-reason">> => atom_to_binary(Reason),
                           <<"x-last-death-queue">> => SourceQueue,
