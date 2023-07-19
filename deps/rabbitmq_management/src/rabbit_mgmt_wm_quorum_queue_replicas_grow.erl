@@ -39,12 +39,14 @@ accept_content(ReqData, Context) ->
   NewReplicaNode = rabbit_mgmt_util:id(node, ReqData),
   rabbit_mgmt_util:with_decode(
     [vhost_pattern, queue_pattern, strategy], ReqData, Context,
-    fun([VHPattern, QPattern, Strategy], _Body, _ReqData) ->
+    fun([VHPattern, QPattern, Strategy], Body, _ReqData) ->
+      Membership = maps:get(<<"membership">>, Body, promotable),
       rabbit_quorum_queue:grow(
         rabbit_data_coercion:to_atom(NewReplicaNode),
         VHPattern,
         QPattern,
-        rabbit_data_coercion:to_atom(Strategy))
+        rabbit_data_coercion:to_atom(Strategy),
+        rabbit_data_coercion:to_atom(Membership))
     end),
   {true, ReqData, Context}.
 
