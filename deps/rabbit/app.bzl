@@ -1633,6 +1633,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/mc_SUITE.erl"],
         outs = ["test/mc_SUITE.beam"],
+        hdrs = ["src/mc.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
