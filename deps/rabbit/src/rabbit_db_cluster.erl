@@ -58,8 +58,7 @@ can_join(RemoteNode) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
         ok ->
-            rabbit_db:run(
-              #{mnesia => fun() -> can_join_using_mnesia(RemoteNode) end});
+            can_join_using_mnesia(RemoteNode);
         Error ->
             Error
     end.
@@ -84,9 +83,7 @@ join(RemoteNode, NodeType)
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            Ret = rabbit_db:run(
-                    #{mnesia =>
-                      fun() -> join_using_mnesia(ClusterNodes, NodeType) end}),
+            Ret =  join_using_mnesia(ClusterNodes, NodeType),
             case Ret of
                 ok ->
                     rabbit_feature_flags:copy_feature_states_after_reset(
