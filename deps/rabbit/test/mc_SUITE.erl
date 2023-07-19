@@ -10,6 +10,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("rabbit/src/mc.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -25,6 +26,7 @@ all_tests() ->
     [
      amqpl_defaults,
      amqpl_table_x_header,
+     amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      stuff
     ].
@@ -113,6 +115,59 @@ amqpl_table_x_header(_Config) ->
     ct:pal("routing headers ~p", [mc:routing_headers(Msg, [x_header])]),
 
     ok.
+
+amqpl_death_records(_Config) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{headers = []},
+                       payload_fragments_rev = [<<"data">>]},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, Anns)),
+
+    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0),
+    ?assertEqual([<<"q1">>], mc:death_queue_names(Msg1)),
+    ?assertMatch({{<<"q1">>, rejected},
+                  #death{exchange = <<"exch">>,
+                         routing_keys = [<<"apple">>],
+                         count = 1}}, mc:last_death(Msg1)),
+    ?assertEqual(false, mc:is_death_cycle(<<"q1">>, Msg1)),
+
+    #content{properties = #'P_basic'{headers = H1}} = mc:protocol_state(Msg1),
+    ?assertMatch({_, array, [_]}, header(<<"x-death">>, H1)),
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-first-death-queue">>, H1)),
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-last-death-queue">>, H1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-first-death-exchange">>, H1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-last-death-exchange">>, H1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-first-death-reason">>, H1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-last-death-reason">>, H1)),
+    {_, array, [{table, T1}]} = header(<<"x-death">>, H1),
+    ?assertMatch({_, long, 1}, header(<<"count">>, T1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T1)),
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"exchange">>, T1)),
+    ?assertMatch({_, timestamp, _}, header(<<"time">>, T1)),
+    ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
+
+
+    %% second dead letter, e.g. a ttl reason returning to source queue
+
+    Msg2 = mc:record_death(ttl, <<"dl">>, Msg1),
+
+    #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg2),
+    {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
+    ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
+
+    ct:pal("H2 ~p", [T2a]),
+    ct:pal("routing headers ~p", [mc:routing_headers(Msg1, [x_headers])]),
+
+
+
+
+    ok.
+
+header(K, H) ->
+    rabbit_basic:header(K, H).
 
 amqpl_amqp_bin_amqpl(_Config) ->
     %% incoming amqpl converted to amqp, serialized / deserialized then converted
