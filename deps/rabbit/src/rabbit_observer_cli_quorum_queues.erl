@@ -137,6 +137,8 @@ sheet_body(PrevState) ->
                                          case maps:get(InternalName, RaStates, undefined) of
                                              leader -> "L";
                                              follower -> "F";
+                                             promotable -> "f";  %% temporary non-voter
+                                             non_voter -> "-";  %% permanent non-voter
                                              _ -> "?"
                                          end,
                                          format_int(proplists:get_value(memory, ProcInfo)),

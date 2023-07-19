@@ -941,6 +941,11 @@ rabbitmq_integration_suite(
     size = "medium",
 )
 
+rabbitmq_suite(
+    name = "unit_quorum_queue_SUITE",
+    size = "medium",
+)
+
 rabbitmq_integration_suite(
     name = "unit_app_management_SUITE",
     size = "medium",
