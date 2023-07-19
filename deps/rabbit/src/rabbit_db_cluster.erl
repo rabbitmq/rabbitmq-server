@@ -78,7 +78,7 @@ join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
-            rabbit_db:reset(),
+            ok = rabbit_db:reset(),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
