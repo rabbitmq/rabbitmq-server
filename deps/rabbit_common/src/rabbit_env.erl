@@ -31,7 +31,8 @@
 
 -ifdef(TEST).
 -export([parse_conf_env_file_output2/2,
-         value_is_yes/1]).
+         value_is_yes/1,
+         parse_conf_env_file_output_win32/2]).
 -endif.
 
 %% Vary from OTP version to version.
@@ -1673,7 +1674,10 @@ do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile0) ->
 
     TempBatchFileContent = [<<"@echo off\r\n">>,
                             <<"chcp 65001 >nul\r\n">>,
-                            <<"call \"">>, ConfEnvFile3, <<"\" && echo ">>, Marker, <<" && set\r\n">>],
+                            <<"call \"">>, ConfEnvFile3, <<"\"\r\n">>,
+                            <<"if ERRORLEVEL 1 exit /B 1\r\n">>,
+                            <<"echo ">>, Marker, <<"\r\n">>,
+                            <<"set\r\n">>],
     TempPath = get_temp_path_win32(),
     TempBatchFileName = rabbit_misc:format("rabbitmq-env-conf-runner-~ts.bat", [os:getpid()]),
     TempBatchFilePath = normalize_path(TempPath, TempBatchFileName),
@@ -1759,8 +1763,13 @@ parse_conf_env_file_output(Context, Marker, [Marker | Lines]) ->
 parse_conf_env_file_output(Context, Marker, [_ | Lines]) ->
     parse_conf_env_file_output(Context, Marker, Lines).
 
-parse_conf_env_file_output1(Context, Lines) ->
-    Vars = parse_conf_env_file_output2(Lines, #{}),
+parse_conf_env_file_output1(#{os_type := {OSType, _}} = Context, Lines) ->
+    Vars = case OSType of
+               win32 ->
+                   parse_conf_env_file_output_win32(Lines, #{});
+               _ ->
+                   parse_conf_env_file_output2(Lines, #{})
+           end,
     %% Re-export variables.
     lists:foreach(
       fun(Var) ->
@@ -1778,6 +1787,24 @@ parse_conf_env_file_output1(Context, Lines) ->
               end
       end, lists:sort(maps:keys(Vars))),
     Context.
+
+parse_conf_env_file_output_win32([], Vars) ->
+    Vars;
+parse_conf_env_file_output_win32([Line | Lines], Vars) ->
+    case string:split(Line, "=") of
+        [Var, Val0] ->
+            Val1 = string:trim(Val0),
+            Val2 = string:trim(Val1, both, [$"]),
+            Vars1 = Vars#{Var => Val2},
+            parse_conf_env_file_output_win32(Lines, Vars1);
+        _ ->
+            %% Parsing failed somehow.
+            ?LOG_WARNING(
+               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line: ~tp",
+               [Line],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            parse_conf_env_file_output_win32(Lines, Vars)
+    end.
 
 parse_conf_env_file_output2([], Vars) ->
     Vars;
