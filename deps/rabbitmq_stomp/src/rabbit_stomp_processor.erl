@@ -31,7 +31,7 @@
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf, authz_context, auth_mechanism, auth_login,
-                user,
+                user, queue_states,
                 default_topic_exchange, default_nack_requeue}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
@@ -159,6 +159,7 @@ initial_state(Configuration,
        route_state         = rabbit_routing_util:init_state(),
        reply_queues        = #{},
        frame_transformer   = undefined,
+       queue_states        = rabbit_queue_type:init(),
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
        default_topic_exchange = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>),
        default_nack_requeue = application:get_env(rabbitmq_stomp, default_nack_requeue, true)}.
@@ -171,8 +172,8 @@ command({"CONNECT", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
 command(Request, State = #proc_state{channel = none,
-                             config = #stomp_configuration{
-                             implicit_connect = true}}) ->
+                                     config = #stomp_configuration{
+                                                 implicit_connect = true}}) ->
     {ok, State1 = #proc_state{channel = Ch}, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     case Ch of
@@ -181,8 +182,8 @@ command(Request, State = #proc_state{channel = none,
     end;
 
 command(_Request, State = #proc_state{channel = none,
-                              config = #stomp_configuration{
-                              implicit_connect = false}}) ->
+                                      config = #stomp_configuration{
+                                                  implicit_connect = false}}) ->
     {ok, send_error("Illegal command",
                     "You must log in using CONNECT first",
                     State), none};
@@ -263,9 +264,9 @@ process_request(ProcessFun, SuccessFun, State) ->
 
 process_connect(Implicit, Frame,
                 State = #proc_state{channel        = none,
-                               config         = Config,
-                               ssl_login_name = SSLLoginName,
-                               adapter_info   = AdapterInfo}) ->
+                                    config         = Config,
+                                    ssl_login_name = SSLLoginName,
+                                    adapter_info   = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
@@ -892,36 +893,59 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
     end.
 
 ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
-                                               reply_queues  = RQS,
-                                               subscriptions = Subs}) ->
+                                                    reply_queues  = RQS,
+                                                    subscriptions = Subs,
+                                                    user = #user{username = Username} = User,
+                                                    authz_context = AuthzCtx,
+                                                    queue_states  = QStates0}) ->
     case maps:find(TempQueueId, RQS) of
         {ok, RQ} ->
             {binary_to_list(RQ), State};
         error ->
             {ok, Queue} = create_queue(State),
-            QName = amqqueue:get_name(Queue),
+            #resource{name = QNameBin} = QName = amqqueue:get_name(Queue),
 
-            ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
-            #'basic.consume_ok'{} =
-                amqp_channel:subscribe(Channel,
-                                       #'basic.consume'{
-                                         queue        = QName,
-                                         consumer_tag = ConsumerTag,
-                                         no_ack       = true,
-                                         nowait       = false},
-                                       self()),
+            case check_resource_access(User, QName, read, AuthzCtx) of
+                ok ->
+                    ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
+                    Spec = #{no_ack => true,
+                             channel_pid => self(),
+                             limiter_pid => none,
+                             limiter_active => false,
+                             prefetch_count => 5, %% TODO: promote to config
+                             consumer_tag => ConsumerTag,
+                             exclusive_consume => false,
+                             args => [],
+                             ok_msg => undefined,
+                             acting_user => Username},
+                    rabbit_amqqueue:with(
+                      QName,
+                      fun(Q1) ->
+                              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+                                  {ok, QStates} ->
+                                      State1 = State#proc_state{queue_states = QStates},
+                                      Destination = binary_to_list(QNameBin),
 
-            Destination = binary_to_list(QName),
+                                      %% synthesise a subscription to the reply queue destination
+                                      Subs1 = maps:put(ConsumerTag,
+                                                       #subscription{dest_hdr  = Destination,
+                                                                     multi_ack = false},
+                                                       Subs),
 
-            %% synthesise a subscription to the reply queue destination
-            Subs1 = maps:put(ConsumerTag,
-                             #subscription{dest_hdr  = Destination,
-                                           multi_ack = false},
-                             Subs),
-
-            {Destination, State#proc_state{
-                            reply_queues  = maps:put(TempQueueId, QName, RQS),
-                            subscriptions = Subs1}}
+                                      {Destination, State1#proc_state{
+                                                      reply_queues  = maps:put(TempQueueId, QNameBin, RQS),
+                                                      subscriptions = Subs1}};
+                                  {error, Reason} ->
+                                        error("Failed to consume from ~s: ~p",
+                                              [rabbit_misc:rs(QName), Reason],
+                                              State)
+                              end
+                      end);
+                {error, access_refused} ->
+                           error("Failed to consume from ~s: no read access",
+                                 [rabbit_misc:rs(QName)],
+                                 State)
+            end
     end.
 
 %%----------------------------------------------------------------------------
