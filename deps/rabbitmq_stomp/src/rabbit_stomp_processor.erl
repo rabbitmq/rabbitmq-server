@@ -31,6 +31,7 @@
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf, authz_context, auth_mechanism, auth_login,
+                user,
                 default_topic_exchange, default_nack_requeue}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
@@ -271,7 +272,8 @@ process_connect(Implicit, Frame,
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
-                      {Auth, {Username, Passwd}} = creds(Frame1, SSLLoginName, Config),
+                      {Auth, {Username, Passwd}} = Creds= creds(Frame1, SSLLoginName, Config),
+                      {ok, User} = do_native_login(Creds, State),
                       {ok, DefaultVHost} = application:get_env(
                                              rabbitmq_stomp, default_vhost),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
@@ -284,7 +286,8 @@ process_connect(Implicit, Frame,
                               StateN#proc_state{frame_transformer = FT,
                                                 auth_mechanism = Auth,
                                                 auth_login = Username,
-                                                authz_context = #{}}), %% TODO: client_id? else?
+                                                authz_context = #{},  %% TODO: client_id? else?
+                                                user = User}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -896,19 +899,19 @@ ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
             {binary_to_list(RQ), State};
         error ->
             {ok, Queue} = create_queue(State),
-
+            QName = amqqueue:get_name(Queue),
 
             ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
             #'basic.consume_ok'{} =
                 amqp_channel:subscribe(Channel,
                                        #'basic.consume'{
-                                         queue        = Queue,
+                                         queue        = QName,
                                          consumer_tag = ConsumerTag,
                                          no_ack       = true,
                                          nowait       = false},
                                        self()),
 
-            Destination = binary_to_list(Queue),
+            Destination = binary_to_list(QName),
 
             %% synthesise a subscription to the reply queue destination
             Subs1 = maps:put(ConsumerTag,
@@ -917,7 +920,7 @@ ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
                              Subs),
 
             {Destination, State#proc_state{
-                            reply_queues  = maps:put(TempQueueId, Queue, RQS),
+                            reply_queues  = maps:put(TempQueueId, QName, RQS),
                             subscriptions = Subs1}}
     end.
 
@@ -1217,7 +1220,7 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% message headers
     Exchange.
 
-create_queue(_State = #proc_state{authz_context = AuthzCtx, auth_login = User}) ->
+create_queue(_State = #proc_state{authz_context = AuthzCtx, user = #user{username = Username} = User}) ->
 
     {ok, VHost} = application:get_env(rabbitmq_stomp, default_vhost),
     QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
@@ -1230,7 +1233,7 @@ create_queue(_State = #proc_state{authz_context = AuthzCtx, auth_login = User}) 
                 rabbit_core_metrics:queue_declared(QName),
 
                 case rabbit_amqqueue:declare(QName, _Durable = false, _AutoDelete = true,
-                                             [], self(), #{user => User}) of
+                                             [], self(), Username) of
                     {new, Q} when ?is_amqqueue(Q) ->
                         rabbit_core_metrics:queue_created(QName),
                         {ok, Q};
@@ -1313,3 +1316,20 @@ check_resource_access(User, Resource, Perm, Context) ->
                     {error, access_refused}
             end
     end.
+
+do_native_login(Creds, State) ->
+    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+    {Username, AuthProps} = case Creds of
+                                {ssl, {Username, none}}-> {Username, []};
+                                {_, {Username, Password}} -> {Username, [{password, Password},
+                                                                         {vhost, DefaultVHost}]}
+                            end,
+
+     case rabbit_access_control:check_user_login(Username, AuthProps) of
+        {ok, User} ->
+            {ok, User};
+        {refused, Username1, _Msg, _Args} ->
+             rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username1]),
+             error("Bad CONNECT", "Access refused for user '" ++
+                      binary_to_list(Username1) ++ "'", [], State)
+     end.
