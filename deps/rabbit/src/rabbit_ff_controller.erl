@@ -727,8 +727,8 @@ refresh_after_app_load_task() ->
 
 enable_many(#{states_per_node := _} = Inventory, [FeatureName | Rest]) ->
     case enable_if_supported(Inventory, FeatureName) of
-        ok    -> enable_many(Inventory, Rest);
-        Error -> Error
+        {ok, Inventory1} -> enable_many(Inventory1, Rest);
+        Error            -> Error
     end;
 enable_many(_Inventory, []) ->
     ok.
@@ -736,7 +736,8 @@ enable_many(_Inventory, []) ->
 -spec enable_if_supported(Inventory, FeatureName) -> Ret when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
       FeatureName :: rabbit_feature_flags:feature_name(),
-      Ret :: ok | {error, Reason},
+      Ret :: {ok, NewInventory} | {error, Reason},
+      NewInventory :: rabbit_feature_flags:cluster_inventory(),
       Reason :: term().
 
 enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
@@ -746,10 +747,7 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
                "Feature flags: `~ts`: supported; continuing",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            case lock_registry_and_enable(Inventory, FeatureName) of
-                {ok, _Inventory} -> ok;
-                Error            -> Error
-            end;
+            lock_registry_and_enable(Inventory, FeatureName);
         false ->
             ?LOG_DEBUG(
                "Feature flags: `~ts`: unsupported; aborting",
