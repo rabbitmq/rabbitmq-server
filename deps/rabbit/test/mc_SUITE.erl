@@ -28,6 +28,7 @@ all_tests() ->
      amqpl_table_x_header,
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
+     amqp_amqpl,
      stuff
     ].
 
@@ -246,6 +247,103 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     ok.
 
+
+thead2(T, Value) ->
+    {symbol(atom_to_binary(T)), {T, Value}}.
+
+thead(T, Value) ->
+    {utf8(atom_to_binary(T)), {T, Value}}.
+
+amqp_amqpl(_Config) ->
+    H = #'v1_0.header'{priority = {ubyte, 3},
+                       ttl = {uint, 20000},
+                       durable = true},
+    MAC = [
+           {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
+          thead2(list, [utf8(<<"1">>)]),
+          thead2(map, [{utf8(<<"k">>), utf8(<<"v">>)}])
+          ],
+    M =  #'v1_0.message_annotations'{content = MAC},
+    P = #'v1_0.properties'{content_type = {symbol, <<"ctype">>},
+                           content_encoding = {symbol, <<"cenc">>},
+                           message_id = {utf8, <<"msg-id">>},
+                           correlation_id = {utf8, <<"corr-id">>},
+                           user_id = {binary, <<"user-id">>},
+                           reply_to = {utf8, <<"reply-to">>},
+                           group_id = {utf8, <<"group-id">>},
+                           creation_time = {timestamp, 10000}
+                          },
+    AC = [
+          thead(long, 5),
+          thead(ulong, 5),
+          thead(utf8, <<"a-string">>),
+          thead(binary, <<"data">>),
+          thead(ubyte, 1),
+          thead(short, 2),
+          thead(ushort, 3),
+          thead(uint, 4),
+          thead(int, 4),
+          thead(double, 5.0),
+          thead(float, 6.0),
+          thead(timestamp, 7000),
+          thead(byte, 128),
+          {utf8(<<"null">>), null}
+         ],
+    A =  #'v1_0.application_properties'{content = AC},
+    D =  #'v1_0.data'{content = <<"data">>},
+
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
+    %% validate source data is serialisable
+    _ = mc:serialize(Msg),
+
+    ?assertEqual(3, mc:priority(Msg)),
+    ?assertEqual(true, mc:is_persistent(Msg)),
+    ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg)),
+    ?assertEqual({utf8, <<"corr-id">>}, mc:correlation_id(Msg)),
+
+    MsgL = mc:convert(mc_amqpl, Msg),
+
+    ?assertEqual(3, mc:priority(MsgL)),
+    ?assertEqual(true, mc:is_persistent(MsgL)),
+    ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(MsgL)),
+    #content{properties = #'P_basic'{headers = HL} = Props} = Content = mc:protocol_state(MsgL),
+
+    ?assertMatch(#'P_basic'{user_id = <<"user-id">>}, Props),
+    ?assertMatch(#'P_basic'{reply_to = <<"reply-to">>}, Props),
+    ?assertMatch(#'P_basic'{content_type = <<"ctype">>}, Props),
+    ?assertMatch(#'P_basic'{content_encoding = <<"cenc">>}, Props),
+    ?assertMatch(#'P_basic'{app_id = <<"group-id">>}, Props),
+    ?assertMatch(#'P_basic'{timestamp = 10}, Props),
+    ?assertMatch(#'P_basic'{delivery_mode = 2}, Props),
+    ?assertMatch(#'P_basic'{priority = 3}, Props),
+    ?assertMatch(#'P_basic'{expiration = <<"20000">>}, Props),
+
+    ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
+
+    ?assertMatch({_, long, 5}, header(<<"long">>, HL)),
+    ?assertMatch({_, long, 5}, header(<<"ulong">>, HL)),
+    ?assertMatch({_, longstr, <<"a-string">>}, header(<<"utf8">>, HL)),
+    ?assertMatch({_, binary, <<"data">>}, header(<<"binary">>, HL)),
+    ?assertMatch({_, unsignedbyte, 1}, header(<<"ubyte">>, HL)),
+    ?assertMatch({_, short, 2}, header(<<"short">>, HL)),
+    ?assertMatch({_, unsignedshort, 3}, header(<<"ushort">>, HL)),
+    ?assertMatch({_, unsignedint, 4}, header(<<"uint">>, HL)),
+    ?assertMatch({_, signedint, 4}, header(<<"int">>, HL)),
+    ?assertMatch({_, double, 5.0}, header(<<"double">>, HL)),
+    ?assertMatch({_, float, 6.0}, header(<<"float">>, HL)),
+    ?assertMatch({_, timestamp, 7}, header(<<"timestamp">>, HL)),
+    ?assertMatch({_, byte, 128}, header(<<"byte">>, HL)),
+    ?assertMatch({_, void, undefined}, header(<<"null">>, HL)),
+
+    %% validate content is serialisable
+    _ = rabbit_binary_generator:build_simple_content_frames(1, Content,
+                                                            1000000,
+                                                            rabbit_framing_amqp_0_9_1),
+
+    ok.
+
 amqp10_non_single_data_bodies(_Config) ->
     Props = #'P_basic'{type = <<"amqp-1.0">>},
     Payloads = [
@@ -449,3 +547,8 @@ test_amqp091_roundtrip(Props, Payload) ->
     ?assertEqual(iolist_to_binary(Payload),
                  iolist_to_binary(PayloadOut)),
     ok.
+
+utf8(V) ->
+    {utf8, V}.
+symbol(V) ->
+    {symbol, V}.

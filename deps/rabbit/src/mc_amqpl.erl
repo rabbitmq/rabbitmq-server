@@ -56,7 +56,7 @@ init(#content{} = Content0) ->
     {strip_header(Content, ?DELETED_HEADER), Anns}.
 
 convert_from(mc_amqp, Sections) ->
-    {H, MAnn, P, AProp, Body} =
+    {H, MAnn, Prop, AProp, Body} =
         lists:foldl(
           fun
               (#'v1_0.header'{} = S, Acc) ->
@@ -95,11 +95,11 @@ convert_from(mc_amqp, Sections) ->
                        content_type = ContentType,
                        content_encoding = ContentEncoding,
                        creation_time = Timestamp,
-                       group_id = GroupId} = case P of
+                       group_id = GroupId} = case Prop of
                                                  undefined ->
                                                      #'v1_0.properties'{};
                                                  _ ->
-                                                     P
+                                                     Prop
                                              end,
 
     AP = case AProp of
@@ -116,9 +116,17 @@ convert_from(mc_amqp, Sections) ->
                   #'v1_0.header'{durable = false} -> 1;
                   _ -> amqp10_map_get(symbol(<<"x-basic-delivery-mode">>), MA)
               end,
+    Priority = case H of
+                  #'v1_0.header'{priority = {_, P}} -> P;
+                  _ -> amqp10_map_get(symbol(<<"x-basic-priority">>), MA)
+               end,
     %% TODO: check amqp header first for priority, ttl
-    Priority = amqp10_map_get(symbol(<<"x-basic-priority">>), MA),
-    Expiration = amqp10_map_get(symbol(<<"x-basic-expiration">>), MA),
+    Expiration = case H of
+                     #'v1_0.header'{ttl = {_, T}} ->
+                         integer_to_binary(T);
+                     _ ->
+                         amqp10_map_get(symbol(<<"x-basic-expiration">>), MA)
+                 end,
     Type = case Type0 of
                undefined ->
                    amqp10_map_get(symbol(<<"x-basic-type">>), MA);
@@ -574,6 +582,7 @@ unwrap({_Type, V}) ->
 
 to_091(Key, {utf8, V}) when is_binary(V) -> {Key, longstr, V};
 to_091(Key, {long, V}) -> {Key, long, V};
+to_091(Key, {ulong, V}) -> {Key, long, V}; %% TODO: we could try to constrain this
 to_091(Key, {byte, V}) -> {Key, byte, V};
 to_091(Key, {ubyte, V}) -> {Key, unsignedbyte, V};
 to_091(Key, {short, V}) -> {Key, short, V};
