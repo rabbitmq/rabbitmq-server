@@ -741,8 +741,13 @@ wait_for_cluster_status(N, Max, Status, AllNodes, Nodes) ->
 
 verify_status_equal(Node, Status, AllNodes) ->
     NodeStatus = sort_cluster_status(cluster_status(Node)),
-    (AllNodes =/= [Node]) =:= rpc:call(Node, rabbit_db_cluster, is_clustered, [])
-        andalso equal(Status, NodeStatus).
+    IsClustered = case rpc:call(Node, rabbit_db_cluster, is_clustered, []) of
+                      {badrpc, {'EXIT', {undef, _}}} ->
+                          rpc:call(Node, rabbit_mnesia, is_clustered, []);
+                      Ret ->
+                          Ret
+                  end,
+    (AllNodes =/= [Node]) =:= IsClustered andalso equal(Status, NodeStatus).
 
 equal({_, _, A, B, C}, {undef, undef, A, B, C}) ->
     true;
@@ -755,7 +760,12 @@ cluster_status(Node) ->
     AllMembers = rpc:call(Node, rabbit_nodes, list_members, []),
     RunningMembers = rpc:call(Node, rabbit_nodes, list_running, []),
 
-    AllDbNodes = rpc:call(Node, rabbit_db_cluster, members, []),
+    AllDbNodes = case rpc:call(Node, rabbit_db_cluster, members, []) of
+                     {badrpc, {'EXIT', {undef, _}}} ->
+                         rpc:call(Node, rabbit_mnesia, cluster_nodes, [all]);
+                     Ret ->
+                         Ret
+                 end,
     DiscDbNodes = rpc:call(Node, rabbit_mnesia, cluster_nodes, [disc]),
     RunningDbNodes = rpc:call(Node, rabbit_mnesia, cluster_nodes, [running]),
 
