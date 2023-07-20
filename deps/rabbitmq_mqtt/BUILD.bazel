@@ -67,8 +67,6 @@ test_suite_beam_files(name = "test_suite_beam_files")
 
 # gazelle:erlang_app_extra_app ssl
 
-# gazelle:erlang_app_dep amqp_client
-
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
@@ -83,7 +81,6 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
-        "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@ra//:erlang_app",
