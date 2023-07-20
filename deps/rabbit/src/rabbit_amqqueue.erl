@@ -1094,22 +1094,15 @@ check_queue_version(Val, Args) ->
         Error            -> Error
     end.
 
--define(KNOWN_QUEUE_TYPES, [<<"classic">>, <<"quorum">>, <<"stream">>]).
-known_queue_types() ->
-    Registered = rabbit_registry:lookup_all(queue),
-    {QueueTypes, _} = lists:unzip(Registered),
-    QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
-    ?KNOWN_QUEUE_TYPES ++ QTypeBins.
-
 check_queue_type({longstr, Val}, _Args) ->
-    case lists:member(Val, known_queue_types()) of
+    case lists:member(Val, rabbit_queue_type:known_queue_type_names()) of
         true  -> ok;
         false -> {error, rabbit_misc:format("unsupported queue type '~ts'", [Val])}
     end;
 check_queue_type({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_type(Val, _Args) when is_binary(Val) ->
-    case lists:member(Val, known_queue_types()) of
+    case lists:member(Val, rabbit_queue_type:known_queue_type_names()) of
         true  -> ok;
         false -> {error, rabbit_misc:format("unsupported queue type '~ts'", [Val])}
     end;
