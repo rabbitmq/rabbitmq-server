@@ -144,9 +144,9 @@ process_connect(
                "protocol version: ~p, keepalive: ~p, property names: ~p",
                [ClientId0, Username0, CleanStart, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
     SslLoginName = ssl_login_name(Socket),
-    Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
-               true   -> flow;
-               false  -> noflow
+    Flow = case application:get_env(rabbit, mirroring_flow_control) of
+               {ok, true} -> flow;
+               {ok, false} -> noflow
            end,
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
     TopicAliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
@@ -1054,7 +1054,7 @@ check_vhost_connection_limit(VHost) ->
 
 check_vhost_alive(VHost) ->
     case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
-        true  ->
+        true ->
             ok;
         false ->
             ?LOG_ERROR("MQTT connection failed: vhost '~s' is down", [VHost]),
@@ -1445,7 +1445,7 @@ consume(Q, QoS, #state{
                              channel_pid => self(),
                              limiter_pid => none,
                              limiter_active => false,
-                             prefetch_count => Prefetch,
+                             mode => {simple_prefetch, Prefetch},
                              consumer_tag => ?CONSUMER_TAG,
                              exclusive_consume => false,
                              args => [],
@@ -1711,7 +1711,8 @@ send_disconnect(_, _) ->
     ok.
 
 -spec terminate(boolean(), rabbit_event:event_props(), state()) -> ok.
-terminate(SendWill, Infos, State) ->
+terminate(SendWill, Infos, State = #state{queue_states = QStates}) ->
+    rabbit_queue_type:close(QStates),
     rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),

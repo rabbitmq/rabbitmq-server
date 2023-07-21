@@ -954,10 +954,6 @@
 ##
 # amqp1_0.default_user = guest
 
-## Enable protocol strict mode. See the README for more information.
-##
-# amqp1_0.protocol_strict_mode = false
-
 ## Logging settings.
 ##
 ## See https://rabbitmq.com/logging.html for details.

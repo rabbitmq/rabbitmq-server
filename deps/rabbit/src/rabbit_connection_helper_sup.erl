@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/1]).
 -export([
     start_channel_sup_sup/1,
     start_queue_collector/2
@@ -30,10 +30,10 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link() -> rabbit_types:ok_pid_or_error().
-
-start_link() ->
-    supervisor:start_link(?MODULE, []).
+-spec start_link(supervisor:sup_flags()) ->
+    supervisor:startlink_ret().
+start_link(SupFlags) ->
+    supervisor:start_link(?MODULE, SupFlags).
 
 -spec start_channel_sup_sup(pid()) -> rabbit_types:ok_pid_or_error().
 
@@ -62,10 +62,6 @@ start_queue_collector(SupPid, Identity) ->
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
+init(SupFlags) ->
     ?LG_PROCESS_TYPE(connection_helper_sup),
-    SupFlags = #{strategy => one_for_one,
-                 intensity => 10,
-                 period => 10,
-                 auto_shutdown => any_significant},
     {ok, {SupFlags, []}}.

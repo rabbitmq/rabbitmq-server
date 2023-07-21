@@ -168,6 +168,9 @@ rabbitmq_integration_suite(
         "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
     shard_count = 2,
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(

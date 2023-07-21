@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(system_SUITE).
+-module(amqp_system_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -58,27 +58,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(streams, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-            Config1 = rabbit_ct_helpers:set_config(Config, [
-                {rmq_nodename_suffix, Suffix},
-                {amqp10_client_library, dotnet}
-              ]),
-            rabbit_ct_helpers:run_setup_steps(Config1, [
-                fun build_dotnet_test_project/1
-            ] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps());
-        _     ->
-            {skip, "stream tests are skipped in mixed mode"}
-    end;
 init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Suffix},
-        {amqp10_client_library, Group}
+        {amqp_client_library, Group}
       ]),
     GroupSetupStep = case Group of
         dotnet -> fun build_dotnet_test_project/1;
@@ -131,76 +115,51 @@ build_maven_test_project(Config) ->
 %% -------------------------------------------------------------------
 
 roundtrip(Config) ->
-    run(Config, [
-        {dotnet, "roundtrip"},
-        {java, "RoundTripTest"}
-      ]).
+    run(Config, [{dotnet, "roundtrip"},
+                 {java, "RoundTripTest"}]).
 
 streams(Config) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
-                                               durable = true,
-                                               arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
-    run(Config, [
-        {dotnet, "streams"}
-      ]).
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
+    run(Config, [{dotnet, "streams"}]).
 
 roundtrip_to_amqp_091(Config) ->
-    run(Config, [
-        {dotnet, "roundtrip_to_amqp_091"}
-      ]).
+    run(Config, [{dotnet, "roundtrip_to_amqp_091"}]).
 
 default_outcome(Config) ->
-    run(Config, [
-        {dotnet, "default_outcome"}
-      ]).
+    run(Config, [{dotnet, "default_outcome"}]).
 
 no_routes_is_released(Config) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
     amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"no_routes_is_released">>,
                                               durable = true}),
-    run(Config, [
-        {dotnet, "no_routes_is_released"}
-      ]).
+    run(Config, [{dotnet, "no_routes_is_released"}]).
 
 outcomes(Config) ->
-    run(Config, [
-        {dotnet, "outcomes"}
-      ]).
+    run(Config, [{dotnet, "outcomes"}]).
 
 fragmentation(Config) ->
-    run(Config, [
-        {dotnet, "fragmentation"}
-      ]).
+    run(Config, [{dotnet, "fragmentation"}]).
 
 message_annotations(Config) ->
-    run(Config, [
-        {dotnet, "message_annotations"}
-      ]).
+    run(Config, [{dotnet, "message_annotations"}]).
 
 footer(Config) ->
-    run(Config, [
-        {dotnet, "footer"}
-      ]).
+    run(Config, [{dotnet, "footer"}]).
 
 data_types(Config) ->
-    run(Config, [
-        {dotnet, "data_types"}
-      ]).
+    run(Config, [{dotnet, "data_types"}]).
 
 reject(Config) ->
-    run(Config, [
-        {dotnet, "reject"}
-      ]).
+    run(Config, [{dotnet, "reject"}]).
 
 redelivery(Config) ->
-    run(Config, [
-        {dotnet, "redelivery"}
-      ]).
+    run(Config, [{dotnet, "redelivery"}]).
 
 routing(Config) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"transient_q">>,
                                            durable = false}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"durable_q">>,
@@ -217,18 +176,6 @@ routing(Config) ->
         {dotnet, "routing"}
       ]).
 
-%% TODO: this tests doesn't test anything that the standard routing test
-%% already does. We should test stream specific things here like attaching
-%% to a given offset
-stream_interop_basics(Config) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
-    run(Config, [
-        {dotnet, "routing"}
-      ]).
-
 invalid_routes(Config) ->
     run(Config, [
         {dotnet, "invalid_routes"}
@@ -238,7 +185,7 @@ auth_failure(Config) ->
     run(Config, [ {dotnet, "auth_failure"} ]).
 
 access_failure(Config) ->
-    User = <<"access_failure">>,
+    User = atom_to_binary(?FUNCTION_NAME),
     rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
     rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
                                              <<".*">>, %% configure
@@ -248,12 +195,12 @@ access_failure(Config) ->
     run(Config, [ {dotnet, "access_failure"} ]).
 
 access_failure_not_allowed(Config) ->
-    User = <<"access_failure_not_allowed">>,
+    User = atom_to_binary(?FUNCTION_NAME),
     rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
     run(Config, [ {dotnet, "access_failure_not_allowed"} ]).
 
 access_failure_send(Config) ->
-    User = <<"access_failure_send">>,
+    User = atom_to_binary(?FUNCTION_NAME),
     rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
     rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
                                              <<".*">>, %% configure
@@ -263,15 +210,13 @@ access_failure_send(Config) ->
     run(Config, [ {dotnet, "access_failure_send"} ]).
 
 run(Config, Flavors) ->
-    ClientLibrary = ?config(amqp10_client_library, Config),
+    ClientLibrary = ?config(amqp_client_library, Config),
     Fun = case ClientLibrary of
-        dotnet -> fun run_dotnet_test/2;
-        java   -> fun run_java_test/2
-    end,
-    case proplists:get_value(ClientLibrary, Flavors) of
-        false    -> ok;
-        TestName -> Fun(Config, TestName)
-    end.
+              dotnet -> fun run_dotnet_test/2;
+              java   -> fun run_java_test/2
+          end,
+    {ClientLibrary, TestName} = proplists:lookup(ClientLibrary, Flavors),
+    Fun(Config, TestName).
 
 run_dotnet_test(Config, Method) ->
     TestProjectDir = ?config(dotnet_test_project_dir, Config),

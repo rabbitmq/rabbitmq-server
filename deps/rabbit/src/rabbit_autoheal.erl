@@ -411,7 +411,7 @@ make_decision(AllPartitions) ->
 partition_value(Partition) ->
     Connections = [Res || Node <- Partition,
                           Res <- [rpc:call(Node, rabbit_networking,
-                                           connections_local, [])],
+                                           local_connections, [])],
                           is_list(Res)],
     {length(lists:append(Connections)), length(Partition)}.
 

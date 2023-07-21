@@ -370,6 +370,13 @@ code_change(_OldVsn, State, _Extra) ->
 maybe_notify_decorators(false, State) -> State;
 maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
 
+notify_decorators_if_became_empty(WasEmpty, State) ->
+    case (not WasEmpty) andalso is_empty(State) of
+        true -> notify_decorators(State);
+        false -> ok
+    end,
+    State.
+
 notify_decorators(Event, State) ->
     _ = decorator_callback(qname(State), Event, []),
     ok.
@@ -569,14 +576,6 @@ assert_invariant(State = #q{consumers = Consumers, single_active_consumer_on = f
     true = (rabbit_queue_consumers:inactive(Consumers) orelse is_empty(State)).
 
 is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
-
-maybe_send_drained(WasEmpty, #q{q = Q} = State) ->
-    case (not WasEmpty) andalso is_empty(State) of
-        true  -> notify_decorators(State),
-                 rabbit_queue_consumers:send_drained(amqqueue:get_name(Q));
-        false -> ok
-    end,
-    State.
 
 confirm_messages([], MTC, _QName) ->
     MTC;
@@ -852,7 +851,7 @@ requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
     WasEmpty = BQ:is_empty(BQS),
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     {_Dropped, State1} = maybe_drop_head(State#q{backing_queue_state = BQS1}),
-    run_message_queue(maybe_send_drained(WasEmpty, drop_expired_msgs(State1))).
+    run_message_queue(notify_decorators_if_became_empty(WasEmpty, drop_expired_msgs(State1))).
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
@@ -861,7 +860,7 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     %%       we will send expired messages at times.
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
-    {Result, maybe_send_drained(Result =:= empty, State1)}.
+    {Result, notify_decorators_if_became_empty(Result =:= empty, State1)}.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
@@ -992,11 +991,6 @@ calculate_msg_expiry(Msg, TTL) ->
             os:system_time(microsecond) + T * 1000
     end.
 
-%% Logically this function should invoke maybe_send_drained/2.
-%% However, that is expensive. Since some frequent callers of
-%% drop_expired_msgs/1, in particular deliver_or_enqueue/3, cannot
-%% possibly cause the queue to become empty, we push the
-%% responsibility to the callers. So be cautious when adding new ones.
 drop_expired_msgs(State) ->
     case is_empty(State) of
         true  -> State;
@@ -1343,9 +1337,8 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
-            _From, State = #q{q = Q,
-                              consumers = Consumers,
+             ModeOrPrefetch, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
+            _From, State = #q{consumers = Consumers,
                               active_consumer = Holder,
                               single_active_consumer_on = SingleActiveConsumerOn}) ->
     ConsumerRegistration = case SingleActiveConsumerOn of
@@ -1355,33 +1348,28 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                     {error, reply({error, exclusive_consume_unavailable}, State)};
                 false ->
                     Consumers1 = rabbit_queue_consumers:add(
-                                   amqqueue:get_name(Q),
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive,
-                                   PrefetchCount, Args, is_empty(State),
-                                   ActingUser, Consumers),
-
-                  case Holder of
-                      none ->
-                          NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
-                          {state, State#q{consumers          = Consumers1,
-                                          has_had_consumers  = true,
-                                          active_consumer    = NewConsumer}};
-                      _    ->
-                          {state, State#q{consumers          = Consumers1,
-                                          has_had_consumers  = true}}
-                  end
+                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   Args, ActingUser, Consumers),
+                    case Holder of
+                        none ->
+                            NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
+                            {state, State#q{consumers          = Consumers1,
+                                            has_had_consumers  = true,
+                                            active_consumer    = NewConsumer}};
+                        _    ->
+                            {state, State#q{consumers          = Consumers1,
+                                            has_had_consumers  = true}}
+                    end
             end;
         false ->
             case check_exclusive_access(Holder, ExclusiveConsume, State) of
               in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
               ok     ->
                     Consumers1 = rabbit_queue_consumers:add(
-                                   amqqueue:get_name(Q),
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive,
-                                   PrefetchCount, Args, is_empty(State),
-                                   ActingUser, Consumers),
+                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   Args, ActingUser, Consumers),
                     ExclusiveConsumer =
                         if ExclusiveConsume -> {ChPid, ConsumerTag};
                            true             -> Holder
@@ -1408,7 +1396,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                     {false, _} ->
                        {true, up}
                 end,
-            rabbit_core_metrics:consumer_created(
+                PrefetchCount = rabbit_queue_consumers:parse_prefetch_count(ModeOrPrefetch),
+                rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                 PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
@@ -1436,7 +1425,9 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1), ActingUser),
             notify_decorators(State1),
             case should_auto_delete(State1) of
-                false -> reply(ok, ensure_expiry_timer(State1));
+                false ->
+                    State2 = run_message_queue(Holder =/= Holder1, State1),
+                    reply(ok, ensure_expiry_timer(State2));
                 true  ->
                     log_auto_delete(
                         io_lib:format(
@@ -1467,7 +1458,7 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
                                      backing_queue_state = BQS}) ->
     {Count, BQS1} = BQ:purge(BQS),
     State1 = State#q{backing_queue_state = BQS1},
-    reply({ok, Count}, maybe_send_drained(Count =:= 0, State1));
+    reply({ok, Count}, notify_decorators_if_became_empty(Count =:= 0, State1));
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
@@ -1638,21 +1629,57 @@ handle_cast(update_mirroring, State = #q{q = Q,
             noreply(update_mirroring(Policy, State1))
     end;
 
-handle_cast({credit, ChPid, CTag, Credit, Drain},
-            State = #q{consumers           = Consumers,
-                       backing_queue       = BQ,
-                       backing_queue_state = BQS,
-                       q = Q}) ->
-    Len = BQ:len(BQS),
-    rabbit_classic_queue:send_credit_reply(ChPid, amqqueue:get_name(Q), Len),
-    noreply(
-      case rabbit_queue_consumers:credit(amqqueue:get_name(Q),
-                                         Len == 0, Credit, Drain, ChPid, CTag,
-                                         Consumers) of
-          unchanged               -> State;
-          {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
-                                     run_message_queue(true, State1)
-      end);
+handle_cast({credit, SessionPid, CTag, Credit, Drain},
+            #q{q = Q,
+               backing_queue = BQ,
+               backing_queue_state = BQS0} = State) ->
+    %% Credit API v1.
+    %% Delete this function clause when feature flag credit_api_v2 becomes required.
+    %% Behave like non-native AMQP 1.0: Send send_credit_reply before deliveries.
+    rabbit_classic_queue:send_credit_reply_credit_api_v1(
+      SessionPid, amqqueue:get_name(Q), BQ:len(BQS0)),
+    handle_cast({credit, SessionPid, CTag, credit_api_v1, Credit, Drain, false}, State);
+handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain, Echo},
+            #q{consumers = Consumers0,
+               q = Q} = State0) ->
+    QName = amqqueue:get_name(Q),
+    State = #q{backing_queue_state = PostBQS,
+               backing_queue = BQ} = case rabbit_queue_consumers:process_credit(
+                                            DeliveryCountRcv, Credit, SessionPid, CTag, Consumers0) of
+                                         unchanged ->
+                                             State0;
+                                         {unblocked, Consumers1} ->
+                                             State1 = State0#q{consumers = Consumers1},
+                                             run_message_queue(true, State1)
+                                     end,
+    case rabbit_queue_consumers:get_link_state(SessionPid, CTag) of
+        {credit_api_v1, PostCred}
+          when Drain andalso
+               is_integer(PostCred) andalso PostCred > 0 ->
+            %% credit API v1
+            rabbit_queue_consumers:drained(credit_api_v1, SessionPid, CTag),
+            rabbit_classic_queue:send_drained_credit_api_v1(SessionPid, QName, CTag, PostCred);
+        {PostDeliveryCountSnd, PostCred}
+          when is_integer(PostDeliveryCountSnd) andalso
+               Drain andalso
+               is_integer(PostCred) andalso PostCred > 0 ->
+            %% credit API v2
+            AdvancedDeliveryCount = serial_number:add(PostDeliveryCountSnd, PostCred),
+            rabbit_queue_consumers:drained(AdvancedDeliveryCount, SessionPid, CTag),
+            Avail = BQ:len(PostBQS),
+            rabbit_classic_queue:send_credit_reply(
+              SessionPid, QName, CTag, AdvancedDeliveryCount, 0, Avail, Drain);
+        {PostDeliveryCountSnd, PostCred}
+          when is_integer(PostDeliveryCountSnd) andalso
+               Echo ->
+            %% credit API v2
+            Avail = BQ:len(PostBQS),
+            rabbit_classic_queue:send_credit_reply(
+              SessionPid, QName, CTag, PostDeliveryCountSnd, PostCred, Avail, Drain);
+        _ ->
+            ok
+    end,
+    noreply(State);
 
 % Note: https://www.pivotaltracker.com/story/show/166962656
 % This event is necessary for the stats timer to be initialized with
@@ -1731,7 +1758,7 @@ handle_info({maybe_expire, _Vsn}, State) ->
 handle_info({drop_expired, Vsn}, State = #q{args_policy_version = Vsn}) ->
     WasEmpty = is_empty(State),
     State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined}),
-    noreply(maybe_send_drained(WasEmpty, State1));
+    noreply(notify_decorators_if_became_empty(WasEmpty, State1));
 
 handle_info({drop_expired, _Vsn}, State) ->
     noreply(State);

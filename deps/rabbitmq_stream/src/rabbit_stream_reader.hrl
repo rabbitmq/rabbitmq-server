@@ -26,6 +26,8 @@
          stream :: stream(),
          reference :: undefined | publisher_reference(),
          leader :: pid(),
+         %% We do not use atomics here for concurrent access. Instead, we use atomics
+         %% to reduce memory copy overhead for record fields that change often.
          message_counters :: atomics:atomics_ref(),
          %% use to distinguish a stale publisher from a live publisher with the same ID
          %% used only for publishers without a reference (dedup off)

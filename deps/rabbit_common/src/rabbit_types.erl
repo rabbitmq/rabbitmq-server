@@ -39,6 +39,8 @@
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
 -type(vhost() :: binary()).
+%% An arbitrary binary tag used to distinguish between different consumers
+%% set up by the same process.
 -type(ctag() :: binary()).
 
 %% TODO: make this more precise by tying specific class_ids to

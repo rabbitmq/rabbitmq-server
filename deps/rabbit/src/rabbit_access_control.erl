@@ -10,7 +10,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
-         check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/4, check_resource_access/4, check_topic_access/4,
+         check_user_id/2]).
 
 -export([permission_cache_can_expire/1, update_state/2, expiry_timestamp/1]).
 
@@ -220,6 +221,31 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
+    end.
+
+-spec check_user_id(mc:state(), rabbit_types:user()) ->
+    ok | {refused, string(), [term()]}.
+check_user_id(Message, ActualUser) ->
+    case mc:user_id(Message) of
+        undefined ->
+            ok;
+        {binary, ClaimedUserName} ->
+            check_user_id0(ClaimedUserName, ActualUser)
+    end.
+
+check_user_id0(Username, #user{username = Username}) ->
+    ok;
+check_user_id0(_, #user{authz_backends = [{rabbit_auth_backend_dummy, _}]}) ->
+    ok;
+check_user_id0(ClaimedUserName, #user{username = ActualUserName,
+                                      tags = Tags}) ->
+    case lists:member(impersonator, Tags) of
+        true ->
+            ok;
+        false ->
+            {refused,
+             "user_id property set to '~ts' but authenticated user was '~ts'",
+             [ClaimedUserName, ActualUserName]}
     end.
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->

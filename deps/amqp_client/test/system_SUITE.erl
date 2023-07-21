@@ -1342,9 +1342,9 @@ channel_writer_death(Config) ->
         Ret = amqp_channel:call(Channel, QoS),
         throw({unexpected_success, Ret})
     catch
-        exit:{{function_clause,
-               [{rabbit_channel, check_user_id_header, _, _} | _]}, _}
-        when ConnType =:= direct -> ok;
+        exit:{{{badrecord, <<>>},
+               [{rabbit_channel, _, _, _} | _]}, _}
+          when ConnType =:= direct -> ok;
 
         exit:{{infrastructure_died, {unknown_properties_record, <<>>}}, _}
         when ConnType =:= network -> ok

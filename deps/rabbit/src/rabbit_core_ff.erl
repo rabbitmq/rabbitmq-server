@@ -123,6 +123,8 @@
 -rabbit_feature_flag(
    {message_containers,
     #{desc          => "Message containers.",
+      %%TODO Once lower version node in mixed versions is bumped to 3.13,
+      %% make 'required' for upgrading AMQP 1.0 from 3.13 to 4.0
       stability     => stable,
       depends_on    => [feature_flags_v2]
      }}).
@@ -155,4 +157,10 @@
                         "part of a policy.",
       stability     => stable,
       depends_on    => [stream_queue]
+     }}).
+
+-rabbit_feature_flag(
+   {credit_api_v2,
+    #{desc          => "Credit API v2 between queue clients and queue processes",
+      stability     => stable
      }}).

@@ -542,7 +542,7 @@ defmodule TestHelper do
   end
 
   def await_no_client_connections_with_iterations(node, n) when n > 0 do
-    case :rpc.call(node, :rabbit_networking, :connections_local, []) do
+    case :rpc.call(node, :rabbit_networking, :local_connections, []) do
       [] ->
         :ok
 
@@ -561,13 +561,13 @@ defmodule TestHelper do
   end
 
   def close_all_connections(node) do
-    # we intentionally use connections_local/0 here because connections/0,
+    # we intentionally use local_connections/0 here because connections/0,
     # the cluster-wide version, loads some bits around cluster membership
     # that are not normally ready with a single node. MK.
     #
     # when/if we decide to test
     # this project against a cluster of nodes this will need revisiting. MK.
-    for pid <- :rpc.call(node, :rabbit_networking, :connections_local, []) do
+    for pid <- :rpc.call(node, :rabbit_networking, :local_connections, []) do
       :rpc.call(node, :rabbit_networking, :close_connection, [pid, :force_closed])
     end
 

@@ -203,9 +203,11 @@ module Test =
             receiver.SetCredit(100, true)
             let rtd = receiver.Receive()
             assertNotNull rtd
-            assertTrue (rtd.MessageAnnotations.Map.Count = 1)
-            let (result, _) =  rtd.MessageAnnotations.Map.TryGetValue("x-stream-offset")
-            assertTrue result
+            assertEqual 3 rtd.MessageAnnotations.Map.Count
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-stream-offset"))
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-exchange"))
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-routing-key"))
+
             assertEqual body rtd.Body
             assertEqual rtd.Properties.CorrelationId  corr
             receiver.Close()
@@ -216,7 +218,7 @@ module Test =
     let roundtrip_to_amqp_091 uri =
         use c = connect uri
         let q = "roundtrip-091-q"
-        let corr = "corrlation"
+        let corr = "correlation"
         let sender = SenderLink(c.Session, q + "-sender" , q)
 
         new Message("hi"B, Header = Header(),
@@ -300,7 +302,8 @@ module Test =
 
         assertEqual m.Body m'.Body
         assertEqual (m.MessageAnnotations.Descriptor) (m'.MessageAnnotations.Descriptor)
-        assertEqual 2 (m'.MessageAnnotations.Map.Count)
+        // our 2 custom annotations + x-exchange + x-routing-key = 4
+        assertEqual 4 (m'.MessageAnnotations.Map.Count)
         assertTrue (m.MessageAnnotations.[k1] = m'.MessageAnnotations.[k1])
         assertTrue (m.MessageAnnotations.[k2] = m'.MessageAnnotations.[k2])
 
@@ -312,7 +315,7 @@ module Test =
         let k2 = Symbol "key2"
         footer.[Symbol "key1"] <- "value1"
         footer.[Symbol "key2"] <- "value2"
-        let m = new Message("testing annotations", Footer = footer)
+        let m = new Message("testing footer", Footer = footer)
         sender.Send m
         let m' = receive receiver
 
@@ -432,7 +435,7 @@ module Test =
                 receiver.Close()
             with
             | :? Amqp.AmqpException as ae ->
-                assertEqual (ae.Error.Condition) (Symbol cond)
+                assertEqual (Symbol cond) (ae.Error.Condition)
             | _ -> failwith "invalid expection thrown"
 
     let authFailure uri =
@@ -456,8 +459,6 @@ module Test =
                 ))
             let sender = new SenderLink(ac.Session, "test-sender", dest)
             sender.Send(new Message "hi", TimeSpan.FromSeconds 15.)
-
-
             failwith "expected exception not received"
         with
         | :? Amqp.AmqpException as ex ->

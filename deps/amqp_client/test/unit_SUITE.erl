@@ -322,9 +322,9 @@ route_destination_parsing(_Config) ->
     ok.
 
 parse_dest(Destination, Params) ->
-    rabbit_routing_util:parse_endpoint(Destination, Params).
+    rabbit_routing_parser:parse_endpoint(Destination, Params).
 parse_dest(Destination) ->
-    rabbit_routing_util:parse_endpoint(Destination).
+    rabbit_routing_parser:parse_endpoint(Destination).
 
 %% -------------------------------------------------------------------
 %% Topic variable map

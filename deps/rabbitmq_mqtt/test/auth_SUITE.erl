@@ -1092,7 +1092,8 @@ vhost_connection_limit(Config) ->
     unlink(C3),
     ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
     ok = emqtt:disconnect(C1),
-    ok = emqtt:disconnect(C2).
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, 1),
@@ -1105,7 +1106,8 @@ vhost_queue_limit(Config) ->
                  emqtt:subscribe(C, [{<<"topic1">>, qos0},
                                      {<<"topic2">>, qos1},
                                      {<<"topic3">>, qos1}])),
-    ok = assert_connection_closed(C).
+    ok = assert_connection_closed(C),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 user_connection_limit(Config) ->
     DefaultUser = <<"guest">>,

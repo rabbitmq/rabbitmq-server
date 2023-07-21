@@ -26,6 +26,7 @@
     cluster_nodes/1, cluster_nodes/2,
 
     setup_meck/1,
+    setup_meck/2,
 
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
@@ -160,6 +161,7 @@
     clear_permissions/5,
 
     set_vhost_limit/5,
+    clear_vhost_limit/3,
 
     set_user_limits/3,
     set_user_limits/4,
@@ -1711,6 +1713,11 @@ set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
         rabbit_vhost_limit, set,
         [VHost, Limits, <<"ct-tests">>]).
 
+clear_vhost_limit(Config, Node, VHost) ->
+    rpc(Config, Node,
+        rabbit_vhost_limit, clear,
+        [VHost, <<"ct-tests">>]).
+
 set_user_limits(Config, Username, Limits) ->
     set_user_limits(Config, 0, Username, Limits).
 
@@ -2252,7 +2259,13 @@ if_cover(F) ->
     end.
 
 setup_meck(Config) ->
-    {Mod, Bin, File} = code:get_object_code(meck),
-    [true | _] = rpc_all(Config, code, add_path, [filename:dirname(File)]),
-    [{module, Mod} | _] = rpc_all(Config, code, load_binary, [Mod, File, Bin]),
-    ok.
+    setup_meck(Config, []).
+
+setup_meck(Config, LoadModules)
+  when is_list(LoadModules) ->
+    lists:foreach(
+      fun(Mod) ->
+              {Mod, Bin, File} = code:get_object_code(Mod),
+              [true | _] = rpc_all(Config, code, add_path, [filename:dirname(File)]),
+              [{module, Mod} | _] = rpc_all(Config, code, load_binary, [Mod, File, Bin])
+      end, [meck | LoadModules]).
