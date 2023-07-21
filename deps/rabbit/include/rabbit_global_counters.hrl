@@ -1,5 +1,4 @@
 -define(NUM_PROTOCOL_COUNTERS, 8).
--define(NUM_PROTOCOL_QUEUE_TYPE_COUNTERS, 8).
 
 %% Dead Letter counters:
 %%

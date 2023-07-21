@@ -797,11 +797,6 @@ handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler = {CH, _Ref}} = State) ->
     CH ! BasicNack,
     {noreply, update_confirm_set(BasicNack, State)};
-
-handle_method_from_server1(#'basic.credit_drained'{} = CreditDrained, none,
-                           #state{consumer = Consumer} = State) ->
-    Consumer ! CreditDrained,
-    {noreply, State};
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
 handle_method_from_server1(Method, Content, State) ->

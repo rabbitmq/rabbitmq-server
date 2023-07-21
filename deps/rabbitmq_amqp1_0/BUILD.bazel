@@ -1,148 +1,61 @@
-load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
-    "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "broker_for_integration_suites",
     "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
 )
 load(
     ":app.bzl",
     "all_beam_files",
     "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
 )
-
-APP_ENV = """[
-	    {default_user, "guest"},
-	    {default_vhost, <<"/">>},
-	    {protocol_strict_mode, false}
-	  ]"""
 
 APP_NAME = "rabbitmq_amqp1_0"
 
-APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
+APP_DESCRIPTION = "Deprecated no-op AMQP 1.0 plugin"
 
 all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit:erlang_app",  # keep
     ],
 )
 
-xref(
-    name = "xref",
-    additional_libs = [
-        "//deps/rabbitmq_cli:erlang_app",  # keep
-    ],
-    target = ":erlang_app",
-)
-
-plt(
-    name = "deps_plt",
-    apps = [
-        "ssl",  # keep
-    ],
-    for_target = ":erlang_app",
-    ignore_warnings = True,
-    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
-    plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
-)
-
-dialyze(
-    name = "dialyze",
-    size = "medium",
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":deps_plt",
-    target = ":erlang_app",
-)
-
-eunit(
-    name = "eunit",
-    target = ":test_erlang_app",
-)
-
-broker_for_integration_suites()
-
-rabbitmq_integration_suite(
-    name = "amqp10_client_SUITE",
-    size = "medium",
-    runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
-    ],
-)
-
-rabbitmq_integration_suite(
-    name = "command_SUITE",
-    size = "medium",
-    runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
-    ],
-    deps = [
-        "//deps/amqp10_common:erlang_app",
-    ],
-)
-
-rabbitmq_integration_suite(
-    name = "proxy_protocol_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    name = "system_SUITE",
-    flaky = True,
-    shard_count = 2,
-    tags = [
-        "dotnet",
-    ],
-    test_env = {
-        "TMPDIR": "$TEST_TMPDIR",
-    },
-)
-
-rabbitmq_integration_suite(
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
-    deps = [
-        "//deps/amqp10_common:erlang_app",
-    ],
-)
-
-assert_suites()
+all_srcs(name = "all_srcs")
 
 alias(
     name = "rabbitmq_amqp1_0",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
 )
+
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
+
+plt(
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    plt = "//:base_plt",
+)
+
+dialyze(
+    name = "dialyze",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+assert_suites()

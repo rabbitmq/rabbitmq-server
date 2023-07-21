@@ -100,7 +100,8 @@ eunit(
     target = ":test_erlang_app",
 )
 
-broker_for_integration_suites()
+broker_for_integration_suites(
+)
 
 rabbitmq_integration_suite(
     name = "commands_SUITE",
@@ -139,6 +140,14 @@ rabbitmq_integration_suite(
     deps = [
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_stream_common:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "protocol_interop_SUITE",
+    size = "medium",
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
     ],
 )
 

@@ -116,6 +116,11 @@ rabbitmq_suite(
     name = "binary_parser_SUITE",
 )
 
+rabbitmq_suite(
+    name = "serial_number_SUITE",
+    size = "small",
+)
+
 assert_suites()
 
 alias(

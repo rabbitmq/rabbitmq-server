@@ -8,11 +8,10 @@
 -module(unit_access_control_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 all() ->
     [
@@ -24,7 +23,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           password_hashing,
-          unsupported_connection_refusal
+          version_negotiation
       ]},
       {sequential_tests, [], [
           login_with_credentials_but_no_password,
@@ -278,20 +277,37 @@ auth_backend_internal_expand_topic_permission(_Config) ->
         ),
     ok.
 
-unsupported_connection_refusal(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, unsupported_connection_refusal1, [Config]).
+%% Test AMQP 1.0 §2.2
+version_negotiation(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, version_negotiation1, [Config]).
 
-unsupported_connection_refusal1(Config) ->
+version_negotiation1(Config) ->
     H = ?config(rmq_hostname, Config),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    [passed = test_unsupported_connection_refusal(H, P, V) ||
-        V <- [<<"AMQP",9,9,9,9>>, <<"AMQP",0,1,0,0>>, <<"XXXX",0,0,9,1>>]],
-    passed.
 
-test_unsupported_connection_refusal(H, P, Header) ->
+    [?assertEqual(<<"AMQP",0,1,0,0>>, version_negotiation2(H, P, Vsn)) ||
+     Vsn <- [<<"AMQP",0,1,0,0>>,
+             <<"AMQP",0,1,0,1>>,
+             <<"AMQP",0,1,1,0>>,
+             <<"AMQP",0,9,1,0>>,
+             <<"AMQP",0,0,8,0>>,
+             <<"XXXX",0,1,0,0>>,
+             <<"XXXX",0,0,9,1>>]],
+
+    [?assertEqual(<<"AMQP",3,1,0,0>>, version_negotiation2(H, P, Vsn)) ||
+     Vsn <- [<<"AMQP",1,1,0,0>>,
+             <<"AMQP",4,1,0,0>>,
+             <<"AMQP",9,1,0,0>>]],
+
+    [?assertEqual(<<"AMQP",0,0,9,1>>, version_negotiation2(H, P, Vsn)) ||
+     Vsn <- [<<"AMQP",0,0,9,2>>,
+             <<"AMQP",0,0,10,0>>,
+             <<"AMQP",0,0,10,1>>]],
+    ok.
+
+version_negotiation2(H, P, Header) ->
     {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
     ok = gen_tcp:send(C, Header),
-    {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
+    {ok, ServerVersion} = gen_tcp:recv(C, 8, 100),
     ok = gen_tcp:close(C),
-    passed.
+    ServerVersion.

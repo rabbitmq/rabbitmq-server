@@ -2,16 +2,16 @@
 
 This is an [Erlang client for the AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
 
-It's primary purpose is to be used in RabbitMQ related projects but it is a
-generic client that was tested with at least 4 implementations of AMQP 1.0.
+Its primary purpose is to be used in RabbitMQ related projects but it is a
+generic client that was tested with at least 3 implementations of AMQP 1.0.
 
 If you are looking for an Erlang client for [AMQP 0-9-1](https://www.rabbitmq.com/tutorials/amqp-concepts.html) — a completely different
-protocol despite the name — [consider this one](https://github.com/rabbitmq/rabbitmq-erlang-client).
+protocol despite the name — [consider this one](../amqp_client).
 
 ## Project Maturity and Status
 
 This client is used in the cross-protocol version of the RabbitMQ Shovel plugin. It is not 100%
-feature complete but moderately mature and was tested against at least three AMQP 1.0 servers:
+feature complete but moderately mature and was tested against at least 3 AMQP 1.0 servers:
 RabbitMQ, Azure ServiceBus, ActiveMQ.
 
 This client library is not officially supported by VMware at this time.
@@ -80,8 +80,8 @@ after 2000 ->
       exit(credited_timeout)
 end.
 
-%% create a new message using a delivery-tag, body and indicate
-%% it's settlement status (true meaning no disposition confirmation
+%% Create a new message using a delivery-tag, body and indicate
+%% its settlement status (true meaning no disposition confirmation
 %% will be sent by the receiver).
 OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, true),
 ok = amqp10_client:send_msg(Sender, OutMsg),
@@ -112,7 +112,7 @@ after the `Open` frame has been successfully written to the socket rather than
 waiting until the remote end returns with their `Open` frame. The client will
 notify the caller of various internal/async events using `amqp10_event`
 messages. In the example above when the remote replies with their `Open` frame
-a message is sent of the following forma:
+a message is sent of the following form:
 
 ```
 {amqp10_event, {connection, ConnectionPid, opened}}

@@ -1268,7 +1268,7 @@ management_plugin_connection(Config) ->
        name := ConnectionName}] = http_get(Config, "/connections"),
     process_flag(trap_exit, true),
     http_delete(Config,
-                "/connections/" ++ binary_to_list(uri_string:quote((ConnectionName))),
+                "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)),
                 ?NO_CONTENT),
     await_exit(C1),
     ?assertEqual([], http_get(Config, "/connections")),
@@ -1386,7 +1386,7 @@ keepalive(Config) ->
 
     await_exit(C1),
     assert_v5_disconnect_reason_code(Config, ?RC_KEEP_ALIVE_TIMEOUT),
-    true = rpc(Config, meck, validate, [Mod]),
+    ?assert(rpc(Config, meck, validate, [Mod])),
     ok = rpc(Config, meck, unload, [Mod]),
 
     C2 = connect(<<"client2">>, Config),
@@ -1415,7 +1415,7 @@ keepalive_turned_off(Config) ->
 
     rabbit_ct_helpers:consistently(?_assert(erlang:is_process_alive(C))),
 
-    true = rpc(Config, meck, validate, [Mod]),
+    ?assert(rpc(Config, meck, validate, [Mod])),
     ok = rpc(Config, meck, unload, [Mod]),
     ok = emqtt:disconnect(C).
 

@@ -9,8 +9,7 @@
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
--export([parse_endpoint/1, parse_endpoint/2]).
--export([parse_routing/1, dest_temp_queue/1]).
+-export([dest_temp_queue/1]).
 
 -include("amqp_client.hrl").
 -include("rabbit_routing_prefixes.hrl").
@@ -23,50 +22,6 @@ dest_prefixes() -> [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
                     ?AMQQUEUE_PREFIX, ?REPLY_QUEUE_PREFIX].
 
 all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].
-
-%% --------------------------------------------------------------------------
-
-parse_endpoint(Destination) ->
-    parse_endpoint(Destination, false).
-
-parse_endpoint(undefined, AllowAnonymousQueue) ->
-    parse_endpoint("/queue", AllowAnonymousQueue);
-
-parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination),
-                                              AllowAnonymousQueue);
-parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
-        [Name] ->
-            {ok, {queue, unescape(Name)}};
-        ["", Type | Rest]
-            when Type =:= "exchange" orelse Type =:= "queue" orelse
-                 Type =:= "topic"    orelse Type =:= "temp-queue" ->
-            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
-        ["", "amq", "queue" | Rest] ->
-            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
-        ["", "reply-queue" = Prefix | [_|_]] ->
-            parse_endpoint0(reply_queue,
-                            [lists:nthtail(2 + length(Prefix), Destination)],
-                            AllowAnonymousQueue);
-        _ ->
-            {error, {unknown_destination, Destination}}
-    end.
-
-parse_endpoint0(exchange, ["" | _] = Rest,    _) ->
-    {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name],             _) ->
-    {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern],    _) ->
-    {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(queue,    [],                 false) ->
-    {error, {invalid_destination, queue, []}};
-parse_endpoint0(queue,    [],                 true) ->
-    {ok, {queue, undefined}};
-parse_endpoint0(Type,     [[_|_]] = [Name],   _) ->
-    {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type,     Rest,               _) ->
-    {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
 
@@ -140,16 +95,6 @@ ensure_binding(Queue, {Exchange, RoutingKey}, Channel) ->
 
 %% --------------------------------------------------------------------------
 
-parse_routing({exchange, {Name, undefined}}) ->
-    {Name, ""};
-parse_routing({exchange, {Name, Pattern}}) ->
-    {Name, Pattern};
-parse_routing({topic, Name}) ->
-    {"amq.topic", Name};
-parse_routing({Type, Name})
-  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
-    {"", Name}.
-
 dest_temp_queue({temp_queue, Name}) -> Name;
 dest_temp_queue(_)                  -> none.
 
@@ -206,17 +151,3 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
         _ ->
             Method2
     end.
-
-%% --------------------------------------------------------------------------
-
-to_url([])  -> [];
-to_url(Lol) -> "/" ++ string:join(Lol, "/").
-
-atomise(Name) when is_list(Name) ->
-    list_to_atom(re:replace(Name, "-", "_", [{return,list}, global])).
-
-unescape(Str) -> unescape(Str, []).
-
-unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
-unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
-unescape([],           Acc) -> lists:reverse(Acc).

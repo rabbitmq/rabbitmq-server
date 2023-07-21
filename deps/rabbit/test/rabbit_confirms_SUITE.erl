@@ -64,8 +64,8 @@ confirm(_Config) ->
     ?assertEqual(undefined, rabbit_confirms:smallest(U7)),
 
     U8 = rabbit_confirms:insert(2, [QName], XName, U1),
-    {[{1, XName}, {2, XName}], _U9} = rabbit_confirms:confirm([1, 2], QName, U8),
-    ok.
+    {[{Seq1, XName}, {Seq2, XName}], _U9} = rabbit_confirms:confirm([1, 2], QName, U8),
+    ?assertEqual([1, 2], lists:sort([Seq1, Seq2])).
 
 
 reject(_Config) ->
@@ -94,8 +94,7 @@ reject(_Config) ->
     {ok, {2, XName}, U5} = rabbit_confirms:reject(2, U3),
     {error, not_found} = rabbit_confirms:reject(2, U5),
     ?assertEqual(1, rabbit_confirms:size(U5)),
-    ?assertEqual(1, rabbit_confirms:smallest(U5)),
-    ok.
+    ?assertEqual(1, rabbit_confirms:smallest(U5)).
 
 remove_queue(_Config) ->
     XName = rabbit_misc:r(<<"/">>, exchange, <<"X">>),
@@ -114,5 +113,5 @@ remove_queue(_Config) ->
 
     U5 = rabbit_confirms:insert(1, [QName], XName, U0),
     U6 = rabbit_confirms:insert(2, [QName], XName, U5),
-    {[{1, XName}, {2, XName}], _U} = rabbit_confirms:remove_queue(QName, U6),
-    ok.
+    {[{Seq1, XName}, {Seq2, XName}], _U} = rabbit_confirms:remove_queue(QName, U6),
+    ?assertEqual([1, 2], lists:sort([Seq1, Seq2])).

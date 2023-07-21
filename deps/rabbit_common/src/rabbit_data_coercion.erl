@@ -65,9 +65,9 @@ to_map(Val) when is_list(Val) -> maps:from_list(Val).
 
 -spec atomize_keys(Val :: map() | list()) -> map() | list().
 atomize_keys(Val) when is_list(Val) ->
-  [{to_atom(K), V} || {K, V} <- Val];
+    [{to_atom(K), V} || {K, V} <- Val];
 atomize_keys(Val) when is_map(Val) ->
-  maps:from_list(atomize_keys(maps:to_list(Val))).
+    #{to_atom(K) => V || K := V <- Val}.
 
 -spec to_list_of_binaries(Val :: undefined | [atom() | list() | binary() | integer()]) -> [binary()].
 to_list_of_binaries(Value) ->

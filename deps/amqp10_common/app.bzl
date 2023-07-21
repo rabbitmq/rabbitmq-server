@@ -13,6 +13,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/serial_number.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "amqp10_common",
@@ -34,6 +35,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/serial_number.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "amqp10_common",
@@ -62,11 +64,12 @@ def all_srcs(name = "all_srcs"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/serial_number.erl",
         ],
     )
     filegroup(
         name = "public_hdrs",
-        srcs = ["include/amqp10_framing.hrl"],
+        srcs = ["include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
     )
     filegroup(
         name = "private_hdrs",
@@ -93,6 +96,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/binary_parser_SUITE.erl"],
         outs = ["test/binary_parser_SUITE.beam"],
+        app_name = "amqp10_common",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "serial_number_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/serial_number_SUITE.erl"],
+        outs = ["test/serial_number_SUITE.beam"],
         app_name = "amqp10_common",
         erlc_opts = "//:test_erlc_opts",
     )
