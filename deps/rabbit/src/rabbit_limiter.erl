@@ -62,12 +62,11 @@
 %%    that's what the limit_prefetch/3, unlimit_prefetch/1,
 %%    get_prefetch_limit/1 API functions are about. They also tell the
 %%    limiter queue state (via the queue) about consumer credit
-%%    changes and message acknowledgement - that's what credit/5 and
+%%    changes and message acknowledgement - that's what credit/4 and
 %%    ack_from_queue/3 are for.
 %%
-%% 2. Queues also tell the limiter queue state about the queue
-%%    becoming empty (via drained/1) and consumers leaving (via
-%%    forget_consumer/2).
+%% 2. Queues also tell the limiter queue state about consumers leaving
+%%    (via forget_consumer/2).
 %%
 %% 3. Queues register with the limiter - this happens as part of
 %%    activate/1.
@@ -120,8 +119,8 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/5, ack_from_queue/3,
-         drained/1, forget_consumer/2]).
+         is_suspended/1, is_consumer_blocked/2, credit/4, ack_from_queue/3,
+         forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/4]).
@@ -136,7 +135,7 @@
 -type qstate() :: #qstate{pid :: pid() | none,
                           state :: 'dormant' | 'active' | 'suspended'}.
 
--type credit_mode() :: 'manual' | 'drain' | 'auto'.
+-type credit_mode() :: auto | manual.
 
 %%----------------------------------------------------------------------------
 
@@ -259,18 +258,11 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
--spec credit
-        (qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode(),
-         boolean()) ->
-            {boolean(), qstate()}.
-
-credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
-    {Res, Cr} =
-        case IsEmpty andalso Mode =:= drain of
-            true  -> {true,  #credit{credit = 0,   mode = manual}};
-            false -> {false, #credit{credit = Crd, mode = Mode}}
-        end,
-    {Res, Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}}.
+-spec credit(qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode()) ->
+    qstate().
+credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode) ->
+    Cr =  #credit{credit = Crd, mode = Mode},
+    Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}.
 
 -spec ack_from_queue(qstate(), rabbit_types:ctag(), non_neg_integer()) ->
           {boolean(), qstate()}.
@@ -286,20 +278,6 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
         end,
     {Unblocked, Limiter#qstate{credits = Credits1}}.
 
--spec drained(qstate()) ->
-          {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}.
-
-drained(Limiter = #qstate{credits = Credits}) ->
-    Drain = fun(C) -> C#credit{credit = 0, mode = manual} end,
-    {CTagCredits, Credits2} =
-        rabbit_misc:gb_trees_fold(
-          fun (CTag, C = #credit{credit = Crd, mode = drain},  {Acc, Creds0}) ->
-                  {[{CTag, Crd} | Acc], update_credit(CTag, Drain(C), Creds0)};
-              (_CTag,   #credit{credit = _Crd, mode = _Mode}, {Acc, Creds0}) ->
-                  {Acc, Creds0}
-          end, {[], Credits}, Credits),
-    {CTagCredits, Limiter#qstate{credits = Credits2}}.
-
 -spec forget_consumer(qstate(), rabbit_types:ctag()) -> qstate().
 
 forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
@@ -308,13 +286,6 @@ forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
 %%----------------------------------------------------------------------------
 %% Queue-local code
 %%----------------------------------------------------------------------------
-
-%% We want to do all the AMQP 1.0-ish link level credit calculations
-%% in the queue (to do them elsewhere introduces a ton of
-%% races). However, it's a big chunk of code that is conceptually very
-%% linked to the limiter concept. So we get the queue to hold a bit of
-%% state for us (#qstate.credits), and maintain a fiction that the
-%% limiter is making the decisions...
 
 decrement_credit(CTag, Credits) ->
     case gb_trees:lookup(CTag, Credits) of
@@ -325,16 +296,10 @@ decrement_credit(CTag, Credits) ->
     end.
 
 enter_credit(CTag, C, Credits) ->
-    gb_trees:enter(CTag, ensure_credit_invariant(C), Credits).
+    gb_trees:enter(CTag, C, Credits).
 
 update_credit(CTag, C, Credits) ->
-    gb_trees:update(CTag, ensure_credit_invariant(C), Credits).
-
-ensure_credit_invariant(C = #credit{credit = 0, mode = drain}) ->
-    %% Using up all credit implies no need to send a 'drained' event
-    C#credit{mode = manual};
-ensure_credit_invariant(C) ->
-    C.
+    gb_trees:update(CTag, C, Credits).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

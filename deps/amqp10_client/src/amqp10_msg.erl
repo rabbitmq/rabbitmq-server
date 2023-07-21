@@ -38,7 +38,7 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--type maybe(T) :: T | undefined.
+-type opt(T) :: T | undefined.
 
 -type delivery_tag() :: binary().
 -type content_type() :: term(). % TODO: refine
@@ -52,23 +52,23 @@
 
 -type amqp10_header() :: #{durable => boolean(), % false
                            priority => byte(), % 4
-                           ttl => maybe(non_neg_integer()),
+                           ttl => opt(non_neg_integer()),
                            first_acquirer => boolean(), % false
                            delivery_count => non_neg_integer()}. % 0
 
--type amqp10_properties() :: #{message_id => maybe(any()),
-                               user_id => maybe(binary()),
-                               to => maybe(any()),
-                               subject => maybe(binary()),
-                               reply_to => maybe(any()),
-                               correlation_id => maybe(any()),
-                               content_type => maybe(content_type()),
-                               content_encoding => maybe(content_encoding()),
-                               absolute_expiry_time => maybe(non_neg_integer()),
-                               creation_time => maybe(non_neg_integer()),
-                               group_id => maybe(binary()),
-                               group_sequence => maybe(non_neg_integer()),
-                               reply_to_group_id => maybe(binary())}.
+-type amqp10_properties() :: #{message_id => opt(any()),
+                               user_id => opt(binary()),
+                               to => opt(any()),
+                               subject => opt(binary()),
+                               reply_to => opt(any()),
+                               correlation_id => opt(any()),
+                               content_type => opt(content_type()),
+                               content_encoding => opt(content_encoding()),
+                               absolute_expiry_time => opt(non_neg_integer()),
+                               creation_time => opt(non_neg_integer()),
+                               group_id => opt(binary()),
+                               group_sequence => opt(non_neg_integer()),
+                               reply_to_group_id => opt(binary())}.
 
 -type amqp10_body() :: [#'v1_0.data'{}] |
                        [#'v1_0.amqp_sequence'{}] |
@@ -78,13 +78,13 @@
 
 -record(amqp10_msg,
         {transfer :: #'v1_0.transfer'{},
-         header :: maybe(#'v1_0.header'{}),
-         delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}),
-         properties :: maybe(#'v1_0.properties'{}),
-         application_properties :: maybe(#'v1_0.application_properties'{}),
+         header :: opt(#'v1_0.header'{}),
+         delivery_annotations :: opt(#'v1_0.delivery_annotations'{}),
+         message_annotations :: opt(#'v1_0.message_annotations'{}),
+         properties :: opt(#'v1_0.properties'{}),
+         application_properties :: opt(#'v1_0.application_properties'{}),
          body :: amqp10_body() | unset,
-         footer :: maybe(#'v1_0.footer'{})
+         footer :: opt(#'v1_0.footer'{})
          }).
 
 -opaque amqp10_msg() :: #amqp10_msg{}.
@@ -142,7 +142,7 @@ settled(#amqp10_msg{transfer = #'v1_0.transfer'{settled = Settled}}) ->
 % the last 1 octet is the version
 % See 2.8.11 in the spec
 -spec message_format(amqp10_msg()) ->
-    maybe({non_neg_integer(), non_neg_integer()}).
+    opt({non_neg_integer(), non_neg_integer()}).
 message_format(#amqp10_msg{transfer =
                          #'v1_0.transfer'{message_format = undefined}}) ->
     undefined;

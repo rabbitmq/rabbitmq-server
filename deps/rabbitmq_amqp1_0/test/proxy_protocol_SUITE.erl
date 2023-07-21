@@ -7,47 +7,38 @@
 
 -module(proxy_protocol_SUITE).
 
--include_lib("common_test/include/ct.hrl").
-
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -define(TIMEOUT, 5000).
 
 all() ->
-    [
-        {group, sequential_tests}
-    ].
+    [{group, tests}].
 
-groups() -> [
-        {sequential_tests, [], [
-            proxy_protocol_v1,
-            proxy_protocol_v1_tls,
-            proxy_protocol_v2_local
-        ]}
+groups() ->
+    [{tests, [shuffle],
+      [v1,
+       v1_tls,
+       v2_local]}
     ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
-    ]),
-    Config2 = rabbit_ct_helpers:merge_app_env(Config1, [
-        {rabbit, [
-            {proxy_protocol, true}
-        ]}
-    ]),
-    Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
-    rabbit_ct_helpers:run_setup_steps(Config3,
-        rabbit_ct_broker_helpers:setup_steps() ++
-        rabbit_ct_client_helpers:setup_steps()).
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodename_suffix, ?MODULE},
+                 {rabbitmq_ct_tls_verify, verify_none}]),
+    Config2 = rabbit_ct_helpers:merge_app_env(
+                Config1,
+                [{rabbit, [{proxy_protocol, true}]}]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config2,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) -> Config.
-end_per_group(_, Config) -> Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -55,38 +46,38 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-proxy_protocol_v1(Config) ->
+v1(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-        [binary, {active, false}, {packet, raw}]),
+                                   [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     [ok = inet:send(Socket, amqp_1_0_frame(FrameType))
-        || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
+     || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81 \\(\\d\\)">>, [{capture, none}]),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(
+                       Config, ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
-proxy_protocol_v1_tls(Config) ->
+v1_tls(Config) ->
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-        [binary, {active, false}, {packet, raw}]),
+                                   [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
     [ok = ssl:send(SslSocket, amqp_1_0_frame(FrameType))
-        || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
+     || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     timer:sleep(1000),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81 \\(\\d\\)$">>, [{capture, none}]),
+                                                  ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
-proxy_protocol_v2_local(Config) ->
+v2_local(Config) ->
     ProxyInfo = #{
         command => local,
         version => 2
@@ -100,7 +91,7 @@ proxy_protocol_v2_local(Config) ->
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+ \\(\\d\\)$">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
@@ -136,17 +127,16 @@ connection_name() ->
     case retry(fun connection_registered/0, 20) of
         true ->
             Connections = ets:tab2list(connection_created),
-            {_Key, Values} = lists:nth(1, Connections),
+            {_Key, Values} = hd(Connections),
             {_, Name} = lists:keyfind(name, 1, Values),
             Name;
         false ->
-            error
+            ct:fail("no connection registered")
     end.
 
 connection_registered() ->
-    I = ets:info(connection_created),
-    Size = proplists:get_value(size, I),
-    Size > 0.
+    Size = ets:info(connection_created, size),
+    is_integer(Size) andalso Size > 0.
 
 retry(_Function, 0) ->
     false;

@@ -22,7 +22,7 @@
          settle/3,
          return/3,
          discard/3,
-         credit/4,
+         credit/6,
          handle_ra_event/4,
          untracked_enqueue/2,
          purge/1,
@@ -39,11 +39,6 @@
 -define(COMMAND_TIMEOUT, 30000).
 
 -type seq() :: non_neg_integer().
--type action() :: {send_credit_reply, Available :: non_neg_integer()} |
-                  {send_drained, CTagCredit ::
-                   {rabbit_fifo:consumer_tag(), non_neg_integer()}} |
-                  rabbit_queue_type:action().
--type actions() :: [action()].
 
 -record(consumer, {last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
@@ -65,18 +60,14 @@
                                            {[seq()], [seq()], [seq()]}},
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
-                consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
+                consumer_deliveries = #{} :: #{rabbit_types:ctag() =>
                                                #consumer{}},
                 timer_state :: term()
                }).
 
 -opaque state() :: #state{}.
 
--export_type([
-              state/0,
-              actions/0
-             ]).
-
+-export_type([state/0]).
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
@@ -111,7 +102,7 @@ init(Servers, SoftLimit) ->
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 -spec enqueue(rabbit_amqqueue:name(), Correlation :: term(),
               Msg :: term(), State :: state()) ->
-    {ok, state(), actions()} | {reject_publish, state()}.
+    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()}.
 enqueue(QName, Correlation, Msg,
         #state{queue_status = undefined,
                next_enqueue_seq = 1,
@@ -177,7 +168,7 @@ enqueue(QName, Correlation, Msg,
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 %%
 -spec enqueue(rabbit_amqqueue:name(), Msg :: term(), State :: state()) ->
-    {ok, state(), actions()} | {reject_publish, state()}.
+    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()}.
 enqueue(QName, Msg, State) ->
     enqueue(QName, undefined, Msg, State).
 
@@ -193,7 +184,7 @@ enqueue(QName, Msg, State) ->
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
--spec dequeue(rabbit_amqqueue:name(), rabbit_fifo:consumer_tag(),
+-spec dequeue(rabbit_amqqueue:name(), rabbit_types:ctag(),
               Settlement :: settled | unsettled, state()) ->
     {ok, non_neg_integer(), term(), non_neg_integer()}
      | {empty, state()} | {error | timeout, term()}.
@@ -239,7 +230,7 @@ add_delivery_count_header(Msg, Count) ->
 %% @param MsgIds the message ids received with the {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
 %%
--spec settle(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec settle(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     ServerId = pick_server(State0),
@@ -267,7 +258,7 @@ settle(ConsumerTag, [_|_] = MsgIds,
 %% @returns
 %% `{State, list()}' if the command was successfully sent.
 %%
--spec return(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec return(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     ServerId = pick_server(State0),
@@ -292,7 +283,7 @@ return(ConsumerTag, [_|_] = MsgIds,
 %% @param MsgIds the message ids to discard
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
--spec discard(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec discard(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     ServerId = pick_server(State0),
@@ -325,7 +316,7 @@ discard(ConsumerTag, [_|_] = MsgIds,
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec checkout(rabbit_fifo:consumer_tag(),
+-spec checkout(rabbit_types:ctag(),
                NumUnsettled :: non_neg_integer(),
                CreditMode :: rabbit_fifo:credit_mode(),
                Meta :: rabbit_fifo:consumer_meta(),
@@ -389,16 +380,19 @@ query_single_active_consumer(#state{leader = Leader}) ->
 %%
 %% This only has an effect if the consumer uses credit mode: credited
 %% @param ConsumerTag a unique tag to identify this particular consumer.
-%% @param Credit the amount of credit to provide to theq queue
+%% @param Credit the amount of credit to provide to the queue
 %% @param Drain tells the queue to use up any credit that cannot be immediately
 %% fulfilled. (i.e. there are not enough messages on queue to use up all the
 %% provided credit).
--spec credit(rabbit_fifo:consumer_tag(),
-             Credit :: non_neg_integer(),
+%% @param Reply true if the queue client requests a credit_reply queue action
+-spec credit(rabbit_types:ctag(),
+             rabbit_queue_type:credit(),
              Drain :: boolean(),
+             Reply :: boolean(),
+             rabbit_queue_type:link_state_properties(),
              state()) ->
-          {state(), actions()}.
-credit(ConsumerTag, Credit, Drain,
+          {state(), rabbit_queue_type:actions()}.
+credit(ConsumerTag, Credit, Drain, _Reply, _Properties,
        #state{consumer_deliveries = CDels} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
     %% the last received msgid provides us with the delivery count if we
@@ -406,7 +400,7 @@ credit(ConsumerTag, Credit, Drain,
     C = maps:get(ConsumerTag, CDels, #consumer{last_msg_id = -1}),
     ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
-                                  C#consumer.last_msg_id + 1, Drain),
+                                  C#consumer.delivery_count, Drain),
     {send_command(ServerId, undefined, Cmd, normal, State0), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
@@ -418,7 +412,7 @@ credit(ConsumerTag, Credit, Drain,
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec cancel_checkout(rabbit_fifo:consumer_tag(), state()) ->
+-spec cancel_checkout(rabbit_types:ctag(), state()) ->
     {ok, state()} | {error | timeout, term()}.
 cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
     Servers = sorted_servers(State0),
@@ -521,25 +515,25 @@ update_machine_state(Server, Conf) ->
 %% with them.</li>
 -spec handle_ra_event(rabbit_amqqueue:name(), ra:server_id(),
                       ra_server_proc:ra_event_body(), state()) ->
-    {internal, Correlators :: [term()], actions(), state()} |
-    {rabbit_fifo:client_msg(), state()} | {eol, actions()}.
+    {internal, Correlators :: [term()], rabbit_queue_type:actions(), state()} |
+    {rabbit_fifo:client_msg(), state()} | {eol, rabbit_queue_type:actions()}.
 handle_ra_event(QName, From, {applied, Seqs},
                 #state{cfg = #cfg{soft_limit = SftLmt}} = State0) ->
 
-    {Corrs, Actions0, State1} = lists:foldl(fun seq_applied/2,
-                                           {[], [], State0#state{leader = From}},
-                                           Seqs),
+    {Corrs, ActionsRev, State1} = lists:foldl(fun seq_applied/2,
+                                              {[], [], State0#state{leader = From}},
+                                              Seqs),
+    Actions0 = lists:reverse(ActionsRev),
     Actions = case Corrs of
                   [] ->
-                      lists:reverse(Actions0);
+                      Actions0;
                   _ ->
                       %%TODO consider using lists:foldr/3 above because
                       %% Corrs is returned in the wrong order here.
                       %% The wrong order does not matter much because the channel sorts the
                       %% sequence numbers before confirming to the client. But rabbit_fifo_client
                       %% is sequence numer agnostic: it handles any correlation terms.
-                      [{settled, QName, Corrs}
-                       | lists:reverse(Actions0)]
+                      [{settled, QName, Corrs} | Actions0]
               end,
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
@@ -572,6 +566,18 @@ handle_ra_event(QName, From, {applied, Seqs},
     end;
 handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(QName, From, Del, State0);
+handle_ra_event(_QName, _From,
+                {machine, {credit_reply, Tag, Credit, _Available,
+                           Drain, _LinkStateProperties} = Action},
+                State0) ->
+    State = case Drain of
+                true -> add_delivery_count(Credit, Tag, State0);
+                false -> State0
+            end,
+    %%TODO filter out Action if local echo state is false and not Drain or
+    %% introduce new #credit_v2{} command that contains an additional Reply boolean when
+    %% we go with a new fifo version.
+    {ok, State, [Action]};
 handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status
@@ -667,14 +673,13 @@ maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
                         maybe_add_action(Act, Acc, State)
                 end, {Acc0, State0}, Actions);
-maybe_add_action({send_drained, {Tag, Credit}} = Action, Acc,
-                 #state{consumer_deliveries = CDels} = State) ->
-    %% add credit to consumer delivery_count
-    C = maps:get(Tag, CDels),
-    {[Action | Acc],
-     State#state{consumer_deliveries =
-                 update_consumer(Tag, C#consumer.last_msg_id,
-                                 Credit, C, CDels)}};
+maybe_add_action({send_drained, {Tag, Credit}}, Acc, State0) ->
+    %% This function clause should be deleted when
+    %% feature flag credit_api_v2 becomes required.
+    State = add_delivery_count(Credit, Tag, State0),
+    %% Convert to new credit_api_v2 action.
+    Action = {credit_reply, Tag, Credit, _Avail = 0, _Drain = true, #{}},
+    {[Action | Acc], State};
 maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
     {[Action | Acc], State}.
@@ -792,6 +797,10 @@ update_consumer(Tag, LastId, DelCntIncr,
                         delivery_count = D + DelCntIncr},
              Consumers).
 
+add_delivery_count(DelCntIncr, Tag, #state{consumer_deliveries = CDels0} = State) ->
+    Con = #consumer{last_msg_id = LastMsgId} = maps:get(Tag, CDels0),
+    CDels = update_consumer(Tag, LastMsgId, DelCntIncr, Con, CDels0),
+    State#state{consumer_deliveries = CDels}.
 
 get_missing_deliveries(State, From, To, ConsumerTag) ->
     %% find local server

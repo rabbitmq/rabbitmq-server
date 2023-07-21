@@ -21,8 +21,7 @@ load(
 
 APP_ENV = """[
 	    {default_user, "guest"},
-	    {default_vhost, <<"/">>},
-	    {protocol_strict_mode, false}
+	    {default_vhost, <<"/">>}
 	  ]"""
 
 APP_NAME = "rabbitmq_amqp1_0"
@@ -36,6 +35,8 @@ all_test_beam_files(name = "all_test_beam_files")
 all_srcs(name = "all_srcs")
 
 test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep amqp_client
 
 rabbitmq_app(
     name = "erlang_app",
@@ -86,6 +87,7 @@ dialyze(
 
 eunit(
     name = "eunit",
+    compiled_suites = [":test_event_recorder_beam"],
     target = ":test_erlang_app",
 )
 
@@ -93,7 +95,11 @@ broker_for_integration_suites()
 
 rabbitmq_integration_suite(
     name = "amqp10_client_SUITE",
-    size = "medium",
+    size = "large",
+    additional_beam = [
+        ":test_event_recorder_beam",
+    ],
+    shard_count = 3,
     runtime_deps = [
         "//deps/amqp10_client:erlang_app",
     ],
@@ -131,11 +137,13 @@ rabbitmq_integration_suite(
     name = "config_schema_SUITE",
 )
 
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
-    deps = [
-        "//deps/amqp10_common:erlang_app",
+rabbitmq_integration_suite(
+    name = "auth_SUITE",
+    additional_beam = [
+        ":test_event_recorder_beam",
+    ],
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
     ],
 )
 

@@ -35,7 +35,7 @@
          settle_msg/3,
          flow_link_credit/3,
          flow_link_credit/4,
-         echo/1,
+         stop_receiver_link/1,
          link_handle/1,
          get_msg/1,
          get_msg/2,
@@ -112,7 +112,7 @@ open_connection(ConnectionConfig0) ->
     ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
     amqp10_client_connection:open(ConnectionConfig2).
 
-%% @doc Opens a connection using a connection_config map
+%% @doc Closes a connection.
 %% This is asynchronous and will notify completion to the caller using
 %% an amqp10_event of the following format:
 %% {amqp10_event, {connection, ConnectionPid, {closed, Why}}}
@@ -271,9 +271,8 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
--spec attach_receiver_link(pid(), binary(), binary(),
-                           snd_settle_mode(), terminus_durability(), filter(),
-                           properties()) ->
+-spec attach_receiver_link(pid(), binary(), binary(), snd_settle_mode(),
+                           terminus_durability(), filter(), properties()) ->
     {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties)
   when is_pid(Session) andalso
@@ -323,27 +322,29 @@ flow_link_credit(Ref, Credit, RenewWhenBelow) ->
                        Drain :: boolean()) -> ok.
 flow_link_credit(#link_ref{role = receiver, session = Session,
                            link_handle = Handle},
-                 Credit, RenewWhenBelow, Drain) ->
+                 Credit, RenewWhenBelow, Drain)
+  when RenewWhenBelow =:= never orelse
+       is_integer(RenewWhenBelow) andalso
+       RenewWhenBelow > 0 andalso
+       RenewWhenBelow =< Credit ->
     Flow = #'v1_0.flow'{link_credit = {uint, Credit},
                         drain = Drain},
     ok = amqp10_client_session:flow(Session, Handle, Flow, RenewWhenBelow).
 
-%% @doc Request that the sender's flow state is echoed back
-%% This may be used to determine when the Link has finally quiesced.
-%% see §2.6.10 of the spec
-echo(#link_ref{role = receiver, session = Session,
-               link_handle = Handle}) ->
+%% @doc Stop a receiving link.
+%% See AMQP 1.0 spec §2.6.10.
+stop_receiver_link(#link_ref{role = receiver,
+                             session = Session,
+                             link_handle = Handle}) ->
     Flow = #'v1_0.flow'{link_credit = {uint, 0},
                         echo = true},
-    ok = amqp10_client_session:flow(Session, Handle, Flow, 0).
+    ok = amqp10_client_session:flow(Session, Handle, Flow, never).
 
 %%% messages
 
 %% @doc Send a message on a the link referred to be the 'LinkRef'.
-%% Returns ok for "async" transfers when messages are sent with settled=true
-%% else it returns the delivery state from the disposition
 -spec send_msg(link_ref(), amqp10_msg:amqp10_msg()) ->
-    ok | {error, insufficient_credit | link_not_found | half_attached}.
+    ok | amqp10_client_session:transfer_error().
 send_msg(#link_ref{role = sender, session = Session,
                    link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),

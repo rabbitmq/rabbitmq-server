@@ -36,18 +36,11 @@ See the "Virtual Hosts" section below for a description.
 
     {default_vhost, <<"/">>}
 
-The `protocol_strict_mode` setting controls how strictly peers must conform
-to the specification. The default is not to enforce strictness, which allows
-non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
-
-    {protocol_strict_mode, false}
-
 
 Configuration example using [sysctl config format](https://rabbitmq.com/configure.html#config-file-formats):
 
     amqp1_0.default_user  = guest
     amqp1_0.default_vhost = /
-    amqp1_0.protocol_strict_mode = false
 
 
 Configuration for interoperability between AMQP 0.9.1 and AMQP 1.0. 

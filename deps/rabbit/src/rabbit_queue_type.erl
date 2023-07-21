@@ -43,7 +43,7 @@
          module/2,
          deliver/4,
          settle/5,
-         credit/5,
+         credit/7,
          dequeue/5,
          fold_state/3,
          is_policy_applicable/2,
@@ -63,11 +63,14 @@
 
 -type queue_name() :: rabbit_amqqueue:name().
 -type queue_state() :: term().
--type msg_tag() :: term().
+%% sequence number typically
+-type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
 -type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
-
--export_type([queue_type/0]).
+%% Link credit can be negative, see AMQP 1.0 [2.6.7].
+-type credit() :: integer().
+%% https://www.amqp.org/specification/1.0/link-state-properties
+-type link_state_properties() :: #{binary() => term()}.
 
 -define(STATE, ?MODULE).
 
@@ -83,9 +86,11 @@
 -type action() ::
     %% indicate to the queue type module that a message has been delivered
     %% fully to the queue
-    {settled, Success :: boolean(), [msg_tag()]} |
+    {settled, queue_name(), [correlation()]} |
     {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} |
-    {block | unblock, QueueName :: term()}.
+    {block | unblock, QueueName :: term()} |
+    {credit_reply, rabbit_types:ctag(), credit(), Available :: non_neg_integer(),
+     Drain :: boolean(), link_state_properties()}.
 
 -type actions() :: [action()].
 
@@ -94,44 +99,41 @@
     term().
 
 -record(ctx, {module :: module(),
-              %% "publisher confirm queue accounting"
-              %% queue type implementation should emit a:
-              %% {settle, Success :: boolean(), msg_tag()}
-              %% to either settle or reject the delivery of a
-              %% message to the queue instance
-              %% The queue type module will then emit a {confirm | reject, [msg_tag()}
-              %% action to the channel or channel like process when a msg_tag
-              %% has reached its conclusion
               state :: queue_state()}).
-
 
 -record(?STATE, {ctxs = #{} :: #{queue_name() => #ctx{}}
                 }).
 
 -opaque state() :: #?STATE{}.
 
+-type consume_mode() :: credited | {simple_prefetch, non_neg_integer()}.
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
                           limiter_pid => pid() | none,
                           limiter_active => boolean(),
-                          prefetch_count => non_neg_integer(),
+                          mode := consume_mode(),
                           consumer_tag := rabbit_types:ctag(),
                           exclusive_consume => boolean(),
                           args => rabbit_framing:amqp_table(),
                           ok_msg := term(),
                           acting_user :=  rabbit_types:username()}.
 
--type delivery_options() :: #{correlation => term(), %% sequence no typically
+-type delivery_options() :: #{correlation => correlation(),
                               atom() => term()}.
 
 -type settle_op() :: 'complete' | 'requeue' | 'discard'.
 
 -export_type([state/0,
+              consume_mode/0,
               consume_spec/0,
               delivery_options/0,
               action/0,
               actions/0,
-              settle_op/0]).
+              settle_op/0,
+              queue_type/0,
+              credit/0,
+              correlation/0,
+              link_state_properties/0]).
 
 -callback is_enabled() -> boolean().
 
@@ -179,7 +181,8 @@
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
                   queue_state()) ->
-    {ok, queue_state(), actions()} | {error, term()} |
+    {ok, queue_state(), actions()} |
+    {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback cancel(amqqueue:amqqueue(),
@@ -207,8 +210,9 @@
     {queue_state(), actions()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
--callback credit(queue_name(), rabbit_types:ctag(),
-                 non_neg_integer(), Drain :: boolean(), queue_state()) ->
+-callback credit(queue_name(), rabbit_types:ctag(), credit(),
+                 Drain :: boolean(), Reply :: boolean(),
+                 link_state_properties(), queue_state()) ->
     {queue_state(), actions()}.
 
 -callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
@@ -414,7 +418,9 @@ new(Q, State) when ?is_amqqueue(Q) ->
     set_ctx(Q, Ctx, State).
 
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
-    {ok, state()} | {error, term()}.
+    {ok, state()} |
+    {error, term()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 consume(Q, Spec, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
@@ -630,13 +636,13 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
     end.
 
 -spec credit(amqqueue:amqqueue() | queue_name(),
-             rabbit_types:ctag(), non_neg_integer(),
-             boolean(), state()) -> {ok, state(), actions()}.
-credit(Q, CTag, Credit, Drain, Ctxs) ->
+             rabbit_types:ctag(), credit(), boolean(), boolean(),
+             link_state_properties(), state()) ->
+    {ok, state(), actions()}.
+credit(Q, CTag, Credit, Drain, Reply, Properties, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(Q, Ctxs),
-    QName = amqqueue:get_name(Q),
-    {State, Actions} = Mod:credit(QName, CTag, Credit, Drain, State0),
+    {State, Actions} = Mod:credit(qref(Q), CTag, Credit, Drain, Reply, Properties, State0),
     {ok, set_ctx(Q, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),

@@ -25,6 +25,7 @@ groups() ->
         {classic_queue, [], [
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
+            fallback_to_another_consumer_when_first_one_is_cancelled_qos1,
             fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
             fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks,
             amqp_exclusive_consume_fails_on_exclusive_consumer_queue
@@ -32,6 +33,7 @@ groups() ->
         {quorum_queue, [], [
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
+            fallback_to_another_consumer_when_first_one_is_cancelled_qos1,
             fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
             fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks,
             basic_get_is_unsupported
@@ -165,6 +167,49 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     amqp_connection:close(C),
     ok.
 
+fallback_to_another_consumer_when_first_one_is_cancelled_qos1(Config) ->
+    {C, Ch} = connection_and_channel(Config),
+    Q = queue_declare(Ch, Config),
+    ?assertEqual(#'basic.qos_ok'{},
+                 amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 1})),
+    CTag1 = <<"tag1">>,
+    CTag2 = <<"tag2">>,
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
+                                                consumer_tag = CTag1}, self()),
+    receive #'basic.consume_ok'{consumer_tag = CTag1} -> ok
+    after 5000 -> ct:fail(timeout_ctag1)
+    end,
+
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
+                                                consumer_tag = CTag2}, self()),
+    receive #'basic.consume_ok'{consumer_tag = CTag2} -> ok
+    after 5000 -> ct:fail(timeout_ctag2)
+    end,
+
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"m1">>}),
+    amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"m2">>}),
+
+    DTag1 = receive {#'basic.deliver'{consumer_tag = CTag1,
+                                      delivery_tag = DTag},
+                     #amqp_msg{payload = <<"m1">>}} -> DTag
+            after 5000 -> ct:fail(timeout_m1)
+            end,
+
+    #'basic.cancel_ok'{consumer_tag = CTag1} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag1}),
+    receive #'basic.cancel_ok'{consumer_tag = CTag1} -> ok
+    after 5000 -> ct:fail(missing_cancel)
+    end,
+
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+
+    receive {#'basic.deliver'{consumer_tag = CTag2},
+             #amqp_msg{payload = <<"m2">>}} -> ok;
+            Unexpected -> ct:fail({unexpected, Unexpected})
+    after 5000 -> ct:fail(timeout_m2)
+    end,
+    amqp_connection:close(C).
+
 fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks(Config) ->
     %% Let's ensure that although the consumer is cancelled we still keep the unacked
     %% messages and accept acknowledgments on them.
@@ -292,7 +337,7 @@ queue_declare(Channel, Config) ->
 
 consume({Parent, State, 0}) ->
     Parent ! {consumer_done, State};
-consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown}) ->
+consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown} = Arg) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
             consume({Parent, {maps:put(CTag, 0, MessagesPerConsumer), MessageCount}, CountDown});
@@ -307,9 +352,9 @@ consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown}) ->
             consume({Parent, NewState, CountDown - 1});
         #'basic.cancel_ok'{consumer_tag = CTag} ->
             Parent ! {cancel_ok, CTag},
-            consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown});
+            consume(Arg);
         _ ->
-            consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown})
+            consume(Arg)
     after ?TIMEOUT ->
               Parent ! {consumer_timeout, {MessagesPerConsumer, MessageCount}},
               flush(),

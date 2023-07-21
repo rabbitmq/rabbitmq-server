@@ -25,7 +25,7 @@
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
--export([credit/5]).
+-export([credit/7]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
@@ -122,6 +122,7 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
+-define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -460,7 +461,7 @@ capabilities() ->
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
                           <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
+      consumer_arguments => [<<"x-priority">>],
       server_named => false}.
 
 rpc_delete_metrics(QName) ->
@@ -779,8 +780,12 @@ settle(_QName, requeue, CTag, MsgIds, QState) ->
 settle(_QName, discard, CTag, MsgIds, QState) ->
     rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
 
-credit(_QName, CTag, Credit, Drain, QState) ->
-    rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
+-spec credit(rabbit_amqqueue:name(), rabbit_types:ctag(), rabbit_queue_type:credit(),
+             Drain :: boolean(), Reply :: boolean(),
+             rabbit_queue_type:link_state_properties(), rabbit_fifo_client:state()) ->
+    {rabbit_fifo_client:state(), rabbit_queue_type:actions()}.
+credit(_QName, CTag, Credit, Drain, Reply, Properties, QState) ->
+    rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, Reply, Properties, QState).
 
 -spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(), pid(),
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->
@@ -808,7 +813,7 @@ consume(Q, #{limiter_active := true}, _State)
 consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     #{no_ack := NoAck,
       channel_pid := ChPid,
-      prefetch_count := ConsumerPrefetchCount,
+      mode := Mode,
       consumer_tag := ConsumerTag0,
       exclusive_consume := ExclusiveConsume,
       args := Args,
@@ -819,35 +824,26 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     maybe_send_reply(ChPid, OkMsg),
     ConsumerTag = quorum_ctag(ConsumerTag0),
-    %% A prefetch count of 0 means no limitation,
-    %% let's make it into something large for ra
-    Prefetch0 = case ConsumerPrefetchCount of
-                    0 -> 2000;
-                    Other -> Other
-                end,
     %% consumer info is used to describe the consumer properties
     AckRequired = not NoAck,
+    {CreditMode, EffectivePrefetch, DeclaredPrefetch} =
+        case Mode of
+            credited ->
+                {Mode, 0, 0};
+            {simple_prefetch = M, Declared} ->
+                Effective = case Declared of
+                                0 -> ?UNLIMITED_PREFETCH_COUNT;
+                                _ -> Declared
+                            end,
+                {M, Effective, Declared}
+        end,
     ConsumerMeta = #{ack => AckRequired,
-                     prefetch => ConsumerPrefetchCount,
+                     prefetch => DeclaredPrefetch,
                      args => Args,
                      username => ActingUser},
-
-    {CreditMode, Credit, Drain} = parse_credit_args(Prefetch0, Args),
-    %% if the mode is credited we should send a separate credit command
-    %% after checkout and give 0 credits initally
-    Prefetch = case CreditMode of
-                   credited -> 0;
-                   simple_prefetch -> Prefetch0
-               end,
-    {ok, QState1} = rabbit_fifo_client:checkout(ConsumerTag, Prefetch,
-                                                CreditMode, ConsumerMeta,
-                                                QState0),
-    QState = case CreditMode of
-                   credited when Credit > 0 ->
-                     rabbit_fifo_client:credit(ConsumerTag, Credit, Drain,
-                                               QState1);
-                   _ -> QState1
-               end,
+    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag, EffectivePrefetch,
+                                               CreditMode, ConsumerMeta,
+                                               QState0),
     case single_active_consumer_on(Q) of
         true ->
             %% get the leader from state
@@ -862,10 +858,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume,
                       AckRequired, QName,
-                      ConsumerPrefetchCount, ActivityStatus == single_active, %% Active
+                      DeclaredPrefetch, ActivityStatus == single_active, %% Active
                       ActivityStatus, Args),
                     emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, Prefetch,
+                                          AckRequired, QName, DeclaredPrefetch,
                                           Args, none, ActingUser),
                     {ok, QState};
                 {error, Error} ->
@@ -877,10 +873,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             rabbit_core_metrics:consumer_created(
               ChPid, ConsumerTag, ExclusiveConsume,
               AckRequired, QName,
-              ConsumerPrefetchCount, true, %% Active
+              DeclaredPrefetch, true, %% Active
               up, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  AckRequired, QName, Prefetch,
+                                  AckRequired, QName, DeclaredPrefetch,
                                   Args, none, ActingUser),
             {ok, QState}
     end.
@@ -1789,20 +1785,6 @@ overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
     rabbit_log:warning("Invalid overflow strategy ~tp for quorum queue: ~ts",
                        [V, rabbit_misc:rs(QName)]),
     Def.
-
-parse_credit_args(Default, Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
-        {table, T} ->
-            case {rabbit_misc:table_lookup(T, <<"credit">>),
-                  rabbit_misc:table_lookup(T, <<"drain">>)} of
-                {{long, C}, {bool, D}} ->
-                    {credited, C, D};
-                _ ->
-                    {simple_prefetch, Default, false}
-            end;
-        undefined ->
-            {simple_prefetch, Default, false}
-    end.
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 notify_decorators(Q) when ?is_amqqueue(Q) ->

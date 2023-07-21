@@ -10,6 +10,7 @@
 
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
 %% Public API.
 -export(['begin'/1,
@@ -23,7 +24,7 @@
          disposition/6
         ]).
 
-%% Private API.
+%% Private API
 -export([start_link/4,
          socket_ready/2
         ]).
@@ -36,7 +37,8 @@
          callback_mode/0
         ]).
 
-%% gen_statem state callbacks.
+%% gen_statem state callbacks
+%% see figure 2.30
 -export([
          unmapped/3,
          begin_sent/3,
@@ -44,20 +46,23 @@
          end_sent/3
         ]).
 
+-import(serial_number,
+        [add/2,
+         diff/2]).
+
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
--define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 -define(DEFAULT_TIMEOUT, 5000).
--define(INITIAL_OUTGOING_ID, 0).
--define(INITIAL_DELIVERY_COUNT, 0).
+-define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
+-define(INITIAL_OUTGOING_DELIVERY_ID, ?UINT_MAX).
+%% "The next-outgoing-id MAY be initialized to an arbitrary value" [2.5.6]
+-define(INITIAL_OUTGOING_TRANSFER_ID, ?UINT_MAX - 1).
+%% "Note that, despite its name, the delivery-count is not a count but a
+%% sequence number initialized at an arbitrary point by the sender." [2.6.7]
+-define(INITIAL_DELIVERY_COUNT, ?UINT_MAX - 2).
 
-% -type from() :: {pid(), term()}.
-
--type transfer_id() :: non_neg_integer().
--type link_handle() :: non_neg_integer().
 -type link_name() :: binary().
 -type link_address() :: binary().
 -type link_role() :: sender | receiver.
--type link_source() :: link_address() | undefined.
 -type link_target() :: {pid, pid()} | binary() | undefined.
 
 -type snd_settle_mode() :: unsettled | settled | mixed.
@@ -75,14 +80,23 @@
 % http://www.amqp.org/specification/1.0/filters
 -type filter() :: #{binary() => binary() | map() | list(binary())}.
 -type properties() :: #{binary() => tuple()}.
+-type max_message_size() :: undefined | non_neg_integer().
 
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
                          snd_settle_mode => snd_settle_mode(),
                          rcv_settle_mode => rcv_settle_mode(),
                          filter => filter(),
-                         properties => properties()
+                         properties => properties(),
+                         max_message_size => max_message_size()
                         }.
+
+-type transfer_error() :: {error,
+                           insufficient_credit |
+                           remote_incoming_window_exceeded |
+                           message_size_exceeded |
+                           link_not_found |
+                           half_attached}.
 
 -type link_ref() :: #link_ref{}.
 
@@ -94,7 +108,9 @@
               target_def/0,
               source_def/0,
               properties/0,
-              filter/0]).
+              filter/0,
+              max_message_size/0,
+              transfer_error/0]).
 
 -record(link,
         {name :: link_name(),
@@ -104,11 +120,10 @@
          output_handle :: link_handle(),
          input_handle :: link_handle() | undefined,
          role :: link_role(),
-         source :: link_source(),
          target :: link_target(),
-         delivery_count = 0 :: non_neg_integer(),
+         max_message_size :: non_neg_integer() | Unlimited :: undefined,
+         delivery_count :: sequence_no() | undefined,
          link_credit = 0 :: non_neg_integer(),
-         link_credit_unsettled = 0 :: non_neg_integer(),
          available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
          partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
@@ -118,30 +133,27 @@
 -record(state,
         {channel :: pos_integer(),
          remote_channel :: pos_integer() | undefined,
-         next_incoming_id = 0 :: transfer_id(),
+
+         %% session flow control, see section 2.5.6
+         next_incoming_id :: transfer_number() | undefined,
          incoming_window = ?MAX_SESSION_WINDOW_SIZE :: non_neg_integer(),
-         next_outgoing_id = ?INITIAL_OUTGOING_ID + 1 :: transfer_id(),
-         outgoing_window = ?MAX_SESSION_WINDOW_SIZE  :: non_neg_integer(),
+         next_outgoing_id = ?INITIAL_OUTGOING_TRANSFER_ID :: transfer_number(),
          remote_incoming_window = 0 :: non_neg_integer(),
          remote_outgoing_window = 0 :: non_neg_integer(),
+
          reader :: pid(),
          socket :: amqp10_client_connection:amqp10_socket() | undefined,
          links = #{} :: #{link_handle() => #link{}},
-         % maps link name to outgoing link handle
-         link_index = #{} :: #{link_name() => link_handle()},
-         % maps incoming handle to outgoing
-         link_handle_index = #{} :: #{link_handle() => link_handle()},
+         link_index = #{} :: #{link_name() => Outgoing :: link_handle()},
+         link_handle_index = #{} :: #{Incoming :: link_handle() => Outgoing :: link_handle()},
          next_link_handle = 0 :: link_handle(),
-         early_attach_requests = [] :: [term()],
-         connection_config = #{} :: amqp10_client_connection:connection_config(),
-         % the unsettled map needs to go in the session state as a disposition
-         % can reference transfers for many different links
-         unsettled = #{} :: #{transfer_id() => {amqp10_msg:delivery_tag(),
-                                                any()}}, %TODO: refine as FsmRef
-         incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
+         early_attach_requests :: [term()],
+         connection_config :: amqp10_client_connection:connection_config(),
+         outgoing_delivery_id = ?INITIAL_OUTGOING_DELIVERY_ID :: delivery_number(),
+         outgoing_unsettled = #{} :: #{delivery_number() => {amqp10_msg:delivery_tag(), Notify :: pid()}},
+         incoming_unsettled = #{} :: #{delivery_number() => link_handle()},
          notify :: pid()
         }).
-
 
 %% -------------------------------------------------------------------
 %% Public API.
@@ -173,27 +185,26 @@ begin_sync(Connection, Timeout) ->
 
 -spec attach(pid(), attach_args()) -> {ok, link_ref()}.
 attach(Session, Args) ->
-    gen_statem:call(Session, {attach, Args}, {dirty_timeout, ?TIMEOUT}).
+    gen_statem:call(Session, {attach, Args}, ?TIMEOUT).
 
 -spec detach(pid(), link_handle()) -> ok | {error, link_not_found | half_attached}.
 detach(Session, Handle) ->
-    gen_statem:call(Session, {detach, Handle}, {dirty_timeout, ?TIMEOUT}).
+    gen_statem:call(Session, {detach, Handle}, ?TIMEOUT).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
-    ok | {error, insufficient_credit | link_not_found | half_attached}.
+    ok | transfer_error().
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
-    gen_statem:call(Session, {transfer, Transfer, Records},
-                    {dirty_timeout, Timeout}).
+    gen_statem:call(Session, {transfer, Transfer, Records}, Timeout).
 
 flow(Session, Handle, Flow, RenewAfter) ->
     gen_statem:cast(Session, {flow, Handle, Flow, RenewAfter}).
 
--spec disposition(pid(), link_role(), transfer_id(), transfer_id(), boolean(),
+-spec disposition(pid(), link_role(), delivery_number(), delivery_number(), boolean(),
                   amqp10_client_types:delivery_state()) -> ok.
 disposition(Session, Role, First, Last, Settled, DeliveryState) ->
     gen_statem:call(Session, {disposition, Role, First, Last, Settled,
-                              DeliveryState}, {dirty_timeout, ?TIMEOUT}).
+                              DeliveryState}, ?TIMEOUT).
 
 
 
@@ -217,8 +228,11 @@ callback_mode() -> [state_functions].
 init([FromPid, Channel, Reader, ConnConfig]) ->
     process_flag(trap_exit, true),
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
-    State = #state{notify = FromPid, channel = Channel, reader = Reader,
-                   connection_config = ConnConfig},
+    State = #state{notify = FromPid,
+                   channel = Channel,
+                   reader = Reader,
+                   connection_config = ConnConfig,
+                   early_attach_requests = []},
     {ok, unmapped, State}.
 
 unmapped(cast, {socket_ready, Socket}, State) ->
@@ -265,15 +279,13 @@ mapped(cast, #'v1_0.end'{error = Err}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     % TODO: send notifications for links?
-    Reason = case Err of
-                 undefined -> normal;
-                 _ -> Err
-             end,
+    Reason = reason(Err),
     ok = notify_session_ended(State, Reason),
     {stop, normal, State};
 mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             initial_delivery_count = IDC,
-                            handle = {uint, InHandle}},
+                            handle = {uint, InHandle},
+                            max_message_size = MaybeMaxMessageSize},
        #state{links = Links, link_index = LinkIndex,
               link_handle_index = LHI} = State0) ->
 
@@ -281,25 +293,33 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
     #{OutHandle := Link0} = Links,
     ok = notify_link_attached(Link0),
 
-    DeliveryCount = case Link0 of
-                        #link{role = sender, delivery_count = DC} -> DC;
-                        _ -> unpack(IDC)
-                    end,
-    Link = Link0#link{input_handle = InHandle, state = attached,
-                      delivery_count = DeliveryCount},
+    {DeliveryCount, MaxMessageSize} =
+    case Link0 of
+        #link{role = sender,
+              delivery_count = DC} ->
+            MSS = case MaybeMaxMessageSize of
+                      {ulong, S} when S > 0 -> S;
+                      _ -> undefined
+                  end,
+            {DC, MSS};
+        #link{role = receiver,
+              max_message_size = MSS} ->
+            {unpack(IDC), MSS}
+    end,
+    Link = Link0#link{state = attached,
+                      input_handle = InHandle,
+                      delivery_count = DeliveryCount,
+                      max_message_size = MaxMessageSize},
     State = State0#state{links = Links#{OutHandle => Link},
                          link_index = maps:remove(Name, LinkIndex),
                          link_handle_index = LHI#{InHandle => OutHandle}},
     {next_state, mapped, State};
 mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
                             error = Err},
-        #state{links = Links, link_handle_index = LHI} = State0) ->
+       #state{links = Links, link_handle_index = LHI} = State0) ->
     with_link(InHandle, State0,
               fun (#link{output_handle = OutHandle} = Link, State) ->
-                      Reason = case Err of
-                                   undefined -> normal;
-                                   Err -> Err
-                               end,
+                      Reason = reason(Err),
                       ok = notify_link_detached(Link, Reason),
                       {next_state, mapped,
                        State#state{links = maps:remove(OutHandle, Links),
@@ -323,8 +343,8 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     State1 = State#state{links = Links1},
     {next_state, mapped, State1};
 mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
-                         more = true} = Transfer, Payload},
-                         #state{links = Links} = State0) ->
+                               more = true} = Transfer, Payload},
+       #state{links = Links} = State0) ->
 
     {ok, #link{output_handle = OutHandle} = Link} =
         find_link_by_input_handle(InHandle, State0),
@@ -335,16 +355,16 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
               State0#state{links = Links#{OutHandle => Link1}}),
     {next_state, mapped, State};
 mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
-                         delivery_id = MaybeDeliveryId,
-                         settled = Settled} = Transfer0, Payload0},
-                         #state{incoming_unsettled = Unsettled0} = State0) ->
+                               delivery_id = MaybeDeliveryId,
+                               settled = Settled} = Transfer0, Payload0},
+       #state{incoming_unsettled = Unsettled0} = State0) ->
 
     {ok, #link{target = {pid, TargetPid},
                output_handle = OutHandle,
                ref = LinkRef} = Link0} =
         find_link_by_input_handle(InHandle, State0),
 
-    {Transfer, Payload, Link} = complete_partial_transfer(Transfer0, Payload0, Link0),
+    {Transfer, Payload, Link1} = complete_partial_transfer(Transfer0, Payload0, Link0),
     Msg = decode_as_msg(Transfer, Payload),
 
     % stash the DeliveryId - not sure for what yet
@@ -359,23 +379,22 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
     % notify when credit is exhausted (link_credit = 0)
     % detach the Link with a transfer-limit-exceeded error code if further
     % transfers are received
-    case book_transfer_received(Settled,
-                                State0#state{incoming_unsettled = Unsettled},
-                                Link) of
-        {ok, State} ->
+    case book_transfer_received(State0#state{incoming_unsettled = Unsettled},
+                                Link1) of
+        {ok, Link2, State} ->
             % deliver
             TargetPid ! {amqp10_msg, LinkRef, Msg},
-            State1 = auto_flow(Link, State),
+            State1 = auto_flow(Link2, State),
             {next_state, mapped, State1};
-        {credit_exhausted, State} ->
+        {credit_exhausted, Link2, State} ->
             TargetPid ! {amqp10_msg, LinkRef, Msg},
-            ok = notify_link(Link, credit_exhausted),
+            notify_credit_exhausted(Link2),
             {next_state, mapped, State};
-        {transfer_limit_exceeded, State} ->
-            logger:warning("transfer_limit_exceeded for link ~tp", [Link]),
-            Link1 = detach_with_error_cond(Link, State,
+        {transfer_limit_exceeded, Link2, State} ->
+            logger:warning("transfer_limit_exceeded for link ~tp", [Link2]),
+            Link = detach_with_error_cond(Link2, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
-            {next_state, mapped, update_link(Link1, State)}
+            {next_state, mapped, update_link(Link, State)}
     end;
 
 
@@ -386,122 +405,118 @@ mapped(cast, #'v1_0.disposition'{role = true,
                                  first = {uint, First},
                                  last = Last0,
                                  state = DeliveryState},
-       #state{unsettled = Unsettled0} = State) ->
+       #state{outgoing_unsettled = Unsettled0} = State) ->
     Last = case Last0 of
                undefined -> First;
                {uint, L} -> L
            end,
     % TODO: no good if the range becomes very large!! refactor
-    Unsettled =
-        lists:foldl(fun(Id, Acc) ->
-                            case Acc of
-                                #{Id := {DeliveryTag, Receiver}} ->
-                                    %% TODO: currently all modified delivery states
-                                    %% will be translated to the old, `modified` atom.
-                                    %% At some point we should translate into the
-                                    %% full {modified, bool, bool, map) tuple.
-                                    S = translate_delivery_state(DeliveryState),
-                                    ok = notify_disposition(Receiver,
-                                                            {S, DeliveryTag}),
-                                    maps:remove(Id, Acc);
-                                _ -> Acc
-                            end
-                    end, Unsettled0, lists:seq(First, Last)),
+    Unsettled = serial_number:foldl(
+                  fun(Id, Acc0) ->
+                          case maps:take(Id, Acc0) of
+                              {{DeliveryTag, Pid}, Acc} ->
+                                  %% TODO: currently all modified delivery states
+                                  %% will be translated to the old, `modified` atom.
+                                  %% At some point we should translate into the
+                                  %% full {modified, bool, bool, map) tuple.
+                                  S = translate_delivery_state(DeliveryState),
+                                  ok = notify_disposition(Pid, {S, DeliveryTag}),
+                                  Acc;
+                              error ->
+                                  Acc0
+                          end
+                  end, Unsettled0, First, Last),
 
-    {next_state, mapped, State#state{unsettled = Unsettled}};
+    {next_state, mapped, State#state{outgoing_unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
     logger:warning("Unhandled session frame ~tp in state ~tp",
                              [Frame, State]),
     {next_state, mapped, State};
 mapped({call, From},
+       {transfer, _Transfer, _Parts},
+       #state{remote_incoming_window = Window})
+  when Window =< 0 ->
+    {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
+mapped({call, From},
+       {transfer, _Transfer, _Parts},
+       #state{remote_incoming_window = Window})
+  when Window =< 0 ->
+    {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
+mapped({call, From = {Pid, _}},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
                                    settled = false} = Transfer0, Parts},
-       #state{next_outgoing_id = NOI, links = Links,
-              unsettled = Unsettled} = State) ->
+       #state{outgoing_delivery_id = DeliveryId, links = Links,
+              outgoing_unsettled = Unsettled} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
-            {keep_state, State, [{reply, From, {error, half_attached}}]};
+            {keep_state_and_data, {reply, From, {error, half_attached}}};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
-            {keep_state, State, [{reply, From, {error, insufficient_credit}}]};
-        #{OutHandle := Link} ->
-            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI),
-                                                 resume = false},
-            {ok, NumFrames} = send_transfer(Transfer, Parts, State),
-            State1 = State#state{unsettled = Unsettled#{NOI => {DeliveryTag, From}}},
-            {keep_state, book_transfer_send(NumFrames, Link, State1),
-             [{reply, From, ok}]};
+            {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
+        #{OutHandle := Link = #link{max_message_size = MaxMessageSize}} ->
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
+            case send_transfer(Transfer, Parts, MaxMessageSize, State) of
+                {ok, NumFrames} ->
+                    State1 = State#state{outgoing_unsettled = Unsettled#{DeliveryId => {DeliveryTag, Pid}}},
+                    {keep_state, book_transfer_send(NumFrames, Link, State1), {reply, From, ok}};
+                Error ->
+                    {keep_state_and_data, {reply, From, Error}}
+            end;
         _ ->
-            {keep_state, State, [{reply, From, {error, link_not_found}}]}
+            {keep_state_and_data, {reply, From, {error, link_not_found}}}
 
     end;
 mapped({call, From},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
-        Parts}, #state{next_outgoing_id = NOI,
+        Parts}, #state{outgoing_delivery_id = DeliveryId,
                        links = Links} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
-            {keep_state_and_data, [{reply, From, {error, half_attached}}]};
+            {keep_state_and_data, {reply, From, {error, half_attached}}};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
-            {keep_state_and_data, [{reply, From, {error, insufficient_credit}}]};
-        #{OutHandle := Link} ->
-            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI)},
-            {ok, NumFrames} = send_transfer(Transfer, Parts, State),
-            % TODO look into if erlang will correctly wrap integers during
-            % binary conversion.
-            {keep_state, book_transfer_send(NumFrames, Link, State),
-             [{reply, From, ok}]};
+            {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
+        #{OutHandle := Link = #link{max_message_size = MaxMessageSize}} ->
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
+            case send_transfer(Transfer, Parts, MaxMessageSize, State) of
+                {ok, NumFrames} ->
+                    {keep_state, book_transfer_send(NumFrames, Link, State), {reply, From, ok}};
+                Error ->
+                    {keep_state_and_data, {reply, From, Error}}
+            end;
         _ ->
-            {keep_state, [{reply, From, {error, link_not_found}}]}
+            {keep_state_and_data, {reply, From, {error, link_not_found}}}
     end;
 
 mapped({call, From},
        {disposition, Role, First, Last, Settled0, DeliveryState},
-       #state{incoming_unsettled = Unsettled0,
-              links = Links0} = State0) ->
-    Disposition =
-    begin
-        DS = translate_delivery_state(DeliveryState),
-        #'v1_0.disposition'{role = translate_role(Role),
-                            first = {uint, First},
-                            last = {uint, Last},
-                            settled = Settled0,
-                            state = DS}
-    end,
-
-    Ks = lists:seq(First, Last),
-    Settled = maps:values(maps:with(Ks, Unsettled0)),
-    Links = lists:foldl(fun (H, Acc) ->
-                                #{H := #link{link_credit_unsettled = LCU} = L} = Acc,
-                                Acc#{H => L#link{link_credit_unsettled = LCU-1}}
-                        end, Links0, Settled),
-    Unsettled = maps:without(Ks, Unsettled0),
-    State = lists:foldl(fun(H, S) ->
-                                #{H := L} = Links,
-                                auto_flow(L, S)
-                        end,
-                        State0#state{incoming_unsettled = Unsettled,
-                                     links = Links},
-                        lists:usort(Settled)),
-
+       #state{incoming_unsettled = Unsettled0} = State0) ->
+    Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
+    State = State0#state{incoming_unsettled = Unsettled},
+    Disposition = #'v1_0.disposition'{
+                     role = translate_role(Role),
+                     first = {uint, First},
+                     last = {uint, Last},
+                     settled = Settled0,
+                     state = translate_delivery_state(DeliveryState)},
     Res = send(Disposition, State),
-
-    {keep_state, State, [{reply, From, Res}]};
+    {keep_state, State, {reply, From, Res}};
 
 mapped({call, From}, {attach, Attach}, State) ->
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
-    {keep_state, State1, [{reply, From, {ok, LinkRef}}]};
+    {keep_state, State1, {reply, From, {ok, LinkRef}}};
 
 mapped({call, From}, Msg, State) ->
     {Reply, State1} = send_detach(fun send/2, Msg, From, State),
-    {keep_state, State1, [{reply, From, Reply}]};
+    {keep_state, State1, {reply, From, Reply}};
 
 mapped(_EvtType, Msg, _State) ->
     logger:warning("amqp10_session: unhandled msg in mapped state ~W",
-                          [Msg, 10]),
+                   [Msg, 10]),
     keep_state_and_data.
 
-end_sent(_EvtType, #'v1_0.end'{}, State) ->
+end_sent(_EvtType, #'v1_0.end'{error = Err}, State) ->
+    Reason = reason(Err),
+    ok = notify_session_ended(State, Reason),
     {stop, normal, State};
 end_sent(_EvtType, _Frame, State) ->
     % just drop frames here
@@ -526,11 +541,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 send_begin(#state{socket = Socket,
                   next_outgoing_id = NextOutId,
-                  incoming_window = InWin,
-                  outgoing_window = OutWin} = State) ->
+                  incoming_window = InWin} = State) ->
     Begin = #'v1_0.begin'{next_outgoing_id = uint(NextOutId),
                           incoming_window = uint(InWin),
-                          outgoing_window = uint(OutWin) },
+                          outgoing_window = ?UINT_OUTGOING_WINDOW},
     Frame = encode_frame(Begin, State),
     socket_send(Socket, Frame).
 
@@ -551,33 +565,32 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     socket_send(Socket, Frame).
 
-send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
-                                        connection_config = Config}) ->
-    OutMaxFrameSize = case Config of
-                          #{outgoing_max_frame_size := undefined} ->
-                              ?MAX_MAX_FRAME_SIZE;
-                          #{outgoing_max_frame_size := Sz} -> Sz;
-                          _ -> ?MAX_MAX_FRAME_SIZE
-                      end,
+send_transfer(Transfer0, Parts0, MaxMessageSize, #state{socket = Socket,
+                                                        channel = Channel,
+                                                        connection_config = Config}) ->
+    OutMaxFrameSize = maps:get(outgoing_max_frame_size, Config),
     Transfer = amqp10_framing:encode_bin(Transfer0),
-    TSize = iolist_size(Transfer),
+    TransferSize = iolist_size(Transfer),
     Parts = [amqp10_framing:encode_bin(P) || P <- Parts0],
     PartsBin = iolist_to_binary(Parts),
-
-    % TODO: this does not take the extended header into account
-    % see: 2.3
-    MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
-
-    Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
-    ok = socket_send(Socket, Frames),
-    {ok, length(Frames)}.
+    if is_integer(MaxMessageSize) andalso
+       MaxMessageSize > 0 andalso
+       byte_size(PartsBin) > MaxMessageSize ->
+           {error, message_size_exceeded};
+       true ->
+           % TODO: this does not take the extended header into account
+           % see: 2.3
+           MaxPayloadSize = OutMaxFrameSize - TransferSize - ?FRAME_HEADER_SIZE,
+           Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
+           ok = socket_send(Socket, Frames),
+           {ok, length(Frames)}
+    end.
 
 send_flow(Send, OutHandle,
           #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewAfter,
           #state{links = Links,
                  next_incoming_id = NII,
                  next_outgoing_id = NOI,
-                 outgoing_window = OutWin,
                  incoming_window = InWin} = State) ->
     AutoFlow = case RenewAfter of
                    never -> never;
@@ -586,22 +599,23 @@ send_flow(Send, OutHandle,
     #{OutHandle := #link{output_handle = H,
                          role = receiver,
                          delivery_count = DeliveryCount,
-                         available = Available,
-                         link_credit_unsettled = LCU} = Link} = Links,
-    Flow = Flow0#'v1_0.flow'{handle = uint(H),
-                             link_credit = uint(Credit),
-                             next_incoming_id = uint(NII),
-                             next_outgoing_id = uint(NOI),
-                             outgoing_window = uint(OutWin),
-                             incoming_window = uint(InWin),
-                             delivery_count = uint(DeliveryCount),
-                             available = uint(Available)},
+                         available = Available} = Link} = Links,
+    Flow = Flow0#'v1_0.flow'{
+                   handle = uint(H),
+                   link_credit = uint(Credit),
+                   %% "This value MUST be set if the peer has received the begin
+                   %% frame for the session, and MUST NOT be set if it has not." [2.7.4]
+                   next_incoming_id = maybe_uint(NII),
+                   next_outgoing_id = uint(NOI),
+                   outgoing_window = ?UINT_OUTGOING_WINDOW,
+                   incoming_window = uint(InWin),
+                   %% "In the event that the receiving link endpoint has not yet seen the
+                   %% initial attach frame from the sender this field MUST NOT be set." [2.7.4]
+                   delivery_count = maybe_uint(DeliveryCount),
+                   available = uint(Available)},
     ok = Send(Flow, State),
     State#state{links = Links#{OutHandle =>
                                Link#link{link_credit = Credit,
-                                         % need to add on the current LCU
-                                         % to ensure we don't overcredit
-                                         link_credit_unsettled = LCU + Credit,
                                          auto_flow = AutoFlow}}}.
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
@@ -636,10 +650,20 @@ make_properties(#{properties := Properties}) ->
 make_properties(_) ->
     undefined.
 
-translate_properties(Properties) when is_map(Properties) andalso map_size(Properties) =< 0 ->
-    undefined;
-translate_properties(Properties) when is_map(Properties) ->
-    {map, maps:fold(fun translate_property/3, [], Properties)}.
+max_message_size(#{max_message_size := Size})
+  when is_integer(Size) andalso
+       Size > 0 ->
+    {ulong, Size};
+max_message_size(_) ->
+    undefined.
+
+translate_properties(Properties)
+  when is_map(Properties) andalso
+       map_size(Properties) > 0 ->
+    {map, maps:fold(fun translate_property/3, [], Properties)};
+translate_properties(Properties)
+  when is_map(Properties) ->
+    undefined.
 
 translate_property(K, V, Acc) when is_tuple(V) ->
     [{{symbol, K}, V} | Acc].
@@ -726,12 +750,13 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
     Target = make_target(Args),
     Properties = make_properties(Args),
 
-    {LinkTarget, RoleAsBool} = case Role of
-                                   {receiver, _, Pid} ->
-                                       {{pid, Pid}, true};
-                                   {sender, #{address := TargetAddr}} ->
-                                       {TargetAddr, false}
-                               end,
+    {LinkTarget, RoleAsBool, InitialDeliveryCount, MaxMessageSize} =
+    case Role of
+        {receiver, _, Pid} ->
+            {{pid, Pid}, true, undefined, max_message_size(Args)};
+        {sender, #{address := TargetAddr}} ->
+            {TargetAddr, false, uint(?INITIAL_DELIVERY_COUNT), undefined}
+    end,
 
     % create attach performative
     Attach = #'v1_0.attach'{name = {utf8, Name},
@@ -739,11 +764,11 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                             handle = {uint, OutHandle},
                             source = Source,
                             properties = Properties,
-                            initial_delivery_count =
-                                {uint, ?INITIAL_DELIVERY_COUNT},
+                            initial_delivery_count = InitialDeliveryCount,
                             snd_settle_mode = snd_settle_mode(Args),
                             rcv_settle_mode = rcv_settle_mode(Args),
-                            target = Target},
+                            target = Target,
+                            max_message_size = MaxMessageSize},
     ok = Send(Attach, State),
 
     Link = #link{name = Name,
@@ -753,7 +778,9 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                  role = element(1, Role),
                  notify = FromPid,
                  auto_flow = never,
-                 target = LinkTarget},
+                 target = LinkTarget,
+                 delivery_count = unpack(InitialDeliveryCount),
+                 max_message_size = unpack(MaxMessageSize)},
 
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = OutHandle + 1,
@@ -767,39 +794,50 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
        #state{next_outgoing_id = OurNOI} = State) ->
     NII = case MaybeNII of
               {uint, N} -> N;
-              undefined -> ?INITIAL_OUTGOING_ID + 1
+              undefined -> ?INITIAL_OUTGOING_TRANSFER_ID
           end,
+    RemoteIncomingWindow = diff(add(NII, InWin), OurNOI), % see: 2.5.6
     State#state{next_incoming_id = NOI,
-                remote_incoming_window = NII + InWin - OurNOI, % see: 2.5.6
+                remote_incoming_window = RemoteIncomingWindow,
                 remote_outgoing_window = OutWin}.
 
 
 -spec handle_link_flow(#'v1_0.flow'{}, #link{}) -> {ok | send_flow, #link{}}.
-handle_link_flow(#'v1_0.flow'{drain = true, link_credit = {uint, TheirCredit}},
+handle_link_flow(#'v1_0.flow'{drain = true,
+                              link_credit = {uint, TheirCredit}},
                  Link = #link{role = sender,
                               delivery_count = OurDC,
                               available = 0}) ->
     {send_flow, Link#link{link_credit = 0,
-                          delivery_count = OurDC + TheirCredit}};
+                          delivery_count = add(OurDC, TheirCredit)}};
 handle_link_flow(#'v1_0.flow'{delivery_count = MaybeTheirDC,
                               link_credit = {uint, TheirCredit}},
                  Link = #link{role = sender,
                               delivery_count = OurDC}) ->
     TheirDC = case MaybeTheirDC of
-                  undefined -> ?INITIAL_DELIVERY_COUNT;
-                  {uint, DC} -> DC
+                  {uint, DC} -> DC;
+                  undefined -> ?INITIAL_DELIVERY_COUNT
               end,
-    LinkCredit = TheirDC + TheirCredit - OurDC,
-
+    LinkCredit = diff(add(TheirDC, TheirCredit), OurDC),
     {ok, Link#link{link_credit = LinkCredit}};
 handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
+                              link_credit = {uint, TheirCredit},
                               available = Available,
                               drain = Drain},
-                 Link = #link{role = receiver}) ->
-
-    {ok, Link#link{delivery_count = unpack(TheirDC),
-                   available = unpack(Available),
-                   drain = Drain}}.
+                 Link0 = #link{role = receiver}) ->
+    Link = case Drain andalso TheirCredit =< 0 of
+               true ->
+                   notify_credit_exhausted(Link0),
+                   Link0#link{delivery_count = unpack(TheirDC),
+                              link_credit = 0,
+                              available = unpack(Available),
+                              drain = Drain};
+               false ->
+                   Link0#link{delivery_count = unpack(TheirDC),
+                              available = unpack(Available),
+                              drain = Drain}
+           end,
+    {ok, Link}.
 
 -spec find_link_by_input_handle(link_handle(), #state{}) ->
     {ok, #link{}} | not_found.
@@ -825,8 +863,11 @@ with_link(InHandle, State, Fun) ->
             {next_state, end_sent, State}
     end.
 
+maybe_uint(undefined) -> undefined;
+maybe_uint(Int) -> uint(Int).
 
 uint(Int) -> {uint, Int}.
+
 unpack(X) -> amqp10_client_types:unpack(X).
 
 snd_settle_mode(#{snd_settle_mode := unsettled}) -> {ubyte, 0};
@@ -864,10 +905,12 @@ translate_delivery_state(received) -> #'v1_0.received'{}.
 translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
-maybe_notify_link_credit(#link{link_credit = 0, role = sender},
-                         #link{link_credit = Credit} = Link)
-  when Credit > 0 ->
-    notify_link(Link, credited);
+maybe_notify_link_credit(#link{role = sender,
+                               link_credit = 0},
+                         #link{role = sender,
+                               link_credit = NewCredit} = NewLink)
+  when NewCredit > 0 ->
+    notify_link(NewLink, credited);
 maybe_notify_link_credit(_Old, _New) ->
     ok.
 
@@ -890,72 +933,65 @@ notify_session_ended(#state{notify = Pid}, Reason) ->
     Pid ! amqp10_session_event({ended, Reason}),
     ok.
 
-notify_disposition({Pid, _}, SessionDeliveryTag) ->
-    Pid ! {amqp10_disposition, SessionDeliveryTag},
+notify_disposition(Pid, DeliveryStateDeliveryTag) ->
+    Pid ! {amqp10_disposition, DeliveryStateDeliveryTag},
     ok.
 
 book_transfer_send(Num, #link{output_handle = Handle} = Link,
-                   #state{next_outgoing_id = NOI,
+                   #state{next_outgoing_id = NextOutgoingId,
+                          outgoing_delivery_id = DeliveryId,
                           remote_incoming_window = RIW,
                           links = Links} = State) ->
-    State#state{next_outgoing_id = NOI+Num,
+    State#state{next_outgoing_id = add(NextOutgoingId, Num),
+                outgoing_delivery_id = add(DeliveryId, 1),
                 remote_incoming_window = RIW-Num,
-                links = Links#{Handle => incr_link_counters(Link)}}.
+                links = Links#{Handle => book_link_transfer_send(Link)}}.
 
 book_partial_transfer_received(#state{next_incoming_id = NID,
                                       remote_outgoing_window = ROW} = State) ->
-    State#state{next_incoming_id = NID+1,
-                remote_outgoing_window = ROW-1}.
+    State#state{next_incoming_id = add(NID, 1),
+                remote_outgoing_window = ROW - 1}.
 
-book_transfer_received(_Settled,
-                       State = #state{connection_config =
+book_transfer_received(State = #state{connection_config =
                                       #{transfer_limit_margin := Margin}},
-                       #link{link_credit = Margin}) ->
-    {transfer_limit_exceeded, State};
-book_transfer_received(Settled,
-                       #state{next_incoming_id = NID,
+                       #link{link_credit = Margin} = Link) ->
+    {transfer_limit_exceeded, Link, State};
+book_transfer_received(#state{next_incoming_id = NID,
                               remote_outgoing_window = ROW,
                               links = Links} = State,
                        #link{output_handle = OutHandle,
                              delivery_count = DC,
-                             link_credit = LC,
-                             link_credit_unsettled = LCU0} = Link) ->
-    LCU = case Settled of
-              true -> LCU0-1;
-              _ -> LCU0
-          end,
-
-    Link1 = Link#link{delivery_count = DC+1,
-                      link_credit = LC-1,
-                      link_credit_unsettled = LCU},
+                             link_credit = LC} = Link) ->
+    Link1 = Link#link{delivery_count = add(DC, 1),
+                      link_credit = LC - 1},
     State1 = State#state{links = Links#{OutHandle => Link1},
-                         next_incoming_id = NID+1,
-                         remote_outgoing_window = ROW-1},
+                         next_incoming_id = add(NID, 1),
+                         remote_outgoing_window = ROW - 1},
     case Link1 of
-        #link{link_credit = 0,
-              % only notify of credit exhaustion when
-              % not using auto flow.
-              auto_flow = never} ->
-            {credit_exhausted, State1};
-        _ -> {ok, State1}
+        #link{link_credit = 0 } ->
+            {credit_exhausted, Link1, State1};
+        _ ->
+            {ok, Link1, State1}
     end.
 
-auto_flow(#link{link_credit_unsettled = LCU,
+auto_flow(#link{link_credit = LC,
                 auto_flow = {auto, Limit, Credit},
                 output_handle = OutHandle}, State)
-  when LCU =< Limit ->
+  when LC < Limit ->
     send_flow(fun send/2, OutHandle,
               #'v1_0.flow'{link_credit = {uint, Credit}},
               Limit, State);
-auto_flow(_Link, State) ->
+auto_flow(_, State) ->
     State.
 
 update_link(Link = #link{output_handle = OutHandle},
             State = #state{links = Links}) ->
             State#state{links = Links#{OutHandle => Link}}.
 
-incr_link_counters(#link{link_credit = LC, delivery_count = DC} = Link) ->
-    Link#link{delivery_count = DC+1, link_credit = LC-1}.
+book_link_transfer_send(Link = #link{link_credit = LC,
+                                     delivery_count = DC}) ->
+    Link#link{link_credit = LC - 1,
+              delivery_count = add(DC, 1)}.
 
 append_partial_transfer(Transfer, Payload,
                         #link{partial_transfers = undefined} = Link) ->
@@ -985,6 +1021,12 @@ socket_send(Sock, Data) ->
         {error, _Reason} ->
             throw({stop, normal})
     end.
+
+%% Only notify of credit exhaustion when not using auto flow.
+notify_credit_exhausted(Link = #link{auto_flow = never}) ->
+    ok = notify_link(Link, credit_exhausted);
+notify_credit_exhausted(_Link) ->
+    ok.
 
 -dialyzer({no_fail_call, socket_send0/2}).
 socket_send0({tcp, Socket}, Data) ->
@@ -1026,6 +1068,9 @@ sym(B) when is_binary(B) -> {symbol, B};
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
 sym(B) when is_atom(B) -> {symbol, atom_to_binary(B, utf8)}.
 
+reason(undefined) -> normal;
+reason(Other) -> Other.
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -1051,7 +1096,9 @@ handle_session_flow_pre_begin_test() ->
     State = handle_session_flow(Flow, State0),
     42 = State#state.next_incoming_id,
     2000 = State#state.remote_outgoing_window,
-    ?INITIAL_OUTGOING_ID + 1 + 1000 - 51 = State#state.remote_incoming_window.
+    % using serial number arithmetic:
+    % ?INITIAL_OUTGOING_TRANSFER_ID + 1000 = 998
+    ?assertEqual(998 - 51, State#state.remote_incoming_window).
 
 handle_link_flow_sender_test() ->
     Handle = 45,
@@ -1064,14 +1111,14 @@ handle_link_flow_sender_test() ->
                        },
     {ok, Outcome} = handle_link_flow(Flow, Link),
     % see section 2.6.7
-    Expected = DeliveryCount + 42 - (DeliveryCount + 2),
-    Expected = Outcome#link.link_credit,
+    ?assertEqual(DeliveryCount + 42 - (DeliveryCount + 2), Outcome#link.link_credit),
 
     % receiver does not yet know the delivery_count
     {ok, Outcome2} = handle_link_flow(Flow#'v1_0.flow'{delivery_count = undefined},
-                                Link),
-    Expected2 = ?INITIAL_DELIVERY_COUNT + 42 - (DeliveryCount + 2),
-    Expected2 = Outcome2#link.link_credit.
+                                      Link),
+    % using serial number arithmetic:
+    % ?INITIAL_DELIVERY_COUNT + 42 - (DeliveryCount + 2) = -18
+    ?assertEqual(-18, Outcome2#link.link_credit).
 
 handle_link_flow_sender_drain_test() ->
     Handle = 45,
@@ -1098,7 +1145,8 @@ handle_link_flow_receiver_test() ->
     Flow = #'v1_0.flow'{handle = {uint, Handle},
                         delivery_count = {uint, SenderDC},
                         available = 99,
-                        drain = true % what to do?
+                        drain = true, % what to do?
+                        link_credit = {uint, 0}
                        },
     {ok, Outcome} = handle_link_flow(Flow, Link),
     % see section 2.6.7

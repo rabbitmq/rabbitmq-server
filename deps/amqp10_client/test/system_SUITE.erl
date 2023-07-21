@@ -14,21 +14,10 @@
 
 -include("src/amqp10_client.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
--define(UNAUTHORIZED_USER, <<"test_user_no_perm">>).
-
-%% The latch constant defines how many processes are spawned in order
-%% to run certain functionality in parallel. It follows the standard
-%% countdown latch pattern.
--define(LATCH, 100).
-
-%% The wait constant defines how long a consumer waits before it
-%% unsubscribes
--define(WAIT, 200).
-
-%% How to long wait for a process to die after an expected failure
--define(PROCESS_EXIT_TIMEOUT, 5000).
+suite() ->
+    [{timetrap, {seconds, 120}}].
 
 all() ->
     [
@@ -77,7 +66,8 @@ shared() ->
      subscribe,
      subscribe_with_auto_flow,
      outgoing_heartbeat,
-     roundtrip_large_messages
+     roundtrip_large_messages,
+     transfer_id_vs_delivery_id
     ].
 
 %% -------------------------------------------------------------------
@@ -112,17 +102,13 @@ stop_amqp10_client_app(Config) ->
 init_per_group(rabbitmq, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0,
                                           {sasl, {plain, <<"guest">>, <<"guest">>}}),
-    Config1 = rabbit_ct_helpers:merge_app_env(Config,
-                                              [{rabbitmq_amqp1_0,
-                                                [{protocol_strict_mode, true}]}]),
-    rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
+    rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(rabbitmq_strict, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0,
                                           {sasl, {plain, <<"guest">>, <<"guest">>}}),
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                               [{rabbitmq_amqp1_0,
-                                                [{default_user, none},
-                                                 {protocol_strict_mode, true}]}]),
+                                                [{default_user, none}]}]),
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(activemq, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, {sasl, anon}),
@@ -309,9 +295,7 @@ roundtrip_large_messages(Config) ->
     Data1Mb = binary:copy(DataKb, 1024),
     roundtrip(OpenConf, Data1Mb),
     roundtrip(OpenConf, binary:copy(Data1Mb, 8)),
-    roundtrip(OpenConf, binary:copy(Data1Mb, 64)),
-    ok.
-
+    ok = roundtrip(OpenConf, binary:copy(Data1Mb, 64)).
 
 roundtrip(OpenConf) ->
     roundtrip(OpenConf, <<"banana">>).
@@ -319,39 +303,32 @@ roundtrip(OpenConf) ->
 roundtrip(OpenConf, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session,
-                                                    <<"banana-sender">>,
-                                                    <<"test1">>,
-                                                    settled,
-                                                    unsettled_state),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
 
     Now = os:system_time(millisecond),
     Props = #{creation_time => Now},
-    Msg0 =  amqp10_msg:set_properties(Props,
-                                      amqp10_msg:new(<<"my-tag">>, Body, true)),
-    Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
-    Msg = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg1),
-    % RabbitMQ AMQP 1.0 does not yet support delivery annotations
-    % Msg = amqp10_msg:set_delivery_annotations(#{<<"x_key">> => "x_value"}, Msg2),
+    Msg0 = amqp10_msg:new(<<"my-tag">>, Body, true),
+    Msg1 =  amqp10_msg:set_properties(Props, Msg0),
+    Msg2 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg1),
+    Msg3 = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg2),
+    Msg = amqp10_msg:set_delivery_annotations(#{<<"y_key">> => "y_value"}, Msg3),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"banana-receiver">>,
-                                                        <<"test1">>,
-                                                        settled,
-                                                        unsettled_state),
-    {ok, OutMsg} = amqp10_client:get_msg(Receiver, 60000 * 5),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver, 60_000 * 4),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     #{creation_time := Now} = amqp10_msg:properties(OutMsg),
     #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
-    % #{<<"x_key">> := <<"x_value">>} = amqp10_msg:delivery_annotations(OutMsg),
+    #{<<"y_key">> := <<"y_value">>} = amqp10_msg:delivery_annotations(OutMsg),
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
@@ -379,7 +356,7 @@ filtered_roundtrip(OpenConf, Body) ->
                                                         settled,
                                                         unsettled_state),
     ok = amqp10_client:send_msg(Sender, Msg1),
-    {ok, OutMsg1} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    {ok, OutMsg1} = amqp10_client:get_msg(DefaultReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-1-tag">>, amqp10_msg:delivery_tag(OutMsg1)),
 
     timer:sleep(5 * 1000),
@@ -398,15 +375,51 @@ filtered_roundtrip(OpenConf, Body) ->
                                                         unsettled_state,
                                                         #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>}),
 
-    {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsg2)),
 
-    {ok, OutMsgFiltered} = amqp10_client:get_msg(FilteredReceiver, 60000 * 5),
+    {ok, OutMsgFiltered} = amqp10_client:get_msg(FilteredReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsgFiltered)),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+%% Assert that implementations respect the difference between transfer-id and delivery-id.
+transfer_id_vs_delivery_id(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => anon},
+
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
+    await_link(Sender, credited, link_credit_timeout),
+
+    P0 = binary:copy(<<0>>, 8_000_000),
+    P1 = <<P0/binary, 1>>,
+    P2 = <<P0/binary, 2>>,
+    Msg1 = amqp10_msg:new(<<"tag 1">>, P1, true),
+    Msg2 = amqp10_msg:new(<<"tag 2">>, P2, true),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = amqp10_client:detach_link(Sender),
+    await_link(Sender, {detached, normal}, link_detach_timeout),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+    {ok, RcvMsg1} = amqp10_client:get_msg(Receiver, 60_000 * 4),
+    {ok, RcvMsg2} = amqp10_client:get_msg(Receiver, 60_000 * 4),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+
+    ?assertEqual([P1], amqp10_msg:body(RcvMsg1)),
+    ?assertEqual([P2], amqp10_msg:body(RcvMsg2)),
+    %% Despite many transfers, there were only 2 deliveries.
+    %% Therefore, delivery-id should have been increased by just 1.
+    ?assertEqual(serial_number:add(amqp10_msg:delivery_id(RcvMsg1), 1),
+                 amqp10_msg:delivery_id(RcvMsg2)).
 
 % a message is sent before the link attach is guaranteed to
 % have completed and link credit granted
@@ -676,11 +689,13 @@ incoming_heartbeat(Config) ->
               idle_time_out => 1000, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(CConf),
     receive
-        {amqp10_event, {connection, Connection,
-         {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}} ->
+        {amqp10_event,
+         {connection, Connection0,
+          {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}}
+          when Connection0 =:= Connection ->
             ok
     after 5000 ->
-          exit(incoming_heartbeat_assert)
+              exit(incoming_heartbeat_assert)
     end,
     demonitor(MockRef).
 
@@ -704,7 +719,8 @@ publish_messages(Sender, Data, Num) ->
 
 receive_one(Receiver) ->
     receive
-        {amqp10_msg, Receiver, Msg} ->
+        {amqp10_msg, Receiver0, Msg}
+          when Receiver0 =:= Receiver ->
             amqp10_client:accept_msg(Receiver, Msg)
     after 2000 ->
           timeout
@@ -712,7 +728,8 @@ receive_one(Receiver) ->
 
 await_disposition(DeliveryTag) ->
     receive
-        {amqp10_disposition, {accepted, DeliveryTag}} -> ok
+        {amqp10_disposition, {accepted, DeliveryTag0}}
+          when DeliveryTag0 =:= DeliveryTag -> ok
     after 3000 ->
               flush(),
               exit(dispostion_timeout)
@@ -720,9 +737,12 @@ await_disposition(DeliveryTag) ->
 
 await_link(Who, What, Err) ->
     receive
-        {amqp10_event, {link, Who, What}} ->
+        {amqp10_event, {link, Who0, What0}}
+          when Who0 =:= Who andalso
+               What0 =:= What ->
             ok;
-        {amqp10_event, {link, Who, {detached, Why}}} ->
+        {amqp10_event, {link, Who0, {detached, Why}}}
+          when Who0 =:= Who ->
             exit(Why)
     after 5000 ->
               flush(),

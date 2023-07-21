@@ -17,6 +17,8 @@
         is_list(H) orelse
         (is_map(H) andalso is_map_key(size, H))).
 
+-define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
+
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
@@ -56,14 +58,10 @@
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
 
--type consumer_tag() :: binary().
-%% An arbitrary binary tag used to distinguish between different consumers
-%% set up by the same process. See: {@link rabbit_fifo_client:checkout/3.}
-
--type delivery() :: {delivery, consumer_tag(), [delivery_msg()]}.
+-type delivery() :: {delivery, rabbit_types:ctag(), [delivery_msg()]}.
 %% Represents the delivery of one or more rabbit_fifo messages.
 
--type consumer_id() :: {consumer_tag(), pid()}.
+-type consumer_id() :: {rabbit_types:ctag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
 -type credit_mode() :: credited |
@@ -101,7 +99,7 @@
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
-         tag :: consumer_tag(),
+         tag :: rabbit_types:ctag(),
          %% the mode of how credit is incremented
          %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
@@ -200,7 +198,7 @@
          dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
-         %% waiting consumers, one is picked active consumer is cancelled or dies
+         %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
          last_active :: option(non_neg_integer()),

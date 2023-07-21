@@ -45,7 +45,7 @@ insert(SeqNo, QNames, #resource{kind = exchange} = XName,
   when is_integer(SeqNo)
        andalso is_list(QNames)
        andalso not is_map_key(SeqNo, U0) ->
-    U = U0#{SeqNo => {XName, maps:from_list([{Q, ok} || Q <- QNames])}},
+    U = U0#{SeqNo => {XName, maps:from_keys(QNames, ok)}},
     S = case S0 of
             undefined -> SeqNo;
             _ -> S0
@@ -58,20 +58,18 @@ insert(SeqNo, QNames, #resource{kind = exchange} = XName,
 confirm(SeqNos, QName, #?MODULE{smallest = Smallest0,
                                 unconfirmed = U0} = State)
   when is_list(SeqNos) ->
-    {Confirmed, U} = lists:foldr(
-                       fun (SeqNo, Acc) ->
-                               confirm_one(SeqNo, QName, Acc)
-                       end, {[], U0}, SeqNos),
-    %% check if smallest is in Confirmed
-    %% TODO: this can be optimised by checking in the preceeding foldr
-    Smallest =
-    case lists:any(fun ({S, _}) -> S == Smallest0 end, Confirmed) of
-        true ->
-            %% work out new smallest
-            next_smallest(Smallest0, U);
-        false ->
-            Smallest0
-    end,
+    {Confirmed, ConfirmedSmallest, U} =
+        lists:foldl(
+          fun (SeqNo, Acc) ->
+                  confirm_one(SeqNo, QName, Smallest0, Acc)
+          end, {[], false, U0}, SeqNos),
+    Smallest = case ConfirmedSmallest of
+                   true ->
+                       %% work out new smallest
+                       next_smallest(Smallest0, U);
+                   false ->
+                       Smallest0
+               end,
     {Confirmed, State#?MODULE{smallest = Smallest,
                               unconfirmed = U}}.
 
@@ -124,17 +122,21 @@ is_empty(State) ->
 
 %% INTERNAL
 
-confirm_one(SeqNo, QName, {Acc, U0}) ->
+confirm_one(SeqNo, QName, Smallest, {Acc, ConfirmedSmallest0, U0}) ->
     case maps:take(SeqNo, U0) of
         {{XName, QS}, U1}
           when is_map_key(QName, QS)
                andalso map_size(QS) == 1 ->
             %% last queue confirm
-            {[{SeqNo, XName} | Acc], U1};
+            ConfirmedSmallest = case SeqNo of
+                                    Smallest -> true;
+                                    _ -> ConfirmedSmallest0
+                                end,
+            {[{SeqNo, XName} | Acc], ConfirmedSmallest, U1};
         {{XName, QS}, U1} ->
-            {Acc, U1#{SeqNo => {XName, maps:remove(QName, QS)}}};
+            {Acc, ConfirmedSmallest0, U1#{SeqNo => {XName, maps:remove(QName, QS)}}};
         error ->
-            {Acc, U0}
+            {Acc, ConfirmedSmallest0, U0}
     end.
 
 next_smallest(_S, U) when map_size(U) == 0 ->

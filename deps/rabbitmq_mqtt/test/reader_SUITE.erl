@@ -96,6 +96,7 @@ block_connack_timeout(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Ports0 = rpc(Config, erlang, ports, []),
 
+    DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let connection block.
     timer:sleep(100),
@@ -123,7 +124,7 @@ block_connack_timeout(Config) ->
     MqttReaderMRef = monitor(process, MqttReader),
 
     %% Unblock connection. CONNECT packet will be processed on the server.
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
 
     receive
         {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, {socket_ends, einval}}} ->

@@ -254,6 +254,24 @@ handle_dest({amqp10_event, {link, Link, credited}},
     lists:foldl(fun ({A, B, C}, S) ->
                         forward(A, B, C, S)
                 end, State, lists:reverse(Pend));
+
+%%TODO handle credit_exhausted
+%% Repro:
+%% Create shovel from RabbitMQ q0 to Azure Service Bus q1 as described in
+%% https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-integrate-with-rabbitmq
+%% Create also shovel from Azure Service Bus q1 to RabbitMQ q2
+%% Receive from RabbitMQ q2:
+%% java -jar target/perf-test.jar -x 0 -y 1 -u q2 -p
+%% Send to RabbitMQ q0:
+%% java -jar target/perf-test.jar -x 1 -y 0 -u q0 -r 2000 -p -C 5000 -s 1
+%% This should crash the shovel on main because
+%% 1. no credit_exhausted is sent by AMQP 1.0 sending client, and
+%% 2. credit_exhausted isn't handled here
+%{{badmatch,{error,insufficient_credit}},
+% [{rabbit_amqp10_shovel,forward,4,
+%      [{file,"rabbit_amqp10_shovel.erl"},
+%       {line,337}]},
+
 handle_dest({amqp10_event, {link, Link, _Evt}},
             State= #{dest := #{current := #{link := Link}}}) ->
     State;

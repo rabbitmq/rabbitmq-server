@@ -33,7 +33,6 @@ amqp10_client:
 - amqp10_client_app
 - amqp10_client_connection
 - amqp10_client_connection_sup
-- amqp10_client_connections_sup
 - amqp10_client_frame_reader
 - amqp10_client_session
 - amqp10_client_sessions_sup
@@ -45,6 +44,7 @@ amqp10_common:
 - amqp10_binary_parser
 - amqp10_framing
 - amqp10_framing0
+- serial_number
 app:
 - appup_src
 aten:
@@ -925,16 +925,9 @@ rabbit_common:
 rabbitmq_amqp1_0:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand
 - rabbit_amqp1_0
-- rabbit_amqp1_0_channel
-- rabbit_amqp1_0_incoming_link
-- rabbit_amqp1_0_link_util
-- rabbit_amqp1_0_message
-- rabbit_amqp1_0_outgoing_link
 - rabbit_amqp1_0_reader
 - rabbit_amqp1_0_session
-- rabbit_amqp1_0_session_process
 - rabbit_amqp1_0_session_sup
-- rabbit_amqp1_0_session_sup_sup
 - rabbit_amqp1_0_util
 - rabbit_amqp1_0_writer
 rabbitmq_auth_backend_cache:

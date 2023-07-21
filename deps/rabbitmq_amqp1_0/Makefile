@@ -4,8 +4,7 @@ PROJECT_DESCRIPTION = AMQP 1.0 support for RabbitMQ
 define PROJECT_ENV
 [
 	    {default_user, "guest"},
-	    {default_vhost, <<"/">>},
-	    {protocol_strict_mode, false}
+	    {default_vhost, <<"/">>}
 	  ]
 endef
 

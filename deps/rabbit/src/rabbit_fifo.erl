@@ -132,7 +132,6 @@
               delivery/0,
               command/0,
               credit_mode/0,
-              consumer_tag/0,
               consumer_meta/0,
               consumer_id/0,
               client_msg/0,
@@ -279,7 +278,7 @@ apply(#{index := Idx} = Meta,
             {State00, ok, []}
     end;
 apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
-                    drain = Drain, consumer_id = ConsumerId},
+                    drain = Drain, consumer_id = ConsumerId = {CTag, CPid}},
       #?MODULE{consumers = Cons0,
                service_queue = ServiceQueue0,
                waiting_consumers = Waiting0} = State0) ->
@@ -289,39 +288,54 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
             C = max(0, RemoteDelCnt + NewCredit - DelCnt),
             %% grant the credit
             Con1 = Con0#consumer{credit = C},
-            ServiceQueue = maybe_queue_consumer(ConsumerId, Con1,
-                                                ServiceQueue0),
-            Cons = maps:put(ConsumerId, Con1, Cons0),
-            {State1, ok, Effects} =
-            checkout(Meta, State0,
-                     State0#?MODULE{service_queue = ServiceQueue,
-                                    consumers = Cons}, []),
-            Response = {send_credit_reply, messages_ready(State1)},
-            %% by this point all checkouts for the updated credit value
-            %% should be processed so we can evaluate the drain
-            case Drain of
-                false ->
-                    %% just return the result of the checkout
-                    {State1, Response, Effects};
+            ServiceQueue = maybe_queue_consumer(ConsumerId, Con1, ServiceQueue0),
+            Cons1 = maps:put(ConsumerId, Con1, Cons0),
+            State1 = State0#?MODULE{service_queue = ServiceQueue,
+                                    consumers = Cons1},
+
+            {#?MODULE{consumers = Cons2 = #{ConsumerId := Con = #consumer{credit = PostCred,
+                                                                          delivery_count = DeliveryCount0}}} =
+             State2, ok, Effects} = checkout(Meta, State0, State1, []),
+            Available = messages_ready(State2),
+            CreditReplyV1 = {send_credit_reply, Available},
+            {RespV1, State} = case Drain andalso PostCred > 0 of
+                                  true ->
+                                      %% "advance the delivery-count as much as possible, consuming all link-credit"
+                                      %% [AMQP 1.0, 2.6.7]
+                                      DeliveryCount = DeliveryCount0 + PostCred,
+                                      Cons = maps:update(ConsumerId,
+                                                         Con#consumer{delivery_count = DeliveryCount,
+                                                                      credit = 0},
+                                                         Cons2),
+                                      {{multi, [CreditReplyV1, {send_drained, {CTag, PostCred}}]},
+                                       State2#?MODULE{consumers = Cons}};
+                                  false ->
+                                      {CreditReplyV1, State2}
+                              end,
+            case rabbit_feature_flags:is_enabled(credit_api_v2) of
                 true ->
-                    Con = #consumer{credit = PostCred} =
-                        maps:get(ConsumerId, State1#?MODULE.consumers),
-                    %% add the outstanding credit to the delivery count
-                    DeliveryCount = Con#consumer.delivery_count + PostCred,
-                    Consumers = maps:put(ConsumerId,
-                                         Con#consumer{delivery_count = DeliveryCount,
-                                                      credit = 0},
-                                         State1#?MODULE.consumers),
-                    Drained = Con#consumer.credit,
-                    {CTag, _} = ConsumerId,
-                    {State1#?MODULE{consumers = Consumers},
-                     %% returning a multi response with two client actions
-                     %% for the channel to execute
-                     {multi, [Response, {send_drained, {CTag, Drained}}]},
-                     Effects}
+                    %% FLOW to AMQP 1.0 client should be sent *after* TRANSFERs.
+                    %% Hence, credit_reply should be sent to queue client *after* delivery effects.
+                    Eff = {send_msg, CPid,
+                           {credit_reply, CTag, PostCred, Available, Drain, #{}},
+                           ?DELIVERY_SEND_MSG_OPTS},
+                    {State, ok, Effects ++ [Eff]};
+                false ->
+                    %% We must always send a send_credit_reply because basic.credit is synchronous.
+                    %%
+                    %% Also, we keep the bug that has existed with feature flag credit_api_v2 disabled
+                    %% that the send_drained reply is sent before the delivery effects (resulting in
+                    %% the wrong behaviour that the FLOW to AMQP 1.0 client gets sent before the TRANSFERs).
+                    %% We keep the bug because old rabbit_fifo_client implementations expect a send_drained
+                    %% Ra reply (they can't handle such a Ra effect).
+                    {State, RespV1, Effects}
             end;
         _ when Waiting0 /= [] ->
-            %% there are waiting consuemrs
+            %%TODO next time when we bump the machine version:
+            %% 1. Do not put consumer at head of waiting_consumers if NewCredit == 0
+            %%    to reduce likelihood of activating a 0 credit consumer.
+            %% 2. Support Drain == true, i.e. advance delivery-count, consuming all link-credit since there
+            %%    are no messages available for an inactive consumer and send credit_reply with Drain=true.
             case lists:keytake(ConsumerId, 1, Waiting0) of
                 {value, {_, Con0 = #consumer{delivery_count = DelCnt}}, Waiting} ->
                     %% the consumer is a waiting one
@@ -330,7 +344,17 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
                     Con = Con0#consumer{credit = C},
                     State = State0#?MODULE{waiting_consumers =
                                            [{ConsumerId, Con} | Waiting]},
-                    {State, {send_credit_reply, messages_ready(State)}};
+                    %% No messages are available for inactive consumers.
+                    Available = 0,
+                    case rabbit_feature_flags:is_enabled(credit_api_v2) of
+                        true ->
+                            {State, ok,
+                             {send_msg, CPid,
+                              {credit_reply, CTag, C, Available, false, #{}},
+                              ?DELIVERY_SEND_MSG_OPTS}};
+                        false ->
+                            {State, {send_credit_reply, Available}}
+                    end;
                 false ->
                     {State0, ok}
             end;
@@ -2034,7 +2058,7 @@ get_next_msg(#?MODULE{returns = Returns0,
 delivery_effect({CTag, CPid}, [{MsgId, ?MSG(Idx,  Header)}],
                 #?MODULE{msg_cache = {Idx, RawMsg}}) ->
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
-     [local, ra_event]};
+     ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect({CTag, CPid}, Msgs, _State) ->
     RaftIdxs = lists:foldr(fun ({_, ?MSG(I, _)}, Acc) ->
                                    [I | Acc]
@@ -2045,7 +2069,7 @@ delivery_effect({CTag, CPid}, Msgs, _State) ->
                          fun (Cmd, {MsgId, ?MSG(_Idx,  Header)}) ->
                                  {MsgId, {Header, get_msg(Cmd)}}
                          end, Log, Msgs),
-             [{send_msg, CPid, {delivery, CTag, DelMsgs}, [local, ra_event]}]
+             [{send_msg, CPid, {delivery, CTag, DelMsgs}, ?DELIVERY_SEND_MSG_OPTS}]
      end,
      {local, node(CPid)}}.
 
@@ -2188,11 +2212,11 @@ update_or_remove_sub(_Meta, ConsumerId,
                      #?MODULE{consumers = Cons,
                               service_queue = ServiceQueue} = State) ->
     State#?MODULE{consumers = maps:put(ConsumerId, Con, Cons),
-                  service_queue = uniq_queue_in(ConsumerId, Con, ServiceQueue)}.
+                  service_queue = maybe_queue_consumer(ConsumerId, Con, ServiceQueue)}.
 
-uniq_queue_in(Key, #consumer{credit = Credit,
-                             status = up,
-                             cfg = #consumer_cfg{priority = P}}, ServiceQueue)
+maybe_queue_consumer(Key, #consumer{credit = Credit,
+                                    status = up,
+                                    cfg = #consumer_cfg{priority = P}}, ServiceQueue)
   when Credit > 0 ->
     % TODO: queue:member could surely be quite expensive, however the practical
     % number of unique consumers may not be large enough for it to matter
@@ -2202,7 +2226,7 @@ uniq_queue_in(Key, #consumer{credit = Credit,
         false ->
             priority_queue:in(Key, P, ServiceQueue)
     end;
-uniq_queue_in(_Key, _Consumer, ServiceQueue) ->
+maybe_queue_consumer(_Key, _Consumer, ServiceQueue) ->
     ServiceQueue.
 
 update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
@@ -2278,16 +2302,6 @@ credit_mode(#{machine_version := Vsn}, Credit, simple_prefetch)
     {simple_prefetch, Credit};
 credit_mode(_, _, Mode) ->
     Mode.
-
-maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
-                     ServiceQueue0) ->
-    case Credit > 0 of
-        true ->
-            % consumer needs service - check if already on service queue
-            uniq_queue_in(ConsumerId, Con, ServiceQueue0);
-        false ->
-            ServiceQueue0
-    end.
 
 %% creates a dehydrated version of the current state to be cached and
 %% potentially used to for a snaphot at a later point
@@ -2365,8 +2379,8 @@ make_return(ConsumerId, MsgIds) ->
 make_discard(ConsumerId, MsgIds) ->
     #discard{consumer_id = ConsumerId, msg_ids = MsgIds}.
 
--spec make_credit(consumer_id(), non_neg_integer(), non_neg_integer(),
-                  boolean()) -> protocol().
+-spec make_credit(consumer_id(), rabbit_queue_type:credit(),
+                  non_neg_integer(), boolean()) -> protocol().
 make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
     #credit{consumer_id = ConsumerId,
             credit = Credit,

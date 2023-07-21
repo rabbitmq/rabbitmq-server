@@ -174,6 +174,13 @@ get_property(priority, Msg) ->
                     undefined
             end
     end;
+get_property(subject, Msg) ->
+    case Msg of
+        #msg{properties = #'v1_0.properties'{subject = {utf8, Subject}}} ->
+            Subject;
+        _ ->
+            undefined
+    end;
 get_property(_P, _Msg) ->
     undefined.
 
@@ -187,10 +194,19 @@ convert_to(TargetProto, Msg, Env) ->
 serialize(Sections) ->
     encode_bin(Sections).
 
-protocol_state(Msg, Anns) ->
+protocol_state(Msg0 = #msg{header = Header0}, Anns) ->
+    Redelivered = maps:get(redelivered, Anns, false),
+    FirstAcquirer = not Redelivered,
+    Header = case Header0 of
+                 undefined ->
+                     #'v1_0.header'{first_acquirer = FirstAcquirer};
+                 #'v1_0.header'{} ->
+                     Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
+             end,
+    Msg = Msg0#msg{header = Header},
+
     Exchange = maps:get(exchange, Anns),
     [RKey | _] = maps:get(routing_keys, Anns),
-
     %% any x-* annotations get added as message annotations
     AnnsToAdd = maps:filter(fun (Key, _) -> mc_util:is_x_header(Key) end, Anns),
 
@@ -410,6 +426,10 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
+    RoutingKeys = case get_property(subject, Msg) of
+                      undefined -> undefined;
+                      Subject -> [Subject]
+                  end,
 
     Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
                  {list, DeathMaps}  ->
@@ -434,8 +454,10 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                  maps_put_truthy(
                    ttl, Ttl,
                    maps_put_truthy(
-                     deaths, Deaths,
-                     #{}))))),
+                     routing_keys, RoutingKeys,
+                     maps_put_truthy(
+                       deaths, Deaths,
+                       #{})))))),
     case MA of
         [] ->
             Anns;

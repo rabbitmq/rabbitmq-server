@@ -36,7 +36,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0, recover/0, pg_local/0]).
 
 %% for tests
 -export([validate_msg_store_io_batch_size_and_credit_disc_bound/2]).
@@ -266,6 +266,12 @@
                    [{description, "TCP and TLS listeners (backwards compatibility)"},
                     {mfa,         {logger, debug, ["'networking' boot step skipped and moved to end of startup", [], #{domain => ?RMQLOG_DOMAIN_GLOBAL}]}},
                     {requires,    notify_cluster}]}).
+
+-rabbit_boot_step({pg_local,
+                   [{description, "local-only pg scope"},
+                    {mfa,         {rabbit, pg_local, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
 
 %%---------------------------------------------------------------------------
 
@@ -1098,6 +1104,9 @@ recover() ->
     ok = rabbit_vhost:recover(),
     ok.
 
+pg_local() ->
+    rabbit_sup:start_child(pg, [node()]).
+
 -spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
@@ -1690,7 +1699,19 @@ persist_static_configuration() ->
        classic_queue_store_v2_max_cache_size,
        classic_queue_store_v2_check_crc32,
        incoming_message_interceptors
-      ]).
+      ]),
+
+    %% Disallow 0 as it means unlimited:
+    %% "If this field is zero or unset, there is no maximum
+    %% size imposed by the link endpoint." [AMQP 1.0 §2.7.3]
+    MaxMsgSize = case application:get_env(?MODULE, max_message_size) of
+                     {ok, Size}
+                       when is_integer(Size) andalso Size > 0 ->
+                         erlang:min(Size, ?MAX_MSG_SIZE);
+                     _ ->
+                         ?MAX_MSG_SIZE
+                 end,
+    ok = persistent_term:put(max_message_size, MaxMsgSize).
 
 persist_static_configuration(Params) ->
     App = ?MODULE,

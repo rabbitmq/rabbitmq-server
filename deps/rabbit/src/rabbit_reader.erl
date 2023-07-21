@@ -356,16 +356,16 @@ start_connection(Parent, HelperSup, RanchRef, Deb, Sock) ->
             %% connection was closed cleanly by the client
             #v1{connection = #connection{user  = #user{username = Username},
                                          vhost = VHost}} ->
-                rabbit_log_connection:info("closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts')",
-                    [self(), dynamic_connection_name(Name), VHost, Username]);
+                rabbit_log_connection:info("closing AMQP connection (~ts, vhost: '~ts', user: '~ts')",
+                    [dynamic_connection_name(Name), VHost, Username]);
             %% just to be more defensive
             _ ->
-                rabbit_log_connection:info("closing AMQP connection ~tp (~ts)",
-                    [self(), dynamic_connection_name(Name)])
+                rabbit_log_connection:info("closing AMQP connection (~ts)",
+                    [dynamic_connection_name(Name)])
             end
     catch
         Ex ->
-          log_connection_exception(dynamic_connection_name(Name), Ex)
+            log_connection_exception(dynamic_connection_name(Name), Ex)
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -499,8 +499,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             %%
             %% The goal is to not log TCP healthchecks (a connection
             %% with no data received) unless specified otherwise.
-            Fmt = "accepting AMQP connection ~tp (~ts)",
-            Args = [self(), ConnName],
+            Fmt = "accepting AMQP connection ~ts",
+            Args = [ConnName],
             case Recv of
                 closed -> _ = rabbit_log_connection:debug(Fmt, Args);
                 _      -> _ = rabbit_log_connection:info(Fmt, Args)
@@ -1249,9 +1249,8 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
     rabbit_log_connection:info(
-        "connection ~tp (~ts): "
-        "user '~ts' authenticated and granted access to vhost '~ts'",
-        [self(), dynamic_connection_name(ConnName), Username, VHost]),
+      "connection ~ts: user '~ts' authenticated and granted access to vhost '~ts'",
+      [dynamic_connection_name(ConnName), Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
@@ -1275,9 +1274,9 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
                                            log_name   = ConnName} = Conn,
                            sock       = Sock}) when ?IS_RUNNING(State) ->
     rabbit_log_connection:debug(
-        "connection ~tp (~ts) of user '~ts': "
-        "asked to update secret, reason: ~ts",
-        [self(), dynamic_connection_name(ConnName), Username, Reason]),
+      "connection ~ts of user '~ts': "
+      "asked to update secret, reason: ~ts",
+      [dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
         %% User/auth backend state has been updated. Now we can propagate it to channels
@@ -1292,9 +1291,8 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
         rabbit_log_connection:info(
-            "connection ~tp (~ts): "
-            "user '~ts' updated secret, reason: ~ts",
-            [self(), dynamic_connection_name(ConnName), Username, Reason]),
+          "connection ~ts: user '~ts' updated secret, reason: ~ts",
+          [dynamic_connection_name(ConnName), Username, Reason]),
         State#v1{connection = Conn#connection{user = User1}};
       {refused, Message} ->
         rabbit_log_connection:error("Secret update was refused for user '~ts': ~tp",
@@ -1633,8 +1631,16 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
                               recv_len     = RecvLen,
                               pending_recv = PendingRecv,
                               helper_sup   = SupPid,
-                              proxy_socket = ProxySocket}) ->
-    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket}.
+                              proxy_socket = ProxySocket,
+                              connection = #connection{
+                                              name = Name,
+                                              host = Host,
+                                              peer_host = PeerHost,
+                                              port = Port,
+                                              peer_port = PeerPort,
+                                              connected_at = ConnectedAt}}) ->
+    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
+     Name, Host, PeerHost, Port, PeerPort, ConnectedAt}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
@@ -1768,7 +1774,8 @@ augment_connection_log_name(#connection{name = Name} = Connection) ->
             Connection;
         UserSpecifiedName ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
-            rabbit_log_connection:info("connection ~tp (~ts) has a client-provided name: ~ts", [self(), Name, UserSpecifiedName]),
+            rabbit_log_connection:info("connection ~ts has a client-provided name: ~ts",
+                                       [Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
             Connection#connection{log_name = LogName}
     end.

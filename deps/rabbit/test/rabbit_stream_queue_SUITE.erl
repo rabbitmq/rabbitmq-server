@@ -19,7 +19,7 @@
 -define(WAIT, 5000).
 
 suite() ->
-    [{timetrap, 15 * 60000}].
+    [{timetrap, 15 * 60_000}].
 
 all() ->
     [
@@ -1635,11 +1635,6 @@ consume_from_replica(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_credit(Config) ->
-    %% Because osiris provides one chunk on every read and we don't want to buffer
-    %% messages in the broker to avoid memory penalties, the credit value won't
-    %% be strict - we allow it into the negative values.
-    %% We can test that after receiving a chunk, no more messages are delivered until
-    %% the credit goes back to a positive value.
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1659,39 +1654,54 @@ consume_credit(Config) ->
     qos(Ch1, Credit, false),
     subscribe(Ch1, Q, false, 0),
 
-    %% Receive everything
-    DeliveryTags = receive_batch(),
-
-    %% We receive at least the given credit as we know there are 100 messages in the queue
-    ?assert(length(DeliveryTags) >= Credit),
-
-    %% Let's ack as many messages as we can while avoiding a positive credit for new deliveries
-    {ToAck, Pending} = lists:split(length(DeliveryTags) - Credit, DeliveryTags),
-
-    [ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
-                                              multiple     = false})
-     || DeliveryTag <- ToAck],
-
-    %% Nothing here, this is good
-    receive
-        {#'basic.deliver'{}, _} ->
-            exit(unexpected_delivery)
-    after 1000 ->
-            ok
+    %% We expect to receive exactly 2 messages.
+    DTag1 = receive {#'basic.deliver'{delivery_tag = Tag1}, _} -> Tag1
+            after 5000 -> ct:fail({missing_delivery, ?LINE})
+            end,
+    _DTag2 = receive {#'basic.deliver'{delivery_tag = Tag2}, _} -> Tag2
+             after 5000 -> ct:fail({missing_delivery, ?LINE})
+             end,
+    receive {#'basic.deliver'{}, _} -> ct:fail({unexpected_delivery, ?LINE})
+    after 100 -> ok
     end,
 
-    %% Let's ack one more, we should receive a new chunk
-    ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = hd(Pending),
-                                             multiple     = false}),
-
-    %% Yeah, here is the new chunk!
-    receive
-        {#'basic.deliver'{}, _} ->
-            ok
-    after 5000 ->
-            exit(timeout)
+    %% When we ack the 1st message, we should receive exactly 1 more message
+    ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DTag1,
+                                             multiple = false}),
+    DTag3 = receive {#'basic.deliver'{delivery_tag = Tag3}, _} -> Tag3
+            after 5000 -> ct:fail({missing_delivery, ?LINE})
+            end,
+    receive {#'basic.deliver'{}, _} ->
+                ct:fail({unexpected_delivery, ?LINE})
+    after 100 -> ok
     end,
+
+    %% Whenever we ack 2 messages, we should receive exactly 2 more messages.
+    ok = consume_credit0(Ch1, DTag3),
+
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+consume_credit0(_Ch, DTag)
+  when DTag > 50 ->
+    %% sufficiently tested
+    ok;
+consume_credit0(Ch, DTagPrev) ->
+    %% Ack 2 messages.
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTagPrev,
+                                            multiple = true}),
+    %% Receive 1st message.
+    receive {#'basic.deliver'{}, _} -> ok
+    after 5000 -> ct:fail({missing_delivery, ?LINE})
+    end,
+    %% Receive 2nd message.
+    DTag = receive {#'basic.deliver'{delivery_tag = T}, _} -> T
+           after 5000 -> ct:fail({missing_delivery, ?LINE})
+           end,
+    %% We shouldn't receive more messages given that AMQP 0.9.1 prefetch count is 2.
+    receive {#'basic.deliver'{}, _} -> ct:fail({unexpected_delivery, ?LINE})
+    after 10 -> ok
+    end,
+    consume_credit0(Ch, DTag).
 
 consume_credit_out_of_order_ack(Config) ->
     %% Like consume_credit but acknowledging the messages out of order.

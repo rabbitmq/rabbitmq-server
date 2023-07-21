@@ -8,7 +8,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="RabbitMQ.Client" Version="6.*" />
-    <PackageReference Include="AmqpNetLite" Version="2.4.1" />
-    <PackageReference Include="AmqpNetLite.Serialization" Version="2.4.1" />
+    <PackageReference Include="AmqpNetLite" Version="2.4.7" />
+    <PackageReference Include="AmqpNetLite.Serialization" Version="2.4.7" />
   </ItemGroup>
 </Project>

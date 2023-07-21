@@ -15,12 +15,6 @@
 %% {default_user, "guest"},
 {mapping, "amqp1_0.default_user", "rabbitmq_amqp1_0.default_user", 
     [{datatype, [{enum, [none]}, string]}]}.
-%% Enable protocol strict mode. See the README for more information.
-%%
-%% {protocol_strict_mode, false}
-%   ]},
-{mapping, "amqp1_0.protocol_strict_mode", "rabbitmq_amqp1_0.protocol_strict_mode", 
-    [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "amqp1_0.default_vhost", "rabbitmq_amqp1_0.default_vhost", 
     [{datatype, string}]}.

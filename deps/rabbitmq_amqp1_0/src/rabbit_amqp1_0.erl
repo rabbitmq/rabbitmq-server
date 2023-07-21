@@ -8,9 +8,10 @@
 
 -export([emit_connection_info_local/3,
          emit_connection_info_all/4,
-         list/0,
-         register_connection/1,
-         unregister_connection/1]).
+         list_local/0,
+         register_connection/1]).
+
+-define(PROCESS_GROUP_NAME, rabbit_amqp10_connections).
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_amqp1_0, emit_connection_info_local,
@@ -20,21 +21,19 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     ok.
 
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
+    ConnectionPids = list_local(),
     rabbit_control_misc:emitting_map_with_exit_handler(
-      AggregatorPid, Ref,
+      AggregatorPid,
+      Ref,
       fun(Pid) ->
               rabbit_amqp1_0_reader:info(Pid, Items)
       end,
-      list()).
+      ConnectionPids).
 
--spec list() -> [pid()].
-list() ->
-    pg_local:get_members(rabbit_amqp10_connections).
+-spec list_local() -> [pid()].
+list_local() ->
+    pg:get_local_members(node(), ?PROCESS_GROUP_NAME).
 
 -spec register_connection(pid()) -> ok.
 register_connection(Pid) ->
-    pg_local:join(rabbit_amqp10_connections, Pid).
-
--spec unregister_connection(pid()) -> ok.
-unregister_connection(Pid) ->
-    pg_local:leave(rabbit_amqp10_connections, Pid).
+    ok = pg:join(node(), ?PROCESS_GROUP_NAME, Pid).

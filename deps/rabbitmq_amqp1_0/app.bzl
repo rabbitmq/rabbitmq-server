@@ -11,16 +11,9 @@ def all_beam_files(name = "all_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
             "src/rabbit_amqp1_0.erl",
-            "src/rabbit_amqp1_0_channel.erl",
-            "src/rabbit_amqp1_0_incoming_link.erl",
-            "src/rabbit_amqp1_0_link_util.erl",
-            "src/rabbit_amqp1_0_message.erl",
-            "src/rabbit_amqp1_0_outgoing_link.erl",
             "src/rabbit_amqp1_0_reader.erl",
             "src/rabbit_amqp1_0_session.erl",
-            "src/rabbit_amqp1_0_session_process.erl",
             "src/rabbit_amqp1_0_session_sup.erl",
-            "src/rabbit_amqp1_0_session_sup_sup.erl",
             "src/rabbit_amqp1_0_util.erl",
             "src/rabbit_amqp1_0_writer.erl",
         ],
@@ -30,7 +23,6 @@ def all_beam_files(name = "all_beam_files"):
         erlc_opts = "//:erlc_opts",
         deps = [
             "//deps/amqp10_common:erlang_app",
-            "//deps/amqp_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
         ],
@@ -48,16 +40,9 @@ def all_test_beam_files(name = "all_test_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
             "src/rabbit_amqp1_0.erl",
-            "src/rabbit_amqp1_0_channel.erl",
-            "src/rabbit_amqp1_0_incoming_link.erl",
-            "src/rabbit_amqp1_0_link_util.erl",
-            "src/rabbit_amqp1_0_message.erl",
-            "src/rabbit_amqp1_0_outgoing_link.erl",
             "src/rabbit_amqp1_0_reader.erl",
             "src/rabbit_amqp1_0_session.erl",
-            "src/rabbit_amqp1_0_session_process.erl",
             "src/rabbit_amqp1_0_session_sup.erl",
-            "src/rabbit_amqp1_0_session_sup_sup.erl",
             "src/rabbit_amqp1_0_util.erl",
             "src/rabbit_amqp1_0_writer.erl",
         ],
@@ -67,7 +52,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = [
             "//deps/amqp10_common:erlang_app",
-            "//deps/amqp_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
         ],
@@ -95,16 +79,9 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand.erl",
             "src/rabbit_amqp1_0.erl",
-            "src/rabbit_amqp1_0_channel.erl",
-            "src/rabbit_amqp1_0_incoming_link.erl",
-            "src/rabbit_amqp1_0_link_util.erl",
-            "src/rabbit_amqp1_0_message.erl",
-            "src/rabbit_amqp1_0_outgoing_link.erl",
             "src/rabbit_amqp1_0_reader.erl",
             "src/rabbit_amqp1_0_session.erl",
-            "src/rabbit_amqp1_0_session_process.erl",
             "src/rabbit_amqp1_0_session_sup.erl",
-            "src/rabbit_amqp1_0_session_sup_sup.erl",
             "src/rabbit_amqp1_0_util.erl",
             "src/rabbit_amqp1_0_writer.erl",
         ],
@@ -129,7 +106,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/amqp10_client_SUITE.beam"],
         app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
         name = "command_SUITE_beam_files",
@@ -166,13 +143,22 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
+
     erlang_bytecode(
-        name = "unit_SUITE_beam_files",
+        name = "auth_SUITE_beam_files",
         testonly = True,
-        srcs = ["test/unit_SUITE.erl"],
-        outs = ["test/unit_SUITE.beam"],
-        hdrs = ["include/rabbit_amqp1_0.hrl"],
+        srcs = ["test/auth_SUITE.erl"],
+        outs = ["test/auth_SUITE.beam"],
         app_name = "rabbitmq_amqp1_0",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp10_common:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "test_event_recorder_beam",
+        testonly = True,
+        srcs = ["test/event_recorder.erl"],
+        outs = ["test/event_recorder.beam"],
+        app_name = "rabbitmq_amqp1_0",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
     )

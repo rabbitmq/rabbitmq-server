@@ -51,20 +51,6 @@ include erlang.mk
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt
 
-# --------------------------------------------------------------------
-# Compiler flags.
-# --------------------------------------------------------------------
-
-# gen_fsm is deprecated starting from Erlang 20, but we want to support
-# Erlang 19 as well.
-
-ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
-ERLANG_20_ERTS_VER := 9.0
-
-ifeq ($(call compare_version,$(ERTS_VER),$(ERLANG_20_ERTS_VER),>=),true)
-ERLC_OPTS += -Dnowarn_deprecated_gen_fsm
-endif
-
 # Dialyze the tests.
 DIALYZER_OPTS += --src -r test
 

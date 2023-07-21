@@ -11,21 +11,13 @@
 
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
--ifdef(nowarn_deprecated_gen_fsm).
--compile({nowarn_deprecated_function,
-          [{gen_fsm, reply, 2},
-           {gen_fsm, send_all_state_event, 2},
-           {gen_fsm, send_event, 2},
-           {gen_fsm, start_link, 3},
-           {gen_fsm, sync_send_all_state_event, 2}]}).
--endif.
-
-%% Public API.
+%% public API
 -export([open/1,
          close/2]).
 
-%% Private API.
+%% private API
 -export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
@@ -34,13 +26,14 @@
          encrypt_sasl/1,
          decrypt_sasl/1]).
 
-%% gen_fsm callbacks.
+%% gen_statem callbacks
 -export([init/1,
          callback_mode/0,
          terminate/3,
          code_change/4]).
 
-%% gen_fsm state callbacks.
+%% gen_statem state callbacks
+%% see figure 2.23
 -export([expecting_socket/3,
          sasl_hdr_sent/3,
          sasl_hdr_rcvds/3,
@@ -71,18 +64,17 @@
       notify => pid() | none, % the pid to send connection events to
       notify_when_opened => pid() | none,
       notify_when_closed => pid() | none,
-      max_frame_size => non_neg_integer(), % TODO: constrain to large than 512
-      outgoing_max_frame_size => non_neg_integer() | undefined,
+      %% incoming maximum frame size set by our client application
+      max_frame_size => pos_integer(), % TODO: constrain to large than 512
+      %% outgoing maximum frame size set by AMQP peer in OPEN performative
+      outgoing_max_frame_size => pos_integer() | undefined,
       idle_time_out => milliseconds(),
       % set to a negative value to allow a sender to "overshoot" the flow
       % control by this margin
       transfer_limit_margin => 0 | neg_integer(),
       %% These credentials_obfuscation-wrapped values have the type of
       %% decrypted_sasl/0
-      sasl => encrypted_sasl() | decrypted_sasl(),
-      notify => pid(),
-      notify_when_opened => pid() | none,
-      notify_when_closed => pid() | none
+      sasl => encrypted_sasl() | decrypted_sasl()
   }.
 
 -record(state,
@@ -167,13 +159,13 @@ protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
 
 -spec begin_session(pid()) -> supervisor:startchild_ret().
 begin_session(Pid) ->
-    gen_statem:call(Pid, begin_session, {dirty_timeout, ?TIMEOUT}).
+    gen_statem:call(Pid, begin_session, ?TIMEOUT).
 
 heartbeat(Pid) ->
     gen_statem:cast(Pid, heartbeat).
 
 %% -------------------------------------------------------------------
-%% gen_fsm callbacks.
+%% gen_statem callbacks.
 %% -------------------------------------------------------------------
 
 callback_mode() -> [state_functions].
@@ -259,7 +251,7 @@ hdr_sent({call, From}, begin_session,
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1}.
 
-open_sent(_EvtType, #'v1_0.open'{max_frame_size = MFSz,
+open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                                  idle_time_out = Timeout},
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
@@ -271,8 +263,14 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MFSz,
                                  heartbeat_timer = Tmr};
                 _ -> State0
             end,
-    State1 = State#state{config =
-                         Config#{outgoing_max_frame_size => unpack(MFSz)}},
+    MaxFrameSize = case unpack(MaybeMaxFrameSize) of
+                       undefined ->
+                           %% default as per 2.7.1
+                           ?UINT_MAX;
+                       Bytes when is_integer(Bytes) ->
+                           Bytes
+                   end,
+    State1 = State#state{config = Config#{outgoing_max_frame_size => MaxFrameSize}},
     State2 = lists:foldr(
                fun(From, S0) ->
                        {Ret, S2} = handle_begin_session(From, S0),
@@ -416,19 +414,18 @@ send_open(#state{socket = Socket, config = Config}) ->
                   ]},
     ContainerId = maps:get(container_id, Config, generate_container_id()),
     IdleTimeOut = maps:get(idle_time_out, Config, 0),
+    IncomingMaxFrameSize = maps:get(max_frame_size, Config),
     Open0 = #'v1_0.open'{container_id = {utf8, ContainerId},
                          channel_max = {ushort, 100},
                          idle_time_out = {uint, IdleTimeOut},
-                         properties = Props},
-    Open1 = case Config of
-               #{max_frame_size := MFSz} ->
-                   Open0#'v1_0.open'{max_frame_size = {uint, MFSz}};
-               _ -> Open0
-           end,
+                         properties = Props,
+                         max_frame_size = {uint, IncomingMaxFrameSize}
+                        },
     Open = case Config of
                #{hostname := Hostname} ->
-                   Open1#'v1_0.open'{hostname = {utf8, Hostname}};
-               _ -> Open1
+                   Open0#'v1_0.open'{hostname = {utf8, Hostname}};
+               _ ->
+                   Open0
            end,
     Encoded = amqp10_framing:encode_bin(Open),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
@@ -508,7 +505,7 @@ unpack(V) -> amqp10_client_types:unpack(V).
 
 -spec generate_container_id() -> binary().
 generate_container_id() ->
-    Pre = list_to_binary(atom_to_list(node())),
+    Pre = atom_to_binary(node()),
     Id = bin_to_hex(crypto:strong_rand_bytes(8)),
     <<Pre/binary, <<"_">>/binary, Id/binary>>.
 
@@ -552,4 +549,5 @@ decrypted_sasl_to_bin(none) -> <<"ANONYMOUS">>.
 config_defaults() ->
     #{sasl => none,
       transfer_limit_margin => 0,
-      max_frame_size => ?MAX_MAX_FRAME_SIZE}.
+      %% 1 MB
+      max_frame_size => 1_048_576}.
