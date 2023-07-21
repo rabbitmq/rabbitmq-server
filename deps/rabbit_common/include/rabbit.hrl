@@ -8,7 +8,7 @@
 -include("resource.hrl").
 
 %% Passed around most places
--record(user, {username,
+-record(user, {username :: rabbit_types:option(rabbit_types:username()),
                tags,
                authz_backends}). %% List of {Module, AuthUserImpl} pairs
 
@@ -254,7 +254,7 @@
 %% Max message size is hard limited to 512 MiB.
 %% If user configures a greater rabbit.max_message_size,
 %% this value is used instead.
--define(MAX_MSG_SIZE, 536870912).
+-define(MAX_MSG_SIZE, 536_870_912).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
 

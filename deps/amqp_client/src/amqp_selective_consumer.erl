@@ -176,10 +176,7 @@ handle_info({'DOWN', _MRef, process, Pid, _Info},
                 _         -> {ok, State} %% unnamed consumer went down
                                          %% before receiving consume_ok
             end
-    end;
-handle_info(#'basic.credit_drained'{} = Method, State) ->
-    deliver_to_consumer_or_die(Method, Method, State),
-    {ok, State}.
+    end.
 
 %% @private
 handle_call({register_default_consumer, Pid}, _From,
@@ -246,8 +243,7 @@ tag(#'basic.consume'{consumer_tag = Tag})         -> Tag;
 tag(#'basic.consume_ok'{consumer_tag = Tag})      -> Tag;
 tag(#'basic.cancel'{consumer_tag = Tag})          -> Tag;
 tag(#'basic.cancel_ok'{consumer_tag = Tag})       -> Tag;
-tag(#'basic.deliver'{consumer_tag = Tag})         -> Tag;
-tag(#'basic.credit_drained'{consumer_tag = Tag})  -> Tag.
+tag(#'basic.deliver'{consumer_tag = Tag})         -> Tag.
 
 add_to_monitor_dict(Pid, Monitors) ->
     case maps:find(Pid, Monitors) of

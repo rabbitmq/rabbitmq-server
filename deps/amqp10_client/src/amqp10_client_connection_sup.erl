@@ -8,35 +8,31 @@
 
 -behaviour(supervisor).
 
-%% Private API.
+%% API
 -export([start_link/1]).
 
-%% Supervisor callbacks.
+%% Supervisor callbacks
 -export([init/1]).
 
--define(CHILD(Id, Mod, Type, Args), {Id, {Mod, start_link, Args},
-                                     transient, 5000, Type, [Mod]}).
-
-%% -------------------------------------------------------------------
-%% Private API.
-%% -------------------------------------------------------------------
-
--spec start_link(amqp10_client_connection:connection_config()) ->
-    {ok, pid()} | ignore | {error, any()}.
 start_link(Config) ->
     supervisor:start_link(?MODULE, [Config]).
 
-%% -------------------------------------------------------------------
-%% Supervisor callbacks.
-%% -------------------------------------------------------------------
-
-init(Args) ->
-    ReaderSpec = ?CHILD(reader, amqp10_client_frame_reader,
-                        worker, [self() | Args]),
-    ConnectionSpec = ?CHILD(connection, amqp10_client_connection,
-                            worker, [self() | Args]),
-    SessionsSupSpec = ?CHILD(sessions, amqp10_client_sessions_sup,
-                             supervisor, []),
-    {ok, {{one_for_all, 0, 1}, [ConnectionSpec,
-                                ReaderSpec,
-                                SessionsSupSpec]}}.
+init(Args0) ->
+    SupFlags = #{strategy => one_for_all,
+                 intensity => 0,
+                 period => 1},
+    Fun = start_link,
+    Args = [self() | Args0],
+    ConnectionSpec = #{id => connection,
+                       start => {amqp10_client_connection, Fun, Args},
+                       restart => transient},
+    ReaderSpec = #{id => reader,
+                   start => {amqp10_client_frame_reader, Fun, Args},
+                   restart => transient},
+    SessionsSupSpec = #{id => sessions,
+                        start => {amqp10_client_sessions_sup, Fun, []},
+                        restart => transient,
+                        type => supervisor},
+    {ok, {SupFlags, [ConnectionSpec,
+                     ReaderSpec,
+                     SessionsSupSpec]}}.

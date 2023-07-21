@@ -9,30 +9,12 @@
 
 -behaviour(application).
 
-%% Application callbacks
+%% application callbacks
 -export([start/2,
          stop/1]).
 
--type start_type() :: (
-        normal |
-        {takeover, Node :: node()} |
-        {failover, Node :: node()}
-       ).
--type state() :: term().
-
-%%====================================================================
-%% API
-%%====================================================================
-
--spec start(StartType :: start_type(), StartArgs :: term()) ->
-    {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: state()} | {error, Reason :: term()}.
 start(_Type, _Args) ->
     amqp10_client_sup:start_link().
 
--spec stop(State :: state()) -> ok.
 stop(_State) ->
     ok.
-
-%%====================================================================
-%% Internal functions
-%%====================================================================

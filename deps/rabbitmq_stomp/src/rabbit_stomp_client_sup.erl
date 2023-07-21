@@ -15,12 +15,16 @@
 
 start_link(Ref, _Transport, Configuration) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    ConnectionHelperSupFlags = #{strategy => one_for_one,
+                                 intensity => 10,
+                                 period => 10,
+                                 auto_shutdown => any_significant},
     {ok, HelperPid} =
         supervisor:start_child(
             SupPid,
             #{
                 id => rabbit_stomp_heartbeat_sup,
-                start => {rabbit_connection_helper_sup, start_link, []},
+                start => {rabbit_connection_helper_sup, start_link, [ConnectionHelperSupFlags]},
                 restart => transient,
                 significant => true,
                 shutdown => infinity,

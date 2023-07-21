@@ -14,6 +14,7 @@
          is_persistent/1,
          ttl/1,
          correlation_id/1,
+         user_id/1,
          message_id/1,
          timestamp/1,
          priority/1,
@@ -104,6 +105,9 @@ timestamp(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 priority(#basic_message{content = Content}) ->
+    get_property(?FUNCTION_NAME, Content).
+
+user_id(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 correlation_id(#basic_message{content = Content}) ->
@@ -384,6 +388,13 @@ get_property(P, #content{properties = none} = Content) ->
 get_property(durable,
              #content{properties = #'P_basic'{delivery_mode = Mode}}) ->
     Mode == 2;
+get_property(user_id,
+             #content{properties = #'P_basic'{user_id = UserId}}) ->
+    if UserId =:= undefined ->
+           undefined;
+       is_binary(UserId) ->
+           {binary, UserId}
+    end;
 get_property(ttl, #content{properties = Props}) ->
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     MsgTTL;

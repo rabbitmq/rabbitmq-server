@@ -100,7 +100,6 @@ dialyze(
 )
 
 broker_for_integration_suites(
-    extra_plugins = ["//deps/rabbitmq_amqp1_0:erlang_app"],
 )
 
 TEST_DEPS = [

@@ -19,7 +19,10 @@
 -behaviour(supervisor).
 -behaviour(ranch_protocol).
 
--export([start_link/3, reader/1]).
+-export([start_link/3,
+         reader/1,
+         start_connection_helper_sup/2
+        ]).
 
 -export([init/1]).
 
@@ -27,40 +30,17 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(any(), module(), any()) ->
+-spec start_link(ranch:ref(), module(), any()) ->
     {'ok', pid(), pid()}.
 
 start_link(Ref, _Transport, _Opts) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
-    %% We need to get channels in the hierarchy here so they get shut
-    %% down after the reader, so the reader gets a chance to terminate
-    %% them cleanly. But for 1.0 readers we can't start the real
-    %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
-    %% so we add another supervisor into the hierarchy.
-    %%
-    %% This supervisor also acts as an intermediary for heartbeaters and
-    %% the queue collector process, since these must not be siblings of the
-    %% reader due to the potential for deadlock if they are added/restarted
-    %% whilst the supervision tree is shutting down.
-    {ok, HelperSup} =
-        supervisor:start_child(
-            SupPid,
-            #{
-                id => helper_sup,
-                start => {rabbit_connection_helper_sup, start_link, []},
-                restart => transient,
-                significant => true,
-                shutdown => infinity,
-                type => supervisor,
-                modules => [rabbit_connection_helper_sup]
-            }
-        ),
     {ok, ReaderPid} =
         supervisor:start_child(
             SupPid,
             #{
                 id => reader,
-                start => {rabbit_reader, start_link, [HelperSup, Ref]},
+                start => {rabbit_reader, start_link, [Ref]},
                 restart => transient,
                 significant => true,
                 shutdown => ?WORKER_WAIT,
@@ -74,6 +54,20 @@ start_link(Ref, _Transport, _Opts) ->
 
 reader(Pid) ->
     hd(rabbit_misc:find_child(Pid, reader)).
+
+-spec start_connection_helper_sup(pid(), supervisor:sup_flags()) ->
+    supervisor:startchild_ret().
+start_connection_helper_sup(ConnectionSupPid, ConnectionHelperSupFlags) ->
+    supervisor:start_child(
+      ConnectionSupPid,
+      #{
+        id => helper_sup,
+        start => {rabbit_connection_helper_sup, start_link, [ConnectionHelperSupFlags]},
+        restart => transient,
+        significant => true,
+        shutdown => infinity,
+        type => supervisor
+       }).
 
 %%--------------------------------------------------------------------------
 

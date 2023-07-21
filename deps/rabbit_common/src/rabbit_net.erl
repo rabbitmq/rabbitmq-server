@@ -32,11 +32,11 @@
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
 -type hostname() :: inet:hostname().
 -type ip_port() :: inet:port_number().
--type rabbit_proxy_socket() :: {'rabbit_proxy_socket', ranch_transport:socket(), ranch_proxy_header:proxy_info()}.
+-type proxy_socket() :: {'rabbit_proxy_socket', ranch_transport:socket(), ranch_proxy_header:proxy_info()}.
 % -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
--spec proxy_ssl_info(socket(), rabbit_proxy_socket() | 'undefined') -> 'nossl' | ok_val_or_error([{atom(), any()}]).
+-spec proxy_ssl_info(socket(), proxy_socket() | 'undefined') -> 'nossl' | ok_val_or_error([{atom(), any()}]).
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
 -spec getstat(socket(), [stat_option()]) ->
           ok_val_or_error([{stat_option(), integer()}]).

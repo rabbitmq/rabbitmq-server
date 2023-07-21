@@ -33,7 +33,6 @@ amqp10_client:
 - amqp10_client_app
 - amqp10_client_connection
 - amqp10_client_connection_sup
-- amqp10_client_connections_sup
 - amqp10_client_frame_reader
 - amqp10_client_session
 - amqp10_client_sessions_sup
@@ -45,6 +44,7 @@ amqp10_common:
 - amqp10_binary_parser
 - amqp10_framing
 - amqp10_framing0
+- serial_number
 aten:
 - aten
 - aten_app
@@ -543,6 +543,12 @@ rabbit:
 - rabbit
 - rabbit_access_control
 - rabbit_alarm
+- rabbit_amqp1_0
+- rabbit_amqp_reader
+- rabbit_amqp_session
+- rabbit_amqp_session_sup
+- rabbit_amqp_util
+- rabbit_amqp_writer
 - rabbit_amqqueue
 - rabbit_amqqueue_control
 - rabbit_amqqueue_process
@@ -805,6 +811,7 @@ rabbit_common:
 - rabbit_registry
 - rabbit_registry_class
 - rabbit_resource_monitor_misc
+- rabbit_routing_parser
 - rabbit_runtime
 - rabbit_runtime_parameter
 - rabbit_semver
@@ -818,20 +825,7 @@ rabbit_common:
 - worker_pool_sup
 - worker_pool_worker
 rabbitmq_amqp1_0:
-- Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand
-- rabbit_amqp1_0
-- rabbit_amqp1_0_channel
-- rabbit_amqp1_0_incoming_link
-- rabbit_amqp1_0_link_util
-- rabbit_amqp1_0_message
-- rabbit_amqp1_0_outgoing_link
-- rabbit_amqp1_0_reader
-- rabbit_amqp1_0_session
-- rabbit_amqp1_0_session_process
-- rabbit_amqp1_0_session_sup
-- rabbit_amqp1_0_session_sup_sup
-- rabbit_amqp1_0_util
-- rabbit_amqp1_0_writer
+- rabbitmq_amqp1_0_noop
 rabbitmq_auth_backend_cache:
 - rabbit_auth_backend_cache
 - rabbit_auth_backend_cache_app

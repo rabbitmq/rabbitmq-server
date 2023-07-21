@@ -101,7 +101,12 @@ connect_dest(State = #{name := Name,
                                      uri => Uri}}}.
 
 connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
-    {ok, Config} = amqp10_client:parse_uri(Uri),
+    {ok, Config0} = amqp10_client:parse_uri(Uri),
+    %% As done for AMQP 0.9.1, exclude AMQP 1.0 shovel connections from maintenance mode
+    %% to prevent crashes and errors being logged by the shovel plugin when a node gets drained.
+    %% A better solution would be that the shovel plugin subscribes to event
+    %% maintenance_connections_closed to gracefully transfer shovels over to other live nodes.
+    Config = Config0#{properties => #{<<"ignore-maintenance">> => {boolean, true}}},
     {ok, Conn} = amqp10_client:open_connection(Config),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
@@ -125,13 +130,13 @@ connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
 -spec init_source(state()) -> state().
 init_source(State = #{source := #{current := #{link := Link},
                                   prefetch_count := Prefetch} = Src}) ->
-    {Credit, RenewAfter} = case Src of
-                               #{delete_after := R} when is_integer(R) ->
-                                   {R, never};
-                               #{prefetch_count := Pre} ->
-                                   {Pre, round(Prefetch/10)}
-                           end,
-    ok = amqp10_client:flow_link_credit(Link, Credit, RenewAfter),
+    {Credit, RenewWhenBelow} = case Src of
+                                   #{delete_after := R} when is_integer(R) ->
+                                       {R, never};
+                                   #{prefetch_count := Pre} ->
+                                       {Pre, max(1, round(Prefetch/10))}
+                               end,
+    ok = amqp10_client:flow_link_credit(Link, Credit, RenewWhenBelow),
     Remaining = case Src of
                     #{delete_after := never} -> unlimited;
                     #{delete_after := Rem} -> Rem;

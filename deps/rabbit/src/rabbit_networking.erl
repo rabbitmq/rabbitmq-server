@@ -49,9 +49,7 @@
 
 -export([
     local_connections/0,
-    local_non_amqp_connections/0,
-    %% prefer local_connections/0
-    connections_local/0
+    local_non_amqp_connections/0
 ]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -448,19 +446,15 @@ register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
 unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 
 -spec connections() -> [rabbit_types:connection()].
-
 connections() ->
     Nodes = rabbit_nodes:list_running(),
-    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
+    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, local_connections, [], ?RPC_TIMEOUT).
 
 -spec local_connections() -> [rabbit_types:connection()].
-%% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
 local_connections() ->
-    connections_local().
-
--spec connections_local() -> [rabbit_types:connection()].
-%% @deprecated Prefer {@link local_connections}
-connections_local() -> pg_local:get_members(rabbit_connections).
+    Amqp091Pids = pg_local:get_members(rabbit_connections),
+    Amqp10Pids = rabbit_amqp1_0:list_local(),
+    Amqp10Pids ++ Amqp091Pids.
 
 -spec register_non_amqp_connection(pid()) -> ok.
 
@@ -510,21 +504,16 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
-      connections_local()).
+      local_connections()).
 
 -spec close_connection(pid(), string()) -> 'ok'.
-
 close_connection(Pid, Explanation) ->
-    case lists:member(Pid, connections()) of
-        true  ->
-            Res = rabbit_reader:shutdown(Pid, Explanation),
-            rabbit_log:info("Closing connection ~tp because ~tp", [Pid, Explanation]),
-            Res;
-        false ->
-            rabbit_log:warning("Asked to close connection ~tp (reason: ~tp) "
-                               "but no running cluster node reported it as an active connection. Was it already closed? ",
-                               [Pid, Explanation]),
-            ok
+    rabbit_log:info("Closing connection ~tp because ~tp",
+                    [Pid, Explanation]),
+    try rabbit_reader:shutdown(Pid, Explanation)
+    catch exit:{Reason, _Location} ->
+              rabbit_log:warning("Could not close connection ~tp (reason: ~tp): ~p",
+                                 [Pid, Explanation, Reason])
     end.
 
 -spec close_connections([pid()], string()) -> 'ok'.

@@ -214,6 +214,8 @@ protocol(unknown) ->
     unknown;
 protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
+protocol(Version = {1, 0}) ->
+    protocol({'AMQP', Version});
 protocol({Family, Version}) ->
     print("~ts ~ts", [Family, protocol_version(Version)]);
 protocol(Protocol) when is_binary(Protocol) ->

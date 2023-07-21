@@ -50,7 +50,7 @@
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
 -type alarm() :: local_alarm() | resource_alarm().
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
-                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
+                           IsThereAnyAlarmWithSameSourceInTheCluster :: boolean(),
                            NodeForWhichAlarmWasSetOrCleared :: node()}.
 
 %%----------------------------------------------------------------------------

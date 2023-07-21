@@ -506,7 +506,7 @@ tidy_canceled_subscription(ConsumerTag, _Subscription,
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = maps:remove(ConsumerTag, Subs),
-    {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
+    {ok, Dest} = rabbit_routing_parser:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
@@ -528,7 +528,7 @@ maybe_delete_durable_sub(_Destination, _Frame, State) ->
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
         {ok, DestHdr} ->
-            case rabbit_routing_util:parse_endpoint(DestHdr) of
+            case rabbit_routing_parser:parse_endpoint(DestHdr) of
                 {ok, Destination} ->
                     case Fun(Destination, DestHdr, Frame, State) of
                         {error, invalid_endpoint} ->
@@ -902,7 +902,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
         not_found ->
             {Frame, State};
         {ok, ReplyTo} ->
-            {ok, Destination} = rabbit_routing_util:parse_endpoint(ReplyTo),
+            {ok, Destination} = rabbit_routing_parser:parse_endpoint(ReplyTo),
             case rabbit_routing_util:dest_temp_queue(Destination) of
                 none ->
                     {Frame, State};
@@ -1126,7 +1126,7 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
               Id = build_subscription_id(Frame),
               % Note: we discard the exchange here so there's no need to use
               % the default_topic_exchange configuration key
-              {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+              {_, Name} = rabbit_routing_parser:parse_routing(EndPoint),
               list_to_binary(rabbit_stomp_util:subscription_queue_name(Name, Id, Frame))
           end
          }] ++ rabbit_stomp_util:build_params(EndPoint, Headers),
@@ -1230,7 +1230,7 @@ additional_info(Key,
     proplists:get_value(Key, AddInfo).
 
 parse_routing(Destination, DefaultTopicExchange) ->
-    {Exchange0, RoutingKey} = rabbit_routing_util:parse_routing(Destination),
+    {Exchange0, RoutingKey} = rabbit_routing_parser:parse_routing(Destination),
     Exchange1 = maybe_apply_default_topic_exchange(Exchange0, DefaultTopicExchange),
     {Exchange1, RoutingKey}.
 

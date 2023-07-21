@@ -96,6 +96,7 @@ block_connack_timeout(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Ports = rpc(Config, erlang, ports, []),
 
+    DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let connection block.
     timer:sleep(100),
@@ -117,7 +118,7 @@ block_connack_timeout(Config) ->
     MqttReaderMRef = monitor(process, MqttReader),
 
     %% Unblock connection. CONNECT packet will be processed on the server.
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
 
     receive {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, {socket_ends, einval}}} ->
                 %% We expect that MQTT reader process exits (without crashing)
@@ -151,15 +152,13 @@ handle_invalid_packets(Config) ->
     ?assertEqual(N, rpc(Config, ets, info, [connection_metrics, size])).
 
 login_timeout(Config) ->
-    rpc(Config, application, set_env, [rabbitmq_mqtt, login_timeout, 400]),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = gen_tcp:connect("localhost", P, [{active, false}]),
-
-    try
-        {error, closed} = gen_tcp:recv(C, 0, 500)
-    after
-        rpc(Config, application, unset_env, [rabbitmq_mqtt, login_timeout])
-    end.
+    App = rabbitmq_mqtt,
+    Par = ?FUNCTION_NAME,
+    ok = rpc(Config, application, set_env, [App, Par, 400]),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, Socket} = gen_tcp:connect("localhost", Port, [{active, false}]),
+    ?assertEqual({error, closed}, gen_tcp:recv(Socket, 0, 500)),
+    ok = rpc(Config, application, unset_env, [App, Par]).
 
 stats(Config) ->
     C = connect(?FUNCTION_NAME, Config),

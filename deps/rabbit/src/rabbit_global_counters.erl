@@ -93,7 +93,6 @@
 -define(MESSAGES_GET_EMPTY, 6).
 -define(MESSAGES_REDELIVERED, 7).
 -define(MESSAGES_ACKNOWLEDGED, 8).
-%% Note: ?NUM_PROTOCOL_QUEUE_TYPE_COUNTERS needs to be up-to-date. See include/rabbit_global_counters.hrl
 -define(PROTOCOL_QUEUE_TYPE_COUNTERS,
             [
                 {
@@ -131,13 +130,15 @@
             ]).
 
 boot_step() ->
-    %% Protocol counters
-    init([{protocol, amqp091}]),
+    [begin
+         %% Protocol counters
+         init([{protocol, Proto}]),
 
-    %% Protocol & Queue Type counters
-    init([{protocol, amqp091}, {queue_type, rabbit_classic_queue}]),
-    init([{protocol, amqp091}, {queue_type, rabbit_quorum_queue}]),
-    init([{protocol, amqp091}, {queue_type, rabbit_stream_queue}]),
+         %% Protocol & Queue Type counters
+         init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
+         init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]),
+         init([{protocol, Proto}, {queue_type, rabbit_stream_queue}])
+     end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
     %%

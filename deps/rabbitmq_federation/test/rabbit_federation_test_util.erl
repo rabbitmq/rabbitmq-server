@@ -193,7 +193,7 @@ expect(Payloads, Timeout) ->
                 false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~tp", [Payload]))
             end
     after Timeout ->
-        ?assert(false, rabbit_misc:format("Did not receive expected payloads ~tp in time", [Payloads]))
+              ct:fail("Did not receive expected payloads ~tp in time", [Payloads])
     end.
 
 expect_empty(Ch, Q) ->

@@ -33,7 +33,7 @@
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/5, basic_consume/12, basic_cancel/5, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
--export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
+-export([notify_down_all/2, notify_down_all/3, activate_limit_all/2]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/2, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
@@ -92,7 +92,7 @@
 -define(IS_QUORUM(QPid), is_tuple(QPid)).
 %%----------------------------------------------------------------------------
 
--export_type([name/0, qmsg/0, absent_reason/0]).
+-export_type([name/0, qmsg/0, msg_id/0, absent_reason/0]).
 
 -type name() :: rabbit_types:r('queue').
 
@@ -101,7 +101,7 @@
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
 -type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(),
                  boolean(), mc:state()}.
--type msg_id() :: non_neg_integer().
+-type msg_id() :: undefined | non_neg_integer() | {Priority :: non_neg_integer(), undefined | non_neg_integer()}.
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
 -type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
@@ -789,11 +789,13 @@ check_exclusive_access(Q, _ReaderPid, _MatchType) ->
       [rabbit_misc:rs(QueueName)]).
 
 -spec with_exclusive_access_or_die(name(), pid(), qfun(A)) ->
-          A | rabbit_types:channel_exit().
-
+    A | rabbit_types:channel_exit().
 with_exclusive_access_or_die(Name, ReaderPid, F) ->
     with_or_die(Name,
-                fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
+                fun (Q) ->
+                        check_exclusive_access(Q, ReaderPid),
+                        F(Q)
+                end).
 
 assert_args_equivalence(Q, NewArgs) ->
     ExistingArgs = amqqueue:get_arguments(Q),
@@ -1731,15 +1733,6 @@ deactivate_limit_all(QRefs, ChPid) ->
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{deactivate_limit, ChPid}]}).
 
--spec credit(amqqueue:amqqueue(),
-             rabbit_types:ctag(),
-             non_neg_integer(),
-             boolean(),
-             rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()}.
-credit(Q, CTag, Credit, Drain, QStates) ->
-    rabbit_queue_type:credit(Q, CTag, Credit, Drain, QStates).
-
 -spec basic_get(amqqueue:amqqueue(), boolean(), pid(), rabbit_types:ctag(),
                 rabbit_queue_type:state()) ->
           {'ok', non_neg_integer(), qmsg(), rabbit_queue_type:state()} |
@@ -1766,7 +1759,7 @@ basic_consume(Q, NoAck, ChPid, LimiterPid,
              channel_pid => ChPid,
              limiter_pid => LimiterPid,
              limiter_active => LimiterActive,
-             prefetch_count => ConsumerPrefetchCount,
+             mode => {simple_prefetch, ConsumerPrefetchCount},
              consumer_tag => ConsumerTag,
              exclusive_consume => ExclusiveConsume,
              args => Args,
