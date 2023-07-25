@@ -24,7 +24,7 @@ setup(#{feature_flags_file := FFFile}) ->
             %% stop_app/start_app, so reset it here. This ensures that e.g.
             %% any change to the configuration file w.r.t. deprecated features
             %% are taken into account.
-            rabbit_ff_registry_factory:reset_registry(),
+            rabbit_feature_flags:reset_registry(),
 
             ?LOG_DEBUG(
                "Initializing feature flags registry", [],
