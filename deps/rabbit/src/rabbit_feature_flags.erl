@@ -120,6 +120,7 @@
          query_supported_feature_flags/0,
          does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
+         copy_feature_states_after_reset/1,
          uses_callbacks/1,
          reset_registry/0]).
 
@@ -1122,10 +1123,13 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
                                   false -> [Name | Acc]
                               end
                       end, FeatureNames1, PreviouslyEnabled),
-    FeatureNames3 = lists:sort(FeatureNames2),
+    do_write_enabled_feature_flags_list(FeatureNames2).
+
+do_write_enabled_feature_flags_list(EnabledFeatureNames) ->
+    EnabledFeatureNames1 = lists:sort(EnabledFeatureNames),
 
     File = enabled_feature_flags_list_file(),
-    Content = io_lib:format("~tp.~n", [FeatureNames3]),
+    Content = io_lib:format("~tp.~n", [EnabledFeatureNames1]),
     %% TODO: If we fail to write the the file, we should spawn a process
     %% to retry the operation.
     case file:write_file(File, Content) of
@@ -1150,6 +1154,24 @@ enabled_feature_flags_list_file() ->
     case application:get_env(rabbit, feature_flags_file) of
         {ok, Val} -> Val;
         undefined -> throw(feature_flags_file_not_set)
+    end.
+
+copy_feature_states_after_reset(RemoteNode) ->
+    ?assertEqual(undefined, erlang:whereis(rabbit_ff_controller)),
+    EnabledFeatureFlags = erpc:call(
+                            RemoteNode, ?MODULE, list, [enabled], 60000),
+    EnabledFeatureNames = maps:keys(EnabledFeatureFlags),
+    ?LOG_DEBUG(
+       "Feature flags: copy feature states from remote node `~ts` after "
+       "a reset of this node `~ts`; enabled feature flags:~n~p",
+       [RemoteNode, node(), EnabledFeatureNames],
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    case do_write_enabled_feature_flags_list(EnabledFeatureNames) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            File = enabled_feature_flags_list_file(),
+            throw({feature_flags_file_copy_error, File, Reason})
     end.
 
 %% -------------------------------------------------------------------
