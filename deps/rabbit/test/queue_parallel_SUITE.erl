@@ -24,6 +24,17 @@ all() ->
     ].
 
 groups() ->
+    %% Don't run testcases in parallel when Bazel is used because they fail
+    %% with various system errors in CI, like the inability to spawn system
+    %% processes or to open a TCP port.
+    UsesBazel = case os:getenv("RABBITMQ_RUN") of
+                    false -> false;
+                    _     -> true
+                end,
+    GroupOptions = case UsesBazel of
+                       false -> [parallel];
+                       true  -> []
+                   end,
     AllTests = [publish,
                 consume,
                 consume_first_empty,
@@ -56,14 +67,14 @@ groups() ->
                     ],
     [
      {parallel_tests, [], [
-       {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
-                                                trigger_message_store_compaction]},
-       {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
-                                                 trigger_message_store_compaction]},
-       {quorum_queue, [parallel], AllTests ++ ExtraBccTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
-       {stream_queue, [parallel], ExtraBccTests ++ [publish, subscribe]}
+       {classic_queue, GroupOptions, AllTests ++ [delete_immediately_by_pid_succeeds,
+                                                  trigger_message_store_compaction]},
+       {mirrored_queue, GroupOptions, AllTests ++ [delete_immediately_by_pid_succeeds,
+                                                   trigger_message_store_compaction]},
+       {quorum_queue, GroupOptions, AllTests ++ ExtraBccTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_limit, GroupOptions, AllTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_bytes, GroupOptions, AllTests ++ [delete_immediately_by_pid_fails]},
+       {stream_queue, GroupOptions, ExtraBccTests ++ [publish, subscribe]}
       ]}
     ].
 
