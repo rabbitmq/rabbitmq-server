@@ -567,10 +567,9 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     gen_server:cast(Pid, Evt).
 
 send_drained(Pid, QName, CTagCredits) when is_list(CTagCredits) ->
-    [_ = gen_server:cast(Pid, {queue_event, QName,
-                               {send_drained, CTagCredit}})
-     || CTagCredit <- CTagCredits],
-    ok;
+    lists:foreach(fun(CTagCredit) ->
+                          send_drained(Pid, QName, CTagCredit)
+                  end, CTagCredits);
 send_drained(Pid, QName, CTagCredit) when is_tuple(CTagCredit) ->
     gen_server:cast(Pid, {queue_event, QName,
                           {send_drained, CTagCredit}}).
