@@ -18,8 +18,6 @@
 -export([adapter_name/1]).
 -export([info/2]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
@@ -156,7 +154,7 @@ initial_state(Configuration,
        version             = none,
        pending_receipts    = undefined,
        config              = Configuration,
-       route_state         = rabbit_routing_util:init_state(),
+       route_state         = routing_init_state(),
        reply_queues        = #{},
        frame_transformer   = undefined,
        queue_states        = rabbit_queue_type:init(),
@@ -514,7 +512,7 @@ tidy_canceled_subscription(ConsumerTag, _Subscription,
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = maps:remove(ConsumerTag, Subs),
-    {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
+    {ok, Dest} = parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
@@ -534,7 +532,7 @@ maybe_delete_durable_sub(_Destination, _Frame, State) ->
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
         {ok, DestHdr} ->
-            case rabbit_routing_util:parse_endpoint(DestHdr) of
+            case parse_endpoint(DestHdr) of
                 {ok, Destination} ->
                     case Fun(Destination, DestHdr, Frame, State) of
                         {error, invalid_endpoint} ->
@@ -562,7 +560,7 @@ with_destination(Command, Frame, State, Fun) ->
                           "'~ts' is not a valid destination.~n"
                           "Valid destination types are: ~ts.~n",
                           [Content,
-                           string:join(rabbit_routing_util:all_dest_prefixes(),
+                           string:join(all_dest_prefixes(),
                                        ", ")], State)
             end;
         not_found ->
@@ -655,23 +653,16 @@ server_header() ->
     rabbit_misc:format("~ts/~ts", [Product, Version]).
 
 do_subscribe(Destination, DestHdr, Frame,
-             State = #proc_state{subscriptions = Subs,
-                                 route_state   = RouteState,
-                                 channel       = Channel,
-                                 default_topic_exchange = DfltTopicEx}) ->
-    check_subscription_access(Destination, State),
+             State0 = #proc_state{subscriptions = Subs,
+                                  default_topic_exchange = DfltTopicEx}) ->
+    check_subscription_access(Destination, State0),
     Prefetch =
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
-                                          undefined),
+                                          application:get_env(rabbit, default_consumer_prefetch)),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
-    case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
-        {ok, Queue, RouteState1} ->
+    case ensure_endpoint(source, Destination, Frame, State0) of
+        {ok, Queue, State} ->
             {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
-            case Prefetch of
-                undefined -> ok;
-                _         -> amqp_channel:call(
-                               Channel, #'basic.qos'{prefetch_count = Prefetch})
-            end,
             case maps:find(ConsumerTag, Subs) of
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
@@ -689,15 +680,12 @@ do_subscribe(Destination, DestHdr, Frame,
                                         [{<<"x-stream-offset">>, Type, Value}]
                                 end,
                     try
-                        amqp_channel:subscribe(Channel,
-                                               #'basic.consume'{
-                                                  queue        = Queue,
-                                                  consumer_tag = ConsumerTag,
-                                                  no_local     = false,
-                                                  no_ack       = (AckMode == auto),
-                                                  exclusive    = false,
-                                                  arguments    = Arguments},
-                                               self()),
+                        consume_queue(Queue, #{no_ack => (AckMode == auto),
+                                               prefetch_count => Prefetch,
+                                               consumer_tag => ConsumerTag,
+                                               exclusive_consume => false,
+                                               args => Arguments},
+                                      State),
                         ok = ensure_binding(Queue, ExchangeAndKey, State)
                     catch exit:Err ->
                             %% it's safe to delete this queue, it
@@ -719,28 +707,24 @@ do_subscribe(Destination, DestHdr, Frame,
                                                        ack_mode    = AckMode,
                                                        multi_ack   = IsMulti,
                                                        description = Description},
-                                         Subs),
-                                   route_state = RouteState1})
+                                         Subs)})
             end;
         {error, _} = Err ->
             Err
     end.
 
 check_subscription_access(Destination = {topic, _Topic},
-                          #proc_state{auth_login = _User,
-                                      connection = Connection,
+                          #proc_state{user = #user{username = Username} = User,
                                       default_topic_exchange = DfltTopicEx}) ->
-    [{amqp_params, AmqpParams}, {internal_user, InternalUser = #user{username = Username}}] =
-        amqp_connection:info(Connection, [amqp_params, internal_user]),
-    #amqp_params_direct{virtual_host = VHost} = AmqpParams,
+    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
     {Exchange, RoutingKey} = parse_routing(Destination, DfltTopicEx),
-    Resource = #resource{virtual_host = VHost,
+    Resource = #resource{virtual_host = DefaultVHost,
         kind = topic,
         name = rabbit_data_coercion:to_binary(Exchange)},
     Context = #{routing_key  => rabbit_data_coercion:to_binary(RoutingKey),
-                variable_map => #{<<"vhost">> => VHost, <<"username">> => Username}
+                variable_map => #{<<"vhost">> => DefaultVHost, <<"username">> => Username}
     },
-    rabbit_access_control:check_topic_access(InternalUser, Resource, read, Context);
+    rabbit_access_control:check_topic_access(User, Resource, read, Context);
 check_subscription_access(_, _) ->
     authorized.
 
@@ -753,15 +737,15 @@ maybe_clean_up_queue(Queue, #proc_state{connection = Connection,
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
-        State = #proc_state{channel = Channel,
+        State0 = #proc_state{channel = Channel,
                             route_state = RouteState,
                             default_topic_exchange = DfltTopicEx}) ->
-    case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
+    case ensure_endpoint(dest, Destination, Frame, State0) of
 
-        {ok, _Q, RouteState1} ->
+        {ok, _Q, State} ->
 
             {Frame1, State1} =
-                ensure_reply_to(Frame, State#proc_state{route_state = RouteState1}),
+                ensure_reply_to(Frame, State),
 
             Props = rabbit_stomp_util:message_properties(Frame1),
 
@@ -877,8 +861,8 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
         not_found ->
             {Frame, State};
         {ok, ReplyTo} ->
-            {ok, Destination} = rabbit_routing_util:parse_endpoint(ReplyTo),
-            case rabbit_routing_util:dest_temp_queue(Destination) of
+            {ok, Destination} = parse_endpoint(ReplyTo),
+            case dest_temp_queue(Destination) of
                 none ->
                     {Frame, State};
                 TempQueueId ->
@@ -892,8 +876,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
             end
     end.
 
-ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
-                                                    reply_queues  = RQS,
+ensure_reply_queue(TempQueueId, State = #proc_state{reply_queues  = RQS,
                                                     subscriptions = Subs,
                                                     user = #user{username = Username} = User,
                                                     authz_context = AuthzCtx,
@@ -905,47 +888,24 @@ ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
             {ok, Queue} = create_queue(State),
             #resource{name = QNameBin} = QName = amqqueue:get_name(Queue),
 
-            case check_resource_access(User, QName, read, AuthzCtx) of
-                ok ->
-                    ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
-                    Spec = #{no_ack => true,
-                             channel_pid => self(),
-                             limiter_pid => none,
-                             limiter_active => false,
-                             prefetch_count => 5, %% TODO: promote to config
-                             consumer_tag => ConsumerTag,
-                             exclusive_consume => false,
-                             args => [],
-                             ok_msg => undefined,
-                             acting_user => Username},
-                    rabbit_amqqueue:with(
-                      QName,
-                      fun(Q1) ->
-                              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
-                                  {ok, QStates} ->
-                                      State1 = State#proc_state{queue_states = QStates},
-                                      Destination = binary_to_list(QNameBin),
+            ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
+            Spec = #{no_ack => true,
+                     prefetch_count => application:get_env(rabbit, default_consumer_prefetch),
+                     consumer_tag => ConsumerTag,
+                     exclusive_consume => false,
+                     args => []},
+            {ok, State1} = consume_queue(QName, Spec, State),
+            Destination = binary_to_list(QNameBin),
 
-                                      %% synthesise a subscription to the reply queue destination
-                                      Subs1 = maps:put(ConsumerTag,
-                                                       #subscription{dest_hdr  = Destination,
-                                                                     multi_ack = false},
-                                                       Subs),
+            %% synthesise a subscription to the reply queue destination
+            Subs1 = maps:put(ConsumerTag,
+                             #subscription{dest_hdr  = Destination,
+                                           multi_ack = false},
+                             Subs),
 
-                                      {Destination, State1#proc_state{
-                                                      reply_queues  = maps:put(TempQueueId, QNameBin, RQS),
-                                                      subscriptions = Subs1}};
-                                  {error, Reason} ->
-                                        error("Failed to consume from ~s: ~p",
-                                              [rabbit_misc:rs(QName), Reason],
-                                              State)
-                              end
-                      end);
-                {error, access_refused} ->
-                           error("Failed to consume from ~s: no read access",
-                                 [rabbit_misc:rs(QName)],
-                                 State)
-            end
+            {Destination, State1#proc_state{
+                            reply_queues  = maps:put(TempQueueId, QNameBin, RQS),
+                            subscriptions = Subs1}}
     end.
 
 %%----------------------------------------------------------------------------
@@ -1112,29 +1072,27 @@ millis_to_seconds(M)               -> M div 1000.
 %% Queue Setup
 %%----------------------------------------------------------------------------
 
-ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
+ensure_endpoint(_Direction, {queue, []}, _Frame, _State) ->
     {error, {invalid_destination, "Destination cannot be blank"}};
 
-ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
+ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, State) ->
     Params =
         [{subscription_queue_name_gen,
           fun () ->
               Id = build_subscription_id(Frame),
               % Note: we discard the exchange here so there's no need to use
               % the default_topic_exchange configuration key
-              {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+              {_, Name} = parse_routing(EndPoint),
               list_to_binary(rabbit_stomp_util:subscription_queue_name(Name, Id, Frame))
           end
          }] ++ rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint,
-                                        [Arguments | Params], State);
+    util_ensure_endpoint(source, EndPoint, [Arguments | Params], State);
 
-ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
+ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, State) ->
     Params = rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, EndPoint,
-                                        [Arguments | Params], State).
+    util_ensure_endpoint(Direction, EndPoint, [Arguments | Params], State).
 
 build_subscription_id(Frame) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
@@ -1226,7 +1184,7 @@ additional_info(Key,
     proplists:get_value(Key, AddInfo).
 
 parse_routing(Destination, DefaultTopicExchange) ->
-    {Exchange0, RoutingKey} = rabbit_routing_util:parse_routing(Destination),
+    {Exchange0, RoutingKey} = parse_routing(Destination),
     Exchange1 = maybe_apply_default_topic_exchange(Exchange0, DefaultTopicExchange),
     {Exchange1, RoutingKey}.
 
@@ -1357,3 +1315,258 @@ do_native_login(Creds, State) ->
              error("Bad CONNECT", "Access refused for user '" ++
                       binary_to_list(Username1) ++ "'", [], State)
      end.
+
+handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates0} = State) ->
+    case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
+        {ok, QState1, Actions} ->
+            State1 = State#proc_state{queue_states = QState1},
+            State = handle_queue_actions(Actions, State1),
+            {ok, STate};
+        {eol, Actions} ->
+            State1 = handle_queue_actions(Actions, State0),
+            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
+            {ConfirmMXs, UC1} =
+                rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
+            %% Deleted queue is a special case.
+            %% Do not nack the "rejected" messages.
+            State3 = record_confirms(ConfirmMXs,
+                                     State2#ch{unconfirmed = UC1}),
+            _ = erase_queue_stats(QRef),
+            noreply_coalesce(
+              State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+        {protocol_error, Type, Reason, ReasonArgs} = Error ->
+            error_log(Type, Reason, ReasonArgs),
+            {error, Error, State}
+    end.
+
+
+parse_endpoint(Destination) ->
+    parse_endpoint(Destination, false).
+
+parse_endpoint(undefined, AllowAnonymousQueue) ->
+    parse_endpoint("/queue", AllowAnonymousQueue);
+
+parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
+    parse_endpoint(unicode:characters_to_list(Destination),
+                                              AllowAnonymousQueue);
+parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
+    case re:split(Destination, "/", [{return, list}]) of
+        [Name] ->
+            {ok, {queue, unescape(Name)}};
+        ["", Type | Rest]
+            when Type =:= "exchange" orelse Type =:= "queue" orelse
+                 Type =:= "topic"    orelse Type =:= "temp-queue" ->
+            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
+        ["", "amq", "queue" | Rest] ->
+            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
+        ["", "reply-queue" = Prefix | [_|_]] ->
+            parse_endpoint0(reply_queue,
+                            [lists:nthtail(2 + length(Prefix), Destination)],
+                            AllowAnonymousQueue);
+        _ ->
+            {error, {unknown_destination, Destination}}
+    end.
+
+parse_endpoint0(exchange, ["" | _] = Rest,    _) ->
+    {error, {invalid_destination, exchange, to_url(Rest)}};
+parse_endpoint0(exchange, [Name],             _) ->
+    {ok, {exchange, {unescape(Name), undefined}}};
+parse_endpoint0(exchange, [Name, Pattern],    _) ->
+    {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
+parse_endpoint0(queue,    [],                 false) ->
+    {error, {invalid_destination, queue, []}};
+parse_endpoint0(queue,    [],                 true) ->
+    {ok, {queue, undefined}};
+parse_endpoint0(Type,     [[_|_]] = [Name],   _) ->
+    {ok, {Type, unescape(Name)}};
+parse_endpoint0(Type,     Rest,               _) ->
+    {error, {invalid_destination, Type, to_url(Rest)}}.
+
+%% --------------------------------------------------------------------------
+
+util_ensure_endpoint(Dir, Endpoint, State) ->
+    util_ensure_endpoint(Dir, Endpoint, [], State).
+
+util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State) ->
+    ExchangeName = rabbit_misc:r(Name, exchange,  proplists:get_value(vhost, Params)),
+    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
+    Amqqueue = new_amqqueue(undefined, exchange, Params, State),
+    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, Queue, State};
+
+util_ensure_endpoint(source, {topic, _}, Params, State) ->
+    Amqqueue = new_amqqueue(undefined, topic, Params, State),
+    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, Queue, State};
+
+util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
+    {ok, undefined, State};
+
+util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = RoutingState}) ->
+    Params1 = rabbit_misc:pmerge(durable, true, Params),
+    Queue = list_to_binary(Name),
+    RState1 = case sets:is_element(Queue, RoutingState) of
+                  true -> State;
+                  _    -> Amqqueue = new_amqqueue(Queue, queue, Params1, State),
+                          {ok, Queue} = create_queue(Amqqueue, State),
+                          #resource{name = QNameBin} = amqqueue:get_name(Queue),
+                          sets:add_element(QNameBin, RoutingState)
+              end,
+    {ok, Queue, State#proc_state{route_state = RState1}};
+
+util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State) ->
+    ExchangeName = rabbit_misc:r(Name, exchange,  proplists:get_value(vhost, Params)),
+    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
+    {ok, undefined, State};
+
+util_ensure_endpoint(dest, {topic, _}, _Params, State) ->
+    {ok, undefined, State};
+
+util_ensure_endpoint(_, {amqqueue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
+
+util_ensure_endpoint(_, {reply_queue, Name}, _Params, State) ->
+  {ok, list_to_binary(Name), State};
+
+util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
+    {error, invalid_endpoint}.
+
+
+%% --------------------------------------------------------------------------
+
+parse_routing({exchange, {Name, undefined}}) ->
+    {Name, ""};
+parse_routing({exchange, {Name, Pattern}}) ->
+    {Name, Pattern};
+parse_routing({topic, Name}) ->
+    {"amq.topic", Name};
+parse_routing({Type, Name})
+  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
+    {"", Name}.
+
+dest_temp_queue({temp_queue, Name}) -> Name;
+dest_temp_queue(_)                  -> none.
+
+%% --------------------------------------------------------------------------
+
+check_exchange(_,            false) ->
+    ok;
+check_exchange(ExchangeName, true) ->
+    _ = rabbit_exchange:lookup_or_die(ExchangeName),
+    ok.
+
+new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{username = Username}}) ->
+    QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
+                   {topic, SQNG} when is_function(SQNG) ->
+                      SQNG();
+                   {exchange, SQNG} when is_function(SQNG) ->
+                       SQNG();
+                   _ ->
+                       QNameBin0
+               end,
+    QName = rabbit_misc:r(proplists:get_value(vhost, Params0), queue, QNameBin),
+    %% defaults
+    Params = case proplists:get_value(durable, Params0, false) of
+                  false -> [{auto_delete, true}, {exclusive = true} | Params0];
+                  true  -> Params0
+              end,
+
+    amqqueue:new(QName,
+                 none,
+                 proplists:get_value(durable, Params, false),
+                 proplists:get_value(auto_delete, Params, false),
+                 case proplists:get_value(exclusive, Params, false) of
+                     false -> none;
+                     true -> self()
+                 end,
+                 proplists:get_value(arguments, Params, []),
+                 application:get_env(rabbitmq_stomp, default_vhost),
+                 #{user => Username}).
+
+
+to_url([])  -> [];
+to_url(Lol) -> "/" ++ string:join(Lol, "/").
+
+atomise(Name) when is_list(Name) ->
+    list_to_atom(re:replace(Name, "-", "_", [{return,list}, global])).
+
+unescape(Str) -> unescape(Str, []).
+
+unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
+unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
+unescape([],           Acc) -> lists:reverse(Acc).
+
+
+consume_queue(QName, Spec0, State = #proc_state{user = #user{username = Username} = User,
+                                                authz_context = AuthzCtx,
+                                                queue_states  = QStates0}) ->
+    case check_resource_access(User, QName, read, AuthzCtx) of
+        ok ->
+            Spec = Spec0#{channel_pid => self(),
+                          limiter_pid => none,
+                          limiter_active => false,
+                          ok_msg => undefined,
+                          acting_user => Username},
+            rabbit_amqqueue:with(
+              QName,
+              fun(Q1) ->
+                      case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+                          {ok, QStates} ->
+                              State1 = State#proc_state{queue_states = QStates},
+                              {ok, State1};
+                          {error, Reason} ->
+                              error("Failed to consume from ~s: ~p",
+                                    [rabbit_misc:rs(QName), Reason],
+                                              State)
+                      end
+              end);
+        {error, access_refused} ->
+            error("Failed to consume from ~s: no read access",
+                  [rabbit_misc:rs(QName)],
+                  State)
+    end.
+
+
+create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx, user = User}) ->
+    {ok, VHost} = application:get_env(rabbitmq_stomp, default_vhost),
+    QName = amqqueue:get_name(Amqqueue),
+
+    %% configure access to queue required for queue.declare
+    ok = check_resource_access(User, QName, configure, AuthzCtx),
+        case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+            false ->
+                rabbit_core_metrics:queue_declared(QName),
+
+                case rabbit_amqqueue:declare(Amqqueue, node()) of
+                    {new, Q} when ?is_amqqueue(Q) ->
+                        rabbit_core_metrics:queue_created(QName),
+                        {ok, Q};
+                    Other ->
+                        log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
+                        {error, queue_declare}
+                end;
+            {true, Limit} ->
+                log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
+                          rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
+                          none),
+                {error, queue_limit_exceeded}
+        end.
+
+routing_init_state() -> sets:new().
+
+
+-define(QUEUE_PREFIX, "/queue").
+-define(TOPIC_PREFIX, "/topic").
+-define(EXCHANGE_PREFIX, "/exchange").
+-define(AMQQUEUE_PREFIX, "/amq/queue").
+-define(TEMP_QUEUE_PREFIX, "/temp-queue").
+%% reply queues names can have slashes in the content so no further
+%% parsing happens.
+-define(REPLY_QUEUE_PREFIX, "/reply-queue/").
+
+%%-------------------------------------------------
+
+dest_prefixes() -> [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
+                    ?AMQQUEUE_PREFIX, ?REPLY_QUEUE_PREFIX].
+
+all_dest_prefixes() -> [?TEMP_QUEUE_PREFIX | dest_prefixes()].

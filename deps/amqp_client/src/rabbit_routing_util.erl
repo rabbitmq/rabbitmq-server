@@ -76,12 +76,12 @@ ensure_endpoint(Dir, Channel, Endpoint, State) ->
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
     check_exchange(Name, Channel,
                    proplists:get_value(check_exchange, Params, false)),
-    Method = queue_declare_method(#'queue.declare'{}, exchange, Params),
+    Method = new_amqqueue(#'queue.declare'{}, exchange, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
 ensure_endpoint(source, Channel, {topic, _}, Params, State) ->
-    Method = queue_declare_method(#'queue.declare'{}, topic, Params),
+    Method = new_amqqueue(#'queue.declare'{}, topic, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
 
@@ -93,7 +93,7 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
     Queue = list_to_binary(Name),
     State1 = case sets:is_element(Queue, State) of
                  true -> State;
-                 _    -> Method = queue_declare_method(
+                 _    -> Method = new_amqqueue(
                                     #'queue.declare'{queue  = Queue,
                                                      nowait = true},
                                     queue, Params1),
@@ -185,7 +185,7 @@ update_queue_declare_nowait(Method, Params) ->
         Val       -> Method#'queue.declare'{nowait = Val}
     end.
 
-queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
+new_amqqueue(#'queue.declare'{} = Method, Type, Params) ->
     %% defaults
     Method1 = case proplists:get_value(durable, Params, false) of
                   true  -> Method#'queue.declare'{durable     = true};
