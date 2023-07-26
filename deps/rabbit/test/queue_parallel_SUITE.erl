@@ -847,46 +847,9 @@ set_queue_options(Config, QName, Options) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options1, [QName, Options]).
 
 set_queue_options1(QName, Options) ->
-<<<<<<< HEAD
     rabbit_misc:execute_mnesia_transaction(fun() ->
         rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
             fun(Q) ->
                 amqqueue:set_options(Q, Options)
             end)
     end).
-=======
-    rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
-                           fun(Q) ->
-                                   amqqueue:set_options(Q, Options)
-                           end).
-
-%% Some CI runs fail with `Failed to create dirty cpu scheduler thread..`
-%% when running the ctl commands. Let's try with an rpc call to avoid
-%% configuration changes which are less portable
-wait_for_messages(Config, QName, Msgs, MsgsReady, MsgsUnack) ->
-    wait_for_messages(Config, QName, Msgs, MsgsReady, MsgsUnack, 60).
-
-wait_for_messages(Config, QName, Msgs, MsgsReady, MsgsUnack, 0) ->
-    Infos = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info_all, [<<"/">>, [name, messages, messages_ready, messages_unacknowledged]]),
-    Resource = rabbit_misc:r(<<"/">>, queue, QName),
-    [QInfo] = lists:filter(fun(Info) ->
-                                   lists:member({name, Resource}, Info)
-                           end, Infos),
-    ?assertEqual([{name, Resource}, {messages, Msgs}, {messages_ready, MsgsReady},
-                  {messages_unacknowledged, MsgsUnack}],
-                 QInfo);
-wait_for_messages(Config, QName, Msgs, MsgsReady, MsgsUnack, N) ->
-    Infos = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info_all, [<<"/">>, [name, messages, messages_ready, messages_unacknowledged]]),
-    Resource = rabbit_misc:r(<<"/">>, queue, QName),
-    [QInfo] = lists:filter(fun(Info) ->
-                                   lists:member({name, Resource}, Info)
-                           end, Infos),
-    case QInfo of
-        [{name, Resource}, {messages, Msgs}, {messages_ready, MsgsReady},
-         {messages_unacknowledged, MsgsUnack}] ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            wait_for_messages(Config, QName, Msgs, MsgsReady, MsgsUnack, N - 1)
-    end.
->>>>>>> 9e03d85cf5 (Use rpcs instead of ctl commands to avoid CI failures)
