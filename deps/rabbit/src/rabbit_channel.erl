@@ -45,8 +45,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, deliver_reply/2,
-         send_credit_reply/2, send_drained/2]).
+-export([send_command/2, deliver_reply/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -301,12 +300,6 @@ shutdown(Pid) ->
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
 
--spec deliver
-        (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok'.
-
-deliver(Pid, ConsumerTag, AckRequired, Msg) ->
-    gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
-
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Delivery) ->
@@ -364,16 +357,6 @@ declare_fast_reply_to_v1(EncodedBin) ->
         {error, _} ->
             not_found
     end.
-
--spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
-
-send_credit_reply(Pid, Len) ->
-    gen_server2:cast(Pid, {send_credit_reply, Len}).
-
--spec send_drained(pid(), [{rabbit_types:ctag(), non_neg_integer()}]) -> 'ok'.
-
-send_drained(Pid, CTagCredit) ->
-    gen_server2:cast(Pid, {send_drained, CTagCredit}).
 
 -spec list() -> [pid()].
 
@@ -690,13 +673,6 @@ handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
 
-handle_cast({deliver, _CTag, _AckReq, _Msg},
-            State = #ch{cfg = #conf{state = closing}}) ->
-    noreply(State);
-handle_cast({deliver, ConsumerTag, AckRequired, Msg}, State) ->
-    % TODO: handle as action
-    noreply(handle_deliver(ConsumerTag, AckRequired, Msg, State));
-
 handle_cast({deliver_reply, _K, _Del},
             State = #ch{cfg = #conf{state = closing}}) ->
     noreply(State);
@@ -719,20 +695,6 @@ handle_cast({deliver_reply, Key, #delivery{message =
            Content),
     noreply(State);
 handle_cast({deliver_reply, _K1, _}, State=#ch{reply_consumer = {_, _, _K2}}) ->
-    noreply(State);
-
-handle_cast({send_credit_reply, Len},
-            State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
-    ok = rabbit_writer:send_command(
-           WriterPid, #'basic.credit_ok'{available = Len}),
-    noreply(State);
-
-handle_cast({send_drained, CTagCredit},
-            State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
-    [ok = rabbit_writer:send_command(
-            WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
-                                               credit_drained = CreditDrained})
-     || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
 % Note: https://www.pivotaltracker.com/story/show/166962656
@@ -2773,10 +2735,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
 handle_deliver(CTag, Ack, Msgs, State) when is_list(Msgs) ->
     lists:foldl(fun(Msg, S) ->
                         handle_deliver0(CTag, Ack, Msg, S)
-                end, State, Msgs);
-handle_deliver(CTag, Ack, Msg, State) ->
-    %% backwards compatibility clause
-    handle_deliver0(CTag, Ack, Msg, State).
+                end, State, Msgs).
 
 handle_deliver0(ConsumerTag, AckRequired,
                 Msg = {QName, QPid, _MsgId, Redelivered,
@@ -2904,8 +2863,7 @@ handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag},
 				[Channel, Timeout], none),
     handle_exception(Ex, State).
 
-handle_queue_actions(Actions, #ch{} = State0) ->
-    WriterPid = State0#ch.cfg#conf.writer_pid,
+handle_queue_actions(Actions, #ch{cfg = #conf{writer_pid = WriterPid}} = State0) ->
     lists:foldl(
       fun
           ({settled, QRef, MsgSeqNos}, S0) ->
@@ -2938,21 +2896,11 @@ handle_queue_actions(Actions, #ch{} = State0) ->
                                               #'basic.credit_ok'{available = Avail}),
               S0;
           ({send_drained, {CTag, Credit}}, S0) ->
-              ok = send_drained_to_writer(WriterPid, CTag, Credit),
-              S0;
-          ({send_drained, CTagCredits}, S0) when is_list(CTagCredits) ->
-              %% this is the backwards compatible option that classic queues
-              %% used to send, this can be removed in 4.0
-              [ok = send_drained_to_writer(WriterPid, CTag, Credit)
-               || {CTag, Credit} <- CTagCredits],
+              ok = rabbit_writer:send_command(WriterPid,
+                                              #'basic.credit_drained'{consumer_tag = CTag,
+                                                                      credit_drained = Credit}),
               S0
       end, State0, Actions).
-
-send_drained_to_writer(WriterPid, CTag, Credit) ->
-    ok = rabbit_writer:send_command(
-           WriterPid,
-           #'basic.credit_drained'{consumer_tag = CTag,
-                                   credit_drained = Credit}).
 
 maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->
     State0;
