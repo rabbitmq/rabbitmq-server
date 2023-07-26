@@ -118,6 +118,14 @@ handle_call({info, InfoItems}, _From, State) ->
 handle_call(Msg, From, State) ->
     {stop, {stomp_unexpected_call, Msg, From}, State}.
 
+handle_cast(QueueEvent = {queue_event, _, _}, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:handle_queue_event(QueueEvent, ProcState) of
+        {ok, NewProcState} ->
+            {noreply, processor_state(NewProcState, State), hibernate};
+        {error, Reason, NewProcState} ->
+            {stop, Reason, processor_state(NewProcState, State)}
+    end;
 handle_cast({close_connection, Reason}, State) ->
     {stop, {shutdown, {server_initiated_close, Reason}}, State};
 handle_cast(client_timeout, State) ->
