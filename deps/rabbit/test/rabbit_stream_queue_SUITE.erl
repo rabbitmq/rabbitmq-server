@@ -22,14 +22,23 @@ suite() ->
 all() ->
     [
      {group, single_node},
-     {group, single_node_parallel},
+     {group, single_node_parallel_1},
+     {group, single_node_parallel_2},
+     {group, single_node_parallel_3},
+     {group, single_node_parallel_4},
      {group, cluster_size_2},
-     {group, cluster_size_2_parallel},
+     {group, cluster_size_2_parallel_1},
+     {group, cluster_size_2_parallel_2},
+     {group, cluster_size_2_parallel_3},
+     {group, cluster_size_2_parallel_4},
      {group, cluster_size_3},
      {group, cluster_size_3_1},
      {group, cluster_size_3_2},
      {group, cluster_size_3_parallel_1},
      {group, cluster_size_3_parallel_2},
+     {group, cluster_size_3_parallel_3},
+     {group, cluster_size_3_parallel_4},
+     {group, cluster_size_3_parallel_5},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
      {group, unclustered_size_3_3}
@@ -38,9 +47,15 @@ all() ->
 groups() ->
     [
      {single_node, [], [restart_single_node, recover]},
-     {single_node_parallel, [parallel], all_tests()},
+     {single_node_parallel_1, [parallel], all_tests_1()},
+     {single_node_parallel_2, [parallel], all_tests_2()},
+     {single_node_parallel_3, [parallel], all_tests_3()},
+     {single_node_parallel_4, [parallel], all_tests_4()},
      {cluster_size_2, [], [recover]},
-     {cluster_size_2_parallel, [parallel], all_tests()},
+     {cluster_size_2_parallel_1, [parallel], all_tests_1()},
+     {cluster_size_2_parallel_2, [parallel], all_tests_2()},
+     {cluster_size_2_parallel_3, [parallel], all_tests_3()},
+     {cluster_size_2_parallel_4, [parallel], all_tests_4()},
      {cluster_size_3, [],
           [
            restart_coordinator_without_queues,
@@ -75,13 +90,16 @@ groups() ->
                                               leader_locator_client_local,
                                               declare_delete_same_stream
                                              ]},
-     {cluster_size_3_parallel_2, [parallel], all_tests()},
+     {cluster_size_3_parallel_2, [parallel], all_tests_1()},
+     {cluster_size_3_parallel_3, [parallel], all_tests_2()},
+     {cluster_size_3_parallel_4, [parallel], all_tests_3()},
+     {cluster_size_3_parallel_5, [parallel], all_tests_4()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
      {unclustered_size_3_3, [], [grow_coordinator_cluster]}
     ].
 
-all_tests() ->
+all_tests_1() ->
     [
      declare_args,
      declare_max_age,
@@ -93,7 +111,11 @@ all_tests() ->
      delete_queue,
      publish,
      publish_confirm,
-     consume_without_qos,
+     consume_without_qos
+    ].
+
+all_tests_2() ->
+    [
      consume,
      consume_offset,
      consume_timestamp_offset,
@@ -105,7 +127,11 @@ all_tests() ->
      consume_and_reject,
      consume_from_last,
      consume_from_next,
-     consume_from_default,
+     consume_from_default
+    ].
+
+all_tests_3() ->
+    [
      consume_from_relative_time_offset,
      consume_credit,
      consume_credit_out_of_order_ack,
@@ -116,7 +142,11 @@ all_tests() ->
      max_length_bytes,
      max_age,
      invalid_policy,
-     max_age_policy,
+     max_age_policy
+    ].
+
+all_tests_4() ->
+    [
      max_segment_size_bytes_validation,
      max_segment_size_bytes_policy,
      max_segment_size_bytes_policy_validation,
@@ -155,12 +185,21 @@ init_per_group(Group, Config) ->
 init_per_group1(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
-                      single_node_parallel -> 1;
+                      single_node_parallel_1 -> 1;
+                      single_node_parallel_2 -> 1;
+                      single_node_parallel_3 -> 1;
+                      single_node_parallel_4 -> 1;
                       cluster_size_2 -> 2;
-                      cluster_size_2_parallel -> 2;
+                      cluster_size_2_parallel_1 -> 2;
+                      cluster_size_2_parallel_2 -> 2;
+                      cluster_size_2_parallel_3 -> 2;
+                      cluster_size_2_parallel_4 -> 2;
                       cluster_size_3 -> 3;
                       cluster_size_3_parallel_1 -> 3;
                       cluster_size_3_parallel_2 -> 3;
+                      cluster_size_3_parallel_3 -> 3;
+                      cluster_size_3_parallel_4 -> 3;
+                      cluster_size_3_parallel_5 -> 3;
                       cluster_size_3_1 -> 3;
                       cluster_size_3_2 -> 3;
                       unclustered_size_3_1 -> 3;
@@ -257,29 +296,36 @@ end_per_testcase(Testcase, Config) ->
 declare_args(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
+<<<<<<< HEAD
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-max-length-bytes">>, long, 2_000_000}])),
+=======
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-length-bytes">>, long, 2_000_000},
+                                             {<<"x-max-age">>, longstr, <<"10D">>},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 5_000_000},
+                                             {<<"x-stream-filter-size-bytes">>, long, 32}
+                                            ])),
+>>>>>>> 2afd7f098e (Tests: split parallel stream queue groups and retry if coordinator unavailable)
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 declare_max_age(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server), Q,
+       declare(Config, Server, Q,
                [{<<"x-queue-type">>, longstr, <<"stream">>},
                 {<<"x-max-age">>, longstr, <<"1A">>}])),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-age">>, longstr, <<"1Y">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"1Y">>}])),
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -289,24 +335,24 @@ declare_invalid_properties(Config) ->
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Server),
+       retry_if_coordinator_unavailable(
+         Config, Server,
          #'queue.declare'{queue     = Q,
                           auto_delete = true,
                           durable   = true,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Server),
+       retry_if_coordinator_unavailable(
+         Config, Server,
          #'queue.declare'{queue     = Q,
                           exclusive = true,
                           durable   = true,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Server),
+       retry_if_coordinator_unavailable(
+         Config, Server,
          #'queue.declare'{queue     = Q,
                           durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})).
@@ -316,28 +362,40 @@ declare_server_named(Config) ->
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
+       declare(Config, Server,
                <<"">>, [{<<"x-queue-type">>, longstr, <<"stream">>}])).
 
 declare_invalid_arg(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
 
     ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-overflow' for queue "
                       "'declare_invalid_arg' in vhost '/' of queue type rabbit_stream_queue">>,
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
-       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+       declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                        {<<"x-overflow">>, longstr, <<"reject-publish">>}])).
 
+<<<<<<< HEAD
+=======
+declare_invalid_filter_size(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - Invalid value for  x-stream-filter-size-bytes">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                   {<<"x-stream-filter-size-bytes">>, long, 256}])).
+
+>>>>>>> 2afd7f098e (Tests: split parallel stream queue groups and retry if coordinator unavailable)
 consume_invalid_arg(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-priority' for queue "
                       "'consume_invalid_arg' in vhost '/' of queue type rabbit_stream_queue">>,
@@ -353,19 +411,18 @@ consume_invalid_arg(Config) ->
 declare_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertMatch([_], find_queue_info(Config, [])),
 
     %% Test declare an existing queue with different arguments
-    ?assertExit(_, declare(Ch, Q, [])),
+    ?assertExit(_, declare(Config, Server, Q, [])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 find_queue_info(Config, Keys) ->
@@ -385,7 +442,7 @@ delete_queue(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
 
@@ -395,8 +452,8 @@ add_replicas(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 1}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 1}])),
 
     %% TODO: add lots of data so that replica is still out of sync when
     %% second request comes in
@@ -460,7 +517,6 @@ add_replicas(Config) ->
 add_replica(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
 
     %% Let's also try the add replica command on other queue types, it should fail
@@ -470,11 +526,11 @@ add_replica(Config) ->
     QQuorum = <<Q/binary, "_quorum">>,
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ?assertEqual({'queue.declare_ok', QClassic, 0, 0},
-                 declare(Ch, QClassic, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
+                 declare(Config, Server0, QClassic, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
     ?assertEqual({'queue.declare_ok', QQuorum, 0, 0},
-                 declare(Ch, QQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                 declare(Config, Server0, QQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Not a member of the cluster, what would happen?
     ?assertEqual({error, node_not_running},
@@ -518,10 +574,9 @@ add_replica(Config) ->
 delete_replica(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     %% Not a member of the cluster, what would happen?
     ?assertEqual({error, node_not_running},
@@ -544,10 +599,9 @@ delete_replica(Config) ->
 delete_last_replica(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
@@ -570,11 +624,10 @@ delete_last_replica(Config) ->
 grow_coordinator_cluster(Config) ->
     [Server0, Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
@@ -588,9 +641,8 @@ grow_coordinator_cluster(Config) ->
                           [<<"/">>, Q, Server1])),
     %% also check we can declare a new stream when calling Server1
     Q2 = unicode:characters_to_binary([Q, <<"_2">>]),
-    ChServer1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
-                 declare(ChServer1, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% wait until the stream coordinator detects there is a new rabbit node
     %% and adds a new member on the new node
@@ -610,12 +662,11 @@ grow_coordinator_cluster(Config) ->
 shrink_coordinator_cluster(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
 
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ok = rabbit_control_helper:command(stop_app, Server2),
     ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server2)], []),
@@ -635,10 +686,9 @@ shrink_coordinator_cluster(Config) ->
 delete_classic_replica(Config) ->
     [Server0, Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
     %% Not a member of the cluster, what would happen?
     ?assertEqual({error, classic_queue_not_supported},
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
@@ -651,10 +701,9 @@ delete_classic_replica(Config) ->
 delete_quorum_replica(Config) ->
     [Server0, Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     %% Not a member of the cluster, what would happen?
     ?assertEqual({error, quorum_queue_not_supported},
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
@@ -667,10 +716,9 @@ delete_quorum_replica(Config) ->
 delete_down_replica(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     ?assertEqual({error, node_not_running},
@@ -692,7 +740,7 @@ publish_coordinator_unavailable(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
@@ -728,7 +776,7 @@ publish(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
@@ -740,7 +788,7 @@ publish_confirm(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
@@ -755,7 +803,7 @@ restart_single_node(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
@@ -772,12 +820,11 @@ restart_single_node(Config) ->
 %% please never consider this a flake
 declare_with_node_down_1(Config) ->
     [Server1, Server2, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 3}])),
     check_leader_and_replicas(Config, [Server1, Server3]),
     %% Since there are not sufficient running nodes, we expect that
     %% also stopped nodes are selected as replicas.
@@ -788,13 +835,12 @@ declare_with_node_down_1(Config) ->
 
 declare_with_node_down_2(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 2},
-                                 {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 2},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
     check_leader_and_replicas(Config, [Server1, Server3]),
     %% Since there are sufficient running nodes, we expect that
     %% stopped nodes are not selected as replicas.
@@ -809,7 +855,7 @@ recover(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
@@ -850,16 +896,15 @@ restart_coordinator_without_queues(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish_confirm(Ch, Q, [<<"msg">>]),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
 
     [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers0],
     [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers0)],
 
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_without_qos(Config) ->
@@ -868,7 +913,7 @@ consume_without_qos(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, consumer_tag = <<"ctag">>},
@@ -878,10 +923,9 @@ consume_without_qos(Config) ->
 consume_without_local_replica(Config) ->
     [Server0, Server1 | _] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     %% Add another node to the cluster, but it won't have a replica
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
@@ -901,7 +945,7 @@ consume(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg">>]),
 
@@ -925,7 +969,7 @@ consume_offset(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
     publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 1000)]),
@@ -960,7 +1004,7 @@ consume_timestamp_offset(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"111">> || _ <- lists:seq(1, 100)]),
 
@@ -992,7 +1036,7 @@ consume_timestamp_last_offset(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"111">> || _ <- lists:seq(1, 100)]),
 
@@ -1039,7 +1083,7 @@ basic_get(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = Q})),
@@ -1048,10 +1092,9 @@ basic_get(Config) ->
 consume_with_autoack(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1067,7 +1110,7 @@ consume_and_nack(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg">>]),
 
@@ -1083,7 +1126,10 @@ consume_and_nack(Config) ->
             %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
-                        declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
+                        amqp_channel:call(Ch1, #'queue.declare'{queue = Q,
+                                                               durable = true,
+                                                               auto_delete = false,
+                                                               arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}))
     after 10000 ->
             exit(timeout)
     end,
@@ -1095,7 +1141,7 @@ basic_cancel(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg">>]),
 
@@ -1122,7 +1168,7 @@ receive_basic_cancel_on_queue_deletion(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     qos(Ch, 10, false),
     CTag = <<"basic_cancel_notification_on_queue_deletion">>,
@@ -1145,7 +1191,7 @@ recover_after_leader_and_coordinator_kill(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch1, Q, [<<"msg 1">>]),
 
@@ -1183,7 +1229,7 @@ keep_consuming_on_leader_restart(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch1, Q, [<<"msg 1">>]),
 
@@ -1292,7 +1338,7 @@ consume_and_reject(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg">>]),
 
@@ -1307,7 +1353,7 @@ consume_and_reject(Config) ->
             %% we'll detect the conneciton/channel closure on the next call.
             %% Let's try to redeclare and see what happens
             ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
-                        declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
+                        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
     after 10000 ->
             exit(timeout)
     end,
@@ -1319,7 +1365,7 @@ consume_and_ack(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg">>]),
 
@@ -1335,7 +1381,7 @@ consume_and_ack(Config) ->
             %% should still be open and declare is an idempotent operation
             %%
             ?assertMatch({'queue.declare_ok', Q, _MsgCount, 0},
-                         declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                         declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
             quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
     after 5000 ->
             exit(timeout)
@@ -1348,7 +1394,7 @@ tracking_status(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Vhost = ?config(rmq_vhost, Config),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
@@ -1370,7 +1416,7 @@ restart_stream(Config) ->
             Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
             Q = ?config(queue_name, Config),
             ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                         declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                         declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
             publish_confirm(Ch, Q, [<<"msg">>]),
             Vhost = ?config(rmq_vhost, Config),
@@ -1400,7 +1446,7 @@ consume_from_last(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
@@ -1456,7 +1502,7 @@ consume_from_next(Config, Args) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
@@ -1501,7 +1547,7 @@ consume_from_relative_time_offset(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
@@ -1528,7 +1574,7 @@ consume_from_replica(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
@@ -1557,7 +1603,7 @@ consume_credit(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
@@ -1615,7 +1661,7 @@ consume_credit_out_of_order_ack(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     NumMsgs = 100,
     %% Let's publish a big batch, to ensure we have more than a chunk available
@@ -1674,7 +1720,7 @@ consume_credit_multiple_ack(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
@@ -1709,9 +1755,9 @@ max_length_bytes(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-length-bytes">>, long, 10000},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 1000}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-length-bytes">>, long, 10000},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 1000}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 100) >>,
 
@@ -1738,18 +1784,17 @@ max_length_bytes(Config) ->
 max_segment_size_bytes_validation(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 10_000_000}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 10_000_000}])),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                       {<<"x-stream-max-segment-size-bytes">>, long, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}])),
+       declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                   {<<"x-stream-max-segment-size-bytes">>, long, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}])),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -1760,9 +1805,9 @@ max_age(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-age">>, longstr, <<"10s">>},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"10s">>},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
@@ -1787,7 +1832,7 @@ replica_recovery(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
     amqp_channel:close(Ch1),
 
@@ -1830,7 +1875,7 @@ leader_failover(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     check_leader_and_replicas(Config, [Server1, Server2, Server3]),
     publish_confirm(Ch1, Q, [<<"msg">> || _ <- lists:seq(1, 100)]),
@@ -1857,11 +1902,10 @@ leader_failover_dedupe(Config) ->
     Nodes = lists:nth(rand:uniform(length(PermNodes)), PermNodes),
     ct:pal("~ts running with nodes ~w", [?FUNCTION_NAME, Nodes]),
     [_Server1, DownNode, PubNode] = Nodes,
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, DownNode, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     check_leader_and_replicas(Config, Nodes),
 
@@ -1928,8 +1972,8 @@ initial_cluster_size_one(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-initial-cluster-size">>, long, 1}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 1}])),
     check_leader_and_replicas(Config, [Server1]),
 
     ?assertMatch(#'queue.delete_ok'{},
@@ -1943,8 +1987,8 @@ initial_cluster_size_two(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-initial-cluster-size">>, long, 2}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 2}])),
 
     Info = find_queue_info(Config, [leader, members]),
 
@@ -1968,8 +2012,8 @@ initial_cluster_size_one_policy(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-initial-cluster-size">>, long, 1}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 1}])),
     check_leader_and_replicas(Config, [Server1]),
 
     ?assertMatch(#'queue.delete_ok'{},
@@ -1985,7 +2029,7 @@ declare_delete_same_stream(Config) ->
     [begin
          Ch = rabbit_ct_client_helpers:open_channel(Config, S),
          ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                      declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                      declare(Config, S, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
          ?assertMatch(#'queue.delete_ok'{},
                       amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
          rabbit_ct_client_helpers:close_channel(Ch)
@@ -2000,8 +2044,8 @@ leader_locator_client_local(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
     Info = find_queue_info(Config, [leader]),
 
@@ -2013,8 +2057,8 @@ leader_locator_client_local(Config) ->
     %% Try second node
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
     Info2 = find_queue_info(Config, [leader]),
     ?assertEqual(Server2, proplists:get_value(leader, Info2)),
@@ -2025,8 +2069,8 @@ leader_locator_client_local(Config) ->
     %% Try third node
     Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
 
     Info3 = find_queue_info(Config, [leader]),
@@ -2039,17 +2083,16 @@ leader_locator_client_local(Config) ->
 leader_locator_balanced(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     Q1 = <<Bin/binary, "_q1">>,
 
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
-                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server1, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
 
     Info = find_queue_info(Config, [leader]),
     Leader = proplists:get_value(leader, Info),
@@ -2059,21 +2102,19 @@ leader_locator_balanced(Config) ->
 
 leader_locator_balanced_maintenance(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     Q = ?config(queue_name, Config),
     Q1 = <<"q1">>,
     Q2 = <<"q2">>,
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
-                 declare(Ch1, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server1, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
-                 declare(Ch2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+                 declare(Config, Server2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
     true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server3),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                  {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
 
     Info = find_queue_info(Config, [leader]),
     Leader = proplists:get_value(leader, Info),
@@ -2085,7 +2126,6 @@ leader_locator_balanced_maintenance(Config) ->
 select_nodes_with_least_replicas(Config) ->
     [Server1 | _ ] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Servers = lists:usort(Servers0),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     Q1 = <<Bin/binary, "_q1">>,
@@ -2094,8 +2134,8 @@ select_nodes_with_least_replicas(Config) ->
     [Q1Members, QMembers] =
     lists:map(fun(Q0) ->
                       ?assertEqual({'queue.declare_ok', Q0, 0, 0},
-                                   declare(Ch, Q0, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                                    {<<"x-initial-cluster-size">>, long, 2}])),
+                                   declare(Config, Server1, Q0, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                                                 {<<"x-initial-cluster-size">>, long, 2}])),
                       Infos = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info_all,
                                                            [<<"/">>, [name, members]]),
                       Name = rabbit_misc:r(<<"/">>, queue, Q0),
@@ -2112,7 +2152,6 @@ select_nodes_with_least_replicas(Config) ->
 leader_locator_policy(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     Q1 = <<Bin/binary, "_q1">>,
@@ -2124,10 +2163,10 @@ leader_locator_policy(Config) ->
            [{<<"queue-leader-locator">>, <<"balanced">>}]),
 
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
-                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                 declare(Config, Server1, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition, leader]),
     ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
@@ -2146,24 +2185,24 @@ queue_size_on_declare(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
     %% Metrics update is not synchronous, wait until metrics are updated on the leader node.
     %% Afterwards, all replicas will get the right size as they have to query the writer node
     ?awaitMatch({'queue.declare_ok', Q, 100, 0},
-                declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+                declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
                 60000),
     amqp_channel:close(Ch1),
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     ?assertEqual({'queue.declare_ok', Q, 100, 0},
-                 declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     amqp_channel:close(Ch2),
 
     Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     ?assertEqual({'queue.declare_ok', Q, 100, 0},
-                 declare(Ch3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     amqp_channel:close(Ch3),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -2179,10 +2218,9 @@ repeat_until(Fun, N) ->
 invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
            [{<<"ha-mode">>, <<"all">>}]),
@@ -2202,10 +2240,9 @@ invalid_policy(Config) ->
 max_age_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     PolicyName = atom_to_binary(?FUNCTION_NAME),
 
     ok = rabbit_ct_broker_helpers:set_policy(
@@ -2231,9 +2268,16 @@ update_retention_policy(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
+<<<<<<< HEAD
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-stream-max-segment-size-bytes">>, long, 200}
                                 ])),
+=======
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 200},
+                                             {<<"x-stream-filter-size-bytes">>, long, 32}
+                                            ])),
+>>>>>>> 2afd7f098e (Tests: split parallel stream queue groups and retry if coordinator unavailable)
     check_leader_and_replicas(Config, Servers),
 
     Msgs = [<<"msg">> || _ <- lists:seq(1, 10000)], %% 3 bytes * 10000 = 30000 bytes
@@ -2263,10 +2307,9 @@ update_retention_policy(Config) ->
 queue_info(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     rabbit_ct_helpers:await_condition(
       fun() ->
@@ -2310,10 +2353,9 @@ max_segment_size_bytes_policy(Config) ->
            [{<<"stream-max-segment-size-bytes">>, 5000}]),
 
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
 
     ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
@@ -2329,7 +2371,7 @@ purge(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'queue.purge'{queue = Q})),
@@ -2340,14 +2382,14 @@ dead_letter_target(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     SourceQ = <<Q/binary, "_source">>,
     ?assertEqual({'queue.declare_ok', SourceQ, 0, 0},
-                 declare(Ch, SourceQ, [{<<"x-queue-type">>, longstr, <<"classic">>},
-                                       {<<"x-dead-letter-exchange">>, longstr, <<>>},
-                                       {<<"x-dead-letter-routing-key">>, longstr, Q}
-                                      ])),
+                 declare(Config, Server, SourceQ, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                                                   {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                   {<<"x-dead-letter-routing-key">>, longstr, Q}
+                                                  ])),
 
     publish_confirm(Ch, SourceQ, [<<"msg">>]),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -2374,6 +2416,80 @@ dead_letter_target(Config) ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+<<<<<<< HEAD
+=======
+
+filter_spec(_) ->
+    [begin
+         FilterSpec = rabbit_stream_queue:filter_spec(Args),
+         ?assert(maps:is_key(filter_spec, FilterSpec)),
+         #{filter_spec := #{filters := Filters, match_unfiltered := MatchUnfiltered}} = FilterSpec,
+         ?assertEqual(lists:sort(ExpectedFilters), lists:sort(Filters)),
+         ?assertEqual(ExpectedMatchUnfiltered, MatchUnfiltered)
+     end || {Args, ExpectedFilters, ExpectedMatchUnfiltered} <-
+            [{[{<<"x-stream-filter">>,array,[{longstr,<<"apple">>},{longstr,<<"banana">>}]}],
+              [<<"apple">>, <<"banana">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>}],
+              [<<"apple">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>}, {<<"sac">>,bool,true}],
+              [<<"apple">>], false},
+             {[{<<"x-stream-filter">>,longstr,<<"apple">>},{<<"x-stream-match-unfiltered">>,bool,true}],
+              [<<"apple">>], true}
+            ]],
+    ?assertEqual(#{}, rabbit_stream_queue:filter_spec([{<<"foo">>,longstr,<<"bar">>}])),
+    ?assertEqual(#{}, rabbit_stream_queue:filter_spec([])),
+    ok.
+
+filtering(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ChPublish = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(ChPublish, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(ChPublish, self()),
+    Publish = fun(FilterValue) ->
+                      lists:foreach(fun(_) ->
+                                            Headers = [{<<"x-stream-filter-value">>, longstr, FilterValue}],
+                                            Msg = #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                                                               headers = Headers},
+                                                            payload = <<"foo">>},
+                                            ok = amqp_channel:cast(ChPublish,
+                                                                   #'basic.publish'{routing_key = Q},
+                                                                   Msg)
+                                    end,lists:seq(0, 100))
+              end,
+    Publish(<<"apple">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    Publish(<<"banana">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    Publish(<<"apple">>),
+    amqp_channel:wait_for_confirms(ChPublish, 5),
+    amqp_channel:close(ChPublish),
+    ChConsume = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(ChConsume, #'basic.qos'{global = false,
+                                                           prefetch_count = 10})),
+
+    CTag = <<"ctag">>,
+    amqp_channel:subscribe(ChConsume, #'basic.consume'{queue = Q,
+                                                       no_ack = false,
+                                                       consumer_tag = CTag,
+                                                       arguments = [{<<"x-stream-offset">>, long, 0},
+                                                                    {<<"x-stream-filter">>, longstr, <<"banana">>}]},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = CTag} ->
+            ok
+    end,
+
+    receive_filtered_batch(ChConsume, 0, 100),
+    amqp_channel:close(ChConsume),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+>>>>>>> 2afd7f098e (Tests: split parallel stream queue groups and retry if coordinator unavailable)
 %%----------------------------------------------------------------------------
 
 delete_queues(Qs) when is_list(Qs) ->
@@ -2388,14 +2504,45 @@ delete_testcase_queue(Name) ->
             ok
     end.
 
-declare(Ch, Q) ->
-    declare(Ch, Q, []).
+declare(Config, Server, Q) ->
+    declare(Config, Server, Q, []).
 
-declare(Ch, Q, Args) ->
-    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
-                                           durable   = true,
-                                           auto_delete = false,
-                                           arguments = Args}).
+declare(Config, Server, Q, Args) ->
+    retry_if_coordinator_unavailable(Config, Server, #'queue.declare'{queue     = Q,
+                                                                      durable   = true,
+                                                                      auto_delete = false,
+                                                                      arguments = Args}).
+
+retry_if_coordinator_unavailable(Config, Server, Cmd) ->
+    Props = ?config(tc_group_properties, Config),
+    %% Running parallel tests the coordinator could be busy answering other
+    %% queries, on the assumption CI servers are slow, so let's allow a few
+    %% attempts.
+    Retries = case lists:member(parallel, Props) of
+                  true -> 3;
+                  false -> 1
+              end,
+    retry_if_coordinator_unavailable(Config, Server, Cmd, Retries).
+
+retry_if_coordinator_unavailable(_, _, _, 0) ->
+    exit(coordinator_unavailable);
+retry_if_coordinator_unavailable(Config, Server, Cmd, Retry) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    try
+        Reply = amqp_channel:call(Ch, Cmd),
+        rabbit_ct_client_helpers:close_channel(Ch),
+        Reply
+    catch
+        exit:{{shutdown, {connection_closing, {server_initiated_close, _, Msg}}}, _} = Error ->
+            case re:run(Msg, ".*coordinator_unavailable.*", [{capture, none}]) of
+                match ->
+                    ct:pal("Attempt to execute command ~p failed, coordinator unavailable", [Cmd]),
+                    retry_if_coordinator_unavailable(Ch, Cmd, Retry - 1);
+                _ ->
+                    exit(Error)
+            end
+    end.
+
 assert_queue_type(Server, Q, Expected) ->
     Actual = get_queue_type(Server, Q),
     Expected = Actual.
