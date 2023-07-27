@@ -189,23 +189,6 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
                                                                  IsMulti,
                                                                  ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
-handle_info({Delivery = #'basic.deliver'{},
-             Message = #amqp_msg{}},
-             State) ->
-    %% receiving a message from a quorum queue
-    %% no delivery context
-    handle_info({Delivery, Message, undefined}, State);
-handle_info({Delivery = #'basic.deliver'{},
-             #amqp_msg{props = Props, payload = Payload},
-             DeliveryCtx},
-             State) ->
-    ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
-                                                        Props,
-                                                        Payload,
-                                                        DeliveryCtx,
-                                                        ProcState),
-    {noreply, processor_state(NewProcState, State), hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
