@@ -11,8 +11,9 @@
     create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-    check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
-    wait_for_replicated/0]).
+    check_schema_integrity/1,
+    clear_ram_only_tables/0, maybe_clear_ram_only_tables/0,
+    retry_timeout/0, wait_for_replicated/0]).
 
 %% for testing purposes
 -export([definitions/0]).
@@ -190,6 +191,12 @@ clear_ram_only_tables() ->
               end
       end, names()),
     ok.
+
+maybe_clear_ram_only_tables() ->
+    ok = case rabbit_db_cluster:is_clustered() of
+             true  -> ok;
+             false -> clear_ram_only_tables()
+         end.
 
 %% The sequence in which we delete the schema and then the other
 %% tables is important: if we delete the schema first when moving to
