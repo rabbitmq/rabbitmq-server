@@ -33,9 +33,9 @@
     </parent>
 
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <junit.jupiter.version>5.9.3</junit.jupiter.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <junit.jupiter.version>5.10.0</junit.jupiter.version>
     </properties>
 
     <groupId>com.rabbitmq.examples</groupId>
