@@ -789,7 +789,7 @@ negotiate_version(Frame) ->
 
 deliver_to_client(ConsumerTag, Ack, Msgs, State) ->
     lists:foldl(fun(Msg, S) ->
-                       deliver_one_to_client(ConsumerTag, Ack, Msg, State)
+                       deliver_one_to_client(ConsumerTag, Ack, Msg, S)
                 end, State, Msgs).
 
 deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, _MsgId, Redelivered,
@@ -1344,18 +1344,18 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
             State1 = State#proc_state{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
             {ok, State};
-        {eol, Actions} ->
-            State1 = handle_queue_actions(Actions, State0),
-            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
-            {ConfirmMXs, UC1} =
-                rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
-            %% Deleted queue is a special case.
-            %% Do not nack the "rejected" messages.
-            State3 = record_confirms(ConfirmMXs,
-                                     State2#ch{unconfirmed = UC1}),
-            _ = erase_queue_stats(QRef),
-            noreply_coalesce(
-              State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+        %% {eol, Actions} ->
+        %%     State1 = handle_queue_actions(Actions, State0),
+        %%     State2 = handle_consuming_queue_down_or_eol(QRef, State1),
+        %%     {ConfirmMXs, UC1} =
+        %%         rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
+        %%     %% Deleted queue is a special case.
+        %%     %% Do not nack the "rejected" messages.
+        %%     State3 = record_confirms(ConfirmMXs,
+        %%                              State2#ch{unconfirmed = UC1}),
+        %%     _ = erase_queue_stats(QRef),
+        %%     noreply_coalesce(
+        %%       State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
         {protocol_error, Type, Reason, ReasonArgs} = Error ->
             log_error(Type, Reason, ReasonArgs),
             {error, Error, State}
@@ -1364,28 +1364,28 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
 handle_queue_actions(Actions, #proc_state{} = State0) ->
     lists:foldl(
       fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
-              deliver_to_client(ConsumerTag, Msgs, Ack, S);
-          ({settled, QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
-              {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
-              send_puback(ConfirmPktIds, S),
-              S#state{unacked_client_pubs = U};
-          ({rejected, _QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
-              %% Negative acks are supported in MQTT v5 only.
-              %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
-              U = lists:foldl(
-                    fun(PktId, Acc0) ->
-                            case rabbit_mqtt_confirms:reject(PktId, Acc0) of
-                                {ok, Acc} -> Acc;
-                                {error, not_found} -> Acc0
-                            end
-                    end, U0, PktIds),
-              S#state{unacked_client_pubs = U};
-          ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
-              S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
-          ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
-              S#state{queues_soft_limit_exceeded = sets:del_element(QName, QSLE)};
-          ({queue_down, QName}, S) ->
-              handle_queue_down(QName, S)
+              deliver_to_client(ConsumerTag, Msgs, Ack, S)%% ;
+          %% ({settled, QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
+          %%     {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
+          %%     send_puback(ConfirmPktIds, S),
+          %%     S#state{unacked_client_pubs = U};
+          %% ({rejected, _QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
+          %%     %% Negative acks are supported in MQTT v5 only.
+          %%     %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
+          %%     U = lists:foldl(
+          %%           fun(PktId, Acc0) ->
+          %%                   case rabbit_mqtt_confirms:reject(PktId, Acc0) of
+          %%                       {ok, Acc} -> Acc;
+          %%                       {error, not_found} -> Acc0
+          %%                   end
+          %%           end, U0, PktIds),
+          %%     S#state{unacked_client_pubs = U};
+          %% ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
+          %%     S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
+          %% ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
+          %%     S#state{queues_soft_limit_exceeded = sets:del_element(QName, QSLE)};
+          %% ({queue_down, QName}, S) ->
+          %%     handle_queue_down(QName, S)
       end, State0, Actions).
 
 
@@ -1432,9 +1432,6 @@ parse_endpoint0(Type,     Rest,               _) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
-
-util_ensure_endpoint(Dir, Endpoint, State) ->
-    util_ensure_endpoint(Dir, Endpoint, [], State).
 
 util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State) ->
     ExchangeName = rabbit_misc:r(Name, exchange,  proplists:get_value(vhost, Params)),
@@ -1516,7 +1513,7 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{usernam
     QName = rabbit_misc:r(proplists:get_value(vhost, Params0), queue, QNameBin),
     %% defaults
     Params = case proplists:get_value(durable, Params0, false) of
-                  false -> [{auto_delete, true}, {exclusive = true} | Params0];
+                  false -> [{auto_delete, true}, {exclusive, true} | Params0];
                   true  -> Params0
               end,
 
