@@ -365,16 +365,30 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
     cancel_subscription(ConsumerTag, Frame, State);
 
 handle_frame("SEND", Frame, State) ->
-    without_headers(?HEADERS_NOT_ON_SEND, "SEND", Frame, State,
-        fun (_Command, Frame1, State1) ->
-            with_destination("SEND", Frame1, State1, fun do_send/4)
-        end);
+    maybe_with_transaction(
+      Frame,
+      fun(State0) ->
+	      ensure_no_headers(?HEADERS_NOT_ON_SEND, "SEND", Frame, State0,
+				fun (_Command, Frame1, State1) ->
+					with_destination("SEND", Frame1, State1, fun do_send/4)
+				end)
+      end, State);
 
 handle_frame("ACK", Frame, State) ->
-    ack_action("ACK", Frame, State, fun create_ack_method/3);
+    maybe_with_transaction(
+      Frame,
+      fun(State0) ->
+	      ack_action("ACK", Frame, State, fun create_ack_method/3)
+      end,
+      State);
 
 handle_frame("NACK", Frame, State) ->
-    ack_action("NACK", Frame, State, fun create_nack_method/3);
+    maybe_with_transaction(
+      Frame,
+      fun(State0) ->
+	      ack_action("NACK", Frame, State, fun create_nack_method/3)
+      end,
+      State);
 
 handle_frame("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
@@ -409,14 +423,8 @@ ack_action(Command, Frame,
                         {ok, Sub} ->
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),
                             Method = MethodFun(DeliveryTag, Sub, Requeue),
-                            case transactional(Frame) of
-                                {yes, Transaction} ->
-                                    extend_transaction(
-                                      Transaction, {Method}, State);
-                                no ->
-                                    amqp_channel:call(Channel, Method),
-                                    ok(State)
-                            end;
+			    amqp_channel:call(Channel, Method),
+			    ok(State);
                         error ->
                             error("Subscription not found",
                                   "Message with id ~tp has no subscription",
@@ -567,7 +575,7 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
+ensure_no_headers([Hdr | Hdrs], Command, Frame, State, Fun) -> %
     case rabbit_stomp_frame:header(Frame, Hdr) of
         {ok, _} ->
             error("Invalid header",
@@ -575,9 +583,9 @@ without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
                   [Hdr, Command],
                   State);
         not_found ->
-            without_headers(Hdrs, Command, Frame, State, Fun)
+            ensure_no_headers(Hdrs, Command, Frame, State, Fun)
     end;
-without_headers([], Command, Frame, State, Fun) ->
+ensure_no_headers([], Command, Frame, State, Fun) ->
     Fun(Command, Frame, State).
 
 do_login(undefined, _, _, _, _, _, State) ->
@@ -752,20 +760,9 @@ do_send(Destination, _DestHdr,
               mandatory = false,
               immediate = false},
 
-            case transactional(Frame1) of
-                {yes, Transaction} ->
-                    extend_transaction(
-                      Transaction,
-                      fun(StateN) ->
-                              maybe_record_receipt(Frame1, StateN)
-                      end,
-                      {Method, Props, BodyFragments},
-                      State1);
-                no ->
-                    ok(send_method(Method, Props, BodyFragments,
-                                   maybe_record_receipt(Frame1, State1)))
-            end;
-
+	    ok(send_method(Method, Props, BodyFragments,
+			   maybe_record_receipt(Frame1, State1)));
+		
         {error, _} = Err ->
 
             Err
@@ -1019,6 +1016,17 @@ transactional_action(Frame, Name, Fun, State) ->
                   State)
     end.
 
+maybe_with_transaction(Frame, Fun, State) ->
+    case transactional(Frame) of
+	{yes, Transaction} ->
+	    extend_transaction(
+	      Transaction,
+	      Fun,
+	      State);
+	no ->
+	    Fun(State)
+	end.
+
 with_transaction(Transaction, State, Fun) ->
     case get({transaction, Transaction}) of
         undefined ->
@@ -1034,24 +1042,21 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
-extend_transaction(Transaction, Callback, Action, State) ->
-    extend_transaction(Transaction, {callback, Callback, Action}, State).
-
-extend_transaction(Transaction, Action, State0) ->
+extend_transaction(Transaction, Fun, State0) ->
     with_transaction(
       Transaction, State0,
-      fun (Actions, State) ->
-              put({transaction, Transaction}, [Action | Actions]),
+      fun (Funs, State) ->
+              put({transaction, Transaction}, [Fun | Funs]),
               ok(State)
       end).
 
 commit_transaction(Transaction, State0) ->
     with_transaction(
       Transaction, State0,
-      fun (Actions, State) ->
+      fun (Funs, State) ->
               FinalState = lists:foldr(fun perform_transaction_action/2,
                                        State,
-                                       Actions),
+                                       Funs),
               erase({transaction, Transaction}),
               ok(FinalState)
       end).
@@ -1059,17 +1064,13 @@ commit_transaction(Transaction, State0) ->
 abort_transaction(Transaction, State0) ->
     with_transaction(
       Transaction, State0,
-      fun (_Actions, State) ->
+      fun (_Frames, State) ->
               erase({transaction, Transaction}),
               ok(State)
       end).
 
-perform_transaction_action({callback, Callback, Action}, State) ->
-    perform_transaction_action(Action, Callback(State));
-perform_transaction_action({Method}, State) ->
-    send_method(Method, State);
-perform_transaction_action({Method, Props, BodyFragments}, State) ->
-    send_method(Method, Props, BodyFragments, State).
+perform_transaction_action(Fun, State) ->
+    Fun(State).
 
 %%--------------------------------------------------------------------
 %% Heartbeat Management
