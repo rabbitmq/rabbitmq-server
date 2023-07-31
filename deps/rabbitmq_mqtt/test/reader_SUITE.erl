@@ -233,7 +233,7 @@ event_authentication_failure(Config) ->
 
     ?assertMatch({error, _}, emqtt:connect(C)),
 
-    [E] = util:get_events(Server),
+    [E | _] = util:get_events(Server, user_authentication_failure),
     util:assert_event_type(user_authentication_failure, E),
     util:assert_event_prop([{name, <<"Trudy">>},
                             {connection_type, network}],

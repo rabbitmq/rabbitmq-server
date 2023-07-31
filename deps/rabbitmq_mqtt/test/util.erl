@@ -17,6 +17,7 @@
          connect/4,
          start_client/4,
          get_events/1,
+         get_events/2,
          assert_event_type/2,
          assert_event_prop/2,
          await_exit/1,
@@ -93,6 +94,11 @@ get_events(Node) ->
     Result = gen_event:call({rabbit_event, Node}, event_recorder, take_state),
     ?assert(is_list(Result)),
     Result.
+
+get_events(Node, Type) ->
+    lists:filter(fun(#event{type = T}) ->
+                         T == Type
+                 end, get_events(Node)).
 
 assert_event_type(ExpectedType, #event{type = ActualType}) ->
     ?assertEqual(ExpectedType, ActualType).
