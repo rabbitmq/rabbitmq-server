@@ -106,8 +106,9 @@ initialize_registry(NewSupportedFeatureFlags) ->
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
     FeatureStates = case RegistryInitialized of
                         true ->
-                            CurrentFeatureStates = rabbit_ff_registry:states(),
-                            maps:merge(FeatureStates0, CurrentFeatureStates);
+                            maps:merge(
+                              FeatureStates0,
+                              rabbit_ff_registry_wrapper:states());
                         false ->
                             FeatureStates0
                     end,
@@ -191,7 +192,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     %% We take the feature flags already registered.
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
     KnownFeatureFlags1 = case RegistryInitialized of
-                             true  -> rabbit_ff_registry:list(all);
+                             true  -> rabbit_ff_registry_wrapper:list(all);
                              false -> #{}
                          end,
 
@@ -239,8 +240,9 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     not rabbit_feature_flags:does_enabled_feature_flags_list_file_exist(),
     FeatureStates0 = case RegistryInitialized of
                          true ->
-                             maps:merge(rabbit_ff_registry:states(),
-                                        NewFeatureStates);
+                             maps:merge(
+                               rabbit_ff_registry_wrapper:states(),
+                               NewFeatureStates);
                          false ->
                              NewFeatureStates
                      end,
@@ -343,8 +345,8 @@ does_registry_need_refresh(AllFeatureFlags,
             %% Before proceeding with the actual
             %% (re)initialization, let's see if there are any
             %% changes.
-            CurrentAllFeatureFlags = rabbit_ff_registry:list(all),
-            CurrentFeatureStates = rabbit_ff_registry:states(),
+            CurrentAllFeatureFlags = rabbit_ff_registry_wrapper:list(all),
+            CurrentFeatureStates = rabbit_ff_registry_wrapper:states(),
             CurrentWrittenToDisk =
             rabbit_ff_registry:is_registry_written_to_disk(),
 
