@@ -104,19 +104,19 @@ get_used_fd({unix, _}, State0) ->
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
 get_used_fd({win32, _}, State0) ->
+    MissingHandleMsg = "Could not execute handle.exe, please install from "
+                       "https://learn.microsoft.com/en-us/sysinternals/downloads/handle",
     Pid = os:getpid(),
     case os:find_executable("handle.exe") of
         false ->
-            State1 = log_fd_warning_once("Could not find handle.exe, using powershell to determine handle count", [], State0),
+            State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
             {State1, 0};
         HandleExe ->
             Args = ["/accepteula", "-s", "-p", Pid],
             {ok, HandleExeOutput} = rabbit_misc:win32_cmd(HandleExe, Args),
             case HandleExeOutput of
                 [] ->
-                    State1 = log_fd_warning_once("Could not execute handle.exe, "
-                                                 "please install from "
-                                                 "https://learn.microsoft.com/en-us/sysinternals/downloads/handle", [], State0),
+                    State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
                     {State1, 0};
                 _  ->
                     case find_files_line(HandleExeOutput) of
