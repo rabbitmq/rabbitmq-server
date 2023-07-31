@@ -286,7 +286,7 @@ is_permitted_nolog(FeatureName) ->
 %% features.
 
 get_phase(FeatureName) when is_atom(FeatureName) ->
-    case rabbit_ff_registry:get(FeatureName) of
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
         undefined    -> undefined;
         FeatureProps -> get_phase(FeatureProps)
     end;
@@ -317,7 +317,7 @@ get_phase(FeatureProps) when is_map(FeatureProps) ->
 %% features.
 
 get_warning(FeatureName) when is_atom(FeatureName) ->
-    case rabbit_ff_registry:get(FeatureName) of
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
         undefined    -> undefined;
         FeatureProps -> get_warning(FeatureProps)
     end;
@@ -328,7 +328,7 @@ get_warning(FeatureProps) when is_map(FeatureProps) ->
     get_warning(FeatureProps, Permitted).
 
 get_warning(FeatureName, Permitted) when is_atom(FeatureName) ->
-    case rabbit_ff_registry:get(FeatureName) of
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
         undefined    -> undefined;
         FeatureProps -> get_warning(FeatureProps, Permitted)
     end;
