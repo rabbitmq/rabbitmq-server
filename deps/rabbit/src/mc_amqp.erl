@@ -195,7 +195,7 @@ convert_to(TargetProto, #msg{header = Header,
                   P,
                   lists_prepend_t(
                     AP,
-                    Data)))),
+                    [Data])))),
     %% convert_from(mc_amqp, Sections) expects a flat list of amqp sections
     %% and the body could be a list itself (or an amqp_value)
     Sections = lists:flatten(Sects),
