@@ -104,29 +104,27 @@ get_used_fd({unix, _}, State0) ->
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
 get_used_fd({win32, _}, State0) ->
+    MissingHandleMsg = "Could not execute handle.exe, please install from "
+                       "https://learn.microsoft.com/en-us/sysinternals/downloads/handle",
     Pid = os:getpid(),
     case os:find_executable("handle.exe") of
         false ->
-            State1 = log_fd_warning_once("Could not find handle.exe, using powershell to determine handle count", [], State0),
-            UsedFd = get_used_fd_via_powershell(Pid),
-            {State1, UsedFd};
+            State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
+            {State1, 0};
         HandleExe ->
             Args = ["/accepteula", "-s", "-p", Pid],
             {ok, HandleExeOutput} = rabbit_misc:win32_cmd(HandleExe, Args),
             case HandleExeOutput of
                 [] ->
-                    State1 = log_fd_warning_once("Could not execute handle.exe, using powershell to determine handle count", [], State0),
-                    UsedFd = get_used_fd_via_powershell(Pid),
-                    {State1, UsedFd};
+                    State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
+                    {State1, 0};
                 _  ->
                     case find_files_line(HandleExeOutput) of
                         unknown ->
                             State1 = log_fd_warning_once("handle.exe output did not contain "
-                                                         "a line beginning with 'File', using "
-                                                         "powershell to determine used file descriptor "
-                                                         "count: ~tp", [HandleExeOutput], State0),
-                            UsedFd = get_used_fd_via_powershell(Pid),
-                            {State1, UsedFd};
+                                                         "a line beginning with 'File': ~tp",
+                                                         [HandleExeOutput], State0),
+                            {State1, 0};
                         UsedFd ->
                             {State0, UsedFd}
                     end
@@ -143,11 +141,6 @@ find_files_line(["File " ++ Rest | _T]) ->
     list_to_integer(Files);
 find_files_line([_H | T]) ->
     find_files_line(T).
-
-get_used_fd_via_powershell(Pid) ->
-    Cmd = "Get-Process -Id " ++ Pid ++ " | Select-Object -ExpandProperty HandleCount",
-    {ok, [Result]} = rabbit_misc:pwsh_cmd(Cmd),
-    list_to_integer(Result).
 
 -define(SAFE_CALL(Fun, NoProcFailResult),
     try
