@@ -79,19 +79,19 @@ convert_from(?MODULE, Sections) ->
 convert_from(_SourceProto, _) ->
     not_implemented.
 
-size(#msg{data = BodySections}) ->
+size(#msg{data = Body}) ->
     %% TODO how to estimate anything but data sections?
-    BodySize = lists:foldl(
-                 fun
-                     (#'v1_0.data'{content = Data}, Acc) ->
-                         iolist_size(Data) + Acc;
-                     (#'v1_0.amqp_sequence'{content = _}, Acc) ->
-                         Acc;
-                     (#'v1_0.amqp_value'{content = _}, Acc) ->
-                         Acc
-                 end, 0, BodySections),
-    MetaSize = 0,
-    {MetaSize, BodySize}.
+    BodySize = if is_list(Body) ->
+                      lists:foldl(
+                        fun(#'v1_0.data'{content = Data}, Acc) ->
+                                iolist_size(Data) + Acc;
+                           (#'v1_0.amqp_sequence'{content = _}, Acc) ->
+                                Acc
+                        end, 0, Body);
+                  is_record(Body, 'v1_0.amqp_value') ->
+                      0
+               end,
+    {_MetaSize = 0, BodySize}.
 
 x_header(Key, Msg) ->
     message_annotation(Key, Msg, undefined).
