@@ -165,7 +165,8 @@ listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
                                 rabbit_listener, [{'$1',[],['$1']}]),
                   lists:foreach(
                     fun(Listener) ->
-                            ets:insert(rabbit_listener_ets, Listener)
+                            rabbit_networking:is_listener_on_this_node(Listener)
+                                andalso ets:insert(rabbit_listener_ets, Listener)
                     end, Listeners)
           end)
     catch

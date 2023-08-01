@@ -45,6 +45,8 @@
 
 -export([ensure_listener_table_for_this_node/0]).
 
+-export([is_listener_on_this_node/1]).
+
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
 -export([
@@ -819,3 +821,7 @@ ipv6_status(TestPort) ->
 ensure_listener_table_for_this_node() ->
     _ = ets:new(?ETS_TABLE, [named_table, public, bag, {keypos, #listener.node}]),
     ok.
+
+%% Needed for migration when feature flag listener_records_in_ets is enabled
+is_listener_on_this_node(#listener{node = Node}) ->
+    Node =:= node().
