@@ -1055,7 +1055,7 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
     Inventory0 = #{feature_flags => #{},
                    applications_per_node => #{},
                    states_per_node => #{}},
-    Rets = rpc_calls(Nodes, rabbit_ff_registry, inventory, [], Timeout),
+    Rets = inventory_rpcs(Nodes, Timeout),
     maps:fold(
       fun
           (Node,
@@ -1080,6 +1080,46 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
           (_Node, _Error, Error) ->
               Error
       end, {ok, Inventory0}, Rets).
+
+inventory_rpcs(Nodes, Timeout) ->
+    %% We must use `rabbit_ff_registry_wrapper' if it is available to avoid
+    %% any deadlock with the Code server. If it is unavailable, we fall back
+    %% to `rabbit_ff_registry'.
+    %%
+    %% See commit aacfa1978e24bcacd8de7d06a7c3c5d9d8bd098e and pull request
+    %% #8155.
+    Rets0 = rpc_calls(
+              Nodes,
+              rabbit_ff_registry_wrapper, inventory, [], Timeout),
+    OlderNodes = maps:fold(
+                   fun
+                       (Node,
+                        {error,
+                         {exception, undef,
+                          [{rabbit_ff_registry_wrapper,_ , _, _} | _]}},
+                        Acc) ->
+                           [Node | Acc];
+                       (_Node, _Ret, Acc) ->
+                           Acc
+                   end, [], Rets0),
+    case OlderNodes of
+        [] ->
+            Rets0;
+        _ ->
+            ?LOG_INFO(
+               "Feature flags: the following nodes run an older version of "
+               "RabbitMQ causing the "
+               "\"rabbit_ff_registry_wrapper:inventory[] undefined\" error "
+               "above: ~2p~n"
+               "Feature flags: falling back to another method for those "
+               "nodes; this may trigger a bug causing them to hang",
+               [lists:sort(OlderNodes)],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            Rets1 = rpc_calls(
+                      OlderNodes,
+                      rabbit_ff_registry, inventory, [], Timeout),
+            maps:merge(Rets0, Rets1)
+    end.
 
 merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
     FeatureFlags = maps:merge(FeatureFlagsA, FeatureFlagsB),

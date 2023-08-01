@@ -1109,11 +1109,11 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
                         end,
     FeatureNames1 = lists:filter(
                       fun(FeatureName) ->
-                              case rabbit_ff_registry:get(FeatureName) of
-                                  undefined ->
-                                      false;
-                                  FeatureProps ->
-                                      ?IS_FEATURE_FLAG(FeatureProps)
+                              FeatureProps = rabbit_ff_registry_wrapper:get(
+                                               FeatureName),
+                              case FeatureProps of
+                                  undefined -> false;
+                                  _         -> ?IS_FEATURE_FLAG(FeatureProps)
                               end
                       end, FeatureNames),
     FeatureNames2 = lists:foldl(
