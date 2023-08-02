@@ -30,7 +30,7 @@
                      adapter_info, send_fun, ssl_login_name, peer_addr,
                      %% see rabbitmq/rabbitmq-stomp#39
                      trailing_lf, authz_context, auth_mechanism, auth_login,
-                     user, queue_states, delivery_tag = 0,
+                     user, queue_states, delivery_tag = 0, msg_seq_no, delivery_flow,
                      default_topic_exchange, default_nack_requeue}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
@@ -140,6 +140,11 @@ initial_state(Configuration,
        %%       to override this value?
        {client_properties, [{<<"product">>, longstr, <<"STOMP client">>}]}
        |Extra]},
+
+    Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
+               true   -> flow;
+               false  -> noflow
+           end,
   #proc_state {
        send_fun            = SendFun,
        adapter_info        = AdapterInfo,
@@ -150,12 +155,14 @@ initial_state(Configuration,
        connection          = none,
        subscriptions       = #{},
        version             = none,
-       pending_receipts    = undefined,
        config              = Configuration,
        route_state         = routing_init_state(),
        reply_queues        = #{},
        frame_transformer   = undefined,
+       msg_seq_no          = 1,
+       delivery_flow       = Flow,
        queue_states        = rabbit_queue_type:init(),
+       pending_receipts    = gb_trees:empty(),
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
        default_topic_exchange = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>),
        default_nack_requeue = application:get_env(rabbitmq_stomp, default_nack_requeue, true)}.
@@ -742,10 +749,15 @@ maybe_clean_up_queue(Queue, #proc_state{connection = Connection,
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
-        State0 = #proc_state{default_topic_exchange = DfltTopicEx}) ->
+        State0 = #proc_state{default_topic_exchange = DfltTopicEx,
+                             delivery_flow = Flow,
+                             user = #user{username = Username} = User,
+                             authz_context = AuthzCtx,
+                             queue_states  = QStates0}) ->
     case ensure_endpoint(dest, Destination, Frame, State0) of
 
         {ok, _Q, State} ->
+            {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
 
             {Frame1, State1} =
                 ensure_reply_to(Frame, State),
@@ -760,13 +772,86 @@ do_send(Destination, _DestHdr,
               mandatory = false,
               immediate = false},
 
-	    ok(send_method(Method, Props, BodyFragments,
-			   maybe_record_receipt(Frame1, State1)));
-		
+            ExchangeName = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
+            check_resource_access(User, ExchangeName, write, AuthzCtx),
+            Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+            check_internal_exchange(Exchange),
+            check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, write),
+
+            {DoConfirm, MsgSeqNo, ReceiptId, State1} =
+                case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
+                    {ok, Id} ->
+                        SeqNo = State#proc_state.msg_seq_no,
+                        {true, SeqNo, Id, State#proc_state{msg_seq_no = SeqNo + 1}};
+                    not_found ->
+                        {false, undefined, undefined, State}
+                end,
+
+            {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
+
+            Content0 = #content{
+                          class_id = ClassId,
+                          properties = Props,
+                          properties_bin = none,
+                          protocol = none,
+                          payload_fragments_rev = [BodyFragments]
+                         },
+            Content = rabbit_message_interceptor:intercept(Content0),
+
+            BasicMessage = rabbit_basic:make_message(ExchangeName, RoutingKey, Content, <<>>),
+
+            Delivery = #delivery{
+                          mandatory = false,
+                          confirm = DoConfirm,
+                          sender = self(),
+                          message = BasicMessage,
+                          msg_seq_no = MsgSeqNo,
+                          flow = Flow
+                         },
+
+            case rabbit_exchange:lookup(ExchangeName) of
+                {ok, Exchange} ->
+                    QNames = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
+                    deliver_to_queues(Delivery, QNames, State);
+                {error, not_found} ->
+                    log_error("~s not found", [rabbit_misc:rs(ExchangeName)], ExchangeName),
+                    {error, exchange_not_found, State}
+            end;
+
         {error, _} = Err ->
 
             Err
     end.
+
+deliver_to_queues(Delivery = #delivery{message    = #basic_message{exchange_name = XName},
+                                       confirm    = Confirm,
+                                       msg_seq_no = MsgSeqNo},
+                  RoutedToQNames,
+                  State0 = #proc_state{queue_states = QStates0}) ->
+    Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
+    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
+        {ok, QStates, Actions} ->
+            %% rabbit_global_counters:messages_routed(ProtoVer, length(Qs)), ??
+            QueueNames = rabbit_amqqueue:queue_names(Qs),
+            State1 = process_routing_confirm(Confirm, QueueNames,
+                                             MsgSeqNo, XName, State0),
+            %% Actions must be processed after registering confirms as actions may
+            %% contain rejections of publishes.
+            {ok, handle_queue_actions(Actions, State1#proc_state{queue_states = QueueStates})};
+        {error, Reason} ->
+            log_error("Failed to deliver message with packet_id=~p to queues: ~p",
+                      [Delivery#delivery.msg_seq_no, Reason], none),
+            {error, Reason, State0}
+    end.
+
+process_routing_confirm(false, _, _, _, State) ->
+    State;
+process_routing_confirm(true, [], MsgSeqNo, XName, State) ->
+    record_confirms([{MsgSeqNo, XName}], State);
+process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
+    State#ch{unconfirmed =
+        rabbit_confirms:insert(MsgSeqNo, QRefs, XName, State#ch.unconfirmed)}.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, _) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
@@ -943,25 +1028,11 @@ do_receipt("SEND", _, State) ->
 do_receipt(_Frame, ReceiptId, State) ->
     send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
 
-maybe_record_receipt(Frame, State = #proc_state{channel          = Channel,
-                                           pending_receipts = PR}) ->
-    case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
-        {ok, Id} ->
-            PR1 = case PR of
-                      undefined ->
-                          amqp_channel:register_confirm_handler(
-                            Channel, self()),
-                          #'confirm.select_ok'{} =
-                              amqp_channel:call(Channel, #'confirm.select'{}),
-                          gb_trees:empty();
-                      _ ->
-                          PR
-                  end,
-            SeqNo = amqp_channel:next_publish_seqno(Channel),
-            State#proc_state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
-        not_found ->
-            State
-    end.
+maybe_record_receipt(_DoConfirm = true, MsgSeqNo, ReceiptId, State = #proc_state{pending_receipts = PR}) ->
+    State#proc_state{pending_receipts = gb_trees:insert(SeqNo, ReceiptId, PR)};
+maybe_record_receipt(_DoConfirm = false, _, _, State) ->
+    State.
+
 
 flush_pending_receipts(DeliveryTag, IsMulti,
                        State = #proc_state{pending_receipts = PR}) ->
@@ -1600,3 +1671,52 @@ create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx, user = Use
         end.
 
 routing_init_state() -> sets:new().
+
+check_internal_exchange(#exchange{name = Name, internal = true}) ->
+    rabbit_misc:protocol_error(access_refused,
+                               "cannot publish to internal ~ts",
+                               [rabbit_misc:rs(Name)]);
+check_internal_exchange(_) ->
+    ok.
+
+
+check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
+                             User = #user{username = Username},
+                          RoutingKey, AuthzContext, Permission) ->
+    Resource = Name#resource{kind = topic},
+    VariableMap = build_topic_variable_map(AuthzContext, VHost, Username),
+    Context = #{routing_key  => RoutingKey,
+                variable_map => VariableMap},
+    Cache = case get(topic_permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    case lists:member({Resource, Context, Permission}, Cache) of
+        true  -> ok;
+        false -> ok = rabbit_access_control:check_topic_access(
+            User, Resource, Permission, Context),
+            CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+            put(topic_permission_cache, [{Resource, Context, Permission} | CacheTail])
+    end;
+check_topic_authorisation(_, _, _, _, _) ->
+    ok.
+
+
+build_topic_variable_map(AuthzContext, VHost, Username) when is_map(AuthzContext) ->
+    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username});
+build_topic_variable_map(AuthzContext, VHost, Username) ->
+    maps:merge(extract_variable_map_from_amqp_params(AuthzContext), #{<<"vhost">> => VHost, <<"username">> => Username}).
+
+%% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
+%% Extracts variable map only from amqp_params_direct, not amqp_params_network.
+%% amqp_params_direct records are usually used by plugins (e.g. STOMP)
+extract_variable_map_from_amqp_params({amqp_params, {amqp_params_direct, _, _, _, _,
+                                                        {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_variable_map_from_amqp_params({amqp_params_direct, _, _, _, _,
+                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_variable_map_from_amqp_params([Value]) ->
+    extract_variable_map_from_amqp_params(Value);
+extract_variable_map_from_amqp_params(_) ->
+    #{}.
