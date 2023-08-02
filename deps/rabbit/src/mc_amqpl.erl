@@ -56,7 +56,7 @@ init(#content{} = Content0) ->
     {strip_header(Content, ?DELETED_HEADER), Anns}.
 
 convert_from(mc_amqp, Sections) ->
-    {H, MAnn, Prop, AProp, Body} =
+    {H, MAnn, Prop, AProp, BodyRev} =
         lists:foldl(
           fun
               (#'v1_0.header'{} = S, Acc) ->
@@ -78,16 +78,20 @@ convert_from(mc_amqp, Sections) ->
           end, {undefined, undefined, undefined, undefined, []},
           Sections),
 
-    {Payload, Type0} = case Body of
-                           [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
-                               {[Bin], undefined};
-                           [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
-                               {Bin, undefined};
-                           _ ->
-                               %% anything else needs to be encoded
-                               {[amqp10_framing:encode_bin(X) || X <- Body],
-                                ?AMQP10_TYPE}
-                       end,
+    {PayloadRev, Type0} = case BodyRev of
+                              [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
+                                  {[Bin], undefined};
+                              [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
+                                  %%TODO Doesn't Bin need to be reversed?
+                                  {Bin, undefined};
+                              _ ->
+                                  %% anything else needs to be encoded
+                                  %%TODO This is inefficient, but #content.payload_fragments_rev expects
+                                  %% currently a flat list of binaries. Can we make rabbit_writer work
+                                  %% with an iolist instead?
+                                  {[iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- BodyRev],
+                                   ?AMQP10_TYPE}
+                          end,
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId0,
                        reply_to = ReplyTo0,
@@ -170,7 +174,7 @@ convert_from(mc_amqp, Sections) ->
     #content{class_id = ?CLASS_ID,
              properties = BP,
              properties_bin = none,
-             payload_fragments_rev = Payload};
+             payload_fragments_rev = PayloadRev};
 convert_from(_SourceProto, _) ->
     not_implemented.
 
