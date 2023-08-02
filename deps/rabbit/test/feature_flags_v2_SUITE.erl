@@ -925,7 +925,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
     unlink(Syncer),
     ExpectedNodes = case UsingFFv1 of
                         true ->
-                            %% With v1, the migration function runs on a
+                            %% With v1, the migration function may run on a
                             %% single node in the cluster only in this
                             %% scenario.
                             %%
@@ -935,7 +935,12 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
                             %% migration function possibly didn't know about
                             %% it. This is one of the problems
                             %% `feature_flags_v2' fixes.
-                            [FirstNode];
+                            %%
+                            %% We still unblock the migration function on the
+                            %% first node and the joining node because
+                            %% depending on the order of events, it may run on
+                            %% that joining node.
+                            [FirstNode, NewNode];
                         false ->
                             %% With v2 but still using the old migration
                             %% function API (taking 3 arguments), the
@@ -958,13 +963,34 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
     %% Unblock the rest and collect the node names of all migration functions
     %% which ran.
     ct:pal("Unblocking other nodes, including the joining one"),
-    OtherMigratedNodes = [receive
-                              {Node, MigFunPid2, waiting} ->
-                                  MigFunPid2 ! proceed,
-                                  Node
-                          end || Node <- ExpectedNodes -- [FirstMigratedNode]],
+    OtherMigratedNodes0 = case UsingFFv1 of
+                              true ->
+                                  [receive
+                                       {Node, MigFunPid2, waiting} ->
+                                           MigFunPid2 ! proceed,
+                                           Node
+                                   after 10000 ->
+                                             undefined
+                                   end
+                                   || Node
+                                      <- ExpectedNodes -- [FirstMigratedNode]];
+                              false ->
+                                  [receive
+                                       {Node, MigFunPid2, waiting} ->
+                                           MigFunPid2 ! proceed,
+                                           Node
+                                   end
+                                   || Node
+                                      <- ExpectedNodes -- [FirstMigratedNode]]
+                          end,
+    OtherMigratedNodes = OtherMigratedNodes0 -- [undefined],
     MigratedNodes = [FirstMigratedNode | OtherMigratedNodes],
-    ?assertEqual(lists:sort(ExpectedNodes), lists:sort(MigratedNodes)),
+    case UsingFFv1 of
+        true ->
+            ok;
+        false ->
+            ?assertEqual(lists:sort(ExpectedNodes), lists:sort(MigratedNodes))
+    end,
 
     ct:pal("Waiting for spawned processes to terminate"),
     receive
