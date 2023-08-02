@@ -224,7 +224,7 @@
 %% The name of the module and function to call when changing the state of
 %% the feature flag.
 
--type migration_fun_context() :: enable | is_enabled.
+-type migration_fun_context() :: enable.
 
 -type migration_fun() :: fun((feature_name(),
                               feature_props_extended(),
@@ -240,10 +240,6 @@
 %% remain disabled. The function must be idempotent: if the feature flag is
 %% already enabled on another node and the local node is running this function
 %% again because it is syncing its feature flags state, it should succeed.
-%%
-%% It is called with the context `is_enabled' to check if a feature flag
-%% is actually enabled. It is useful on RabbitMQ startup, just in case
-%% the previous instance failed to write the feature flags list file.
 
 -type callbacks() :: enable_callback() | post_enable_callback().
 %% All possible callbacks.
@@ -1946,7 +1942,6 @@ sync_cluster_v1(Nodes, _NodeIsVirgin, Timeout) ->
             Nodes2 = lists:usort([node() | Nodes1]),
             rabbit_ff_controller:sync_cluster(Nodes2);
         false ->
-            _ = verify_which_feature_flags_are_actually_enabled(),
             RemoteNodes = Nodes -- [node()],
             sync_feature_flags_with_cluster1(RemoteNodes, Timeout)
     end.
@@ -2079,89 +2074,6 @@ do_sync_feature_flags_with_node([FeatureFlag | Rest]) ->
     end;
 do_sync_feature_flags_with_node([]) ->
     ok.
-
--spec verify_which_feature_flags_are_actually_enabled() ->
-    ok | {error, any()} | no_return().
-%% @private
-
-verify_which_feature_flags_are_actually_enabled() ->
-    AllFeatureFlags = list(all),
-    EnabledFeatureNames = read_enabled_feature_flags_list(),
-    rabbit_log_feature_flags:debug(
-      "Feature flags: double-checking feature flag states..."),
-    %% In case the previous instance of the node failed to write the
-    %% feature flags list file, we want to double-check the list of
-    %% enabled feature flags read from disk. For each feature flag,
-    %% we call the migration function to query if the feature flag is
-    %% actually enabled.
-    %%
-    %% If a feature flag doesn't provide a migration function (or if the
-    %% function fails), we keep the current state of the feature flag.
-    List1 = maps:fold(
-              fun(Name, Props, Acc) ->
-                      case uses_callbacks(Name) of
-                          true ->
-                              Acc;
-                          false ->
-                              Ret = run_migration_fun(Name, Props, is_enabled),
-                              case Ret of
-                                  true ->
-                                      [Name | Acc];
-                                  false ->
-                                      Acc;
-                                  _ ->
-                                      MarkedAsEnabled = is_enabled(Name),
-                                      case MarkedAsEnabled of
-                                          true  -> [Name | Acc];
-                                          false -> Acc
-                                      end
-                              end
-                      end
-              end,
-              [], AllFeatureFlags),
-    RepairedEnabledFeatureNames = lists:sort(List1),
-    %% We log the list of feature flags for which the state changes
-    %% after the check above.
-    WereEnabled = RepairedEnabledFeatureNames -- EnabledFeatureNames,
-    WereDisabled = EnabledFeatureNames -- RepairedEnabledFeatureNames,
-    case {WereEnabled, WereDisabled} of
-        {[], []} -> ok;
-        _        -> rabbit_log_feature_flags:warning(
-                      "Feature flags: the previous instance of this node "
-                      "must have failed to write the `feature_flags` "
-                      "file at `~s`:",
-                      [enabled_feature_flags_list_file()])
-    end,
-    case WereEnabled of
-        [] -> ok;
-        _  -> rabbit_log_feature_flags:warning(
-                "Feature flags:   - list of previously enabled "
-                "feature flags now marked as such: ~p", [WereEnabled])
-    end,
-    case WereDisabled of
-        [] -> ok;
-        _  -> rabbit_log_feature_flags:warning(
-                "Feature flags:   - list of previously disabled "
-                "feature flags now marked as such: ~p", [WereDisabled])
-    end,
-    %% Finally, if the new list of enabled feature flags is different
-    %% than the one on disk, we write the new list and re-initialize the
-    %% registry.
-    case RepairedEnabledFeatureNames of
-        EnabledFeatureNames ->
-            ok;
-        _ ->
-            rabbit_log_feature_flags:debug(
-              "Feature flags: write the repaired list of enabled feature "
-              "flags"),
-            WrittenToDisk = ok =:= try_to_write_enabled_feature_flags_list(
-                                     RepairedEnabledFeatureNames),
-            rabbit_ff_registry_factory:initialize_registry(
-              #{},
-              enabled_feature_flags_to_feature_states(
-                RepairedEnabledFeatureNames),
-              WrittenToDisk)
-    end.
 
 -spec enabled_feature_flags_to_feature_states([feature_name()]) ->
     feature_states().
