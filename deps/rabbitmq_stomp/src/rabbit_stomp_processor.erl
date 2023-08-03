@@ -30,6 +30,7 @@
                      adapter_info, send_fun, ssl_login_name, peer_addr,
                      %% see rabbitmq/rabbitmq-stomp#39
                      trailing_lf, authz_context, auth_mechanism, auth_login,
+                     confirmed, rejected, unconfirmed,
                      user, queue_states, delivery_tag = 0, msg_seq_no, delivery_flow,
                      default_topic_exchange, default_nack_requeue}).
 
@@ -161,6 +162,9 @@ initial_state(Configuration,
        frame_transformer   = undefined,
        msg_seq_no          = 1,
        delivery_flow       = Flow,
+       unconfirmed         = rabbit_confirms:init(),
+       confirmed           = [],
+       rejected            = [],
        queue_states        = rabbit_queue_type:init(),
        pending_receipts    = gb_trees:empty(),
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
@@ -385,7 +389,7 @@ handle_frame("ACK", Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-	      ack_action("ACK", Frame, State, fun create_ack_method/3)
+	      ack_action("ACK", Frame, State0, fun create_ack_method/3)
       end,
       State);
 
@@ -393,7 +397,7 @@ handle_frame("NACK", Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-	      ack_action("NACK", Frame, State, fun create_nack_method/3)
+	      ack_action("NACK", Frame, State0, fun create_nack_method/3)
       end,
       State);
 
@@ -751,9 +755,8 @@ do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State0 = #proc_state{default_topic_exchange = DfltTopicEx,
                              delivery_flow = Flow,
-                             user = #user{username = Username} = User,
-                             authz_context = AuthzCtx,
-                             queue_states  = QStates0}) ->
+                             user = User,
+                             authz_context = AuthzCtx}) ->
     case ensure_endpoint(dest, Destination, Frame, State0) of
 
         {ok, _Q, State} ->
@@ -766,11 +769,11 @@ do_send(Destination, _DestHdr,
 
             {Exchange, RoutingKey} = parse_routing(Destination, DfltTopicEx),
 
-            Method = #'basic.publish'{
-              exchange = list_to_binary(Exchange),
-              routing_key = list_to_binary(RoutingKey),
-              mandatory = false,
-              immediate = false},
+            %% Method = #'basic.publish'{
+            %%   exchange = list_to_binary(Exchange),
+            %%   routing_key = list_to_binary(RoutingKey),
+            %%   mandatory = false,
+            %%   immediate = false},
 
             ExchangeName = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
             check_resource_access(User, ExchangeName, write, AuthzCtx),
@@ -778,11 +781,14 @@ do_send(Destination, _DestHdr,
             check_internal_exchange(Exchange),
             check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, write),
 
-            {DoConfirm, MsgSeqNo, ReceiptId, State1} =
+            {DoConfirm, MsgSeqNo, State1} =
                 case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
                     {ok, Id} ->
                         SeqNo = State#proc_state.msg_seq_no,
-                        {true, SeqNo, Id, State#proc_state{msg_seq_no = SeqNo + 1}};
+                        %% I think it's safe to just add it here because
+                        %% if there is an error down the road process dies
+                        StateRR = maybe_record_receipt(true, SeqNo, Id, State),
+                        {true, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}};
                     not_found ->
                         {false, undefined, undefined, State}
                 end,
@@ -838,20 +844,131 @@ deliver_to_queues(Delivery = #delivery{message    = #basic_message{exchange_name
                                              MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes.
-            {ok, handle_queue_actions(Actions, State1#proc_state{queue_states = QueueStates})};
+            {ok, handle_queue_actions(Actions, State1#proc_state{queue_states = QStates})};
         {error, Reason} ->
             log_error("Failed to deliver message with packet_id=~p to queues: ~p",
                       [Delivery#delivery.msg_seq_no, Reason], none),
             {error, Reason, State0}
     end.
 
+
+record_rejects([], State) ->
+    State;
+record_rejects(MXs, State = #proc_state{rejected = R%% , tx = Tx
+                                       }) ->
+    %% Tx1 = case Tx of
+    %%     none -> none;
+    %%     _    -> failed
+    %% end,
+    State#proc_state{rejected = [MXs | R]%% , tx = Tx1
+                    }.
+
+record_confirms([], State) ->
+    State;
+record_confirms(MXs, State = #proc_state{confirmed = C}) ->
+    State#proc_state{confirmed = [MXs | C]}.
+
 process_routing_confirm(false, _, _, _, State) ->
     State;
 process_routing_confirm(true, [], MsgSeqNo, XName, State) ->
     record_confirms([{MsgSeqNo, XName}], State);
 process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
-    State#ch{unconfirmed =
-        rabbit_confirms:insert(MsgSeqNo, QRefs, XName, State#ch.unconfirmed)}.
+    State#proc_state{unconfirmed =
+        rabbit_confirms:insert(MsgSeqNo, QRefs, XName, State#proc_state.unconfirmed)}.
+
+confirm(MsgSeqNos, QRef, State = #proc_state{unconfirmed = UC}) ->
+    %% NOTE: if queue name does not exist here it's likely that the ref also
+    %% does not exist in unconfirmed messages.
+    %% Neither does the 'ignore' atom, so it's a reasonable fallback.
+    {ConfirmMXs, UC1} = rabbit_confirms:confirm(MsgSeqNos, QRef, UC),
+    %% NB: don't call noreply/1 since we don't want to send confirms.
+    record_confirms(ConfirmMXs, State#proc_state{unconfirmed = UC1}).
+
+send_confirms_and_nacks(State = #proc_state{%% tx = none,
+                                            confirmed = [], rejected = []}) ->
+    State;
+send_confirms_and_nacks(State = #proc_state{%% tx = none,
+                                            confirmed = C, rejected = R}) ->
+    case rabbit_node_monitor:pause_partition_guard() of
+        ok      ->
+            Confirms = lists:append(C),
+            %% rabbit_global_counters:messages_confirmed(stomp, length(Confirms)), %% TODO: what is the protocol?
+            Rejects = lists:append(R),
+            ConfirmMsgSeqNos =
+                lists:foldl(
+                    fun ({MsgSeqNo, _XName}, MSNs) ->
+                        %% ?INCR_STATS(exchange_stats, XName, 1, confirm, State), %% TODO: what to do with stats
+                        [MsgSeqNo | MSNs]
+                    end, [], Confirms),
+            RejectMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Rejects],
+
+            State1 = send_confirms(ConfirmMsgSeqNos,
+                                   RejectMsgSeqNos,
+                                   State#proc_state{confirmed = []}),
+            %% TODO: we don't have server-originated nacks in STOMP unfortunately
+            %% TODO: msg seq nos, same as for confirms. Need to implement
+            %% nack rates first.
+            %% send_nacks(RejectMsgSeqNos,
+            %%            ConfirmMsgSeqNos,
+            %%            State1#proc_state{rejected = []});
+            State1#proc_state{rejected = []};
+        pausing -> State
+    end.
+
+%% TODO: in stomp we can only ERROR, there is no commit_ok :-(
+%% send_confirms_and_nacks(State) ->
+%%     case rabbit_node_monitor:pause_partition_guard() of
+%%         ok      -> maybe_complete_tx(State);
+%%         pausing -> State
+%%     end
+%%        .
+
+%% TODO: in stomp there is no nacks, only ERROR, shall I send error here??
+%% send_nacks([], _, State) ->
+%%     State;
+%% send_nacks(_Rs, _, State = #ch{cfg = #conf{state = closing}}) -> %% optimisation
+%%     State;
+%% send_nacks(Rs, Cs, State) ->
+%%     coalesce_and_send(Rs, Cs,
+%%                       fun(MsgSeqNo, Multiple) ->
+%%                               #'basic.nack'{delivery_tag = MsgSeqNo,
+%%                                             multiple     = Multiple}
+%%                       end, State).
+
+send_confirms([], _, State) ->
+    State;
+%% TODO: implement connection states
+%% send_confirms(_Cs, _, State = #ch{cfg = #conf{state = closing}}) -> %% optimisation
+%%     State;
+send_confirms([MsgSeqNo], _, State) ->
+    ok = send(#'basic.ack'{delivery_tag = MsgSeqNo}, State),
+    State;
+send_confirms(Cs, Rs, State) ->
+    coalesce_and_send(Cs, Rs,
+                      fun(MsgSeqNo, Multiple) ->
+                                  #'basic.ack'{delivery_tag = MsgSeqNo,
+                                               multiple     = Multiple}
+                      end, State).
+
+coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #proc_state{unconfirmed = UC}) ->
+    SMsgSeqNos = lists:usort(MsgSeqNos),
+    UnconfirmedCutoff = case rabbit_confirms:is_empty(UC) of
+                 true  -> lists:last(SMsgSeqNos) + 1;
+                 false -> rabbit_confirms:smallest(UC)
+             end,
+    Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
+    case Ms of
+        [] -> ok;
+        _  -> ok = send(MkMsgFun(lists:last(Ms), true), State)
+    end,
+    [ok = send(MkMsgFun(SeqNo, false), State) || SeqNo <- Ss],
+    State.
+
+ack_cons(Tag, Acked, [{Tag, Acks} | L]) -> [{Tag, Acked ++ Acks} | L];
+ack_cons(Tag, Acked, Acks)              -> [{Tag, Acked} | Acks].
+
+ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, _) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
@@ -1029,10 +1146,9 @@ do_receipt(_Frame, ReceiptId, State) ->
     send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
 
 maybe_record_receipt(_DoConfirm = true, MsgSeqNo, ReceiptId, State = #proc_state{pending_receipts = PR}) ->
-    State#proc_state{pending_receipts = gb_trees:insert(SeqNo, ReceiptId, PR)};
+    State#proc_state{pending_receipts = gb_trees:insert(MsgSeqNo, ReceiptId, PR)};
 maybe_record_receipt(_DoConfirm = false, _, _, State) ->
     State.
-
 
 flush_pending_receipts(DeliveryTag, IsMulti,
                        State = #proc_state{pending_receipts = PR}) ->
@@ -1436,22 +1552,22 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
 handle_queue_actions(Actions, #proc_state{} = State0) ->
     lists:foldl(
       fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
-              deliver_to_client(ConsumerTag, Msgs, Ack, S)%% ;
-          %% ({settled, QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
-          %%     {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
-          %%     send_puback(ConfirmPktIds, S),
-          %%     S#state{unacked_client_pubs = U};
-          %% ({rejected, _QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
-          %%     %% Negative acks are supported in MQTT v5 only.
-          %%     %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
-          %%     U = lists:foldl(
-          %%           fun(PktId, Acc0) ->
-          %%                   case rabbit_mqtt_confirms:reject(PktId, Acc0) of
-          %%                       {ok, Acc} -> Acc;
-          %%                       {error, not_found} -> Acc0
-          %%                   end
-          %%           end, U0, PktIds),
-          %%     S#state{unacked_client_pubs = U};
+              deliver_to_client(ConsumerTag, Msgs, Ack, S);
+          ({settled, QRef, MsgSeqNos}, S0) ->
+              confirm(MsgSeqNos, QRef, S0);
+          ({rejected, _QRef, MsgSeqNos}, S0) ->
+              {U, Rej} =
+              lists:foldr(
+                fun(SeqNo, {U1, Acc}) ->
+                        case rabbit_confirms:reject(SeqNo, U1) of
+                            {ok, MX, U2} ->
+                                {U2, [MX | Acc]};
+                            {error, not_found} ->
+                                {U1, Acc}
+                        end
+                end, {S0#proc_state.unconfirmed, []}, MsgSeqNos),
+              S = S0#proc_state{unconfirmed = U},
+              record_rejects(Rej, S)
           %% ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
           %%     S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
           %% ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
