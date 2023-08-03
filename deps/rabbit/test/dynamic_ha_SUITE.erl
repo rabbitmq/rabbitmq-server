@@ -558,6 +558,16 @@ promote_follower_after_standalone_restart(Config) ->
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
+    %% Make sure the maintenance mode states Mnesia table is replicated
+    %% everywhere. We do this here, just in case mixed-version testing is
+    %% against a version of RabbitMQ that doesn't have the fix yet.
+    %%
+    %% See https://github.com/rabbitmq/rabbitmq-server/pull/9005.
+    rabbit_ct_broker_helpers:rpc(
+      Config, B,
+      mnesia, add_table_copy,
+      [rabbit_node_maintenance_states, B, ram_copies]),
+
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, <<"all">>),
     amqp_channel:call(Ch, #'queue.declare'{queue = ?QNAME,
                                            durable = true}),
