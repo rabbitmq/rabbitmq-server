@@ -793,8 +793,15 @@ subscription_ttl(Config) ->
     ok = emqtt:disconnect(C),
 
     ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
+<<<<<<< HEAD
     timer:sleep(TTL + 100),
     ?assertEqual(0,  rpc(Config, rabbit_amqqueue, count, [])),
+=======
+    timer:sleep(timer:seconds(Seconds) + 100),
+    %% On a slow machine, this test might fail. Let's consider
+    %% the expiry on a longer time window
+    ?awaitMatch(0,  rpc(Config, rabbit_amqqueue, count, []), 15_000, 1000),
+>>>>>>> 57aa7c0343 (mqtt shared_SUITE: another case of a time dependent test)
 
     ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
 
