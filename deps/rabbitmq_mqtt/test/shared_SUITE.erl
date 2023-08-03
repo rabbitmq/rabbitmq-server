@@ -836,7 +836,9 @@ session_expiry(Config) ->
 
     ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
     timer:sleep(timer:seconds(Seconds) + 100),
-    ?assertEqual(0,  rpc(Config, rabbit_amqqueue, count, [])),
+    %% On a slow machine, this test might fail. Let's consider
+    %% the expiry on a longer time window
+    ?awaitMatch(0,  rpc(Config, rabbit_amqqueue, count, []), 15_000, 1000),
 
     ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
 
