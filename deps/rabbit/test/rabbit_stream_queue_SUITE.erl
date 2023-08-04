@@ -1291,13 +1291,22 @@ consume_and_reject(Config) ->
     subscribe(Ch1, Q, false, 0),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            MRef = erlang:monitor(process, Ch1),
             ok = amqp_channel:cast(Ch1, #'basic.reject'{delivery_tag = DeliveryTag,
                                                       requeue      = true}),
-            %% Reject will throw a not implemented exception. As it is a cast operation,
-            %% we'll detect the conneciton/channel closure on the next call.
-            %% Let's try to redeclare and see what happens
-            ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
-                        declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]))
+            %% Reject will throw a not implemented exception. As it is a cast
+            %% operation, we detect the connection error from the channel
+            %% process exit reason.
+            receive
+                {'DOWN', MRef, _, _, Reason} ->
+                    ?assertMatch(
+                       {shutdown,
+                        {connection_closing,
+                         {server_initiated_close, 540, _}}},
+                       Reason)
+            after 10000 ->
+                      exit(timeout)
+            end
     after 10000 ->
             exit(timeout)
     end,
