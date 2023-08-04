@@ -217,6 +217,8 @@ open_channel(Config, Node) ->
     Pid ! {open_channel, self()},
     receive
         Ch when is_pid(Ch) -> Ch
+    after 60_000 ->
+        ct:fail("Timed out waiting for connection to open")
     end.
 
 open_connection_and_channel(Config) ->
