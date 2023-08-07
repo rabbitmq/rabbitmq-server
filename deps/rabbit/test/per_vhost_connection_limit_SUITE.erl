@@ -657,6 +657,17 @@ cluster_multiple_vhosts_zero_limit(Config) ->
 vhost_limit_after_node_renamed(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
+    %% Make sure the maintenance mode states Mnesia table is replicated
+    %% everywhere. We do this here, just in case mixed-version testing is
+    %% against a version of RabbitMQ that doesn't have the fix yet.
+    %%
+    %% See https://github.com/rabbitmq/rabbitmq-server/pull/9005.
+    B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    rabbit_ct_broker_helpers:rpc(
+      Config, B,
+      rabbit_table, ensure_table_copy,
+      [rabbit_node_maintenance_states, B, ram_copies]),
+
     VHost = <<"/renaming_node">>,
     set_up_vhost(Config, VHost),
     set_vhost_connection_limit(Config, VHost, 2),
