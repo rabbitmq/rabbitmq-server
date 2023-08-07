@@ -1038,10 +1038,7 @@ prep_stop(State) ->
 
 stop(State) ->
     ok = rabbit_alarm:stop(),
-    ok = case rabbit_db_cluster:is_clustered() of
-             true  -> ok;
-             false -> rabbit_table:clear_ram_only_tables()
-         end,
+    ok = rabbit_table:maybe_clear_ram_only_tables(),
     case State of
         [] -> rabbit_prelaunch:set_stop_reason(normal);
         _  -> rabbit_prelaunch:set_stop_reason(State)

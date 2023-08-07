@@ -47,7 +47,9 @@
          on_node_down/1,
 
          %% Helpers for diagnostics commands
-         schema_info/1
+         schema_info/1,
+
+         reset_gracefully/0
         ]).
 
 %% Mnesia queries

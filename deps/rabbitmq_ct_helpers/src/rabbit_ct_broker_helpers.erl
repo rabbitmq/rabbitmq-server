@@ -1080,7 +1080,60 @@ rabbitmqctl(Config, Node, Args) ->
     rabbitmqctl(Config, Node, Args, infinity).
 
 rabbitmqctl(Config, Node, Args, Timeout) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
+    %% We want to use the CLI from the given node if there is a secondary
+    %% umbrella being configured.
+    I = get_node_index(Config, Node),
+    CanUseSecondary = (I + 1) rem 2 =:= 0,
+    BazelRunSecCmd = rabbit_ct_helpers:get_config(
+                       Config, rabbitmq_run_secondary_cmd),
+    UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
+                               false ->
+                                   case BazelRunSecCmd of
+                                       undefined -> false;
+                                       _         -> CanUseSecondary
+                                   end;
+                               _ ->
+                                   CanUseSecondary
+                           end,
+    Rabbitmqctl = case UseSecondaryUmbrella of
+                      true ->
+                          case BazelRunSecCmd of
+                              undefined ->
+                                  SrcDir = ?config(
+                                              secondary_rabbit_srcdir,
+                                              Config),
+                                  SecDepsDir = ?config(
+                                                  secondary_erlang_mk_depsdir,
+                                                  Config),
+                                  SecNewScriptsDir = filename:join(
+                                                       [SecDepsDir,
+                                                        SrcDir,
+                                                        "sbin"]),
+                                  SecOldScriptsDir = filename:join(
+                                                       [SecDepsDir,
+                                                        "rabbit",
+                                                        "scripts"]),
+                                  SecNewScriptsDirExists = filelib:is_dir(
+                                                             SecNewScriptsDir),
+                                  SecScriptsDir =
+                                  case SecNewScriptsDirExists of
+                                      true  -> SecNewScriptsDir;
+                                      false -> SecOldScriptsDir
+                                  end,
+                                  rabbit_misc:format(
+                                    "~ts/rabbitmqctl", [SecScriptsDir]);
+                              _ ->
+                                  BazelSecScriptsDir = filename:dirname(
+                                                         BazelRunSecCmd),
+                                  filename:join(
+                                    [BazelSecScriptsDir,
+                                     "sbin",
+                                     "rabbitmqctl"])
+                          end;
+                      false ->
+                          ?config(rabbitmqctl_cmd, Config)
+                  end,
+
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
     Env0 = [
@@ -1137,6 +1190,23 @@ rabbitmq_queues(Config, Node, Args) ->
 %% -------------------------------------------------------------------
 %% Other helpers.
 %% -------------------------------------------------------------------
+
+get_node_index(Config, Node) when is_atom(Node) andalso Node =/= undefined ->
+    NodeConfigs = get_node_configs(Config),
+    get_node_index1(NodeConfigs, Node, 0);
+get_node_index(_Config, I) when is_integer(I) andalso I >= 0 ->
+    I.
+
+get_node_index1([NodeConfig | Rest], Node, I) ->
+    case ?config(nodename, NodeConfig) of
+        Node ->
+            I;
+        _ ->
+            case ?config(initial_nodename, NodeConfig) of
+                Node -> I;
+                _    -> get_node_index1(Rest, Node, I + 1)
+            end
+    end.
 
 get_node_configs(Config) ->
     ?config(rmq_nodes, Config).
