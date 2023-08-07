@@ -7,11 +7,12 @@
 
 -module(rabbit_stomp_processor).
 
+-feature(maybe_expr, enable).
+
 -compile({no_auto_import, [error/3]}).
 
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
 -export([flush_pending_receipts/3,
-         handle_exit/3,
          cancel_consumer/2,
          handle_queue_event/2]).
 
@@ -24,21 +25,37 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--record(proc_state, {session_id, channel, connection, subscriptions,
+-record(proc_state, {session_id, subscriptions,
                      version, start_heartbeat_fun, pending_receipts,
                      config, route_state, reply_queues, frame_transformer,
                      adapter_info, send_fun, ssl_login_name, peer_addr,
                      %% see rabbitmq/rabbitmq-stomp#39
                      trailing_lf, authz_context, auth_mechanism, auth_login,
                      confirmed, rejected, unconfirmed,
+                     %% a map of queue names to consumer tag lists
+                     queue_consumers, unacked_message_q,
                      user, queue_states, delivery_tag = 0, msg_seq_no, delivery_flow,
                      default_topic_exchange, default_nack_requeue}).
 
--record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
+-record(subscription, {dest_hdr, ack_mode, multi_ack, description, queue_name}).
+
+-record(pending_ack, {
+                      %% delivery identifier used by clients
+                      %% to acknowledge and reject deliveries
+                      delivery_tag,
+                      %% consumer tag
+                      tag,
+                      delivered_at,
+                      %% queue name
+                      queue,
+                      %% message ID used by queue and message store implementations
+                      msg_id
+                    }).
 
 -define(FLUSH_TIMEOUT, 60000).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+-define(QUEUE, lqueue).
 
 adapter_name(State) ->
   #proc_state{adapter_info = #amqp_adapter_info{name = Name}} = State,
@@ -81,11 +98,6 @@ adapter_name(State) ->
          DeliveryTag :: term(),
          IsMulti :: boolean().
 
--spec handle_exit(From, Reason, State) -> unknown_exit | {stop, Reason, State}
-    when State  :: #proc_state{},
-         From   :: pid(),
-         Reason :: term().
-
 -spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
 
 %%----------------------------------------------------------------------------
@@ -103,7 +115,6 @@ flush_and_die(State) ->
 
 info(session_id, #proc_state{session_id = Val}) ->
     Val;
-info(channel, #proc_state{channel = Val}) -> Val;
 info(version, #proc_state{version = Val}) -> Val;
 info(implicit_connect, #proc_state{config = #stomp_configuration{implicit_connect = Val}}) ->  Val;
 info(auth_login, #proc_state{auth_login = Val}) ->  Val;
@@ -152,9 +163,8 @@ initial_state(Configuration,
        ssl_login_name      = SSLLoginName,
        peer_addr           = PeerAddr,
        session_id          = none,
-       channel             = none,
-       connection          = none,
        subscriptions       = #{},
+       queue_consumers     = #{},
        version             = none,
        config              = Configuration,
        route_state         = routing_init_state(),
@@ -164,6 +174,7 @@ initial_state(Configuration,
        delivery_flow       = Flow,
        unconfirmed         = rabbit_confirms:init(),
        confirmed           = [],
+       unacked_message_q   = ?QUEUE:new(),
        rejected            = [],
        queue_states        = rabbit_queue_type:init(),
        pending_receipts    = gb_trees:empty(),
@@ -178,17 +189,17 @@ command({"STOMP", Frame}, State) ->
 command({"CONNECT", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
-command(Request, State = #proc_state{channel = none,
+command(Request, State = #proc_state{user = undefined,
                                      config = #stomp_configuration{
                                                  implicit_connect = true}}) ->
-    {ok, State1 = #proc_state{channel = Ch}, _} =
+    {ok, State1 = #proc_state{user = User}, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
-    case Ch of
-        none -> {stop, normal, State1};
+    case User of
+        undefined -> {stop, normal, State1};
         _    -> command(Request, State1)
     end;
 
-command(_Request, State = #proc_state{channel = none,
+command(_Request, State = #proc_state{user = undefined,
                                       config = #stomp_configuration{
                                                   implicit_connect = false}}) ->
     {ok, send_error("Illegal command",
@@ -207,34 +218,22 @@ command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
       fun(StateM) -> ensure_receipt(Frame1, StateM) end,
       State).
 
-cancel_consumer(Ctag, State) ->
+handle_consuming_queue_down_or_eol(QName,
+                                   State = #proc_state{queue_consumers = QCons}) ->
+    ConsumerTags = case maps:find(QName, QCons) of
+                       error       -> gb_sets:new();
+                       {ok, CTags} -> CTags
+                   end,
+    gb_sets:fold(
+      fun (CTag, StateN) ->
+              {ok, _, S} = cancel_consumer(CTag, StateN),
+              S
+      end, State#proc_state{queue_consumers = maps:remove(QName, QCons)}, ConsumerTags).
+
+cancel_consumer(CTag, State) ->
   process_request(
-    fun(StateN) -> server_cancel_consumer(Ctag, StateN) end,
+    fun(StateN) -> server_cancel_consumer(CTag, StateN) end,
     State).
-
-handle_exit(Conn, {shutdown, {server_initiated_close, Code, Explanation}},
-            State = #proc_state{connection = Conn}) ->
-    amqp_death(Code, Explanation, State);
-handle_exit(Conn, {shutdown, {connection_closing,
-                    {server_initiated_close, Code, Explanation}}},
-            State = #proc_state{connection = Conn}) ->
-    amqp_death(Code, Explanation, State);
-handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
-    _ = send_error("AMQP connection died", "Reason: ~tp", [Reason], State),
-    {stop, {conn_died, Reason}, State};
-
-handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
-            State = #proc_state{channel = Ch}) ->
-    amqp_death(Code, Explanation, State);
-
-handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
-    _ = send_error("AMQP channel died", "Reason: ~tp", [Reason], State),
-    {stop, {channel_died, Reason}, State};
-handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
-            State = #proc_state{channel = Ch}) ->
-    amqp_death(Code, Explanation, State);
-handle_exit(_, _, _) -> unknown_exit.
-
 
 process_request(ProcessFun, State) ->
     process_request(ProcessFun, fun (StateM) -> StateM end, State).
@@ -255,14 +254,14 @@ process_request(ProcessFun, SuccessFun, State) ->
                   Result
           end,
     case Res of
-        {ok, Frame, NewState = #proc_state{connection = Conn}} ->
+        {ok, Frame, NewState} ->
             _ = case Frame of
                     none -> ok;
                     _    -> send_frame(Frame, NewState)
                 end,
-            {ok, SuccessFun(NewState), Conn};
-        {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
-            {ok, send_error(Message, Detail, NewState), Conn};
+            {ok, SuccessFun(NewState)};
+        {error, Message, Detail, NewState} ->
+            {ok, send_error(Message, Detail, NewState)};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
         {stop, R, NewState} ->
@@ -270,7 +269,7 @@ process_request(ProcessFun, SuccessFun, State) ->
     end.
 
 process_connect(Implicit, Frame,
-                State = #proc_state{channel        = none,
+                State = #proc_state{user           = undefined,
                                     config         = Config,
                                     ssl_login_name = SSLLoginName,
                                     adapter_info   = AdapterInfo}) ->
@@ -281,7 +280,7 @@ process_connect(Implicit, Frame,
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
                       {Auth, {Username, Passwd}} = Creds= creds(Frame1, SSLLoginName, Config),
-                      {ok, User} = do_native_login(Creds, State),
+                      {ok, User, AuthzCtx} = do_native_login(Creds, State),
                       {ok, DefaultVHost} = application:get_env(
                                              rabbitmq_stomp, default_vhost),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
@@ -294,7 +293,7 @@ process_connect(Implicit, Frame,
                               StateN#proc_state{frame_transformer = FT,
                                                 auth_mechanism = Auth,
                                                 auth_login = Username,
-                                                authz_context = #{},  %% TODO: client_id? else?
+                                                authz_context = AuthzCtx,  %% TODO: client_id? else?
                                                 user = User}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
@@ -389,7 +388,7 @@ handle_frame("ACK", Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-	      ack_action("ACK", Frame, State0, fun create_ack_method/3)
+	      ack_action("ACK", Frame, State0, fun handle_ack/4)
       end,
       State);
 
@@ -397,7 +396,7 @@ handle_frame("NACK", Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-	      ack_action("NACK", Frame, State0, fun create_nack_method/3)
+	      ack_action("NACK", Frame, State0, fun handle_nack/4)
       end,
       State);
 
@@ -421,10 +420,9 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 ack_action(Command, Frame,
-           State = #proc_state{subscriptions = Subs,
-                          channel              = Channel,
-                          version              = Version,
-                          default_nack_requeue = DefaultNackRequeue}, MethodFun) ->
+           State = #proc_state{subscriptions        = Subs,
+                               version              = Version,
+                               default_nack_requeue = DefaultNackRequeue}, Fun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
         {ok, AckValue} ->
@@ -433,9 +431,8 @@ ack_action(Command, Frame,
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),
-                            Method = MethodFun(DeliveryTag, Sub, Requeue),
-			    amqp_channel:call(Channel, Method),
-			    ok(State);
+                            State1 = Fun(DeliveryTag, Sub, Requeue, State),
+			    ok(State1);
                         error ->
                             error("Subscription not found",
                                   "Message with id ~tp has no subscription",
@@ -494,7 +491,8 @@ cancel_subscription({error, _}, _Frame, State) ->
 
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
                     State = #proc_state{subscriptions = Subs,
-                                   channel       = Channel}) ->
+                                        user = #user{username = Username},
+                                        queue_states  = QueueStates0}) ->
     case maps:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
@@ -502,37 +500,60 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                   "Subscription to ~tp not found.~n",
                   [Description],
                   State);
-        {ok, Subscription = #subscription{description = Descr}} ->
-            case amqp_channel:call(Channel,
-                                   #'basic.cancel'{
-                                     consumer_tag = ConsumerTag}) of
-                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
-                    tidy_canceled_subscription(ConsumerTag, Subscription,
-                                               Frame, State);
-                _ ->
-                    error("Failed to cancel subscription",
-                          "UNSUBSCRIBE to ~tp failed.~n",
-                          [Descr],
-                          State)
+        {ok, Subscription = #subscription{queue_name = Queue}} ->
+            NewState = tidy_canceled_subscription(ConsumerTag, Subscription,
+                                                Frame, State),
+
+            case rabbit_misc:with_exit_handler(
+                   fun () -> {error, not_found} end,
+                   fun () ->
+                           %% default NoWait is false, so was the basic.cancel here
+                           %% however there is no cancel.ok in the STOMP world
+                           %% so OkMsg is undefined
+                           rabbit_queue_type:cancel(
+                             Queue, ConsumerTag, undefined,
+                             Username, QueueStates0)
+                   end) of
+                {ok, QueueStates} ->
+                    %% rabbit_global_counters:consumer_deleted(amqp091),
+                    {noreply, NewState#proc_state{queue_states = QueueStates}};
+                {error, not_found} ->
+                    NewState
             end
     end.
 
 %% Server-initiated cancelations will pass an undefined instead of a
 %% STOMP frame. In this case we know that the queue was deleted and
 %% thus we don't have to clean it up.
-tidy_canceled_subscription(ConsumerTag, _Subscription,
-                           undefined, State = #proc_state{subscriptions = Subs}) ->
-    Subs1 = maps:remove(ConsumerTag, Subs),
-    ok(State#proc_state{subscriptions = Subs1});
+tidy_canceled_subscription(ConsumerTag, Subscription,
+                           undefined, State) ->
+    ok(tidy_canceled_subscription_state(ConsumerTag, Subscription, State));
 
 %% Client-initiated cancelations will pass an actual frame
-tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
-                           Frame, State = #proc_state{subscriptions = Subs}) ->
-    Subs1 = maps:remove(ConsumerTag, Subs),
+tidy_canceled_subscription(ConsumerTag, Subscription = #subscription{dest_hdr = DestHdr},
+                           Frame, State0) ->
+    State1 = tidy_canceled_subscription_state(ConsumerTag, Subscription, State0),
     {ok, Dest} = parse_endpoint(DestHdr),
-    maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
+    maybe_delete_durable_sub_queue(Dest, Frame, State1).
 
-maybe_delete_durable_sub({topic, Name}, Frame,
+tidy_canceled_subscription_state(ConsumerTag,
+                                 _Subscription = #subscription{queue_name = QName},
+                                 State = #proc_state{subscriptions = Subs,
+                                                     queue_consumers = QCons}) ->
+    Subs1 = maps:remove(ConsumerTag, Subs),
+    QCons1 =
+        case maps:find(QName, QCons) of
+            error       -> QCons;
+            {ok, CTags} -> CTags1 = gb_sets:delete(ConsumerTag, CTags),
+                           case gb_sets:is_empty(CTags1) of
+                               true  -> maps:remove(QName, QCons);
+                               false -> maps:put(QName, CTags1, QCons)
+                           end
+        end,
+    State#proc_state{subscriptions = Subs1,
+                     queue_consumers = QCons1}.
+
+maybe_delete_durable_sub_queue({topic, Name}, Frame,
                          State = #proc_state{auth_login = Username}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
@@ -543,7 +564,7 @@ maybe_delete_durable_sub({topic, Name}, Frame,
         false ->
             ok(State)
     end;
-maybe_delete_durable_sub(_Destination, _Frame, State) ->
+maybe_delete_durable_sub_queue(_Destination, _Frame, State) ->
     ok(State).
 
 with_destination(Command, Frame, State, Fun) ->
@@ -601,67 +622,23 @@ ensure_no_headers([], Command, Frame, State, Fun) ->
 
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
-do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
-         State = #proc_state{peer_addr = Addr}) ->
-    case start_connection(
-           #amqp_params_direct{username     = Username,
-                               password     = Passwd,
-                               virtual_host = VirtualHost,
-                               adapter_info = AdapterInfo}, Username, Addr) of
-        {ok, Connection} ->
-            link(Connection),
-            {ok, Channel} = amqp_connection:open_channel(Connection),
-            link(Channel),
-            amqp_channel:enable_delivery_flow_control(Channel),
-            SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
-            {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+do_login(_Username, _Passwd, _VirtualHost, Heartbeat, _AdapterInfo, Version,
+         State) ->
+    SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+    {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
 
-          Headers = [{?HEADER_SESSION, SessionId},
-                     {?HEADER_HEART_BEAT,
-                      io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-                     {?HEADER_VERSION, Version}],
-          ok("CONNECTED",
-              case application:get_env(rabbitmq_stomp, hide_server_info, false) of
-                true  -> Headers;
-                false -> [{?HEADER_SERVER, server_header()} | Headers]
-              end,
-               "",
-               State#proc_state{session_id = SessionId,
-                                channel    = Channel,
-                                connection = Connection,
-                                version    = Version});
-        {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username]),
-            error("Bad CONNECT", "Access refused for user '" ++
-                  binary_to_list(Username) ++ "'", [], State);
-        {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
-                               "virtual host access not allowed", [Username]),
-            error("Bad CONNECT", "Virtual host '" ++
-                                 binary_to_list(VirtualHost) ++
-                                 "' access denied", State);
-        {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
-                               "virtual host access not allowed", [Username]),
-            error("Bad CONNECT", "Virtual host '" ++
-                                 binary_to_list(VirtualHost) ++
-                                 "' access denied", State);
-        {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
-                               "this user's access is restricted to localhost", [Username]),
-            error("Bad CONNECT", "non-loopback access denied", State)
-    end.
-
-start_connection(Params, Username, Addr) ->
-    case amqp_connection:start(Params) of
-        {ok, Conn} -> case rabbit_access_control:check_user_loopback(
-                             Username, Addr) of
-                          ok          -> {ok, Conn};
-                          not_allowed -> amqp_connection:close(Conn),
-                                         {error, not_loopback}
-                      end;
-        {error, E} -> {error, E}
-    end.
+    Headers = [{?HEADER_SESSION, SessionId},
+               {?HEADER_HEART_BEAT,
+                io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+               {?HEADER_VERSION, Version}],
+    ok("CONNECTED",
+       case application:get_env(rabbitmq_stomp, hide_server_info, false) of
+           true  -> Headers;
+           false -> [{?HEADER_SERVER, server_header()} | Headers]
+       end,
+       "",
+       State#proc_state{session_id = SessionId,
+                        version    = Version}).
 
 server_header() ->
     {ok, Product} = application:get_key(rabbit, description),
@@ -670,7 +647,8 @@ server_header() ->
 
 do_subscribe(Destination, DestHdr, Frame,
              State0 = #proc_state{subscriptions = Subs,
-                                  default_topic_exchange = DfltTopicEx}) ->
+                                  default_topic_exchange = DfltTopicEx,
+                                  queue_consumers = QCons}) ->
     check_subscription_access(Destination, State0),
     Prefetch =
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
@@ -716,14 +694,20 @@ do_subscribe(Destination, DestHdr, Frame,
                             end,
                             exit(Err)
                     end,
-                    ok(State#proc_state{subscriptions =
-                                       maps:put(
-                                         ConsumerTag,
-                                         #subscription{dest_hdr    = DestHdr,
-                                                       ack_mode    = AckMode,
-                                                       multi_ack   = IsMulti,
-                                                       description = Description},
-                                         Subs)})
+                    CTags1 = case maps:find(Queue, QCons) of
+                                 {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+                                 error -> gb_sets:singleton(ConsumerTag)
+                             end,
+                    QCons1 = maps:put(Queue, CTags1, QCons),
+                    ok(State#proc_state{subscriptions = maps:put(
+                                                          ConsumerTag,
+                                                          #subscription{dest_hdr    = DestHdr,
+                                                                        ack_mode    = AckMode,
+                                                                        multi_ack   = IsMulti,
+                                                                        description = Description,
+                                                                        queue_name  = Queue},
+                                                          Subs),
+                                       queue_consumers = QCons1})
             end;
         {error, _} = Err ->
             Err
@@ -744,11 +728,8 @@ check_subscription_access(Destination = {topic, _Topic},
 check_subscription_access(_, _) ->
     authorized.
 
-maybe_clean_up_queue(Queue, #proc_state{connection = Connection,
-                                       auth_login = Username}) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
+maybe_clean_up_queue(Queue, #proc_state{auth_login = Username}) ->
     catch delete_queue(Queue, Username),
-    catch amqp_channel:close(Channel),
     ok.
 
 do_send(Destination, _DestHdr,
@@ -941,13 +922,12 @@ send_confirms([], _, State) ->
 %% send_confirms(_Cs, _, State = #ch{cfg = #conf{state = closing}}) -> %% optimisation
 %%     State;
 send_confirms([MsgSeqNo], _, State) ->
-    ok = send(#'basic.ack'{delivery_tag = MsgSeqNo}, State),
+    flush_pending_receipts(MsgSeqNo, false, State),
     State;
 send_confirms(Cs, Rs, State) ->
     coalesce_and_send(Cs, Rs,
                       fun(MsgSeqNo, Multiple) ->
-                                  #'basic.ack'{delivery_tag = MsgSeqNo,
-                                               multiple     = Multiple}
+                              flush_pending_receipts(MsgSeqNo, Multiple, State)
                       end, State).
 
 coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #proc_state{unconfirmed = UC}) ->
@@ -958,26 +938,111 @@ coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #proc_state{un
              end,
     Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
     {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
-    case Ms of
-        [] -> ok;
-        _  -> ok = send(MkMsgFun(lists:last(Ms), true), State)
-    end,
-    [ok = send(MkMsgFun(SeqNo, false), State) || SeqNo <- Ss],
-    State.
+    State1 = case Ms of
+                 [] -> State;
+                 _  -> MkMsgFun(lists:last(Ms), true, State)
+             end,
+    lists:foldl(fun(SeqNo, StateN) ->
+                        MkMsgFun(SeqNo, false, StateN)
+                end, State1, Ss).
 
-ack_cons(Tag, Acked, [{Tag, Acks} | L]) -> [{Tag, Acked ++ Acks} | L];
-ack_cons(Tag, Acked, Acks)              -> [{Tag, Acked} | Acks].
+%% ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
 
-ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
+handle_ack(DeliveryTag, #subscription{multi_ack = IsMulti}, _, State = #proc_state{unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
+    State1 = State#proc_state{unacked_message_q = Remaining},
+    {State2, Actions} = settle_acks(Acked, State1),
+    handle_queue_actions(Actions, State2).
 
-create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, _) ->
-    #'basic.ack'{delivery_tag = DeliveryTag,
-                 multiple     = IsMulti}.
+handle_nack(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue, State = #proc_state{unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
+    State1 = State#proc_state{unacked_message_q = Remaining},
+    {State2, Actions} = internal_reject(Requeue, Acked, State1),
+    handle_queue_actions(Actions, State2).
 
-create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue) ->
-    #'basic.nack'{delivery_tag = DeliveryTag,
-                  multiple     = IsMulti,
-                  requeue      = Requeue}.
+%% Records a client-sent acknowledgement. Handles both single delivery acks
+%% and multi-acks.
+%%
+%% Returns a triple of acknowledged pending acks, remaining pending acks,
+%% and outdated pending acks (if any).
+%% Sorts each group in the youngest-first order (ascending by delivery tag).
+collect_acks(UAMQ, 0, true) ->
+    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
+collect_acks(UAMQ, DeliveryTag, Multiple) ->
+    collect_acks([], [], UAMQ, DeliveryTag, Multiple).
+
+collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT}},
+         UAMQTail} ->
+            if CurrentDT == DeliveryTag ->
+                   {[UnackedMsg | AcknowledgedAcc],
+                    case RemainingAcc of
+                        [] -> UAMQTail;
+                        _  -> ?QUEUE:join(
+                                 ?QUEUE:from_list(lists:reverse(RemainingAcc)),
+                                 UAMQTail)
+                    end};
+               Multiple ->
+                    collect_acks([UnackedMsg | AcknowledgedAcc], RemainingAcc,
+                                 UAMQTail, DeliveryTag, Multiple);
+               true ->
+                    collect_acks(AcknowledgedAcc, [UnackedMsg | RemainingAcc],
+                                 UAMQTail, DeliveryTag, Multiple)
+            end;
+        {empty, _} ->
+            error("Unknown delivery tag",
+                  "unknown delivery tag ~w", [DeliveryTag])
+    end.
+
+foreach_per_queue(_F, [], Acc) ->
+    Acc;
+foreach_per_queue(F, [#pending_ack{tag = CTag,
+                                   queue = QName,
+                                   msg_id = MsgId}], Acc) ->
+    %% quorum queue, needs the consumer tag
+    F({QName, CTag}, [MsgId], Acc);
+foreach_per_queue(F, UAL, Acc) ->
+    T = lists:foldl(fun (#pending_ack{tag = CTag,
+                                      queue = QName,
+                                      msg_id = MsgId}, T) ->
+                            rabbit_misc:gb_trees_cons({QName, CTag}, MsgId, T)
+                    end, gb_trees:empty(), UAL),
+    rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).
+
+settle_acks(Acks, State = #proc_state{queue_states = QueueStates0}) ->
+    {QueueStates, Actions} =
+        foreach_per_queue(
+          fun ({QRef, CTag}, MsgIds, {Acc0, ActionsAcc0}) ->
+                  case rabbit_queue_type:settle(QRef, complete, CTag,
+                                                MsgIds, Acc0) of
+                      {ok, Acc, ActionsAcc} ->
+                          %% incr_queue_stats(QRef, MsgIds, State),
+                          {Acc, ActionsAcc0 ++ ActionsAcc};
+                      {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                          rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                  end
+          end, Acks, {QueueStates0, []}),
+    {State#proc_state{queue_states = QueueStates}, Actions}.
+
+%% NB: Acked is in youngest-first order
+internal_reject(Requeue, Acked,
+                State = #proc_state{queue_states = QueueStates0}) ->
+    {QueueStates, Actions} =
+        foreach_per_queue(
+          fun({QRef, CTag}, MsgIds, {Acc0, Actions0}) ->
+                  Op = case Requeue of
+                           false -> discard;
+                           true -> requeue
+                       end,
+                  case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, Acc0) of
+                      {ok, Acc, Actions} ->
+                          {Acc, Actions0 ++ Actions};
+                      {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                          rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                  end
+          end, Acked, {QueueStates0, []}),
+    {State#proc_state{queue_states = QueueStates}, Actions}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(rabbit_stomp_frame:header(
@@ -991,7 +1056,7 @@ deliver_to_client(ConsumerTag, Ack, Msgs, State) ->
                        deliver_one_to_client(ConsumerTag, Ack, Msg, S)
                 end, State, Msgs).
 
-deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, _MsgId, Redelivered,
+deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, MsgId, Redelivered,
                                          #basic_message{exchange_name = ExchangeName,
                                                         routing_keys  = [RoutingKey | _CcRoutes],
                                                         content       = Content}},
@@ -1013,68 +1078,68 @@ deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, _MsgId, Redelivered,
                      _ -> undefined
                  end,
 
-    State1 = send_delivery(Delivery, Props, Payload, DeliveryCtx, State),
+    State1 = send_delivery(QName, MsgId, Delivery, Props, Payload, DeliveryCtx, State),
 
     State1#proc_state{delivery_tag = DeliveryTag + 1}.
 
 
-send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
+send_delivery(QName, MsgId, Delivery = #'basic.deliver'{consumer_tag = ConsumerTag,
+                                          delivery_tag = DeliveryTag},
               Properties, Body, DeliveryCtx,
               State = #proc_state{
-                          session_id  = SessionId,
-                          subscriptions = Subs,
-                          version       = Version}) ->
-    NewState = case maps:find(ConsumerTag, Subs) of
+                         session_id  = SessionId,
+                         subscriptions = Subs,
+                         version       = Version,
+                         unacked_message_q = UAMQ}) ->
+    case maps:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
-            send_frame(
-              "MESSAGE",
-              rabbit_stomp_util:headers(SessionId, Delivery, Properties,
-                                        AckMode, Version),
-              Body,
-              State);
+            NewState = send_frame(
+                          "MESSAGE",
+                          rabbit_stomp_util:headers(SessionId, Delivery, Properties,
+                                                    AckMode, Version),
+                         Body,
+                          State),
+            maybe_notify_sent(DeliveryCtx),
+            case AckMode of
+                {client, _} ->
+                    DeliveredAt = os:system_time(millisecond),
+                    NewState#proc_state{unacked_message_q =
+                                            ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
+                                                                   tag = ConsumerTag,
+                                                                   delivered_at = DeliveredAt,
+                                                                   queue = QName,
+                                                                   msg_id = MsgId}, UAMQ)};
+                _ -> NewState
+            end;
         error ->
             send_error("Subscription not found",
                        "There is no current subscription with tag '~ts'.",
                        [ConsumerTag],
                        State)
-    end,
-    maybe_notify_sent(DeliveryCtx),
-    NewState.
+    end.
 
 maybe_notify_sent(undefined) ->
     ok;
 maybe_notify_sent({_, QPid, _}) ->
        ok = rabbit_amqqueue:notify_sent(QPid, self()).
 
-send_method(Method, Channel, State) ->
-    amqp_channel:call(Channel, Method),
+close_connection(State) ->
+    %% TODO: I feel like there has to be a cleanup,
+    %% maybe delete queues we created?
+    %% notify queues that subsriptions are shutdown?
+    %% (they probably monitor self() after consume anyway)
     State.
 
-send_method(Method, State = #proc_state{channel = Channel}) ->
-    send_method(Method, Channel, State).
-
-send_method(Method, Properties, BodyFragments,
-            State = #proc_state{channel = Channel}) ->
-    send_method(Method, Channel, Properties, BodyFragments, State).
-
-send_method(Method = #'basic.publish'{}, Channel, Properties, BodyFragments,
-            State) ->
-    amqp_channel:cast_flow(
-      Channel, Method,
-      #amqp_msg{props   = Properties,
-                payload = list_to_binary(BodyFragments)}),
-    State.
-
-close_connection(State = #proc_state{connection = none}) ->
-    State;
-%% Closing the connection will close the channel and subchannels
-close_connection(State = #proc_state{connection = Connection}) ->
-    %% ignore noproc or other exceptions to avoid debris
-    catch amqp_connection:close(Connection),
-    State#proc_state{channel = none, connection = none, subscriptions = none};
-close_connection(undefined) ->
-    rabbit_log:debug("~ts:close_connection: undefined state", [?MODULE]),
-    #proc_state{channel = none, connection = none, subscriptions = none}.
+%% close_connection(State = #proc_state{connection = none}) ->
+%%     State;
+%% %% Closing the connection will close the channel and subchannels
+%% close_connection(State = #proc_state{connection = Connection}) ->
+%%     %% ignore noproc or other exceptions to avoid debris
+%%     catch amqp_connection:close(Connection),
+%%     State#proc_state{channel = none, connection = none, subscriptions = none};
+%% close_connection(undefined) ->
+%%     rabbit_log:debug("~ts:close_connection: undefined state", [?MODULE]),
+%%     #proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
 %% Reply-To
@@ -1509,7 +1574,7 @@ check_resource_access(User, Resource, Perm, Context) ->
             end
     end.
 
-do_native_login(Creds, State) ->
+do_native_login(Creds, State = #proc_state{peer_addr = Addr}) ->
     {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
     {Username, AuthProps} = case Creds of
                                 {ssl, {Username0, none}}-> {Username0, []};
@@ -1517,14 +1582,28 @@ do_native_login(Creds, State) ->
                                                                            {vhost, DefaultVHost}]}
                             end,
 
-     case rabbit_access_control:check_user_login(Username, AuthProps) of
-        {ok, User} ->
-            {ok, User};
+    maybe
+        {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
+        {ok, AuthzCtx} ?= check_vhost_access(DefaultVHost, User, Addr),
+        ok ?= check_user_loopback(Username, Addr),
+        rabbit_core_metrics:auth_attempt_succeeded(Addr, Username, stomp),
+        {User, AuthzCtx}
+    else
+        {error, not_allowed} ->
+            rabbit_log:warning("STOMP login failed for user '~ts': "
+                               "virtual host access not allowed", [Username]),
+            error("Bad CONNECT", "Virtual host '" ++
+                      binary_to_list(DefaultVHost) ++
+                      "' access denied", State);
         {refused, Username1, _Msg, _Args} ->
-             rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username1]),
-             error("Bad CONNECT", "Access refused for user '" ++
-                      binary_to_list(Username1) ++ "'", [], State)
-     end.
+            rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username1]),
+            error("Bad CONNECT", "Access refused for user '" ++
+                      binary_to_list(Username1) ++ "'", [], State);
+        {error, not_loopback} ->
+            rabbit_log:warning("STOMP login failed for user '~ts': "
+                               "this user's access is restricted to localhost", [Username]),
+            error("Bad CONNECT", "non-loopback access denied", State)
+    end.
 
 handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates0} = State) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
@@ -1532,18 +1611,16 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
             State1 = State#proc_state{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
             {ok, State};
-        %% {eol, Actions} ->
-        %%     State1 = handle_queue_actions(Actions, State0),
-        %%     State2 = handle_consuming_queue_down_or_eol(QRef, State1),
-        %%     {ConfirmMXs, UC1} =
-        %%         rabbit_confirms:remove_queue(QRef, State2#ch.unconfirmed),
-        %%     %% Deleted queue is a special case.
-        %%     %% Do not nack the "rejected" messages.
-        %%     State3 = record_confirms(ConfirmMXs,
-        %%                              State2#ch{unconfirmed = UC1}),
-        %%     _ = erase_queue_stats(QRef),
-        %%     noreply_coalesce(
-        %%       State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+        {eol, Actions} ->
+            State1 = handle_queue_actions(Actions, State),
+            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
+            {ConfirmMXs, UC1} =
+                rabbit_confirms:remove_queue(QRef, State1#proc_state.unconfirmed),
+            %% Deleted queue is a special case.
+            %% Do not nack the "rejected" messages.
+            State3 = record_confirms(ConfirmMXs,
+                                     State2#proc_state{unconfirmed = UC1}),
+            {ok, State3#proc_state{queue_states = rabbit_queue_type:remove(QRef, QStates0)}};
         {protocol_error, Type, Reason, ReasonArgs} = Error ->
             log_error(Type, Reason, ReasonArgs),
             {error, Error, State}
@@ -1554,7 +1631,8 @@ handle_queue_actions(Actions, #proc_state{} = State0) ->
       fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
               deliver_to_client(ConsumerTag, Msgs, Ack, S);
           ({settled, QRef, MsgSeqNos}, S0) ->
-              confirm(MsgSeqNos, QRef, S0);
+              S = confirm(MsgSeqNos, QRef, S0),
+              send_confirms_and_nacks(S);
           ({rejected, _QRef, MsgSeqNos}, S0) ->
               {U, Rej} =
               lists:foldr(
@@ -1567,6 +1645,7 @@ handle_queue_actions(Actions, #proc_state{} = State0) ->
                         end
                 end, {S0#proc_state.unconfirmed, []}, MsgSeqNos),
               S = S0#proc_state{unconfirmed = U},
+              %% Don't send anything, no nacks in STOMP
               record_rejects(Rej, S)
           %% ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
           %%     S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
@@ -1836,3 +1915,24 @@ extract_variable_map_from_amqp_params([Value]) ->
     extract_variable_map_from_amqp_params(Value);
 extract_variable_map_from_amqp_params(_) ->
     #{}.
+
+
+check_vhost_access(VHost, User = #user{username = Username}, PeerIp) ->
+    AuthzCtx = #{},
+    try rabbit_access_control:check_vhost_access(
+          User, VHost, {ip, PeerIp}, AuthzCtx) of
+        ok ->
+            {ok, AuthzCtx}
+    catch exit:#amqp_error{name = not_allowed} ->
+            rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, stomp),
+            {error, not_allowed}
+    end.
+
+check_user_loopback(Username, PeerIp) ->
+    case rabbit_access_control:check_user_loopback(Username, PeerIp) of
+        ok ->
+            ok;
+        not_allowed ->
+            rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, stomp),
+            {error, not_loopback}
+    end.
