@@ -129,6 +129,7 @@ info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) -
         {Proto, Version} -> {Proto, rabbit_data_coercion:to_binary(Version)};
         Other -> Other
     end;
+info(user, #proc_state{user = User}) -> User;
 info(channels, PState) -> additional_info(channels, PState);
 info(channel_max, PState) -> additional_info(channel_max, PState);
 info(frame_max, PState) -> additional_info(frame_max, PState);
@@ -1587,7 +1588,7 @@ do_native_login(Creds, State = #proc_state{peer_addr = Addr}) ->
         {ok, AuthzCtx} ?= check_vhost_access(DefaultVHost, User, Addr),
         ok ?= check_user_loopback(Username, Addr),
         rabbit_core_metrics:auth_attempt_succeeded(Addr, Username, stomp),
-        {User, AuthzCtx}
+        {ok, User, AuthzCtx}
     else
         {error, not_allowed} ->
             rabbit_log:warning("STOMP login failed for user '~ts': "

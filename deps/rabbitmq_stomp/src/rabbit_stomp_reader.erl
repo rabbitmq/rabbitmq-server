@@ -170,8 +170,8 @@ handle_info(client_timeout, State) ->
 
 handle_info(login_timeout, State) ->
     ProcState = processor_state(State),
-    case rabbit_stomp_processor:info(channel, ProcState) of
-        none ->
+    case rabbit_stomp_processor:info(user, ProcState) of
+        undefined ->
             {stop, {shutdown, login_timeout}, State};
         _ ->
             {noreply, State, hibernate}
@@ -251,14 +251,13 @@ process_received_bytes(Bytes,
                     {stop, normal, State};
                 false ->
                     case rabbit_stomp_processor:process_frame(Frame, ProcState) of
-                        {ok, NewProcState, Conn} ->
+                        {ok, NewProcState} ->
                             PS = rabbit_stomp_frame:initial_state(),
                             NextState = maybe_block(State, Frame),
                             process_received_bytes(Rest, NextState#reader_state{
                                                            current_frame_size = 0,
                                                            processor_state = NewProcState,
-                                                           parse_state     = PS,
-                                                           connection      = Conn});
+                                                           parse_state     = PS});
                         {stop, Reason, NewProcState} ->
                             {stop, Reason,
                              processor_state(NewProcState, State)}
@@ -435,11 +434,11 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#reader_state{connection = C}) when C == none; C == undefined ->
-    %% Avoid emitting stats on terminate when the connection has not yet been
-    %% established, as this causes orphan entries on the stats database
-    State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
-    ensure_stats_timer(State1);
+%% emit_stats(State=#reader_state{connection = C}) when C == none; C == undefined ->
+%%     %% Avoid emitting stats on terminate when the connection has not yet been
+%%     %% established, as this causes orphan entries on the stats database
+%%     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
+%%     ensure_stats_timer(State1);
 emit_stats(State) ->
     [{_, Pid},
      {_, Recv_oct},
@@ -465,7 +464,7 @@ processor_state(ProcState, #reader_state{} = State) ->
 
 infos(Items, State) -> [{Item, info_internal(Item, State)} || Item <- Items].
 
-info_internal(pid, State) -> info_internal(connection, State);
+info_internal(pid, _) -> self();
 info_internal(SockStat, #reader_state{socket = Sock}) when SockStat =:= recv_oct;
                                                            SockStat =:= recv_cnt;
                                                            SockStat =:= send_oct;
@@ -487,8 +486,8 @@ info_internal(timeout, #reader_state{timeout_sec = undefined}) ->
     0;
 info_internal(conn_name, #reader_state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
-info_internal(connection, #reader_state{connection = Val}) ->
-    Val;
+%% info_internal(connection, #reader_state{connection = Val}) ->
+%%     Val;
 info_internal(connection_state, #reader_state{state = Val}) ->
     Val;
 info_internal(Key, #reader_state{processor_state = ProcState}) ->
