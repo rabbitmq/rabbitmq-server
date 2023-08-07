@@ -12,7 +12,7 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--include("amqp10_client.hrl").
+-include("src/amqp10_client.hrl").
 
 -compile(export_all).
 
