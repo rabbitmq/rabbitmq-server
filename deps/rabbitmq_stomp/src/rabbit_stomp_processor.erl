@@ -767,16 +767,16 @@ do_send(Destination, _DestHdr,
             check_internal_exchange(Exchange),
             check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, write),
 
-            {DoConfirm, MsgSeqNo, State1} =
+            {DoConfirm, MsgSeqNo, State2} =
                 case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
                     {ok, Id} ->
-                        SeqNo = State#proc_state.msg_seq_no,
+                        SeqNo = State1#proc_state.msg_seq_no,
                         %% I think it's safe to just add it here because
                         %% if there is an error down the road process dies
-                        StateRR = maybe_record_receipt(true, SeqNo, Id, State),
+                        StateRR = maybe_record_receipt(true, SeqNo, Id, State1),
                         {true, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}};
                     not_found ->
-                        {false, undefined, State}
+                        {false, undefined, State1}
                 end,
 
             {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
@@ -805,10 +805,10 @@ do_send(Destination, _DestHdr,
                 {ok, Exchange} ->
                     QNames = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
                     %% io:format("QNames ~p~n", [QNames]),
-                    deliver_to_queues(Delivery, QNames, State);
+                    deliver_to_queues(Delivery, QNames, State2);
                 {error, not_found} ->
                     log_error("~s not found", [rabbit_misc:rs(ExchangeName)], ExchangeName),
-                    {error, exchange_not_found, State}
+                    {error, exchange_not_found, State2}
             end;
 
         {error, _} = Err ->
@@ -1615,8 +1615,8 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
     case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
         {ok, QState1, Actions} ->
             State1 = State#proc_state{queue_states = QState1},
-            State = handle_queue_actions(Actions, State1),
-            {ok, State};
+            State2 = handle_queue_actions(Actions, State1),
+            {ok, State2};
         {eol, Actions} ->
             State1 = handle_queue_actions(Actions, State),
             State2 = handle_consuming_queue_down_or_eol(QRef, State1),
