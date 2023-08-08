@@ -33,7 +33,7 @@
                      trailing_lf, authz_context, auth_mechanism, auth_login,
                      confirmed, rejected, unconfirmed,
                      %% a map of queue names to consumer tag lists
-                     queue_consumers, unacked_message_q,
+                     queue_consumers, unacked_message_q, vhost,
                      user, queue_states, delivery_tag = 0, msg_seq_no, delivery_flow,
                      default_topic_exchange, default_nack_requeue}).
 
@@ -261,6 +261,8 @@ process_request(ProcessFun, SuccessFun, State) ->
                     _    -> send_frame(Frame, NewState)
                 end,
             {ok, SuccessFun(NewState)};
+        {ok, NewState} ->
+            {ok, SuccessFun(NewState)};
         {error, Message, Detail, NewState} ->
             {ok, send_error(Message, Detail, NewState)};
         {stop, normal, NewState} ->
@@ -281,21 +283,20 @@ process_connect(Implicit, Frame,
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
                       {Auth, {Username, Passwd}} = Creds= creds(Frame1, SSLLoginName, Config),
-                      {ok, User, AuthzCtx} = do_native_login(Creds, State),
                       {ok, DefaultVHost} = application:get_env(
                                              rabbitmq_stomp, default_vhost),
+                      VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                      {ok, StateL} = do_native_login(Creds, StateN#proc_state{vhost = VHost}),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
                       Res = do_login(
                               Username, Passwd,
-                              login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                              VHost,
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                               AdapterInfo#amqp_adapter_info{
                                 protocol = {ProtoName, Version}}, Version,
-                              StateN#proc_state{frame_transformer = FT,
+                              StateL#proc_state{frame_transformer = FT,
                                                 auth_mechanism = Auth,
-                                                auth_login = Username,
-                                                authz_context = AuthzCtx,  %% TODO: client_id? else?
-                                                user = User}),
+                                                auth_login = Username}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -555,12 +556,15 @@ tidy_canceled_subscription_state(ConsumerTag,
                      queue_consumers = QCons1}.
 
 maybe_delete_durable_sub_queue({topic, Name}, Frame,
-                         State = #proc_state{auth_login = Username}) ->
+                         State = #proc_state{auth_login = Username,
+                                             vhost = VHost}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
-            delete_queue(list_to_binary(QName), Username),
+
+            QRes = rabbit_misc:r(VHost, queue, QName),
+            delete_queue(QRes, Username),
             ok(State);
         false ->
             ok(State)
@@ -716,14 +720,14 @@ do_subscribe(Destination, DestHdr, Frame,
 
 check_subscription_access(Destination = {topic, _Topic},
                           #proc_state{user = #user{username = Username} = User,
-                                      default_topic_exchange = DfltTopicEx}) ->
-    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+                                      default_topic_exchange = DfltTopicEx,
+                                      vhost = VHost}) ->
     {Exchange, RoutingKey} = parse_routing(Destination, DfltTopicEx),
-    Resource = #resource{virtual_host = DefaultVHost,
+    Resource = #resource{virtual_host = VHost,
         kind = topic,
         name = rabbit_data_coercion:to_binary(Exchange)},
     Context = #{routing_key  => rabbit_data_coercion:to_binary(RoutingKey),
-                variable_map => #{<<"vhost">> => DefaultVHost, <<"username">> => Username}
+                variable_map => #{<<"vhost">> => VHost, <<"username">> => Username}
     },
     rabbit_access_control:check_topic_access(User, Resource, read, Context);
 check_subscription_access(_, _) ->
@@ -738,18 +742,18 @@ do_send(Destination, _DestHdr,
         State0 = #proc_state{default_topic_exchange = DfltTopicEx,
                              delivery_flow = Flow,
                              user = User,
-                             authz_context = AuthzCtx}) ->
+                             authz_context = AuthzCtx,
+                             vhost = VHost}) ->
     case ensure_endpoint(dest, Destination, Frame, State0) of
 
         {ok, _Q, State} ->
-            {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
-
             {Frame1, State1} =
                 ensure_reply_to(Frame, State),
 
             Props = rabbit_stomp_util:message_properties(Frame1),
 
-            {Exchange, RoutingKey} = parse_routing(Destination, DfltTopicEx),
+            {ExchangeNameList, RoutingKeyList} = parse_routing(Destination, DfltTopicEx),
+            RoutingKey = list_to_binary(RoutingKeyList),
 
             %% Method = #'basic.publish'{
             %%   exchange = list_to_binary(Exchange),
@@ -757,7 +761,7 @@ do_send(Destination, _DestHdr,
             %%   mandatory = false,
             %%   immediate = false},
 
-            ExchangeName = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
+            ExchangeName = rabbit_misc:r(VHost, exchange, list_to_binary(ExchangeNameList)),
             check_resource_access(User, ExchangeName, write, AuthzCtx),
             Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
             check_internal_exchange(Exchange),
@@ -772,7 +776,7 @@ do_send(Destination, _DestHdr,
                         StateRR = maybe_record_receipt(true, SeqNo, Id, State),
                         {true, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}};
                     not_found ->
-                        {false, undefined, undefined, State}
+                        {false, undefined, State}
                 end,
 
             {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
@@ -786,7 +790,7 @@ do_send(Destination, _DestHdr,
                          },
             Content = rabbit_message_interceptor:intercept(Content0),
 
-            BasicMessage = rabbit_basic:make_message(ExchangeName, RoutingKey, Content, <<>>),
+            {ok, BasicMessage} = rabbit_basic:message(ExchangeName, RoutingKey, Content),
 
             Delivery = #delivery{
                           mandatory = false,
@@ -796,10 +800,11 @@ do_send(Destination, _DestHdr,
                           msg_seq_no = MsgSeqNo,
                           flow = Flow
                          },
-
+            %% io:format("Delivery: ~p~n", [Delivery]),
             case rabbit_exchange:lookup(ExchangeName) of
                 {ok, Exchange} ->
                     QNames = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
+                    %% io:format("QNames ~p~n", [QNames]),
                     deliver_to_queues(Delivery, QNames, State);
                 {error, not_found} ->
                     log_error("~s not found", [rabbit_misc:rs(ExchangeName)], ExchangeName),
@@ -818,6 +823,7 @@ deliver_to_queues(Delivery = #delivery{message    = #basic_message{exchange_name
                   State0 = #proc_state{queue_states = QStates0}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    %% io:format("Qs: ~p~n", [Qs]),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
         {ok, QStates, Actions} ->
             %% rabbit_global_counters:messages_routed(ProtoVer, length(Qs)), ??
@@ -1478,9 +1484,9 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% message headers
     Exchange.
 
-create_queue(_State = #proc_state{authz_context = AuthzCtx, user = #user{username = Username} = User}) ->
-
-    {ok, VHost} = application:get_env(rabbitmq_stomp, default_vhost),
+create_queue(_State = #proc_state{authz_context = AuthzCtx,
+                                  user = #user{username = Username} = User,
+                                  vhost = VHost}) ->
     QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
     QName = rabbit_misc:r(VHost, queue, QNameBin),
 
@@ -1506,11 +1512,9 @@ create_queue(_State = #proc_state{authz_context = AuthzCtx, user = #user{usernam
                 {error, queue_limit_exceeded}
         end.
 
-delete_queue(QName, Username) ->
-    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
-    Queue = rabbit_misc:r(DefaultVHost, queue, QName),
+delete_queue(QRes, Username) ->
     case rabbit_amqqueue:with(
-           Queue,
+           QRes,
            fun (Q) ->
                    rabbit_queue_type:delete(Q, false, false, Username)
            end,
@@ -1534,10 +1538,10 @@ ensure_binding(QueueBin, {"", Queue}, _State) ->
     %% queue with its own name
     QueueBin = list_to_binary(Queue),
     ok;
-ensure_binding(Queue, {Exchange, RoutingKey}, _State = #proc_state{auth_login = Username}) ->
-    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
-    Binding = #binding{source = rabbit_misc:r(DefaultVHost, exchange, list_to_binary(Exchange)),
-                       destination = rabbit_misc:r(DefaultVHost, queue, Queue),
+ensure_binding(Queue, {Exchange, RoutingKey}, _State = #proc_state{auth_login = Username,
+                                                                   vhost = VHost}) ->
+    Binding = #binding{source = rabbit_misc:r(VHost, exchange, list_to_binary(Exchange)),
+                       destination = rabbit_misc:r(VHost, queue, Queue),
                        key = list_to_binary(RoutingKey)},
     case rabbit_binding:add(Binding, Username) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
@@ -1575,26 +1579,27 @@ check_resource_access(User, Resource, Perm, Context) ->
             end
     end.
 
-do_native_login(Creds, State = #proc_state{peer_addr = Addr}) ->
-    {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+do_native_login(Creds, State = #proc_state{peer_addr = Addr,
+                                           vhost = VHost}) ->
     {Username, AuthProps} = case Creds of
                                 {ssl, {Username0, none}}-> {Username0, []};
                                 {_, {Username0, Password}} -> {Username0, [{password, Password},
-                                                                           {vhost, DefaultVHost}]}
+                                                                           {vhost, VHost}]}
                             end,
 
     maybe
         {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
-        {ok, AuthzCtx} ?= check_vhost_access(DefaultVHost, User, Addr),
+        {ok, AuthzCtx} ?= check_vhost_access(VHost, User, Addr),
         ok ?= check_user_loopback(Username, Addr),
         rabbit_core_metrics:auth_attempt_succeeded(Addr, Username, stomp),
-        {ok, User, AuthzCtx}
+        {ok, State#proc_state{user = User,
+                              authz_context = AuthzCtx}}
     else
         {error, not_allowed} ->
             rabbit_log:warning("STOMP login failed for user '~ts': "
                                "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
-                      binary_to_list(DefaultVHost) ++
+                      binary_to_list(VHost) ++
                       "' access denied", State);
         {refused, Username1, _Msg, _Args} ->
             rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username1]),
@@ -1701,8 +1706,8 @@ parse_endpoint0(Type,     Rest,               _) ->
 
 %% --------------------------------------------------------------------------
 
-util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State) ->
-    ExchangeName = rabbit_misc:r(Name, exchange,  proplists:get_value(vhost, Params)),
+util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #proc_state{vhost = VHost}) ->
+    ExchangeName = rabbit_misc:r(Name, exchange, VHost),
     check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
     Amqqueue = new_amqqueue(undefined, exchange, Params, State),
     {ok, Queue} = create_queue(Amqqueue, State),
@@ -1718,18 +1723,18 @@ util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
 
 util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = RoutingState}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
-    Queue = list_to_binary(Name),
-    RState1 = case sets:is_element(Queue, RoutingState) of
+    QueueNameBin = list_to_binary(Name),
+    RState1 = case sets:is_element(Params1, RoutingState) of
                   true -> State;
-                  _    -> Amqqueue = new_amqqueue(Queue, queue, Params1, State),
+                  _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
                           {ok, Queue} = create_queue(Amqqueue, State),
                           #resource{name = QNameBin} = amqqueue:get_name(Queue),
                           sets:add_element(QNameBin, RoutingState)
               end,
-    {ok, Queue, State#proc_state{route_state = RState1}};
+    {ok, QueueNameBin, State#proc_state{route_state = RState1}};
 
-util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State) ->
-    ExchangeName = rabbit_misc:r(Name, exchange,  proplists:get_value(vhost, Params)),
+util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #proc_state{vhost = VHost}) ->
+    ExchangeName = rabbit_misc:r(Name, exchange, VHost),
     check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
     {ok, undefined, State};
 
@@ -1769,7 +1774,8 @@ check_exchange(ExchangeName, true) ->
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     ok.
 
-new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{username = Username}}) ->
+new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{username = Username},
+                                                            vhost = VHost}) ->
     QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
                    {topic, SQNG} when is_function(SQNG) ->
                       SQNG();
@@ -1778,7 +1784,7 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{usernam
                    _ ->
                        QNameBin0
                end,
-    QName = rabbit_misc:r(proplists:get_value(vhost, Params0), queue, QNameBin),
+    QName = rabbit_misc:r(VHost, queue, QNameBin),
     %% defaults
     Params = case proplists:get_value(durable, Params0, false) of
                   false -> [{auto_delete, true}, {exclusive, true} | Params0];
@@ -1794,7 +1800,7 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{usernam
                      true -> self()
                  end,
                  proplists:get_value(arguments, Params, []),
-                 application:get_env(rabbitmq_stomp, default_vhost),
+                 VHost,
                  #{user => Username}).
 
 
@@ -1841,18 +1847,23 @@ consume_queue(QName, Spec0, State = #proc_state{user = #user{username = Username
     end.
 
 
-create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx, user = User}) ->
-    {ok, VHost} = application:get_env(rabbitmq_stomp, default_vhost),
+create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx,
+                                            user = User,
+                                            vhost = VHost}) ->
     QName = amqqueue:get_name(Amqqueue),
 
     %% configure access to queue required for queue.declare
     ok = check_resource_access(User, QName, configure, AuthzCtx),
+
         case rabbit_vhost_limit:is_over_queue_limit(VHost) of
             false ->
                 rabbit_core_metrics:queue_declared(QName),
 
-                case rabbit_amqqueue:declare(Amqqueue, node()) of
+                case rabbit_queue_type:declare(Amqqueue, node()) of
                     {new, Q} when ?is_amqqueue(Q) ->
+                        rabbit_core_metrics:queue_created(QName),
+                        {ok, Q};
+                    {existing, Q} when ?is_amqqueue(Q) ->
                         rabbit_core_metrics:queue_created(QName),
                         {ok, Q};
                     Other ->
