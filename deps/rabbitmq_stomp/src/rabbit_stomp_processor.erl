@@ -655,9 +655,11 @@ do_subscribe(Destination, DestHdr, Frame,
                                   default_topic_exchange = DfltTopicEx,
                                   queue_consumers = QCons}) ->
     check_subscription_access(Destination, State0),
+
+    {ok, {_Global, DefaultPrefetch}} = application:get_env(rabbit, default_consumer_prefetch),
     Prefetch =
-        rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
-                                          application:get_env(rabbit, default_consumer_prefetch)),
+        rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT, DefaultPrefetch),
+    %% io:format("Prefetch: ~p~n", [Prefetch]),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
     case ensure_endpoint(source, Destination, Frame, State0) of
         {ok, Queue, State} ->
@@ -1633,9 +1635,10 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
     end.
 
 handle_queue_actions(Actions, #proc_state{} = State0) ->
+    %% io:format("Actions: ~p~n", [Actions]),
     lists:foldl(
       fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
-              deliver_to_client(ConsumerTag, Msgs, Ack, S);
+              deliver_to_client(ConsumerTag, Ack, Msgs, S);
           ({settled, QRef, MsgSeqNos}, S0) ->
               S = confirm(MsgSeqNos, QRef, S0),
               send_confirms_and_nacks(S);
@@ -1817,10 +1820,12 @@ unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
 unescape([],           Acc) -> lists:reverse(Acc).
 
 
-consume_queue(QName, Spec0, State = #proc_state{user = #user{username = Username} = User,
-                                                authz_context = AuthzCtx,
-                                                queue_states  = QStates0}) ->
-    case check_resource_access(User, QName, read, AuthzCtx) of
+consume_queue(QNameBin, Spec0, State = #proc_state{user = #user{username = Username} = User,
+                                                   authz_context = AuthzCtx,
+                                                   queue_states  = QStates0,
+                                                   vhost = VHost}) ->
+    QRes = rabbit_misc:r(VHost, queue, QNameBin),
+    case check_resource_access(User, QRes, read, AuthzCtx) of
         ok ->
             Spec = Spec0#{channel_pid => self(),
                           limiter_pid => none,
@@ -1828,7 +1833,7 @@ consume_queue(QName, Spec0, State = #proc_state{user = #user{username = Username
                           ok_msg => undefined,
                           acting_user => Username},
             rabbit_amqqueue:with(
-              QName,
+              QRes,
               fun(Q1) ->
                       case rabbit_queue_type:consume(Q1, Spec, QStates0) of
                           {ok, QStates} ->
@@ -1836,13 +1841,13 @@ consume_queue(QName, Spec0, State = #proc_state{user = #user{username = Username
                               {ok, State1};
                           {error, Reason} ->
                               error("Failed to consume from ~s: ~p",
-                                    [rabbit_misc:rs(QName), Reason],
+                                    [rabbit_misc:rs(QRes), Reason],
                                               State)
                       end
               end);
         {error, access_refused} ->
             error("Failed to consume from ~s: no read access",
-                  [rabbit_misc:rs(QName)],
+                  [rabbit_misc:rs(QRes)],
                   State)
     end.
 
