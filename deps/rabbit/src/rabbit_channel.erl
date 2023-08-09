@@ -2056,8 +2056,8 @@ record_sent(Type, QueueType, Tag, AckRequired,
 %%
 %% Returns a tuple of acknowledged pending acks and remaining pending acks.
 %% Sorts each group in the youngest-first order (descending by delivery tag).
-%% Special 0-case comes from 0-9-1 spec: If the multiple field is 1 (true), 
-%% and the delivery tag is 0, this indicates acknowledgement of all outstanding messages.
+%% The special case for 0 comes from the AMQP 0-9-1 spec: if the multiple field is set to 1 (true),
+%% and the delivery tag is 0, this indicates acknowledgement of all outstanding messages (by a client).
 collect_acks(UAMQ, 0, true) ->
     {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
 collect_acks(UAMQ, DeliveryTag, Multiple) ->
