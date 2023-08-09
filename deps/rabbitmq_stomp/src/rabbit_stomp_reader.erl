@@ -317,6 +317,9 @@ terminate(Reason, undefined) ->
     {stop, Reason};
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
   maybe_emit_stats(State),
+  rabbit_core_metrics:connection_closed(self()),
+  Infos = infos(?OTHER_METRICS, State),
+  rabbit_event:notify(connection_closed, Infos),
   log_reason(Reason, State),
   _ = rabbit_stomp_processor:flush_and_die(ProcState),
     {stop, Reason}.
@@ -486,8 +489,8 @@ info_internal(timeout, #reader_state{timeout_sec = undefined}) ->
     0;
 info_internal(conn_name, #reader_state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
-%% info_internal(connection, #reader_state{connection = Val}) ->
-%%     Val;
+info_internal(connection, #reader_state{connection = _Val}) ->
+    self();
 info_internal(connection_state, #reader_state{state = Val}) ->
     Val;
 info_internal(Key, #reader_state{processor_state = ProcState}) ->
