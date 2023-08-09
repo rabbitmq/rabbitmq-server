@@ -298,8 +298,10 @@ process_connect(Implicit, Frame,
                                                 auth_mechanism = Auth,
                                                 auth_login = Username}),
                       case {Res, Implicit} of
-                          {{ok, _, StateN1}, implicit} -> ok(StateN1);
-                          _                            -> Res
+                          {{ok, _, StateN1}, implicit} ->
+                              self() ! connection_created, ok(StateN1);
+                          _                            ->
+                              self() ! connection_created, Res
                       end;
                   {error, no_common_version} ->
                       error("Version mismatch",

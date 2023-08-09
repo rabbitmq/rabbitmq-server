@@ -84,6 +84,8 @@ init([SupHelperPid, Ref, Configuration]) ->
             MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
             erlang:send_after(LoginTimeout, self(), login_timeout),
 
+            rabbit_networking:register_non_amqp_connection(self()),
+
             gen_server2:enter_loop(?MODULE, [],
               rabbit_event:init_stats_timer(
                 run_socket(control_throttle(
@@ -133,6 +135,14 @@ handle_cast(client_timeout, State) ->
 handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
+
+
+
+handle_info(connection_created, State) ->
+    Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_created(self(), Infos),
+    rabbit_event:notify(connection_created, Infos),
+    {noreply, State, hibernate};
 
 handle_info({Tag, Sock, Data}, State=#reader_state{socket=Sock})
         when Tag =:= tcp; Tag =:= ssl ->
@@ -316,12 +326,13 @@ terminate(Reason, undefined) ->
     log_reason(Reason, undefined),
     {stop, Reason};
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
-  maybe_emit_stats(State),
-  rabbit_core_metrics:connection_closed(self()),
-  Infos = infos(?OTHER_METRICS, State),
-  rabbit_event:notify(connection_closed, Infos),
-  log_reason(Reason, State),
-  _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    maybe_emit_stats(State),
+    rabbit_core_metrics:connection_closed(self()),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_event:notify(connection_closed, Infos),
+    rabbit_networking:unregister_non_amqp_connection(self()),
+    log_reason(Reason, State),
+    _ = rabbit_stomp_processor:flush_and_die(ProcState),
     {stop, Reason}.
 
 code_change(_OldVsn, State, _Extra) ->

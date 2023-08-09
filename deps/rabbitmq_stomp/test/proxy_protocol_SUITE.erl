@@ -108,7 +108,7 @@ proxy_protocol_v2_local(Config) ->
 connection_name() ->
     Connections = ets:tab2list(connection_created),
     {_Key, Values} = lists:nth(1, Connections),
-    {_, Name} = lists:keyfind(name, 1, Values),
+    {_, Name} = lists:keyfind(conn_name, 1, Values),
     Name.
 
 merge_app_env(MqttConfig, Config) ->
