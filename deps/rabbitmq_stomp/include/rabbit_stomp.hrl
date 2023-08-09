@@ -18,7 +18,6 @@
          connection,
          connection_state,
          session_id,
-         channel,
          version,
          implicit_connect,
          auth_login,
