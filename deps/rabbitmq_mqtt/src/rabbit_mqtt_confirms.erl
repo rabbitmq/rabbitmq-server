@@ -49,22 +49,21 @@ insert(PktId, QNames, State)
 -spec confirm([packet_id()], queue_name(), state()) ->
     {[packet_id()], state()}.
 confirm(PktIds, QName, State0) ->
-    {L0, State} = lists:foldl(fun(PktId, Acc) ->
-                                      confirm_one(PktId, QName, Acc)
-                              end, {[], State0}, PktIds),
-    L = lists:reverse(L0),
-    {L, State}.
+    lists:foldl(fun(PktId, Acc) ->
+                        confirm_one(PktId, QName, Acc)
+                end, {[], State0}, PktIds).
 
--spec reject(packet_id(), state()) ->
-    {ok, state()} | {error, not_found}.
-reject(PktId, State0)
-  when is_integer(PktId) ->
-    case maps:take(PktId, State0) of
-        {_, State} ->
-            {ok, State};
-        error ->
-            {error, not_found}
-    end.
+-spec reject([packet_id()], state()) ->
+    {[packet_id()], state()}.
+reject(PktIds, State0) ->
+    lists:foldl(fun(PktId, Acc = {Rejs, S0}) ->
+                        case maps:take(PktId, S0) of
+                            {_, S} ->
+                                {[PktId | Rejs], S};
+                            error ->
+                                Acc
+                        end
+                end, {[], State0}, PktIds).
 
 %% idempotent
 -spec remove_queue(queue_name(), state()) ->
@@ -77,7 +76,7 @@ remove_queue(QName, State) ->
                   (_, _, PktIds) ->
                        PktIds
                end, [], State),
-    confirm(lists:sort(PktIds), QName, State).
+    confirm(PktIds, QName, State).
 
 %% INTERNAL
 

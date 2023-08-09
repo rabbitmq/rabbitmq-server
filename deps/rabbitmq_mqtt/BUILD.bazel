@@ -281,6 +281,14 @@ rabbitmq_suite(
     ],
 )
 
+rabbitmq_suite(
+    name = "rabbit_mqtt_confirms_SUITE",
+    size = "small",
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 assert_suites()
 
 alias(

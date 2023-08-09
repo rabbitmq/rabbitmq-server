@@ -1686,17 +1686,15 @@ process_routing_confirm(#delivery{confirm = true,
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
     State#state{unacked_client_pubs = U}.
 
--spec send_puback(list(packet_id()), state()) -> ok.
-send_puback(PktIds0, State)
+-spec send_puback(packet_id() | list(packet_id()), reason_code(), state()) -> ok.
+send_puback(PktIds0, ReasonCode, State)
   when is_list(PktIds0) ->
     %% Classic queues confirm messages unordered.
     %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
     PktIds = lists:usort(PktIds0),
     lists:foreach(fun(Id) ->
-                          send_puback(Id, ?RC_SUCCESS, State)
-                  end, PktIds).
-
--spec send_puback(packet_id(), reason_code(), state()) -> ok.
+                          send_puback(Id, ReasonCode, State)
+                  end, PktIds);
 send_puback(PktId, ReasonCode, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
@@ -1971,7 +1969,7 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             QStates = rabbit_queue_type:remove(QRef, QStates1),
             State = State0#state{queue_states = QStates,
                                  unacked_client_pubs = U},
-            send_puback(ConfirmPktIds, State),
+            send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
             {ok, State}
     end.
 
@@ -2001,7 +1999,7 @@ handle_queue_event({queue_event, QName, Evt},
             QStates = rabbit_queue_type:remove(QName, QStates0),
             State = State1#state{queue_states = QStates,
                                  unacked_client_pubs = U},
-            send_puback(ConfirmPktIds, State),
+            send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
             {ok, State};
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->
             {error, Error, State0}
@@ -2013,19 +2011,21 @@ handle_queue_actions(Actions, #state{} = State0) ->
               deliver_to_client(Msgs, Ack, S);
           ({settled, QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
               {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
-              send_puback(ConfirmPktIds, S),
+              send_puback(ConfirmPktIds, ?RC_SUCCESS, S),
               S#state{unacked_client_pubs = U};
-          ({rejected, _QName, PktIds}, S = #state{unacked_client_pubs = U0}) ->
-              %% Negative acks are supported in MQTT v5 only.
-              %% Therefore, in MQTT v3 and v4 we ignore rejected messages.
-              U = lists:foldl(
-                    fun(PktId, Acc0) ->
-                            case rabbit_mqtt_confirms:reject(PktId, Acc0) of
-                                {ok, Acc} -> Acc;
-                                {error, not_found} -> Acc0
-                            end
-                    end, U0, PktIds),
-              S#state{unacked_client_pubs = U};
+          ({rejected, _QName, PktIds}, S0 = #state{unacked_client_pubs = U0,
+                                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
+              {RejectPktIds, U} = rabbit_mqtt_confirms:reject(PktIds, U0),
+              S = S0#state{unacked_client_pubs = U},
+              %% Negative acks are supported only in MQTT v5. In MQTT v3 and v4 we ignore
+              %% rejected messages since we can only (but must not) send a positive ack.
+              case ProtoVer of
+                  ?MQTT_PROTO_V5 ->
+                      send_puback(RejectPktIds, ?RC_IMPLEMENTATION_SPECIFIC_ERROR, S);
+                  _ ->
+                      ok
+              end,
+              S;
           ({block, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
               S#state{queues_soft_limit_exceeded = sets:add_element(QName, QSLE)};
           ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->

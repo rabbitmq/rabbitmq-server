@@ -144,9 +144,3 @@ next_smallest(S, U) when is_map_key(S, U) ->
 next_smallest(S, U) ->
     %% TODO: this is potentially infinitely recursive if called incorrectly
     next_smallest(S+1, U).
-
-
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
