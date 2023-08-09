@@ -249,7 +249,7 @@ handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
         {ok, PState} ->
             maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
         {error, Reason} ->
-            {stop, {shutdown, Reason, State}}
+            {stop, {shutdown, Reason}, State}
     end;
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
