@@ -430,8 +430,10 @@ ack_action(Command, Frame,
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
+                    io:format("ConsumerTag ~p, DeliveryTag ~p~n", [ConsumerTag, DeliveryTag]),
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
+                            io:format("Sub ~p~n", [Sub]),
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),
                             State1 = Fun(DeliveryTag, Sub, Requeue, State),
 			    ok(State1);
@@ -958,13 +960,17 @@ coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #proc_state{un
 %% ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
 
 handle_ack(DeliveryTag, #subscription{multi_ack = IsMulti}, _, State = #proc_state{unacked_message_q = UAMQ}) ->
+    %% io:format("UAMQ ~p~n", [UAMQ]),
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
+    %% io:format("Acked ~p~n, Remaining ~p~n", [Acked, Remaining]),
     State1 = State#proc_state{unacked_message_q = Remaining},
     {State2, Actions} = settle_acks(Acked, State1),
     handle_queue_actions(Actions, State2).
 
 handle_nack(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue, State = #proc_state{unacked_message_q = UAMQ}) ->
+    %% io:format("UAMQ ~p~n", [UAMQ]),
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
+    %% io:format("Acked ~p~n, Remaining ~p~n", [Acked, Remaining]),
     State1 = State#proc_state{unacked_message_q = Remaining},
     {State2, Actions} = internal_reject(Requeue, Acked, State1),
     handle_queue_actions(Actions, State2).
@@ -972,11 +978,8 @@ handle_nack(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue, State = #p
 %% Records a client-sent acknowledgement. Handles both single delivery acks
 %% and multi-acks.
 %%
-%% Returns a triple of acknowledged pending acks, remaining pending acks,
-%% and outdated pending acks (if any).
-%% Sorts each group in the youngest-first order (ascending by delivery tag).
-collect_acks(UAMQ, 0, true) ->
-    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
+%% Returns a tuple of acknowledged pending acks and remaining pending acks.
+%% Sorts each group in the youngest-first order (descending by delivery tag).
 collect_acks(UAMQ, DeliveryTag, Multiple) ->
     collect_acks([], [], UAMQ, DeliveryTag, Multiple).
 
@@ -1100,6 +1103,7 @@ send_delivery(QName, MsgId, Delivery = #'basic.deliver'{consumer_tag = ConsumerT
                          subscriptions = Subs,
                          version       = Version,
                          unacked_message_q = UAMQ}) ->
+    %% io:format("SD Subs ~p~n", [Subs]),
     case maps:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
             NewState = send_frame(
@@ -1110,8 +1114,14 @@ send_delivery(QName, MsgId, Delivery = #'basic.deliver'{consumer_tag = ConsumerT
                           State),
             maybe_notify_sent(DeliveryCtx),
             case AckMode of
-                {client, _} ->
+                client ->
                     DeliveredAt = os:system_time(millisecond),
+                    %% io:format("Send delivery state: ~p~n", [NewState#proc_state{unacked_message_q =
+                    %%                                                                 ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
+                    %%                                                                                        tag = ConsumerTag,
+                    %%                                                                                        delivered_at = DeliveredAt,
+                    %%                                                                                        queue = QName,
+                    %%                                                                                        msg_id = MsgId}, UAMQ)}]),
                     NewState#proc_state{unacked_message_q =
                                             ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
                                                                    tag = ConsumerTag,
