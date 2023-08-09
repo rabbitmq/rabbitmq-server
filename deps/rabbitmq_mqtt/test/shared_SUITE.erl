@@ -340,19 +340,34 @@ quorum_queue_rejects(Config) ->
     bind(Ch, Name, Name),
 
     C = connect(Name, Config, [{retry_interval, 1}]),
-    {ok, _} = emqtt:publish(C, Name, <<"m1">>, qos1),
-    {ok, _} = emqtt:publish(C, Name, <<"m2">>, qos1),
-    %% We expect m3 to be rejected and dropped.
-    ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 700)),
+    {ok, #{reason_code_name := success}} = emqtt:publish(C, Name, <<"m1">>, qos1),
+    {ok, #{reason_code_name := success}} = emqtt:publish(C, Name, <<"m2">>, qos1),
+
+    %% The queue will reject m3.
+    V = ?config(mqtt_version, Config),
+    if V =:= v3 orelse V =:= v4 ->
+           %% v3 and v4 do not support NACKs. Therefore, the server should drop the message.
+           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 700));
+       V =:= v5 ->
+           %% v5 supports NACKs. Therefore, the server should send us a NACK.
+           ?assertMatch({ok, #{reason_code_name := implementation_specific_error}},
+                        emqtt:publish(C, Name, <<"m3">>, qos1))
+    end,
 
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true})),
+                 amqp_channel:call(Ch, #'basic.get'{queue = Name})),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true})),
-    %% m3 is re-sent by emqtt.
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m3">>}},
-                amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true}),
-                2000, 200),
+                 amqp_channel:call(Ch, #'basic.get'{queue = Name})),
+    if V =:= v3 orelse V =:= v4 ->
+           %% m3 is re-sent by emqtt since we didn't receive a PUBACK.
+           ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m3">>}},
+                       amqp_channel:call(Ch, #'basic.get'{queue = Name}),
+                       2000, 200);
+       V =:= v5 ->
+           %% m3 should not be re-sent by emqtt since we received a PUBACK.
+           ?assertMatch(#'basic.get_empty'{},
+                        amqp_channel:call(Ch, #'basic.get'{queue = Name}))
+    end,
 
     ok = emqtt:disconnect(C),
     delete_queue(Ch, Name),
@@ -667,17 +682,22 @@ queue_down_qos1(Config) ->
     bind(Ch1, CQ, Topic),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Ch1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
-
     C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
 
     %% classic queue is down, therefore message is rejected
-    ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 500)),
-
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-    %% classic queue is up, therefore message should arrive
-    eventually(?_assertEqual([[<<"1">>]],
-                             rabbitmqctl_list(Config, 1, ["list_queues", "messages", "--no-table-headers"])),
-               500, 20),
+    V = ?config(mqtt_version, Config),
+    if V =:= v3 orelse V =:= v4 ->
+           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 500)),
+           ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+           %% Classic queue is up. Therefore, message should arrive.
+           eventually(?_assertEqual([[<<"1">>]],
+                                    rabbitmqctl_list(Config, 1, ["list_queues", "messages", "--no-table-headers"])),
+                      500, 20);
+       V =:= v5 ->
+           ?assertMatch({ok, #{reason_code_name := implementation_specific_error}},
+                        emqtt:publish(C, Topic, <<"msg">>, qos1)),
+           ok = rabbit_ct_broker_helpers:start_node(Config, 1)
+    end,
 
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, 0),
     delete_queue(Ch0, CQ),
@@ -1454,7 +1474,7 @@ trace(Config) ->
     {#'basic.get_ok'{routing_key = <<"publish.amq.topic">>},
      #amqp_msg{props = #'P_basic'{headers = PublishHeaders},
                payload = Payload}} =
-    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false}),
+    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
                    <<"routing_keys">> := [Topic],
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
@@ -1470,7 +1490,7 @@ trace(Config) ->
     {#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-trace_subscriberqos0">>},
      #amqp_msg{props = #'P_basic'{headers = DeliverHeaders},
                payload = Payload}} =
-    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false}),
+    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
                    <<"routing_keys">> := [Topic],
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
@@ -1487,7 +1507,7 @@ trace(Config) ->
     {ok, _} = emqtt:publish(Pub, Topic, Payload, qos1),
     ok = expect_publishes(Sub, Topic, [Payload]),
     ?assertMatch(#'basic.get_empty'{},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TraceQ, no_ack = false})),
+                 amqp_channel:call(Ch, #'basic.get'{queue = TraceQ})),
 
     delete_queue(Ch, TraceQ),
     [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
