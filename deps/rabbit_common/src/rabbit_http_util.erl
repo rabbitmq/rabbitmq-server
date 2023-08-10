@@ -177,6 +177,8 @@ quote_plus(Binary) when is_binary(Binary) ->
     quote_plus(binary_to_list(Binary));
 quote_plus(Float) when is_float(Float) ->
     quote_plus(rabbit_numerical:digits(Float));
+quote_plus(FuncNoArgs) when is_function(FuncNoArgs) ->
+    quote_plus(erlang:apply(FuncNoArgs,[]));
 quote_plus(String) ->
     quote_plus(String, []).
 

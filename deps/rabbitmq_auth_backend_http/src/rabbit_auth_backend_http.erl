@@ -32,11 +32,7 @@ description() ->
 
 %%--------------------------------------------------------------------
 
-user_login_authentication(Username, AuthProps0) ->
-    %% drop rabbit_auth_backend_http attribute as this backend does not need credentials once the user has been authenticated
-    %% rabbit_auth_backend_http could be injected by messaging protocols such as amqp1.0 
-    AuthProps = proplists:delete(rabbit_auth_backend_http, AuthProps0),
-
+user_login_authentication(Username, AuthProps) ->
     case http_req(p(user_path), q([{username, Username}|AuthProps])) of
         {error, _} = E  -> E;
         "deny"          -> {refused, "Denied by the backing HTTP service", []};
