@@ -922,17 +922,18 @@ logging_to_exchange_works(Config) ->
       #{exchange := #resource{name = XName} = Exchange}} = ExchangeHandler,
 
     %% Wait for the expected exchange to be automatically declared.
-    lists:any(
-      fun(_) ->
-              Ret = rabbit_ct_broker_helpers:rpc(
-                      Config, 0,
-                      rabbit_exchange, lookup, [Exchange]),
-              case Ret of
-                  {ok, _} -> true;
-                  _       -> timer:sleep(500),
-                             false
-              end
-      end, lists:seq(1, 20)),
+    ?assert(
+       lists:any(
+         fun(_) ->
+                 Ret = rabbit_ct_broker_helpers:rpc(
+                         Config, 0,
+                         rabbit_exchange, lookup, [Exchange]),
+                 case Ret of
+                     {ok, _} -> true;
+                     _       -> timer:sleep(500),
+                                false
+                 end
+         end, lists:seq(1, 20))),
 
     %% Declare a queue to collect all logged messages.
     {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
