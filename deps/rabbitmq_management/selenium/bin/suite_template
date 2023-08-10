@@ -90,6 +90,15 @@ build_mocha_image() {
   end "mocha-test image exists"
 }
 
+build_amqp10-roundtriptest() {
+  begin "Ensuring amqp10-roundtriptest image ..."
+  if [[ "$(docker images -q amqp10-roundtriptest 2> /dev/null)" == "" ]]; then
+    docker build -t amqp10-roundtriptest $SCRIPT/amqp10-roundtriptest
+    print "> Built docker image"
+  fi
+  end "amqp10-roundtriptest image exists"
+}
+
 start_selenium() {
   begin "Starting selenium  ..."
 
@@ -385,8 +394,35 @@ start_fakeproxy() {
     mocha-test run fakeproxy
 
   wait_for_url $FAKEPROXY_URL
-  end "Fakeproxy is ready"
+  end "fakeproxy is ready"
 
+}
+
+init_auth-backend-http() {
+  AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
+  AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/auth-backend-http
+
+  print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
+  print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
+
+}
+start_auth-backend-http() {
+  begin "Starting auth-backend-http ..."
+
+  init_auth-backend-http
+  kill_container_if_exist auth-backend-http
+
+  docker run \
+    --detach \
+    --name auth-backend-http \
+    --net ${DOCKER_NETWORK} \
+    --publish 8888:1080 \
+    --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/expectationInitialiser.json" \
+    -v ${AUTH_BACKEND_HTTP_DIR}:/config \
+    mockserver/mockserver
+
+  wait_for_url $AUTH_BACKEND_HTTP_BASEURL/ready
+  end "auth-backend-http is ready"
 }
 
 wait_for_url() {
@@ -531,6 +567,7 @@ run_local_with() {
   ensure_docker_network
   generate_env_file
   build_mocha_image
+  build_amqp10-roundtriptest
 
   if [[ "$COMMAND" == "start-rabbitmq" ]]
   then
@@ -570,6 +607,7 @@ run_on_docker_with() {
   ensure_docker_network
   generate_env_file
   build_mocha_image
+  build_amqp10-roundtriptest
   start_selenium
 
   trap teardown_components EXIT
