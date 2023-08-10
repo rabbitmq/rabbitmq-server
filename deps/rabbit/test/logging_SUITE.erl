@@ -942,7 +942,7 @@ logging_to_exchange_works(Config) ->
     ?assertMatch(
        #'queue.declare_ok'{},
        amqp_channel:call(Chan, #'queue.declare'{queue = QName,
-                                                durable = false})),
+                                                durable = true})),
     ?assertMatch(
        #'queue.bind_ok'{},
        amqp_channel:call(Chan, #'queue.bind'{queue = QName,
