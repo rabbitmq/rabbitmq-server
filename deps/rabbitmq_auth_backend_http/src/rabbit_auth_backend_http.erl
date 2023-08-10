@@ -179,11 +179,11 @@ p(PathName) ->
     Path.
 
 q(Args) ->
-    string:join([escape(K, V) || {K, V} <- Args], "&").
+    string:join([escape(K, V) || {K, V} <- Args, not is_function(V)], "&").
 
 escape(K, Map) when is_map(Map) ->
     string:join([escape(rabbit_data_coercion:to_list(K) ++ "." ++ rabbit_data_coercion:to_list(Key), Value)
-        || {Key, Value} <- maps:to_list(Map)], "&");
+        || {Key, Value} <- maps:to_list(Map), not is_function(Value)], "&");
 escape(K, V) ->
     rabbit_data_coercion:to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
 
