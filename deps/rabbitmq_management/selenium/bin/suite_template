@@ -83,20 +83,12 @@ init_suite() {
 
 build_mocha_image() {
   begin "Ensuring mocha-test image ..."
-  if [[ "$(docker images -q mocha-test 2> /dev/null)" == "" ]]; then
-    docker build -t mocha-test  --target test $SCRIPT/..
-    print "> Built docker image"
+  tag=($(md5sum package.json))
+  if [[ "$(docker images -q mocha-test:$tag 2> /dev/null)" == "" ]]; then
+    docker build -t mocha-test:$tag  --target test $SCRIPT/..
+    print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"
-}
-
-build_amqp10-roundtriptest() {
-  begin "Ensuring amqp10-roundtriptest image ..."
-  if [[ "$(docker images -q amqp10-roundtriptest 2> /dev/null)" == "" ]]; then
-    docker build -t amqp10-roundtriptest $SCRIPT/amqp10-roundtriptest
-    print "> Built docker image"
-  fi
-  end "amqp10-roundtriptest image exists"
 }
 
 start_selenium() {
@@ -450,7 +442,7 @@ wait_for_url_docker() {
   url=$1
   max_retry=10
   counter=0
-  until (docker run --net rabbitmq_net --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
+  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
   do
     print "Waiting for $url to start"
     sleep 5
@@ -519,6 +511,7 @@ test() {
     --env UAA_URL=${UAA_URL} \
     --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
     --env RUN_LOCAL=false \
+    --env PROFILES="${PROFILES}" \
     -v ${TEST_DIR}:/code/test \
     -v ${SCREENS}:/screens \
     mocha-test test /code/test${TEST_CASES_PATH}
@@ -567,7 +560,6 @@ run_local_with() {
   ensure_docker_network
   generate_env_file
   build_mocha_image
-  build_amqp10-roundtriptest
 
   if [[ "$COMMAND" == "start-rabbitmq" ]]
   then
@@ -607,7 +599,6 @@ run_on_docker_with() {
   ensure_docker_network
   generate_env_file
   build_mocha_image
-  build_amqp10-roundtriptest
   start_selenium
 
   trap teardown_components EXIT
@@ -652,6 +643,7 @@ test_local() {
 
   export RUN_LOCAL=true
   export SCREENSHOTS_DIR=${SCREENS}
+
   npm test $TEST_CASES_DIR/$1
 
 }

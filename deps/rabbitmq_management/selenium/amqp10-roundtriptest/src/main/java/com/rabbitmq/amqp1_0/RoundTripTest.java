@@ -20,7 +20,7 @@ public class RoundTripTest {
     String port = getEnv("RABBITMQ_AMQP_PORT", "5672");
     String scheme = getEnv("RABBITMQ_AMQP_SCHEME", "amqp");
     String username = getEnv("RABBITMQ_AMQP_USERNAME", "guest");
-    String password = getEnv("RABBITMQ_AMQP_PASSWORD", "password");
+    String password = getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
     String uri = scheme + "://" + hostname + ":" + port;
 
     Hashtable<Object, Object> env = new Hashtable<>();

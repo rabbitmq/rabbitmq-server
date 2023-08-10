@@ -7,8 +7,7 @@
     "test": "mocha --recursive --trace-warnings --timeout 40000",
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
-    "amqp10_roundtriptest_docker" : "docker run --rm amqp10-roundtriptest:latest",
-    "amqp10_roundtriptest" : "java -jar amqp10-roundtriptest/target/amqp10-roundtriptest-1.0-SNAPSHOT-jar-with-dependencies.jar"
+    "amqp10_roundtriptest" : "RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME}./run-amqp10-roundtriptest"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [[ "$PROFILES" == *"docker"* ]]; then
+  docker run --rm amqp10-roundtriptest
+else
+  java -jar amqp10-roundtriptest/target/amqp10-roundtriptest-1.0-SNAPSHOT-jar-with-dependencies.jar
+fi
