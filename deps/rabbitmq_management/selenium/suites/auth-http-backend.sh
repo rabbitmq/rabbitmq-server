@@ -6,4 +6,4 @@ TEST_CASES_PATH=/auth-http-backend
 PROFILES=""
 
 source $SCRIPT/../bin/suite_template
-runWith auth-backend-http
+runWith mock-auth-backend-http
