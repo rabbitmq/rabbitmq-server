@@ -96,7 +96,7 @@ user_login_authentication(Username, AuthProps) ->
               end);
         false ->
             case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
-                undefined -> exit({unknown_auth_props, Username, AuthProps});
+                undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};
                 _ -> internal_check_user_login(Username, fun(_) -> true end)
             end
     end.

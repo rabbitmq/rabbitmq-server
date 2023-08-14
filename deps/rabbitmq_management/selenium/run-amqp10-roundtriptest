@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+env | grep RABBITMQ
+
+if [[ -f "/code/amqp10-roundtriptest" ]]; then
+  echo "Running amqp10-roundtriptest inside mocha-test docker image ..."
+  java -jar /code/amqp10-roundtriptest-1.0-SNAPSHOT-jar-with-dependencies.jar
+else
+  if [[ ! -f "amqp10-roundtriptest/target/amqp10-roundtriptest-1.0-SNAPSHOT-jar-with-dependencies.jar" ]]; then
+    echo "Building amqp10-roundtriptest jar ..."
+    mvn -f amqp10-roundtriptest package
+  fi
+  echo "Running amqp10-roundtriptest jar ..."
+  java -jar amqp10-roundtriptest/target/amqp10-roundtriptest-1.0-SNAPSHOT-jar-with-dependencies.jar
+fi
