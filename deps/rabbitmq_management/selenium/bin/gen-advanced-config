@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+#set -x
+
+TEST_PATH=${1:?First parameter is the directory env and config files are relative to}
+ENV_FILE=${2:?Second parameter is a comma-separated list of .env file which has exported template variables}
+FINAL_CONFIG_FILE=${3:?Forth parameter is the name of the final config file. It is relative to where this script is run from}
+
+source $ENV_FILE
+
+parentdir="$(dirname "$FINAL_CONFIG_FILE")"
+mkdir -p $parentdir
+
+echo "" > $FINAL_CONFIG_FILE
+
+FOUND_TEMPLATES_COUNT=0
+for f in $($SCRIPT/find-template-files $TEST_PATH "advanced" "config")
+do
+  envsubst < $f  >> $FINAL_CONFIG_FILE
+  FOUND_TEMPLATES_COUNT+=1
+done
+
+if [ "$FOUND_TEMPLATES_COUNT" -gt 1 ]
+then
+  echo "Matched $FOUND_TEMPLATES_COUNT advanced.config files. There should only match one"
+  exit -1
+fi
+if [ "$FOUND_TEMPLATES_COUNT" -lt 1 ]
+then
+  exit -1
+fi
