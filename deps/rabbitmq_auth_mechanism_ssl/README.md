@@ -105,27 +105,6 @@ Note that the authenticated user will then be looked up in the
 the internal node database by default but could include other
 backends if so configured.
 
-
-## Usage for MQTT Clients
-
-To use this plugin with MQTT clients, set `mqtt.ssl_cert_login` to `true`:
-
-``` ini
-# It makes no sense to allow or expect anonymous client connections
-# with certificate-based authentication 
-mqtt.allow_anonymous = false
-
-# require the peer to provide a certificate, enforce certificate exchange
-ssl_options.verify = verify_peer
-ssl_options.fail_if_no_peer_cert = true
-
-# allow MQTT connections to compute their name from client certificate's CN
-# (for simplicity: CN has been deprecated in favor of SAN for a long time)
-mqtt.ssl_cert_login = true
-ssl_cert_login_from = common_name
-```
-
-
 ## Copyright & License
 
 (c) 2007-2023 VMware, Inc. or its affiliates.
