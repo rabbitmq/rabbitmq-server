@@ -1,0 +1,33 @@
+version: "3.6"
+networks:
+  rabbitmq_net:
+    name: ${DOCKER_NETWORK}
+    external: true
+services:
+  rabbitmq: &rabbitmq
+    image: ${RABBITMQ_DOCKER_IMAGE}
+    networks:
+      - rabbitmq_net
+    ports:
+      - "15672:15672"
+    cap_add:
+      - ALL
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-selenium
+    volumes:
+      - ${RABBITMQ_DIR}:/etc/rabbitmq
+    ulimits:
+      nofile:
+        soft: 2000
+        hard: 2000
+  rabbitmq2:
+    << : *rabbitmq
+    hostname: rabbitmq2
+    ports:
+      - "15673:15672"
+  rabbitmq3:
+    << : *rabbitmq
+    hostname: rabbitmq3
+    ports:
+      - "15674:15672"

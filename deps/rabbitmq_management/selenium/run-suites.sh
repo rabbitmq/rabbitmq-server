@@ -15,7 +15,7 @@ do
   SUITE=$(basename -- "$f")
   echo "=== Running suite $SUITE ============================================"
   echo " "
-  ENV_MODES="docker" $f
+  $f
   TEST_RESULT="$?"
   TEST_STATUS="${GREEN}Succeeded${NC}"
   if [ "$TEST_RESULT" -ne 0 ]
