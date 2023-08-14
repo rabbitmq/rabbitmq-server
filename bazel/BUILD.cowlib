@@ -148,6 +148,8 @@ erlang_app(
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_name = "cowlib",
+    app_description = "Support library for manipulating Web protocols.",
+    app_version = "2.12.1",
     beam_files = [":beam_files"],
     extra_apps = ["crypto"],
 )
