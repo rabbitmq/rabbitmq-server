@@ -105,6 +105,7 @@ Note that the authenticated user will then be looked up in the
 the internal node database by default but could include other
 backends if so configured.
 
+<<<<<<< HEAD
 
 ## Usage for MQTT Clients
 
@@ -126,6 +127,8 @@ ssl_cert_login_from = common_name
 ```
 
 
+=======
+>>>>>>> 75106374bc (Delete MQTT usage from rabbitmq_auth_mechanism_ssl)
 ## Copyright & License
 
 (c) 2007-2023 VMware, Inc. or its affiliates.
