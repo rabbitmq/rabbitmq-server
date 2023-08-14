@@ -1,12 +1,37 @@
 name: Check Bazel/Erlang.mk Equivalence
 on:
-  schedule:
-  - cron: '0 2 * * *'
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      erlang_version:
+        required: true
+        type: string
+      elixir_version:
+        required: true
+        type: string
+      project_version:
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      erlang_version:
+        description: 'OTP version to build with'
+        required: true
+        default: "25.0"
+      elixir_version:
+        description: 'Elixir version to build with'
+        required: true
+        default: "1.15"
+      project_version:
+        description: 'PROJECT_VERSION used for make'
+        required: true
+        default: "3.11.0"
 env:
-  erlang_version: 25.3
-  elixir_version: 1.15
-  VERSION: 3.11.0
+  erlang_version: ${{ inputs.erlang_version || github.event.inputs.erlang_version }}
+  elixir_version: ${{ inputs.elixir_version || github.event.inputs.elixir_version }}
+  VERSION: ${{ inputs.project_version || github.event.inputs.project_version }}
   PLUGINS: amqp10_common amqp10_client rabbitmq_amqp1_0 rabbitmq_auth_backend_cache rabbitmq_auth_backend_http rabbitmq_auth_backend_ldap rabbitmq_auth_backend_oauth2 rabbitmq_auth_mechanism_ssl rabbitmq_consistent_hash_exchange rabbitmq_event_exchange rabbitmq_federation rabbitmq_jms_topic_exchange rabbitmq_mqtt rabbitmq_random_exchange rabbitmq_recent_history_exchange rabbitmq_sharding rabbitmq_shovel rabbitmq_stomp rabbitmq_stream rabbitmq_trust_store rabbitmq_web_dispatch rabbitmq_management_agent rabbitmq_management rabbitmq_prometheus rabbitmq_federation_management rabbitmq_shovel_management rabbitmq_stream_management rabbitmq_top rabbitmq_tracing rabbitmq_web_mqtt rabbitmq_web_mqtt_examples rabbitmq_web_stomp rabbitmq_web_stomp_examples rabbitmq_aws rabbitmq_peer_discovery_common rabbitmq_peer_discovery_aws rabbitmq_peer_discovery_k8s rabbitmq_peer_discovery_consul rabbitmq_peer_discovery_etcd
   EXTRA_PLUGINS: accept amqp_client aten base64url cowboy cowlib credentials_obfuscation cuttlefish eetcd enough gen_batch_server getopt gun jose observer_cli osiris prometheus quantile_estimator ra ranch recon redbug seshat stdout_formatter syslog sysmon_handler systemd thoas
 jobs:
@@ -17,6 +42,8 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
       uses: erlef/setup-beam@v1.16
       with:
@@ -50,6 +77,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: rabbitmq
+        ref: ${{ github.event.inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
       uses: erlef/setup-beam@v1.16
       with:
@@ -87,6 +115,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: rabbitmq-server
+        ref: ${{ github.event.inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
       uses: erlef/setup-beam@v1.16
       with:
