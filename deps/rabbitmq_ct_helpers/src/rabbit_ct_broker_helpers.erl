@@ -1519,12 +1519,12 @@ clear_permissions(Config, Node, Username, VHost) ->
     clear_permissions(Config, Node, Username, VHost, <<"acting-user">>).
 
 clear_permissions(Config, Node, Username, VHost, ActingUser) ->
-    catch rpc(Config, Node,
-              rabbit_auth_backend_internal,
-              clear_permissions,
-              [rabbit_data_coercion:to_binary(Username),
-               rabbit_data_coercion:to_binary(VHost),
-               ActingUser]).
+    rpc(Config, Node,
+        rabbit_auth_backend_internal,
+        clear_permissions,
+        [rabbit_data_coercion:to_binary(Username),
+         rabbit_data_coercion:to_binary(VHost),
+         ActingUser]).
 
 set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
     Limit = case Limit0 of
