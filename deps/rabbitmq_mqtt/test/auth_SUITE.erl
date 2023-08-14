@@ -359,12 +359,12 @@ end_per_testcase(Testcase, Config) when Testcase == port_vhost_mapping_success;
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase(port_vhost_mapping_vhost_does_not_exist, Config) ->
+end_per_testcase(T = port_vhost_mapping_vhost_does_not_exist, Config) ->
     User = <<"guest">>,
     ok = set_full_permissions(Config, User, <<"/">>),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
-    rabbit_ct_helpers:testcase_finished(Config, port_vhost_mapping_vhost_does_not_exist);
-end_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, T);
+end_per_testcase(T = ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping, Config) ->
     delete_cert_user(Config),
     VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
@@ -373,7 +373,7 @@ end_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_ma
     VHostForPortVHostMapping = ?config(temp_vhost_for_port_mapping, Config),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHostForPortVHostMapping),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
-    rabbit_ct_helpers:testcase_finished(Config, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
+    rabbit_ct_helpers:testcase_finished(Config, T);
 end_per_testcase(T, Config) when T == queue_bind_permission;
                                  T == queue_unbind_permission;
                                  T == queue_consume_permission;
