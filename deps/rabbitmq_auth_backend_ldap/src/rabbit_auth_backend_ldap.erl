@@ -91,7 +91,6 @@ extractPassword(AuthProps) ->
                 none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
                             none -> undefined;
                             PasswordFun ->
-                                rabbit_log:debug("Returning rabbit_auth_backend_cache password : ~p", [(PasswordFun())#impl.password]),
                                 (PasswordFun())#impl.password
                         end;
                 PasswordFun ->

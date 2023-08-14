@@ -33,8 +33,6 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-    rabbit_log:debug("http user_login_authentication AuthProps: ~p", AuthProps),
-    rabbit_log:debug("http user_login_authentication extracted password: ~p", [extractPassword(AuthProps)]),
 
     case http_req(p(user_path), q([{username, Username}|extractPassword(AuthProps)])) of
         {error, _} = E  -> E;
