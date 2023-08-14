@@ -1,0 +1,46 @@
+[
+  {
+    "httpRequest": {
+      "path": "/ready"
+    },
+    "httpResponse": {
+      "body": "ok"
+    }
+  },
+  {
+    "httpRequest": {
+      "path": "/auth/user",
+      "queryStringParameters": {
+        "username": "httpuser",
+        "password": "httppassword"
+      }
+    },
+    "httpResponse": {
+      "body": "allow"
+    }
+  },
+  {
+    "httpRequest": {
+      "path": "/auth/vhost"
+    },
+    "httpResponse": {
+      "body": "allow"
+    }
+  },
+  {
+    "httpRequest": {
+      "path": "/auth/resource"
+    },
+    "httpResponse": {
+      "body": "allow"
+    }
+  },
+  {
+    "httpRequest": {
+      "path": "/auth/topic"
+    },
+    "httpResponse": {
+      "body": "allow"
+    }
+  }
+]

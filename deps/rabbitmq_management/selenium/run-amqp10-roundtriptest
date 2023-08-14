@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+<<<<<<< HEAD
+=======
+env | grep RABBITMQ
+>>>>>>> c3ee4e5a6d (Fix #9043)
 
 if [[ -f "/code/amqp10-roundtriptest" ]]; then
   echo "Running amqp10-roundtriptest inside mocha-test docker image ..."

@@ -153,13 +153,10 @@ login_with_credentials_but_no_password1(_Config) ->
     Password = <<"login_with_credentials_but_no_password-password">>,
     ok = rabbit_auth_backend_internal:add_user(Username, Password, <<"acting-user">>),
 
-    try
+    ?assertMatch(
+       {refused, _Message, [Username]},
         rabbit_auth_backend_internal:user_login_authentication(Username,
-                                                              [{key, <<"value">>}]),
-        ?assert(false)
-    catch exit:{unknown_auth_props, Username, [{key, <<"value">>}]} ->
-            ok
-    end,
+                                                              [{key, <<"value">>}])),
 
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
 
