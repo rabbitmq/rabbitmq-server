@@ -7,6 +7,7 @@ require('chromedriver')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
 const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672'
+const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
@@ -39,6 +40,14 @@ module.exports = {
     driver = builder.forBrowser('chrome').build()
     driver.manage().setTimeouts( { pageLoad: 35000 } )
     return driver
+  },
+
+  getURLForProtocol: (protocol) => {
+
+    switch(protocol) {
+      case "amqp": return "amqp://" + hostname
+      default: throw new Error("Unknown prootocol " + protocol)
+    }
   },
 
   goToHome: (driver) => {

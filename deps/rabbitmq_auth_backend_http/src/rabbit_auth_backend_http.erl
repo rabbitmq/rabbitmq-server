@@ -33,15 +33,33 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-    case http_req(p(user_path), q([{username, Username}|AuthProps])) of
+
+    case http_req(p(user_path), q([{username, Username}|extractPassword(AuthProps)])) of
         {error, _} = E  -> E;
         "deny"          -> {refused, "Denied by the backing HTTP service", []};
         "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
-                                      T <- string:tokens(Rest, " ")],
+                                   T <- string:tokens(Rest, " ")],
+
                            {ok, #auth_user{username = Username,
                                            tags     = Tags,
-                                           impl     = fun() -> none end}};
+                                           impl     = fun() -> proplists:get_value(password, AuthProps, none) end}};
         Other           -> {error, {bad_response, Other}}
+    end.
+
+%% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
+%% or as a Function with the attribute rabbit_auth_backend_http if the user was already authenticated with http backend
+%% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
+extractPassword(AuthProps) ->
+    case proplists:get_value(password, AuthProps, none) of
+        none ->
+            case proplists:get_value(rabbit_auth_backend_http, AuthProps, none) of
+                none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
+                            none -> [];
+                            PasswordFun -> [{password, PasswordFun()}]
+                        end;
+                PasswordFun -> [{password, PasswordFun()}]
+            end;
+        Password -> [{password, Password}]
     end.
 
 user_login_authorization(Username, AuthProps) ->
@@ -179,11 +197,11 @@ p(PathName) ->
     Path.
 
 q(Args) ->
-    string:join([escape(K, V) || {K, V} <- Args], "&").
+    string:join([escape(K, V) || {K, V} <- Args, not is_function(V)], "&").
 
 escape(K, Map) when is_map(Map) ->
     string:join([escape(rabbit_data_coercion:to_list(K) ++ "." ++ rabbit_data_coercion:to_list(Key), Value)
-        || {Key, Value} <- maps:to_list(Map)], "&");
+        || {Key, Value} <- maps:to_list(Map), not is_function(Value)], "&");
 escape(K, V) ->
     rabbit_data_coercion:to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
 
