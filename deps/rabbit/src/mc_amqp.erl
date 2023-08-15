@@ -47,12 +47,12 @@
 -record(msg,
         {
          header :: opt(#'v1_0.header'{}),
-         delivery_annotations :: opt(#'v1_0.delivery_annotations'{}),
-         message_annotations :: opt(#'v1_0.message_annotations'{}),
+         delivery_annotations = []:: list(),
+         message_annotations = [] :: list(),
          properties :: opt(#'v1_0.properties'{}),
-         application_properties :: opt(#'v1_0.application_properties'{}),
+         application_properties = [] :: list(),
          data = [] :: amqp10_data(),
-         footer :: opt(#'v1_0.footer'{})
+         footer = [] :: list()
         }).
 
 -opaque state() :: #msg{}.
@@ -64,7 +64,6 @@
 
 %% mc implementation
 init(Sections) when is_list(Sections) ->
-    %% TODO: project essential header values, (durable, etc)
     Msg = decode(Sections, #msg{}),
     init(Msg);
 init(#msg{} = Msg) ->
@@ -118,7 +117,8 @@ get_property(durable, Msg) ->
     case Msg of
         #msg{header = #'v1_0.header'{durable = Durable}}
           when is_atom(Durable) ->
-            %% TODO: is there another boolean format with a tag?
+            Durable;
+        #msg{header = #'v1_0.header'{durable = {boolean, Durable}}} ->
             Durable;
         _ ->
             %% fallback in case the source protocol was old AMQP 0.9.1
@@ -183,19 +183,28 @@ get_property(_P, _Msg) ->
 convert_to(?MODULE, Msg) ->
     Msg;
 convert_to(TargetProto, #msg{header = Header,
-                             message_annotations = MA,
+                             delivery_annotations = DAC,
+                             message_annotations = MAC,
                              properties = P,
-                             application_properties = AP,
-                             data = Data}) ->
-    Sects = lists_prepend_t(
+                             application_properties = APC,
+                             data = Data,
+                             footer = FC}) ->
+
+    DA = #'v1_0.delivery_annotations'{content = DAC},
+    MA = #'v1_0.message_annotations'{content = MAC},
+    AP = #'v1_0.application_properties'{content = APC},
+    F = #'v1_0.footer'{content = FC},
+    Init = [Data] ++ lists_cons_t(F, []),
+    Sects = lists_cons_t(
               Header,
-              lists_prepend_t(
-                MA,
-                lists_prepend_t(
-                  P,
-                  lists_prepend_t(
-                    AP,
-                    [Data])))),
+              lists_cons_t(
+                DA,
+                lists_cons_t(
+                  MA,
+                  lists_cons_t(
+                    P,
+                    lists_cons_t(
+                      AP, Init))))),
     %% convert_from(mc_amqp, Sections) expects a flat list of amqp sections
     %% and the body could be a list itself (or an amqp_value)
     Sections = lists:flatten(Sects),
@@ -205,9 +214,11 @@ protocol_state(_S, _Anns) ->
     undefined.
 
 serialize(#msg{header = Header,
-               message_annotations = MA0,
+               delivery_annotations = DAC,
+               message_annotations = MAC0,
                properties = P,
-               application_properties = AP,
+               application_properties = APC,
+               footer = FC,
                data = Data}, Anns) ->
     Exchange = maps:get(exchange, Anns),
     [RKey | _] = maps:get(routing_keys, Anns),
@@ -220,14 +231,20 @@ serialize(#msg{header = Header,
                           false
                   end, Anns),
 
-    MA = add_message_annotations(
+    MAC = add_message_annotations(
            AnnsToAdd#{<<"x-exchange">> => wrap(Exchange),
-                      <<"x-routing-key">> => wrap(RKey)}, MA0),
+                      <<"x-routing-key">> => wrap(RKey)}, MAC0),
+    DA = #'v1_0.delivery_annotations'{content = DAC},
+    MA = #'v1_0.message_annotations'{content = MAC},
+    AP = #'v1_0.application_properties'{content = APC},
+    F = #'v1_0.footer'{content = FC},
     [encode_bin(Header),
+     encode_bin(DA),
      encode_bin(MA),
      encode_bin(P),
      encode_bin(AP),
-     encode_bin(Data)].
+     encode_bin(Data),
+     encode_bin(F)].
 
 prepare(_For, Msg) ->
     Msg.
@@ -250,26 +267,33 @@ encode_bin(Section) ->
 is_empty(#'v1_0.properties'{message_id = undefined,
                             user_id = undefined,
                             to = undefined,
-                            % subject = wrap(utf8, RKey),
+                            subject = undefined,
                             reply_to = undefined,
                             correlation_id = undefined,
                             content_type = undefined,
                             content_encoding = undefined,
-                            creation_time = undefined}) ->
+                            absolute_expiry_time = undefined,
+                            creation_time = undefined,
+                            group_id = undefined,
+                            group_sequence = undefined,
+                            reply_to_group_id = undefined}) ->
     true;
 is_empty(#'v1_0.application_properties'{content = []}) ->
     true;
 is_empty(#'v1_0.message_annotations'{content = []}) ->
     true;
+is_empty(#'v1_0.delivery_annotations'{content = []}) ->
+    true;
+is_empty(#'v1_0.footer'{content = []}) ->
+    true;
 is_empty(_) ->
     false.
 
 
-message_annotation(_Key, #msg{message_annotations = undefined},
-                  Default) ->
+message_annotation(_Key, #msg{message_annotations = []},
+                   Default) ->
     Default;
-message_annotation(Key, #msg{message_annotations =
-                             #'v1_0.message_annotations'{content = Content}},
+message_annotation(Key, #msg{message_annotations = Content},
                    Default)
   when is_binary(Key) ->
     %% the section record format really is terrible
@@ -280,10 +304,9 @@ message_annotation(Key, #msg{message_annotations =
             Default
     end.
 
-message_annotations_as_simple_map(#msg{message_annotations = undefined}) ->
+message_annotations_as_simple_map(#msg{message_annotations = []}) ->
     #{};
-message_annotations_as_simple_map(
-  #msg{message_annotations = #'v1_0.message_annotations'{content = Content}}) ->
+message_annotations_as_simple_map(#msg{message_annotations = Content}) ->
     %% the section record format really is terrible
     lists:foldl(fun ({{symbol, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
@@ -292,11 +315,10 @@ message_annotations_as_simple_map(
                         Acc
                 end, #{}, Content).
 
-application_properties_as_simple_map(#msg{application_properties = undefined}, M) ->
+application_properties_as_simple_map(#msg{application_properties = []}, M) ->
     M;
-application_properties_as_simple_map(
-  #msg{application_properties = #'v1_0.application_properties'{content = Content}},
-  M) ->
+application_properties_as_simple_map(#msg{application_properties = Content},
+                                     M) ->
     %% the section record format really is terrible
     lists:foldl(fun
                     ({{utf8, K}, {_T, V}}, Acc)
@@ -312,41 +334,33 @@ decode([], Acc) ->
     Acc;
 decode([#'v1_0.header'{} = H | Rem], Msg) ->
     decode(Rem, Msg#msg{header = H});
-decode([#'v1_0.message_annotations'{} = MA | Rem], Msg) ->
-    decode(Rem, Msg#msg{message_annotations = MA});
+decode([#'v1_0.message_annotations'{content = MAC} | Rem], Msg) ->
+    decode(Rem, Msg#msg{message_annotations = MAC});
 decode([#'v1_0.properties'{} = P | Rem], Msg) ->
     decode(Rem, Msg#msg{properties = P});
-decode([#'v1_0.application_properties'{} = AP | Rem], Msg) ->
-    decode(Rem, Msg#msg{application_properties = AP});
-decode([#'v1_0.delivery_annotations'{} = MA | Rem], Msg) ->
-    decode(Rem, Msg#msg{delivery_annotations = MA});
+decode([#'v1_0.application_properties'{content = APC} | Rem], Msg) ->
+    decode(Rem, Msg#msg{application_properties = APC});
+decode([#'v1_0.delivery_annotations'{content = DAC} | Rem], Msg) ->
+    decode(Rem, Msg#msg{delivery_annotations = DAC});
 decode([#'v1_0.data'{} = D | Rem], #msg{data = Body} = Msg)
   when is_list(Body) ->
     decode(Rem, Msg#msg{data = Body ++ [D]});
 decode([#'v1_0.amqp_sequence'{} = D | Rem], #msg{data = Body} = Msg)
   when is_list(Body) ->
     decode(Rem, Msg#msg{data = Body ++ [D]});
-decode([#'v1_0.footer'{} = H | Rem], Msg) ->
-    decode(Rem, Msg#msg{footer = H});
+decode([#'v1_0.footer'{content = FC} | Rem], Msg) ->
+    decode(Rem, Msg#msg{footer = FC});
 decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     %% an amqp value can only be a singleton
     decode(Rem, Msg#msg{data = B}).
 
 add_message_annotations(Anns, MA0) ->
-    Content = maps:fold(
-                fun
-                    (K, {T, V}, Acc) when is_atom(T) ->
-                        map_add(symbol, K, T, V, Acc);
-                    (K, V, Acc) ->
-                        {T, _} = wrap(V),
-                        map_add(symbol, K, T, V, Acc)
-                end,
-                case MA0 of
-                    undefined -> [];
-                    #'v1_0.message_annotations'{content = C} -> C
-                end,
-                Anns),
-    #'v1_0.message_annotations'{content = Content}.
+    maps:fold(fun (K, {T, V}, Acc) when is_atom(T) ->
+                      map_add(symbol, K, T, V, Acc);
+                  (K, V, Acc) ->
+                      {T, _} = wrap(V),
+                      map_add(symbol, K, T, V, Acc)
+              end, MA0, Anns).
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
@@ -433,9 +447,9 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                      deaths, Deaths,
                      #{}))))),
     case MA of
-        undefined ->
+        [] ->
             Anns;
-        #'v1_0.message_annotations'{content = Content} ->
+        _ ->
             lists:foldl(
               fun ({{symbol, <<"x-routing-key">>},
                     {utf8, Key}}, Acc) ->
@@ -445,13 +459,18 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                       Acc#{exchange => Exchange};
                   (_, Acc) ->
                       Acc
-              end, Anns, Content)
+              end, Anns, MA)
     end.
 
-lists_prepend_t(undefined, L) ->
+lists_cons_t(undefined, L) ->
     L;
-lists_prepend_t(Val, L) ->
-    [Val | L].
+lists_cons_t(Val, L) ->
+    case is_empty(Val) of
+        true ->
+            L;
+        false ->
+            [Val | L]
+    end.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
