@@ -265,7 +265,6 @@ erlang_package.hex_package(
     version = "1.7.3",
 )
 
-<<<<<<< HEAD
 erlang_package.git_package(
     patch_cmds = [
         """VERSION=$(git rev-parse HEAD)
@@ -286,8 +285,6 @@ erlang_package.hex_package(
     version = "1.0.6",
 )
 
-=======
->>>>>>> 5bfd708029 (Use osiris from Bazel Central Repository)
 erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
@@ -381,11 +378,8 @@ use_repo(
     "json",
     "jsx",
     "observer_cli",
-<<<<<<< HEAD
     "osiris",
     "parallel_stream",
-=======
->>>>>>> 5bfd708029 (Use osiris from Bazel Central Repository)
     "prometheus",
     "ra",
     "ranch",
