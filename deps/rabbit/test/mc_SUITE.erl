@@ -160,7 +160,7 @@ amqpl_death_records(_Config) ->
     ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
 
     ct:pal("H2 ~p", [T2a]),
-    ct:pal("routing headers ~p", [mc:routing_headers(Msg1, [x_headers])]),
+    ct:pal("routing headers ~p", [mc:routing_headers(Msg2, [x_headers])]),
 
 
 
@@ -200,7 +200,6 @@ amqpl_amqp_bin_amqpl(_Config) ->
                        type = <<"45">>,
                        user_id = <<"banana">>,
                        app_id = <<"rmq">>
-                       % cluster_id = <<"adf">>
                       },
     Payload = [<<"data">>],
     Content = #content{properties = Props,
@@ -287,6 +286,7 @@ amqp_amqpl(_Config) ->
           thead(float, 6.0),
           thead(timestamp, 7000),
           thead(byte, 128),
+          thead(boolean, true),
           {utf8(<<"null">>), null}
          ],
     A =  #'v1_0.application_properties'{content = AC},
@@ -335,6 +335,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, float, 6.0}, header(<<"float">>, HL)),
     ?assertMatch({_, timestamp, 7}, header(<<"timestamp">>, HL)),
     ?assertMatch({_, byte, 128}, header(<<"byte">>, HL)),
+    ?assertMatch({_, bool, true}, header(<<"boolean">>, HL)),
     ?assertMatch({_, void, undefined}, header(<<"null">>, HL)),
 
     %% validate content is serialisable
