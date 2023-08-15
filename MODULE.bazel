@@ -41,6 +41,12 @@ bazel_dep(
     repo_name = "looking_glass",
 )
 
+bazel_dep(
+    name = "com_github_rabbitmq_osiris",
+    version = "1.6.3",
+    repo_name = "osiris",
+)
+
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
@@ -270,12 +276,6 @@ erlang_package.hex_package(
     version = "1.7.3",
 )
 
-erlang_package.git_package(
-    build_file = "@rabbitmq-server//bazel:BUILD.osiris",
-    repository = "rabbitmq/osiris",
-    tag = "v1.6.2",
-)
-
 erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
@@ -372,7 +372,6 @@ use_repo(
     "jose",
     "json",
     "observer_cli",
-    "osiris",
     "prometheus",
     "ra",
     "ranch",
