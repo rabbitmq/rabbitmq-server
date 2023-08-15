@@ -166,9 +166,6 @@ erlang_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.cowboy",
     sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
     version = "2.8.0",
-    patch_cmds = [
-        "rm ebin/cowboy.app",
-    ],
 )
 
 erlang_package.hex_package(
