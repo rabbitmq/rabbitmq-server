@@ -244,7 +244,22 @@ event_authentication_failure(Config) ->
 %% Test that queue type rabbit_mqtt_qos0_queue drops QoS 0 messages when its
 %% max length is reached.
 rabbit_mqtt_qos0_queue_overflow(Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
+    ProtoVer = case ?config(mqtt_version, Config) of
+                   v4 -> mqtt311;
+                   v5 -> mqtt50
+               end,
+    QType = rabbit_mqtt_qos0_queue,
+
+    #{
+      [{protocol, ProtoVer}, {queue_type, QType}] :=
+      #{messages_delivered_total := 0,
+        messages_delivered_consume_auto_ack_total := 0},
+
+      [{queue_type, QType}, {dead_letter_strategy, disabled}] :=
+      #{messages_dead_lettered_maxlen_total := NumDeadLettered}
+     } = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
+
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, QType),
 
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 4000),
@@ -279,7 +294,8 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
     [State] = [S || {data, [{"State", S}]} <- Misc],
     #{proc_state := #{qos0_messages_dropped := NumDropped}} = State,
-    ct:pal("NumReceived=~b~nNumDropped=~b", [NumReceived, NumDropped]),
+
+    ct:pal("NumReceived=~b NumDropped=~b", [NumReceived, NumDropped]),
 
     %% We expect that
     %% 1. all sent messages were either received or dropped
@@ -291,6 +307,19 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     %% 3. we received at least 200 messages because everything below the default
     %% of mailbox_soft_limit=200 should not be dropped
     ?assert(NumReceived >= 200),
+
+    %% Assert that Prometheus metrics counted correctly.
+    ExpectedNumDeadLettered = NumDeadLettered + NumDropped,
+    ?assertMatch(
+       #{
+         [{protocol, ProtoVer}, {queue_type, QType}] :=
+         #{messages_delivered_total := NumReceived,
+           messages_delivered_consume_auto_ack_total := NumReceived},
+
+         [{queue_type, QType}, {dead_letter_strategy, disabled}] :=
+         #{messages_dead_lettered_maxlen_total := ExpectedNumDeadLettered}
+        },
+       rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, [])),
 
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).

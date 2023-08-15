@@ -10,6 +10,11 @@
 -behaviour(application).
 
 -include("rabbit_mqtt.hrl").
+<<<<<<< HEAD
+=======
+-include("rabbit_mqtt_packet.hrl").
+-include_lib("rabbit/include/rabbit_global_counters.hrl").
+>>>>>>> 0f5fe8fadd (Add Prometheus metric messages dropped by MQTT QoS 0 queue type)
 -include_lib("stdlib/include/assert.hrl").
 
 -export([start/2, stop/1]).
@@ -92,15 +97,23 @@ local_connection_pids() ->
     end.
 
 init_global_counters() ->
+<<<<<<< HEAD
     init_global_counters(?MQTT_PROTO_V3),
     init_global_counters(?MQTT_PROTO_V4).
+=======
+    lists:foreach(fun init_global_counters/1, [?MQTT_PROTO_V3,
+                                               ?MQTT_PROTO_V4,
+                                               ?MQTT_PROTO_V5]).
+>>>>>>> 0f5fe8fadd (Add Prometheus metric messages dropped by MQTT QoS 0 queue type)
 
 init_global_counters(ProtoVer) ->
     Proto = {protocol, ProtoVer},
     rabbit_global_counters:init([Proto]),
-    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
-    rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]).
+    rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]),
+    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
+    rabbit_global_counters:init([{queue_type, ?QUEUE_TYPE_QOS_0}, {dead_letter_strategy, disabled}],
+                                [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]).
 
 persist_static_configuration() ->
     rabbit_mqtt_util:init_sparkplug(),
