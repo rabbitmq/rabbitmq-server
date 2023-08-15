@@ -36,6 +36,9 @@ jobs:
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 25_3
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+
       - name: Checkout
         uses: actions/checkout@v3
 
