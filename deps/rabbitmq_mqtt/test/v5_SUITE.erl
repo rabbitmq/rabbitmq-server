@@ -866,7 +866,7 @@ at_most_once_dead_letter_detect_cycle(Config) ->
     ok = emqtt:disconnect(Pub),
     %% Given our subscribing client is disconnected, the message should be dead lettered after 1 ms.
     %% However, due to the dead letter cycle, we expect the message to be dropped.
-    timer:sleep(5),
+    timer:sleep(20),
     Sub2 = connect(SubClientId, Config, [{clean_start, false}]),
     assert_nothing_received(),
     %% Double check that the message was indeed (exactly once) dead lettered.
