@@ -195,7 +195,7 @@ init_per_testcase(user_credentials_auth, Config) ->
     User = <<"new-user">>,
     Pass = <<"new-user-pass">>,
     ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, Pass),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ok = set_full_permissions(Config, User, <<"/">>),
     Config1 = rabbit_ct_helpers:set_config(Config, [{new_user, User},
                                                     {new_user_pass, Pass}]),
     rabbit_ct_helpers:testcase_started(Config1, user_credentials_auth);
@@ -251,15 +251,6 @@ init_per_testcase(T = ssl_user_cert_vhost_mapping_takes_precedence_over_port_vho
     ok = rabbit_ct_broker_helpers:clear_permissions(Config3, User, VhostForPortMapping),
     ok = rabbit_ct_broker_helpers:clear_permissions(Config3, User, <<"/">>),
     testcase_started(Config3, T);
-init_per_testcase(T, Config)
-  when T =:= will_queue_create_permission_queue_read;
-       T =:= will_queue_create_permission_exchange_write;
-       T =:= will_queue_publish_permission_exchange_write;
-       T =:= will_queue_publish_permission_topic_write ->
-    case ?config(mqtt_version, Config) of
-        v4 -> {skip, "Will Delay Interval is an MQTT 5.0 feature"};
-        v5 -> testcase_started(Config, T)
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -281,7 +272,7 @@ set_vhost_for_cert_user(Config, User) ->
         {<<"O=client,CN=unlikelytoexistuser">>, <<"vhost2">>}
     ],
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForCertUser),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VhostForCertUser),
+    ok = set_full_permissions(Config, User, VhostForCertUser),
     ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_default_vhosts, UserToVHostMappingParameter),
     rabbit_ct_helpers:set_config(Config, {temp_vhost_for_ssl_user, VhostForCertUser}).
 
@@ -297,7 +288,7 @@ set_vhost_for_port_vhost_mapping_user(Config, User) ->
 
     ],
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForPortMapping),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VhostForPortMapping),
+    ok = set_full_permissions(Config, User, VhostForPortMapping),
     ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_port_to_vhost_mapping, PortToVHostMappingParameter),
     rabbit_ct_helpers:set_config(Config, {temp_vhost_for_port_mapping, VhostForPortMapping}).
 
@@ -325,14 +316,14 @@ end_per_testcase(Testcase, Config) when Testcase == port_vhost_mapping_success;
                                         Testcase == port_vhost_mapping_not_allowed;
                                         Testcase == port_vhost_mapping_success_no_mapping ->
     User = <<"guest">>,
-    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ok = set_full_permissions(Config, User, <<"/">>),
     VHost = ?config(temp_vhost_for_port_mapping, Config),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(T = port_vhost_mapping_vhost_does_not_exist, Config) ->
     User = <<"guest">>,
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ok = set_full_permissions(Config, User, <<"/">>),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
     rabbit_ct_helpers:testcase_finished(Config, T);
 end_per_testcase(T = ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping, Config) ->
@@ -345,35 +336,32 @@ end_per_testcase(T = ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhos
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHostForPortVHostMapping),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
     rabbit_ct_helpers:testcase_finished(Config, T);
-end_per_testcase(T, Config) when T == queue_bind_permission;
-                                 T == queue_unbind_permission;
-                                 T == queue_consume_permission;
-                                 T == queue_consume_permission_on_connect;
-                                 T == subscription_queue_delete_permission;
-                                 T == will_queue_create_permission_queue_read,
-                                 T == will_queue_create_permission_exchange_write,
-                                 T == will_queue_delete_permission;
-                                 T == queue_declare_permission;
-                                 T == publish_permission;
-                                 T == publish_permission_will_message;
-                                 T == topic_read_permission;
-                                 T == topic_write_permission;
-                                 T == topic_write_permission_variable_expansion;
-                                 T == loopback_user_connects_from_remote_host ->
+end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
+                                        Testcase == no_queue_unbind_permission;
+                                        Testcase == no_queue_consume_permission;
+                                        Testcase == no_queue_consume_permission_on_connect;
+                                        Testcase == no_queue_delete_permission;
+                                        Testcase == no_queue_declare_permission;
+                                        Testcase == no_publish_permission;
+                                        Testcase == no_publish_permission_will_message;
+                                        Testcase == no_topic_read_permission;
+                                        Testcase == no_topic_write_permission;
+                                        Testcase == topic_write_permission_variable_expansion;
+                                        Testcase == loopback_user_connects_from_remote_host ->
     %% So let's wait before logs are surely flushed
     Marker = "MQTT_AUTH_SUITE_MARKER",
     rpc(Config, 0, rabbit_log, error, [Marker]),
     wait_log(Config, [{[Marker], fun () -> stop end}]),
 
     %% Preserve file contents in case some investigation is needed, before truncating.
-    file:copy(?config(log_location, Config), iolist_to_binary([?config(log_location, Config), ".", atom_to_binary(T)])),
+    file:copy(?config(log_location, Config), iolist_to_binary([?config(log_location, Config), ".", atom_to_binary(Testcase)])),
 
     %% And provide an empty log file for the next test in this group
     file:write_file(?config(log_location, Config), <<>>),
 
-    rabbit_ct_helpers:testcase_finished(Config, T);
-end_per_testcase(T, Config) ->
-    rabbit_ct_helpers:testcase_finished(Config, T).
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 delete_cert_user(Config) ->
     User = ?config(temp_ssl_user, Config),
