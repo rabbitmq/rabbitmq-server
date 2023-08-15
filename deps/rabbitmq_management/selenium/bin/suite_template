@@ -84,11 +84,7 @@ init_suite() {
 
 build_mocha_image() {
   begin "Ensuring mocha-test image ..."
-<<<<<<< HEAD
-  tag=($(md5sum package.json))
-=======
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
->>>>>>> c3ee4e5a6d (Fix #9043)
   if [[ "$(docker images -q mocha-test:$tag 2> /dev/null)" == "" ]]; then
     docker build -t mocha-test:$tag  --target test $SCRIPT/..
     print "> Built docker image mocha-test:$tag"
@@ -419,11 +415,7 @@ start_fakeproxy() {
 
 init_mock-auth-backend-http() {
   AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
-<<<<<<< HEAD
-  AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/auth-backend-http
-=======
   AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/mock-auth-backend-http
->>>>>>> c3ee4e5a6d (Fix #9043)
 
   print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
   print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
@@ -448,8 +440,6 @@ start_mock-auth-backend-http() {
   end "mock-auth-backend-http is ready"
 }
 
-<<<<<<< HEAD
-=======
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
 
@@ -483,7 +473,6 @@ start_mock-auth-backend-ldap() {
   end "mock-auth-backend-ldap is ready"
 }
 
->>>>>>> c3ee4e5a6d (Fix #9043)
 wait_for_url() {
   BASE_URL=$1
   if [[ $BASE_URL == *"localhost"** ]]; then
@@ -583,10 +572,7 @@ test() {
     --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
     --env RUN_LOCAL=false \
     --env PROFILES="${PROFILES}" \
-<<<<<<< HEAD
-=======
     --env ENV_FILE="/code/.env" \
->>>>>>> c3ee4e5a6d (Fix #9043)
     -v ${TEST_DIR}:/code/test \
     -v ${SCREENS}:/screens \
     -v ${ENV_FILE}:/code/.env \
@@ -724,10 +710,7 @@ test_local() {
   export RUN_LOCAL=true
   export SCREENSHOTS_DIR=${SCREENS}
 
-<<<<<<< HEAD
-=======
   export ENV_FILE
->>>>>>> c3ee4e5a6d (Fix #9043)
   npm test $TEST_CASES_DIR/$1
 
 }

@@ -7,11 +7,7 @@
     "test": "mocha --recursive --trace-warnings --timeout 40000",
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
-<<<<<<< HEAD
-    "amqp10_roundtriptest" : "RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME}./run-amqp10-roundtriptest"
-=======
     "amqp10_roundtriptest" : "export $(cat $ENV_FILE | xargs)&& ./run-amqp10-roundtriptest"
->>>>>>> c3ee4e5a6d (Fix #9043)
   },
   "keywords": [],
   "author": "",
