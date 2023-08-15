@@ -534,7 +534,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                               fun(Q1) ->
                                       rabbit_queue_type:cancel(
                                         Q1, ConsumerTag, undefined,
-                                        Username, QueueStates0)     
+                                        Username, QueueStates0)
                               end)
                    end) of
                 {ok, QueueStates} ->
@@ -674,8 +674,7 @@ server_header() ->
 do_subscribe(Destination, DestHdr, Frame,
              State0 = #proc_state{subscriptions = Subs,
                                   default_topic_exchange = DfltTopicEx,
-                                  queue_consumers = QCons,
-                                  vhost = VHost}) ->
+                                  queue_consumers = QCons}) ->
     check_subscription_access(Destination, State0),
 
     {ok, {_Global, DefaultPrefetch}} = application:get_env(rabbit, default_consumer_prefetch),
@@ -684,7 +683,7 @@ do_subscribe(Destination, DestHdr, Frame,
     %% io:format("Prefetch: ~p~n", [Prefetch]),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
     case ensure_endpoint(source, Destination, Frame, State0) of
-        {ok, Queue, State} ->
+        {ok, QueueName, State} ->
             {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
             case maps:find(ConsumerTag, Subs) of
                 {ok, _} ->
@@ -703,18 +702,17 @@ do_subscribe(Destination, DestHdr, Frame,
                                         [{<<"x-stream-offset">>, Type, Value}]
                                 end,
                     try
-                        {ok, State1} = consume_queue(Queue, #{no_ack => (AckMode == auto),
-                                                              prefetch_count => Prefetch,
-                                                              consumer_tag => ConsumerTag,
-                                                              exclusive_consume => false,
-                                                              args => Arguments},
+                        {ok, State1} = consume_queue(QueueName, #{no_ack => (AckMode == auto),
+                                                                  prefetch_count => Prefetch,
+                                                                  consumer_tag => ConsumerTag,
+                                                                  exclusive_consume => false,
+                                                                  args => Arguments},
                                                      State),
-                        ok = ensure_binding(Queue, ExchangeAndKey, State1),
-                        CTags1 = case maps:find(Queue, QCons) of
+                        ok = ensure_binding(QueueName, ExchangeAndKey, State1),
+                        CTags1 = case maps:find(QueueName, QCons) of
                                      {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
                                      error -> gb_sets:singleton(ConsumerTag)
                                  end,
-                        QueueName = rabbit_misc:r(VHost, queue, Queue),
                         QCons1 = maps:put(QueueName, CTags1, QCons),
                         ok(State1#proc_state{subscriptions = maps:put(
                                                                ConsumerTag,
@@ -730,14 +728,14 @@ do_subscribe(Destination, DestHdr, Frame,
                             %% was server-named and declared by us
                             case Destination of
                                 {exchange, _} ->
-                                    ok = maybe_clean_up_queue(Queue, State);
+                                    ok = maybe_clean_up_queue(QueueName, State);
                                 {topic, _} ->
-                                    ok = maybe_clean_up_queue(Queue, State);
+                                    ok = maybe_clean_up_queue(QueueName, State);
                                 _ ->
                                     ok
                             end,
                             exit(Err)
-                    end                    
+                    end
             end;
         {error, _} = Err ->
             Err
@@ -1213,7 +1211,7 @@ ensure_reply_queue(TempQueueId, State = #proc_state{reply_queues  = RQS,
             {binary_to_list(RQ), State};
         error ->
             {ok, Queue} = create_queue(State),
-            #resource{name = QNameBin} = amqqueue:get_name(Queue),
+            #resource{name = QNameBin} = QName = amqqueue:get_name(Queue),
 
             ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
             Spec = #{no_ack => true,
@@ -1221,7 +1219,7 @@ ensure_reply_queue(TempQueueId, State = #proc_state{reply_queues  = RQS,
                      consumer_tag => ConsumerTag,
                      exclusive_consume => false,
                      args => []},
-            {ok, State1} = consume_queue(QNameBin, Spec, State),
+            {ok, State1} = consume_queue(QName, Spec, State),
             Destination = binary_to_list(QNameBin),
 
             %% synthesise a subscription to the reply queue destination
@@ -1567,15 +1565,15 @@ delete_queue(QRes, Username) ->
             ok
     end.
 
-ensure_binding(QueueBin, {"", Queue}, _State) ->
+ensure_binding(#resource{name = QueueBin}, {"", Queue}, _State) ->
     %% i.e., we should only be asked to bind to the default exchange a
     %% queue with its own name
     QueueBin = list_to_binary(Queue),
     ok;
-ensure_binding(Queue, {Exchange, RoutingKey}, _State = #proc_state{auth_login = Username,
+ensure_binding(QName, {Exchange, RoutingKey}, _State = #proc_state{auth_login = Username,
                                                                    vhost = VHost}) ->
     Binding = #binding{source = rabbit_misc:r(VHost, exchange, list_to_binary(Exchange)),
-                       destination = rabbit_misc:r(VHost, queue, Queue),
+                       destination = QName,
                        key = list_to_binary(RoutingKey)},
     case rabbit_binding:add(Binding, Username) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
@@ -1722,7 +1720,7 @@ handle_queue_actions(Actions, #proc_state{} = State0) ->
           ({unblock, QName}, S0) ->
               credit_flow:unblock(QName),
               S0;
-          %% TODO: in rabbit_channel there code for handling 
+          %% TODO: in rabbit_channel there code for handling
           %% send_drained and send_credit_reply
           %% I'm doing catch all here to not crash?
           (_, S0) ->
@@ -1779,17 +1777,18 @@ util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #proc_state{
     check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
     Amqqueue = new_amqqueue(undefined, exchange, Params, State),
     {ok, Queue} = create_queue(Amqqueue, State),
-    {ok, Queue, State};
+    {ok, amqqueue:get_name(Queue), State};
 
 util_ensure_endpoint(source, {topic, _}, Params, State) ->
     Amqqueue = new_amqqueue(undefined, topic, Params, State),
     {ok, Queue} = create_queue(Amqqueue, State),
-    {ok, Queue, State};
+    {ok, amqqueue:get_name(Queue), State};
 
 util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
-util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = RoutingState}) ->
+util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = RoutingState,
+                                                                 vhost = VHost}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
     QueueNameBin = list_to_binary(Name),
     RState1 = case sets:is_element(Params1, RoutingState) of
@@ -1799,7 +1798,7 @@ util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = R
                           #resource{name = QNameBin} = amqqueue:get_name(Queue),
                           sets:add_element(QNameBin, RoutingState)
               end,
-    {ok, QueueNameBin, State#proc_state{route_state = RState1}};
+    {ok,  rabbit_misc:r(VHost, queue, QueueNameBin), State#proc_state{route_state = RState1}};
 
 util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #proc_state{vhost = VHost}) ->
     ExchangeName = rabbit_misc:r(Name, exchange, VHost),
@@ -1809,11 +1808,11 @@ util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #proc_state{vh
 util_ensure_endpoint(dest, {topic, _}, _Params, State) ->
     {ok, undefined, State};
 
-util_ensure_endpoint(_, {amqqueue, Name}, _Params, State) ->
-  {ok, list_to_binary(Name), State};
+util_ensure_endpoint(_, {amqqueue, Name}, _Params, State = #proc_state{vhost = VHost}) ->
+  {ok, rabbit_misc:r(VHost, queue, list_to_binary(Name)), State};
 
-util_ensure_endpoint(_, {reply_queue, Name}, _Params, State) ->
-  {ok, list_to_binary(Name), State};
+util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #proc_state{vhost = VHost}) ->
+  {ok, rabbit_misc:r(VHost, queue, list_to_binary(Name)), State};
 
 util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
@@ -1885,11 +1884,9 @@ unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
 unescape([],           Acc) -> lists:reverse(Acc).
 
 
-consume_queue(QNameBin, Spec0, State = #proc_state{user = #user{username = Username} = User,
+consume_queue(QRes, Spec0, State = #proc_state{user = #user{username = Username} = User,
                                                    authz_context = AuthzCtx,
-                                                   queue_states  = QStates0,
-                                                   vhost = VHost}) ->
-    QRes = rabbit_misc:r(VHost, queue, QNameBin),
+                                                   queue_states  = QStates0})->
     case check_resource_access(User, QRes, read, AuthzCtx) of
         ok ->
             Spec = Spec0#{channel_pid => self(),
@@ -1926,27 +1923,27 @@ create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx,
     %% configure access to queue required for queue.declare
     ok = check_resource_access(User, QName, configure, AuthzCtx),
 
-        case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-            false ->
-                rabbit_core_metrics:queue_declared(QName),
+    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+        false ->
+            rabbit_core_metrics:queue_declared(QName),
 
-                case rabbit_queue_type:declare(Amqqueue, node()) of
-                    {new, Q} when ?is_amqqueue(Q) ->
+            case rabbit_queue_type:declare(Amqqueue, node()) of
+                {new, Q} when ?is_amqqueue(Q) ->
                         rabbit_core_metrics:queue_created(QName),
-                        {ok, Q};
-                    {existing, Q} when ?is_amqqueue(Q) ->
-                        rabbit_core_metrics:queue_created(QName),
-                        {ok, Q};
-                    Other ->
-                        log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
-                        {error, queue_declare}
-                end;
-            {true, Limit} ->
-                log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
-                          rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
+                    {ok, Q};
+                {existing, Q} when ?is_amqqueue(Q) ->
+                    rabbit_core_metrics:queue_created(QName),
+                    {ok, Q};
+                Other ->
+                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
+                    {error, queue_declare}
+            end;
+        {true, Limit} ->
+            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
+                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
                           none),
-                {error, queue_limit_exceeded}
-        end.
+            {error, queue_limit_exceeded}
+    end.
 
 routing_init_state() -> sets:new().
 
