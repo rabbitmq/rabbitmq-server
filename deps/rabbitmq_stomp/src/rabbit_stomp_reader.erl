@@ -20,10 +20,6 @@
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
--define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state,
-                        timeout]).
-
 -record(reader_state, {
     socket,
     conn_name,
@@ -172,6 +168,19 @@ handle_info({conserve_resources, Conserve}, State) ->
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, run_socket(control_throttle(State)), hibernate};
+
+handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:handle_down(Evt, ProcState) of
+        {ok, NewProcState} ->
+            {noreply, processor_state(NewProcState, State), hibernate};
+        {error, Reason} ->
+            {stop, {shutdown, Reason, State}}
+    end;
+
+handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid),
+    {noreply, State, hibernate};
 
 %%----------------------------------------------------------------------------
 
@@ -499,6 +508,8 @@ info_internal(timeout, #reader_state{timeout_sec = {_, Receive}}) ->
 info_internal(timeout, #reader_state{timeout_sec = undefined}) ->
     0;
 info_internal(conn_name, #reader_state{conn_name = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
+info_internal(name, #reader_state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
 info_internal(connection, #reader_state{connection = _Val}) ->
     self();
