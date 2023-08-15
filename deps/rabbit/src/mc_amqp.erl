@@ -355,21 +355,19 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     decode(Rem, Msg#msg{data = B}).
 
 add_message_annotations(Anns, MA0) ->
-    maps:fold(fun (K, {T, V}, Acc) when is_atom(T) ->
-                      map_add(symbol, K, T, V, Acc);
+    maps:fold(fun
+                  % (K, {T, V}, Acc) when is_atom(T) ->
+                  %     map_add(symbol, K, T, V, Acc);
                   (K, V, Acc) ->
-                      {T, _} = wrap(V),
-                      map_add(symbol, K, T, V, Acc)
+                      % {T, _} = wrap(V),
+                      map_add(symbol, K, wrap(V), Acc)
               end, MA0, Anns).
 
-map_add(_T, _Key, _Type, undefined, Acc) ->
+map_add(_T, _Key, undefined, Acc) ->
     Acc;
-map_add(KeyType, Key, Type, Value, Acc0) ->
+map_add(KeyType, Key, TaggedValue, Acc0) ->
     TaggedKey = wrap(KeyType, Key),
-    %% TODO: optimise, keydelete always builds a new list even when key is not
-    %% found
-    Acc = lists:keydelete(TaggedKey, 1, Acc0),
-    [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
+    lists_upsert({TaggedKey, TaggedValue}, Acc0).
 
 wrap(_Type, undefined) ->
     undefined;
@@ -378,12 +376,16 @@ wrap(Type, Val) ->
 
 wrap(undefined) ->
     undefined;
+wrap({_, _} = T) ->
+    %% looks wrapped already
+    T;
 wrap(Val) when is_binary(Val) ->
     %% assume string value
     {utf8, Val};
 wrap(Val) when is_integer(Val) ->
-    %% assume string value
-    {uint, Val}.
+    {long, Val};
+wrap(Val) when is_boolean(Val) ->
+    {boolean, Val}.
 
 
 key_find(K, [{{_, K}, {_, V}} | _]) ->
@@ -471,6 +473,17 @@ lists_cons_t(Val, L) ->
         false ->
             [Val | L]
     end.
+
+lists_upsert(New, L) ->
+    lists_upsert(New, L, [], L).
+
+lists_upsert({Key, _} = New, [{Key, _} | Rem], Pref, _All) ->
+    lists:reverse(Pref, [New | Rem]);
+lists_upsert(New, [Item | Rem], Pref, All) ->
+    lists_upsert(New, Rem, [Item | Pref], All);
+lists_upsert(New, [], _Pref, All) ->
+    [New | All].
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
