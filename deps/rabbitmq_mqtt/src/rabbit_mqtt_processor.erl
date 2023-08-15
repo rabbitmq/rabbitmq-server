@@ -1982,6 +1982,8 @@ handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg},
                 false ->
                     deliver_one_to_client(Msg, false, State0);
                 true ->
+                    rabbit_global_counters:messages_dead_lettered(
+                      maxlen, ?QUEUE_TYPE_QOS_0, disabled, 1),
                     State0#state{qos0_messages_dropped = N + 1}
             end,
     {ok, State};
