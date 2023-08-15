@@ -57,7 +57,7 @@ user_login_authentication(Username, []) ->
     R;
 
 user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
-    case pget(password, AuthProps) of
+    case extractPassword(AuthProps) of
         undefined -> user_login_authentication(Username, []);
         <<>> ->
             %% Password "" is special in LDAP, see
@@ -78,8 +78,27 @@ user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
             R
     end;
 
-user_login_authentication(Username, AuthProps) ->
-    exit({unknown_auth_props, Username, AuthProps}).
+user_login_authentication(Username, _AuthProps) ->
+    {refused, "user '~ts' - unauthenticated. Not enough credentials", [Username]}.
+
+%% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
+%% or as a Function with the attribute rabbit_auth_backend_ldap if the user was already authenticated with http backend
+%% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
+extractPassword(AuthProps) ->
+    case proplists:get_value(password, AuthProps, none) of
+        none ->
+            case proplists:get_value(rabbit_auth_backend_ldap, AuthProps, none) of
+                none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
+                            none -> undefined;
+                            PasswordFun ->
+                                (PasswordFun())#impl.password
+                        end;
+                PasswordFun ->
+                    (PasswordFun())#impl.password
+            end;
+        Password ->
+            Password
+    end.
 
 user_login_authorization(Username, AuthProps) ->
     case user_login_authentication(Username, AuthProps) of

@@ -1,0 +1,57 @@
+{
+  "users": [
+
+    {
+      "name": "administrator-only",
+      "password_hash": "Joz9zzUBOrX10lB3GisWN5oTXK+wj0gxS/nyrfTYmBOuhps5",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "administrator"
+      ],
+      "limits": {}
+    },
+    {
+      "name": "management-only",
+      "password_hash": "Joz9zzUBOrX10lB3GisWN5oTXK+wj0gxS/nyrfTYmBOuhps5",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "management"
+      ],
+      "limits": {}
+    },
+    {
+      "name": "management",
+      "password_hash": "wefAAoRipS2ytWb7U2+BLhReT8oO+VU8ztUi3dv+rawi9rB1",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "management"
+      ],
+      "limits": {}
+    },
+    {
+      "name": "monitoring-only",
+      "password_hash": "Joz9zzUBOrX10lB3GisWN5oTXK+wj0gxS/nyrfTYmBOuhps5",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "monitoring"
+      ],
+      "limits": {}
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+
+    {
+      "user": "management",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+
+}

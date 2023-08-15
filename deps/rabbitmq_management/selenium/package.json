@@ -6,19 +6,20 @@
   "scripts": {
     "test": "mocha --recursive --trace-warnings --timeout 40000",
     "fakeportal": "node fakeportal/app.js",
-    "fakeproxy": "node fakeportal/proxy.js"
+    "fakeproxy": "node fakeportal/proxy.js",
+    "amqp10_roundtriptest" : "export $(cat $ENV_FILE | xargs)&& ./run-amqp10-roundtriptest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chromedriver": "^113.0.0",
+    "chromedriver": "^115.0.0",
     "ejs": "^3.1.8",
-    "express": "^4.18.2",
+    "express": "^4.18.2", 
     "geckodriver": "^3.0.2",
     "http-proxy": "^1.18.1",
-    "proxy": "^1.0.2",
     "path": "^0.12.7",
+    "proxy": "^1.0.2",
     "selenium-webdriver": "^4.4.0",
     "xmlhttprequest": "^1.8.0"
   },
