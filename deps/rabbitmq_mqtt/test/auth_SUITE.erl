@@ -10,8 +10,21 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+<<<<<<< HEAD
 -define(CONNECT_TIMEOUT, 10000).
 -define(WAIT_LOG_NO_CRASHES, {["Generic server.*terminating"], fun () -> exit(there_should_be_no_crashes) end}).
+=======
+
+%% defined in MQTT v4 and v5 (not in v3)
+-define(SUBACK_FAILURE, 16#80).
+
+-define(FAIL_IF_CRASH_LOG, {["Generic server.*terminating"],
+                            fun () -> ct:fail(crash_detected) end}).
+-import(rabbit_ct_broker_helpers,
+        [rpc/5,
+         set_full_permissions/3]).
+-import(rabbit_ct_helpers, [testcase_started/2]).
+>>>>>>> 88aae8df4c (Resolve a conflict (#9074))
 
 all() ->
     [{group, anonymous_no_ssl_user},
@@ -207,30 +220,18 @@ init_per_testcase(port_vhost_mapping_not_allowed, Config) ->
     VHost = ?config(temp_vhost_for_port_mapping, Config1),
     rabbit_ct_broker_helpers:clear_permissions(Config1, User, VHost),
     rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_not_allowed);
-init_per_testcase(port_vhost_mapping_vhost_does_not_exist, Config) ->
+init_per_testcase(T = port_vhost_mapping_vhost_does_not_exist, Config) ->
     User = <<"guest">>,
     Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
     rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
     VHost = ?config(temp_vhost_for_port_mapping, Config1),
     rabbit_ct_broker_helpers:delete_vhost(Config1, VHost),
-<<<<<<< HEAD
-    rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_vhost_does_not_exist);
-init_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping, Config) ->
-=======
     testcase_started(Config1, T);
 init_per_testcase(T = ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping, Config) ->
->>>>>>> 1ab4f79147 (Fix MQTT vhost mapping test case)
     Config1 = set_cert_user_on_default_vhost(Config),
     User = ?config(temp_ssl_user, Config1),
     Config2 = set_vhost_for_cert_user(Config1, User),
     Config3 = set_vhost_for_port_vhost_mapping_user(Config2, User),
-<<<<<<< HEAD
-    VhostForPortMapping = ?config(mqtt_port_to_vhost_mapping, Config2),
-    rabbit_ct_broker_helpers:clear_permissions(Config3, User, VhostForPortMapping),
-
-    rabbit_ct_broker_helpers:clear_permissions(Config3, User, <<"/">>),
-    rabbit_ct_helpers:testcase_started(Config3, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
-=======
     %% Given we revoke the vhost permissions that were set by set_vhost_for_port_vhost_mapping_user/2,
     %% we know that if connecting succeeds, the cert vhost mapping must have taken precedence.
     VhostForPortMapping = ?config(temp_vhost_for_port_mapping, Config3),
@@ -246,7 +247,6 @@ init_per_testcase(T, Config)
         v4 -> {skip, "Will Delay Interval is an MQTT 5.0 feature"};
         v5 -> testcase_started(Config, T)
     end;
->>>>>>> 1ab4f79147 (Fix MQTT vhost mapping test case)
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -261,13 +261,8 @@ set_cert_user_on_default_vhost(Config) ->
                                            [Cert]),
     User = binary_to_list(UserBin),
     ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, ""),
-<<<<<<< HEAD
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
-    rabbit_ct_helpers:set_config(Config, [{temp_ssl_user, User}]).
-=======
     ok = set_full_permissions(Config, User, <<"/">>),
     rabbit_ct_helpers:set_config(Config, {temp_ssl_user, User}).
->>>>>>> 1ab4f79147 (Fix MQTT vhost mapping test case)
 
 set_vhost_for_cert_user(Config, User) ->
     VhostForCertUser = <<"vhost_for_cert_user">>,
@@ -340,6 +335,7 @@ end_per_testcase(T = ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhos
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHostForPortVHostMapping),
     ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
 <<<<<<< HEAD
+<<<<<<< HEAD
     rabbit_ct_helpers:testcase_finished(Config, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
 end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
                                         Testcase == no_queue_consume_permission;
@@ -354,6 +350,8 @@ end_per_testcase(Testcase, Config) when Testcase == no_queue_bind_permission;
                                         Testcase == topic_write_permission_variable_expansion;
                                         Testcase == loopback_user_connects_from_remote_host ->
 =======
+=======
+>>>>>>> 88aae8df4c (Resolve a conflict (#9074))
     rabbit_ct_helpers:testcase_finished(Config, T);
 end_per_testcase(T, Config) when T == queue_bind_permission;
                                  T == queue_unbind_permission;
@@ -370,8 +368,11 @@ end_per_testcase(T, Config) when T == queue_bind_permission;
                                  T == topic_write_permission;
                                  T == topic_write_permission_variable_expansion;
                                  T == loopback_user_connects_from_remote_host ->
+<<<<<<< HEAD
 >>>>>>> 8daaa48da8 (User short variable instead of long atom name)
 >>>>>>> 3a59796080 (User short variable instead of long atom name)
+=======
+>>>>>>> 88aae8df4c (Resolve a conflict (#9074))
     %% So let's wait before logs are surely flushed
     Marker = "MQTT_AUTH_SUITE_MARKER",
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_log, error, [Marker]),
@@ -379,14 +380,14 @@ end_per_testcase(T, Config) when T == queue_bind_permission;
              [{[Marker], fun () -> stop end}]),
 
     %% Preserve file contents in case some investigation is needed, before truncating.
-    file:copy(?config(log_location, Config), iolist_to_binary([?config(log_location, Config), ".", atom_to_binary(Testcase)])),
+    file:copy(?config(log_location, Config), iolist_to_binary([?config(log_location, Config), ".", atom_to_binary(T)])),
 
     %% And provide an empty log file for the next test in this group
     file:write_file(?config(log_location, Config), <<>>),
 
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+    rabbit_ct_helpers:testcase_finished(Config, T);
+end_per_testcase(T, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, T).
 
 delete_cert_user(Config) ->
     User = ?config(temp_ssl_user, Config),
