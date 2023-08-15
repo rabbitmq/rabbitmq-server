@@ -198,8 +198,6 @@ x_header(Key, BasicMsg) ->
 routing_headers(#?MODULE{protocol = Proto,
                          annotations = Anns,
                          data = Data}, Options) ->
-    %% TODO: fake death headers also as this is what most users
-    %% use for x- filtering
     New = case lists:member(x_headers, Options) of
               true ->
                   maps:filter(fun (<<"x-", _/binary>>, _) -> true;
