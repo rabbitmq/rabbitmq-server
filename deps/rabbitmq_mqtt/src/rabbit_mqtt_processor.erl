@@ -358,8 +358,246 @@ process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
     rabbit_log_connection:debug("Received a DISCONNECT"),
     {stop, PState}.
 
+<<<<<<< HEAD
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
     Topic1 = Amqp2MqttFun(Topic0),
+=======
+check_protocol_version(ProtoVersion) ->
+    case lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)) of
+        true ->
+            ok;
+        false ->
+            ?LOG_ERROR("unacceptable MQTT protocol version: ~p", [ProtoVersion]),
+            {error, ?CONNACK_UNACCEPTABLE_PROTO_VER}
+    end.
+
+check_credentials(Username, Password, SslLoginName, PeerIp) ->
+    case creds(Username, Password, SslLoginName) of
+        nocreds ->
+            auth_attempt_failed(PeerIp, <<>>),
+            ?LOG_ERROR("MQTT login failed: no credentials provided"),
+            {error, ?CONNACK_BAD_CREDENTIALS};
+        {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
+            auth_attempt_failed(PeerIp, <<>>),
+            ?LOG_ERROR("MQTT login failed: no username is provided"),
+<<<<<<< HEAD
+            {error, ?CONNACK_BAD_CREDENTIALS};
+        {invalid_creds, {User, undefined}} when is_binary(User) ->
+            auth_attempt_failed(PeerIp, User),
+            ?LOG_ERROR("MQTT login failed for user '~p': no password provided", [User]),
+            {error, ?CONNACK_BAD_CREDENTIALS};
+=======
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
+        {invalid_creds, {User, _Pass}} when is_binary(User) ->
+            auth_attempt_failed(PeerIp, User),
+            ?LOG_ERROR("MQTT login failed for user '~s': no password provided", [User]),
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
+>>>>>>> fb0df64373 (Disallow empty password in MQTT)
+        {UserBin, PassBin} ->
+            {ok, {UserBin, PassBin}}
+    end.
+
+ensure_client_id(<<>>, _CleanSess = false) ->
+    ?LOG_ERROR("MQTT client ID must be provided for non-clean session"),
+    {error, ?CONNACK_ID_REJECTED};
+ensure_client_id(<<>>, _CleanSess = true) ->
+    {ok, rabbit_data_coercion:to_binary(
+           rabbit_misc:base64url(
+             rabbit_guid:gen_secure()))};
+ensure_client_id(ClientId, _CleanSess)
+  when is_binary(ClientId) ->
+    {ok, ClientId}.
+
+-spec register_client_id(rabbit_types:vhost(), binary()) ->
+    {ok, RaRegisterState :: undefined | {pending, reference()}} |
+    {error, ConnAckErrorCode :: pos_integer()}.
+register_client_id(VHost, ClientId)
+  when is_binary(VHost), is_binary(ClientId) ->
+    %% Always register client ID in pg.
+    PgGroup = {VHost, ClientId},
+    ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
+
+    case rabbit_mqtt_ff:track_client_id_in_ra() of
+        true ->
+            case collector_register(ClientId) of
+                {ok, Corr} ->
+                    %% Ra node takes care of removing duplicate client ID connections.
+                    {ok, {pending, Corr}};
+                {error, _} = Err ->
+                    %% e.g. this node was removed from the MQTT cluster members
+                    ?LOG_ERROR("MQTT connection failed to register client ID ~s in vhost ~s in Ra: ~p",
+                               [ClientId, VHost, Err]),
+                    {error, ?CONNACK_SERVER_UNAVAILABLE}
+            end;
+        false ->
+            ok = erpc:multicast([node() | nodes()],
+                                ?MODULE,
+                                remove_duplicate_client_id_connections,
+                                [PgGroup, self()]),
+            {ok, undefined}
+    end.
+
+-spec remove_duplicate_client_id_connections({rabbit_types:vhost(), binary()}, pid()) -> ok.
+remove_duplicate_client_id_connections(PgGroup, PidToKeep) ->
+    try persistent_term:get(?PG_SCOPE) of
+        PgScope ->
+            Pids = pg:get_local_members(PgScope, PgGroup),
+            lists:foreach(fun(Pid) ->
+                                  gen_server:cast(Pid, duplicate_id)
+                          end, Pids -- [PidToKeep])
+    catch _:badarg ->
+              %% MQTT supervision tree on this node not fully started
+              ok
+    end.
+
+-spec init_trace(rabbit_types:vhost(), binary()) ->
+    {rabbit_trace:state(), undefined | binary()}.
+init_trace(VHost, ConnName0) ->
+    TraceState = rabbit_trace:init(VHost),
+    ConnName = case rabbit_trace:enabled(TraceState) of
+                   true ->
+                       ConnName0;
+                   false ->
+                       %% Tracing does not need connection name.
+                       %% Use less memmory by setting to undefined.
+                       undefined
+               end,
+    {TraceState, ConnName}.
+
+-spec update_trace(binary(), state()) -> state().
+update_trace(ConnName0, State = #state{cfg = Cfg0 = #cfg{vhost = VHost}}) ->
+    {TraceState, ConnName} = init_trace(VHost, ConnName0),
+    Cfg = Cfg0#cfg{trace_state = TraceState,
+                   conn_name = ConnName},
+    State#state{cfg = Cfg}.
+
+-spec self_consumes(amqqueue:amqqueue()) -> boolean().
+self_consumes(Queue) ->
+    case amqqueue:get_type(Queue) of
+        ?QUEUE_TYPE_QOS_0 ->
+            false;
+        _ ->
+            lists:any(fun(Consumer) ->
+                              element(1, Consumer) =:= self()
+                      end, rabbit_amqqueue:consumers(Queue))
+    end.
+
+handle_clean_sess_qos0(State) ->
+    handle_clean_sess(false, ?QOS_0, State).
+
+handle_clean_sess_qos1(QoS0SessPresent, State) ->
+    handle_clean_sess(QoS0SessPresent, ?QOS_1, State).
+
+handle_clean_sess(_, QoS,
+                  State = #state{cfg = #cfg{clean_sess = true},
+                                 auth_state = #auth_state{user = User = #user{username = Username},
+                                                          authz_ctx = AuthzCtx}}) ->
+    %% "If the Server accepts a connection with CleanSession set to 1, the Server
+    %% MUST set Session Present to 0 in the CONNACK packet [MQTT-3.2.2-1].
+    SessPresent = false,
+    case get_queue(QoS, State) of
+        {error, _} ->
+            {ok, SessPresent, State};
+        {ok, Q0} ->
+            QName = amqqueue:get_name(Q0),
+            %% configure access to queue required for queue.delete
+            case check_resource_access(User, QName, configure, AuthzCtx) of
+                ok ->
+                    delete_queue(QName, Username),
+                    {ok, SessPresent, State};
+                {error, access_refused} ->
+                    {error, ?CONNACK_NOT_AUTHORIZED}
+            end
+    end;
+handle_clean_sess(SessPresent, QoS,
+                  State0 = #state{cfg = #cfg{clean_sess = false}}) ->
+    case get_queue(QoS, State0) of
+        {error, _} ->
+            %% Queue will be created later when client subscribes.
+            {ok, SessPresent, State0};
+        {ok, Q} ->
+            case consume(Q, QoS, State0) of
+                {ok, State} ->
+                    {ok, _SessionPresent = true, State};
+                {error, access_refused} ->
+                    {error, ?CONNACK_NOT_AUTHORIZED};
+                {error, _Reason} ->
+                    %% Let's use most generic error return code.
+                    {error, ?CONNACK_SERVER_UNAVAILABLE}
+            end
+    end.
+
+-spec get_queue(qos(), state()) ->
+    {ok, amqqueue:amqqueue()} |
+    {error, not_found | {resource_locked, amqqueue:amqqueue()}}.
+get_queue(QoS, State) ->
+    QName = queue_name(QoS, State),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} = Ok ->
+            try rabbit_amqqueue:check_exclusive_access(Q, self()) of
+                ok ->
+                    Ok
+            catch
+                exit:#amqp_error{name = resource_locked} ->
+                    %% This can happen when same client ID re-connects
+                    %% while its old connection is not yet closed.
+                    {error, {resource_locked, Q}}
+            end;
+        {error, not_found} = Err ->
+            Err
+    end.
+
+queue_name(?QOS_1, #state{cfg = #cfg{queue_qos1 = #resource{kind = queue} = Name}}) ->
+    Name;
+queue_name(QoS, #state{cfg = #cfg{client_id = ClientId,
+                                  vhost = VHost}}) ->
+    QNameBin = rabbit_mqtt_util:queue_name_bin(ClientId, QoS),
+    rabbit_misc:r(VHost, queue, QNameBin).
+
+%% Query subscriptions from the database and hold them in process state
+%% to avoid future mnesia:match_object/3 queries.
+cache_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
+                    State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+    SubsQos0 = topic_names(?QOS_0, State),
+    SubsQos1 = topic_names(?QOS_1, State),
+    Subs = maps:merge(maps:from_keys(SubsQos0, ?QOS_0),
+                      maps:from_keys(SubsQos1, ?QOS_1)),
+    rabbit_global_counters:consumer_created(ProtoVer),
+    State#state{subscriptions = Subs};
+cache_subscriptions(_, State) ->
+    State.
+
+topic_names(QoS, State = #state{cfg = #cfg{exchange = Exchange}}) ->
+    Bindings =
+    rabbit_binding:list_for_source_and_destination(
+      Exchange,
+      queue_name(QoS, State),
+      %% Querying table rabbit_route is catastrophic for CPU usage.
+      %% Querying table rabbit_reverse_route is acceptable because
+      %% the source exchange is always the same in the MQTT plugin whereas
+      %% the destination queue is different for each MQTT client and
+      %% rabbit_reverse_route is sorted by destination queue.
+      _Reverse = true),
+    lists:map(fun(B) -> amqp_to_mqtt(B#binding.key) end, Bindings).
+
+%% "If a Server receives a SUBSCRIBE Packet containing a Topic Filter that is identical
+%% to an existing Subscription’s Topic Filter then it MUST completely replace that
+%% existing Subscription with a new Subscription. The Topic Filter in the new Subscription
+%% will be identical to that in the previous Subscription, although its maximum QoS value
+%% could be different." [MQTT-3.8.4-3].
+maybe_replace_old_sub(TopicName, QoS, State = #state{subscriptions = Subs}) ->
+    case Subs of
+        #{TopicName := OldQoS} when OldQoS =/= QoS ->
+            QName = queue_name(OldQoS, State),
+            unbind(QName, TopicName, State);
+        _ ->
+            ok
+    end.
+
+-spec hand_off_to_retainer(pid(), binary(), mqtt_msg()) -> ok.
+hand_off_to_retainer(RetainerPid, Topic0, #mqtt_msg{payload = <<"">>}) ->
+    Topic1 = amqp_to_mqtt(Topic0),
+>>>>>>> 8baf2671c3 (Disallow empty password in MQTT)
     rabbit_mqtt_retainer:clear(RetainerPid, Topic1),
     ok;
 hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, Msg) ->
@@ -761,6 +999,7 @@ creds(User, Pass, SSLLoginName) ->
                        is_binary(DefaultUser) andalso
                        is_binary(DefaultPass),
 
+<<<<<<< HEAD
     CredentialsProvided = User =/= undefined orelse
                           Pass =/= undefined,
 
@@ -769,6 +1008,11 @@ creds(User, Pass, SSLLoginName) ->
 
     SSLLoginProvided = TLSAuth =:= true andalso
                        SSLLoginName =/= none,
+=======
+    CredentialsProvided = User =/= undefined orelse Pass =/= undefined,
+    CorrectCredentials = is_binary(User) andalso is_binary(Pass) andalso Pass =/= <<>>,
+    SSLLoginProvided = TLSAuth =:= true andalso SSLLoginName =/= none,
+>>>>>>> 8baf2671c3 (Disallow empty password in MQTT)
 
     case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
         %% Username and password take priority
