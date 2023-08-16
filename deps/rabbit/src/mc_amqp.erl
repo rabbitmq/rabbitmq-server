@@ -15,7 +15,7 @@
          convert_to/2,
          convert_from/2,
          protocol_state/2,
-         serialize/2,
+         serialize/1,
          prepare/2
         ]).
 
@@ -210,16 +210,16 @@ convert_to(TargetProto, #msg{header = Header,
     Sections = lists:flatten(Sects),
     TargetProto:convert_from(?MODULE, Sections).
 
-protocol_state(_S, _Anns) ->
-    undefined.
+serialize(Sections) ->
+    [encode_bin(S) || S <- Sections].
 
-serialize(#msg{header = Header,
-               delivery_annotations = DAC,
-               message_annotations = MAC0,
-               properties = P,
-               application_properties = APC,
-               footer = FC,
-               data = Data}, Anns) ->
+protocol_state(#msg{header = Header,
+                    delivery_annotations = DAC,
+                    message_annotations = MAC0,
+                    properties = P,
+                    application_properties = APC,
+                    footer = FC,
+                    data = Data}, Anns) ->
     Exchange = maps:get(exchange, Anns),
     [RKey | _] = maps:get(routing_keys, Anns),
 
@@ -238,13 +238,13 @@ serialize(#msg{header = Header,
     MA = #'v1_0.message_annotations'{content = MAC},
     AP = #'v1_0.application_properties'{content = APC},
     F = #'v1_0.footer'{content = FC},
-    [encode_bin(Header),
-     encode_bin(DA),
-     encode_bin(MA),
-     encode_bin(P),
-     encode_bin(AP),
-     encode_bin(Data),
-     encode_bin(F)].
+    [Header,
+     DA,
+     MA,
+     P,
+     AP,
+     Data,
+     F].
 
 prepare(_For, Msg) ->
     Msg.
