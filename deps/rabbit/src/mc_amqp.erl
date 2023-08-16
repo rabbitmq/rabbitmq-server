@@ -364,7 +364,7 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
 
 add_message_annotations(Anns, MA0) ->
     maps:fold(fun (K, V, Acc) ->
-                      map_add(symbol, K, mc:infer_type(V), Acc)
+                      map_add(symbol, K, mc_util:infer_type(V), Acc)
               end, MA0, Anns).
 
 map_add(_T, _Key, undefined, Acc) ->
