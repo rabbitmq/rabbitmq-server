@@ -129,9 +129,11 @@ info(protocol, #proc_state{version = Version}) ->
     VersionTuple = case Version of
                        "1.0" -> {1, 0};
                        "1.1" -> {1, 1};
-                       "1.2" -> {1, 2}
+                       "1.2" -> {1, 2};
+                       _ -> none
                    end,
     {'STOMP', VersionTuple};
+info(user, #proc_state{user = undefined}) -> undefined;
 info(user, #proc_state{user = #user{username = Username}}) -> Username;
 info(channels, PState) -> additional_info(channels, PState);
 info(channel_max, PState) -> additional_info(channel_max, PState);
@@ -147,8 +149,8 @@ initial_state(Configuration,
     {SendFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
      SSLLoginName, PeerAddr}) ->
 
-    io:format("AdapterInfo0 ~p~n", [AdapterInfo0]),
-    io:format("PeerAddr ~p~n", [PeerAddr]),
+    %% io:format("AdapterInfo0 ~p~n", [AdapterInfo0]),
+    %% io:format("PeerAddr ~p~n", [PeerAddr]),
 
   %% STOMP connections use exactly one channel. The frame max is not
   %% applicable and there is no way to know what client is used.
@@ -228,13 +230,13 @@ command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
 
 handle_consuming_queue_down_or_eol(QName,
                                    State = #proc_state{queue_consumers = QCons}) ->
-    io:format("DOE QName ~p~n", [QName]),
-    io:format("DOE QCons ~p~n", [QCons]),
+    %% io:format("DOE QName ~p~n", [QName]),
+    %% io:format("DOE QCons ~p~n", [QCons]),
     ConsumerTags = case maps:find(QName, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
-    io:format("DOE ConsumerTags ~p~n", [ConsumerTags]),
+    %% io:format("DOE ConsumerTags ~p~n", [ConsumerTags]),
     gb_sets:fold(
       fun (CTag, StateN) ->
               {ok, S} = cancel_consumer(CTag, StateN),
@@ -257,13 +259,13 @@ process_request(ProcessFun, SuccessFun, State) ->
                  {server_initiated_close, ReplyCode, Explanation}}, _}} ->
                   amqp_death(ReplyCode, Explanation, State);
               {'EXIT', {amqp_error, Name, Msg, _}} ->
-                  io:format("amqp_error ~p, ~p~n", [Name, Msg]),
+                  %% io:format("amqp_error ~p, ~p~n", [Name, Msg]),
                   amqp_death(Name, Msg, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error",
                               Reason, State);
               Result ->
-                  io:format("ProcessFun: ~p~n", [Result]),
+                  %% io:format("ProcessFun: ~p~n", [Result]),
                   Result
           end,
     case Res of
@@ -292,7 +294,7 @@ process_connect(Implicit, Frame,
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
-                      io:format("Version ~p~n", [Version]),
+                      %% io:format("Version ~p~n", [Version]),
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
                       {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
@@ -442,10 +444,10 @@ ack_action(Command, Frame,
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
-                    io:format("ConsumerTag ~p, DeliveryTag ~p~n", [ConsumerTag, DeliveryTag]),
+                    %% io:format("ConsumerTag ~p, DeliveryTag ~p~n", [ConsumerTag, DeliveryTag]),
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
-                            io:format("Sub ~p~n", [Sub]),
+                            %% io:format("Sub ~p~n", [Sub]),
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),
                             State1 = Fun(DeliveryTag, Sub, Requeue, State),
 			    ok(State1);
@@ -753,7 +755,7 @@ do_send(Destination, _DestHdr,
             Props = rabbit_stomp_util:message_properties(Frame1),
 
             {ExchangeNameList, RoutingKeyList} = parse_routing(Destination, DfltTopicEx),
-            io:format("Parse_routing: ~p~n", [{ExchangeNameList, RoutingKeyList}]),
+            %% io:format("Parse_routing: ~p~n", [{ExchangeNameList, RoutingKeyList}]),
             RoutingKey = list_to_binary(RoutingKeyList),
 
             %% Method = #'basic.publish'{
@@ -801,11 +803,11 @@ do_send(Destination, _DestHdr,
                           msg_seq_no = MsgSeqNo,
                           flow = Flow
                          },
-            io:format("Delivery: ~p~n", [Delivery]),
+            %% io:format("Delivery: ~p~n", [Delivery]),
             case rabbit_exchange:lookup(ExchangeName) of
                 {ok, Exchange} ->
                     QNames = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
-                    io:format("QNames ~p~n", [QNames]),
+                    %% io:format("QNames ~p~n", [QNames]),
                     deliver_to_queues(Delivery, QNames, State2);
                 {error, not_found} ->
                     log_error("~s not found", [rabbit_misc:rs(ExchangeName)], ExchangeName),
@@ -813,7 +815,7 @@ do_send(Destination, _DestHdr,
             end;
 
         {error, _} = Err ->
-            io:format("Err ~p~n", [Err]),
+            %% io:format("Err ~p~n", [Err]),
             Err
     end.
 
@@ -824,7 +826,7 @@ deliver_to_queues(Delivery = #delivery{message    = #basic_message{exchange_name
                   State0 = #proc_state{queue_states = QStates0}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    io:format("Qs: ~p~n", [Qs]),
+    %% io:format("Qs: ~p~n", [Qs]),
     case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
         {ok, QStates, Actions} ->
             %% rabbit_global_counters:messages_routed(ProtoVer, length(Qs)), ??
@@ -1664,11 +1666,11 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
     end.
 
 handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates0} = State) ->
-    io:format("Event: ~p~n", [Evt]),
-    io:format("QStates: ~p~n", [QStates0]),
+    %% io:format("Event: ~p~n", [Evt]),
+    %% io:format("QStates: ~p~n", [QStates0]),
     case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
         {ok, QState1, Actions} ->
-            io:format("ActionsEv ~p~n", [Actions]),
+            %% io:format("ActionsEv ~p~n", [Actions]),
             State1 = State#proc_state{queue_states = QState1},
             State2 = handle_queue_actions(Actions, State1),
             {ok, State2};
@@ -1688,7 +1690,7 @@ handle_queue_event({queue_event, QRef, Evt}, #proc_state{queue_states  = QStates
     end.
 
 handle_queue_actions(Actions, #proc_state{} = State0) ->
-    io:format("Actions: ~p~n", [Actions]),
+    %% io:format("Actions: ~p~n", [Actions]),
     lists:foldl(
       fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
               deliver_to_client(ConsumerTag, Ack, Msgs, S);
@@ -1897,7 +1899,7 @@ consume_queue(QRes, Spec0, State = #proc_state{user = #user{username = Username}
               fun(Q1) ->
                       case rabbit_queue_type:consume(Q1, Spec, QStates0) of
                           {ok, QStates} ->
-                              io:format("Consume QStates ~p ~n", [QStates]),
+                              %% io:format("Consume QStates ~p ~n", [QStates]),
                               State1 = State#proc_state{queue_states = QStates},
                               {ok, State1};
                           {error, Reason} ->
