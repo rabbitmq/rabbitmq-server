@@ -27,9 +27,6 @@
          death_queue_names/1
          ]).
 
-%% utilities
--export([infer_type/1]).
-
 -include("mc.hrl").
 
 -type str() :: atom() | string() | binary().
@@ -181,7 +178,7 @@ x_header(Key, #?MODULE{protocol = Proto,
     %% we need to check that first
     case Anns of
         #{Key := Value} ->
-            infer_type(Value);
+            mc_util:infer_type(Value);
         _ ->
             %% if not we have to call into the protocol specific handler
             Proto:x_header(Key, Data)
@@ -382,18 +379,6 @@ prepare(For, #?MODULE{protocol = Proto,
     State#?MODULE{data = Proto:prepare(For, Data)};
 prepare(For, State) ->
     mc_compat:prepare(For, State).
-
-infer_type(undefined) ->
-    undefined;
-infer_type(V) when is_binary(V) ->
-    {utf8, V};
-infer_type(V) when is_integer(V) ->
-    {long, V};
-infer_type(V) when is_boolean(V) ->
-    {boolean, V};
-infer_type({T, _} = V) when is_atom(T) ->
-    %% looks like a pre-tagged type
-    V.
 
 %% INTERNAL
 

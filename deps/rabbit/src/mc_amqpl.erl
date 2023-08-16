@@ -206,7 +206,7 @@ x_header(Key, #content{properties = none} = Content0) ->
     x_header(Key, Content).
 
 property(Prop, Content) ->
-    mc:infer_type(mc_compat:get_property(Prop, Content)).
+    mc_util:infer_type(mc_compat:get_property(Prop, Content)).
 
 routing_headers(#content{properties = #'P_basic'{headers = undefined}}, _Opts) ->
     #{};
