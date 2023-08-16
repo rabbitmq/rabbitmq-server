@@ -2,7 +2,8 @@
 
 -export([is_valid_shortstr/1,
          is_utf8_no_null/1,
-         uuid_to_string/1]).
+         uuid_to_string/1,
+         infer_type/1]).
 
 -spec is_valid_shortstr(term()) -> boolean().
 is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
@@ -24,3 +25,17 @@ uuid_to_string(<<TL:32, TM:16, THV:16, CSR:8, CSL:8, N:48>>) ->
     list_to_binary(
       io_lib:format(<<"urn:uuid:~8.16.0b-~4.16.0b-~4.16.0b-~2.16.0b~2.16.0b-~12.16.0b">>,
                     [TL, TM, THV, CSR, CSL, N])).
+
+
+infer_type(undefined) ->
+    undefined;
+infer_type(V) when is_binary(V) ->
+    {utf8, V};
+infer_type(V) when is_integer(V) ->
+    {long, V};
+infer_type(V) when is_boolean(V) ->
+    {boolean, V};
+infer_type({T, _} = V) when is_atom(T) ->
+    %% looks like a pre-tagged type
+    V.
+
