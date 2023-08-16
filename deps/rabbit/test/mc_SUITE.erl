@@ -301,7 +301,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     %% roundtrip to binary
     Msg10Pre = mc:convert(mc_amqp, Msg),
     Sections = amqp10_framing:decode_bin(
-                 iolist_to_binary(mc:serialize(Msg10Pre))),
+                 iolist_to_binary(amqp_serialize(Msg10Pre))),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
     ?assertEqual(98, mc:priority(Msg10)),
     ?assertEqual(true, mc:is_persistent(Msg10)),
@@ -376,7 +376,7 @@ amqp_amqpl(_Config) ->
              routing_keys => [<<"apple">>]},
     Msg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
     %% validate source data is serialisable
-    _ = mc:serialize(Msg),
+    _ = amqp_serialize(Msg),
 
     ?assertEqual(3, mc:priority(Msg)),
     ?assertEqual(true, mc:is_persistent(Msg)),
@@ -633,3 +633,6 @@ utf8(V) ->
     {utf8, V}.
 symbol(V) ->
     {symbol, V}.
+
+amqp_serialize(Msg) ->
+    mc_amqp:serialize(mc:protocol_state(Msg)).

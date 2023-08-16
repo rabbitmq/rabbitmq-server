@@ -145,11 +145,11 @@ convert_from(mc_amqp, Sections) ->
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     UserId1 = unwrap(UserId0),
-    UserId = case mc_util:is_valid_shortstr(UserId0) of
+    UserId = case mc_util:is_valid_shortstr(UserId1) of
                  true ->
                      UserId1;
                  false ->
-                     %% drop it
+                     %% drop it, what else can we do?
                      undefined
              end,
 
