@@ -10,11 +10,8 @@
 -behaviour(application).
 
 -include("rabbit_mqtt.hrl").
-<<<<<<< HEAD
-=======
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("rabbit/include/rabbit_global_counters.hrl").
->>>>>>> 0f5fe8fadd (Add Prometheus metric messages dropped by MQTT QoS 0 queue type)
 -include_lib("stdlib/include/assert.hrl").
 
 -export([start/2, stop/1]).
@@ -97,14 +94,8 @@ local_connection_pids() ->
     end.
 
 init_global_counters() ->
-<<<<<<< HEAD
-    init_global_counters(?MQTT_PROTO_V3),
-    init_global_counters(?MQTT_PROTO_V4).
-=======
     lists:foreach(fun init_global_counters/1, [?MQTT_PROTO_V3,
-                                               ?MQTT_PROTO_V4,
-                                               ?MQTT_PROTO_V5]).
->>>>>>> 0f5fe8fadd (Add Prometheus metric messages dropped by MQTT QoS 0 queue type)
+                                               ?MQTT_PROTO_V4]).
 
 init_global_counters(ProtoVer) ->
     Proto = {protocol, ProtoVer},
