@@ -178,21 +178,21 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "cowboy",
     build_file = "@rabbitmq-server//bazel:BUILD.cowboy",
-    sha256 = "3afdccb7183cc6f143cb14d3cf51fa00e53db9ec80cdcd525482f5e99bc41d6b",
-    version = "2.10.0",
     patch_cmds = [
         "rm ebin/cowboy.app",
     ],
+    sha256 = "3afdccb7183cc6f143cb14d3cf51fa00e53db9ec80cdcd525482f5e99bc41d6b",
+    version = "2.10.0",
 )
 
 erlang_package.hex_package(
     name = "cowlib",
     build_file = "@rabbitmq-server//bazel:BUILD.cowlib",
-    sha256 = "163b73f6367a7341b33c794c4e88e7dbfe6498ac42dcd69ef44c5bc5507c8db0",
-    version = "2.12.1",
     patch_cmds = [
         "rm ebin/cowlib.app",
     ],
+    sha256 = "163b73f6367a7341b33c794c4e88e7dbfe6498ac42dcd69ef44c5bc5507c8db0",
+    version = "2.12.1",
 )
 
 erlang_package.hex_package(
@@ -303,11 +303,11 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
-    sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
-    version = "2.1.0",
     patch_cmds = [
         "rm ebin/ranch.app",
     ],
+    sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
+    version = "2.1.0",
 )
 
 erlang_package.hex_package(
