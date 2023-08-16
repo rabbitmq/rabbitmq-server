@@ -200,7 +200,7 @@ command({"CONNECT", Frame}, State) ->
 command(Request, State = #proc_state{user = undefined,
                                      config = #stomp_configuration{
                                                  implicit_connect = true}}) ->
-    {ok, State1 = #proc_state{user = User}, _} =
+    {ok, State1 = #proc_state{user = User}} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     case User of
         undefined -> {stop, normal, State1};
