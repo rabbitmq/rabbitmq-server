@@ -244,10 +244,7 @@ event_authentication_failure(Config) ->
 %% Test that queue type rabbit_mqtt_qos0_queue drops QoS 0 messages when its
 %% max length is reached.
 rabbit_mqtt_qos0_queue_overflow(Config) ->
-    ProtoVer = case ?config(mqtt_version, Config) of
-                   v4 -> mqtt311;
-                   v5 -> mqtt50
-               end,
+    ProtoVer = mqtt311,
     QType = rabbit_mqtt_qos0_queue,
 
     #{
