@@ -1290,6 +1290,7 @@ maybe_with_transaction(Frame, Fun, State) ->
 	    extend_transaction(
 	      Transaction,
 	      Fun,
+              Frame,
 	      State);
 	no ->
 	    Fun(State)
@@ -1310,11 +1311,11 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
-extend_transaction(Transaction, Fun, State0) ->
+extend_transaction(Transaction, Fun, Frame, State0) ->
     with_transaction(
       Transaction, State0,
       fun (Funs, State) ->
-              put({transaction, Transaction}, [Fun | Funs]),
+              put({transaction, Transaction}, [{Frame, Fun} | Funs]),
               ok(State)
       end).
 
@@ -1323,10 +1324,10 @@ commit_transaction(Transaction, State0) ->
       Transaction, State0,
       fun (Funs, State) ->
               FinalState = lists:foldr(fun perform_transaction_action/2,
-                                       State,
+                                       {ok, State},
                                        Funs),
               erase({transaction, Transaction}),
-              ok(FinalState)
+              FinalState
       end).
 
 abort_transaction(Transaction, State0) ->
@@ -1337,8 +1338,13 @@ abort_transaction(Transaction, State0) ->
               ok(State)
       end).
 
-perform_transaction_action(Fun, State) ->
-    Fun(State).
+perform_transaction_action(_, {stop, _, _} = Res) ->
+    Res;
+perform_transaction_action({Frame, Fun}, {ok, State}) ->
+    process_request(
+      Fun,
+      fun(StateM) -> ensure_receipt(Frame, StateM) end,
+      State).
 
 %%--------------------------------------------------------------------
 %% Heartbeat Management
