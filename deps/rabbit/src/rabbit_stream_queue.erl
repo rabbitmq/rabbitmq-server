@@ -1062,8 +1062,8 @@ binary_to_msg(#resource{virtual_host = _VHost,
     mc:init(mc_amqp, amqp10_framing:decode_bin(Data), #{}).
 
 msg_to_iodata(Msg0) ->
-    Msg = mc:convert(mc_amqp, Msg0),
-    mc:serialize(Msg).
+    Sections = mc:protocol_state(mc:convert(mc_amqp, Msg0)),
+    mc_amqp:serialize(Sections).
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies

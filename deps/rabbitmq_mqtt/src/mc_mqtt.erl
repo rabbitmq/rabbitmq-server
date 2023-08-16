@@ -15,7 +15,6 @@
          convert_to/2,
          convert_from/2,
          protocol_state/2,
-         serialize/2,
          prepare/2
         ]).
 
@@ -271,9 +270,6 @@ routing_headers(#mqtt_msg{}, _Opts) ->
 
 protocol_state(Msg = #mqtt_msg{}, _Anns) ->
     Msg.
-
-serialize(#mqtt_msg{}, _Anns) ->
-    [].
 
 prepare(_For, #mqtt_msg{} = Msg) ->
     Msg.

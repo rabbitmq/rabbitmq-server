@@ -20,7 +20,6 @@
          %%
          convert/2,
          protocol_state/1,
-         serialize/1,
          prepare/2,
          record_death/3,
          is_death_cycle/2,
@@ -118,11 +117,6 @@
 %% time
 -callback protocol_state(proto_state(), annotations()) ->
     term().
-
-%% Optional: serialize the data into the protocol's binary format
-%% Currently only done my mc_amqp when writing to a stream
--callback serialize(proto_state(), annotations()) ->
-    iodata().
 
 %% prepare the data for either reading or storage
 -callback prepare(read | store, proto_state()) ->
@@ -381,12 +375,6 @@ last_death(#?MODULE{annotations = #{deaths := #deaths{last = Last,
     {Last, maps:get(Last, Rs)};
 last_death(BasicMsg) ->
     mc_compat:last_death(BasicMsg).
-
--spec serialize(state()) -> iodata().
-serialize(#?MODULE{protocol = Proto,
-                   annotations = Anns,
-                   data = Data}) ->
-    Proto:serialize(Data, Anns).
 
 -spec prepare(read | store, state()) -> state().
 prepare(For, #?MODULE{protocol = Proto,

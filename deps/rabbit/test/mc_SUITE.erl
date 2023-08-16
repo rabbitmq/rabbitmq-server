@@ -188,7 +188,9 @@ amqpl_table_x_header(_Config) ->
     %% non x-headers should not show up
     % ?assertEqual(undefined, mc:x_header(<<"fruit">>, Msg)),
 
-    ct:pal("routing headers ~p", [mc:routing_headers(Msg, [x_header])]),
+    ?assertMatch(#{<<"fruit">> := _,
+                   <<"x-fruit">> := _},
+                 mc:routing_headers(Msg, [x_headers])),
 
     ok.
 

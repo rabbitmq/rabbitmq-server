@@ -17,7 +17,6 @@
          protocol_state/2,
          property/2,
          set_property/3,
-         serialize/2,
          prepare/2
         ]).
 
@@ -146,7 +145,7 @@ convert_from(mc_amqp, Sections) ->
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     UserId1 = unwrap(UserId0),
-    UserId = case mc_util:is_valid_shortstr(UserId1) of
+    UserId = case mc_util:is_valid_shortstr(UserId0) of
                  true ->
                      UserId1;
                  false ->
@@ -213,7 +212,9 @@ routing_headers(#content{properties = #'P_basic'{headers = undefined}}, _Opts) -
     #{};
 routing_headers(#content{properties = #'P_basic'{headers = Headers}}, Opts) ->
     IncludeX = lists:member(x_headers, Opts),
-    %% TODO: filter out complex AMQP legacy values such as array and table?
+    %% Complex AMQP values such as array and table are hard to match on but
+    %% should still be included as routing headers as users may use a `void'
+    %% match which would only check for the presence of the key
     lists:foldl(
       fun({<<"x-", _/binary>> = Key, T, Value}, Acc) ->
               case IncludeX of
@@ -234,15 +235,11 @@ routing_value(_, V) ->
     V.
 
 set_property(ttl, undefined, #content{properties = Props} = C) ->
-    %% TODO: impl rest, just what is needed for dead lettering for now
+    %% only ttl is ever modified atm and only unset during dead lettering
     C#content{properties = Props#'P_basic'{expiration = undefined},
               properties_bin = none};
 set_property(_P, _V, Msg) ->
-    %% TODO: impl at least ttl set (needed for dead lettering)
     Msg.
-
-serialize(_, _) ->
-    <<>>.
 
 prepare(read, Content) ->
     rabbit_binary_parser:ensure_content_decoded(Content);
@@ -508,11 +505,6 @@ wrap(_Type, undefined) ->
     undefined;
 wrap(Type, Val) ->
     {Type, Val}.
-
-% unwrap(undefined) ->
-%     undefined;
-% unwrap({_Type, V}) ->
-%     V.
 
 from_091(longstr, V) ->
     case mc_util:is_valid_shortstr(V) of
