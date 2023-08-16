@@ -207,19 +207,7 @@ x_header(Key, #content{properties = none} = Content0) ->
     x_header(Key, Content).
 
 property(Prop, Content) ->
-    case mc_compat:get_property(Prop, Content) of
-        undefined ->
-            undefined;
-        V when is_binary(V) ->
-            %% assume string
-            {utf8, V};
-        V when is_integer(V) ->
-            %% assume string
-            {long, V};
-        _ ->
-            %% TODO: not clear there will be other properties
-            undefined
-    end.
+    mc:infer_type(mc_compat:get_property(Prop, Content)).
 
 routing_headers(#content{properties = #'P_basic'{headers = undefined}}, _Opts) ->
     #{};
@@ -371,6 +359,8 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                          [{Key, long, Val} | H];
                      (<<"x-", _/binary>> = Key, Val, H) when is_binary(Val) ->
                          [{Key, longstr, Val} | H];
+                     (<<"x-", _/binary>> = Key, Val, H) when is_boolean(Val) ->
+                         [{Key, bool, Val} | H];
                      (<<"timestamp_in_ms">> = Key, Val, H) when is_integer(Val) ->
                          [{Key, long, Val} | H];
                      (_, _, Acc) ->
@@ -468,7 +458,7 @@ deaths_to_headers(#deaths{records = Records}, Headers0) ->
     List = lists:sort(
              fun({_, #death{anns = #{last_time := L1}}},
                  {_, #death{anns = #{last_time := L2}}}) ->
-                     L1 > L2
+                     L1 < L2
              end, maps:to_list(Records)),
     Infos = lists:foldl(
               fun ({{QName, Reason}, #death{anns = #{first_time := Ts} = DA,
@@ -693,9 +683,3 @@ amqp10_section_header(Header, Headers) ->
         _ ->
             undefined
     end.
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
-
