@@ -7,6 +7,8 @@
 
 -module(rabbit_global_counters).
 
+-include("rabbit_global_counters.hrl").
+
 -export([
          boot_step/0,
          init/1,
@@ -128,57 +130,48 @@
                 }
             ]).
 
--define(MESSAGES_DEAD_LETTERED_EXPIRED, 1).
--define(MESSAGES_DEAD_LETTERED_REJECTED, 2).
-%% The following two counters are mutually exclusive because
-%% quorum queue dead-letter-strategy at-least-once is incompatible with overflow drop-head.
--define(MESSAGES_DEAD_LETTERED_MAXLEN, 3).
--define(MESSAGES_DEAD_LETTERED_CONFIRMED, 3).
--define(MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT, 4).
--define(MESSAGES_DEAD_LETTERED_COUNTERS,
-        [
-         {
-          messages_dead_lettered_expired_total, ?MESSAGES_DEAD_LETTERED_EXPIRED, counter,
-          "Total number of messages dead-lettered due to message TTL exceeded"
-         },
-         {
-          messages_dead_lettered_rejected_total, ?MESSAGES_DEAD_LETTERED_REJECTED, counter,
-          "Total number of messages dead-lettered due to basic.reject or basic.nack"
-         }
-        ]).
--define(MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
-        {
-         messages_dead_lettered_maxlen_total, ?MESSAGES_DEAD_LETTERED_MAXLEN, counter,
-         "Total number of messages dead-lettered due to overflow drop-head or reject-publish-dlx"
-        }).
--define(MESSAGES_DEAD_LETTERED_CONFIRMED_COUNTER,
-        {
-         messages_dead_lettered_confirmed_total, ?MESSAGES_DEAD_LETTERED_CONFIRMED, counter,
-         "Total number of messages dead-lettered and confirmed by target queues"
-        }).
--define(MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER,
-        {
-         messages_dead_lettered_delivery_limit_total, ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT, counter,
-         "Total number of messages dead-lettered due to delivery-limit exceeded"
-        }).
-
 boot_step() ->
+    %% Protocol counters
     init([{protocol, amqp091}]),
+
+    %% Protocol & Queue Type counters
     init([{protocol, amqp091}, {queue_type, rabbit_classic_queue}]),
     init([{protocol, amqp091}, {queue_type, rabbit_quorum_queue}]),
     init([{protocol, amqp091}, {queue_type, rabbit_stream_queue}]),
+
+    %% Dead Letter counters
+    %%
+    %% Streams never dead letter.
+    %%
+    %% Source classic queue dead letters.
     init([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}],
-         [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]),
+         [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
     init([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, at_most_once}],
-         [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]),
+         [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
+    %%
+    %% Source quorum queue dead letters.
+    %% Only quorum queues can dead letter due to delivery-limit exceeded.
+    %% Only quorum queues support dead letter strategy at-least-once.
     init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, disabled}],
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
-          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER]),
+          ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER
+         ]),
     init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_most_once}],
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
-          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER]),
+          ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER
+         ]),
     init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_least_once}],
          [?MESSAGES_DEAD_LETTERED_CONFIRMED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER
          ]).
 
@@ -193,9 +186,9 @@ init(Labels = [{protocol, Protocol}], Extra) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, Protocol}, Counters);
-init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], Extra) ->
+init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], DeadLetterCounters) ->
     _ = seshat:new_group(?MODULE),
-    Counters = seshat:new(?MODULE, Labels, ?MESSAGES_DEAD_LETTERED_COUNTERS ++ Extra),
+    Counters = seshat:new(?MODULE, Labels, DeadLetterCounters),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
 overview() ->
@@ -263,9 +256,9 @@ consumer_deleted(Protocol) ->
 
 messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
     Index = case Reason of
+                maxlen -> ?MESSAGES_DEAD_LETTERED_MAXLEN;
                 expired -> ?MESSAGES_DEAD_LETTERED_EXPIRED;
                 rejected -> ?MESSAGES_DEAD_LETTERED_REJECTED;
-                maxlen -> ?MESSAGES_DEAD_LETTERED_MAXLEN;
                 delivery_limit -> ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT
             end,
     counters:add(fetch(QueueType, DeadLetterStrategy), Index, Num).
