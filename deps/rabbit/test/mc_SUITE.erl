@@ -25,6 +25,7 @@ all() ->
 all_tests() ->
     [
      amqpl_defaults,
+     amqpl_compat,
      amqpl_table_x_header,
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
@@ -90,6 +91,57 @@ amqpl_defaults(_Config) ->
 
     ok.
 
+amqpl_compat(_Config) ->
+    Props = #'P_basic'{content_type = <<"text/plain">>,
+                       content_encoding = <<"gzip">>,
+                       headers = [{<<"a-stream-offset">>, long, 99},
+                                  {<<"a-string">>, longstr, <<"a string">>},
+                                  {<<"a-bool">>, bool, false},
+                                  {<<"a-unsignedbyte">>, unsignedbyte, 1},
+                                  {<<"a-unsignedshort">>, unsignedshort, 1},
+                                  {<<"a-unsignedint">>, unsignedint, 1},
+                                  {<<"a-signedint">>, signedint, 1},
+                                  {<<"a-timestamp">>, timestamp, 1},
+                                  {<<"a-double">>, double, 1.0},
+                                  {<<"a-float">>, float, 1.0},
+                                  {<<"a-void">>, void, undefined},
+                                  {<<"a-binary">>, binary, <<"data">>},
+                                  {<<"x-stream-filter">>, longstr, <<"apple">>}
+                                 ],
+                       delivery_mode = 1,
+                       priority = 98,
+                       correlation_id = <<"corr">> ,
+                       reply_to = <<"reply-to">>,
+                       expiration = <<"1">>,
+                       message_id = <<"msg-id">>,
+                       timestamp = 99,
+                       type = <<"45">>,
+                       user_id = <<"banana">>,
+                       app_id = <<"rmq">>
+                      },
+    Payload = [<<"data">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+
+    XName= <<"exch">>,
+    RoutingKey = <<"apple">>,
+    {ok, Msg} = rabbit_basic:message_no_id(XName, RoutingKey, Content),
+
+    ?assertEqual(98, mc:priority(Msg)),
+    ?assertEqual(false, mc:is_persistent(Msg)),
+    ?assertEqual(99000, mc:timestamp(Msg)),
+    ?assertEqual({utf8, <<"corr">>}, mc:correlation_id(Msg)),
+    ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg)),
+    ?assertEqual(1, mc:ttl(Msg)),
+    ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
+
+    RoutingHeaders = mc:routing_headers(Msg, []),
+    ct:pal("routing headers ~p", [RoutingHeaders]),
+
+    ok.
+
+
+
 amqpl_table_x_header(_Config) ->
     Tbl = [{<<"type">>, longstr, <<"apple">>},
            {<<"count">>, long, 99}],
@@ -152,6 +204,9 @@ amqpl_death_records(_Config) ->
 
     %% second dead letter, e.g. a ttl reason returning to source queue
 
+    %% record_death uses a timestamp for death record ordering, ensure
+    %% it is definitely higher than the last timestamp taken
+    timer:sleep(2),
     Msg2 = mc:record_death(ttl, <<"dl">>, Msg1),
 
     #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg2),

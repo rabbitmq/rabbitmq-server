@@ -232,8 +232,8 @@ serialize(#msg{header = Header,
                   end, Anns),
 
     MAC = add_message_annotations(
-           AnnsToAdd#{<<"x-exchange">> => wrap(Exchange),
-                      <<"x-routing-key">> => wrap(RKey)}, MAC0),
+           AnnsToAdd#{<<"x-exchange">> => wrap(utf8, Exchange),
+                      <<"x-routing-key">> => wrap(utf8, RKey)}, MAC0),
     DA = #'v1_0.delivery_annotations'{content = DAC},
     MA = #'v1_0.message_annotations'{content = MAC},
     AP = #'v1_0.application_properties'{content = APC},
@@ -355,12 +355,8 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     decode(Rem, Msg#msg{data = B}).
 
 add_message_annotations(Anns, MA0) ->
-    maps:fold(fun
-                  % (K, {T, V}, Acc) when is_atom(T) ->
-                  %     map_add(symbol, K, T, V, Acc);
-                  (K, V, Acc) ->
-                      % {T, _} = wrap(V),
-                      map_add(symbol, K, wrap(V), Acc)
+    maps:fold(fun (K, V, Acc) ->
+                      map_add(symbol, K, mc:infer_type(V), Acc)
               end, MA0, Anns).
 
 map_add(_T, _Key, undefined, Acc) ->
@@ -373,20 +369,6 @@ wrap(_Type, undefined) ->
     undefined;
 wrap(Type, Val) ->
     {Type, Val}.
-
-wrap(undefined) ->
-    undefined;
-wrap({_, _} = T) ->
-    %% looks wrapped already
-    T;
-wrap(Val) when is_binary(Val) ->
-    %% assume string value
-    {utf8, Val};
-wrap(Val) when is_integer(Val) ->
-    {long, Val};
-wrap(Val) when is_boolean(Val) ->
-    {boolean, Val}.
-
 
 key_find(K, [{{_, K}, {_, V}} | _]) ->
     V;
