@@ -28,6 +28,9 @@
          death_queue_names/1
          ]).
 
+%% utilities
+-export([infer_type/1]).
+
 -include("mc.hrl").
 
 -type str() :: atom() | string() | binary().
@@ -177,15 +180,14 @@ set_annotation(Key, Value, BasicMessage) ->
 
 -spec x_header(Key :: binary(), state()) ->
     tagged_prop().
-x_header(Key,
-         #?MODULE{protocol = Proto,
-                  annotations = Anns,
-                  data = Data}) ->
+x_header(Key, #?MODULE{protocol = Proto,
+                       annotations = Anns,
+                       data = Data}) ->
     %% x-headers may be have been added to the annotations map so
     %% we need to check that first
     case Anns of
         #{Key := Value} ->
-            guess_type(Value);
+            infer_type(Value);
         _ ->
             %% if not we have to call into the protocol specific handler
             Proto:x_header(Key, Data)
@@ -393,6 +395,18 @@ prepare(For, #?MODULE{protocol = Proto,
 prepare(For, State) ->
     mc_compat:prepare(For, State).
 
+infer_type(undefined) ->
+    undefined;
+infer_type(V) when is_binary(V) ->
+    {utf8, V};
+infer_type(V) when is_integer(V) ->
+    {long, V};
+infer_type(V) when is_boolean(V) ->
+    {boolean, V};
+infer_type({T, _} = V) when is_atom(T) ->
+    %% looks like a pre-tagged type
+    V.
+
 %% INTERNAL
 
 %% if there is a death with a source queue that is the same as the target
@@ -408,11 +422,6 @@ is_cycle(Queue, [{Queue, Reason} | _])
     true;
 is_cycle(Queue, [_ | Rem]) ->
     is_cycle(Queue, Rem).
-
-guess_type(V) when is_binary(V) ->
-    {utf8, V};
-guess_type(V) when is_integer(V) ->
-    {long, V}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
