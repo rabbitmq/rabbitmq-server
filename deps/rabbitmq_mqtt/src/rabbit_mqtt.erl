@@ -95,14 +95,9 @@ local_connection_pids() ->
 
 init_global_counters() ->
     lists:foreach(fun init_global_counters/1, [?MQTT_PROTO_V3,
-<<<<<<< HEAD
-                                               ?MQTT_PROTO_V4]).
-=======
-                                               ?MQTT_PROTO_V4,
-                                               ?MQTT_PROTO_V5]),
+                                               ?MQTT_PROTO_V4]),
     rabbit_global_counters:init([{queue_type, ?QUEUE_TYPE_QOS_0}, {dead_letter_strategy, disabled}],
                                 [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]).
->>>>>>> 939540f6dd (Init dead letter counter once)
 
 init_global_counters(ProtoVer) ->
     Proto = {protocol, ProtoVer},
