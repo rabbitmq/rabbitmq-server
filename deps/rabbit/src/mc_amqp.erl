@@ -211,7 +211,7 @@ convert_to(TargetProto, #msg{header = Header,
     TargetProto:convert_from(?MODULE, Sections).
 
 serialize(Sections) ->
-    [encode_bin(S) || S <- Sections].
+    encode_bin(Sections).
 
 protocol_state(#msg{header = Header,
                     delivery_annotations = DAC,
@@ -237,14 +237,13 @@ protocol_state(#msg{header = Header,
     DA = #'v1_0.delivery_annotations'{content = DAC},
     MA = #'v1_0.message_annotations'{content = MAC},
     AP = #'v1_0.application_properties'{content = APC},
-    F = #'v1_0.footer'{content = FC},
-    [Header,
-     DA,
-     MA,
-     P,
-     AP,
-     Data,
-     F].
+    Tail = case FC of
+               [] ->
+                   Data;
+               _ ->
+                   Data ++ [#'v1_0.footer'{content = FC}]
+           end,
+    [S || S <- [Header, DA, MA, P, AP | Tail], not is_empty(S)].
 
 prepare(_For, Msg) ->
     Msg.
@@ -255,7 +254,8 @@ prepare(_For, Msg) ->
 encode_bin(undefined) ->
     <<>>;
 encode_bin(Sections) when is_list(Sections) ->
-    [amqp10_framing:encode_bin(Section) || Section <- Sections];
+    [amqp10_framing:encode_bin(Section) || Section <- Sections,
+                                           not is_empty(Section)];
 encode_bin(Section) ->
     case is_empty(Section) of
         true ->
@@ -264,6 +264,8 @@ encode_bin(Section) ->
             amqp10_framing:encode_bin(Section)
     end.
 
+is_empty(undefined) ->
+    true;
 is_empty(#'v1_0.properties'{message_id = undefined,
                             user_id = undefined,
                             to = undefined,
@@ -285,6 +287,12 @@ is_empty(#'v1_0.message_annotations'{content = []}) ->
 is_empty(#'v1_0.delivery_annotations'{content = []}) ->
     true;
 is_empty(#'v1_0.footer'{content = []}) ->
+    true;
+is_empty(#'v1_0.header'{durable = undefined,
+                        priority = undefined,
+                        ttl = undefined,
+                        first_acquirer = undefined,
+                        delivery_count = undefined}) ->
     true;
 is_empty(_) ->
     false.
