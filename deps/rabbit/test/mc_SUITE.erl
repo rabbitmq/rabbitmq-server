@@ -137,10 +137,33 @@ amqpl_compat(_Config) ->
 
     RoutingHeaders = mc:routing_headers(Msg, []),
     ct:pal("routing headers ~p", [RoutingHeaders]),
-
+    ?assertMatch(#{<<"a-binary">> := <<"data">>,
+                   <<"a-bool">> := false,
+                   <<"a-double">> := 1.0,
+                   <<"a-float">> := 1.0,
+                   <<"a-signedint">> := 1,
+                   <<"a-stream-offset">> := 99,
+                   <<"a-string">> := <<"a string">>,
+                   <<"a-timestamp">> := 1000,
+                   <<"a-unsignedbyte">> := 1,
+                   <<"a-unsignedint">> := 1,
+                   <<"a-unsignedshort">> := 1,
+                   <<"a-void">> := undefined}, RoutingHeaders),
+    RoutingHeadersX = mc:routing_headers(Msg, [x_headers]),
+    ?assertMatch(#{<<"a-binary">> := <<"data">>,
+                   <<"a-bool">> := false,
+                   <<"a-double">> := 1.0,
+                   <<"a-float">> := 1.0,
+                   <<"a-signedint">> := 1,
+                   <<"a-stream-offset">> := 99,
+                   <<"a-string">> := <<"a string">>,
+                   <<"a-timestamp">> := 1000,
+                   <<"a-unsignedbyte">> := 1,
+                   <<"a-unsignedint">> := 1,
+                   <<"a-unsignedshort">> := 1,
+                   <<"a-void">> := undefined,
+                   <<"x-stream-filter">> := <<"apple">>}, RoutingHeadersX),
     ok.
-
-
 
 amqpl_table_x_header(_Config) ->
     Tbl = [{<<"type">>, longstr, <<"apple">>},
