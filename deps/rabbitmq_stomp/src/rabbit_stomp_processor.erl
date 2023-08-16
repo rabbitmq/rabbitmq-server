@@ -295,21 +295,18 @@ process_connect(Implicit, Frame,
                       io:format("Version ~p~n", [Version]),
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
-                      {Auth, {Username, Passwd}} = Creds= creds(Frame1, SSLLoginName, Config),
+                      {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} = application:get_env(
                                              rabbitmq_stomp, default_vhost),
                       VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
-                      {ok, StateL} = do_native_login(Creds, StateN#proc_state{vhost = VHost}),
+                      Heartbeat = login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
-                      Res = do_login(
-                              Username, Passwd,
-                              VHost,
-                              login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
-                              AdapterInfo#amqp_adapter_info{
-                                protocol = {ProtoName, Version}}, Version,
-                              StateL#proc_state{frame_transformer = FT,
-                                                auth_mechanism = Auth,
-                                                auth_login = Username}),
+                      Res = do_native_login(Creds, Heartbeat, Version, StateN#proc_state{vhost = VHost,
+                                                                                         adapter_info = AdapterInfo#amqp_adapter_info{
+                                                                                                          protocol = {ProtoName, Version}},
+                                                                                         frame_transformer = FT,
+                                                                                         auth_mechanism = Auth,
+                                                                                         auth_login = Username}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} ->
                               self() ! connection_created, ok(StateN1);
@@ -645,26 +642,6 @@ ensure_no_headers([Hdr | Hdrs], Command, Frame, State, Fun) -> %
     end;
 ensure_no_headers([], Command, Frame, State, Fun) ->
     Fun(Command, Frame, State).
-
-do_login(undefined, _, _, _, _, _, State) ->
-    error("Bad CONNECT", "Missing login or passcode header(s)", State);
-do_login(_Username, _Passwd, _VirtualHost, Heartbeat, _AdapterInfo, Version,
-         State) ->
-    SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
-    {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
-
-    Headers = [{?HEADER_SESSION, SessionId},
-               {?HEADER_HEART_BEAT,
-                io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-               {?HEADER_VERSION, Version}],
-    ok("CONNECTED",
-       case application:get_env(rabbitmq_stomp, hide_server_info, false) of
-           true  -> Headers;
-           false -> [{?HEADER_SERVER, server_header()} | Headers]
-       end,
-       "",
-       State#proc_state{session_id = SessionId,
-                        version    = Version}).
 
 server_header() ->
     {ok, Product} = application:get_key(rabbit, description),
@@ -1615,8 +1592,8 @@ check_resource_access(User, Resource, Perm, Context) ->
             %% end
     end.
 
-do_native_login(Creds, State = #proc_state{peer_addr = Addr,
-                                           vhost = VHost}) ->
+do_native_login(Creds, Heartbeat, Version,  State = #proc_state{peer_addr = Addr,
+                                                                vhost = VHost}) ->
     {Username, AuthProps} = case Creds of
                                 {ssl, {Username0, none}}-> {Username0, []};
                                 {_, {Username0, Password}} -> {Username0, [{password, Password},
@@ -1628,8 +1605,23 @@ do_native_login(Creds, State = #proc_state{peer_addr = Addr,
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, Addr),
         ok ?= check_user_loopback(Username, Addr),
         rabbit_core_metrics:auth_attempt_succeeded(Addr, Username, stomp),
-        {ok, State#proc_state{user = User,
-                              authz_context = AuthzCtx}}
+        SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+        {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+
+        Headers = [{?HEADER_SESSION, SessionId},
+                   {?HEADER_HEART_BEAT,
+                    io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+                   {?HEADER_VERSION, Version}],
+        ok("CONNECTED",
+           case application:get_env(rabbitmq_stomp, hide_server_info, false) of
+               true  -> Headers;
+               false -> [{?HEADER_SERVER, server_header()} | Headers]
+           end,
+           "",
+           State#proc_state{session_id = SessionId,
+                            version    = Version,
+                            user = User,
+                            authz_context = AuthzCtx})
     else
         {error, not_allowed} ->
             rabbit_log:warning("STOMP login failed for user '~ts': "
