@@ -12,6 +12,13 @@
 
 -export([init_state/0, reset_state/0,
          parse/2, serialise/2]).
+
+%% This function is nowhere called externally, but must be exported
+%% to circumvent the bug in https://github.com/erlang/otp/issues/7566
+%% If not exported, this function will return garbage binary data on OTP 26
+%% on Mac OS M1 and M2.
+-export([serialise_len/1]).
+
 -export_type([state/0]).
 
 -opaque state() :: unauthenticated | authenticated | fun().
