@@ -182,44 +182,13 @@ get_property(_P, _Msg) ->
 
 convert_to(?MODULE, Msg) ->
     Msg;
-convert_to(TargetProto, #msg{header = Header,
-                             delivery_annotations = DAC,
-                             message_annotations = MAC,
-                             properties = P,
-                             application_properties = APC,
-                             data = Data,
-                             footer = FC}) ->
-
-    DA = #'v1_0.delivery_annotations'{content = DAC},
-    MA = #'v1_0.message_annotations'{content = MAC},
-    AP = #'v1_0.application_properties'{content = APC},
-    F = #'v1_0.footer'{content = FC},
-    Init = [Data] ++ lists_cons_t(F, []),
-    Sects = lists_cons_t(
-              Header,
-              lists_cons_t(
-                DA,
-                lists_cons_t(
-                  MA,
-                  lists_cons_t(
-                    P,
-                    lists_cons_t(
-                      AP, Init))))),
-    %% convert_from(mc_amqp, Sections) expects a flat list of amqp sections
-    %% and the body could be a list itself (or an amqp_value)
-    Sections = lists:flatten(Sects),
-    TargetProto:convert_from(?MODULE, Sections).
+convert_to(TargetProto, Msg) ->
+    TargetProto:convert_from(?MODULE, msg_to_sections(Msg, fun (X) -> X end)).
 
 serialize(Sections) ->
     encode_bin(Sections).
 
-protocol_state(#msg{header = Header,
-                    delivery_annotations = DAC,
-                    message_annotations = MAC0,
-                    properties = P,
-                    application_properties = APC,
-                    footer = FC,
-                    data = Data}, Anns) ->
+protocol_state(Msg, Anns) ->
     Exchange = maps:get(exchange, Anns),
     [RKey | _] = maps:get(routing_keys, Anns),
 
@@ -231,25 +200,79 @@ protocol_state(#msg{header = Header,
                           false
                   end, Anns),
 
-    MAC = add_message_annotations(
-           AnnsToAdd#{<<"x-exchange">> => wrap(utf8, Exchange),
-                      <<"x-routing-key">> => wrap(utf8, RKey)}, MAC0),
-    DA = #'v1_0.delivery_annotations'{content = DAC},
-    MA = #'v1_0.message_annotations'{content = MAC},
-    AP = #'v1_0.application_properties'{content = APC},
-    Tail = case FC of
-               [] ->
-                   Data;
-               _ ->
-                   Data ++ [#'v1_0.footer'{content = FC}]
-           end,
-    [S || S <- [Header, DA, MA, P, AP | Tail], not is_empty(S)].
+    MACFun = fun(MAC) ->
+                     add_message_annotations(
+                       AnnsToAdd#{<<"x-exchange">> => wrap(utf8, Exchange),
+                                  <<"x-routing-key">> => wrap(utf8, RKey)}, MAC)
+             end,
+
+    msg_to_sections(Msg, MACFun).
+    % DA = #'v1_0.delivery_annotations'{content = DAC},
+    % MA = #'v1_0.message_annotations'{content = MAC},
+    % AP = #'v1_0.application_properties'{content = APC},
+    % F = #'v1_0.footer'{content = FC},
+    % Tail = case Data of
+    %            #'v1_0.amqp_value'{} ->
+    %                [Data | maybe_cons(F, [])];
+    %            _ when is_list(Data) ->
+    %                Data ++ maybe_cons(F, [])
+    %        end,
+    % [S || S <- [Header, DA, MA, P, AP | Tail], not is_empty(S)].
 
 prepare(_For, Msg) ->
     Msg.
 
 %% internal
 %%
+%%
+
+msg_to_sections(#msg{header = H,
+                     delivery_annotations = DAC,
+                     message_annotations = MAC0,
+                     properties = P,
+                     application_properties = APC,
+                     data = Data,
+                     footer = FC}, MacFun) ->
+    Tail = case FC of
+               [] -> [];
+               _ ->
+                   [#'v1_0.footer'{content = FC}]
+           end,
+    S0 = case Data of
+               #'v1_0.amqp_value'{} ->
+                   [Data | Tail];
+               _ when is_list(Data) ->
+                   Data ++ Tail
+           end,
+    S1 = case APC of
+             [] -> S0;
+             _ ->
+                 [#'v1_0.application_properties'{content = APC} | S0]
+         end,
+    S2 = case P of
+             undefined -> S1;
+             _ ->
+                 [P | S1]
+         end,
+    S3 = case MacFun(MAC0) of
+             [] -> S2;
+             MAC ->
+                 [#'v1_0.message_annotations'{content = MAC} | S2]
+         end,
+    S4 = case DAC of
+             [] -> S3;
+             _ ->
+                 [#'v1_0.delivery_annotations'{content = DAC} | S3]
+         end,
+    case H of
+        undefined -> S4;
+        _ ->
+            [H | S4]
+    end.
+
+
+
+
 
 encode_bin(undefined) ->
     <<>>;
@@ -452,16 +475,6 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                   (_, Acc) ->
                       Acc
               end, Anns, MA)
-    end.
-
-lists_cons_t(undefined, L) ->
-    L;
-lists_cons_t(Val, L) ->
-    case is_empty(Val) of
-        true ->
-            L;
-        false ->
-            [Val | L]
     end.
 
 lists_upsert(New, L) ->

@@ -288,6 +288,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
              routing_keys => [<<"apple">>]},
     Msg = mc:init(mc_amqpl, Content, Anns),
 
+    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, Msg)),
+    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, Msg)),
     ?assertEqual(98, mc:priority(Msg)),
     ?assertEqual(true, mc:is_persistent(Msg)),
     ?assertEqual(99000, mc:timestamp(Msg)),
@@ -303,6 +305,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Sections = amqp10_framing:decode_bin(
                  iolist_to_binary(amqp_serialize(Msg10Pre))),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
+    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, Msg10)),
+    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, Msg10)),
     ?assertEqual(98, mc:priority(Msg10)),
     ?assertEqual(true, mc:is_persistent(Msg10)),
     ?assertEqual(99000, mc:timestamp(Msg10)),
@@ -314,6 +318,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
 
+    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, MsgL2)),
+    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, MsgL2)),
     ?assertEqual(98, mc:priority(MsgL2)),
     ?assertEqual(true, mc:is_persistent(MsgL2)),
     ?assertEqual(99000, mc:timestamp(MsgL2)),
@@ -322,7 +328,6 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(1, mc:ttl(MsgL2)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, MsgL2)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(MsgL2, [])),
-
 
     ok.
 
