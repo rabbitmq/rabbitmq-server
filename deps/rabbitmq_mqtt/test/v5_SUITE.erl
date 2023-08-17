@@ -127,7 +127,8 @@ cluster_size_1_tests() ->
      topic_alias_retained_message,
      topic_alias_disallowed_retained_message,
      extended_auth,
-     headers_exchange
+     headers_exchange,
+     consistent_hash_exchange
     ].
 
 cluster_size_3_tests() ->
@@ -1984,12 +1985,9 @@ headers_exchange(Config) ->
                               Ch, #'exchange.bind'{destination = HeadersX,
                                                    source = <<"amq.topic">>,
                                                    routing_key = <<"my.topic">>}),
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{queue = Q1,
-                                                   durable = true}),
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{queue = Q2,
-                                                   durable = true}),
+    [#'queue.declare_ok'{} = amqp_channel:call(
+                               Ch, #'queue.declare'{queue = Q,
+                                                    durable = true}) || Q <- Qs],
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue = Q1,
                                              exchange = HeadersX,
@@ -2036,6 +2034,72 @@ headers_exchange(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = Q1})),
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = Q2})),
+
+    ok = emqtt:disconnect(C),
+    [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+%% Binding a consistent hash exchange to the MQTT topic exchange should support
+%% consistent routing based on Correlation-Data in the PUBLISH packet.
+consistent_hash_exchange(Config) ->
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_consistent_hash_exchange),
+    HashX = <<"my-consistent-hash-exchange">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Qs = [Q1, Q2],
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare'{
+                                        exchange = HashX,
+                                        type = <<"x-consistent-hash">>,
+                                        arguments = [{<<"hash-property">>, longstr, <<"correlation_id">>}],
+                                        durable = true,
+                                        auto_delete = true}),
+    #'exchange.bind_ok'{} = amqp_channel:call(
+                              Ch, #'exchange.bind'{destination = HashX,
+                                                   source = <<"amq.topic">>,
+                                                   routing_key = <<"a.*">>}),
+    [#'queue.declare_ok'{} = amqp_channel:call(
+                               Ch, #'queue.declare'{queue = Q,
+                                                    durable = true}) || Q <- Qs],
+    [#'queue.bind_ok'{} = amqp_channel:call(
+                            Ch, #'queue.bind'{queue = Q,
+                                              exchange = HashX,
+                                              %% weight
+                                              routing_key = <<"1">>}) || Q <- Qs],
+
+    Rands = [integer_to_binary(rand:uniform(1000)) || _ <- lists:seq(1, 30)],
+    UniqRands = lists:uniq(Rands),
+    NumMsgs = 150,
+    C = connect(?FUNCTION_NAME, Config),
+    [begin
+         N = integer_to_binary(rand:uniform(1_000_000)),
+         Topic = <<"a/", N/binary>>,
+         {ok, _} =  emqtt:publish(C, Topic,
+                                  #{'Correlation-Data' => lists:nth(rand:uniform(length(UniqRands)), UniqRands)},
+                                  N, [{qos, 1}])
+     end || _ <- lists:seq(1, NumMsgs)],
+
+    #'basic.consume_ok'{consumer_tag = Ctag1} = amqp_channel:subscribe(
+                                                  Ch, #'basic.consume'{queue = Q1,
+                                                                       no_ack = true}, self()),
+    #'basic.consume_ok'{consumer_tag = Ctag2} = amqp_channel:subscribe(
+                                                  Ch, #'basic.consume'{queue = Q2,
+                                                                       no_ack = true}, self()),
+    {N1, Corrs1} = receive_correlations(Ctag1, 0, sets:new([{version, 2}])),
+    {N2, Corrs2} = receive_correlations(Ctag2, 0, sets:new([{version, 2}])),
+    ct:pal("q1: ~b messages, ~b unique correlation-data", [N1, sets:size(Corrs1)]),
+    ct:pal("q2: ~b messages, ~b unique correlation-data", [N2, sets:size(Corrs2)]),
+    %% All messages should be routed.
+    ?assertEqual(NumMsgs, N1 + N2),
+    %% Each of the 2 queues should have received at least 1 message.
+    ?assert(sets:size(Corrs1) > 0),
+    ?assert(sets:size(Corrs2) > 0),
+    %% Assert that the consistent hash exchange routed the given Correlation-Data consistently.
+    %% The same Correlation-Data should never be present in both queues.
+    Intersection = sets:intersection(Corrs1, Corrs2),
+    ?assert(sets:is_empty(Intersection)),
 
     ok = emqtt:disconnect(C),
     [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],

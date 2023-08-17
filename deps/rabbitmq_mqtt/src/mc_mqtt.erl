@@ -262,6 +262,8 @@ size_prop(_, _, Sum) ->
 x_header(_Key, #mqtt_msg{}) ->
     undefined.
 
+property(correlation_id, #mqtt_msg{props = #{'Correlation-Data' := Corr}}) ->
+    {binary, Corr};
 property(_Key, #mqtt_msg{}) ->
     undefined.
 
