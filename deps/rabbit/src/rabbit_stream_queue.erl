@@ -1055,10 +1055,20 @@ stream_entries(QName, Name, LocalPid,
 stream_entries(_QName, _Name, _LocalPid, Str, Msgs) ->
     {Str, Msgs}.
 
-binary_to_msg(#resource{virtual_host = _VHost,
-                        kind = queue,
-                        name = _QName}, Data) ->
-    mc:init(mc_amqp, amqp10_framing:decode_bin(Data), #{}).
+binary_to_msg(#resource{kind = queue,
+                        name = QName}, Data) ->
+    Mc0 = mc:init(mc_amqp, amqp10_framing:decode_bin(Data), #{}),
+    %% If exchange or routing_keys annotation isn't present the data most likely came
+    %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
+    %% of the direct exchange.
+    Mc = case mc:get_annotation(exchange, Mc0) of
+             undefined -> mc:set_annotation(exchange, <<>>, Mc0);
+             _ -> Mc0
+         end,
+    case mc:get_annotation(routing_keys, Mc) of
+        undefined -> mc:set_annotation(routing_keys, [QName], Mc);
+        _ -> Mc
+    end.
 
 msg_to_iodata(Msg0) ->
     Sections = mc:protocol_state(mc:convert(mc_amqp, Msg0)),
