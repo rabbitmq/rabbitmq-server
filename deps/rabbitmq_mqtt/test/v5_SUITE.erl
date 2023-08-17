@@ -127,7 +127,8 @@ cluster_size_1_tests() ->
      topic_alias_disallowed,
      topic_alias_retained_message,
      topic_alias_disallowed_retained_message,
-     extended_auth
+     extended_auth,
+     headers_exchange
     ].
 
 cluster_size_3_tests() ->
@@ -2010,6 +2011,80 @@ extended_auth(Config) ->
                                                 'Authentication-Data' => <<"123456">>}}]),
     unlink(C),
     ?assertEqual({error, {bad_authentication_method, #{}}}, Connect(C)).
+
+%% Binding a headers exchange to the MQTT topic exchange should support
+%% routing based on (topic and) User Property in the PUBLISH packet.
+headers_exchange(Config) ->
+    HeadersX = <<"my-headers-exchange">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Qs = [Q1, Q2],
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare'{exchange = HeadersX,
+                                                         type = <<"headers">>,
+                                                         durable = true,
+                                                         auto_delete = true}),
+    #'exchange.bind_ok'{} = amqp_channel:call(
+                              Ch, #'exchange.bind'{destination = HeadersX,
+                                                   source = <<"amq.topic">>,
+                                                   routing_key = <<"my.topic">>}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = Q1,
+                                                   durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = Q2,
+                                                   durable = true}),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Q1,
+                                             exchange = HeadersX,
+                                             arguments = [{<<"x-match">>, longstr, <<"any">>},
+                                                          {<<"k1">>, longstr, <<"v1">>},
+                                                          {<<"k2">>, longstr, <<"v2">>}]
+                                            }),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Q2,
+                                             exchange = HeadersX,
+                                             arguments = [{<<"x-match">>, longstr, <<"all-with-x">>},
+                                                          {<<"k1">>, longstr, <<"v1">>},
+                                                          {<<"k2">>, longstr, <<"v2">>},
+                                                          {<<"x-k3">>, longstr, <<"🐇"/utf8>>}]
+                                            }),
+    C = connect(?FUNCTION_NAME, Config),
+    Topic = <<"my/topic">>,
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k1">>, <<"v1">>},
+                                      {<<"k2">>, <<"v2">>},
+                                      {<<"x-k3">>, unicode:characters_to_binary("🐇")}
+                                     ]},
+                <<"m1">>, [{qos, 1}]),
+    [?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    ok = emqtt:publish(C, Topic, <<"m2">>),
+    [?assertMatch(#'basic.get_empty'{},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k1">>, <<"nope">>}]},
+                <<"m3">>, [{qos, 1}]),
+    [?assertMatch(#'basic.get_empty'{},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k2">>, <<"v2">>}]},
+                <<"m4">>, [{qos, 1}]),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m4">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q1})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q2})),
+
+    ok = emqtt:disconnect(C),
+    [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
 
 %% -------------------------------------------------------------------
 %% Helpers

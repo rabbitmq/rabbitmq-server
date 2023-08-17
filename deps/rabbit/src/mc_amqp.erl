@@ -103,7 +103,7 @@ property(_Prop, #msg{}) ->
     undefined.
 
 routing_headers(Msg, Opts) ->
-    IncludeX = lists:member(x_header, Opts),
+    IncludeX = lists:member(x_headers, Opts),
     X = case IncludeX of
             true ->
                 message_annotations_as_simple_map(Msg);
