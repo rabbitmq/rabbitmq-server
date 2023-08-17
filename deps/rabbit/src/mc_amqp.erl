@@ -98,7 +98,7 @@ x_header(Key, Msg) ->
 property(correlation_id, #msg{properties = #'v1_0.properties'{correlation_id = Corr}}) ->
     Corr;
 property(message_id, #msg{properties = #'v1_0.properties'{message_id = MsgId}}) ->
-     MsgId;
+    MsgId;
 property(_Prop, #msg{}) ->
     undefined.
 

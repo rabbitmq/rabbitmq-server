@@ -129,6 +129,7 @@ broker_for_integration_suites(
     extra_plugins = [
         "//deps/rabbitmq_management:erlang_app",
         "//deps/rabbitmq_web_mqtt:erlang_app",
+        "//deps/rabbitmq_consistent_hash_exchange:erlang_app",
     ],
 )
 
