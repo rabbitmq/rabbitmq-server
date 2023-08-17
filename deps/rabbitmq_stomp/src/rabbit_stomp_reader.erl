@@ -171,12 +171,8 @@ handle_info({bump_credit, Msg}, State) ->
 
 handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt, State) ->
     ProcState = processor_state(State),
-    case rabbit_stomp_processor:handle_down(Evt, ProcState) of
-        {ok, NewProcState} ->
-            {noreply, processor_state(NewProcState, State), hibernate};
-        {error, Reason} ->
-            {stop, {shutdown, Reason, State}}
-    end;
+    {ok, NewProcState} = rabbit_stomp_processor:handle_down(Evt, ProcState),
+    {noreply, processor_state(NewProcState, State), hibernate};
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     rabbit_amqqueue_common:notify_sent_queue_down(QPid),
@@ -208,9 +204,9 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
                                                                  IsMulti,
                                                                  ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
-handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
+handle_info(#'basic.cancel'{consumer_tag = CTag}, State) ->
     ProcState = processor_state(State),
-    case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
+    case rabbit_stomp_processor:cancel_consumer(CTag, ProcState) of
       {ok, NewProcState, _} ->
         {noreply, processor_state(NewProcState, State), hibernate};
       {stop, Reason, NewProcState} ->
@@ -233,14 +229,8 @@ handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 
 
 %%----------------------------------------------------------------------------
-handle_info({'EXIT', From, Reason}, State) ->
-  ProcState = processor_state(State),
-  case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
-    {stop, NewReason, NewProcState} ->
-        {stop, NewReason, processor_state(NewProcState, State)};
-    unknown_exit ->
-        {stop, {connection_died, Reason}, State}
-  end.
+handle_info({'EXIT', _From, Reason}, State) ->
+    {stop, {connection_died, Reason}, State}.
 %%----------------------------------------------------------------------------
 
 process_received_bytes([], State) ->

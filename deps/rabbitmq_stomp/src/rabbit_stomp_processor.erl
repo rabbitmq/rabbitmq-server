@@ -202,11 +202,13 @@ command({"CONNECT", Frame}, State) ->
 command(Request, State = #proc_state{user = undefined,
                                      config = #stomp_configuration{
                                                  implicit_connect = true}}) ->
-    {ok, State1 = #proc_state{user = User}} =
-        process_connect(implicit, #stomp_frame{headers = []}, State),
-    case User of
-        undefined -> {stop, normal, State1};
-        _    -> command(Request, State1)
+
+    case process_connect(implicit, #stomp_frame{headers = []}, State) of
+        {ok, State1 = #proc_state{user = undefined}} ->
+            {stop, normal, State1};
+        {ok, State1 = #proc_state{user = _User}} ->
+            command(Request, State1);
+        Res -> Res
     end;
 
 command(_Request, State = #proc_state{user = undefined,
@@ -519,8 +521,6 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                   [Description],
                   State);
         {ok, Subscription = #subscription{queue_name = Queue}} ->
-            {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
-                                                           Frame, State),
 
             case rabbit_misc:with_exit_handler(
                    fun () -> {error, not_found} end,
@@ -537,9 +537,16 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                               end)
                    end) of
                 {ok, QueueStates} ->
-                    %% rabbit_global_counters:consumer_deleted(amqp091),
-                    {ok, NewState#proc_state{queue_states = QueueStates}};
+                    %% rabbit_global_counters:consumer_deleted('STOMP'),
+
+                    {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
+                                                                   Frame, State#proc_state{queue_states = QueueStates}),
+                    {ok, NewState};
                 {error, not_found} ->
+                    %% rabbit_global_counters:consumer_deleted('STOMP'),
+
+                    {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
+                                                                   Frame, State),
                     {ok, NewState}
             end
     end.
@@ -582,8 +589,8 @@ maybe_delete_durable_sub_queue({topic, Name}, Frame,
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
-
-            QRes = rabbit_misc:r(VHost, queue, QName),
+            QRes = rabbit_misc:r(VHost, queue, list_to_binary(QName)),
+            io:format("Durable QRes: ~p~n", [QRes]),
             delete_queue(QRes, Username),
             ok(State);
         false ->
@@ -883,7 +890,7 @@ send_confirms_and_nacks(State = #proc_state{%% tx = none,
     case rabbit_node_monitor:pause_partition_guard() of
         ok      ->
             Confirms = lists:append(C),
-            %% rabbit_global_counters:messages_confirmed(stomp, length(Confirms)), %% TODO: what is the protocol?
+            %% rabbit_global_counters:messages_confirmed('STOMP', length(Confirms)),
             Rejects = lists:append(R),
             ConfirmMsgSeqNos =
                 lists:foldl(
@@ -932,12 +939,12 @@ send_confirms([], _, State) ->
 %% send_confirms(_Cs, _, State = #ch{cfg = #conf{state = closing}}) -> %% optimisation
 %%     State;
 send_confirms([MsgSeqNo], _, State) ->
-    flush_pending_receipts(MsgSeqNo, false, State),
-    State;
+    State1 = flush_pending_receipts(MsgSeqNo, false, State),
+    State1;
 send_confirms(Cs, Rs, State) ->
     coalesce_and_send(Cs, Rs,
-                      fun(MsgSeqNo, Multiple) ->
-                              flush_pending_receipts(MsgSeqNo, Multiple, State)
+                      fun(MsgSeqNo, Multiple, StateN) ->
+                              flush_pending_receipts(MsgSeqNo, Multiple, StateN)
                       end, State).
 
 coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #proc_state{unconfirmed = UC}) ->
@@ -1533,7 +1540,7 @@ delete_queue(QRes, Username) ->
     case rabbit_amqqueue:with(
            QRes,
            fun (Q) ->
-                   rabbit_queue_type:delete(Q, false, false, Username)
+                   io:format("Delete queue ~p~n", [rabbit_queue_type:delete(Q, false, false, Username)])
            end,
            fun (not_found) ->
                    ok;
@@ -1587,17 +1594,6 @@ check_resource_access(User, Resource, Perm, Context) ->
             CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
             put(permission_cache, [V | CacheTail]),
             ok
-            %% try rabbit_access_control:check_resource_access(User, Resource, Perm, Context) of
-            %%     ok ->
-            %%         CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
-            %%         put(permission_cache, [V | CacheTail]),
-            %%         ok
-            %% catch
-            %%     exit:#amqp_error{name = access_refused,
-            %%                      explanation = Msg} ->
-            %%         log_error(access_refused, Msg, none),
-            %%         {error, access_refused}
-            %% end
     end.
 
 do_native_login(Creds, Heartbeat, Version,  State = #proc_state{peer_addr = Addr,
@@ -1887,33 +1883,27 @@ unescape([],           Acc) -> lists:reverse(Acc).
 consume_queue(QRes, Spec0, State = #proc_state{user = #user{username = Username} = User,
                                                    authz_context = AuthzCtx,
                                                    queue_states  = QStates0})->
-    case check_resource_access(User, QRes, read, AuthzCtx) of
-        ok ->
-            Spec = Spec0#{channel_pid => self(),
-                          limiter_pid => none,
-                          limiter_active => false,
-                          ok_msg => undefined,
-                          acting_user => Username},
-            rabbit_amqqueue:with_or_die(
-              QRes,
-              fun(Q1) ->
-                      case rabbit_queue_type:consume(Q1, Spec, QStates0) of
-                          {ok, QStates} ->
-                              %% io:format("Consume QStates ~p ~n", [QStates]),
-                              State1 = State#proc_state{queue_states = QStates},
+    check_resource_access(User, QRes, read, AuthzCtx),
+    Spec = Spec0#{channel_pid => self(),
+                  limiter_pid => none,
+                  limiter_active => false,
+                  ok_msg => undefined,
+                  acting_user => Username},
+    rabbit_amqqueue:with_or_die(
+      QRes,
+      fun(Q1) ->
+              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+                  {ok, QStates} ->
+                      %% io:format("Consume QStates ~p ~n", [QStates]),
+                      %% rabbit_global_counters:consumer_created('STOMP'),
+                      State1 = State#proc_state{queue_states = QStates},
                               {ok, State1};
-                          {error, Reason} ->
-                              error("Failed to consume from ~s: ~p",
+                  {error, Reason} ->
+                      error("Failed to consume from ~s: ~p",
                                     [rabbit_misc:rs(QRes), Reason],
-                                              State)
-                      end
-              end);
-        {error, access_refused} ->
-            error("Failed to consume from ~s: no read access",
-                  [rabbit_misc:rs(QRes)],
-                  State)
-    end.
-
+                            State)
+              end
+      end).
 
 create_queue(Amqqueue, _State = #proc_state{authz_context = AuthzCtx,
                                             user = User,
