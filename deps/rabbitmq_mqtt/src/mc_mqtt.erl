@@ -265,6 +265,16 @@ x_header(_Key, #mqtt_msg{}) ->
 property(_Key, #mqtt_msg{}) ->
     undefined.
 
+routing_headers(#mqtt_msg{props = #{'User-Property' := UserProperty}}, Opts) ->
+    IncludeX = lists:member(x_headers, Opts),
+    lists:foldl(fun({<<"x-", _/binary>> = K, V}, M) ->
+                        case IncludeX of
+                            true -> M#{K => V};
+                            false -> M
+                        end;
+                   ({K, V}, M) ->
+                        M#{K => V}
+                end, #{}, UserProperty);
 routing_headers(#mqtt_msg{}, _Opts) ->
     #{}.
 
