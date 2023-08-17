@@ -207,7 +207,7 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
 handle_info(#'basic.cancel'{consumer_tag = CTag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(CTag, ProcState) of
-      {ok, NewProcState, _} ->
+      {ok, NewProcState} ->
         {noreply, processor_state(NewProcState, State), hibernate};
       {stop, Reason, NewProcState} ->
         {stop, Reason, processor_state(NewProcState, State)}

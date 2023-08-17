@@ -64,42 +64,42 @@ adapter_name(State) ->
 
 %%----------------------------------------------------------------------------
 
--spec initial_state(
-  #stomp_configuration{},
-  {SendFun, AdapterInfo, SSLLoginName, PeerAddr})
-    -> #proc_state{}
-  when SendFun :: fun((atom(), binary()) -> term()),
-       AdapterInfo :: #amqp_adapter_info{},
-       SSLLoginName :: atom() | binary(),
-       PeerAddr :: inet:ip_address().
+%% -spec initial_state(
+%%   #stomp_configuration{},
+%%   {SendFun, AdapterInfo, SSLLoginName, PeerAddr})
+%%     -> #proc_state{}
+%%   when SendFun :: fun((atom(), binary()) -> term()),
+%%        AdapterInfo :: #amqp_adapter_info{},
+%%        SSLLoginName :: atom() | binary(),
+%%        PeerAddr :: inet:ip_address().
 
--type process_frame_result() ::
-    {ok, term(), #proc_state{}} |
-    {stop, term(), #proc_state{}}.
+%% -type process_frame_result() ::
+%%     {ok, term(), #proc_state{}} |
+%%     {stop, term(), #proc_state{}}.
 
--spec process_frame(#stomp_frame{}, #proc_state{}) ->
-    process_frame_result().
+%% -spec process_frame(#stomp_frame{}, #proc_state{}) ->
+%%           process_frame_result().
 
--spec flush_and_die(#proc_state{}) -> #proc_state{}.
+%% -spec flush_and_die(#proc_state{}) -> #proc_state{}.
 
--spec command({Command, Frame}, State) -> process_frame_result()
-    when Command :: string(),
-         Frame   :: #stomp_frame{},
-         State   :: #proc_state{}.
+%% -spec command({Command, Frame}, State) -> process_frame_result()
+%%     when Command :: string(),
+%%          Frame   :: #stomp_frame{},
+%%          State   :: #proc_state{}.
 
--type process_fun() :: fun((#proc_state{}) ->
-        {ok, #stomp_frame{}, #proc_state{}}  |
-        {error, string(), string(), #proc_state{}} |
-        {stop, term(), #proc_state{}}).
--spec process_request(process_fun(), fun((#proc_state{}) -> #proc_state{}), #proc_state{}) ->
-    process_frame_result().
+%% -type process_fun() :: fun((#proc_state{}) ->
+%%         {ok, #stomp_frame{}, #proc_state{}}  |
+%%         {error, string(), string(), #proc_state{}} |
+%%         {stop, term(), #proc_state{}}).
+%% -spec process_request(process_fun(), fun((#proc_state{}) -> #proc_state{}), #proc_state{}) ->
+%%     process_frame_result().
 
--spec flush_pending_receipts(DeliveryTag, IsMulti, State) -> State
-    when State :: #proc_state{},
-         DeliveryTag :: term(),
-         IsMulti :: boolean().
+%% -spec flush_pending_receipts(DeliveryTag, IsMulti, State) -> State
+%%     when State :: #proc_state{},
+%%          DeliveryTag :: term(),
+%%          IsMulti :: boolean().
 
--spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
+%% -spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
 
 %%----------------------------------------------------------------------------
 
@@ -783,7 +783,7 @@ do_send(Destination, _DestHdr,
                         SeqNo = State1#proc_state.msg_seq_no,
                         %% I think it's safe to just add it here because
                         %% if there is an error down the road process dies
-                        StateRR = maybe_record_receipt(true, SeqNo, Id, State1),
+                        StateRR = record_receipt(true, SeqNo, Id, State1),
                         {true, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}};
                     not_found ->
                         {false, undefined, State1}
@@ -1013,8 +1013,8 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
                   "unknown delivery tag ~w", [DeliveryTag])
     end.
 
-foreach_per_queue(_F, [], Acc) ->
-    Acc;
+%% foreach_per_queue(_F, [], Acc) ->
+%%     Acc;
 foreach_per_queue(F, [#pending_ack{tag = CTag,
                                    queue = QName,
                                    msg_id = MsgId}], Acc) ->
@@ -1235,10 +1235,8 @@ do_receipt("SEND", _, State) ->
 do_receipt(_Frame, ReceiptId, State) ->
     send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
 
-maybe_record_receipt(_DoConfirm = true, MsgSeqNo, ReceiptId, State = #proc_state{pending_receipts = PR}) ->
-    State#proc_state{pending_receipts = gb_trees:insert(MsgSeqNo, ReceiptId, PR)};
-maybe_record_receipt(_DoConfirm = false, _, _, State) ->
-    State.
+record_receipt(_DoConfirm = true, MsgSeqNo, ReceiptId, State = #proc_state{pending_receipts = PR}) ->
+    State#proc_state{pending_receipts = gb_trees:insert(MsgSeqNo, ReceiptId, PR)}.
 
 flush_pending_receipts(DeliveryTag, IsMulti,
                        State = #proc_state{pending_receipts = PR}) ->
@@ -1724,46 +1722,39 @@ handle_queue_actions(Actions, #proc_state{} = State0) ->
       end, State0, Actions).
 
 
-parse_endpoint(Destination) ->
-    parse_endpoint(Destination, false).
 
-parse_endpoint(undefined, AllowAnonymousQueue) ->
-    parse_endpoint("/queue", AllowAnonymousQueue);
-
-parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination),
-                                              AllowAnonymousQueue);
-parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
+parse_endpoint(undefined) ->
+    parse_endpoint("/queue");
+parse_endpoint(Destination) when is_binary(Destination) ->
+    parse_endpoint(unicode:characters_to_list(Destination));
+parse_endpoint(Destination) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
             when Type =:= "exchange" orelse Type =:= "queue" orelse
                  Type =:= "topic"    orelse Type =:= "temp-queue" ->
-            parse_endpoint0(atomise(Type), Rest, AllowAnonymousQueue);
+            parse_endpoint0(atomise(Type), Rest);
         ["", "amq", "queue" | Rest] ->
-            parse_endpoint0(amqqueue, Rest, AllowAnonymousQueue);
+            parse_endpoint0(amqqueue, Rest);
         ["", "reply-queue" = Prefix | [_|_]] ->
             parse_endpoint0(reply_queue,
-                            [lists:nthtail(2 + length(Prefix), Destination)],
-                            AllowAnonymousQueue);
+                            [lists:nthtail(2 + length(Prefix), Destination)]);
         _ ->
             {error, {unknown_destination, Destination}}
     end.
 
-parse_endpoint0(exchange, ["" | _] = Rest,    _) ->
+parse_endpoint0(exchange, ["" | _] = Rest) ->
     {error, {invalid_destination, exchange, to_url(Rest)}};
-parse_endpoint0(exchange, [Name],             _) ->
+parse_endpoint0(exchange, [Name]) ->
     {ok, {exchange, {unescape(Name), undefined}}};
-parse_endpoint0(exchange, [Name, Pattern],    _) ->
+parse_endpoint0(exchange, [Name, Pattern]) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
-parse_endpoint0(queue,    [],                 false) ->
+parse_endpoint0(queue,    []) ->
     {error, {invalid_destination, queue, []}};
-parse_endpoint0(queue,    [],                 true) ->
-    {ok, {queue, undefined}};
-parse_endpoint0(Type,     [[_|_]] = [Name],   _) ->
+parse_endpoint0(Type,     [[_|_]] = [Name]) ->
     {ok, {Type, unescape(Name)}};
-parse_endpoint0(Type,     Rest,               _) ->
+parse_endpoint0(Type,     Rest) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
 
 %% --------------------------------------------------------------------------
