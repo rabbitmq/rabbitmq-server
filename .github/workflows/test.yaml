@@ -74,7 +74,14 @@ jobs:
           --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=-exclusive,-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
-          --verbose_failures
+          --verbose_failures \
+          --build_event_json_file=bes.json
+    - name: SAVE bes.json
+      uses: actions/upload-artifact@v3
+      with:
+        name: bes-${{ matrix.otp_version_id }}.json
+        path: bes.json
+
   test-exclusive:
     name: Test (Exclusive Tests)
     runs-on: ubuntu-20.04
