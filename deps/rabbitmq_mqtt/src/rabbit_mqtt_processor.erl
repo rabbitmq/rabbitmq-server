@@ -380,19 +380,11 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
         {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
             auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no username is provided"),
-<<<<<<< HEAD
             {error, ?CONNACK_BAD_CREDENTIALS};
-        {invalid_creds, {User, undefined}} when is_binary(User) ->
-            auth_attempt_failed(PeerIp, User),
-            ?LOG_ERROR("MQTT login failed for user '~p': no password provided", [User]),
-            {error, ?CONNACK_BAD_CREDENTIALS};
-=======
-            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {User, _Pass}} when is_binary(User) ->
             auth_attempt_failed(PeerIp, User),
             ?LOG_ERROR("MQTT login failed for user '~s': no password provided", [User]),
-            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
->>>>>>> fb0df64373 (Disallow empty password in MQTT)
+            {error, ?CONNACK_BAD_CREDENTIALS};
         {UserBin, PassBin} ->
             {ok, {UserBin, PassBin}}
     end.
