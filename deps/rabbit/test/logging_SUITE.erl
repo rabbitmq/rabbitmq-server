@@ -146,7 +146,7 @@ init_per_testcase(Testcase, Config) ->
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
             ExchProps = [{enabled, true},
-                         {level, info}] ,
+                         {level, debug}] ,
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
                         [{rmq_nodes_count, 1},
@@ -154,7 +154,7 @@ init_per_testcase(Testcase, Config) ->
             Config2 = rabbit_ct_helpers:merge_app_env(
                         Config1,
                         {rabbit, [{log, [{exchange, ExchProps},
-                                         {file, [{level, info}]}]}]}),
+                                         {file, [{level, debug}]}]}]}),
             rabbit_ct_helpers:run_steps(
               Config2,
               rabbit_ct_broker_helpers:setup_steps() ++
@@ -910,11 +910,11 @@ logging_to_exchange_works(Config) ->
     ExchangeHandler = get_handler_by_id(Handlers, rmq_1_exchange),
     ?assertNotEqual(undefined, ExchangeHandler),
     ?assertMatch(
-       #{level := info,
+       #{level := debug,
          module := rabbit_logger_exchange_h,
          filter_default := log,
-         filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info}}}],
+         filters := [{progress_reports, {_, log}},
+                     {rmqlog_filter, {_, #{global := debug}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{exchange := _}},
        ExchangeHandler),
@@ -922,17 +922,18 @@ logging_to_exchange_works(Config) ->
       #{exchange := #resource{name = XName} = Exchange}} = ExchangeHandler,
 
     %% Wait for the expected exchange to be automatically declared.
-    lists:any(
-      fun(_) ->
-              Ret = rabbit_ct_broker_helpers:rpc(
-                      Config, 0,
-                      rabbit_exchange, lookup, [Exchange]),
-              case Ret of
-                  {ok, _} -> true;
-                  _       -> timer:sleep(500),
-                             false
-              end
-      end, lists:seq(1, 20)),
+    ?assert(
+       lists:any(
+         fun(_) ->
+                 Ret = rabbit_ct_broker_helpers:rpc(
+                         Config, 0,
+                         rabbit_exchange, lookup, [Exchange]),
+                 case Ret of
+                     {ok, _} -> true;
+                     _       -> timer:sleep(500),
+                                false
+                 end
+         end, lists:seq(1, 20))),
 
     %% Declare a queue to collect all logged messages.
     {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
@@ -941,7 +942,7 @@ logging_to_exchange_works(Config) ->
     ?assertMatch(
        #'queue.declare_ok'{},
        amqp_channel:call(Chan, #'queue.declare'{queue = QName,
-                                                durable = false})),
+                                                durable = true})),
     ?assertMatch(
        #'queue.bind_ok'{},
        amqp_channel:call(Chan, #'queue.bind'{queue = QName,
