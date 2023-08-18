@@ -1007,14 +1007,8 @@ logging_to_exchange_works(Config) ->
        #{level := debug,
          module := rabbit_logger_exchange_h,
          filter_default := log,
-<<<<<<< HEAD
-         filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
-=======
          filters := [{progress_reports, {_, log}},
                      {rmqlog_filter, {_, #{global := debug}}}],
->>>>>>> 608f78d450 (logging_SUITE: Enable debug logging in exchange tests)
          formatter := {rabbit_logger_text_fmt, _},
          config := #{exchange := _}},
        ExchangeHandler),
