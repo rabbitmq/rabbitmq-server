@@ -131,9 +131,6 @@ handle_cast(client_timeout, State) ->
 handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
-
-
-
 handle_info(connection_created, State) ->
     Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
     rabbit_core_metrics:connection_created(self(), Infos),
@@ -193,25 +190,6 @@ handle_info(login_timeout, State) ->
     end;
 
 %%----------------------------------------------------------------------------
-
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
-    ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag,
-                                                                 IsMulti,
-                                                                 ProcState),
-    {noreply, processor_state(NewProcState, State), hibernate};
-handle_info(#'basic.cancel'{consumer_tag = CTag}, State) ->
-    ProcState = processor_state(State),
-    case rabbit_stomp_processor:cancel_consumer(CTag, ProcState) of
-      {ok, NewProcState} ->
-        {noreply, processor_state(NewProcState, State), hibernate};
-      {stop, Reason, NewProcState} ->
-        {stop, Reason, processor_state(NewProcState, State)}
-    end;
 
 handle_info({start_heartbeats, {0, 0}}, State) ->
     {noreply, State#reader_state{timeout_sec = {0, 0}}};
