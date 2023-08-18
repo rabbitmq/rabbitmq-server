@@ -107,6 +107,7 @@ eunit(
         ":test_src_rabbit_stomp_client_beam",
         ":test_src_rabbit_stomp_publish_test_beam",
     ],
+    erl_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
     target = ":test_erlang_app",
 )
 
