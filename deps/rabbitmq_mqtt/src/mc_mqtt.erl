@@ -48,7 +48,7 @@ init(Msg = #mqtt_msg{qos = Qos,
     {Msg, Anns}.
 
 convert_from(mc_amqp, Sections) ->
-    {Header, MsgAnns, AmqpProps, PayloadRev} =
+    {Header, _MsgAnns, AmqpProps, PayloadRev} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
@@ -76,24 +76,18 @@ convert_from(mc_amqp, Sections) ->
               _ ->
                   ?QOS_0
           end,
-    Props0 = case MsgAnns of
-                 #'v1_0.message_annotations'{
-                    content = #{{symbol, <<"x-opt-reply-to-topic">>} := {utf8, Topic}}} ->
-                     #{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)};
+    %% TODO convert #'v1_0.properties'{reply_to} to Response-Topic
+    Props0 = case AmqpProps of
+                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
+                     #{'Correlation-Data' => correlation_id(Corr)};
                  _ ->
                      #{}
              end,
-    Props1 = case AmqpProps of
-                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     Props0#{'Correlation-Data' => correlation_id(Corr)};
-                 _ ->
-                     Props0
-             end,
     Props = case AmqpProps of
                 #'v1_0.properties'{content_type = {symbol, ContentType}} ->
-                    Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType)};
+                    Props0#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType)};
                 _ ->
-                    Props1
+                    Props0
             end,
     Payload = lists:flatten(lists:reverse(PayloadRev)),
     #mqtt_msg{retain = false,
@@ -105,7 +99,7 @@ convert_from(mc_amqpl, #content{properties = PBasic,
                                 payload_fragments_rev = Payload}) ->
     #'P_basic'{expiration = Expiration,
                delivery_mode = DelMode,
-               headers = Headers0,
+               headers = H0,
                correlation_id = CorrId,
                content_type = ContentType} = PBasic,
     Qos = case DelMode of
@@ -116,33 +110,39 @@ convert_from(mc_amqpl, #content{properties = PBasic,
              true -> #{'Content-Type' => ContentType};
              false -> #{}
          end,
-    Headers = case Headers0 of
-                  undefined -> [];
-                  _ -> Headers0
-              end,
-    P1 = case lists:keyfind(<<"x-opt-reply-to-topic">>, 1, Headers) of
-             {_, longstr, Topic} ->
-                 P0#{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)};
-             _ ->
-                 P0
+    H1 = case H0 of
+             undefined -> [];
+             _ -> H0
          end,
-    P2 = case is_binary(CorrId) of
-             true ->
-                 P1#{'Correlation-Data' => CorrId};
-             false ->
-                 case lists:keyfind(<<"x-correlation-id">>, 1, Headers) of
-                     {_, longstr, Corr} ->
-                         P1#{'Correlation-Data' => Corr};
-                     _ ->
-                         P1
-                 end
+    {P1, H3} = case lists:keytake(<<"x-reply-to-topic">>, 1, H1) of
+                   {value, {_, longstr, Topic}, H2} ->
+                       {P0#{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)}, H2};
+                   false ->
+                       {P0, H1}
+               end,
+    {P2, H} = case is_binary(CorrId) of
+                  true ->
+                      {P1#{'Correlation-Data' => CorrId}, H3};
+                  false ->
+                      case lists:keytake(<<"x-correlation-id">>, 1, H3) of
+                          {value, {_, longstr, Corr}, H4} ->
+                              {P1#{'Correlation-Data' => Corr}, H4};
+                          false ->
+                              {P1, H3}
+                      end
+              end,
+    P3 = case amqpl_header_to_user_property(H) of
+             [] ->
+                 P2;
+             UserProperty ->
+                 P2#{'User-Property' => UserProperty}
          end,
     P = case is_binary(Expiration) of
             true ->
                 Millis = binary_to_integer(Expiration),
-                P2#{'Message-Expiry-Interval' => Millis div 1000};
+                P3#{'Message-Expiry-Interval' => Millis div 1000};
             false ->
-                P2
+                P3
         end,
     #mqtt_msg{retain = false,
               qos = Qos,
@@ -157,7 +157,34 @@ convert_to(?MODULE, Msg) ->
 convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                               props = Props,
                               payload = Payload}) ->
-    Header = #'v1_0.header'{durable = Qos > 0},
+    S0 = [#'v1_0.data'{content = Payload}],
+
+    %% x- prefixed MQTT User Properties go into Message Annotations.
+    %% All other MQTT User Properties go into Application Properties.
+    %% MQTT User Property allows duplicate keys, while AMQP maps don't.
+    %% Order is semantically important in both MQTT User Property and AMQP maps.
+    %% Therefore, we must dedup the keys and must maintain order.
+    {MsgAnns, AppProps} =
+    case Props of
+        #{'User-Property' := UserProps} ->
+            {MsgAnnsRev, AppPropsRev, _} =
+            lists:foldl(fun({Name, _}, Acc = {_, _, M})
+                              when is_map_key(Name, M) ->
+                                Acc;
+                           ({<<"x-", _/binary>> = Name, Val}, {MAnns, AProps, M}) ->
+                                {[{{utf8, Name}, {utf8, Val}} | MAnns], AProps, M#{Name => true}};
+                           ({Name, Val}, {MAnns, AProps, M}) ->
+                                {MAnns, [{{utf8, Name}, {utf8, Val}} | AProps], M#{Name => true}}
+                        end, {[], [], #{}}, UserProps),
+            {lists:reverse(MsgAnnsRev), lists:reverse(AppPropsRev)};
+        _ ->
+            {[], []}
+    end,
+    S1 = case AppProps of
+             [] -> S0;
+             _ -> [#'v1_0.application_properties'{content = AppProps} | S0]
+         end,
+
     ContentType = case Props of
                       #{'Content-Type' := ContType} ->
                           %%TODO MQTT Content Type is UTF-8 whereas
@@ -177,19 +204,26 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                  _ ->
                      undefined
              end,
-    AmqpProps = #'v1_0.properties'{content_type = ContentType,
-                                   correlation_id = CorrId},
-    AppData = #'v1_0.data'{content = Payload},
-    Sections = case Props of
-                   #{'Response-Topic' := Topic} ->
-                       MsgAnns = #'v1_0.message_annotations'{
-                                    content = [{{symbol, <<"x-opt-reply-to-topic">>},
-                                                {utf8, rabbit_mqtt_util:mqtt_to_amqp(Topic)}}]},
-                       [Header, MsgAnns, AmqpProps, AppData];
-                   _ ->
-                       [Header, AmqpProps, AppData]
-               end,
-    mc_amqp:convert_from(mc_amqp, Sections);
+    %% TODO Translate MQTT Response-Topic to AMQP topic.
+    %% If operator did not mofidy mqtt.exchange, set reply-to address to "/topic/" RK.
+    %% If operator modified mqtt.exchange, set reply-to address to "/exchange/" X "/" RK.
+    % case Props of
+    %     #{'Response-Topic' := Topic} ->
+    %         rabbit_mqtt_util:mqtt_to_amqp(Topic)
+    S2 = case {ContentType, CorrId} of
+             {undefined, undefined} ->
+                 S1;
+             _ ->
+                 [#'v1_0.properties'{content_type = ContentType,
+                                     correlation_id = CorrId} | S1]
+         end,
+
+    S3 = case MsgAnns of
+             [] -> S2;
+             _ -> [#'v1_0.message_annotations'{content = MsgAnns} | S2]
+         end,
+    S = [#'v1_0.header'{durable = Qos > 0} | S3],
+    mc_amqp:convert_from(mc_amqp, S);
 convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                                props = Props,
                                payload = Payload}) ->
@@ -202,21 +236,29 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                       _ -> undefined
                   end,
     Hs0 = case Props of
-              #{'Response-Topic' := Topic} ->
-                  [{<<"x-opt-reply-to-topic">>, longstr, rabbit_mqtt_util:mqtt_to_amqp(Topic)}];
+              #{'User-Property' := UserProperty} ->
+                  lists:map(fun({Name, Value}) ->
+                                    {Name, longstr, Value}
+                            end, UserProperty);
               _ ->
                   []
           end,
-    {CorrId, Hs} = case Props of
+    Hs1 = case Props of
+              #{'Response-Topic' := Topic} ->
+                  [{<<"x-reply-to-topic">>, longstr, rabbit_mqtt_util:mqtt_to_amqp(Topic)} | Hs0];
+              _ ->
+                  Hs0
+          end,
+    {CorrId, Hs2} = case Props of
                        #{'Correlation-Data' := Corr} ->
                            case mc_util:is_valid_shortstr(Corr) of
                                true ->
-                                   {Corr, Hs0};
+                                   {Corr, Hs1};
                                false ->
-                                   {undefined, [{<<"x-correlation-id">>, longstr, Corr} | Hs0]}
+                                   {undefined, [{<<"x-correlation-id">>, longstr, Corr} | Hs1]}
                            end;
                        _ ->
-                           {undefined, Hs0}
+                           {undefined, Hs1}
                    end,
     Expiration = case Props of
                      #{'Message-Expiry-Interval' := Seconds} ->
@@ -224,6 +266,12 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                      _ ->
                          undefined
                  end,
+    %% "Duplicate fields are illegal." [4.2.5.5 Field Tables]
+    %% RabbitMQ sorts field tables by keys.
+    Hs = lists:usort(fun({Key1, _Type1, _Val1},
+                         {Key2, _Type2, _Val2}) ->
+                             Key1 =< Key2
+                     end, Hs2),
     BP = #'P_basic'{content_type = ContentType,
                     headers = Hs,
                     delivery_mode = DelMode,
@@ -290,3 +338,40 @@ correlation_id({uuid, UUID}) ->
     mc_util:uuid_to_string(UUID);
 correlation_id({_T, Corr}) ->
     rabbit_data_coercion:to_binary(Corr).
+
+%% Translates AMQP 0.9.1 headers to MQTT 5.0 User Properties if
+%% the value is convertible to a UTF-8 String.
+-spec amqpl_header_to_user_property(rabbit_framing:amqp_table()) ->
+    user_property().
+amqpl_header_to_user_property(Table) ->
+    lists:filtermap(fun amqpl_field_to_string_pair/1, Table).
+
+amqpl_field_to_string_pair({K, longstr, V}) ->
+    case mc_util:is_utf8_no_null(V) of
+        true -> {true, {K, V}};
+        false -> false
+    end;
+amqpl_field_to_string_pair({K, T, V})
+  when T =:= byte;
+       T =:= unsignedbyte;
+       T =:= short;
+       T =:= unsignedshort;
+       T =:= signedint;
+       T =:= unsignedint;
+       T =:= long;
+       T =:= timestamp ->
+    {true, {K, integer_to_binary(V)}};
+amqpl_field_to_string_pair({K, T, V})
+  when T =:= float;
+       T =:= double ->
+    {true, {K, float_to_binary(V)}};
+amqpl_field_to_string_pair({K, void, _V}) ->
+    {true, {K, <<>>}};
+amqpl_field_to_string_pair({K, bool, V}) ->
+    {true, {K, atom_to_binary(V)}};
+amqpl_field_to_string_pair({_K, T, _V})
+  when T =:= array;
+       T =:= table;
+       %% Raw binary data is not UTF-8 encoded.
+       T =:= binary ->
+    false.

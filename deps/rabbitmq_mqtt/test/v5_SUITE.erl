@@ -104,7 +104,7 @@ cluster_size_1_tests() ->
      publish_property_payload_format_indicator,
      publish_property_response_topic_correlation_data,
      publish_property_user_property,
-     publish_property_mqtt_to_amqp091,
+     publish_property_mqtt_amqp091_mqtt,
      disconnect_with_will,
      will_qos2,
      will_delay_greater_than_session_expiry,
@@ -1306,45 +1306,68 @@ publish_property_user_property(Config) ->
     end,
     ok = emqtt:disconnect(C).
 
-%% Test Properties interoperability between MQTT and AMQP 0.9.1
-publish_property_mqtt_to_amqp091(Config) ->
+%% Test properties interoperability between MQTT and AMQP 0.9.1
+publish_property_mqtt_amqp091_mqtt(Config) ->
     Q = ClientId = atom_to_binary(?FUNCTION_NAME),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
                                                              exchange = <<"amq.topic">>,
                                                              routing_key = <<"my.topic">>}),
+    %% MQTT to AMQP 0.9.1
     C = connect(ClientId, Config),
     MqttResponseTopic = <<"response/topic">>,
     {ok, _, [1]} = emqtt:subscribe(C, MqttResponseTopic, qos1),
     Correlation = <<"some correlation ID">>,
     RequestPayload = <<"my request">>,
+    UserProperty = [{<<"rabbit🐇"/utf8>>, <<"carrot🥕"/utf8>>},
+                    {<<"key">>, <<"val">>},
+                    {<<"key">>, <<"val">>}],
     {ok, _} = emqtt:publish(C, <<"my/topic">>,
                             #{'Content-Type' => <<"text/plain">>,
                               'Correlation-Data' => Correlation,
-                              'Response-Topic' => MqttResponseTopic},
+                              'Response-Topic' => MqttResponseTopic,
+                              'User-Property' => UserProperty},
                             RequestPayload, [{qos, 1}]),
+
     {#'basic.get_ok'{},
      #amqp_msg{payload = RequestPayload,
                props = #'P_basic'{content_type = <<"text/plain">>,
                                   correlation_id = Correlation,
                                   delivery_mode = 2,
                                   headers = Headers}}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
-    {<<"x-opt-reply-to-topic">>, longstr, AmqpResponseTopic} = rabbit_basic:header(<<"x-opt-reply-to-topic">>, Headers),
+    %% We expect unique headers sorted by key.
+    [{<<"key">>, longstr, <<"val">>},
+     {<<"rabbit🐇"/utf8>>, longstr, <<"carrot🥕"/utf8>>},
+     {<<"x-reply-to-topic">>, longstr, AmqpResponseTopic}] = Headers,
+
+    %% AMQP 0.9.1 to MQTT
     ReplyPayload = <<"{\"my\" : \"reply\"}">>,
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
                                            routing_key = AmqpResponseTopic},
                       #amqp_msg{payload = ReplyPayload,
                                 props = #'P_basic'{correlation_id = Correlation,
-                                                   content_type = <<"application/json">>}}),
+                                                   content_type = <<"application/json">>,
+                                                   headers = Headers ++ [{<<"a">>, unsignedint, 4},
+                                                                         {<<"b">>, bool, true},
+                                                                         {"c", binary, <<0, 255, 0>>}]}}),
+
     receive {publish,
              #{client_pid := C,
                topic := MqttResponseTopic,
                payload := ReplyPayload,
                properties := #{'Content-Type' := <<"application/json">>,
-                               'Correlation-Data' := Correlation}}} -> ok
+                               'Correlation-Data' := Correlation,
+                               'User-Property' := UserProperty1}}} ->
+                ?assertEqual(
+                   [{<<"a">>, <<"4">>},
+                    {<<"b">>, <<"true">>},
+                    {<<"key">>, <<"val">>},
+                    {<<"rabbit🐇"/utf8>>, <<"carrot🥕"/utf8>>}],
+                   lists:sort(UserProperty1))
     after 500 -> ct:fail("did not receive reply")
     end,
+
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
     ok = emqtt:disconnect(C).
 
