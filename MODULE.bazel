@@ -42,9 +42,15 @@ bazel_dep(
 )
 
 bazel_dep(
-    name = "com_github_rabbitmq_osiris",
+    name = "rabbitmq_osiris",
     version = "1.6.3",
     repo_name = "osiris",
+)
+
+bazel_dep(
+    name = "rabbitmq_ra",
+    version = "2.6.2",
+    repo_name = "ra",
 )
 
 erlang_config = use_extension(
@@ -294,13 +300,6 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
-    name = "ra",
-    build_file = "@rabbitmq-server//bazel:BUILD.ra",
-    sha256 = "1cc3101c8f7382dc73bb3fc9f044c16261306f5cbba3d79a5a6f5176695f7a18",
-    version = "2.6.3",
-)
-
-erlang_package.hex_package(
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
@@ -376,7 +375,6 @@ use_repo(
     "json",
     "observer_cli",
     "prometheus",
-    "ra",
     "ranch",
     "recon",
     "redbug",
