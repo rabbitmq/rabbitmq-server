@@ -23,7 +23,9 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked}).
+                unacked, last_pause_ts}).
+
+-define(LAST_PAUSE_TS_ELAPSED_SECONDS, 30).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -83,12 +85,16 @@ handle_cast(go, State = #not_started{}) ->
 handle_cast(go, State) ->
     {noreply, State};
 
-handle_cast(run, State = #state{upstream        = Upstream,
-                                upstream_params = UParams,
-                                ch              = Ch,
-                                run             = false}) ->
+handle_cast(run, State0 = #state{upstream        = Upstream,
+                                 upstream_params = UParams,
+                                 ch              = Ch,
+                                 run             = false}) ->
     consume(Ch, Upstream, UParams#upstream_params.x_or_q),
-    {noreply, State#state{run = true}};
+    %% Set the last_pause_ts value so that subsequent pause requests have to
+    %% wait the LAST_PAUSE_TS_ELAPSED_SECONDS duration. We don't want the link
+    %% to be immediately paused right after starting
+    State1 = set_last_pause_ts(State0),
+    {noreply, State1#state{run = true}};
 
 handle_cast(run, State = #not_started{}) ->
     {noreply, State#not_started{run = true}};
@@ -97,16 +103,20 @@ handle_cast(run, State) ->
     %% Already started
     {noreply, State};
 
+handle_cast(pause, State = #not_started{}) ->
+    {noreply, State#not_started{run = false}};
+
 handle_cast(pause, State = #state{run = false}) ->
     %% Already paused
     {noreply, State};
 
-handle_cast(pause, State = #not_started{}) ->
-    {noreply, State#not_started{run = false}};
+handle_cast(pause, State0 = #state{last_pause_ts = undefined}) ->
+    State1 = set_last_pause_ts(State0),
+    {noreply, State1};
 
-handle_cast(pause, State = #state{ch = Ch, upstream = Upstream}) ->
-    cancel(Ch, Upstream),
-    {noreply, State#state{run = false}};
+handle_cast(pause, State0 = #state{last_pause_ts = LastPauseTs}) when is_integer(LastPauseTs) ->
+    State1 = handle_pause_maybe_cancel(State0),
+    {noreply, State1};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -324,3 +334,17 @@ handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
     rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
+
+set_last_pause_ts(State) ->
+    State#state{last_pause_ts = erlang:monotonic_time(second)}.
+
+handle_pause_maybe_cancel(State0 = #state{ch = Ch, upstream = Upstream, last_pause_ts = LastPauseTs}) ->
+    Elapsed = erlang:monotonic_time(second) - LastPauseTs,
+    if
+        Elapsed > ?LAST_PAUSE_TS_ELAPSED_SECONDS ->
+            State1 = set_last_pause_ts(State0),
+            cancel(Ch, Upstream),
+            State1#state{run = false};
+        true ->
+            State0
+    end.
