@@ -343,8 +343,43 @@ routing_headers(#mqtt_msg{props = #{'User-Property' := UserProperty}}, Opts) ->
 routing_headers(#mqtt_msg{}, _Opts) ->
     #{}.
 
-protocol_state(Msg = #mqtt_msg{}, _Anns) ->
-    Msg.
+protocol_state(Msg = #mqtt_msg{props = Props0,
+                               topic = Topic}, Anns) ->
+    %% Remove any PUBLISH or Will Properties that are not forwarded unaltered.
+    Props1 = maps:remove('Message-Expiry-Interval', Props0),
+    {WillDelay, Props2} = case maps:take('Will-Delay-Interval', Props1) of
+                              error -> {0, Props1};
+                              ValMap -> ValMap
+                          end,
+    Props = case maps:get(ttl, Anns, undefined) of
+                undefined ->
+                    Props2;
+                Ttl ->
+                    case maps:get(timestamp, Anns) of
+                        undefined ->
+                            Props2;
+                        Timestamp ->
+                            SourceProtocolIsMqtt = Topic =/= undefined,
+                            %% Only if source protocol is MQTT we know that timestamp was set by the server.
+                            case SourceProtocolIsMqtt of
+                                false ->
+                                    Props2;
+                                true ->
+                                    %% "The PUBLISH packet sent to a Client by the Server MUST contain a
+                                    %% Message Expiry Interval set to the received value minus the time that
+                                    %% the Application Message has been waiting in the Server" [MQTT-3.3.2-6]
+                                    WaitingMillis0 = os:system_time(millisecond) - Timestamp,
+                                    %% For a delayed Will Message, the waiting time starts
+                                    %% when the Will Message was published.
+                                    WaitingMillis = WaitingMillis0 - WillDelay * 1000,
+                                    MEIMillis = max(0, Ttl - WaitingMillis),
+                                    Props2#{'Message-Expiry-Interval' => MEIMillis div 1000}
+                            end
+                    end
+            end,
+    [RoutingKey | _] = maps:get(routing_keys, Anns),
+    Msg#mqtt_msg{topic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
+                 props = Props}.
 
 prepare(_For, #mqtt_msg{} = Msg) ->
     Msg.

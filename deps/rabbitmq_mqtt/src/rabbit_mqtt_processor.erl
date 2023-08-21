@@ -17,7 +17,9 @@
          update_trace/2, send_disconnect/2]).
 
 -ifdef(TEST).
--export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
+-export([get_vhost_username/1,
+         get_vhost/3,
+         get_vhost_from_user_mapping/2]).
 -endif.
 
 -export_type([state/0,
@@ -1541,7 +1543,7 @@ binding_action(ExchangeName, TopicFilter, QName, BindingArgs,
 publish_to_queues(
   #mqtt_msg{topic = Topic,
             packet_id = PacketId} = MqttMsg,
-  #state{cfg = #cfg{exchange = ExchangeName  =#resource{name = ExchangeNameBin},
+  #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
                     delivery_flow = Flow,
                     conn_name = ConnName,
                     trace_state = TraceState},
@@ -2018,17 +2020,16 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery0,
+deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
                       AckRequired, State0) ->
-    McMqtt = mc:convert(mc_mqtt, Mc),
-    Delivery = setelement(5, Delivery0, McMqtt),
-    #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     SubscriberQoS = case AckRequired of
                         true -> ?QOS_1;
                         false -> ?QOS_0
                     end,
+    McMqtt = mc:convert(mc_mqtt, Mc),
+    MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
-    {SettleOp, State1} = maybe_publish_to_client(Delivery, QoS, State0),
+    {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
     State = maybe_auto_settle(AckRequired, SettleOp, QoS, QNameOrType, QMsgId, State1),
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
@@ -2040,53 +2041,19 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     %% [MQTT-3.8.4-8]."
     erlang:min(PublisherQoS, SubscriberQoS).
 
-maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
+maybe_publish_to_client(_, {_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     {complete, State};
 maybe_publish_to_client(
-  {QNameOrType, _QPid, QMsgId, Redelivered, Mc} = Delivery, QoS, State0) ->
-    #mqtt_msg{retain = Retain,
-              topic = Topic,
-              payload = Payload,
-              props = Props0} = mc:protocol_state(Mc),
-    %% Remove any PUBLISH or Will Properties that are not forwarded unaltered.
-    Props1 = maps:remove('Message-Expiry-Interval', Props0),
-    {WillDelay, Props2} = case maps:take('Will-Delay-Interval', Props1) of
-                              error -> {0, Props1};
-                              ValMap -> ValMap
-                          end,
-    Props3 =
-    case mc:get_annotation(ttl, Mc) of
-        undefined ->
-            Props2;
-        Ttl ->
-            case mc:get_annotation(timestamp, Mc) of
-                undefined ->
-                    Props2;
-                Timestamp ->
-                    SourceProtocolIsMqtt = Topic =/= undefined,
-                    %% Only if source protocol is MQTT we know that timestamp was set by the server.
-                    case SourceProtocolIsMqtt of
-                        false ->
-                            Props2;
-                        true ->
-                            %% "The PUBLISH packet sent to a Client by the Server MUST contain a
-                            %% Message Expiry Interval set to the received value minus the time that
-                            %% the Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-                            WaitingMillis0 = os:system_time(millisecond) - Timestamp,
-                            %% For a delayed Will Message, the waiting time starts
-                            %% when the Will Message was published.
-                            WaitingMillis = WaitingMillis0 - WillDelay * 1000,
-                            MEIMillis = max(0, Ttl - WaitingMillis),
-                            Props2#{'Message-Expiry-Interval' => MEIMillis div 1000}
-                    end
-            end
-    end,
+  #mqtt_msg{retain = Retain,
+            topic = Topic0,
+            payload = Payload,
+            props = Props0},
+  {QNameOrType, _QPid, QMsgId, Redelivered, Mc} = Delivery,
+  QoS, State0) ->
     MatchedTopicFilters = matched_topic_filters_v5(Mc, State0),
-    Props4 = maybe_add_subscription_ids(MatchedTopicFilters, Props3, State0),
-    [RoutingKey | _] = mc:get_annotation(routing_keys, Mc),
-    Topic1 = amqp_to_mqtt(RoutingKey),
-    {Topic2, Props, State1} = process_topic_alias_outbound(Topic1, Props4, State0),
+    Props1 = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
+    {Topic, Props, State1} = process_topic_alias_outbound(Topic0, Props1, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State1),
     Packet = #mqtt_packet{
                 fixed = #mqtt_packet_fixed{
@@ -2096,7 +2063,7 @@ maybe_publish_to_client(
                            retain = retain(Retain, MatchedTopicFilters, State)},
                 variable = #mqtt_packet_publish{
                               packet_id = PacketId,
-                              topic_name = Topic2,
+                              topic_name = Topic,
                               props = Props},
                 payload = Payload},
     SettleOp = case send(Packet, State) of
