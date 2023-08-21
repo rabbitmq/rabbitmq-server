@@ -327,6 +327,22 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
+    name = "ra_alt",
+    pkg = "ra",
+    build_file = "@rabbitmq-server//bazel:BUILD.ra",
+    sha256 = "f4dd317ab4030c0b14453bcf70179130f388dec35f7d59b6c7edcdfa25270397",
+    version = "2.7.0",
+)
+
+erlang_package.hex_package(
+    name = "seshat_alt",
+    pkg = "seshat",
+    build_file = "@rabbitmq-server//bazel:BUILD.seshat",
+    sha256 = "7cef700f92831dd7cae6a6dd223ccc55ac88ecce0631ee9ab0f2b5fb70e79b90",
+    version = "0.6.0",
+)
+
+erlang_package.hex_package(
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
@@ -398,9 +414,11 @@ use_repo(
     "khepri_mnesia_migration",
     "observer_cli",
     "prometheus",
+    "ra_alt",
     "ranch",
     "recon",
     "redbug",
+    "seshat_alt",
     "stdout_formatter",
     "syslog",
     "sysmon_handler",
