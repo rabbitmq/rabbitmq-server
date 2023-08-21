@@ -131,6 +131,7 @@ def all_srcs(name = "all_srcs"):
             "include/amqqueue.hrl",
             "include/amqqueue_v2.hrl",
             "include/gm_specs.hrl",
+            "include/mc.hrl",
             "include/rabbit_global_counters.hrl",
             "include/vhost.hrl",
             "include/vhost_v2.hrl",
@@ -144,7 +145,6 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "private_hdrs",
         srcs = [
-            "src/mc.hrl",
             "src/rabbit_feature_flags.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
@@ -1633,7 +1633,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/mc_SUITE.erl"],
         outs = ["test/mc_SUITE.beam"],
-        hdrs = ["src/mc.hrl"],
+        hdrs = ["include/mc.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],

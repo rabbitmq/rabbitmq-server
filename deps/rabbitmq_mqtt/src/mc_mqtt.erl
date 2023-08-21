@@ -5,6 +5,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([
          init/1,
@@ -252,9 +253,13 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                   end,
     Hs0 = case Props of
               #{'User-Property' := UserProperty} ->
-                  lists:map(fun({Name, Value}) ->
-                                    {Name, longstr, Value}
-                            end, UserProperty);
+                  lists:filtermap(
+                    fun({Name, Value}) ->
+                            case string:length(Name) =< ?AMQP_LEGACY_FIELD_NAME_MAX_CHARS of
+                                true -> {true, {Name, longstr, Value}};
+                                false -> false
+                            end
+                    end, UserProperty);
               _ ->
                   []
           end,

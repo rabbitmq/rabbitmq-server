@@ -16,3 +16,7 @@
 
 %% good enough for most use cases
 -define(IS_MC(Msg), element(1, Msg) == mc andalso tuple_size(Msg) == 5).
+
+%% "Field names MUST start with a letter, '$' or '#' and may continue with letters, '$' or '#', digits, or
+%% underlines, to a maximum length of 128 characters." [AMQP 0.9.1 4.2.5.5 Field Tables]
+-define(AMQP_LEGACY_FIELD_NAME_MAX_CHARS, 128).
