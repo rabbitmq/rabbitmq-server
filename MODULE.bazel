@@ -321,6 +321,14 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
+    name = "ra_alt",
+    pkg = "ra",
+    build_file = "@rabbitmq-server//bazel:BUILD.ra",
+    sha256 = "1cc3101c8f7382dc73bb3fc9f044c16261306f5cbba3d79a5a6f5176695f7a18",
+    version = "2.6.3",
+)
+
+erlang_package.hex_package(
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
@@ -399,6 +407,7 @@ use_repo(
     "khepri_mnesia_migration",
     "observer_cli",
     "prometheus",
+    "ra_alt",
     "ranch",
     "recon",
     "redbug",

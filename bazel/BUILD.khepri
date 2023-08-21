@@ -132,7 +132,7 @@ erlang_app(
     priv = [":priv"],
     deps = [
         "@horus//:erlang_app",
-        "@ra//:erlang_app",
+        "@ra_alt//:erlang_app",
     ],
 )
 
@@ -172,7 +172,7 @@ erlang_bytecode(
     erlc_opts = "//:erlc_opts",
     deps = [
         "@horus//:erlang_app",
-        "@ra//:erlang_app",
+        "@ra_alt//:erlang_app",
     ],
 )
 
