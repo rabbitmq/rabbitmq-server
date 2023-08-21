@@ -3,7 +3,8 @@
 -export([is_valid_shortstr/1,
          is_utf8_no_null/1,
          uuid_to_string/1,
-         infer_type/1]).
+         infer_type/1,
+         utf8_string_is_ascii/1]).
 
 -spec is_valid_shortstr(term()) -> boolean().
 is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
@@ -39,3 +40,10 @@ infer_type({T, _} = V) when is_atom(T) ->
     %% looks like a pre-tagged type
     V.
 
+utf8_string_is_ascii(UTF8String)
+  when is_binary(UTF8String) ->
+    List = unicode:characters_to_list(UTF8String),
+    lists:all(fun(Char) ->
+                      Char >= 0 andalso
+                      Char < 128
+              end, List).

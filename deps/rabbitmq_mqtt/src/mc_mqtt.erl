@@ -187,8 +187,13 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
             lists:foldl(fun({Name, _}, Acc = {_, _, M})
                               when is_map_key(Name, M) ->
                                 Acc;
-                           ({<<"x-", _/binary>> = Name, Val}, {MAnns, AProps, M}) ->
-                                {[{{utf8, Name}, {utf8, Val}} | MAnns], AProps, M#{Name => true}};
+                           ({<<"x-", _/binary>> = Name, Val}, Acc = {MAnns, AProps, M}) ->
+                                case mc_util:utf8_string_is_ascii(Name) of
+                                    true ->
+                                        {[{{symbol, Name}, {utf8, Val}} | MAnns], AProps, M#{Name => true}};
+                                    false ->
+                                        Acc
+                                end;
                            ({Name, Val}, {MAnns, AProps, M}) ->
                                 {MAnns, [{{utf8, Name}, {utf8, Val}} | AProps], M#{Name => true}}
                         end, {[], [], #{}}, UserProps),
@@ -203,20 +208,18 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
 
     ContentType = case Props of
                       #{'Content-Type' := ContType} ->
-                          %%TODO MQTT Content Type is UTF-8 whereas
-                          %% AMQP Content Type is only ASCII
-                          {symbol, ContType};
+                          case mc_util:utf8_string_is_ascii(ContType) of
+                              true ->
+                                  {symbol, ContType};
+                              false ->
+                                  undefined
+                          end;
                       _ ->
                           undefined
                   end,
     CorrId = case Props of
                  #{'Correlation-Data' := Corr} ->
-                     case mc_util:is_utf8_no_null(Corr) of
-                         true ->
-                             {utf8, Corr};
-                         false ->
-                             {binary, Corr}
-                     end;
+                     {binary, Corr};
                  _ ->
                      undefined
              end,
@@ -254,11 +257,11 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
     Hs0 = case Props of
               #{'User-Property' := UserProperty} ->
                   lists:filtermap(
-                    fun({Name, Value}) ->
-                            case string:length(Name) =< ?AMQP_LEGACY_FIELD_NAME_MAX_CHARS of
-                                true -> {true, {Name, longstr, Value}};
-                                false -> false
-                            end
+                    fun({Name, Value})
+                          when byte_size(Name) =< ?AMQP_LEGACY_FIELD_NAME_MAX_LEN ->
+                            {true, {Name, longstr, Value}};
+                       (_) ->
+                            false
                     end, UserProperty);
               _ ->
                   []
@@ -293,7 +296,9 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                              Key1 =< Key2
                      end, Hs2),
     BP = #'P_basic'{content_type = ContentType,
-                    headers = Hs,
+                    headers = if Hs =:= [] -> undefined;
+                                 Hs =/= [] -> Hs
+                              end,
                     delivery_mode = DelMode,
                     correlation_id = CorrId,
                     expiration = Expiration},
@@ -327,6 +332,11 @@ size_prop('User-Property', L, Sum) ->
 size_prop(_, _, Sum) ->
     Sum.
 
+x_header(Key, #mqtt_msg{props = #{'User-Property' := UserProp}}) ->
+    case proplists:get_value(Key, UserProp) of
+        undefined -> undefined;
+        Val -> {utf8, Val}
+    end;
 x_header(_Key, #mqtt_msg{}) ->
     undefined.
 

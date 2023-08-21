@@ -1,7 +1,6 @@
 -module(mc_SUITE).
 
--compile(nowarn_export_all).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").

@@ -19,4 +19,5 @@
 
 %% "Field names MUST start with a letter, '$' or '#' and may continue with letters, '$' or '#', digits, or
 %% underlines, to a maximum length of 128 characters." [AMQP 0.9.1 4.2.5.5 Field Tables]
--define(AMQP_LEGACY_FIELD_NAME_MAX_CHARS, 128).
+%% Given that the valid chars are ASCII chars, 1 char is encoded as 1 byte.
+-define(AMQP_LEGACY_FIELD_NAME_MAX_LEN, 128).

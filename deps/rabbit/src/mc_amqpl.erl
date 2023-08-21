@@ -138,11 +138,11 @@ convert_from(mc_amqp, Sections) ->
            end,
 
     Headers0 = [to_091(K, V) || {{utf8, K}, V} <- AP,
-                                string:length(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_CHARS],
+                                byte_size(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_LEN],
     %% Add remaining message annotations as headers?
     XHeaders = [to_091(K, V) || {{symbol, K}, V} <- MA,
                                 not is_internal_header(K),
-                                string:length(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_CHARS],
+                                byte_size(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_LEN],
     {Headers1, MsgId091} = message_id(MsgId, <<"x-message-id">>, Headers0),
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 

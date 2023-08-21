@@ -256,14 +256,6 @@ rabbitmq_integration_suite(
     ],
 )
 
-rabbitmq_suite(
-    name = "util_SUITE",
-    size = "small",
-    data = [
-        "test/rabbitmq_mqtt.app",
-    ],
-)
-
 rabbitmq_integration_suite(
     name = "v5_SUITE",
     size = "large",
@@ -290,6 +282,19 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
     ],
+)
+
+rabbitmq_suite(
+    name = "util_SUITE",
+    size = "small",
+    data = [
+        "test/rabbitmq_mqtt.app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "mc_mqtt_SUITE",
+    size = "small",
 )
 
 assert_suites()
