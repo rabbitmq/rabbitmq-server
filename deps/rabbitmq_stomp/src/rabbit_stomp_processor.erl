@@ -58,6 +58,8 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(QUEUE, lqueue).
 
+-import(rabbit_misc, [maps_put_truthy/3]).
+
 adapter_name(State) ->
   #proc_state{adapter_info = #amqp_adapter_info{name = Name}} = State,
   Name.
@@ -765,11 +767,8 @@ do_send(Destination, _DestHdr,
             %% io:format("Parse_routing: ~p~n", [{ExchangeNameList, RoutingKeyList}]),
             RoutingKey = list_to_binary(RoutingKeyList),
 
-            %% Method = #'basic.publish'{
-            %%   exchange = list_to_binary(Exchange),
-            %%   routing_key = list_to_binary(RoutingKey),
-            %%   mandatory = false,
-            %%   immediate = false},
+
+            rabbit_global_counters:messages_received(stomp, 1),
 
             ExchangeName = rabbit_misc:r(VHost, exchange, list_to_binary(ExchangeNameList)),
             check_resource_access(User, ExchangeName, write, AuthzCtx),
@@ -777,16 +776,18 @@ do_send(Destination, _DestHdr,
             check_internal_exchange(Exchange),
             check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, write),
 
-            {DoConfirm, MsgSeqNo, State2} =
+            {DeliveryOptions, _MsgSeqNo, State2} =
                 case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
+                    not_found ->
+                        {maps_put_truthy(flow, Flow, #{}), undefined, State1};
                     {ok, Id} ->
+                        rabbit_global_counters:messages_received_confirm(stomp, 1),
                         SeqNo = State1#proc_state.msg_seq_no,
                         %% I think it's safe to just add it here because
                         %% if there is an error down the road process dies
                         StateRR = record_receipt(true, SeqNo, Id, State1),
-                        {true, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}};
-                    not_found ->
-                        {false, undefined, State1}
+                        Opts = maps_put_truthy(flow, Flow, #{correlation => SeqNo}),
+                        {Opts, SeqNo, StateRR#proc_state{msg_seq_no = SeqNo + 1}}
                 end,
 
             {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
@@ -798,54 +799,59 @@ do_send(Destination, _DestHdr,
                           protocol = none,
                           payload_fragments_rev = [BodyFragments]
                          },
-            Content = rabbit_message_interceptor:intercept(Content0),
 
-            {ok, BasicMessage} = rabbit_basic:message(ExchangeName, RoutingKey, Content),
+            Message0 = mc_amqpl:message(ExchangeName, RoutingKey, Content0),
 
-            Delivery = #delivery{
-                          mandatory = false,
-                          confirm = DoConfirm,
-                          sender = self(),
-                          message = BasicMessage,
-                          msg_seq_no = MsgSeqNo,
-                          flow = Flow
-                         },
+            Message = rabbit_message_interceptor:intercept(Message0),
+
+            %% {ok, BasicMessage} = rabbit_basic:message(ExchangeName, RoutingKey, Content),
+
+            %% Delivery = #delivery{
+            %%               mandatory = false,
+            %%               confirm = DoConfirm,
+            %%               sender = self(),
+            %%               message = BasicMessage,
+            %%               msg_seq_no = MsgSeqNo,
+            %%               flow = Flow
+            %%              },
+            QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
+            %% io:format("QNames ~p~n", [QNames]),
+
+            Delivery = {Message, DeliveryOptions, QNames},
             %% io:format("Delivery: ~p~n", [Delivery]),
-            case rabbit_exchange:lookup(ExchangeName) of
-                {ok, Exchange} ->
-                    QNames = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
-                    %% io:format("QNames ~p~n", [QNames]),
-                    deliver_to_queues(Delivery, QNames, State2);
-                {error, not_found} ->
-                    log_error("~s not found", [rabbit_misc:rs(ExchangeName)], ExchangeName),
-                    {error, exchange_not_found, State2}
-            end;
-
+            deliver_to_queues(ExchangeName, Delivery, State2);
         {error, _} = Err ->
             %% io:format("Err ~p~n", [Err]),
             Err
     end.
 
-deliver_to_queues(Delivery = #delivery{message    = #basic_message{exchange_name = XName},
-                                       confirm    = Confirm,
-                                       msg_seq_no = MsgSeqNo},
-                  RoutedToQNames,
+deliver_to_queues(_XName,
+                  {_Message, Options, _RoutedToQueues = []},
+                  State)
+  when not is_map_key(correlation, Options) -> %% optimisation when there are no queues
+    %%?INCR_STATS(exchange_stats, XName, 1, publish, State),
+    rabbit_global_counters:messages_unroutable_dropped(stomp, 1),
+    %%?INCR_STATS(exchange_stats, XName, 1, drop_unroutable, State),
+    {ok, State};
+
+deliver_to_queues(XName,
+                  {Message, Options, RoutedToQNames},
                   State0 = #proc_state{queue_states = QStates0}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    MsgSeqNo = maps:get(correlation, Options, undefined),
     %% io:format("Qs: ~p~n", [Qs]),
-    case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
+    case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
-            %% rabbit_global_counters:messages_routed(ProtoVer, length(Qs)), ??
+            rabbit_global_counters:messages_routed(stomp, length(Qs)),
             QueueNames = rabbit_amqqueue:queue_names(Qs),
-            State1 = process_routing_confirm(Confirm, QueueNames,
-                                             MsgSeqNo, XName, State0),
+            State1 = process_routing_confirm(MsgSeqNo, QueueNames, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes.
             {ok, handle_queue_actions(Actions, State1#proc_state{queue_states = QStates})};
         {error, Reason} ->
             log_error("Failed to deliver message with packet_id=~p to queues: ~p",
-                      [Delivery#delivery.msg_seq_no, Reason], none),
+                      [MsgSeqNo, Reason], none),
             {error, Reason, State0}
     end.
 
@@ -866,11 +872,11 @@ record_confirms([], State) ->
 record_confirms(MXs, State = #proc_state{confirmed = C}) ->
     State#proc_state{confirmed = [MXs | C]}.
 
-process_routing_confirm(false, _, _, _, State) ->
+process_routing_confirm(undefined, _, _, State) ->
     State;
-process_routing_confirm(true, [], MsgSeqNo, XName, State) ->
+process_routing_confirm(MsgSeqNo, [], XName, State) ->
     record_confirms([{MsgSeqNo, XName}], State);
-process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
+process_routing_confirm(MsgSeqNo, QRefs, XName, State) ->
     State#proc_state{unconfirmed =
         rabbit_confirms:insert(MsgSeqNo, QRefs, XName, State#proc_state.unconfirmed)}.
 
@@ -1074,16 +1080,18 @@ deliver_to_client(ConsumerTag, Ack, Msgs, State) ->
                        deliver_one_to_client(ConsumerTag, Ack, Msg, S)
                 end, State, Msgs).
 
-deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, MsgId, Redelivered,
-                                         #basic_message{exchange_name = ExchangeName,
-                                                        routing_keys  = [RoutingKey | _CcRoutes],
-                                                        content       = Content}},
+deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, MsgId, Redelivered, MsgCont0} = _Msg,
                       State = #proc_state{queue_states = QStates,
                                           delivery_tag = DeliveryTag}) ->
+
+    [RoutingKey | _] = mc:get_annotation(routing_keys, MsgCont0),
+    ExchangeNameBin = mc:get_annotation(exchange, MsgCont0),
+    MsgCont = mc:convert(mc_amqpl, MsgCont0),
+    Content = mc:protocol_state(MsgCont),
     Delivery = #'basic.deliver'{consumer_tag = ConsumerTag,
                                 delivery_tag = DeliveryTag,
                                 redelivered  = Redelivered,
-                                exchange     = ExchangeName#resource.name,
+                                exchange     = ExchangeNameBin,
                                 routing_key  = RoutingKey},
 
 
@@ -1102,7 +1110,7 @@ deliver_one_to_client(ConsumerTag, _Ack, {QName, QPid, MsgId, Redelivered,
 
 
 send_delivery(QName, MsgId, Delivery = #'basic.deliver'{consumer_tag = ConsumerTag,
-                                          delivery_tag = DeliveryTag},
+                                                        delivery_tag = DeliveryTag},
               Properties, Body, DeliveryCtx,
               State = #proc_state{
                          session_id  = SessionId,
