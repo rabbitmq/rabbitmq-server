@@ -65,6 +65,9 @@
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
+%% Used internally in `rabbit_db_cluster'.
+-export([members/0]).
+
 -deprecated({on_running_node, 1,
              "Use rabbit_process:on_running_node/1 instead"}).
 -deprecated({is_process_alive, 1,
@@ -478,6 +481,27 @@ cluster_status(WhichNodes) ->
         disc    -> DiscNodes;
         ram     -> AllNodes -- DiscNodes;
         running -> RunningNodes
+    end.
+
+members() ->
+    case rabbit_mnesia:is_running() andalso rabbit_table:is_present() of
+        true ->
+            %% If Mnesia is running locally and some tables exist, we can know
+            %% the database was initialized and we can query the list of
+            %% members.
+            mnesia:system_info(db_nodes);
+        false ->
+            try
+                %% When Mnesia is not running, we fall back to reading the
+                %% cluster status files stored on disk, if they exist.
+                {Members, _, _} = rabbit_node_monitor:read_cluster_status(),
+                Members
+            catch
+                throw:{error, _Reason}:_Stacktrace ->
+                    %% If we couldn't read those files, we consider that only
+                    %% this node is part of the "cluster".
+                    [node()]
+            end
     end.
 
 node_info() ->
