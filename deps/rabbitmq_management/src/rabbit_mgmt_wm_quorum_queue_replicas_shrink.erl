@@ -35,4 +35,9 @@ delete_completed(ReqData, Context) ->
   {false, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-  rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    case rabbit_mgmt_features:is_qq_replica_operations_disabled() of
+        true ->
+            rabbit_mgmt_util:method_not_allowed(<<"Broker settings disallow quorum queue replica operations.">>, ReqData, Context);
+        false ->
+            rabbit_mgmt_util:is_authorized_admin(ReqData, Context)
+    end.

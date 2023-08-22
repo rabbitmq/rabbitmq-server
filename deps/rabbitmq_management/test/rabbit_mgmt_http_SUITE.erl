@@ -22,7 +22,7 @@
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
-                                http_delete/3, http_delete/5,
+                                http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
                                 assert_permanent_redirect/3,
@@ -151,7 +151,8 @@ all_tests() -> [
     auth_attempts_test,
     user_limits_list_test,
     user_limit_set_test,
-    config_environment_test
+    config_environment_test,
+    disabled_qq_replica_opers_test
 ].
 
 %% -------------------------------------------------------------------
@@ -216,6 +217,11 @@ init_per_testcase(Testcase = disabled_operator_policy_test, Config) ->
     rabbit_ct_broker_helpers:rpc_all(Config,
       application, set_env, [rabbitmq_management, restrictions, Restrictions]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
+    Restrictions = [{quorum_queue_replica_operations, [{disabled, true}]}],
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbitmq_management, restrictions, Restrictions]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -274,6 +280,10 @@ end_per_testcase0(config_environment_test, Config) ->
                                  [rabbit, config_environment_test_env]),
     Config;
 end_per_testcase0(disabled_operator_policy_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                  [rabbitmq_management, restrictions]),
     Config;
@@ -3552,6 +3562,15 @@ config_environment_test(Config) ->
                             proplists:get_value(rabbitmq_management, EnvList)),
     ?assertEqual(config_environment_test_value, V).
 
+
+disabled_qq_replica_opers_test(Config) ->
+    Nodename = rabbit_data_coercion:to_list(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Body = [{node, Nodename}],
+    http_post(Config, "/queues/quorum/%2F/qq.whatever/replicas/add", Body, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/queues/quorum/%2F/qq.whatever/replicas/delete", ?METHOD_NOT_ALLOWED, Body),
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/grow", Body, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/shrink", ?METHOD_NOT_ALLOWED),
+    passed.
 
 %% -------------------------------------------------------------------
 %% Helpers.
