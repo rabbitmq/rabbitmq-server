@@ -8,7 +8,11 @@
 -module(rabbit_mgmt_features).
 
 -export([is_op_policy_updating_disabled/0,
+         is_qq_replica_operations_disabled/0,
          are_stats_enabled/0]).
+
+is_qq_replica_operations_disabled() ->
+    get_restriction([quorum_queue_replica_operations, disabled]).
 
 is_op_policy_updating_disabled() ->
     case get_restriction([operator_policy_changes, disabled]) of
