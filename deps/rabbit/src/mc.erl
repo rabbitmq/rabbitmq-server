@@ -68,7 +68,8 @@
                        {utf8, binary()} |
                        {binary, binary()} |
                        {boolean, boolean()} |
-                       {ulong | long, integer()} |
+                       {long, integer()} |
+                       {ulong, non_neg_integer() } |
                        undefined.
 
 %% behaviour callbacks for protocol specific implementation
@@ -85,7 +86,7 @@
      PayloadSize :: non_neg_integer()}.
 
 %% retrieve and x- header from the protocol data
-%% the return value should be tagged with and AMQP 1.0 type
+%% the return value should be tagged with an AMQP 1.0 type
 -callback x_header(binary(), proto_state()) ->
     tagged_prop().
 
@@ -232,7 +233,7 @@ priority(BasicMsg) ->
     {uuid, binary()} |
     {utf8, binary()} |
     {binary, binary()} |
-    {ulong, integer()} |
+    {ulong, non_neg_integer()} |
     undefined.
 correlation_id(#?MODULE{protocol = Proto,
                         data = Data}) ->
@@ -244,7 +245,7 @@ correlation_id(BasicMsg) ->
     {uuid, binary()} |
     {utf8, binary()} |
     {binary, binary()} |
-    {ulong, integer()} |
+    {ulong, non_neg_integer()} |
     undefined.
 message_id(#?MODULE{protocol = Proto,
                     data = Data}) ->

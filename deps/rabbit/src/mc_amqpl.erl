@@ -277,7 +277,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                   undefined -> [];
                   _ -> Headers0
               end,
-    %% TODO: only add header section if at least once of the fields
+    %% TODO: only add header section if at least one of the fields
     %% needs to be set
     H = #'v1_0.header'{durable = DelMode =:= 2,
                        %% TODO: check Priority is a ubyte?
@@ -401,7 +401,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
               properties_bin = none};
 protocol_state(Content0, Anns) ->
     %% TODO: refactor to detect _if_ the properties even need decoding
-    %% It is possible that no additional annotations or proorties need to be
+    %% It is possible that no additional annotations or properties need to be
     %% changed
     protocol_state(prepare(read, Content0), Anns).
 

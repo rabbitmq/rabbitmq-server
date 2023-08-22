@@ -221,7 +221,7 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                      undefined
              end,
     %% TODO Translate MQTT Response-Topic to AMQP topic.
-    %% If operator did not mofidy mqtt.exchange, set reply-to address to "/topic/" RK.
+    %% If operator did not modify mqtt.exchange, set reply-to address to "/topic/" RK.
     %% If operator modified mqtt.exchange, set reply-to address to "/exchange/" X "/" RK.
     % case Props of
     %     #{'Response-Topic' := Topic} ->
