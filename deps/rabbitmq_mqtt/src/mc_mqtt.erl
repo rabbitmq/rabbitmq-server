@@ -7,6 +7,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/mc.hrl").
 
+-define(CONTENT_TYPE_AMQP, <<"message/vnd.rabbitmq.amqp">>).
+
 -export([
          init/1,
          size/1,
@@ -49,7 +51,8 @@ init(Msg = #mqtt_msg{qos = Qos,
     {Msg, Anns}.
 
 convert_from(mc_amqp, Sections) ->
-    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev, PayloadFormatIndicator} =
+    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev,
+     PayloadFormatIndicator, ContentType} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
@@ -63,17 +66,19 @@ convert_from(mc_amqp, Sections) ->
               Acc;
          (#'v1_0.data'{content = C}, Acc) ->
               setelement(5, Acc, [C | element(5, Acc)]);
-         (#'v1_0.amqp_value'{content = {utf8, Data}}, Acc) ->
-              Acc1 = setelement(5, Acc, [Data]),
-              setelement(6, Acc1, true);
-         (BodySect, Acc)
-           when is_record(BodySect, 'v1_0.amqp_sequence') orelse
-                is_record(BodySect, 'v1_0.amqp_value') ->
-              %% TODO How to indicate to MQTT client that payload is encoded by AMQP type system?
-              %% There is no registered message/amqp content type or encoding.
-              Bin = amqp10_framing:encode_bin(BodySect),
-              setelement(5, Acc, [Bin | element(5, Acc)])
-      end, {undefined, [], undefined, [], [], false}, Sections),
+         (#'v1_0.amqp_value'{content = {binary, Bin}}, Acc) ->
+              setelement(5, Acc, [Bin]);
+         (#'v1_0.amqp_value'{content = C} = Val, Acc) ->
+              case amqp_to_utf8_string(C) of
+                  cannot_convert ->
+                      amqp_encode(Val, Acc);
+                  String ->
+                      Acc1 = setelement(5, Acc, [String]),
+                      setelement(6, Acc1, true)
+              end;
+         (#'v1_0.amqp_sequence'{} = Seq, Acc) ->
+              amqp_encode(Seq, Acc)
+      end, {undefined, [], undefined, [], [], false, undefined}, Sections),
     Qos = case Header of
               #'v1_0.header'{durable = true} ->
                   ?QOS_1;
@@ -92,20 +97,25 @@ convert_from(mc_amqp, Sections) ->
                  _ ->
                      Props0
              end,
-    Props2 = case AmqpProps of
-                 #'v1_0.properties'{content_type = {symbol, ContentType}} ->
-                     Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType)};
+    Props2 = case ContentType of
+                 undefined ->
+                     case AmqpProps of
+                         #'v1_0.properties'{content_type = {symbol, ContentType1}} ->
+                             Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType1)};
+                         _ ->
+                             Props1
+                     end;
                  _ ->
-                     Props1
+                     Props1#{'Content-Type' => ContentType}
              end,
     UserProp0 = lists:filtermap(fun({{symbol, <<"x-", _/binary>> = Key}, Val}) ->
-                                        amqp_to_utf8_string(Key, Val);
+                                        filter_map_amqp_to_utf8_string(Key, Val);
                                    (_) ->
                                         false
                                 end, MsgAnns),
     %% "The keys of this map are restricted to be of type string" [AMQP 1.0 3.2.5]
     UserProp1 = lists:filtermap(fun({{utf8, Key}, Val}) ->
-                                        amqp_to_utf8_string(Key, Val)
+                                        filter_map_amqp_to_utf8_string(Key, Val)
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
                 [] -> Props2;
@@ -454,13 +464,22 @@ amqpl_field_to_utf8_string_pair({_K, T, _V})
        T =:= binary ->
     false.
 
-amqp_to_utf8_string(Key, {utf8, Val}) when is_binary(Val) ->
-    {true, {Key, Val}};
-amqp_to_utf8_string(Key, Val)
+filter_map_amqp_to_utf8_string(Key, TypeVal) ->
+    case amqp_to_utf8_string(TypeVal) of
+        cannot_convert ->
+            false;
+        String ->
+            {true, {Key, String}}
+    end.
+
+amqp_to_utf8_string({utf8, Val})
+  when is_binary(Val) ->
+    Val;
+amqp_to_utf8_string(Val)
   when Val =:= null;
        Val =:= undefined ->
-    {true, {Key, <<>>}};
-amqp_to_utf8_string(Key, {T, Val})
+    <<>>;
+amqp_to_utf8_string({T, Val})
   when T =:= byte;
        T =:= ubyte;
        T =:= short;
@@ -469,27 +488,32 @@ amqp_to_utf8_string(Key, {T, Val})
        T =:= uint;
        T =:= long;
        T =:= ulong ->
-    {true, {Key, integer_to_binary(Val)}};
-amqp_to_utf8_string(Key, {timestamp, Millis}) ->
+    integer_to_binary(Val);
+amqp_to_utf8_string({timestamp, Millis}) ->
     %% MQTT 5.0 defines all intervals (e.g. Keep Alive, Message Expiry Interval,
     %% Session Expiry Interval) in seconds. Therefore let's convert to seconds.
-    {true, {Key, integer_to_binary(Millis div 1000)}};
-amqp_to_utf8_string(Key, {T, Val})
+    integer_to_binary(Millis div 1000);
+amqp_to_utf8_string({T, Val})
   when T =:= double;
        T =:= float ->
-    {true, {Key, float_to_binary(Val)}};
-amqp_to_utf8_string(Key, Val)
+    float_to_binary(Val);
+amqp_to_utf8_string(Val)
   when Val =:= true;
        Val =:= {boolean, true} ->
-    {true, {Key, <<"true">>}};
-amqp_to_utf8_string(Key, Val)
+    <<"true">>;
+amqp_to_utf8_string(Val)
   when Val =:= false;
        Val =:= {boolean, false} ->
-    {true, {Key, <<"false">>}};
-amqp_to_utf8_string(_Key, {T, _Val})
+    <<"false">>;
+amqp_to_utf8_string({T, _Val})
   when T =:= map;
        T =:= list;
        T =:= array;
        %% Raw binary data is not UTF-8 encoded.
        T =:= binary ->
-    false.
+    cannot_convert.
+
+amqp_encode(Data, Acc0) ->
+    Bin = amqp10_framing:encode_bin(Data),
+    Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
+    setelement(7, Acc, ?CONTENT_TYPE_AMQP).

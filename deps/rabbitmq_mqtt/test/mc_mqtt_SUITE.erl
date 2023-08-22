@@ -4,6 +4,7 @@
           nowarn_export_all]).
 
 -include_lib("rabbitmq_mqtt/include/rabbit_mqtt_packet.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
@@ -15,20 +16,26 @@ all() ->
 groups() ->
     [
      {lossless, [parallel],
-      [amqp,
-       amqp_payload_format_indicator,
-       amqpl,
-       amqpl_correlation]
+      [roundtrip_amqp,
+       roundtrip_amqp_payload_format_indicator,
+       roundtrip_amqpl,
+       roundtrip_amqpl_correlation,
+       amqp_to_mqtt_amqp_value_section_binary,
+       amqp_to_mqtt_amqp_value_section_list,
+       amqp_to_mqtt_amqp_value_section_null,
+       amqp_to_mqtt_amqp_value_section_int,
+       amqp_to_mqtt_amqp_value_section_boolean
+      ]
      },
      {lossy, [parallel],
-      [amqp_user_property,
-       amqpl_user_property,
-       amqp_content_type
+      [roundtrip_amqp_user_property,
+       roundtrip_amqpl_user_property,
+       roundtrip_amqp_content_type
       ]
      }
     ].
 
-amqp(_Config) ->
+roundtrip_amqp(_Config) ->
     Msg = #mqtt_msg{
              qos = 1,
              topic = <<"/my/topic">>,
@@ -95,17 +102,17 @@ amqp(_Config) ->
 
 %% The indicator that the Payload is UTF-8 encoded should not be lost when translating
 %% from MQTT 5.0 to AMQP 1.0 or vice versa.
-amqp_payload_format_indicator(_Config) ->
+roundtrip_amqp_payload_format_indicator(_Config) ->
     Msg0 = mqtt_msg(),
     Msg = Msg0#mqtt_msg{payload = <<"🐇"/utf8>>,
                         props = #{'Payload-Format-Indicator' => 1}},
     #mqtt_msg{payload = Payload,
-              props = Props} = roundtrip_amqp(mc_amqp, Msg),
+              props = Props} = roundtrip(mc_amqp, Msg),
     ?assertEqual(unicode:characters_to_binary("🐇"),
                  iolist_to_binary(Payload)),
     ?assertMatch(#{'Payload-Format-Indicator' := 1}, Props).
 
-amqpl(_Config) ->
+roundtrip_amqpl(_Config) ->
     Msg = #mqtt_msg{
              qos = 1,
              topic = <<"/my/topic">>,
@@ -145,16 +152,60 @@ amqpl(_Config) ->
     ?assertMatch(#{'User-Property' := ExpectedUserProperty}, Props).
 
 %% Non-UTF-8 Correlation Data should also be converted (via AMQP 0.9.1 header x-correlation-id).
-amqpl_correlation(_Config) ->
+roundtrip_amqpl_correlation(_Config) ->
     Msg0 = mqtt_msg(),
     Correlation = binary:copy(<<0>>, 1024),
     Msg = Msg0#mqtt_msg{
             props = #{'Correlation-Data' => Correlation}},
     ?assertMatch(#mqtt_msg{props = #{'Correlation-Data' := Correlation}},
-                 roundtrip_amqp(mc_amqpl, Msg)).
+                 roundtrip(mc_amqpl, Msg)).
+
+%% Binaries should be sent unmodified.
+amqp_to_mqtt_amqp_value_section_binary(_Config) ->
+    Val = amqp_value({binary, <<0, 255>>}),
+    #mqtt_msg{props = Props,
+              payload = Payload} = amqp_to_mqtt([Val]),
+    ?assertEqual(<<0, 255>>, iolist_to_binary(Payload)),
+    ?assertEqual(#{}, Props).
+
+%% Lists cannot be converted to a text representation.
+%% They should be encoded using the AMQP 1.0 type system.
+amqp_to_mqtt_amqp_value_section_list(_Config) ->
+    Val = amqp_value({list, [{uint, 3}]}),
+    #mqtt_msg{props = Props,
+              payload = Payload} = amqp_to_mqtt([Val]),
+    ?assertEqual(#{'Content-Type' => <<"message/vnd.rabbitmq.amqp">>}, Props),
+    ?assert(iolist_size(Payload) > 0).
+
+amqp_to_mqtt_amqp_value_section_null(_Config) ->
+    Val = amqp_value(null),
+    #mqtt_msg{props = Props,
+              payload = Payload} = amqp_to_mqtt([Val]),
+    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
+    ?assertEqual(0, iolist_size(Payload)).
+
+amqp_to_mqtt_amqp_value_section_int(_Config) ->
+    Val = amqp_value({int, -3}),
+    #mqtt_msg{props = Props,
+              payload = Payload} = amqp_to_mqtt([Val]),
+    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
+    ?assertEqual(<<"-3">>, iolist_to_binary(Payload)).
+
+amqp_to_mqtt_amqp_value_section_boolean(_Config) ->
+    Val1 = amqp_value(true),
+    #mqtt_msg{props = Props1,
+              payload = Payload1} = amqp_to_mqtt([Val1]),
+    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props1),
+    ?assertEqual(<<"true">>, iolist_to_binary(Payload1)),
+
+    Val2 = amqp_value({boolean, false}),
+    #mqtt_msg{props = Props2,
+              payload = Payload2} = amqp_to_mqtt([Val2]),
+    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props2),
+    ?assertEqual(<<"false">>, iolist_to_binary(Payload2)).
 
 %% When converting from MQTT 5.0 to AMQP 1.0, we expect to lose some User Property.
-amqp_user_property(_Config) ->
+roundtrip_amqp_user_property(_Config) ->
     Msg0 = mqtt_msg(),
     Msg = Msg0#mqtt_msg{props = #{'User-Property' =>
                                   [{<<"x-dup"/utf8>>, <<"val-2">>},
@@ -163,7 +214,7 @@ amqp_user_property(_Config) ->
                                    {<<"dup">>, <<"val-5">>},
                                    {<<"x-key-no-ascii🐇"/utf8>>, <<"val-1">>}
                                   ]}},
-    #mqtt_msg{props = Props} = roundtrip_amqp(mc_amqp, Msg),
+    #mqtt_msg{props = Props} = roundtrip(mc_amqp, Msg),
     Lost = [%% AMQP 1.0 maps disallow duplicate keys.
             {<<"x-dup">>, <<"val-3">>},
             {<<"dup">>, <<"val-5">>},
@@ -175,7 +226,7 @@ amqp_user_property(_Config) ->
 
 %% When converting from MQTT 5.0 to AMQP 0.9.1, we expect to lose any duplicates and
 %% any User Property whose name is longer than 128 characters.
-amqpl_user_property(_Config) ->
+roundtrip_amqpl_user_property(_Config) ->
     Msg0 = mqtt_msg(),
     Msg = Msg0#mqtt_msg{
             props = #{'User-Property' => [{<<"key-2">>, <<"val-2">>},
@@ -185,16 +236,16 @@ amqpl_user_property(_Config) ->
                                          ]}},
     ?assertMatch(#mqtt_msg{props = #{'User-Property' := [{<<"key-1">>, <<"val-1">>},
                                                          {<<"key-2">>, <<"val-2">>}]}},
-                 roundtrip_amqp(mc_amqpl, Msg)).
+                 roundtrip(mc_amqpl, Msg)).
 
 %% In MQTT 5.0 the Content Type is a UTF-8 encoded string.
 %% In AMQP 1.0 the Content Type is a symbol.
 %% We expect to lose the Content Type when converting from MQTT 5.0 to AMQP 1.0 if
 %% the Content Type is not valid ASCII.
-amqp_content_type(_Config) ->
+roundtrip_amqp_content_type(_Config) ->
     Msg0 = mqtt_msg(),
     Msg = Msg0#mqtt_msg{props = #{'Content-Type' => <<"no-ascii🐇"/utf8>>}},
-    #mqtt_msg{props = Props} = roundtrip_amqp(mc_amqp, Msg),
+    #mqtt_msg{props = Props} = roundtrip(mc_amqp, Msg),
     ?assertNot(maps:is_key('Content-Type', Props)).
 
 mqtt_msg() ->
@@ -202,9 +253,18 @@ mqtt_msg() ->
               topic = <<"my/topic">>,
               payload = <<>>}.
 
-roundtrip_amqp(Mod, MqttMsg) ->
+roundtrip(Mod, MqttMsg) ->
     Anns = #{routing_keys => [rabbit_mqtt_util:mqtt_to_amqp(MqttMsg#mqtt_msg.topic)]},
     Mc0 = mc:init(mc_mqtt, MqttMsg, Anns),
     Mc1 = mc:convert(Mod, Mc0),
     Mc = mc:convert(mc_mqtt, Mc1),
     mc:protocol_state(Mc).
+
+amqp_to_mqtt(Sections) ->
+    Anns = #{routing_keys => [<<"apple">>]},
+    Mc0 = mc:init(mc_amqp, Sections, Anns),
+    Mc = mc:convert(mc_mqtt, Mc0),
+    mc:protocol_state(Mc).
+
+amqp_value(Content) ->
+    #'v1_0.amqp_value'{content = Content}.
