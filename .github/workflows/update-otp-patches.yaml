@@ -107,18 +107,6 @@ jobs:
         echo "SHA2=${SHA2}" >> $GITHUB_OUTPUT
     - name: MODIFY VERSION FILE
       run: |
-        sudo npm install --global --silent @bazel/buildozer
-
-        OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
-        OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
-
-        echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
-        echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
-
-        echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src_${{ matrix.name }})" > WORKSPACE
-        echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
-        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
-
         cat << EOF > replacer.mjs
         import { readFile, writeFile } from 'node:fs/promises';
         let [_node, _script, s, p, r] = process.argv;
@@ -129,6 +117,22 @@ jobs:
         let updated = source.replace(pattern, replacement);
         await writeFile(s, updated);
         EOF
+
+        sudo npm install --global --silent @bazel/buildozer
+
+        OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
+        OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
+
+        echo "OLD_SHA: $OLD_SHA"
+        echo "OLD_VERSION: $OLD_VERSION"
+
+        echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
+        echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
+        echo "MODULE.bazel updated"
+
+        echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src_${{ matrix.name }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
+        echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
 
         cat << EOF > old.txt
                 internal_erlang_from_github_release(
@@ -148,6 +152,8 @@ jobs:
 
         node replacer.mjs WORKSPACE old.txt new.txt
         rm replacer.mjs old.txt new.txt
+
+        echo "WORKSPACE updated"
 
         set -x
         git diff
