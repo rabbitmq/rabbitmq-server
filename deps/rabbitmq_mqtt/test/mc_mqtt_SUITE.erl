@@ -1,11 +1,8 @@
 -module(mc_mqtt_SUITE).
 
--compile([export_all, nowarn_export_all]).
+-compile([export_all,
+          nowarn_export_all]).
 
-% -include_lib("rabbit_common/include/rabbit_framing.hrl").
-% -include_lib("rabbit_common/include/rabbit.hrl").
-% -include_lib("amqp10_common/include/amqp10_framing.hrl").
-% -include_lib("rabbit/include/mc.hrl").
 -include_lib("rabbitmq_mqtt/include/rabbit_mqtt_packet.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -19,6 +16,7 @@ groups() ->
     [
      {lossless, [parallel],
       [amqp,
+       amqp_payload_format_indicator,
        amqpl,
        amqpl_correlation]
      },
@@ -94,6 +92,18 @@ amqp(_Config) ->
     ExpectedUserProperty = maps:get('User-Property', Msg#mqtt_msg.props),
     %% We expect order to be maintained.
     ?assertMatch(#{'User-Property' := ExpectedUserProperty}, Props).
+
+%% The indicator that the Payload is UTF-8 encoded should not be lost when translating
+%% from MQTT 5.0 to AMQP 1.0 or vice versa.
+amqp_payload_format_indicator(_Config) ->
+    Msg0 = mqtt_msg(),
+    Msg = Msg0#mqtt_msg{payload = <<"🐇"/utf8>>,
+                        props = #{'Payload-Format-Indicator' => 1}},
+    #mqtt_msg{payload = Payload,
+              props = Props} = roundtrip_amqp(mc_amqp, Msg),
+    ?assertEqual(unicode:characters_to_binary("🐇"),
+                 iolist_to_binary(Payload)),
+    ?assertMatch(#{'Payload-Format-Indicator' := 1}, Props).
 
 amqpl(_Config) ->
     Msg = #mqtt_msg{

@@ -49,7 +49,7 @@ init(Msg = #mqtt_msg{qos = Qos,
     {Msg, Anns}.
 
 convert_from(mc_amqp, Sections) ->
-    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev} =
+    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev, PayloadFormatIndicator} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
@@ -63,6 +63,9 @@ convert_from(mc_amqp, Sections) ->
               Acc;
          (#'v1_0.data'{content = C}, Acc) ->
               setelement(5, Acc, [C | element(5, Acc)]);
+         (#'v1_0.amqp_value'{content = {utf8, Data}}, Acc) ->
+              Acc1 = setelement(5, Acc, [Data]),
+              setelement(6, Acc1, true);
          (BodySect, Acc)
            when is_record(BodySect, 'v1_0.amqp_sequence') orelse
                 is_record(BodySect, 'v1_0.amqp_value') ->
@@ -70,25 +73,30 @@ convert_from(mc_amqp, Sections) ->
               %% There is no registered message/amqp content type or encoding.
               Bin = amqp10_framing:encode_bin(BodySect),
               setelement(5, Acc, [Bin | element(5, Acc)])
-      end, {undefined, [], undefined, [], []}, Sections),
+      end, {undefined, [], undefined, [], [], false}, Sections),
     Qos = case Header of
               #'v1_0.header'{durable = true} ->
                   ?QOS_1;
               _ ->
                   ?QOS_0
           end,
-    %% TODO convert #'v1_0.properties'{reply_to} to Response-Topic
-    Props0 = case AmqpProps of
-                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     #{'Correlation-Data' => correlation_id(Corr)};
-                 _ ->
-                     #{}
+    Props0 = case PayloadFormatIndicator of
+                 true -> #{'Payload-Format-Indicator' => 1};
+                 false -> #{}
              end,
+    %% TODO convert #'v1_0.properties'{reply_to} to Response-Topic
+    %%
     Props1 = case AmqpProps of
-                 #'v1_0.properties'{content_type = {symbol, ContentType}} ->
-                     Props0#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType)};
+                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
+                     Props0#{'Correlation-Data' => correlation_id(Corr)};
                  _ ->
                      Props0
+             end,
+    Props2 = case AmqpProps of
+                 #'v1_0.properties'{content_type = {symbol, ContentType}} ->
+                     Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType)};
+                 _ ->
+                     Props1
              end,
     UserProp0 = lists:filtermap(fun({{symbol, <<"x-", _/binary>> = Key}, Val}) ->
                                         amqp_to_utf8_string(Key, Val);
@@ -100,10 +108,8 @@ convert_from(mc_amqp, Sections) ->
                                         amqp_to_utf8_string(Key, Val)
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
-                [] ->
-                    Props1;
-                UserProp ->
-                    Props1#{'User-Property' => UserProp}
+                [] -> Props2;
+                UserProp -> Props2#{'User-Property' => UserProp}
             end,
     Payload = lists:flatten(lists:reverse(PayloadRev)),
     #mqtt_msg{retain = false,
@@ -173,7 +179,14 @@ convert_to(?MODULE, Msg) ->
 convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                               props = Props,
                               payload = Payload}) ->
-    S0 = [#'v1_0.data'{content = Payload}],
+    Body = case Props of
+               #{'Payload-Format-Indicator' := 1}
+                 when is_binary(Payload) ->
+                   #'v1_0.amqp_value'{content = {utf8, Payload}};
+               _ ->
+                   #'v1_0.data'{content = Payload}
+           end,
+    S0 = [Body],
 
     %% x- prefixed MQTT User Properties go into Message Annotations.
     %% All other MQTT User Properties go into Application Properties.
