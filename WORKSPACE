@@ -115,6 +115,7 @@ http_file(
 )
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> d3e24896cd (Remove the secondary otp and elixir definitions in WORKSPACE file)
 load(
     "@rules_erlang//:rules_erlang.bzl",
@@ -204,6 +205,8 @@ register_elixir_defaults()
 
 =======
 >>>>>>> b52722dc1e (Remove the secondary otp and elixir definitions in WORKSPACE file)
+=======
+>>>>>>> da1b6a86e7 (fixup backport)
 new_git_repository(
     name = "bats",
     build_file = "@//:BUILD.bats",
