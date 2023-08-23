@@ -17,7 +17,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-         state_can_expire/0]).
+         state_can_expire/0, format_multi_attr/1, format_multi_attr/2]).
 
 -export([get_connections/0]).
 
@@ -699,13 +699,31 @@ get_attributes(AttrName, [#eldap_entry{attributes = A}|Rem]) ->
 get_attributes(AttrName, [_|Rem])    -> get_attributes(AttrName, Rem).
 
 %% Format multiple attribute values for logging
-format_multi_attr(Attrs) ->
-    format_multi_attr(io_lib:printable_list(Attrs), Attrs).
+%% The attribute can be:
+%%  - an ascii string (Erlang recognizes it as a printable_list)
+%%  - an non-ascii string (Erlang does not recognize it as a printable_list)
+%%  - a list/array of strings, which may contain ascii only or non-ascii and ascii characters
+utf8_list_to_string(List) -> unicode:characters_to_list(list_to_binary(List)).
+join_utf8_list(Acc, Sep, List) -> Acc ++ utf8_list_to_string(List) ++ Sep.
 
+format_multi_attr_value(Acc, _Sep, []) -> Acc;
+format_multi_attr_value(Acc, Sep, [H|T]) when is_list(H) ->
+  [H1|_T1] = H,
+  case H1 of
+    V when is_list(V) -> format_multi_attr_value(join_utf8_list(Acc, Sep, V), Sep, T);
+    _ -> format_multi_attr_value(join_utf8_list(Acc, Sep, H), Sep, T)
+  end;
+format_multi_attr_value(Acc, Sep, List) -> join_utf8_list(Acc, Sep, List).
+
+format_multi_attr(Attrs) -> format_multi_attr(io_lib:printable_list(Attrs), Attrs).
 format_multi_attr(true, Attrs)                     -> Attrs;
-format_multi_attr(_,    Attrs) when is_list(Attrs) -> string:join(Attrs, "; ");
+format_multi_attr(_,    Attrs) when is_list(Attrs) ->
+  [H|_T] = Attrs,
+  case H of
+    V when is_list(V) -> format_multi_attr_value("", "; ", Attrs);
+    _ -> utf8_list_to_string(Attrs)
+  end;
 format_multi_attr(_,    Error)                     -> Error.
-
 
 %% In case of multiple attributes, check for equality bi-directionally
 is_multi_attr_member(Str1, Str2) ->
