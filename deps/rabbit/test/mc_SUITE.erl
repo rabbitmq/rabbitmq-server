@@ -26,7 +26,8 @@ all_tests() ->
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      amqp_amqpl,
-     stuff
+     stuff,
+     amqp_to_amqpl_data_body
     ].
 
 groups() ->
@@ -425,6 +426,23 @@ amqp_amqpl(_Config) ->
                                                             rabbit_framing_amqp_0_9_1),
 
     ok.
+
+amqp_to_amqpl_data_body(_Config) ->
+    Cases = [#'v1_0.data'{content = <<"helloworld">>},
+             #'v1_0.data'{content = [<<"hello">>, <<"world">>]}],
+    lists:foreach(
+      fun(Section) ->
+              Sections = case is_list(Section) of
+                             true -> Section;
+                             false -> [Section]
+                         end,
+              Mc0 = mc:init(mc_amqp, Sections, #{}),
+              Mc = mc:convert(mc_amqpl, Mc0),
+              #content{payload_fragments_rev = PayFragRev} = mc:protocol_state(Mc),
+              PayFrag = lists:reverse(PayFragRev),
+              ?assertEqual(<<"helloworld">>,
+                           iolist_to_binary(PayFrag))
+      end, Cases).
 
 amqp10_non_single_data_bodies(_Config) ->
     Props = #'P_basic'{type = <<"amqp-1.0">>},

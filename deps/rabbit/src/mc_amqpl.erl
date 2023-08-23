@@ -81,8 +81,7 @@ convert_from(mc_amqp, Sections) ->
                               [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
                                   {[Bin], undefined};
                               [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
-                                  %%TODO Doesn't Bin need to be reversed?
-                                  {Bin, undefined};
+                                  {lists:reverse(Bin), undefined};
                               _ ->
                                   %% anything else needs to be encoded
                                   %%TODO This is inefficient, but #content.payload_fragments_rev expects
