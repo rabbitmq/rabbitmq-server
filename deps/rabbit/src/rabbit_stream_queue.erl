@@ -857,8 +857,7 @@ close(#stream_client{readers = Readers}) ->
 
 update(Q, State)
   when ?is_amqqueue(Q) ->
-    Pid = amqqueue:get_pid(Q),
-    update_leader_pid(Pid, State).
+    State.
 
 update_leader_pid(Pid, #stream_client{leader = Pid} =  State) ->
     State;
