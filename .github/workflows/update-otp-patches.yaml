@@ -107,17 +107,6 @@ jobs:
         echo "SHA2=${SHA2}" >> $GITHUB_OUTPUT
     - name: MODIFY VERSION FILE
       run: |
-        cat << EOF > replacer.mjs
-        import { readFile, writeFile } from 'node:fs/promises';
-        let [_node, _script, s, p, r] = process.argv;
-        let source = await readFile(s, 'utf-8');
-        let pattern = await readFile(p, 'utf-8');
-        let replacement = await readFile(r, 'utf-8');
-        if (!source.includes(pattern)) process.exit(1);
-        let updated = source.replace(pattern, replacement);
-        await writeFile(s, updated);
-        EOF
-
         sudo npm install --global --silent @bazel/buildozer
 
         OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
@@ -133,25 +122,6 @@ jobs:
         echo "$(cat WORKSPACE | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src_${{ matrix.name }})" > WORKSPACE
         echo "$(cat WORKSPACE | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE
         echo "$(cat WORKSPACE | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE
-
-        cat << EOF > old.txt
-                internal_erlang_from_github_release(
-                    name = "${{ matrix.name }}",
-                    sha256 = "${OLD_SHA}",
-                    version = "${OLD_VERSION}",
-                ),
-        EOF
-
-        cat << EOF > new.txt
-                internal_erlang_from_github_release(
-                    name = "${{ matrix.name }}",
-                    sha256 = "${{ steps.fetch-version.outputs.SHA }}",
-                    version = "${{ steps.fetch-version.outputs.VERSION }}",
-                ),
-        EOF
-
-        node replacer.mjs WORKSPACE old.txt new.txt
-        rm replacer.mjs old.txt new.txt
 
         echo "WORKSPACE updated"
 

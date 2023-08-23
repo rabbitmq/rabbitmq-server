@@ -59,12 +59,13 @@ jobs:
         OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
         OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
 
+        echo "OLD_SHA: $OLD_SHA"
+        echo "OLD_VERSION: $OLD_VERSION"
+
         echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
         echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
 
-        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}/" WORKSPACE
-        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}/" WORKSPACE
-        rm *_orig
+        echo "MODULE.bazel updated"
 
         set -x
         git diff
