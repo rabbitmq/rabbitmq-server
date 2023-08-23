@@ -112,6 +112,7 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-26.0.2.tar.gz"],
 )
 
+<<<<<<< HEAD
 load(
     "@rules_erlang//:rules_erlang.bzl",
     "erlang_config",
@@ -198,6 +199,8 @@ load(
 
 register_elixir_defaults()
 
+=======
+>>>>>>> b52722dc1e (Remove the secondary otp and elixir definitions in WORKSPACE file)
 new_git_repository(
     name = "bats",
     build_file = "@//:BUILD.bats",
