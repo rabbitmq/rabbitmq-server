@@ -521,3 +521,10 @@ end}.
     {datatype, {enum, [true, false]}},
     {include_default, false}
 ]}.
+
+%% Disables add/remove/grow/shrink over API.
+
+{mapping, "management.restrictions.quorum_queue_replica_operations.disabled", "rabbitmq_management.restrictions.quorum_queue_replica_operations.disabled", [
+    {datatype, {enum, [true, false]}},
+    {include_default, false}
+]}.
