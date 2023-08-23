@@ -16,7 +16,8 @@ all() ->
     [
      fill,
      ad_fill,
-     user_dn_pattern_gh_7161
+     user_dn_pattern_gh_7161,
+     format_different_types_of_ldap_attribute_values
     ].
 
 fill(_Config) ->
@@ -51,3 +52,25 @@ user_dn_pattern_gh_7161(_Config) ->
     ok = application:load(rabbitmq_auth_backend_ldap),
     {ok, UserDnPattern} = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
     ?assertEqual("${username}", UserDnPattern).
+
+utf8_list_to_string(StrangeList) ->
+  unicode:characters_to_list(list_to_binary(StrangeList)).
+
+heuristic_encoding_bin(Bin) when is_binary(Bin) ->
+    case unicode:characters_to_binary(Bin,utf8,utf8) of
+	Bin ->
+	    utf8;
+	_ ->
+	    latin1
+    end.
+
+format_different_types_of_ldap_attribute_values(_Config) ->
+    AsciiOnlyAttr = [50,56,48,48,48,45],
+    ?assertEqual("28000-", rabbit_auth_backend_ldap:format_multi_attr("28000-")),
+    ?assertEqual("28000-", rabbit_auth_backend_ldap:format_multi_attr(AsciiOnlyAttr)),
+
+    NonAsciiAttr = [50,56,48,48,48,45,195,159],
+    ?assertEqual("28000-ß", rabbit_auth_backend_ldap:format_multi_attr(NonAsciiAttr)),
+
+    ?assertEqual("one; 28000-ß; two; ", rabbit_auth_backend_ldap:format_multi_attr(["one", NonAsciiAttr, "two"])),
+    ok.
