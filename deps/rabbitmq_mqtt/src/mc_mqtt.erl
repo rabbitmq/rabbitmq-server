@@ -2,12 +2,14 @@
 -behaviour(mc).
 
 -include("rabbit_mqtt_packet.hrl").
+-include("rabbit_mqtt.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/mc.hrl").
 
 -define(CONTENT_TYPE_AMQP, <<"message/vnd.rabbitmq.amqp">>).
+-define(DEFAULT_MQTT_EXCHANGE, <<"amq.topic">>).
 
 -export([
          init/1,
@@ -89,24 +91,37 @@ convert_from(mc_amqp, Sections) ->
                  true -> #{'Payload-Format-Indicator' => 1};
                  false -> #{}
              end,
-    %% TODO convert #'v1_0.properties'{reply_to} to Response-Topic
-    %%
     Props1 = case AmqpProps of
-                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     Props0#{'Correlation-Data' => correlation_id(Corr)};
+                 #'v1_0.properties'{reply_to = {utf8, Address}} ->
+                     MqttX = persistent_term:get(?PERSISTENT_TERM_EXCHANGE),
+                     case Address of
+                         <<"/topic/", Topic/binary>>
+                           when MqttX =:= ?DEFAULT_MQTT_EXCHANGE ->
+                             add_response_topic(Topic, Props0);
+                         <<"/exchange/", MqttX:(byte_size(MqttX))/binary, "/", RoutingKey/binary>> ->
+                             add_response_topic(RoutingKey, Props0);
+                         _ ->
+                             Props0
+                     end;
                  _ ->
                      Props0
              end,
-    Props2 = case ContentType of
+    Props2 = case AmqpProps of
+                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
+                     Props1#{'Correlation-Data' => correlation_id(Corr)};
+                 _ ->
+                     Props1
+             end,
+    Props3 = case ContentType of
                  undefined ->
                      case AmqpProps of
                          #'v1_0.properties'{content_type = {symbol, ContentType1}} ->
-                             Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType1)};
+                             Props2#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType1)};
                          _ ->
-                             Props1
+                             Props2
                      end;
                  _ ->
-                     Props1#{'Content-Type' => ContentType}
+                     Props2#{'Content-Type' => ContentType}
              end,
     UserProp0 = lists:filtermap(fun({{symbol, <<"x-", _/binary>> = Key}, Val}) ->
                                         filter_map_amqp_to_utf8_string(Key, Val);
@@ -118,8 +133,8 @@ convert_from(mc_amqp, Sections) ->
                                         filter_map_amqp_to_utf8_string(Key, Val)
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
-                [] -> Props2;
-                UserProp -> Props2#{'User-Property' => UserProp}
+                [] -> Props3;
+                UserProp -> Props3#{'User-Property' => UserProp}
             end,
     Payload = lists:flatten(lists:reverse(PayloadRev)),
     #mqtt_msg{retain = false,
@@ -246,18 +261,26 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                  _ ->
                      undefined
              end,
-    %% TODO Translate MQTT Response-Topic to AMQP topic.
-    %% If operator did not modify mqtt.exchange, set reply-to address to "/topic/" RK.
-    %% If operator modified mqtt.exchange, set reply-to address to "/exchange/" X "/" RK.
-    % case Props of
-    %     #{'Response-Topic' := Topic} ->
-    %         rabbit_mqtt_util:mqtt_to_amqp(Topic)
-    S2 = case {ContentType, CorrId} of
-             {undefined, undefined} ->
+    ReplyTo = case Props of
+                  #{'Response-Topic' := MqttTopic} ->
+                      Topic = rabbit_mqtt_util:mqtt_to_amqp(MqttTopic),
+                      Address = case persistent_term:get(?PERSISTENT_TERM_EXCHANGE) of
+                                    ?DEFAULT_MQTT_EXCHANGE ->
+                                        <<"/topic/", Topic/binary>>;
+                                    Exchange ->
+                                        <<"/exchange/", Exchange/binary, "/", Topic/binary>>
+                                end,
+                      {utf8, Address};
+                  _ ->
+                      undefined
+              end,
+    S2 = case {ContentType, CorrId, ReplyTo} of
+             {undefined, undefined, undefined} ->
                  S1;
              _ ->
                  [#'v1_0.properties'{content_type = ContentType,
-                                     correlation_id = CorrId} | S1]
+                                     correlation_id = CorrId,
+                                     reply_to = ReplyTo} | S1]
          end,
 
     S3 = case MsgAnns of
@@ -296,16 +319,16 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                   Hs0
           end,
     {CorrId, Hs2} = case Props of
-                       #{'Correlation-Data' := Corr} ->
-                           case mc_util:is_valid_shortstr(Corr) of
-                               true ->
-                                   {Corr, Hs1};
-                               false ->
-                                   {undefined, [{<<"x-correlation-id">>, longstr, Corr} | Hs1]}
-                           end;
-                       _ ->
-                           {undefined, Hs1}
-                   end,
+                        #{'Correlation-Data' := Corr} ->
+                            case mc_util:is_valid_shortstr(Corr) of
+                                true ->
+                                    {Corr, Hs1};
+                                false ->
+                                    {undefined, [{<<"x-correlation-id">>, longstr, Corr} | Hs1]}
+                            end;
+                        _ ->
+                            {undefined, Hs1}
+                    end,
     Expiration = case Props of
                      #{'Message-Expiry-Interval' := Seconds} ->
                          integer_to_binary(timer:seconds(Seconds));
@@ -517,3 +540,7 @@ amqp_encode(Data, Acc0) ->
     Bin = amqp10_framing:encode_bin(Data),
     Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
     setelement(7, Acc, ?CONTENT_TYPE_AMQP).
+
+add_response_topic(AmqpTopic, PublishProperties) ->
+    MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(AmqpTopic),
+    PublishProperties#{'Response-Topic' => MqttTopic}.

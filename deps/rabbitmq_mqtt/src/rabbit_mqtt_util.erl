@@ -143,7 +143,6 @@ env(Key) ->
 
 coerce_env_value(default_pass, Val) -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(default_user, Val) -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(exchange, Val)     -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(vhost, Val)        -> rabbit_data_coercion:to_binary(Val);
 coerce_env_value(_, Val)            -> Val.
 

@@ -200,6 +200,7 @@ process_connect(
         {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
+        Exchange = rabbit_misc:r(VHost, exchange, persistent_term:get(?PERSISTENT_TERM_EXCHANGE)),
         S = #state{
                cfg = #cfg{socket = Socket,
                           proto_ver = proto_integer_to_atom(ProtoVer),
@@ -215,7 +216,7 @@ process_connect(
                           peer_ip_addr = PeerIp,
                           peer_port = PeerPort,
                           send_fun = SendFun,
-                          exchange = rabbit_misc:r(VHost, exchange, rabbit_mqtt_util:env(exchange)),
+                          exchange = Exchange,
                           retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                           vhost = VHost,
                           client_id = ClientId,

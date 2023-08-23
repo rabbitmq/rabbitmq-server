@@ -15,9 +15,10 @@ all() ->
 
 groups() ->
     [
-     {lossless, [parallel],
+     {lossless, [shuffle],
       [roundtrip_amqp,
        roundtrip_amqp_payload_format_indicator,
+       roundtrip_amqp_response_topic,
        roundtrip_amqpl,
        roundtrip_amqpl_correlation,
        amqp_to_mqtt_amqp_value_section_binary,
@@ -27,10 +28,12 @@ groups() ->
        amqp_to_mqtt_amqp_value_section_boolean
       ]
      },
-     {lossy, [parallel],
+     {lossy, [shuffle],
       [roundtrip_amqp_user_property,
        roundtrip_amqpl_user_property,
-       roundtrip_amqp_content_type
+       roundtrip_amqp_content_type,
+       amqp_to_mqtt_reply_to,
+       amqp_to_mqtt_footer
       ]
      }
     ].
@@ -111,6 +114,20 @@ roundtrip_amqp_payload_format_indicator(_Config) ->
     ?assertEqual(unicode:characters_to_binary("🐇"),
                  iolist_to_binary(Payload)),
     ?assertMatch(#{'Payload-Format-Indicator' := 1}, Props).
+
+roundtrip_amqp_response_topic(_Config) ->
+    Topic = <<"/rabbit/🐇"/utf8>>,
+    Msg0 = mqtt_msg(),
+    Key = mqtt_exchange,
+    MqttExchanges = [<<"amq.topic">>,
+                     <<"some-other-topic-exchange">>],
+    [begin
+         ok = persistent_term:put(Key, X),
+         Msg = Msg0#mqtt_msg{props = #{'Response-Topic' => Topic}},
+         ?assertMatch(#mqtt_msg{props = #{'Response-Topic' := Topic}},
+                      roundtrip(mc_amqp, Msg)),
+         true = persistent_term:erase(Key)
+     end || X <- MqttExchanges].
 
 roundtrip_amqpl(_Config) ->
     Msg = #mqtt_msg{
@@ -247,6 +264,30 @@ roundtrip_amqp_content_type(_Config) ->
     Msg = Msg0#mqtt_msg{props = #{'Content-Type' => <<"no-ascii🐇"/utf8>>}},
     #mqtt_msg{props = Props} = roundtrip(mc_amqp, Msg),
     ?assertNot(maps:is_key('Content-Type', Props)).
+
+amqp_to_mqtt_reply_to(_Config) ->
+    Val = amqp_value({utf8, <<"hey">>}),
+    Key = mqtt_exchange,
+    ok = persistent_term:put(Key, <<"mqtt-topic-exchange">>),
+
+    AmqpProps1 = #'v1_0.properties'{reply_to = {utf8, <<"/exchange/mqtt-topic-exchange/my.routing.key">>}},
+    #mqtt_msg{props = Props1} = amqp_to_mqtt([AmqpProps1, Val]),
+    ?assertEqual({ok, <<"my/routing/key">>},
+                 maps:find('Response-Topic', Props1)),
+
+    AmqpProps2 = #'v1_0.properties'{reply_to = {utf8, <<"/exchange/NON-mqtt-topic-exchange/my.routing.key">>}},
+    #mqtt_msg{props = Props2} = amqp_to_mqtt([AmqpProps2, Val]),
+    ?assertEqual(error,
+                 maps:find('Response-Topic', Props2)),
+
+    true = persistent_term:erase(Key).
+
+amqp_to_mqtt_footer(_Config) ->
+    Val = amqp_value({utf8, <<"hey">>}),
+    Footer = #'v1_0.footer'{content = [{symbol, <<"key">>}, {utf8, <<"value">>}]},
+    %% We can translate, but lose the footer.
+    #mqtt_msg{payload = Payload} = amqp_to_mqtt([Val, Footer]),
+    ?assertEqual(<<"hey">>, iolist_to_binary(Payload)).
 
 mqtt_msg() ->
     #mqtt_msg{qos = 0,
