@@ -1990,6 +1990,26 @@ chunk_disk_msgs_test(_Config) ->
                  rabbit_fifo:chunk_disk_msgs(TwoBigMsgs, 0, [[]])),
     ok.
 
+checkout_metadata_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    {State00, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State0, _} = enq(Config, 2, 2, second, State00),
+    %% NB: the consumer meta data is taken _before_ it runs a checkout
+    %% so in this case num_checked_out will be 0
+    {State1, {ok, #{next_msg_id := 0,
+                    num_checked_out := 0}}, _} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              State0),
+    {State2, _, _} = apply(meta(Config, ?LINE),
+                           rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    {_State3, {ok, #{next_msg_id := 1,
+                     num_checked_out := 1}}, _} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              State2),
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).

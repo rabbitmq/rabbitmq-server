@@ -408,6 +408,7 @@ apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
               credit = Credit,
               delivery_count = DeliveryCount,
               next_msg_id = NextMsgId} = Consumer,
+
     %% reply with a consumer summary
     Reply = {ok, #{next_msg_id => NextMsgId,
                    credit => Credit,

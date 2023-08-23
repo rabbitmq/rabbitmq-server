@@ -46,7 +46,7 @@
                   rabbit_queue_type:action().
 -type actions() :: [action()].
 
--record(consumer, {last_msg_id :: seq() | -1,
+-record(consumer, {last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
                    delivery_count = 0 :: non_neg_integer()}).
 
@@ -359,8 +359,20 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                                 %% this is the pre 3.11.1 / 3.10.9
                                 %% reply format
                                 -1;
-                            {ok, #{next_msg_id := NextMsgId}} ->
-                                NextMsgId - 1
+                            {ok, #{num_checked_out := NumChecked,
+                                   next_msg_id := NextMsgId}} ->
+                                case NumChecked > 0 of
+                                    true ->
+                                        %% we cannot know if the pending messages
+                                        %% have been delivered to the client or they
+                                        %% are on their way to the current process.
+                                        %% We set `undefined' to signal this uncertainty
+                                        %% and will just accept the next arriving message
+                                        %% irrespective of message id
+                                        undefined;
+                                    false ->
+                                        NextMsgId - 1
+                                end
                         end,
             SDels = maps:update_with(
                       ConsumerTag, fun (C) -> C#consumer{ack = Ack} end,
@@ -713,7 +725,11 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
     %% TODO: remove potential default allocation
     case Consumer of
         #consumer{last_msg_id = Prev} = C
-          when FstId =:= Prev+1 ->
+          when Prev =:= undefined orelse FstId =:= Prev+1 ->
+            %% Prev =:= undefined is a special case where a checkout was done
+            %% for a previously cancelled consumer that still had pending messages
+            %% In this case we can't reliably know what the next expected message
+            %% id should be so have to accept whatever message comes next
             maybe_auto_ack(Ack, Del,
                            State0#state{consumer_deliveries =
                                         update_consumer(Tag, LastId,
