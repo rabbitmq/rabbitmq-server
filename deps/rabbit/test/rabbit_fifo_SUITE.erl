@@ -1969,6 +1969,50 @@ header_test(_) ->
     ?assertEqual(undefined, rabbit_fifo:get_header(blah, H5)),
     ok.
 
+<<<<<<< HEAD
+=======
+chunk_disk_msgs_test(_Config) ->
+    %% NB: this does test an internal function
+    %% input to this function is a reversed list of MSGs
+    Input = [{I, ?MSG(I, 1000)} || I <- lists:seq(200, 1, -1)],
+    Chunks = rabbit_fifo:chunk_disk_msgs(Input, 0, [[]]),
+    ?assertMatch([_, _], Chunks),
+    [Chunk1, Chunk2] = Chunks,
+    ?assertMatch([{1, ?MSG(1, 1000)} | _], Chunk1),
+    %% the chunks are worked out in backwards order, hence the first chunk
+    %% will be a "remainder" chunk
+    ?assertMatch([{73, ?MSG(73, 1000)} | _], Chunk2),
+    ?assertEqual(128, length(Chunk2)),
+    ?assertEqual(72, length(Chunk1)),
+
+    TwoBigMsgs = [{124, ?MSG(124, 200_000)},
+                  {123, ?MSG(123, 200_000)}],
+    ?assertMatch([[{123, ?MSG(123, 200_000)}],
+                  [{124, ?MSG(124, 200_000)}]],
+                 rabbit_fifo:chunk_disk_msgs(TwoBigMsgs, 0, [[]])),
+    ok.
+
+checkout_metadata_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    {State00, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State0, _} = enq(Config, 2, 2, second, State00),
+    %% NB: the consumer meta data is taken _before_ it runs a checkout
+    %% so in this case num_checked_out will be 0
+    {State1, {ok, #{next_msg_id := 0,
+                    num_checked_out := 0}}, _} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              State0),
+    {State2, _, _} = apply(meta(Config, ?LINE),
+                           rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    {_State3, {ok, #{next_msg_id := 1,
+                     num_checked_out := 1}}, _} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              State2),
+    ok.
+
+>>>>>>> 0390886305 (QQ: fix bug when subscribing using an already existing consumer tag)
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
