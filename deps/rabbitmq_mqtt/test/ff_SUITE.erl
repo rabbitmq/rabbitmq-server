@@ -150,7 +150,7 @@ mqtt_v5(Config) ->
     {ok, _, [1]} = emqtt:subscribe(C2, Topic, qos1),
     ok = emqtt:disconnect(C2),
     C3 = connect(<<"pub-v4">>, Config),
-    ok = emqtt:publish(C3, Topic, <<"msg">>, qos0),
+    {ok, _} = emqtt:publish(C3, Topic, <<"msg">>, qos1),
     ok = emqtt:disconnect(C3),
 
     DependantFF = message_containers,
