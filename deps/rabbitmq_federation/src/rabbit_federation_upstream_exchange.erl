@@ -52,15 +52,27 @@ route(X = #exchange{arguments = Args}, Msg, _Opts) ->
                 {longstr, Val1} -> Val1;
                 _               -> unknown
             end,
-    %% Federation uses AMQP 0.9.1 internally at the moment so this
-    %% conversion may need to happen anyway
-    LegacyMsg = mc:convert(mc_amqpl, Msg),
-    Content = mc:protocol_state(LegacyMsg),
-    Headers = rabbit_basic:extract_headers(Content),
-    case rabbit_federation_util:should_forward(Headers, MaxHops, DName, DVhost) of
+    case should_forward(Msg, MaxHops, DName, DVhost) of
         true  -> rabbit_exchange_type_fanout:route(X, Msg);
         false -> []
     end.
+
+
+should_forward(Msg, MaxHops, DName, DVhost) ->
+    case mc:x_header(?ROUTING_HEADER, Msg) of
+        {list, A} ->
+            length(A) < MaxHops andalso
+                not already_seen(DName, DVhost, A);
+        _ ->
+            true
+    end.
+
+already_seen(DName, DVhost, List) ->
+    lists:any(fun (Map) ->
+                    DName =:= mc_util:amqp_map_get(<<"cluster-name">>, Map, undefined) andalso
+                    DVhost =:= mc_util:amqp_map_get(<<"vhost">>, Map, undefined)
+              end, List).
+
 
 validate(#exchange{arguments = Args}) ->
     rabbit_federation_util:validate_arg(?MAX_HOPS_ARG, long, Args).

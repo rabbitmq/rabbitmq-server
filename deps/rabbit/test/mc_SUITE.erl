@@ -23,6 +23,7 @@ all_tests() ->
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
+     amqpl_table_x_header_array_of_tbls,
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      amqp_amqpl,
@@ -131,6 +132,7 @@ amqpl_compat(_Config) ->
                    <<"x-stream-filter">> := <<"apple">>}, RoutingHeadersX),
     ok.
 
+
 amqpl_table_x_header(_Config) ->
     Tbl = [{<<"type">>, longstr, <<"apple">>},
            {<<"count">>, long, 99}],
@@ -157,6 +159,34 @@ amqpl_table_x_header(_Config) ->
     ?assertMatch(#{<<"fruit">> := _,
                    <<"x-fruit">> := _},
                  mc:routing_headers(Msg, [x_headers])),
+
+    ok.
+
+amqpl_table_x_header_array_of_tbls(_Config) ->
+    Tbl1 = [{<<"type">>, longstr, <<"apple">>},
+            {<<"count">>, long, 99}],
+    Tbl2 = [{<<"type">>, longstr, <<"orange">>},
+            {<<"count">>, long, 45}],
+    Props = #'P_basic'{headers = [
+                                  {<<"x-fruit">>, array, [{table, Tbl1},
+                                                          {table, Tbl2}]}
+                                 ]},
+    Payload = [<<"data">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqpl, Content, Anns),
+    ?assertMatch({list,
+                  [{map,
+                    [{{symbol, <<"type">>}, {utf8, <<"apple">>}},
+                     {{symbol, <<"count">>}, {long, 99}}]},
+                   {map,
+                    [{{symbol, <<"type">>}, {utf8, <<"orange">>}},
+                     {{symbol, <<"count">>}, {long, 45}}]}
+                  ]},
+                 mc:x_header(<<"x-fruit">>, Msg)),
+
 
     ok.
 

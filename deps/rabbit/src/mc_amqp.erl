@@ -311,13 +311,7 @@ message_annotation(_Key, #msg{message_annotations = []},
 message_annotation(Key, #msg{message_annotations = Content},
                    Default)
   when is_binary(Key) ->
-    %% the section record format really is terrible
-    case lists:search(fun ({{symbol, K}, _}) -> K == Key end, Content) of
-        {value, {_K, V}} ->
-            V;
-        false ->
-            Default
-    end.
+    mc_util:amqp_map_get(Key, Content, Default).
 
 message_annotations_as_simple_map(#msg{message_annotations = []}) ->
     #{};

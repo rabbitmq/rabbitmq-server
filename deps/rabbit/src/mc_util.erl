@@ -4,7 +4,9 @@
          is_utf8_no_null/1,
          uuid_to_string/1,
          infer_type/1,
-         utf8_string_is_ascii/1]).
+         utf8_string_is_ascii/1,
+         amqp_map_get/3
+        ]).
 
 -spec is_valid_shortstr(term()) -> boolean().
 is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
@@ -47,3 +49,13 @@ utf8_string_is_ascii(UTF8String)
                       Char >= 0 andalso
                       Char < 128
               end, List).
+
+amqp_map_get(Key, {map, List}, Default) ->
+    case lists:search(fun ({{_, K}, _}) -> K == Key end, List) of
+        {value, {_K, V}} ->
+            V;
+        false ->
+            Default
+    end;
+amqp_map_get(_, _, Default) ->
+    Default.
