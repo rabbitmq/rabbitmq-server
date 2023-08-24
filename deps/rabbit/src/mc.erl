@@ -25,7 +25,7 @@
          is_death_cycle/2,
          last_death/1,
          death_queue_names/1
-         ]).
+        ]).
 
 -include("mc.hrl").
 
@@ -54,7 +54,7 @@
               state/0,
               ann_key/0,
               ann_value/0
-              ]).
+             ]).
 
 -type proto_state() :: term().
 

@@ -1,7 +1,6 @@
 -module(mc_amqp).
 -behaviour(mc).
 
-% -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include("mc.hrl").
 
@@ -42,8 +41,6 @@
 -type opt(T) :: T | undefined.
 -type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
                        #'v1_0.amqp_value'{}.
-%% TODO: no need to keep section records, only contents really needed
-%% for DA / MA and APs
 -record(msg,
         {
          header :: opt(#'v1_0.header'{}),
@@ -223,8 +220,6 @@ prepare(_For, Msg) ->
     Msg.
 
 %% internal
-%%
-%%
 
 msg_to_sections(#msg{header = H,
                      delivery_annotations = DAC,
@@ -239,11 +234,11 @@ msg_to_sections(#msg{header = H,
                    [#'v1_0.footer'{content = FC}]
            end,
     S0 = case Data of
-               #'v1_0.amqp_value'{} ->
-                   [Data | Tail];
-               _ when is_list(Data) ->
-                   Data ++ Tail
-           end,
+             #'v1_0.amqp_value'{} ->
+                 [Data | Tail];
+             _ when is_list(Data) ->
+                 Data ++ Tail
+         end,
     S1 = case APC of
              [] -> S0;
              _ ->
@@ -486,8 +481,3 @@ lists_upsert(New, [Item | Rem], Pref, All) ->
     lists_upsert(New, Rem, [Item | Pref], All);
 lists_upsert(New, [], _Pref, All) ->
     [New | All].
-
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.

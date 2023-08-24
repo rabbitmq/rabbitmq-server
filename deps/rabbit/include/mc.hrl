@@ -6,7 +6,7 @@
                 exchange :: rabbit_misc:resource_name(),
                 routing_keys = [] :: [rabbit_types:routing_key()],
                 count = 0 :: non_neg_integer(),
-                anns  = #{} :: death_anns()
+                anns :: death_anns()
                }).
 
 -record(deaths, {first :: death_key(),

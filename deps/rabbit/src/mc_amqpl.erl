@@ -31,7 +31,7 @@
 -import(rabbit_misc,
         [maps_put_truthy/3,
          maps_put_falsy/3
-         ]).
+        ]).
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(AMQP10_TYPE, <<"amqp-1.0">>).
@@ -119,8 +119,8 @@ convert_from(mc_amqp, Sections) ->
                   _ -> amqp10_map_get(symbol(<<"x-basic-delivery-mode">>), MA)
               end,
     Priority = case H of
-                  #'v1_0.header'{priority = {_, P}} -> P;
-                  _ -> amqp10_map_get(symbol(<<"x-basic-priority">>), MA)
+                   #'v1_0.header'{priority = {_, P}} -> P;
+                   _ -> amqp10_map_get(symbol(<<"x-basic-priority">>), MA)
                end,
     %% TODO: check amqp header first for priority, ttl
     Expiration = case H of
@@ -420,11 +420,11 @@ message(#resource{name = ExchangeNameBin}, RoutingKey,
         #content{properties = Props} = Content, Anns, true)
   when is_binary(RoutingKey) andalso
        is_map(Anns) ->
-            HeaderRoutes = rabbit_basic:header_routes(Props#'P_basic'.headers),
-            mc:init(?MODULE,
-                    rabbit_basic:strip_bcc_header(Content),
-                    Anns#{routing_keys => [RoutingKey | HeaderRoutes],
-                          exchange => ExchangeNameBin});
+    HeaderRoutes = rabbit_basic:header_routes(Props#'P_basic'.headers),
+    mc:init(?MODULE,
+            rabbit_basic:strip_bcc_header(Content),
+            Anns#{routing_keys => [RoutingKey | HeaderRoutes],
+                  exchange => ExchangeNameBin});
 message(#resource{} = XName, RoutingKey,
         #content{} = Content, Anns, false) ->
     {ok, Msg} = rabbit_basic:message(XName, RoutingKey, Content),

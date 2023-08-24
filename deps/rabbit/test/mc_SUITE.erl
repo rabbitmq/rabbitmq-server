@@ -26,7 +26,6 @@ all_tests() ->
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      amqp_amqpl,
-     stuff,
      amqp_to_amqpl_data_body
     ].
 
@@ -35,39 +34,9 @@ groups() ->
      {tests, [], all_tests()}
     ].
 
-init_per_suite(Config) ->
-    Config.
-
-end_per_suite(_Config) ->
-    ok.
-
-init_per_group(_Group, Config) ->
-    Config.
-
-end_per_group(_Group, _Config) ->
-    ok.
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    ok.
-
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
-
-stuff(_Config) ->
-    MA = #'v1_0.message_annotations'{content = [{{symbol, <<"k">>}, {utf8, <<"v">>}}]},
-    % Desc = {described,
-    %         {utf8, <<"URL">>},
-    %         {utf8, <<"https://rabbitmq.com">>}},
-    MAEnc = amqp10_framing:encode(MA),
-    ct:pal("~p", [MAEnc]),
-    ct:pal("~p", [amqp10_framing:decode(MAEnc)]),
-
-    % amqp10_framing:decode(Desc),
-    ok.
 
 amqpl_defaults(_Config) ->
     Props = #'P_basic'{},
