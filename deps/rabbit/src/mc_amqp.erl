@@ -204,17 +204,6 @@ protocol_state(Msg, Anns) ->
              end,
 
     msg_to_sections(Msg, MACFun).
-    % DA = #'v1_0.delivery_annotations'{content = DAC},
-    % MA = #'v1_0.message_annotations'{content = MAC},
-    % AP = #'v1_0.application_properties'{content = APC},
-    % F = #'v1_0.footer'{content = FC},
-    % Tail = case Data of
-    %            #'v1_0.amqp_value'{} ->
-    %                [Data | maybe_cons(F, [])];
-    %            _ when is_list(Data) ->
-    %                Data ++ maybe_cons(F, [])
-    %        end,
-    % [S || S <- [Header, DA, MA, P, AP | Tail], not is_empty(S)].
 
 prepare(_For, Msg) ->
     Msg.
