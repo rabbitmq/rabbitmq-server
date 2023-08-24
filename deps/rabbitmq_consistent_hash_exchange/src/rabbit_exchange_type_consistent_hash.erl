@@ -262,19 +262,13 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
 value_to_hash(undefined, Msg) ->
     mc:get_annotation(routing_keys, Msg);
 value_to_hash({header, Header}, Msg0) ->
-    Msg = mc:convert(mc_amqpl, Msg0),
-    #content{} = Content = mc:protocol_state(Msg),
-    Headers = rabbit_basic:extract_headers(Content),
-    case Headers of
-        undefined -> undefined;
-        _         -> rabbit_misc:table_lookup(Headers, Header)
-    end;
+    maps:get(Header, mc:routing_headers(Msg0, [x_headers]));
 value_to_hash({property, Property}, Msg) ->
     case Property of
         <<"correlation_id">> ->
-            mc:correlation_id(Msg);
+            unwrap(mc:correlation_id(Msg));
         <<"message_id">> ->
-            mc:message_id(Msg);
+            unwrap(mc:message_id(Msg));
         <<"timestamp">> ->
             case mc:timestamp(Msg) of
                 undefined ->
@@ -322,3 +316,8 @@ map_has_value0({_Bucket, SameVal, _I}, SameVal) ->
     true;
 map_has_value0({_Bucket, _OtherVal, I}, Val) ->
     map_has_value0(maps:next(I), Val).
+
+unwrap(undefined) ->
+    undefined;
+unwrap({_, V}) ->
+    V.
