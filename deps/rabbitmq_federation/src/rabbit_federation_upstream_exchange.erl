@@ -69,8 +69,8 @@ should_forward(Msg, MaxHops, DName, DVhost) ->
 
 already_seen(DName, DVhost, List) ->
     lists:any(fun (Map) ->
-                    DName =:= mc_util:amqp_map_get(<<"cluster-name">>, Map, undefined) andalso
-                    DVhost =:= mc_util:amqp_map_get(<<"vhost">>, Map, undefined)
+                      {utf8, DName} =:= mc_util:amqp_map_get(<<"cluster-name">>, Map, undefined) andalso
+                      {utf8, DVhost} =:= mc_util:amqp_map_get(<<"vhost">>, Map, undefined)
               end, List).
 
 

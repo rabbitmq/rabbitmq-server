@@ -70,6 +70,8 @@
                        {boolean, boolean()} |
                        {long, integer()} |
                        {ulong, non_neg_integer() } |
+                       {list, [tagged_prop()]} |
+                       {map, [{tagged_prop(), tagged_prop()}]} |
                        undefined.
 
 %% behaviour callbacks for protocol specific implementation
