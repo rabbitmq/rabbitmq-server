@@ -1695,7 +1695,7 @@ confirm_availability_on_leader_change(Config) ->
 
 flush(T) ->
     receive X ->
-                ct:pal("flushed ~w", [X]),
+                ct:pal("flushed ~p", [X]),
                 flush(T)
     after T ->
               ok
@@ -2987,12 +2987,13 @@ cancel_and_consume_with_same_tag(Config) ->
     DeclareRslt0 = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
     ?assertMatch(ExpectedDeclareRslt0, DeclareRslt0),
 
-    ok = publish(Ch, QQ),
+    ok = publish(Ch, QQ, <<"msg1">>),
 
     ok = subscribe(Ch, QQ, false),
 
     DeliveryTag = receive
-                      {#'basic.deliver'{delivery_tag = D}, _} ->
+                      {#'basic.deliver'{delivery_tag = D},
+                       #amqp_msg{payload = <<"msg1">>}} ->
                           D
                   after 5000 ->
                             flush(100),
@@ -3003,10 +3004,11 @@ cancel_and_consume_with_same_tag(Config) ->
 
     ok = subscribe(Ch, QQ, false),
 
-    ok = publish(Ch, QQ),
+    ok = publish(Ch, QQ, <<"msg2">>),
 
     receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
+        {#'basic.deliver'{delivery_tag = _},
+         #amqp_msg{payload = <<"msg2">>}} ->
             ok
     after 5000 ->
               flush(100),
