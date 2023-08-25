@@ -146,7 +146,7 @@ handle_go(Q0) when ?is_amqqueue(Q0) ->
                    },
             ok = gm:broadcast(GM, request_depth),
             ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
-            rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
+            _ = rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
             {ok, State};
         {stale, StalePid} ->
             rabbit_mirror_queue_misc:log_warning(

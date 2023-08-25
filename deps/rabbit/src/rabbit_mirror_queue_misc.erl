@@ -168,7 +168,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               %% master we need to sync and then
                               %% shut it down. So let's check if
                               %% the new master needs to sync.
-                              maybe_auto_sync(Q3),
+                              _ = maybe_auto_sync(Q3),
                               {ok, QPid1, DeadPids, slaves_to_start_on_failure(Q3, DeadGMPids)};
                       _ ->
                               %% Master has changed, and we're not it.
@@ -514,7 +514,7 @@ actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
                      end,
     {NodeHostingPrimary, CollectNodes(MirrorPids), CollectNodes(InSyncMirrorPids)}.
 
--spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok'.
+-spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok' | pid().
 
 maybe_auto_sync(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -612,7 +612,7 @@ update_mirrors(Q) when ?is_amqqueue(Q) ->
     drop_mirrors(QName, PreTransferNodesWithReplicas -- NewlySelectedNodesWithReplicas),
     %% This is for the case where no extra nodes were added but we changed to
     %% a policy requiring auto-sync.
-    maybe_auto_sync(Q),
+    _ = maybe_auto_sync(Q),
     ok.
 
 queue_length(Q) ->
