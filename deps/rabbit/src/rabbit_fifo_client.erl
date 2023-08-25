@@ -47,13 +47,9 @@
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
 -type actions() :: [action()].
 
-<<<<<<< HEAD
 -type cluster_name() :: rabbit_types:r(queue).
 
--record(consumer, {last_msg_id :: seq() | -1,
-=======
 -record(consumer, {last_msg_id :: seq() | -1 | undefined,
->>>>>>> 0390886305 (QQ: fix bug when subscribing using an already existing consumer tag)
                    ack = false :: boolean(),
                    delivery_count = 0 :: non_neg_integer()}).
 
