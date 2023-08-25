@@ -182,9 +182,7 @@ init_per_group(Group, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config0,
                 [{rmq_nodes_count, Nodes},
-                 {rmq_nodename_suffix, Suffix},
-                 {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                                        tcp_port_mqtt_tls_extra]}]),
+                 {rmq_nodename_suffix, Suffix}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
                 {rabbit, [{classic_queue_default_version, 2}]}),
