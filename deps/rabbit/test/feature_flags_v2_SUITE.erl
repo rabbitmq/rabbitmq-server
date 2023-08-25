@@ -34,6 +34,7 @@
          mf_wait_and_count_runs_v2_enable/1,
          mf_wait_and_count_runs_v2_post_enable/1,
          mf_crash_on_joining_node/1,
+         mf_fail/1,
 
          rpc_calls/1,
          enable_unknown_feature_flag_on_a_single_node/1,
@@ -47,6 +48,7 @@
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/0,
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/1,
          enable_feature_flag_with_post_enable/1,
+         failed_enable_feature_flag_with_post_enable/1,
          have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
          have_required_feature_flag_in_cluster_and_add_member_without_it/1,
          error_during_migration_after_initial_success/1,
@@ -95,6 +97,7 @@ groups() ->
        enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2,
        enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2,
        enable_feature_flag_with_post_enable,
+       failed_enable_feature_flag_with_post_enable,
        have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
        have_required_feature_flag_in_cluster_and_add_member_without_it,
        error_during_migration_after_initial_success,
@@ -333,18 +336,22 @@ mf_count_runs(#{command := enable}) ->
 mf_wait_and_count_runs_v2_enable(_Args) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
-    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
+    ?LOG_NOTICE(
+       "Migration function on ~s: waiting for signal from ~tp...",
+       [node(), Peer]),
     receive proceed -> ok end,
-    ?LOG_NOTICE("Migration function: unblocked!", []),
+    ?LOG_NOTICE("Migration function on ~s: unblocked!", [node()]),
     bump_runs(),
     ok.
 
-mf_wait_and_count_runs_v2_post_enable(_Args) ->
+mf_wait_and_count_runs_v2_post_enable(#{enabled := Enabled}) ->
     Peer = get_peer_proc(),
-    Peer ! {node(), self(), waiting},
-    ?LOG_NOTICE("Migration function: waiting for signal from ~tp...", [Peer]),
+    Peer ! {node(), self(), waiting, Enabled},
+    ?LOG_NOTICE(
+       "Migration function (post) on ~s: waiting for signal from ~tp...",
+       [node(), Peer]),
     receive proceed -> ok end,
-    ?LOG_NOTICE("Migration function: unblocked!", []),
+    ?LOG_NOTICE("Migration function (post) on ~s: unblocked!", [node()]),
     bump_runs(),
     ok.
 
@@ -353,6 +360,9 @@ mf_crash_on_joining_node(_Args) ->
         [_, _, _] -> throw(crash_on_joining_node);
         _         -> ok
     end.
+
+mf_fail(Args) ->
+    throw({failed, Args}).
 
 -define(PT_PEER_PROC, {?MODULE, peer_proc}).
 
@@ -1101,7 +1111,7 @@ enable_feature_flag_with_post_enable(Config) ->
     %% sure the feature flag is in the `state_changing' state and we can try
     %% to add a new node and sync its feature flags.
     FirstNodeMigFunPid = receive
-                             {_Node, MigFunPid1, waiting} -> MigFunPid1
+                             {_Node, MigFunPid1, waiting, true} -> MigFunPid1
                          end,
 
     %% Check compatibility between NewNodes and Nodes. This doesn't block.
@@ -1188,7 +1198,7 @@ enable_feature_flag_with_post_enable(Config) ->
     %% which ran.
     ct:pal("Unblocking other nodes, including the joining one"),
     OtherMigratedNodes = [receive
-                              {Node, MigFunPid2, waiting} ->
+                              {Node, MigFunPid2, waiting, true} ->
                                   MigFunPid2 ! proceed,
                                   Node
                           end || Node <- ExpectedNodes -- [FirstMigratedNode]],
@@ -1218,6 +1228,89 @@ enable_feature_flag_with_post_enable(Config) ->
            end,
            [])
          || Node <- AllNodes],
+    ok.
+
+failed_enable_feature_flag_with_post_enable(Config) ->
+    Nodes = [FirstNode | _] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       stability => stable,
+                       callbacks =>
+                       #{enable =>
+                         {?MODULE, mf_fail},
+                         post_enable =>
+                         {?MODULE, mf_wait_and_count_runs_v2_post_enable}}}},
+    ?assertEqual(ok, inject_on_nodes(Nodes, FeatureFlags)),
+
+    ct:pal(
+      "Checking the feature flag is supported but disabled on all nodes"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    ct:pal(
+      "Enabling the feature flag in the cluster (in a separate process)"),
+    Peer = self(),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   %% The migration function uses the `Peer' PID (the process
+                   %% executing the testcase) to notify its own PID and wait
+                   %% for a signal from `Peer' to proceed and finish the
+                   %% migration.
+                   record_peer_proc(Peer),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+    _ = spawn_link(
+          fun() ->
+                  ok =
+                  run_on_node(
+                    FirstNode,
+                    fun() ->
+                            ?assertMatch(
+                               {error, {failed, _}},
+                               rabbit_feature_flags:enable(
+                                 FeatureName)),
+                            ok
+                    end,
+                    [])
+          end),
+
+    _ = [receive
+             {Node, MigFunPid, waiting, false} ->
+                 MigFunPid ! proceed,
+                 Node
+         end || Node <- Nodes],
+
+    ct:pal(
+      "Checking the feature flag is supported but disabled on all nodes"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assertEqual(
+                      1,
+                      persistent_term:get(?PT_MIGRATION_FUN_RUNS, 0)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
     ok.
 
 have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
