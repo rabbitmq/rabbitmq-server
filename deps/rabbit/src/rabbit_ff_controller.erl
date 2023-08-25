@@ -48,7 +48,8 @@
          all_nodes/0,
          running_nodes/0,
          collect_inventory_on_nodes/1, collect_inventory_on_nodes/2,
-         mark_as_enabled_on_nodes/4]).
+         mark_as_enabled_on_nodes/4,
+         wait_for_task_and_stop/0]).
 
 %% gen_statem callbacks.
 -export([callback_mode/0,
@@ -76,6 +77,9 @@ start() ->
 
 start_link() ->
     gen_statem:start_link({local, ?LOCAL_NAME}, ?MODULE, none, []).
+
+wait_for_task_and_stop() ->
+    gen_statem:stop(?LOCAL_NAME).
 
 is_supported(FeatureNames) ->
     is_supported(FeatureNames, ?TIMEOUT).
@@ -283,7 +287,31 @@ proceed_with_task(refresh_after_app_load) ->
     refresh_after_app_load_task().
 
 terminate(_Reason, _State, _Data) ->
+    %% We block until a possible in-flight operation finishes. This increases
+    %% the chance that an in-flight `enable' operation finishes and records the
+    %% new feature flag state on this node before the `rabbit' application
+    %% stops or this Erlang node exits.
+    wait_for_in_flight_operations(),
     ok.
+
+wait_for_in_flight_operations() ->
+    case register_globally() of
+        yes ->
+            %% We don't unregister so the controller holds the lock until it
+            %% exits.
+            ?LOG_DEBUG(
+               "Feature flags: controller exiting, no in-flight operations",
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            ok;
+        no ->
+            ?LOG_DEBUG(
+               "Feature flags: can't stop local controller while there is "
+               "an in-flight operation; waiting for it to finish",
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            RequestId = notify_me_when_done(),
+            _ = gen_statem:wait_response(RequestId, infinity),
+            wait_for_in_flight_operations()
+    end.
 
 code_change(_OldVsn, OldState, OldData, _Extra) ->
     {ok, OldState, OldData}.

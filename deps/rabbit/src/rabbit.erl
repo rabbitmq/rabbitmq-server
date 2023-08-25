@@ -1031,6 +1031,10 @@ do_run_postlaunch_phase(Plugins) ->
 
 prep_stop(State) ->
     rabbit_boot_state:set(stopping),
+    %% Wait for any in-flight feature flag changes to finish. This way, we
+    %% increase the chance of letting an `enable' operation to finish if the
+    %% controller waits for anything in-flight before is actually exits.
+    ok = rabbit_ff_controller:wait_for_task_and_stop(),
     rabbit_peer_discovery:maybe_unregister(),
     State.
 
