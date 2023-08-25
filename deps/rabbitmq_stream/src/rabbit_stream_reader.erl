@@ -1461,8 +1461,7 @@ handle_frame_pre_auth(Transport,
                                                                   [Username]),
                                     {C1#stream_connection{connection_step =
                                                               failure},
-                                     {sasl_authenticate,
-                                      ?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK,
+                                     {sasl_authenticate, ?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK,
                                       <<>>}}
                             end
                     end,
@@ -1643,6 +1642,100 @@ handle_frame_post_auth(Transport,
     rabbit_global_counters:increase_protocol_counter(stream,
                                                      ?PRECONDITION_FAILED, 1),
     {Connection0, State};
+
+handle_frame_post_auth(Transport,
+                       #stream_connection{user = #user{username = Username} = _User,
+                                          socket = S,
+                                          host = Host,
+                                          auth_mechanism = Auth_Mechanism,
+                                          authentication_state = AuthState,
+                                          resource_alarm = false} =
+                           C1,
+                       State,
+                       {request, CorrelationId,
+                        {sasl_authenticate, NewMechanism, NewSaslBin}}) ->
+    rabbit_log:debug("Open frame received sasl_authenticate for username '~ts'", [Username]),
+
+    Connection1 =
+      case Auth_Mechanism of
+        {NewMechanism, AuthMechanism} -> %% Mechanism is the same used during the pre-auth phase
+              {C2, CmdBody} =
+                  case AuthMechanism:handle_response(NewSaslBin, AuthState) of
+                      {refused, NewUsername, Msg, Args} ->
+                          rabbit_core_metrics:auth_attempt_failed(Host,
+                                                                  NewUsername,
+                                                                  stream),
+                          auth_fail(NewUsername, Msg, Args, C1, State),
+                          rabbit_log_connection:warning(Msg, Args),
+                          {C1#stream_connection{connection_step = failure},
+                           {sasl_authenticate,
+                            ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
+                      {protocol_error, Msg, Args} ->
+                          rabbit_core_metrics:auth_attempt_failed(Host,
+                                                                  <<>>,
+                                                                  stream),
+                          notify_auth_result(none,
+                                             user_authentication_failure,
+                                             [{error,
+                                               rabbit_misc:format(Msg,
+                                                                  Args)}],
+                                             C1,
+                                             State),
+                          rabbit_log_connection:warning(Msg, Args),
+                          {C1#stream_connection{connection_step = failure},
+                           {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
+                      {challenge, Challenge, AuthState1} ->
+                          {C1#stream_connection{authentication_state = AuthState1,
+                                                connection_step = authenticating},
+                           {sasl_authenticate, ?RESPONSE_SASL_CHALLENGE,
+                            Challenge}};
+                      {ok, NewUser = #user{username = NewUsername}} ->
+                          case NewUsername of
+                            Username ->
+                                  rabbit_core_metrics:auth_attempt_succeeded(Host,
+                                                                             Username,
+                                                                             stream),
+                                  notify_auth_result(Username,
+                                                     user_authentication_success,
+                                                     [],
+                                                     C1,
+                                                     State),
+                                  rabbit_log:debug("Successfully updated secret for username '~ts'", [Username]),
+                                  {C1#stream_connection{user = NewUser,
+                                                        authentication_state = done,
+                                                        connection_step = authenticated},
+                                   {sasl_authenticate, ?RESPONSE_CODE_OK,
+                                    <<>>}};
+                              _ ->
+                                  rabbit_core_metrics:auth_attempt_failed(Host,
+                                                                          Username,
+                                                                          stream),
+                                  rabbit_log_connection:warning("Not allowed to change username '~ts'. Only password",
+                                                                [Username]),
+                                  {C1#stream_connection{connection_step =
+                                                            failure},
+                                   {sasl_authenticate,
+                                    ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME,
+                                    <<>>}}
+                          end
+                  end,
+              Frame =
+                  rabbit_stream_core:frame({response, CorrelationId,
+                                            CmdBody}),
+              send(Transport, S, Frame),
+              C2;
+        {OtherMechanism, _} ->
+              rabbit_log_connection:warning("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
+                                              [Username, NewMechanism, OtherMechanism]),
+              CmdBody =
+                {sasl_authenticate, ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM, <<>>},
+              Frame = rabbit_stream_core:frame({response, CorrelationId, CmdBody}),
+              send(Transport, S, Frame),
+              C1#stream_connection{connection_step = failure}
+      end,
+
+    {Connection1, State};
+
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
                                           publishers = Publishers0,
@@ -3839,4 +3932,3 @@ stream_from_consumers(SubId, Consumers) ->
         _ ->
             undefined
     end.
-
