@@ -54,11 +54,8 @@ exports_files([
 # gazelle:exclude deps/inet_tcp_proxy
 # gazelle:exclude deps/jose
 # gazelle:exclude deps/json
-<<<<<<< HEAD
 # gazelle:exclude deps/jsx
-=======
 # gazelle:exclude deps/meck
->>>>>>> 877e9da874 (Gazelle: ignore test deps fetched by make)
 # gazelle:exclude deps/observer_cli
 # gazelle:exclude deps/osiris
 # gazelle:exclude deps/prometheus
