@@ -965,15 +965,22 @@ update_feature_state_and_enable(
                     case Ret2 of
                         {ok, Inventory2} ->
                             post_enable(
-                              Inventory2, FeatureName, NodesWhereDisabled),
+                              Inventory2, FeatureName, NodesWhereDisabled,
+                              true),
                             Ret2;
                         Error ->
+                            post_enable(
+                              Inventory1, FeatureName, NodesWhereDisabled,
+                              false),
                             restore_feature_flag_state(
-                              Nodes, NodesWhereDisabled, Inventory,
+                              Nodes, NodesWhereDisabled, Inventory1,
                               FeatureName),
                             Error
                     end;
                 Error ->
+                    post_enable(
+                      Inventory, FeatureName, NodesWhereDisabled,
+                      false),
                     restore_feature_flag_state(
                       Nodes, NodesWhereDisabled, Inventory, FeatureName),
                     Error
@@ -992,7 +999,8 @@ restore_feature_flag_state(
        "it:~n"
        "  enabled on:  ~0p~n"
        "  disabled on: ~0p",
-       [FeatureName, NodesWhereEnabled, NodesWhereDisabled]),
+       [FeatureName, NodesWhereEnabled, NodesWhereDisabled],
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     _ = mark_as_enabled_on_nodes(
           NodesWhereEnabled, Inventory, FeatureName, true),
     _ = mark_as_enabled_on_nodes(
@@ -1024,16 +1032,28 @@ do_enable(#{states_per_node := _} = Inventory, FeatureName, Nodes) ->
             Error
     end.
 
--spec post_enable(Inventory, FeatureName, Nodes) -> Ret when
+-spec post_enable(Inventory, FeatureName, Nodes, Enabled) -> Ret when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
       FeatureName :: rabbit_feature_flags:feature_name(),
       Nodes :: [node()],
+      Enabled :: boolean(),
       Ret :: ok.
 
-post_enable(#{states_per_node := _}, FeatureName, Nodes) ->
+post_enable(#{states_per_node := _}, FeatureName, Nodes, Enabled) ->
     case rabbit_feature_flags:uses_callbacks(FeatureName) of
         true ->
-            _ = run_callback(Nodes, FeatureName, post_enable, #{}, infinity),
+            ?LOG_DEBUG(
+               "Feature flags: `~ts`: run `post_enable` callback (if any) "
+               "to ~ts",
+               [FeatureName,
+                case Enabled of
+                    true  -> "perform any cleanups";
+                    false -> "rollback any changes"
+                end],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            _ = run_callback(
+                  Nodes, FeatureName, post_enable, #{enabled => Enabled},
+                  infinity),
             ok;
         false ->
             ok
