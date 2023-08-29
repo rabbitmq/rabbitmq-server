@@ -192,11 +192,13 @@ clear_ram_only_tables() ->
       end, names()),
     ok.
 
+-spec maybe_clear_ram_only_tables() -> ok.
+
 maybe_clear_ram_only_tables() ->
-    ok = case rabbit_db_cluster:is_clustered() of
-             true  -> ok;
-             false -> clear_ram_only_tables()
-         end.
+    case rabbit_mnesia:members() of
+        [N] when N=:= node() -> clear_ram_only_tables();
+        _                    -> ok
+    end.
 
 %% The sequence in which we delete the schema and then the other
 %% tables is important: if we delete the schema first when moving to
