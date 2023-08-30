@@ -200,6 +200,8 @@ process_down(_, State) ->
 
 %% By receiving this message we become the leader
 %% TODO should we try to debounce this?
+handle_msg({request_start, _Node}, not_healing, []) ->
+    not_healing;
 handle_msg({request_start, Node},
            not_healing, Partitions) ->
     rabbit_log:info("Autoheal request received from ~tp", [Node]),
