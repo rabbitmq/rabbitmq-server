@@ -43,7 +43,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rabbitmq_osiris",
-    version = "1.6.3",
+    version = "1.6.4",
     repo_name = "osiris",
 )
 
