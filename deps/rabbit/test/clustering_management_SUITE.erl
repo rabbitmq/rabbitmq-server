@@ -13,7 +13,11 @@
 
 -compile(export_all).
 
--define(LOOP_RECURSION_DELAY, 100).
+-import(clustering_utils, [
+                           assert_cluster_status/2,
+                           assert_clustered/1,
+                           assert_not_clustered/1
+                          ]).
 
 all() ->
     [
@@ -707,6 +711,7 @@ pid_from_file(PidFile) ->
 cluster_members(Config) ->
     rabbit_ct_broker_helpers:get_node_configs(Config, nodename).
 
+<<<<<<< HEAD
 assert_cluster_status({All, Disc, Running}, Nodes) ->
     assert_cluster_status({All, Running, All, Disc, Running}, Nodes);
 assert_cluster_status(Status0, Nodes) ->
@@ -769,6 +774,8 @@ assert_clustered(Nodes) ->
 assert_not_clustered(Node) ->
     assert_cluster_status({[Node], [Node], [Node], [Node], [Node]}, [Node]).
 
+=======
+>>>>>>> 1b90263417 (feature_flags_SUITE: wait for cluster status instead of a fixed time)
 assert_failure(Fun) ->
     case catch Fun() of
         {error, _Code, Reason}         -> Reason;
