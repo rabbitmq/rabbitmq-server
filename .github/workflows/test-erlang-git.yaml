@@ -42,6 +42,10 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe \
+<<<<<<< HEAD
           --test_tag_filters=-mixed-version-cluster,-exclusive,-aws,-docker,-dialyze \
+=======
+          --test_tag_filters=-mixed-version-cluster,-no-remote-exec,-aws,-docker \
+>>>>>>> c814b604bb (Use the no-remote-exec instead of exclusive tag for some tests)
           --build_tests_only \
           --verbose_failures
