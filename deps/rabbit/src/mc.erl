@@ -196,8 +196,8 @@ routing_headers(#?MODULE{protocol = Proto,
                          data = Data}, Options) ->
     New = case lists:member(x_headers, Options) of
               true ->
-                  maps:filter(fun (<<"x-", _/binary>>, _) -> true;
-                                  (_, _) -> false
+                  maps:filter(fun (Key, _) ->
+                                      mc_util:is_x_header(Key)
                               end, Anns);
               false ->
                   #{}

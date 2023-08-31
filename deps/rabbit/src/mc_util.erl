@@ -5,7 +5,8 @@
          uuid_to_string/1,
          infer_type/1,
          utf8_string_is_ascii/1,
-         amqp_map_get/3
+         amqp_map_get/3,
+         is_x_header/1
         ]).
 
 -spec is_valid_shortstr(term()) -> boolean().
@@ -61,3 +62,9 @@ amqp_map_get(Key, List, Default) when is_list(List) ->
     end;
 amqp_map_get(_, _, Default) ->
     Default.
+
+-spec is_x_header(binary()) -> boolean().
+is_x_header(<<"x-", _/binary>>) ->
+    true;
+is_x_header(_) ->
+    false.

@@ -190,12 +190,7 @@ protocol_state(Msg, Anns) ->
     [RKey | _] = maps:get(routing_keys, Anns),
 
     %% any x-* annotations get added as message annotations
-    AnnsToAdd = maps:filter(
-                  fun (<<"x-", _Rest/binary>>, _Val) ->
-                          true;
-                      (_, _) ->
-                          false
-                  end, Anns),
+    AnnsToAdd = maps:filter(fun (Key, _) -> mc_util:is_x_header(Key) end, Anns),
 
     MACFun = fun(MAC) ->
                      add_message_annotations(

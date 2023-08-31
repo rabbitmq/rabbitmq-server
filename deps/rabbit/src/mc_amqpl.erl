@@ -306,7 +306,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                  APC = [{wrap(utf8, K), from_091(T, V)}
                         || {K, T, V} <- Headers,
                            supported_header_value_type(T),
-                           not is_x_header(K)],
+                           not mc_util:is_x_header(K)],
                  #'v1_0.application_properties'{content = APC};
              A ->
                  A
@@ -317,7 +317,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
              undefined ->
                  MAC0 = [{{symbol, K}, from_091(T, V)}
                          || {K, T, V} <- Headers,
-                            is_x_header(K),
+                            mc_util:is_x_header(K),
                             %% all message annotation keys need to be either a symbol or ulong
                             %% but 0.9.1 field-table names are always strings
                             is_binary(K)
@@ -650,11 +650,6 @@ essential_properties(#content{} = C) ->
           maps_put_falsy(
             durable, Durable,
             #{})))).
-
-is_x_header(<<"x-", _/binary>>) ->
-    true;
-is_x_header(_) ->
-    false.
 
 %% headers that are added as annotations during conversions
 is_internal_header(<<"x-basic-", _/binary>>) ->
