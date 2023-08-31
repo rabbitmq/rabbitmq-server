@@ -121,7 +121,6 @@ rabbitmq_integration_suite(
     shard_count = 2,
     tags = [
         "dotnet",
-        "exclusive",
     ],
     test_env = {
         "TMPDIR": "$TEST_TMPDIR",
