@@ -345,6 +345,9 @@ rabbitmq_integration_suite(
     flaky = True,
     shard_count = 18,
     sharding_method = "case",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -454,6 +457,9 @@ rabbitmq_integration_suite(
     shard_count = 5,
     runtime_deps = [
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:erlang_app",
+    ],
+    additional_beam = [
+        ":test_clustering_utils_beam",
     ],
 )
 
