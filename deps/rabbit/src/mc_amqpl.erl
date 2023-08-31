@@ -66,6 +66,9 @@ convert_from(mc_amqp, Sections) ->
                   setelement(3, Acc, S);
               (#'v1_0.application_properties'{} = S, Acc) ->
                   setelement(4, Acc, S);
+              (#'v1_0.delivery_annotations'{}, Acc) ->
+                  %% delivery annotations not currently used
+                  Acc;
               (#'v1_0.footer'{}, Acc) ->
                   %% footer not currently used
                   Acc;
@@ -77,19 +80,20 @@ convert_from(mc_amqp, Sections) ->
           end, {undefined, undefined, undefined, undefined, []},
           Sections),
 
-    {PayloadRev, Type0} = case BodyRev of
-                              [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
-                                  {[Bin], undefined};
-                              [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
-                                  {lists:reverse(Bin), undefined};
-                              _ ->
-                                  %% anything else needs to be encoded
-                                  %%TODO This is inefficient, but #content.payload_fragments_rev expects
-                                  %% currently a flat list of binaries. Can we make rabbit_writer work
-                                  %% with an iolist instead?
-                                  {[iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- BodyRev],
-                                   ?AMQP10_TYPE}
-                          end,
+    {PayloadRev, Type0} =
+        case BodyRev of
+            [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
+                {[Bin], undefined};
+            [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
+                {lists:reverse(Bin), undefined};
+            _ ->
+                %% anything else needs to be encoded
+                %% TODO: This is potentially inefficient, but #content.payload_fragments_rev expects
+                %% currently a flat list of binaries. Can we make rabbit_writer work
+                %% with an iolist instead?
+                {[erlang:iolist_to_iovec(amqp10_framing:encode_bin(X))
+                  || X <- BodyRev], ?AMQP10_TYPE}
+        end,
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId0,
                        reply_to = ReplyTo0,
@@ -122,7 +126,7 @@ convert_from(mc_amqp, Sections) ->
                    #'v1_0.header'{priority = {_, P}} -> P;
                    _ -> amqp10_map_get(symbol(<<"x-basic-priority">>), MA)
                end,
-    %% TODO: check amqp header first for priority, ttl
+    %% check amqp header first for priority, ttl
     Expiration = case H of
                      #'v1_0.header'{ttl = {_, T}} ->
                          integer_to_binary(T);
