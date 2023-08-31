@@ -3,6 +3,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -compile(export_all).
 
 all() ->
@@ -278,7 +279,7 @@ policy_resets_to_default(Config) ->
         QueueName, QueueName, <<"queues">>,
         [{<<"max-length">>, MaxLength}, {<<"overflow">>, XOverflow}]),
 
-    timer:sleep(1000),
+    ?awaitMatch([_, _], get_policy_definition(Config, QueueName), 30000),
 
     [amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
                            #amqp_msg{payload = <<"HI">>})
@@ -301,6 +302,8 @@ policy_resets_to_default(Config) ->
         QueueName, QueueName, <<"queues">>,
         [{<<"max-length">>, MaxLength}]),
 
+    ?awaitMatch([_], get_policy_definition(Config, QueueName), 30000),
+
     NotRejectedMessage = <<"HI-not-rejected">>,
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
                           #amqp_msg{payload = NotRejectedMessage}),
@@ -316,6 +319,16 @@ policy_resets_to_default(Config) ->
         {true, _}  -> error({message_should_be_rejected, RejectedMessage});
         {_, false} -> error({message_should_be_enqueued, NotRejectedMessage});
         _ -> ok
+    end.
+
+get_policy_definition(Config, QueueName) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                           [rabbit_misc:r(<<"/">>, queue, QueueName)]),
+    case amqqueue:get_policy(Q) of
+        undefined ->
+            undefined;
+        Policy ->
+            proplists:get_value(definition, Policy, [])
     end.
 
 consume_all_messages(Ch, QueueName) ->
