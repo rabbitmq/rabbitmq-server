@@ -47,6 +47,12 @@ bazel_dep(
     repo_name = "osiris",
 )
 
+git_override(
+    module_name = "rabbitmq_osiris",
+    commit = "910590b392be8ba9c09684203238d9606534c271",
+    remote = "https://github.com/rabbitmq/osiris.git",
+)
+
 bazel_dep(
     name = "rabbitmq_ra",
     version = "2.6.2",
