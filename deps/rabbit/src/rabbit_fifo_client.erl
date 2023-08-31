@@ -118,37 +118,24 @@ enqueue(QName, Correlation, Msg,
                next_enqueue_seq = 1,
                cfg = #cfg{servers = Servers,
                           timeout = Timeout}} = State0) ->
-    %% it is the first enqueue, check the version
-    {_, Node} = pick_server(State0),
-    case rpc:call(Node, ra_machine, version, [{machine, rabbit_fifo, #{}}]) of
-        0 ->
-            %% the leader is running the old version
-            enqueue(QName, Correlation, Msg, State0#state{queue_status = go});
-        N when is_integer(N) ->
-            %% were running the new version on the leader do sync initialisation
-            %% of enqueuer session
-            Reg = rabbit_fifo:make_register_enqueuer(self()),
-            case ra:process_command(Servers, Reg, Timeout) of
-                {ok, reject_publish, Leader} ->
-                    {reject_publish, State0#state{leader = Leader,
-                                                  queue_status = reject_publish}};
-                {ok, ok, Leader} ->
-                    enqueue(QName, Correlation, Msg, State0#state{leader = Leader,
-                                                                  queue_status = go});
-                {error, {no_more_servers_to_try, _Errs}} ->
-                    %% if we are not able to process the register command
-                    %% it is safe to reject the message as we never attempted
-                    %% to send it
-                    {reject_publish, State0};
-                %% TODO: not convinced this can ever happen when using
-                %% a list of servers
-                {timeout, _} ->
-                    {reject_publish, State0};
-                Err ->
-                    exit(Err)
-            end;
-        {badrpc, nodedown} ->
-            {reject_publish, State0}
+    %% the first publish, register and enqueuer for this process.
+    Reg = rabbit_fifo:make_register_enqueuer(self()),
+    case ra:process_command(Servers, Reg, Timeout) of
+        {ok, reject_publish, Leader} ->
+            {reject_publish, State0#state{leader = Leader,
+                                          queue_status = reject_publish}};
+        {ok, ok, Leader} ->
+            enqueue(QName, Correlation, Msg, State0#state{leader = Leader,
+                                                          queue_status = go});
+        {error, {no_more_servers_to_try, _Errs}} ->
+            %% if we are not able to process the register command
+            %% it is safe to reject the message as we never attempted
+            %% to send it
+            {reject_publish, State0};
+        {timeout, _} ->
+            {reject_publish, State0};
+        Err ->
+            exit(Err)
     end;
 enqueue(_QName, _Correlation, _Msg,
         #state{queue_status = reject_publish,
