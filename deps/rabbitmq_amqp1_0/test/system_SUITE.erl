@@ -277,7 +277,7 @@ run(Config, Flavors) ->
 
 run_dotnet_test(Config, Method) ->
     TestProjectDir = ?config(dotnet_test_project_dir, Config),
-    Uri = rabbit_ct_broker_helpers:node_uri(Config, 0),
+    Uri = rabbit_ct_broker_helpers:node_uri(Config, 0, [{use_ipaddr, true}]),
     Ret = rabbit_ct_helpers:exec(["dotnet", "run", "--", Method, Uri ],
       [
         {cd, TestProjectDir}
