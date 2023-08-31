@@ -182,12 +182,17 @@ enqueue(Correlation, Msg,
                queue_status = go,
                next_seq = Seq,
                next_enqueue_seq = EnqueueSeq,
+<<<<<<< HEAD
                cfg = #cfg{soft_limit = SftLmt,
                           block_handler = BlockFun}} = State0) ->
     Server = pick_server(State0),
+=======
+               cfg = #cfg{soft_limit = SftLmt}} = State0) ->
+    ServerId = pick_server(State0),
+>>>>>>> b43d616d1e (Use ra_leaderboard when initialising quorum queue client.)
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
-    ok = ra:pipeline_command(Server, Cmd, Seq, low),
+    ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
     Tag = case map_size(Pending) >= SftLmt of
               true -> slow;
               false -> ok
@@ -235,12 +240,18 @@ enqueue(Msg, State) ->
               Settlement :: settled | unsettled, state()) ->
     {ok, non_neg_integer(), term(), non_neg_integer()}
      | {empty, state()} | {error | timeout, term()}.
+<<<<<<< HEAD
 dequeue(ConsumerTag, Settlement,
         #state{cfg = #cfg{timeout = Timeout,
                           cluster_name = QName}} = State0) ->
     Node = pick_server(State0),
+=======
+dequeue(QueueName, ConsumerTag, Settlement,
+        #state{cfg = #cfg{timeout = Timeout}} = State0) ->
+    ServerId = pick_server(State0),
+>>>>>>> b43d616d1e (Use ra_leaderboard when initialising quorum queue client.)
     ConsumerId = consumer_id(ConsumerTag),
-    case ra:process_command(Node,
+    case ra:process_command(ServerId,
                             rabbit_fifo:make_checkout(ConsumerId,
                                                       {dequeue, Settlement},
                                                       #{}),
@@ -282,9 +293,9 @@ add_delivery_count_header(Msg, _Count) ->
 -spec settle(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
-    Node = pick_server(State0),
+    ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_settle(consumer_id(ConsumerTag), MsgIds),
-    {send_command(Node, undefined, Cmd, normal, State0), []};
+    {send_command(ServerId, undefined, Cmd, normal, State0), []};
 settle(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -312,10 +323,10 @@ settle(ConsumerTag, [_|_] = MsgIds,
 -spec return(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
-    Node = pick_server(State0),
+    ServerId = pick_server(State0),
     % TODO: make rabbit_fifo return support lists of message ids
     Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
-    {send_command(Node, undefined, Cmd, normal, State0), []};
+    {send_command(ServerId, undefined, Cmd, normal, State0), []};
 return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -341,9 +352,9 @@ return(ConsumerTag, [_|_] = MsgIds,
 -spec discard(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
-    Node = pick_server(State0),
+    ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_discard(consumer_id(ConsumerTag), MsgIds),
-    {send_command(Node, undefined, Cmd, normal, State0), []};
+    {send_command(ServerId, undefined, Cmd, normal, State0), []};
 discard(ConsumerTag, [_|_] = MsgIds,
         #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -450,10 +461,10 @@ credit(ConsumerTag, Credit, Drain,
     %% the last received msgid provides us with the delivery count if we
     %% add one as it is 0 indexed
     C = maps:get(ConsumerTag, CDels, #consumer{last_msg_id = -1}),
-    Node = pick_server(State0),
+    ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
                                   C#consumer.last_msg_id + 1, Drain),
-    {send_command(Node, undefined, Cmd, normal, State0), []}.
+    {send_command(ServerId, undefined, Cmd, normal, State0), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -606,10 +617,10 @@ handle_ra_event(From, {applied, Seqs},
                                                          add_command(Cid, discard,
                                                                      Discards, Acc)))
                          end, [], State1#state.unsent_commands),
-            Node = pick_server(State2),
+            ServerId = pick_server(State2),
             %% send all the settlements and returns
             State = lists:foldl(fun (C, S0) ->
-                                        send_command(Node, undefined, C,
+                                        send_command(ServerId, undefined, C,
                                                      normal, S0)
                                 end, State2, Commands),
             UnblockFun(),
@@ -671,9 +682,9 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 %% @returns `ok'
 -spec untracked_enqueue([ra:server_id()], term()) ->
     ok.
-untracked_enqueue([Node | _], Msg) ->
+untracked_enqueue([ServerId | _], Msg) ->
     Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg),
-    ok = ra:pipeline_command(Node, Cmd),
+    ok = ra:pipeline_command(ServerId, Cmd),
     ok.
 
 %% Internal
@@ -903,10 +914,10 @@ send_command(Server, Correlation, Command, Priority,
                 next_seq = Seq + 1,
                 slow = Tag == slow}.
 
-resend_command(Node, Correlation, Command,
+resend_command(ServerId, Correlation, Command,
                #state{pending = Pending,
                       next_seq = Seq} = State) ->
-    ok = ra:pipeline_command(Node, Command, Seq),
+    ok = ra:pipeline_command(ServerId, Command, Seq),
     State#state{pending = Pending#{Seq => {Correlation, Command}},
                 next_seq = Seq + 1}.
 
