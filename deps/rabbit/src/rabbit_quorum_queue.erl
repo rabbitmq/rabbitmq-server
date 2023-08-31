@@ -27,7 +27,7 @@
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
 -export([credit/5]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/2]).
+-export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
@@ -77,11 +77,11 @@
 
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqqueue.hrl").
 
 -type msg_id() :: non_neg_integer().
--type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
+-type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
+                 mc:state()}.
 
 -define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
@@ -894,39 +894,30 @@ stateless_deliver(ServerId, Delivery) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId],
                                               Delivery#delivery.message).
 
--spec deliver(rabbit_amqqueue:name(), Confirm :: boolean(),
-              rabbit_types:delivery(), rabbit_fifo_client:state()) ->
-    {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
-    {reject_publish, rabbit_fifo_client:state()}.
-deliver(QName, false, Delivery, QState0) ->
-    case rabbit_fifo_client:enqueue(QName, Delivery#delivery.message, QState0) of
-        {ok, _State, _Actions} = Res ->
-            Res;
+deliver0(QName, undefined, Msg, QState0) ->
+    case rabbit_fifo_client:enqueue(QName, Msg, QState0) of
+        {ok, _, _} = Res -> Res;
         {reject_publish, State} ->
             {ok, State, []}
     end;
-deliver(QName, true, Delivery, QState0) ->
-    rabbit_fifo_client:enqueue(QName,
-                               Delivery#delivery.msg_seq_no,
-                               Delivery#delivery.message, QState0).
+deliver0(QName, Correlation, Msg, QState0) ->
+    rabbit_fifo_client:enqueue(QName, Correlation,
+                               Msg, QState0).
 
-deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
-                       confirm = Confirm} = Delivery0) ->
-    %% TODO: we could also consider clearing out the message id here
-    Content = prepare_content(Content0),
-    Delivery = Delivery0#delivery{message = Msg#basic_message{content = Content}},
+deliver(QSs, Msg0, Options) ->
+    Correlation = maps:get(correlation, Options, undefined),
+    Msg = mc:prepare(store, Msg0),
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
-              ok = rabbit_fifo_client:untracked_enqueue(
-                     [QRef], Delivery#delivery.message),
+              ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
               QName = amqqueue:get_name(Q),
-              case deliver(QName, Confirm, Delivery, S0) of
+              case deliver0(QName, Correlation, Msg, S0) of
                   {reject_publish, S} ->
-                      Seq = Delivery#delivery.msg_seq_no,
-                      {[{Q, S} | Qs], [{rejected, QName, [Seq]} | Actions]};
+                      {[{Q, S} | Qs],
+                       [{rejected, QName, [Correlation]} | Actions]};
                   {ok, S, As} ->
                       {[{Q, S} | Qs], As ++ Actions}
               end
@@ -1579,9 +1570,12 @@ peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
                         #{delivery_count := C} -> C;
                        _ -> 0
                     end,
-            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long,
-                                          Count, Msg0),
-            {ok, rabbit_basic:peek_fmt_message(Msg)};
+            Msg = mc:set_annotation(<<"x-delivery-count">>, Count, Msg0),
+            XName = mc:get_annotation(exchange, Msg),
+            RoutingKeys = mc:get_annotation(routing_keys, Msg),
+            AmqpLegacyMsg = mc:prepare(read, mc:convert(mc_amqpl, Msg)),
+            Content = mc:protocol_state(AmqpLegacyMsg),
+            {ok, rabbit_basic:peek_fmt_message(XName, RoutingKeys, Content)};
         {error, Err} ->
             {error, Err};
         Err ->
@@ -1714,20 +1708,6 @@ notify_decorators(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
-
-%% remove any data that a quorum queue doesn't need
-prepare_content(#content{properties = none} = Content) ->
-    Content;
-prepare_content(#content{protocol = none} = Content) ->
-    Content;
-prepare_content(#content{properties = #'P_basic'{expiration = undefined} = Props,
-                         protocol = Proto} = Content) ->
-    Content#content{properties = none,
-                    properties_bin = Proto:encode_properties(Props)};
-prepare_content(Content) ->
-    %% expiration is set. Therefore, leave properties decoded so that
-    %% rabbit_fifo can directly parse it without having to decode again.
-    Content.
 
 ets_lookup_element(Tbl, Key, Pos, Default) ->
     try ets:lookup_element(Tbl, Key, Pos) of

@@ -59,6 +59,10 @@ def _deps_symlinks(ctx):
         target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
         source = path_join("deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
     ))
+    commands.append(_ln_command(
+        target = path_join("..", "..", "..", "bazel-bin", "deps", "amqp10_common", "include", "amqp10_framing.hrl"),
+        source = path_join("deps", "amqp10_common", "include", "amqp10_framing.hrl"),
+    ))
 
     ctx.actions.write(
         output = output,

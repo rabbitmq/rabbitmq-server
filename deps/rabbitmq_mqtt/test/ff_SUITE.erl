@@ -137,12 +137,33 @@ rabbit_mqtt_qos0_queue(Config) ->
 
 mqtt_v5(Config) ->
     FeatureFlag = ?FUNCTION_NAME,
-    {Client1, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
-    unlink(Client1),
-    ?assertEqual({error, {unsupported_protocol_version, #{}}}, Connect(Client1)),
 
+    %% MQTT 5.0 is not yet supported.
+    {C1, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
+    unlink(C1),
+    ?assertEqual({error, {unsupported_protocol_version, #{}}}, Connect(C1)),
+
+    %% Send message from node 0.
+    %% Message is stored in old AMQP 0.9.1 format on node 1.
+    Topic = <<"my/topic">>,
+    C2 = connect(<<"sub-v4">>, Config, 1, util:non_clean_sess_opts()),
+    {ok, _, [1]} = emqtt:subscribe(C2, Topic, qos1),
+    ok = emqtt:disconnect(C2),
+    C3 = connect(<<"pub-v4">>, Config),
+    {ok, _} = emqtt:publish(C3, Topic, <<"msg">>, qos1),
+    ok = emqtt:disconnect(C3),
+
+    DependantFF = message_containers,
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, DependantFF)),
     ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
+    ?assert(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, DependantFF)),
 
-    {Client2, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
-    ?assertMatch({ok, _}, Connect(Client2)),
-    ok = emqtt:disconnect(Client2).
+    %% Translate from old AMQP 0.9.1 message format consuming from node 2.
+    C4 = connect(<<"sub-v4">>, Config, 2, [{clean_start, false}]),
+    ok = expect_publishes(C4, Topic, [<<"msg">>]),
+    ok = emqtt:disconnect(C4),
+
+    %% MQTT 5.0 is now supported.
+    {C5, Connect} = util:start_client(?FUNCTION_NAME, Config, 0, [{proto_ver, v5}]),
+    ?assertMatch({ok, _}, Connect(C5)),
+    ok = emqtt:disconnect(C5).

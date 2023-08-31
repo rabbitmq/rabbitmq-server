@@ -7,7 +7,6 @@
 -module(util_SUITE).
 -compile([export_all, nowarn_export_all]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
@@ -18,7 +17,6 @@ all() ->
 groups() ->
     [
      {tests, [parallel], [
-                          coerce_exchange,
                           coerce_vhost,
                           coerce_default_user,
                           coerce_default_pass,
@@ -27,22 +25,13 @@ groups() ->
      }
     ].
 
-suite() ->
-    [{timetrap, {seconds, 60}}].
-
 init_per_suite(Config) ->
     ok = application:load(rabbitmq_mqtt),
     Config.
+
 end_per_suite(Config) ->
     ok = application:unload(rabbitmq_mqtt),
     Config.
-init_per_group(_, Config) -> Config.
-end_per_group(_, Config) -> Config.
-init_per_testcase(_, Config) -> Config.
-end_per_testcase(_, Config) -> Config.
-
-coerce_exchange(_) ->
-    ?assertEqual(<<"amq.topic">>, rabbit_mqtt_util:env(exchange)).
 
 coerce_vhost(_) ->
     ?assertEqual(<<"/">>, rabbit_mqtt_util:env(vhost)).

@@ -3,15 +3,13 @@
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
 %% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
-%%
 
 -module(rabbit_exchange_type_headers).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/2, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
@@ -32,14 +30,61 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{content = Content}}) ->
-    Headers = case (Content#content.properties)#'P_basic'.headers of
-                  undefined -> [];
-                  H         -> rabbit_misc:sort_field_table(H)
-              end,
+route(#exchange{name = Name}, Msg) ->
+    route(#exchange{name = Name}, Msg, #{}).
+
+route(#exchange{name = Name}, Msg, _Opts) ->
+    %% TODO: find a way not to extract x-headers unless necessary
+    Headers = mc:routing_headers(Msg, [x_headers]),
+
     rabbit_router:match_bindings(
-      Name, fun (#binding{args = Spec}) -> headers_match(Spec, Headers) end).
+      Name, fun(#binding{args = Args}) ->
+                    case rabbit_misc:table_lookup(Args, <<"x-match">>) of
+                        {longstr, <<"any">>} ->
+                            match_any(Args, Headers, fun match/2);
+                        {longstr, <<"any-with-x">>} ->
+                            match_any(Args, Headers, fun match_x/2);
+                        {longstr, <<"all-with-x">>} ->
+                            match_all(Args, Headers, fun match_x/2);
+                        _ ->
+                            match_all(Args, Headers, fun match/2)
+                    end
+            end).
+
+match_x({<<"x-match">>, _, _}, _M) ->
+    skip;
+match_x({K, void, _}, M) ->
+    maps:is_key(K, M);
+match_x({K, _, V}, M) ->
+    maps:get(K, M, undefined) =:= V.
+
+match({<<"x-", _/binary>>, _, _}, _M) ->
+    skip;
+match({K, void, _}, M) ->
+    maps:is_key(K, M);
+match({K, _, V}, M) ->
+    maps:get(K, M, undefined) =:= V.
+
+
+match_all([], _, _MatchFun) ->
+    true;
+match_all([Arg | Rem], M, Fun) ->
+    case Fun(Arg, M) of
+        false ->
+            false;
+        _ ->
+            match_all(Rem, M, Fun)
+    end.
+
+match_any([], _, _Fun) ->
+    false;
+match_any([Arg | Rem], M, Fun) ->
+    case Fun(Arg, M) of
+        true ->
+            true;
+        _ ->
+            match_any(Rem, M, Fun)
+    end.
 
 validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
@@ -47,98 +92,16 @@ validate_binding(_X, #binding{args = Args}) ->
         {longstr, <<"any">>} -> ok;
         {longstr, <<"all-with-x">>} -> ok;
         {longstr, <<"any-with-x">>} -> ok;
-        {longstr, Other}     -> {error,
-                                 {binding_invalid,
-                                  "Invalid x-match field value ~tp; "
-                                  "expected all, any, all-with-x, or any-with-x", [Other]}};
-        {Type,    Other}     -> {error,
-                                 {binding_invalid,
-                                  "Invalid x-match field type ~tp (value ~tp); "
-                                  "expected longstr", [Type, Other]}};
-        undefined            -> ok %% [0]
+        {longstr, Other} ->
+            {error, {binding_invalid,
+                     "Invalid x-match field value ~tp; "
+                     "expected all, any, all-with-x, or any-with-x", [Other]}};
+        {Type, Other} ->
+            {error, {binding_invalid,
+                     "Invalid x-match field type ~tp (value ~tp); "
+                     "expected longstr", [Type, Other]}};
+        undefined -> ok %% [0]
     end.
-%% [0] spec is vague on whether it can be omitted but in practice it's
-%% useful to allow people to do this
-
-parse_x_match({longstr, <<"all">>}) -> all;
-parse_x_match({longstr, <<"any">>}) -> any;
-parse_x_match({longstr, <<"all-with-x">>}) -> all_with_x;
-parse_x_match({longstr, <<"any-with-x">>}) -> any_with_x;
-parse_x_match(_) -> all. %% legacy; we didn't validate
-
-%% Horrendous matching algorithm. Depends for its merge-like
-%% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_field_table) that route/1 and
-%% rabbit_binding:{add,remove}/2 do.
-%%
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%%
-
--spec headers_match
-        (rabbit_framing:amqp_table(), rabbit_framing:amqp_table()) ->
-            boolean().
-
-headers_match(Args, Data) ->
-    MK = parse_x_match(rabbit_misc:table_lookup(Args, <<"x-match">>)),
-    headers_match(Args, Data, true, false, MK).
-
-% A bit less horrendous algorithm :)
-headers_match(_, _, false, _, all) -> false;
-headers_match(_, _, false, _, all_with_x) -> false;
-headers_match(_, _, _, true, any) -> true;
-headers_match(_, _, _, true, any_with_x) -> true;
-
-% No more bindings, return current state
-headers_match([], _Data, AllMatch, _AnyMatch, all) -> AllMatch;
-headers_match([], _Data, AllMatch, _AnyMatch, all_with_x) -> AllMatch;
-headers_match([], _Data, _AllMatch, AnyMatch, any) -> AnyMatch;
-headers_match([], _Data, _AllMatch, AnyMatch, any_with_x) -> AnyMatch;
-
-%% Always delete binding x-match
-headers_match([{<<"x-match">>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind) ->
-    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
-% Delete all other bindings starting with x-
-% unless x-match is set to all-with-x or any-with-x
-headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind)
-  when MatchKind =/= all_with_x, MatchKind =/= any_with_x ->
-    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
-
-% No more data, but still bindings, false with all
-headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
-    headers_match([], [], false, AnyMatch, MatchKind);
-
-% Data key header not in binding, go next data
-headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK > DK ->
-    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
-
-% Binding key header not in data, false with all, go next binding
-headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
-              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
-    headers_match(PRest, Data, false, AnyMatch, MatchKind);
-
-%% It's not properly specified, but a "no value" in a
-%% pattern field is supposed to mean simple presence of
-%% the corresponding data field. I've interpreted that to
-%% mean a type of "void" for the pattern field.
-headers_match([{PK, void, _PV} | PRest], [{DK, _DT, _DV} | DRest],
-              AllMatch, _AnyMatch, MatchKind) when PK == DK ->
-    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-
-% Complete match, true with any, go next
-headers_match([{PK, _PT, PV} | PRest], [{DK, _DT, DV} | DRest],
-              AllMatch, _AnyMatch, MatchKind) when PK == DK andalso PV == DV ->
-    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-
-% Value does not match, false with all, go next
-headers_match([{PK, _PT, _PV} | PRest], [{DK, _DT, _DV} | DRest],
-              _AllMatch, AnyMatch, MatchKind) when PK == DK ->
-    headers_match(PRest, DRest, false, AnyMatch, MatchKind).
-
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

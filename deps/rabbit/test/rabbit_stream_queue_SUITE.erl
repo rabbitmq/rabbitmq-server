@@ -1027,6 +1027,7 @@ consume_timestamp_offset(Config) ->
         #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
             ok
     after 5000 ->
+              flush(),
             exit(consume_ok_timeout)
     end,
 

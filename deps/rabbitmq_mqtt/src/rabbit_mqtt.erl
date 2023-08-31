@@ -110,6 +110,10 @@ init_global_counters(ProtoVer) ->
 persist_static_configuration() ->
     rabbit_mqtt_util:init_sparkplug(),
 
+    {ok, Exchange} = application:get_env(?APP_NAME, exchange),
+    ?assert(is_binary(Exchange)),
+    ok = persistent_term:put(?PERSISTENT_TERM_EXCHANGE, Exchange),
+
     {ok, MailboxSoftLimit} = application:get_env(?APP_NAME, mailbox_soft_limit),
     ?assert(is_integer(MailboxSoftLimit)),
     ok = persistent_term:put(?PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, MailboxSoftLimit),

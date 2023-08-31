@@ -11,15 +11,15 @@
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
          forget_all_durable/1]).
--export([pseudo_queue/2, pseudo_queue/3, immutable/1]).
+-export([pseudo_queue/2, pseudo_queue/3]).
 -export([exists/1, lookup/1, lookup/2, lookup_many/1, lookup_durable_queue/1,
          not_found_or_absent_dirty/1,
          with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          augment_declare_args/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2,
-         requeue/3, ack/3, reject/4]).
+         stat/1
+        ]).
 -export([not_found/1, absent/2]).
 -export([list/0, list_durable/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
@@ -69,7 +69,7 @@
 -export([deactivate_limit_all/2]).
 
 -export([prepend_extra_bcc/1]).
--export([queue/1, queue_name/1, queue_names/1]).
+-export([queue/1, queue_names/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -95,7 +95,7 @@
 -type qlen() :: rabbit_types:ok(non_neg_integer()).
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
 -type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(),
-                 boolean(), rabbit_types:message()}.
+                 boolean(), mc:state()}.
 -type msg_id() :: non_neg_integer().
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
@@ -1616,33 +1616,6 @@ delete_crashed_internal(Q, ActingUser) when ?amqqueue_is_classic(Q) ->
 purge(Q) when ?is_amqqueue(Q) ->
     rabbit_queue_type:purge(Q).
 
--spec requeue(name(),
-              {rabbit_fifo:consumer_tag(), [msg_id()]},
-              rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()}.
-requeue(QRef, {CTag, MsgIds}, QStates) ->
-    reject(QRef, true, {CTag, MsgIds}, QStates).
-
--spec ack(name(),
-          {rabbit_fifo:consumer_tag(), [msg_id()]},
-          rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()}.
-ack(QPid, {CTag, MsgIds}, QueueStates) ->
-    rabbit_queue_type:settle(QPid, complete, CTag, MsgIds, QueueStates).
-
-
--spec reject(name(),
-             boolean(),
-             {rabbit_fifo:consumer_tag(), [msg_id()]},
-             rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()}.
-reject(QRef, Requeue, {CTag, MsgIds}, QStates) ->
-    Op = case Requeue of
-             true -> requeue;
-             false -> discard
-         end,
-    rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, QStates).
-
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
@@ -2001,16 +1974,6 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                  rabbit_classic_queue % Type
                 ).
 
--spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().
-
-immutable(Q) -> amqqueue:set_immutable(Q).
-
--spec deliver([amqqueue:amqqueue()], rabbit_types:delivery()) -> 'ok'.
-
-deliver(Qs, Delivery) ->
-    _ = rabbit_queue_type:deliver(Qs, Delivery, stateless),
-    ok.
-
 get_quorum_nodes(Q) ->
     case amqqueue:get_type_state(Q) of
         #{nodes := Nodes} ->
@@ -2064,14 +2027,6 @@ queue(Q)
 queue({Q, RouteInfos})
   when ?is_amqqueue(Q) andalso is_map(RouteInfos) ->
     Q.
-
--spec queue_name(name() | {name(), route_infos()}) ->
-    name().
-queue_name(QName = #resource{kind = queue}) ->
-    QName;
-queue_name({QName = #resource{kind = queue}, RouteInfos})
-  when is_map(RouteInfos) ->
-    QName.
 
 -spec queue_names([Q | {Q, route_infos()}]) ->
     [name()] when Q :: amqqueue:amqqueue().

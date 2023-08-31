@@ -7,14 +7,13 @@
 -module(rabbit_exchange_type_recent_history).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_recent_history.hrl").
 
 -behaviour(rabbit_exchange_type).
 
 -import(rabbit_misc, [table_lookup/2]).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2, create/2, delete/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
 -export([setup_schema/0, disable_plugin/0]).
@@ -46,8 +45,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name      = XName,
-                arguments = Args},
-      #delivery{message = Message}) ->
+                arguments = Args}, Message, _Options) ->
     Length = table_lookup(Args, <<"x-recent-history-length">>),
     maybe_cache_msg(XName, Message, Length),
     rabbit_router:match_routing_key(XName, ['_']).
@@ -94,8 +92,7 @@ add_binding(none, #exchange{ name = XName },
         {ok, X} ->
             Msgs = get_msgs_from_cache(XName),
             [begin
-                 Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
-                 Qs = rabbit_exchange:route(X, Delivery),
+                 Qs = rabbit_exchange:route(X, Msg),
                  case rabbit_amqqueue:lookup_many(Qs) of
                      [] ->
                          destination_not_found_error(Qs);
@@ -125,23 +122,12 @@ disable_plugin() ->
 
 %%----------------------------------------------------------------------------
 %%private
-maybe_cache_msg(XName,
-                #basic_message{content =
-                               #content{properties =
-                                        #'P_basic'{headers = Headers}}}
-                = Message,
-                Length) ->
-    case Headers of
-        undefined ->
-            cache_msg(XName, Message, Length);
+maybe_cache_msg(XName, Message, Length) ->
+    case mc:x_header(<<"x-recent-history-no-store">>, Message) of
+        {boolean, true} ->
+            ok;
         _ ->
-            Store = table_lookup(Headers, <<"x-recent-history-no-store">>),
-            case Store of
-                {bool, true} ->
-                    ok;
-                _ ->
-                    cache_msg(XName, Message, Length)
-            end
+            cache_msg(XName, Message, Length)
     end.
 
 cache_msg(XName, Message, Length) ->
@@ -153,8 +139,7 @@ get_msgs_from_cache(XName) ->
 deliver_messages(Qs, Msgs) ->
     lists:map(
       fun (Msg) ->
-              Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
-              rabbit_amqqueue:deliver(Qs, Delivery)
+              _ = rabbit_queue_type:deliver(Qs, Msg, #{}, stateless)
       end, lists:reverse(Msgs)).
 
 -spec destination_not_found_error(string()) -> no_return().

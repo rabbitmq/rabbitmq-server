@@ -611,20 +611,20 @@ send_or_record_confirm(#delivery{confirm    = false}, State) ->
 send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
-                                 message    = #basic_message {
-                                   is_persistent = true,
-                                   id            = MsgId}},
+                                 message    = Message
+                                },
                        State = #q{q                 = Q,
-                                  msg_id_to_channel = MTC})
-  when ?amqqueue_is_durable(Q) ->
-    MTC1 = maps:put(MsgId, {SenderPid, MsgSeqNo}, MTC),
-    {eventually, State#q{msg_id_to_channel = MTC1}};
-send_or_record_confirm(#delivery{confirm    = true,
-                                 sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo},
-                       #q{q = Q} = State) ->
-    confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
-    {immediately, State}.
+                                  msg_id_to_channel = MTC}) ->
+    Persistent = mc:is_persistent(Message),
+    MsgId = mc:get_annotation(id, Message),
+    case Persistent  of
+        true when ?amqqueue_is_durable(Q) ->
+            MTC1 = maps:put(MsgId, {SenderPid, MsgSeqNo}, MTC),
+            {eventually, State#q{msg_id_to_channel = MTC1}};
+        _ ->
+            confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
+            {immediately, State}
+    end.
 
 %% This feature was used by `rabbit_amqqueue_process` and
 %% `rabbit_mirror_queue_slave` up-to and including RabbitMQ 3.7.x. It is
@@ -641,7 +641,8 @@ send_mandatory(#delivery{mandatory  = true,
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
                   flow    = Flow,
-                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC, QName) ->
+                  message = Msg}, BQ, BQS, MTC, QName) ->
+    MsgId = mc:get_annotation(id, Msg),
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC, QName);
                false -> MTC
@@ -809,12 +810,13 @@ send_reject_publish(#delivery{confirm = true,
                               sender = SenderPid,
                               flow = Flow,
                               msg_seq_no = MsgSeqNo,
-                              message = #basic_message{id = MsgId}},
+                              message = Msg},
                       _Delivered,
                       State = #q{ q = Q,
                                   backing_queue = BQ,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}) ->
+    MsgId = mc:get_annotation(id, Msg),
     ok = rabbit_classic_queue:send_rejection(SenderPid,
                                              amqqueue:get_name(Q), MsgSeqNo),
 
@@ -834,9 +836,8 @@ will_overflow(#delivery{message = Message},
                  backing_queue_state = BQS}) ->
     ExpectedQueueLength = BQ:len(BQS) + 1,
 
-    #basic_message{content = #content{payload_fragments_rev = PFR}} = Message,
-    MessageSize = iolist_size(PFR),
-    ExpectedQueueSizeBytes = BQ:info(message_bytes_ready, BQS) + MessageSize,
+    {_, PayloadSize} = mc:size(Message),
+    ExpectedQueueSizeBytes = BQ:info(message_bytes_ready, BQS) + PayloadSize,
 
     ExpectedQueueLength > MaxLen orelse ExpectedQueueSizeBytes > MaxBytes.
 
@@ -977,21 +978,18 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
                                    run_message_queue(true, Fun(State1))
     end.
 
-message_properties(Message = #basic_message{content = Content},
-                   Confirm, #q{ttl = TTL}) ->
-    #content{payload_fragments_rev = PFR} = Content,
+message_properties(Message, Confirm, #q{ttl = TTL}) ->
+    {_, Size} = mc:size(Message),
     #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
                         needs_confirming = Confirm == eventually,
-                        size             = iolist_size(PFR)}.
+                        size             = Size}.
 
-calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
-    #content{properties = Props} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    %% We assert that the expiration must be valid - we check in the channel.
-    {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
+calculate_msg_expiry(Msg, TTL) ->
+    MsgTTL = mc:ttl(Msg),
     case lists:min([TTL, MsgTTL]) of
         undefined -> undefined;
-        T         -> os:system_time(microsecond) + T * 1000
+        T ->
+            os:system_time(microsecond) + T * 1000
     end.
 
 %% Logically this function should invoke maybe_send_drained/2.

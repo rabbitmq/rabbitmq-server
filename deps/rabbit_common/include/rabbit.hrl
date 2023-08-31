@@ -121,7 +121,7 @@
         {mandatory,  %% Whether the message was published as mandatory
          confirm,    %% Whether the message needs confirming
          sender,     %% The pid of the process that created the delivery
-         message,    %% The #basic_message record
+         message,    %% The message container
          msg_seq_no, %% Msg Sequence Number from the channel publish_seqno field
          flow}).     %% Should flow control be used for this delivery
 

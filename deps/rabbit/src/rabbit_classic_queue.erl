@@ -38,7 +38,7 @@
          consume/3,
          cancel/5,
          handle_event/3,
-         deliver/2,
+         deliver/3,
          settle/5,
          credit/5,
          dequeue/5,
@@ -326,18 +326,21 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
     [{Type, QRef, MsgSeqs} | Acc].
 
 -spec deliver([{amqqueue:amqqueue(), state()}],
-              Delivery :: term()) ->
+              Delivery :: mc:state(),
+              rabbit_queue_type:delivery_options()) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
-deliver(Qs0, #delivery{flow = Flow,
-                       msg_seq_no = MsgNo,
-                       message = #basic_message{} = Msg0,
-                       confirm = Confirm} = Delivery0) ->
+deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
-    Msg = Msg0#basic_message{id = rabbit_guid:gen()},
-    Delivery = Delivery0#delivery{message = Msg},
+    Msg = mc:prepare(store, mc:set_annotation(id, rabbit_guid:gen(), Msg0)),
+    Mandatory = maps:get(mandatory, Options, false),
+    MsgSeqNo = maps:get(correlation, Options, undefined),
+    Flow = maps:get(flow, Options, noflow),
+    Confirm = MsgSeqNo /= undefined,
 
-    {MPids, SPids, Qs} = qpids(Qs0, Confirm, MsgNo),
+    {MPids, SPids, Qs} = qpids(Qs0, Confirm, MsgSeqNo),
+    Delivery = rabbit_basic:delivery(Mandatory, Confirm, Msg, MsgSeqNo, Flow),
+
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process

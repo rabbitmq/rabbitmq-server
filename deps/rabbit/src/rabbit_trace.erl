@@ -47,19 +47,18 @@ enabled(none) ->
 enabled(#exchange{}) ->
     true.
 
--spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_return(),
+-spec tap_in(mc:state(), rabbit_exchange:route_return(),
              binary(), rabbit_types:username(), state()) -> 'ok'.
 tap_in(Msg, QNames, ConnName, Username, State) ->
     tap_in(Msg, QNames, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
--spec tap_in(rabbit_types:basic_message(), rabbit_exchange:route_return(),
+-spec tap_in(mc:state(), rabbit_exchange:route_return(),
              binary(), rabbit_channel:channel_number(),
              rabbit_types:username(), state()) -> 'ok'.
-
 tap_in(_Msg, _QNames, _ConnName, _ChannelNum, _Username, none) -> ok;
-tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
-                                                      virtual_host = VHost}},
-       QNames, ConnName, ChannelNum, Username, TraceX) ->
+tap_in(Msg, QNames, ConnName, ChannelNum, Username, TraceX) ->
+    XName = mc:get_annotation(exchange, Msg),
+    #exchange{name = #resource{virtual_host = VHost}} = TraceX,
     RoutedQs = lists:map(fun(#resource{kind = queue, name = Name}) ->
                                  {longstr, Name};
                             ({#resource{kind = queue, name = Name}, _}) ->
@@ -78,9 +77,8 @@ tap_out(Msg, ConnName, Username, State) ->
     tap_out(Msg, ConnName, ?CONNECTION_GLOBAL_CHANNEL_NUM, Username, State).
 
 -spec tap_out(rabbit_amqqueue:qmsg(), binary(),
-                    rabbit_channel:channel_number(),
-                    rabbit_types:username(), state()) -> 'ok'.
-
+              rabbit_channel:channel_number(),
+              rabbit_types:username(), state()) -> 'ok'.
 tap_out(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
 tap_out({#resource{name = QName, virtual_host = VHost},
          _QPid, _QMsgId, Redelivered, Msg},
@@ -127,7 +125,6 @@ update_config(Fun) ->
     VHosts0 = vhosts_with_tracing_enabled(),
     VHosts = Fun(VHosts0),
     application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
-
     NonAmqpPids = rabbit_networking:local_non_amqp_connections(),
     rabbit_log:debug("Will now refresh state of channels and of ~b non AMQP 0.9.1 "
                      "connections after virtual host tracing changes",
@@ -142,21 +139,31 @@ vhosts_with_tracing_enabled() ->
 
 %%----------------------------------------------------------------------------
 
-trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
-      _RKPrefix, _RKSuffix, _Extra) ->
-    ok;
-trace(X, Msg = #basic_message{content = #content{payload_fragments_rev = PFR}},
-      RKPrefix, RKSuffix, Extra) ->
-    ok = rabbit_basic:publish(
-                X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
-    ok.
+trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
+    XName = mc:get_annotation(exchange, Msg0),
+    case X of
+        #exchange{name = #resource{name = XName}} ->
+            ok;
+        #exchange{name = SourceXName} ->
+            RoutingKeys = mc:get_annotation(routing_keys, Msg0),
+            %% for now convert into amqp legacy
+            Msg = mc:prepare(read, mc:convert(mc_amqpl, Msg0)),
+            %% check exchange name in case it is same as target
+            #content{properties = Props} = Content0 =
+                mc:protocol_state(Msg),
 
-msg_to_table(#basic_message{exchange_name = #resource{name = XName},
-                            routing_keys  = RoutingKeys,
-                            content       = Content}) ->
-    #content{properties = Props} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
+            Key = <<RKPrefix/binary, ".", RKSuffix/binary>>,
+            Content = Content0#content{properties =
+                                       #'P_basic'{headers = msg_to_table(XName, RoutingKeys, Props)
+                                                  ++ Extra},
+                                       properties_bin = none},
+            TargetXName = SourceXName#resource{name = ?XNAME},
+            TraceMsg = mc_amqpl:message(TargetXName, Key, Content),
+            ok = rabbit_queue_type:publish_at_most_once(X, TraceMsg),
+            ok
+    end.
+
+msg_to_table(XName, RoutingKeys, Props) ->
     {PropsTable, _Ix} =
         lists:foldl(fun (K, {L, Ix}) ->
                             V = element(Ix, Props),

@@ -10,7 +10,6 @@
 -ignore_xref([{maps, get, 2}]).
 
 -include("rabbit.hrl").
--include("rabbit_framing.hrl").
 -include("rabbit_misc.hrl").
 
 -include_lib("kernel/include/file.hrl").
@@ -79,10 +78,15 @@
 -export([raw_read_file/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
--export([maps_any/2]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
+-export([is_valid_shortstr/1]).
+
+-export([maps_any/2,
+         maps_put_truthy/3,
+         maps_put_falsy/3
+        ]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1594,3 +1598,36 @@ is_even(N) ->
 -spec is_odd(integer()) -> boolean().
 is_odd(N) ->
     (N band 1) =:= 1.
+
+-spec is_valid_shortstr(term()) -> boolean().
+is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
+    is_utf8_no_null(Bin);
+is_valid_shortstr(_) ->
+    false.
+
+is_utf8_no_null(<<>>) ->
+    true;
+is_utf8_no_null(<<0, _/binary>>) ->
+    false;
+is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
+    is_utf8_no_null(Rem);
+is_utf8_no_null(_) ->
+    false.
+
+-spec maps_put_truthy(Key, Value, Map) -> Map when
+      Map :: #{Key => Value}.
+maps_put_truthy(_K, undefined, M) ->
+    M;
+maps_put_truthy(_K, false, M) ->
+    M;
+maps_put_truthy(K, V, M) ->
+    maps:put(K, V, M).
+
+-spec maps_put_falsy(Key, Value, Map) -> Map when
+      Map :: #{Key => Value}.
+maps_put_falsy(K, undefined, M) ->
+    maps:put(K, undefined, M);
+maps_put_falsy(K, false, M) ->
+    maps:put(K, false, M);
+maps_put_falsy(_K, _V, M) ->
+    M.

@@ -428,8 +428,9 @@ maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
                          unconfirmed_msg = UCM}) ->
     MsgId = case MsgOrId of
-                #basic_message{id = Id} -> Id;
-                Id when is_binary(Id)   -> Id
+                Id when is_binary(Id)   -> Id;
+                Msg ->
+                    mc:get_annotation(id, Msg)
             end,
     ?MSG_ID_BYTES = size(MsgId),
     case {MsgProps#message_properties.needs_confirming, MsgOrId} of
@@ -874,7 +875,8 @@ create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
     case MsgOrId of
         MsgId when is_binary(MsgId) ->
             {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, <<>>};
-        #basic_message{id = MsgId} ->
+        Msg ->
+            MsgId = mc:get_annotation(id, Msg),
             MsgBin = term_to_binary(MsgOrId),
             {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, MsgBin}
     end.
@@ -894,8 +896,11 @@ parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
                                 size   = Size},
     case MsgBin of
         <<>> -> {MsgId, Props};
-        _    -> Msg = #basic_message{id = MsgId} = binary_to_term(MsgBin),
-                {Msg, Props}
+        _  ->
+            Msg = binary_to_term(MsgBin),
+            %% assertion
+            MsgId = mc:get_annotation(id, Msg),
+            {Msg, Props}
     end.
 
 %%----------------------------------------------------------------------------

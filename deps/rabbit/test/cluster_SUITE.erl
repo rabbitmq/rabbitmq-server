@@ -13,6 +13,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(TIMEOUT, 30000).

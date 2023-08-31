@@ -99,12 +99,11 @@
 
 -rabbit_feature_flag(
    {restart_streams,
-    #{desc          => "Support for restarting streams with optional preferred next leader argument. "
+    #{desc          => "Support for restarting streams with optional preferred next leader argument."
       "Used to implement stream leader rebalancing",
       stability     => stable,
       depends_on    => [stream_queue]
      }}).
-
 
 -rabbit_feature_flag(
    {stream_sac_coordinator_unblock_group,
@@ -119,4 +118,11 @@
     #{desc          => "Support for stream filtering.",
       stability     => stable,
       depends_on    => [stream_queue]
+     }}).
+
+-rabbit_feature_flag(
+   {message_containers,
+    #{desc          => "Message containers.",
+      stability     => stable,
+      depends_on    => [feature_flags_v2]
      }}).

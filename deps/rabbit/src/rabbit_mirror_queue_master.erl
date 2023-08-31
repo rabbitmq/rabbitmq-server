@@ -26,7 +26,6 @@
 
 -behaviour(rabbit_backing_queue).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
 -record(state, { name,
@@ -232,14 +231,17 @@ purge(State = #state { gm                  = GM,
 -spec purge_acks(_) -> no_return().
 purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
+publish(Msg, MsgProps, IsDelivered, ChPid, Flow,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
+    MsgId = mc:get_annotation(id, Msg),
+    {_, Size} = mc:size(Msg),
+
     false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, Msg},
-                      rabbit_basic:msg_size(Msg)),
+                      Size),
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
@@ -249,11 +251,13 @@ batch_publish(Publishes, ChPid, Flow,
                                backing_queue       = BQ,
                                backing_queue_state = BQS }) ->
     {Publishes1, false, MsgSizes} =
-        lists:foldl(fun ({Msg = #basic_message { id = MsgId },
+        lists:foldl(fun ({Msg,
                           MsgProps, _IsDelivered}, {Pubs, false, Sizes}) ->
+                            MsgId = mc:get_annotation(id, Msg),
+                            {_, Size} = mc:size(Msg),
                             {[{Msg, MsgProps, true} | Pubs], %% [0]
                              false = maps:is_key(MsgId, SS), %% ASSERTION
-                             Sizes + rabbit_basic:msg_size(Msg)}
+                             Sizes + Size}
                     end, {[], false, 0}, Publishes),
     Publishes2 = lists:reverse(Publishes1),
     ok = gm:broadcast(GM, {batch_publish, ChPid, Flow, Publishes2},
@@ -264,14 +268,16 @@ batch_publish(Publishes, ChPid, Flow,
 %% IsDelivered flag to true, so to avoid iterating over the messages
 %% again at the mirror, we do it here.
 
-publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
+publish_delivered(Msg, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
                                                 seen_status         = SS,
                                                 backing_queue       = BQ,
                                                 backing_queue_state = BQS }) ->
+    MsgId = mc:get_annotation(id, Msg),
+    {_, Size} = mc:size(Msg),
     false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, Msg},
-                      rabbit_basic:msg_size(Msg)),
+                      Size),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
@@ -282,10 +288,12 @@ batch_publish_delivered(Publishes, ChPid, Flow,
                                          backing_queue       = BQ,
                                          backing_queue_state = BQS }) ->
     {false, MsgSizes} =
-        lists:foldl(fun ({Msg = #basic_message { id = MsgId }, _MsgProps},
+        lists:foldl(fun ({Msg, _MsgProps},
                          {false, Sizes}) ->
+                            MsgId = mc:get_annotation(id, Msg),
+                            {_, Size} = mc:size(Msg),
                             {false = maps:is_key(MsgId, SS), %% ASSERTION
-                             Sizes + rabbit_basic:msg_size(Msg)}
+                             Sizes + Size}
                     end, {false, 0}, Publishes),
     ok = gm:broadcast(GM, {batch_publish_delivered, ChPid, Flow, Publishes},
                       MsgSizes),
@@ -439,11 +447,12 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-is_duplicate(Message = #basic_message { id = MsgId },
+is_duplicate(Message,
              State = #state { seen_status         = SS,
                               backing_queue       = BQ,
                               backing_queue_state = BQS,
                               confirmed           = Confirmed }) ->
+    MsgId = mc:get_annotation(id, Message),
     %% Here, we need to deal with the possibility that we're about to
     %% receive a message that we've already seen when we were a mirror
     %% (we received it via gm). Thus if we do receive such message now

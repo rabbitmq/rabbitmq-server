@@ -1532,10 +1532,6 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects) ->
     end.
 
 maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
-                  _, Header,
-                  #?MODULE{cfg = #cfg{msg_ttl = undefined}}) ->
-    Header;
-maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
                   RaCmdTs, Header,
                   #?MODULE{cfg = #cfg{msg_ttl = PerQueueMsgTTL}}) ->
     update_expiry_header(RaCmdTs, PerQueueMsgTTL, Header);
@@ -1548,9 +1544,15 @@ maybe_set_msg_ttl(#basic_message{content = #content{properties = Props}},
     {ok, PerMsgMsgTTL} = rabbit_basic:parse_expiration(Props),
     TTL = min(PerMsgMsgTTL, PerQueueMsgTTL),
     update_expiry_header(RaCmdTs, TTL, Header);
-maybe_set_msg_ttl(_, _, Header,
-                  #?MODULE{cfg = #cfg{}}) ->
-    Header.
+maybe_set_msg_ttl(Msg, RaCmdTs, Header,
+                  #?MODULE{cfg = #cfg{msg_ttl = MsgTTL}}) ->
+    case mc:is(Msg) of
+        true ->
+            TTL = min(MsgTTL, mc:ttl(Msg)),
+            update_expiry_header(RaCmdTs, TTL, Header);
+        false ->
+            Header
+    end.
 
 update_expiry_header(_, undefined, Header) ->
     Header;
@@ -2393,8 +2395,14 @@ message_size(#basic_message{content = Content}) ->
 message_size(B) when is_binary(B) ->
     byte_size(B);
 message_size(Msg) ->
-    %% probably only hit this for testing so ok to use erts_debug
-    erts_debug:size(Msg).
+    case mc:is(Msg) of
+        true ->
+            {_, PayloadSize} = mc:size(Msg),
+            PayloadSize;
+        false ->
+            %% probably only hit this for testing so ok to use erts_debug
+            erts_debug:size(Msg)
+    end.
 
 
 all_nodes(#?MODULE{consumers = Cons0,

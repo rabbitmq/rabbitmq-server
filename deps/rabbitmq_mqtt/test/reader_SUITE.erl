@@ -62,11 +62,7 @@ merge_app_env(Config) ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]}
-      ]),
+    Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodename_suffix, ?MODULE}),
     Config2 = rabbit_ct_helpers:run_setup_steps(
                 Config1,
                 [fun merge_app_env/1] ++

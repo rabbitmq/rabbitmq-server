@@ -64,12 +64,7 @@ init_per_group(G, Config)
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {rmq_nodename_suffix, Suffix},
-                {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                                       tcp_port_mqtt_tls_extra]}
-               ]),
+                Config0, {rmq_nodename_suffix, Suffix}),
     Mod = list_to_atom("rabbit_mqtt_retained_msg_store_" ++ atom_to_list(Group)),
     Env = [{rabbitmq_mqtt, [{retained_message_store, Mod}]},
            {rabbit, [

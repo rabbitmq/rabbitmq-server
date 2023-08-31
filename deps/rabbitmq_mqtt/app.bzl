@@ -19,6 +19,7 @@ def all_beam_files(name = "all_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
+            "src/mc_mqtt.erl",
             "src/mqtt_machine.erl",
             "src/mqtt_machine_v0.erl",
             "src/mqtt_node.erl",
@@ -45,7 +46,7 @@ def all_beam_files(name = "all_beam_files"):
         beam = [":behaviours"],
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ra//:erlang_app", "@ranch//:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ra//:erlang_app", "@ranch//:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -69,6 +70,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
+            "src/mc_mqtt.erl",
             "src/mqtt_machine.erl",
             "src/mqtt_machine_v0.erl",
             "src/mqtt_node.erl",
@@ -96,6 +98,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
         deps = [
+            "//deps/amqp10_common:erlang_app",
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
@@ -126,6 +129,7 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
+            "src/mc_mqtt.erl",
             "src/mqtt_machine.erl",
             "src/mqtt_machine_v0.erl",
             "src/mqtt_node.erl",
@@ -338,4 +342,23 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rabbit_mqtt_confirms_SUITE.beam"],
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "mc_mqtt_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/mc_mqtt_SUITE.erl"],
+        outs = ["test/mc_mqtt_SUITE.beam"],
+        hdrs = ["include/rabbit_mqtt_packet.hrl"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "protocol_interop_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/protocol_interop_SUITE.erl"],
+        outs = ["test/protocol_interop_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_stomp:erlang_app"],
     )

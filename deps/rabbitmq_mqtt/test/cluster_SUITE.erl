@@ -79,8 +79,6 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]},
         {rmq_nodes_clustered, true}
       ]),
     Config2 = rabbit_ct_helpers:run_setup_steps(Config1,

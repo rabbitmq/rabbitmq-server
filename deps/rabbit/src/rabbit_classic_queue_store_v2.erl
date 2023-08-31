@@ -71,7 +71,7 @@
 
 -type buffer() :: #{
     %% SeqId => {Offset, Size, Msg}
-    rabbit_variable_queue:seq_id() => {non_neg_integer(), non_neg_integer(), #basic_message{}}
+                    rabbit_variable_queue:seq_id() => {non_neg_integer(), non_neg_integer(), mc:state()}
 }.
 
 -record(qs, {
@@ -142,7 +142,7 @@ maybe_close_fd(Fd) ->
 info(#qs{ write_buffer = WriteBuffer }) ->
     [{qs_buffer_size, map_size(WriteBuffer)}].
 
--spec write(rabbit_variable_queue:seq_id(), rabbit_types:basic_message(),
+-spec write(rabbit_variable_queue:seq_id(), mc:state(),
             rabbit_types:message_properties(), State)
         -> {msg_location(), State} when State::state().
 
@@ -283,7 +283,7 @@ build_data({_, Size, Msg}, CheckCRC32) ->
     ].
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
-        -> {rabbit_types:basic_message(), State} when State::state().
+        -> {mc:state(), State} when State::state().
 
 read(SeqId, DiskLocation, State = #qs{ write_buffer = WriteBuffer,
                                        cache = Cache }) ->
@@ -328,7 +328,7 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     {Msg, State}.
 
 -spec read_many([{rabbit_variable_queue:seq_id(), msg_location()}], State)
-        -> {[rabbit_types:basic_message()], State} when State::state().
+        -> {[mc:state()], State} when State::state().
 
 read_many([], State) ->
     {[], State};

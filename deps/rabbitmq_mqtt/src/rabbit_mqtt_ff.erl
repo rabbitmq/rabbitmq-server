@@ -39,10 +39,13 @@
 %%    available on all nodes to support Will Delay Interval.
 -rabbit_feature_flag(
    {mqtt_v5,
-    #{desc          => "Support MQTT 5.0",
-      stability     => stable,
-      %% MQTT 5.0 feature Will Delay Interval depends on client ID tracking in pg local.
-      depends_on    => [delete_ra_cluster_mqtt_node]
+    #{desc       => "Support MQTT 5.0",
+      stability  => stable,
+      depends_on => [
+                     %% MQTT 5.0 feature Will Delay Interval depends on client ID tracking in pg local.
+                     delete_ra_cluster_mqtt_node,
+                     message_containers
+                    ]
      }}).
 
 -spec track_client_id_in_ra() -> boolean().

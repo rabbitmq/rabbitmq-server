@@ -17,7 +17,9 @@
          update_trace/2, send_disconnect/2]).
 
 -ifdef(TEST).
--export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
+-export([get_vhost_username/1,
+         get_vhost/3,
+         get_vhost_from_user_mapping/2]).
 -endif.
 
 -export_type([state/0,
@@ -26,10 +28,10 @@
 -import(rabbit_mqtt_util, [mqtt_to_amqp/1,
                            amqp_to_mqtt/1,
                            ip_address_to_binary/1]).
+-import(rabbit_misc, [maps_put_truthy/3]).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
@@ -37,7 +39,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, <<"mqtt">>).
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
--define(AMQP_091_SHORT_STR_MAX_SIZE, 255).
+-define(DEFAULT_EXCHANGE_NAME, <<>>).
 
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
@@ -198,6 +200,7 @@ process_connect(
         {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
+        Exchange = rabbit_misc:r(VHost, exchange, persistent_term:get(?PERSISTENT_TERM_EXCHANGE)),
         S = #state{
                cfg = #cfg{socket = Socket,
                           proto_ver = proto_integer_to_atom(ProtoVer),
@@ -213,7 +216,7 @@ process_connect(
                           peer_ip_addr = PeerIp,
                           peer_port = PeerPort,
                           send_fun = SendFun,
-                          exchange = rabbit_misc:r(VHost, exchange, rabbit_mqtt_util:env(exchange)),
+                          exchange = Exchange,
                           retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
                           vhost = VHost,
                           client_id = ClientId,
@@ -1238,10 +1241,6 @@ creds(User, Pass, SSLLoginName) ->
 auth_attempt_failed(PeerIp, Username) ->
     rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt).
 
-delivery_mode(?QOS_0) -> 1;
-delivery_mode(?QOS_1) -> 2;
-delivery_mode(?QOS_2) -> 2.
-
 maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
 maybe_downgrade_qos(?QOS_2) -> ?QOS_1.
@@ -1543,62 +1542,25 @@ binding_action(ExchangeName, TopicFilter, QName, BindingArgs,
     BindingFun(Binding, Username).
 
 publish_to_queues(
-  #mqtt_msg{retain = Retain,
-            qos = Qos,
-            topic = Topic,
-            packet_id = PacketId,
-            payload = Payload,
-            props = Props},
-  #state{cfg = #cfg{exchange = ExchangeName,
+  #mqtt_msg{topic = Topic,
+            packet_id = PacketId} = MqttMsg,
+  #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
                     delivery_flow = Flow,
                     conn_name = ConnName,
                     trace_state = TraceState},
-         auth_state = #auth_state{user = #user{username = Username}}
-        } = State) ->
-    RoutingKey = mqtt_to_amqp(Topic),
-    Confirm = Qos > ?QOS_0,
-    {Expiration, Timestamp} = case Props of
-                                  #{'Message-Expiry-Interval' := ExpirySecs} ->
-                                      {integer_to_binary(timer:seconds(ExpirySecs)),
-                                       os:system_time(second)};
-                                  _ ->
-                                      {undefined, undefined}
-                              end,
-    PBasic0 = mqtt_props_to_amqp_props(Props, Qos, Retain),
-    PBasic = PBasic0#'P_basic'{
-                       delivery_mode = delivery_mode(Qos),
-                       expiration = Expiration,
-                       timestamp = Timestamp},
-    {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
-    Content0 = #content{
-                  class_id = ClassId,
-                  properties = PBasic,
-                  properties_bin = none,
-                  protocol = none,
-                  payload_fragments_rev = [Payload]
-                 },
-    Content = rabbit_message_interceptor:intercept(Content0),
-    BasicMessage = #basic_message{
-                      exchange_name = ExchangeName,
-                      routing_keys = [RoutingKey],
-                      content = Content,
-                      id = <<>>, %% GUID set in rabbit_classic_queue
-                      is_persistent = Confirm
-                     },
-    Delivery = #delivery{
-                  mandatory = false,
-                  confirm = Confirm,
-                  sender = self(),
-                  message = BasicMessage,
-                  msg_seq_no = PacketId,
-                  flow = Flow
-                 },
+         auth_state = #auth_state{user = #user{username = Username}}} = State) ->
+
+    Anns = #{exchange => ExchangeNameBin,
+             routing_keys => [mqtt_to_amqp(Topic)]},
+    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns),
+    Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            QNames0 = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
+            QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
-            rabbit_trace:tap_in(BasicMessage, QNames, ConnName, Username, TraceState),
-            deliver_to_queues(Delivery, QNames, State);
+            rabbit_trace:tap_in(Msg, QNames, ConnName, Username, TraceState),
+            Opts = maps_put_truthy(flow, Flow, maps_put_truthy(correlation, PacketId, #{})),
+            deliver_to_queues(Msg, Opts, QNames, State);
         {error, not_found} ->
             ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
             {error, exchange_not_found, State}
@@ -1637,54 +1599,55 @@ drop_local(QNames, #state{subscriptions = Subs,
 drop_local(QNames, _) ->
     QNames.
 
-deliver_to_queues(Delivery,
+deliver_to_queues(Message0,
+                  Options,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
+    Message = compat(Message0, State0),
+    case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(ProtoVer, length(Qs)),
-            State = process_routing_confirm(Delivery, Qs,
+            State = process_routing_confirm(Options, Qs,
                                             State0#state{queue_states = QStates}),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes.
             {ok, handle_queue_actions(Actions, State)};
         {error, Reason} ->
+            Corr = maps:get(correlation, Options, undefined),
             ?LOG_ERROR("Failed to deliver message with packet_id=~p to queues: ~p",
-                       [Delivery#delivery.msg_seq_no, Reason]),
+                       [Corr, Reason]),
             {error, Reason, State0}
     end.
 
-process_routing_confirm(#delivery{confirm = false},
-                        [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+process_routing_confirm(Options,
+                        [], State = #state{cfg = #cfg{proto_ver = ProtoVer}})
+  when not is_map_key(correlation, Options) ->
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION},
+process_routing_confirm(#{correlation := ?WILL_MSG_QOS_1_CORRELATION},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     %% unroutable will message with QoS 1
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = PktId},
+process_routing_confirm(#{correlation := PktId},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_unroutable_returned(ProtoVer, 1),
     send_puback(PktId, ?RC_NO_MATCHING_SUBSCRIBERS, State),
     State;
-process_routing_confirm(#delivery{confirm = false}, _, State) ->
-    State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION}, [_|_], State) ->
+process_routing_confirm(#{correlation := ?WILL_MSG_QOS_1_CORRELATION},
+                        [_|_], State) ->
     %% routable will message with QoS 1
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = PktId},
+process_routing_confirm(#{correlation := PktId},
                         Qs, State = #state{unacked_client_pubs = U0}) ->
     QNames = rabbit_amqqueue:queue_names(Qs),
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
-    State#state{unacked_client_pubs = U}.
+    State#state{unacked_client_pubs = U};
+process_routing_confirm(#{}, _, State) ->
+    State.
 
 -spec send_puback(packet_id() | list(packet_id()), reason_code(), state()) -> ok.
 send_puback(PktIds0, ReasonCode, State)
@@ -1754,77 +1717,71 @@ terminate(SendWill, Infos, State) ->
 
 -spec maybe_send_will(boolean(), state()) -> ok.
 maybe_send_will(
-  true, #state{cfg = #cfg{will_msg = #mqtt_msg{
-                                        props = Props = #{'Will-Delay-Interval' := Delay},
-                                        retain = Retain,
-                                        qos = Qos,
-                                        topic = Topic,
-                                        payload = Payload},
-                          session_expiry_interval_secs = SessionExpiry,
-                          exchange = #resource{name = XName},
-                          client_id = ClientId,
-                          vhost = Vhost}} = State)
+  true,
+  #state{cfg = #cfg{will_msg = #mqtt_msg{
+                                  props = Props = #{'Will-Delay-Interval' := Delay},
+                                  topic = Topic} = MqttMsg,
+                    session_expiry_interval_secs = SessionExpiry,
+                    exchange = #resource{name = XName},
+                    client_id = ClientId,
+                    vhost = Vhost
+                   }} = State)
   when is_integer(Delay) andalso Delay > 0 andalso SessionExpiry > 0 ->
     QArgs0 = queue_ttl_args(SessionExpiry),
     QArgs =  QArgs0 ++ [{<<"x-dead-letter-exchange">>, longstr, XName},
-                        {<<"x-dead-letter-routing-key">>, longstr, mqtt_to_amqp(Topic)}],
+                        {<<"x-dead-letter-routing-key">>, longstr,  mqtt_to_amqp(Topic)}],
     T = erlang:monotonic_time(millisecond),
     case create_queue(will, none, QArgs, rabbit_queue_type:default(), State) of
         {ok, Q} ->
-            #resource{name = QNameBin} = amqqueue:get_name(Q),
-            DefaultX = #resource{virtual_host = Vhost,
-                                 kind = exchange,
-                                 name = <<"">>},
             %% "The Server delays publishing the Client’s Will Message until the Will Delay
             %% Interval has passed or the Session ends, whichever happens first." [v5 3.1.3.2.2]
-            MsgTTLSecs = min(Delay, SessionExpiry),
-            MsgTTL0 = timer:seconds(MsgTTLSecs),
-            MsgTTL = if SessionExpiry =:= infinity ->
-                            MsgTTL0;
-                        is_integer(SessionExpiry) ->
-                            %% Queue creation could have taken several milliseconds.
-                            Elapsed = erlang:monotonic_time(millisecond) - T,
-                            SessionExpiryFromNow = timer:seconds(SessionExpiry) - Elapsed,
-                            %% Ensure the Will Message is dead lettered BEFORE the queue expires.
-                            %% 5 ms should be enough time to send out the Will Message.
-                            %% The important bit is that, in the queue implementation, the
-                            %% message expiry timer fires before the queue expiry timer.
-                            %% From MQTT client perspective, the granularity of defined intervals
-                            %% is seconds. So sending the Will Message a few milliseconds earlier
-                            %% doesn't matter from the client's point of view.
-                            %% However, we shouldn't send the Will Message too early because
-                            %% "The Client can arrange for the Will Message to notify that Session
-                            %% Expiry has occurred" [v5 3.1.2.5]
-                            %% So, we don't want to send out a false positive session expiry
-                            %% notification in case the client reconnects shortly after.
-                            Interval0 = SessionExpiryFromNow - 5,
-                            Interval = max(0, Interval0),
-                            min(MsgTTL0, Interval)
-                     end,
-            {Headers, Timestamp} = case Props of
-                                       #{'Message-Expiry-Interval' := ExpirySecs} ->
-                                           E = integer_to_binary(timer:seconds(ExpirySecs)),
-                                           {[{<<"x-dead-letter-expiration">>, longstr, E},
-                                             {<<"x-mqtt-will-delay-interval">>, long, Delay}],
-                                            os:system_time(second)};
-                                       _ ->
-                                           {[], undefined}
-                                   end,
-            PBasic0 = mqtt_props_to_amqp_props(Props, Qos, Retain),
-            PBasic = PBasic0#'P_basic'{
-                               %% Persist message regardless of Will QoS since there is no noticable
-                               %% performance benefit if that single message is transient. This ensures that
-                               %% delayed Will Messages are not lost after a broker restart.
-                               headers = Headers ++ PBasic0#'P_basic'.headers,
-                               delivery_mode = 2,
-                               expiration = integer_to_binary(MsgTTL),
-                               timestamp = Timestamp},
+            Ttl0 = timer:seconds(min(Delay, SessionExpiry)),
+            Ttl = if SessionExpiry =:= infinity ->
+                         Ttl0;
+                     is_integer(SessionExpiry) ->
+                         %% Queue creation could have taken several milliseconds.
+                         Elapsed = erlang:monotonic_time(millisecond) - T,
+                         SessionExpiryFromNow = timer:seconds(SessionExpiry) - Elapsed,
+                         %% Ensure the Will Message is dead lettered BEFORE the queue expires.
+                         %% 5 ms should be enough time to send out the Will Message.
+                         %% The important bit is that, in the queue implementation, the
+                         %% message expiry timer fires before the queue expiry timer.
+                         %% From MQTT client perspective, the granularity of defined intervals
+                         %% is seconds. So sending the Will Message a few milliseconds earlier
+                         %% doesn't matter from the client's point of view.
+                         %% However, we shouldn't send the Will Message too early because
+                         %% "The Client can arrange for the Will Message to notify that Session
+                         %% Expiry has occurred" [v5 3.1.2.5]
+                         %% So, we don't want to send out a false positive session expiry
+                         %% notification in case the client reconnects shortly after.
+                         Interval0 = SessionExpiryFromNow - 5,
+                         Interval = max(0, Interval0),
+                         min(Ttl0, Interval)
+                  end,
+            DefaultX = #resource{virtual_host = Vhost,
+                                 kind = exchange,
+                                 name = ?DEFAULT_EXCHANGE_NAME},
+            #resource{name = QNameBin} = amqqueue:get_name(Q),
+            Anns0 = #{exchange => ?DEFAULT_EXCHANGE_NAME,
+                      routing_keys => [QNameBin],
+                      ttl => Ttl,
+                      %% Persist message regardless of Will QoS since there is no noticable
+                      %% performance benefit if that single message is transient. This ensures that
+                      %% delayed Will Messages are not lost after a broker restart.
+                      durable => true},
+            Anns = case Props of
+                       #{'Message-Expiry-Interval' := MEI} ->
+                           Anns0#{dead_letter_ttl => timer:seconds(MEI)};
+                       _ ->
+                           Anns0
+                   end,
+            Msg = mc:init(mc_mqtt, MqttMsg, Anns),
             case check_publish_permitted(DefaultX, Topic, State) of
                 ok ->
-                    ok = rabbit_basic:publish(DefaultX, QNameBin, PBasic, Payload),
-                    ?LOG_DEBUG("scheduled delayed Will Message to topic ~s for MQTT "
-                               "client ID ~s to be sent in ~b ms",
-                               [Topic, ClientId, MsgTTL]);
+                    ok = rabbit_queue_type:publish_at_most_once(DefaultX, Msg),
+                    ?LOG_DEBUG("scheduled delayed Will Message to topic ~s "
+                               "for MQTT client ID ~s to be sent in ~b ms",
+                               [Topic, ClientId, Ttl]);
                 {error, access_refused = Reason} ->
                     log_delayed_will_failure(Topic, ClientId, Reason)
             end;
@@ -2064,27 +2021,16 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client(Msg0 = {QNameOrType, QPid, QMsgId, _Redelivered,
-                              BasicMsg = #basic_message{content = Content0}},
+deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
                       AckRequired, State0) ->
-    Content = #content{properties = #'P_basic'{headers = Headers}} =
-        rabbit_binary_parser:ensure_content_decoded(Content0),
-    Msg = setelement(5, Msg0, BasicMsg#basic_message{content = Content}),
-    PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
-                       {byte, QoS0} ->
-                           QoS0;
-                       undefined ->
-                           %% non-MQTT publishes are assumed to be QoS 1 regardless of delivery_mode
-                           ?QOS_1
-                   end,
     SubscriberQoS = case AckRequired of
-                        true ->
-                            ?QOS_1;
-                        false ->
-                            ?QOS_0
+                        true -> ?QOS_1;
+                        false -> ?QOS_0
                     end,
-    QoS = effective_qos(PublisherQoS, SubscriberQoS),
-    {SettleOp, State1} = maybe_publish_to_client(Msg, QoS, State0),
+    McMqtt = mc:convert(mc_mqtt, Mc),
+    MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
+    QoS = effective_qos(PublisherQos, SubscriberQoS),
+    {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
     State = maybe_auto_settle(AckRequired, SettleOp, QoS, QNameOrType, QMsgId, State1),
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
@@ -2096,37 +2042,34 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     %% [MQTT-3.8.4-8]."
     erlang:min(PublisherQoS, SubscriberQoS).
 
-maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
+maybe_publish_to_client(_, {_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     {complete, State};
 maybe_publish_to_client(
-  Msg = {QNameOrType, _QPid, QMsgId, Redelivered,
-         #basic_message{
-            routing_keys = [RoutingKey | _CcRoutes],
-            content = #content{payload_fragments_rev = FragmentsRev,
-                               properties = PBasic = #'P_basic'{headers = Headers}}}},
-  QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
-    Props0 = amqp_props_to_mqtt_props(PBasic, ProtoVer),
-    MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
+  #mqtt_msg{retain = Retain,
+            topic = Topic0,
+            payload = Payload,
+            props = Props0},
+  {QNameOrType, _QPid, QMsgId, Redelivered, Mc} = Delivery,
+  QoS, State0) ->
+    MatchedTopicFilters = matched_topic_filters_v5(Mc, State0),
     Props1 = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
-    Topic0 = amqp_to_mqtt(RoutingKey),
     {Topic, Props, State1} = process_topic_alias_outbound(Topic0, Props1, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State1),
-    Packet =
-    #mqtt_packet{
-       fixed = #mqtt_packet_fixed{
-                  type = ?PUBLISH,
-                  qos = QoS,
-                  dup = Redelivered,
-                  retain = retain(Headers, MatchedTopicFilters, State)},
-       variable = #mqtt_packet_publish{
-                     packet_id = PacketId,
-                     topic_name = Topic,
-                     props = Props},
-       payload = lists:reverse(FragmentsRev)},
+    Packet = #mqtt_packet{
+                fixed = #mqtt_packet_fixed{
+                           type = ?PUBLISH,
+                           qos = QoS,
+                           dup = Redelivered,
+                           retain = retain(Retain, MatchedTopicFilters, State)},
+                variable = #mqtt_packet_publish{
+                              packet_id = PacketId,
+                              topic_name = Topic,
+                              props = Props},
+                payload = Payload},
     SettleOp = case send(Packet, State) of
                    ok ->
-                       trace_tap_out(Msg, State),
+                       trace_tap_out(Delivery, State),
                        message_delivered(QNameOrType, Redelivered, QoS, State),
                        complete;
                    {error, packet_too_large} ->
@@ -2134,173 +2077,10 @@ maybe_publish_to_client(
                end,
     {SettleOp, State}.
 
-%% Convert MQTT v5 PUBLISH or Will properties to AMQP 0.9.1 properties.
--spec mqtt_props_to_amqp_props(properties(), qos(), boolean()) ->
-    rabbit_framing:amqp_property_record().
-mqtt_props_to_amqp_props(Props, Qos, Retain) ->
-    P0 = #'P_basic'{headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
-                               {<<"x-mqtt-retain">>, bool, Retain}]},
-    P1 = case Props of
-             #{'Content-Type' := T}
-               when byte_size(T) =< ?AMQP_091_SHORT_STR_MAX_SIZE ->
-                 P0#'P_basic'{content_type = T};
-             _ ->
-                 %% TODO if Content-Type is > 255 bytes (which seems unlikely), should we:
-                 %% 1. silently ignore (as done right now), or
-                 %% 2. close the network connection (i.e. prohibit), or
-                 %% 3. add a custom AMQP 0.9.1 header?
-                 P0
-         end,
-    P2 = case Props of
-             #{'Payload-Format-Indicator' := 1} ->
-                 %% UTF-8 is not a MIME content encoding and therefore cannot be set as #'P_basic'.content_encoding.
-                 %% Rather, it would match to #'P_basic'.content_type = <<"text/plain;charset=UTF-8">>.
-                 %% However, we cannot set #'P_basic'.content_type because we don't know the subtype (wehther it's
-                 %% 'plain') and that field is already set by MQTT 5.0 property Content-Type.
-                 %% Therefore, we add a custom header.
-                 P1#'P_basic'{headers = [{<<"x-mqtt-payload-format-indicator">>, bool, true} |
-                                         P1#'P_basic'.headers]};
-             _ ->
-                 P1
-         end,
-    P3 = case Props of
-             #{'Response-Topic' := Topic} ->
-                 %% Unfortunately, we cannot set #'P_basic'.reply_to because they are expected to hold
-                 %% the binary queue name in AMQP 0.9.1: "One of the standard message properties is
-                 %% Reply-To, which is designed specifically for carrying the name of reply queues."
-                 %% Therefore, we add a custom header.
-                 P2#'P_basic'{headers = [{<<"x-opt-reply-to-topic">>, longstr,
-                                          %% Convert such that an AMQP consumer can respond.
-                                          mqtt_to_amqp(Topic)} |
-                                         P2#'P_basic'.headers]};
-             _ ->
-                 P2
-         end,
-    P4 = case Props of
-             #{'Correlation-Data' := Corr}
-               when byte_size(Corr) =< ?AMQP_091_SHORT_STR_MAX_SIZE ->
-                 P3#'P_basic'{correlation_id = Corr};
-             #{'Correlation-Data' := Corr}
-               when byte_size(Corr) > ?AMQP_091_SHORT_STR_MAX_SIZE ->
-                 P3#'P_basic'{headers = [{<<"x-correlation-id">>, longstr, Corr}
-                                         | P3#'P_basic'.headers]};
-             _ ->
-                 P3
-         end,
-    P = case Props of
-            #{'User-Property' := PropList} ->
-                %% "The same name is allowed to appear more than once."
-                %% "The Server MUST maintain the order of User Properties
-                %% when forwarding the Application Message" [v5 3.3.2.3.7]
-                %% However, in AMQP 0.9.1 Field Tables: "Duplicate fields are illegal."
-                %% To allow duplicate names and to maintain order, we create a 2 element map:
-                %% The 1st element contains all names in order.
-                %% The 2nd element contains all values in order.
-                {Names, Values} = lists:unzip(PropList),
-                Header = {<<"x-mqtt-user-property">>,
-                          table,
-                          rabbit_misc:to_amqp_table(#{<<"names">> => Names,
-                                                      <<"values">> => Values})},
-                P4#'P_basic'{headers = [Header | P4#'P_basic'.headers]};
-            _ ->
-                P4
-        end,
-    P.
-
-%% Convert AMQP 0.9.1 properties to MQTT v5 PUBLISH properties.
--spec amqp_props_to_mqtt_props(rabbit_framing:amqp_property_record(), protocol_version_atom()) ->
-    properties().
-%% Do not unnecessarily convert properties.
-amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V3) ->
-    #{};
-amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V4) ->
-    #{};
-amqp_props_to_mqtt_props(
-  #'P_basic'{headers = Headers,
-             expiration = Expiration,
-             timestamp = TimestampSeconds,
-             content_type = ContentType,
-             correlation_id = CorrelationId
-            }, ?MQTT_PROTO_V5) ->
-    SourceProtocolIsMqtt = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
-                               {byte, _Qos} -> true;
-                               undefined -> false
-                           end,
-    P0 = if is_binary(Expiration) andalso
-            is_integer(TimestampSeconds) andalso
-            %% Only if source protocol is MQTT we know that timestamp was set by the server
-            SourceProtocolIsMqtt ->
-                ExpirationMs = binary_to_integer(Expiration),
-                ExpirationSeconds = ExpirationMs div 1000,
-                %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
-                %% Expiry Interval set to the received value minus the time that the
-                %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
-                WaitingSeconds0 = os:system_time(second) - TimestampSeconds,
-                %% For a delayed Will Message, the waiting time starts when the Will Message was published.
-                WaitingSeconds = case rabbit_basic:header(<<"x-mqtt-will-delay-interval">>, Headers) of
-                                     {<<"x-mqtt-will-delay-interval">>, long, Delay} ->
-                                         WaitingSeconds0 - Delay;
-                                     _ ->
-                                         WaitingSeconds0
-                                 end,
-                Expiry = max(0, ExpirationSeconds - WaitingSeconds),
-                #{'Message-Expiry-Interval' => Expiry};
-            true ->
-                #{}
-         end,
-    P1 = case ContentType of
-             T when is_binary(T) ->
-                 P0#{'Content-Type' => T};
-             _ ->
-                 P0
-         end,
-    P2 = case rabbit_basic:header(<<"x-mqtt-payload-format-indicator">>, Headers) of
-             {<<"x-mqtt-payload-format-indicator">>, bool, true} ->
-                 P1#{'Payload-Format-Indicator' => 1};
-             _ ->
-                 P1
-         end,
-    P3 = case rabbit_basic:header(<<"x-opt-reply-to-topic">>, Headers) of
-             {<<"x-opt-reply-to-topic">>, longstr, Topic}
-               when is_binary(Topic) ->
-                 P2#{'Response-Topic' => amqp_to_mqtt(Topic)};
-             _ ->
-                 P2
-         end,
-    P4 = case CorrelationId of
-             C when is_binary(C) ->
-                 P3#{'Correlation-Data' => C};
-             C when is_list(C) ->
-                 P3#{'Correlation-Data' => list_to_binary(C)};
-             _ ->
-                 case rabbit_basic:header(<<"x-correlation-id">>, Headers) of
-                     {<<"x-correlation-id">>, longstr, C}
-                       when is_binary(C) ->
-                         P3#{'Correlation-Data' => C};
-                     _ ->
-                         P3
-                 end
-         end,
-    P = case rabbit_basic:header(<<"x-mqtt-user-property">>, Headers) of
-            {<<"x-mqtt-user-property">>, table, Table} ->
-                case rabbit_misc:amqp_table(Table) of
-                    #{<<"names">> := Names,
-                      <<"values">> := Values} ->
-                        P4#{'User-Property' => lists:zip(Names, Values)};
-                    _ ->
-                        P4
-                end;
-            _ ->
-                P4
-        end,
-    P.
-
-matched_topic_filters_v5(Headers, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
-    case rabbit_mqtt_util:table_lookup(Headers, <<"x-binding-keys">>) of
-        {array, BindingKeys} ->
-            [amqp_to_mqtt(BKey) || {longstr, BKey} <- BindingKeys];
-        undefined ->
-            []
+matched_topic_filters_v5(Msg, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+    case mc:get_annotation(binding_keys, Msg) of
+        undefined -> [];
+        BKeys -> lists:map(fun rabbit_mqtt_util:amqp_to_mqtt/1, BKeys)
     end;
 matched_topic_filters_v5(_, _) ->
     [].
@@ -2323,17 +2103,14 @@ maybe_add_subscription_ids(TopicFilters, Props, #state{subscriptions = Subs}) ->
 %% If 1, Application Messages forwarded using this subscription keep the RETAIN
 %% flag they were published with. If 0, Application Messages forwarded using
 %% this subscription have the RETAIN flag set to 0." [v5 3.8.3.1]
-retain(Headers, TopicFilters, #state{subscriptions = Subs}) ->
-    case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-retain">>) of
-        {bool, true} ->
-            lists:any(fun(T) -> case maps:get(T, Subs, undefined) of
-                                    #mqtt_subscription_opts{retain_as_published = Rap} -> Rap;
-                                    undefined -> false
-                                end
-                      end, TopicFilters);
-        _ ->
-            false
-    end.
+retain(false, _, _) ->
+    false;
+retain(true, TopicFilters, #state{subscriptions = Subs}) ->
+    lists:any(fun(T) -> case maps:get(T, Subs, undefined) of
+                            #mqtt_subscription_opts{retain_as_published = Rap} -> Rap;
+                            undefined -> false
+                        end
+              end, TopicFilters).
 
 msg_id_to_packet_id(_, ?QOS_0, State) ->
     %% "A PUBLISH packet MUST NOT contain a Packet Identifier if its QoS value is set to 0 [MQTT-2.2.1-2]."
@@ -2753,3 +2530,17 @@ format_status(
       ra_register_state => RaRegisterState,
       queues_soft_limit_exceeded => QSLE,
       qos0_messages_dropped => Qos0MsgsDropped}.
+
+-spec compat(mc:state(), state()) -> mc:state().
+compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
+    case rabbit_feature_flags:is_enabled(message_containers) of
+        true ->
+            McMqtt;
+        false = FFState ->
+            #mqtt_msg{qos = Qos} = mc:protocol_state(McMqtt),
+            [RoutingKey] = mc:get_annotation(routing_keys, McMqtt),
+            McLegacy = mc:convert(mc_amqpl, McMqtt),
+            Content = mc:protocol_state(McLegacy),
+            BasicMsg = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),
+            rabbit_basic:add_header(<<"x-mqtt-publish-qos">>, byte, Qos, BasicMsg)
+    end.

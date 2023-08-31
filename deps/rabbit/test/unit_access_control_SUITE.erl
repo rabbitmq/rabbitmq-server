@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -427,10 +427,10 @@ test_topic_expect_match(X, List) ->
               BinKey = list_to_binary(Key),
               Message = rabbit_basic:message(X#exchange.name, BinKey,
                                              #'P_basic'{}, <<>>),
-              Res = rabbit_exchange_type_topic:route(
-                      X, #delivery{mandatory = false,
-                                   sender    = self(),
-                                   message   = Message}),
+              Msg = mc_amqpl:message(X#exchange.name,
+                                     BinKey,
+                                     Message#basic_message.content),
+              Res = rabbit_exchange_type_topic:route(X, Msg),
               ExpectedRes = lists:map(
                               fun (Q) -> #resource{virtual_host = <<"/">>,
                                                    kind = queue,

@@ -51,7 +51,7 @@ exchange() ->
 
 exchange(VHost) ->
     _ = ensure_vhost_exists(VHost),
-    rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
+   rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
 
 %%----------------------------------------------------------------------------
 
@@ -74,21 +74,22 @@ handle_event(#event{type      = Type,
                     timestamp = TS,
                     reference = none}, #state{vhost = VHost} = State) ->
     _ = case key(Type) of
-        ignore -> ok;
-        Key    ->
-                  Props2 = [{<<"timestamp_in_ms">>, TS} | Props],
-                  PBasic = #'P_basic'{delivery_mode = 2,
-                                      headers = fmt_proplist(Props2),
-                                      %% 0-9-1 says the timestamp is a
-                                      %% "64 bit POSIX
-                                      %% timestamp". That's second
-                                      %% resolution, not millisecond.
-                                      timestamp = erlang:convert_time_unit(
-                                                    TS, milli_seconds, seconds)},
-            Msg = rabbit_basic:message(exchange(VHost), Key, PBasic, <<>>),
-                  rabbit_basic:publish(
-                    rabbit_basic:delivery(false, false, Msg, undefined))
-    end,
+            ignore -> ok;
+            Key    ->
+                Props2 = [{<<"timestamp_in_ms">>, TS} | Props],
+                PBasic = #'P_basic'{delivery_mode = 2,
+                                    headers = fmt_proplist(Props2),
+                                    %% 0-9-1 says the timestamp is a
+                                    %% "64 bit POSIX
+                                    %% timestamp". That's second
+                                    %% resolution, not millisecond.
+                                    timestamp = erlang:convert_time_unit(
+                                                  TS, milli_seconds, seconds)},
+                Content = rabbit_basic:build_content(PBasic, <<>>),
+                XName = exchange(VHost),
+                Msg = mc_amqpl:message(XName, Key, Content),
+                rabbit_queue_type:publish_at_most_once(XName, Msg)
+        end,
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.

@@ -20,17 +20,22 @@
 
 %%----------------------------------------------------------------------------
 
+-deprecated([{route, 2, "Use route/3 instead"}]).
+
 -export_type([name/0, type/0, route_opts/0, route_infos/0, route_return/0]).
 -type name() :: rabbit_types:exchange_name().
 -type type() :: rabbit_types:exchange_type().
 -type route_opts() :: #{return_binding_keys => boolean()}.
 -type route_infos() :: #{binding_keys => #{rabbit_types:binding_key() => true}}.
--type route_return() :: [rabbit_amqqueue:name() | {rabbit_amqqueue:name(), route_infos()}].
+-type route_return() :: list(rabbit_amqqueue:name() |
+                             {rabbit_amqqueue:name(), route_infos()} |
+                             {virtual_reply_queue, binary()}).
 
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
                     policy, user_who_performed_action]).
+-define(DEFAULT_EXCHANGE_NAME, <<>>).
 
 -spec recover(rabbit_types:vhost()) -> [name()].
 
@@ -339,38 +344,39 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
-%% rabbit_types:delivery() is more strict than #delivery{}, some
-%% fields can't be undefined. But there are places where
-%% rabbit_exchange:route/2 is called with the absolutely bare delivery
-%% like #delivery{message = #basic_message{routing_keys = [...]}}
--spec route(rabbit_types:exchange(), #delivery{}) -> [rabbit_amqqueue:name()].
-route(Exchange, Delivery) ->
-    route(Exchange, Delivery, #{}).
+-spec route(rabbit_types:exchange(), mc:state()) ->
+    [rabbit_amqqueue:name() | {virtual_reply_queue, binary()}].
+route(Exchange, Message) ->
+    route(Exchange, Message, #{}).
 
--spec route(rabbit_types:exchange(), #delivery{}, route_opts()) ->
+-spec route(rabbit_types:exchange(), mc:state(), route_opts()) ->
     route_return().
-route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
-                decorators = Decorators} = X,
-      #delivery{message = #basic_message{routing_keys = RKs}} = Delivery,
-      Opts) ->
-    case RName of
-        <<>> ->
-            RKsSorted = lists:usort(RKs),
-            [rabbit_channel:deliver_reply(RK, Delivery) ||
-             RK <- RKsSorted, virtual_reply_queue(RK)],
-            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
-                                                not virtual_reply_queue(RK)];
+route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
+                                 virtual_host = VHost}},
+      Message, _Opts) ->
+    RKs0 = mc:get_annotation(routing_keys, Message),
+    RKs = lists:usort(RKs0),
+    [begin
+         case virtual_reply_queue(RK) of
+             false ->
+                 rabbit_misc:r(VHost, queue, RK);
+             true ->
+                 {virtual_reply_queue, RK}
+         end
+     end
+     || RK <- RKs];
+route(X = #exchange{name = XName,
+                    decorators = Decorators},
+      Message, Opts) ->
+    Decs = rabbit_exchange_decorator:select(route, Decorators),
+    QNamesToBKeys = route1(Message, Decs, Opts, {[X], XName, #{}}),
+    case Opts of
+        #{return_binding_keys := true} ->
+            maps:fold(fun(QName, BindingKeys, L) ->
+                              [{QName, #{binding_keys => BindingKeys}} | L]
+                      end, [], QNamesToBKeys);
         _ ->
-            Decs = rabbit_exchange_decorator:select(route, Decorators),
-            QNamesToBKeys = route1(Delivery, Decs, Opts, {[X], XName, #{}}),
-            case Opts of
-                #{return_binding_keys := true} ->
-                    maps:fold(fun(QName, BindingKeys, L) ->
-                                      [{QName, #{binding_keys => BindingKeys}} | L]
-                              end, [], QNamesToBKeys);
-                _ ->
-                    maps:keys(QNamesToBKeys)
-            end
+            maps:keys(QNamesToBKeys)
     end.
 
 virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
@@ -378,16 +384,16 @@ virtual_reply_queue(_)                                      -> false.
 
 route1(_, _, _, {[], _, QNames}) ->
     QNames;
-route1(Delivery, Decorators, Opts,
+route1(Message, Decorators, Opts,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
     {Route, Arity} = type_to_route_fun(Type),
     ExchangeDests = case Arity of
-                        2 -> Route(X, Delivery);
-                        3 -> Route(X, Delivery, Opts)
+                        2 -> Route(X, Message);
+                        3 -> Route(X, Message, Opts)
                     end,
-    DecorateDests  = process_decorators(X, Decorators, Delivery),
+    DecorateDests  = process_decorators(X, Decorators, Message),
     AlternateDests = process_alternate(X, ExchangeDests),
-    route1(Delivery, Decorators, Opts,
+    route1(Message, Decorators, Opts,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
                        AlternateDests ++ DecorateDests ++ ExchangeDests)).
 
@@ -402,8 +408,8 @@ process_alternate(_X, _Results) ->
 
 process_decorators(_, [], _) -> %% optimisation
     [];
-process_decorators(X, Decorators, Delivery) ->
-    lists:append([Decorator:route(X, Delivery) || Decorator <- Decorators]).
+process_decorators(X, Decorators, Message) ->
+    lists:append([Decorator:route(X, Message) || Decorator <- Decorators]).
 
 process_route(#resource{kind = exchange} = XName,
               {_WorkList, XName, _QNames} = Acc) ->

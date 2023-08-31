@@ -51,10 +51,14 @@ log(LogEvent, Config) ->
 
 do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
     RoutingKey = make_routing_key(LogEvent, Config),
-    AmqpMsg = log_event_to_amqp_msg(LogEvent, Config),
+    PBasic = log_event_to_amqp_msg(LogEvent, Config),
     Body = try_format_body(LogEvent, Config),
-    case rabbit_basic:publish(Exchange, RoutingKey, AmqpMsg, Body) of
-        ok                 -> ok;
+    Content = rabbit_basic:build_content(PBasic, Body),
+    Anns = #{exchange => Exchange#resource.name,
+             routing_keys => [RoutingKey]},
+    Msg = mc:init(mc_amqpl, Content, Anns),
+    case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
+        ok -> ok;
         {error, not_found} -> ok
     end.
 

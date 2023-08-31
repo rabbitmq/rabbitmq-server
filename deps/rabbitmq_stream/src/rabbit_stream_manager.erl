@@ -18,6 +18,7 @@
 
 -behaviour(gen_server).
 
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 
@@ -429,10 +430,11 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     Res = try
               Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
-              Delivery =
-                  #delivery{message =
-                                #basic_message{routing_keys = [RoutingKey]}},
-              case rabbit_exchange:route(Exchange, Delivery) of
+              Content = #content{properties = #'P_basic'{}},
+              DummyMsg = mc_amqpl:message(ExchangeName,
+                                          RoutingKey,
+                                          Content),
+              case rabbit_exchange:route(Exchange, DummyMsg) of
                   [] ->
                       {ok, no_route};
                   Routes ->

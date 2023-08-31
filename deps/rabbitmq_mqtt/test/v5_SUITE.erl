@@ -104,7 +104,6 @@ cluster_size_1_tests() ->
      publish_property_payload_format_indicator,
      publish_property_response_topic_correlation_data,
      publish_property_user_property,
-     publish_property_mqtt_to_amqp091,
      disconnect_with_will,
      will_qos2,
      will_delay_greater_than_session_expiry,
@@ -127,7 +126,9 @@ cluster_size_1_tests() ->
      topic_alias_disallowed,
      topic_alias_retained_message,
      topic_alias_disallowed_retained_message,
-     extended_auth
+     extended_auth,
+     headers_exchange,
+     consistent_hash_exchange
     ].
 
 cluster_size_3_tests() ->
@@ -165,9 +166,7 @@ init_per_group(Group, Config0) ->
                 Config0,
                 [{mqtt_version, v5},
                  {rmq_nodes_count, Nodes},
-                 {rmq_nodename_suffix, Suffix},
-                 {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                                        tcp_port_mqtt_tls_extra]}]),
+                 {rmq_nodename_suffix, Suffix}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
                 {rabbit, [{classic_queue_default_version, 2},
@@ -1100,7 +1099,8 @@ session_upgrade_v3_v5_amqp091_pub(Config) ->
     amqp_channel:call(Ch,
                       #'basic.publish'{exchange = <<"amq.topic">>,
                                        routing_key = Topic},
-                      #amqp_msg{payload = Payload}),
+                      #amqp_msg{payload = Payload,
+                                props = #'P_basic'{delivery_mode = 2}}),
 
     Subv5 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
     ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
@@ -1218,8 +1218,7 @@ publish_property_payload_format_indicator(Config) ->
     {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 0}, <<"m1">>, [{qos, 1}]),
     {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 1}, <<"m2">>, [{qos, 1}]),
     receive {publish, #{payload := <<"m1">>,
-                        properties := Props}} ->
-                ?assertEqual(0, maps:size(Props))
+                        properties := #{'Payload-Format-Indicator' := 0}}} -> ok
     after 1000 -> ct:fail("did not receive m1")
     end,
     receive {publish, #{payload := <<"m2">>,
@@ -1302,48 +1301,6 @@ publish_property_user_property(Config) ->
                         properties := #{'User-Property' := UserProperty}}} -> ok
     after 1000 -> ct:fail("did not receive message")
     end,
-    ok = emqtt:disconnect(C).
-
-%% Test Properties interoperability between MQTT and AMQP 0.9.1
-publish_property_mqtt_to_amqp091(Config) ->
-    Q = ClientId = atom_to_binary(?FUNCTION_NAME),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
-                                                             exchange = <<"amq.topic">>,
-                                                             routing_key = <<"my.topic">>}),
-    C = connect(ClientId, Config),
-    MqttResponseTopic = <<"response/topic">>,
-    {ok, _, [1]} = emqtt:subscribe(C, MqttResponseTopic, qos1),
-    Correlation = <<"some correlation ID">>,
-    RequestPayload = <<"my request">>,
-    {ok, _} = emqtt:publish(C, <<"my/topic">>,
-                            #{'Content-Type' => <<"text/plain">>,
-                              'Correlation-Data' => Correlation,
-                              'Response-Topic' => MqttResponseTopic},
-                            RequestPayload, [{qos, 1}]),
-    {#'basic.get_ok'{},
-     #amqp_msg{payload = RequestPayload,
-               props = #'P_basic'{content_type = <<"text/plain">>,
-                                  correlation_id = Correlation,
-                                  delivery_mode = 2,
-                                  headers = Headers}}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
-    {<<"x-opt-reply-to-topic">>, longstr, AmqpResponseTopic} = rabbit_basic:header(<<"x-opt-reply-to-topic">>, Headers),
-    ReplyPayload = <<"{\"my\" : \"reply\"}">>,
-    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
-                                           routing_key = AmqpResponseTopic},
-                      #amqp_msg{payload = ReplyPayload,
-                                props = #'P_basic'{correlation_id = Correlation,
-                                                   content_type = <<"application/json">>}}),
-    receive {publish,
-             #{client_pid := C,
-               topic := MqttResponseTopic,
-               payload := ReplyPayload,
-               properties := #{'Content-Type' := <<"application/json">>,
-                               'Correlation-Data' := Correlation}}} -> ok
-    after 500 -> ct:fail("did not receive reply")
-    end,
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
     ok = emqtt:disconnect(C).
 
 disconnect_with_will(Config) ->
@@ -2011,9 +1968,155 @@ extended_auth(Config) ->
     unlink(C),
     ?assertEqual({error, {bad_authentication_method, #{}}}, Connect(C)).
 
+%% Binding a headers exchange to the MQTT topic exchange should support
+%% routing based on (topic and) User Property in the PUBLISH packet.
+headers_exchange(Config) ->
+    HeadersX = <<"my-headers-exchange">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Qs = [Q1, Q2],
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare'{exchange = HeadersX,
+                                                         type = <<"headers">>,
+                                                         durable = true,
+                                                         auto_delete = true}),
+    #'exchange.bind_ok'{} = amqp_channel:call(
+                              Ch, #'exchange.bind'{destination = HeadersX,
+                                                   source = <<"amq.topic">>,
+                                                   routing_key = <<"my.topic">>}),
+    [#'queue.declare_ok'{} = amqp_channel:call(
+                               Ch, #'queue.declare'{queue = Q,
+                                                    durable = true}) || Q <- Qs],
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Q1,
+                                             exchange = HeadersX,
+                                             arguments = [{<<"x-match">>, longstr, <<"any">>},
+                                                          {<<"k1">>, longstr, <<"v1">>},
+                                                          {<<"k2">>, longstr, <<"v2">>}]
+                                            }),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Q2,
+                                             exchange = HeadersX,
+                                             arguments = [{<<"x-match">>, longstr, <<"all-with-x">>},
+                                                          {<<"k1">>, longstr, <<"v1">>},
+                                                          {<<"k2">>, longstr, <<"v2">>},
+                                                          {<<"x-k3">>, longstr, <<"🐇"/utf8>>}]
+                                            }),
+    C = connect(?FUNCTION_NAME, Config),
+    Topic = <<"my/topic">>,
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k1">>, <<"v1">>},
+                                      {<<"k2">>, <<"v2">>},
+                                      {<<"x-k3">>, unicode:characters_to_binary("🐇")}
+                                     ]},
+                <<"m1">>, [{qos, 1}]),
+    [?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    ok = emqtt:publish(C, Topic, <<"m2">>),
+    [?assertMatch(#'basic.get_empty'{},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k1">>, <<"nope">>}]},
+                <<"m3">>, [{qos, 1}]),
+    [?assertMatch(#'basic.get_empty'{},
+                  amqp_channel:call(Ch, #'basic.get'{queue = Q})) || Q <- Qs],
+
+    {ok, _} = emqtt:publish(
+                C, Topic,
+                #{'User-Property' => [{<<"k2">>, <<"v2">>}]},
+                <<"m4">>, [{qos, 1}]),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m4">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q1})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q2})),
+
+    ok = emqtt:disconnect(C),
+    [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+%% Binding a consistent hash exchange to the MQTT topic exchange should support
+%% consistent routing based on Correlation-Data in the PUBLISH packet.
+consistent_hash_exchange(Config) ->
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_consistent_hash_exchange),
+    HashX = <<"my-consistent-hash-exchange">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Qs = [Q1, Q2],
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare'{
+                                        exchange = HashX,
+                                        type = <<"x-consistent-hash">>,
+                                        arguments = [{<<"hash-property">>, longstr, <<"correlation_id">>}],
+                                        durable = true,
+                                        auto_delete = true}),
+    #'exchange.bind_ok'{} = amqp_channel:call(
+                              Ch, #'exchange.bind'{destination = HashX,
+                                                   source = <<"amq.topic">>,
+                                                   routing_key = <<"a.*">>}),
+    [#'queue.declare_ok'{} = amqp_channel:call(
+                               Ch, #'queue.declare'{queue = Q,
+                                                    durable = true}) || Q <- Qs],
+    [#'queue.bind_ok'{} = amqp_channel:call(
+                            Ch, #'queue.bind'{queue = Q,
+                                              exchange = HashX,
+                                              %% weight
+                                              routing_key = <<"1">>}) || Q <- Qs],
+
+    Rands = [integer_to_binary(rand:uniform(1000)) || _ <- lists:seq(1, 30)],
+    UniqRands = lists:uniq(Rands),
+    NumMsgs = 150,
+    C = connect(?FUNCTION_NAME, Config),
+    [begin
+         N = integer_to_binary(rand:uniform(1_000_000)),
+         Topic = <<"a/", N/binary>>,
+         {ok, _} =  emqtt:publish(C, Topic,
+                                  #{'Correlation-Data' => lists:nth(rand:uniform(length(UniqRands)), UniqRands)},
+                                  N, [{qos, 1}])
+     end || _ <- lists:seq(1, NumMsgs)],
+
+    #'basic.consume_ok'{consumer_tag = Ctag1} = amqp_channel:subscribe(
+                                                  Ch, #'basic.consume'{queue = Q1,
+                                                                       no_ack = true}, self()),
+    #'basic.consume_ok'{consumer_tag = Ctag2} = amqp_channel:subscribe(
+                                                  Ch, #'basic.consume'{queue = Q2,
+                                                                       no_ack = true}, self()),
+    {N1, Corrs1} = receive_correlations(Ctag1, 0, sets:new([{version, 2}])),
+    {N2, Corrs2} = receive_correlations(Ctag2, 0, sets:new([{version, 2}])),
+    ct:pal("q1: ~b messages, ~b unique correlation-data", [N1, sets:size(Corrs1)]),
+    ct:pal("q2: ~b messages, ~b unique correlation-data", [N2, sets:size(Corrs2)]),
+    %% All messages should be routed.
+    ?assertEqual(NumMsgs, N1 + N2),
+    %% Each of the 2 queues should have received at least 1 message.
+    ?assert(sets:size(Corrs1) > 0),
+    ?assert(sets:size(Corrs2) > 0),
+    %% Assert that the consistent hash exchange routed the given Correlation-Data consistently.
+    %% The same Correlation-Data should never be present in both queues.
+    Intersection = sets:intersection(Corrs1, Corrs2),
+    ?assert(sets:is_empty(Intersection)),
+
+    ok = emqtt:disconnect(C),
+    [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
+
+receive_correlations(Ctag, N, Set) ->
+    receive {#'basic.deliver'{consumer_tag = Ctag},
+             #amqp_msg{props = #'P_basic'{correlation_id = Corr}}} ->
+                ?assert(is_binary(Corr)),
+                receive_correlations(Ctag, N + 1, sets:add_element(Corr, Set))
+    after 200 ->
+              {N, Set}
+    end.
 
 assert_no_queue_ttl(NumQs, Config) ->
     Qs = rpc(Config, rabbit_amqqueue, list, []),
@@ -2045,4 +2148,3 @@ assert_nothing_received(Timeout) ->
     receive Unexpected -> ct:fail("Received unexpected message: ~p", [Unexpected])
     after Timeout -> ok
     end.
-

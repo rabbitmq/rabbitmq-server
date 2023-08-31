@@ -10,7 +10,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/2, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
@@ -26,9 +26,12 @@ description() ->
 
 serialise_events() -> false.
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery()) -> no_return().
+-spec route(rabbit_types:exchange(), mc:state()) -> no_return().
+route(Exchange, Msg) ->
+    route(Exchange, Msg, #{}).
 
-route(#exchange{name = Name, type = Type}, _) ->
+-spec route(rabbit_types:exchange(), mc:state(), map()) -> no_return().
+route(#exchange{name = Name, type = Type}, _, _Opts) ->
     rabbit_misc:protocol_error(
       precondition_failed,
       "Cannot route message through ~ts: exchange type ~ts not found",

@@ -40,7 +40,7 @@
          handle_down/4,
          handle_event/3,
          module/2,
-         deliver/3,
+         deliver/4,
          settle/5,
          credit/5,
          dequeue/5,
@@ -49,7 +49,8 @@
          is_server_named_allowed/1,
          arguments/1,
          arguments/2,
-         notify_decorators/1
+         notify_decorators/1,
+         publish_at_most_once/2
          ]).
 
 -export([
@@ -119,12 +120,14 @@
                           ok_msg := term(),
                           acting_user :=  rabbit_types:username()}.
 
-
+-type delivery_options() :: #{correlation => term(), %% sequence no typically
+                              atom() => term()}.
 
 -type settle_op() :: 'complete' | 'requeue' | 'discard'.
 
 -export_type([state/0,
               consume_spec/0,
+              delivery_options/0,
               action/0,
               actions/0,
               settle_op/0]).
@@ -194,7 +197,8 @@
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback deliver([{amqqueue:amqqueue(), queue_state()}],
-                  Delivery :: term()) ->
+                  Message :: mc:state(),
+                  Options :: delivery_options()) ->
     {[{amqqueue:amqqueue(), queue_state()}], actions()}.
 
 -callback settle(queue_name(), settle_op(), rabbit_types:ctag(),
@@ -497,20 +501,40 @@ module(QRef, State) ->
             {error, not_found}
     end.
 
+%% convenience function for throwaway publishes
+-spec publish_at_most_once(rabbit_types:exchange() |
+                           rabbit_exchange:name(),
+                           mc:state()) ->
+    ok | {error, not_found}.
+publish_at_most_once(#resource{} = XName, Msg) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            publish_at_most_once(X, Msg);
+        Err ->
+            Err
+    end;
+publish_at_most_once(X, Msg)
+    when element(1, X) == exchange -> % hacky but good enough
+    QNames = rabbit_exchange:route(X, Msg, #{return_binding_keys => true}),
+    Qs = rabbit_amqqueue:lookup_many(QNames),
+    _ = deliver(Qs, Msg, #{}, stateless),
+    ok.
+
 -spec deliver([amqqueue:amqqueue() |
                {amqqueue:amqqueue(), rabbit_exchange:route_infos()}],
-              rabbit_types:delivery(),
+              Message :: mc:state(),
+              delivery_options(),
               stateless | state()) ->
     {ok, state(), actions()} | {error, Reason :: term()}.
-deliver(Qs, Delivery, State) ->
+deliver(Qs, Message, Options, State) ->
     try
-        deliver0(Qs, Delivery, State)
+        deliver0(Qs, Message, Options, State)
     catch
         exit:Reason ->
             {error, Reason}
     end.
 
-deliver0(Qs, Delivery0, stateless) ->
+deliver0(Qs, Message0, Options, stateless) ->
     ByTypeAndBindingKeys =
     lists:foldl(fun(Elem, Acc) ->
                         {Q, BKeys} = queue_binding_keys(Elem),
@@ -521,11 +545,11 @@ deliver0(Qs, Delivery0, stateless) ->
                                         end, [{Q, stateless}], Acc)
                 end, #{}, Qs),
     maps:foreach(fun({Mod, BKeys}, QSs) ->
-                         Delivery = add_binding_keys(Delivery0, BKeys),
-                         _ = Mod:deliver(QSs, Delivery)
+                         Message = add_binding_keys(Message0, BKeys),
+                         _ = Mod:deliver(QSs, Message, Options)
                  end, ByTypeAndBindingKeys),
     {ok, stateless, []};
-deliver0(Qs, Delivery0, #?STATE{} = State0) ->
+deliver0(Qs, Message0, Options, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
     ByTypeAndBindingKeys =
@@ -548,8 +572,8 @@ deliver0(Qs, Delivery0, #?STATE{} = State0) ->
     %%% dispatch each group to queue type interface?
     {Xs, Actions} = maps:fold(
                       fun({Mod, BKeys}, QSs, {X0, A0}) ->
-                              Delivery = add_binding_keys(Delivery0, BKeys),
-                              {X, A} = Mod:deliver(QSs, Delivery),
+                              Message = add_binding_keys(Message0, BKeys),
+                              {X, A} = Mod:deliver(QSs, Message, Options),
                               {X0 ++ X, A0 ++ A}
                       end, {[], []}, ByTypeAndBindingKeys),
     State = lists:foldl(
@@ -569,17 +593,11 @@ queue_binding_keys({Q, _RouteInfos})
   when ?is_amqqueue(Q) ->
     {Q, #{}}.
 
-add_binding_keys(Delivery, BindingKeys)
+add_binding_keys(Message, BindingKeys)
   when map_size(BindingKeys) =:= 0 ->
-    Delivery;
-add_binding_keys(Delivery, BindingKeys) ->
-    L = maps:fold(fun(B, true, Acc) ->
-                          [{longstr, B} | Acc]
-                  end, [], BindingKeys),
-    BasicMsg = rabbit_basic:add_header(
-                 <<"x-binding-keys">>, array, L,
-                 Delivery#delivery.message),
-    Delivery#delivery{message = BasicMsg}.
+    Message;
+add_binding_keys(Message, BindingKeys) ->
+    mc:set_annotation(binding_keys, maps:keys(BindingKeys), Message).
 
 -spec settle(queue_name(), settle_op(), rabbit_types:ctag(),
              [non_neg_integer()], state()) ->

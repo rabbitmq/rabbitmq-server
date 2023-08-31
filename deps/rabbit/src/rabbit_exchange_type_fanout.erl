@@ -10,7 +10,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/2, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
@@ -31,7 +31,10 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name = Name}, _Delivery) ->
+route(#exchange{name = Name}, _Message) ->
+    route(#exchange{name = Name}, _Message, #{}).
+
+route(#exchange{name = Name}, _Message, _Opts) ->
     rabbit_router:match_routing_key(Name, ['_']).
 
 validate(_X) -> ok.

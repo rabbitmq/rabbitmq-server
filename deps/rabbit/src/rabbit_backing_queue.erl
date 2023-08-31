@@ -23,12 +23,12 @@
 
 -type flow() :: 'flow' | 'noflow'.
 -type msg_ids() :: [rabbit_types:msg_id()].
--type publish() :: {rabbit_types:basic_message(),
+-type publish() :: {mc:state(),
                     rabbit_types:message_properties(), boolean()}.
--type delivered_publish() :: {rabbit_types:basic_message(),
+-type delivered_publish() :: {mc:state(),
                               rabbit_types:message_properties()}.
 -type fetch_result(Ack) ::
-        ('empty' | {rabbit_types:basic_message(), boolean(), Ack}).
+        ('empty' | {mc:state(), boolean(), Ack}).
 -type drop_result(Ack) ::
         ('empty' | {rabbit_types:msg_id(), Ack}).
 -type recovery_terms() :: [term()] | 'non_clean_shutdown'.
@@ -38,7 +38,7 @@
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok').
 -type duration() :: ('undefined' | 'infinity' | number()).
 
--type msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A).
+-type msg_fun(A) :: fun ((mc:state(), ack(), A) -> A).
 -type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
 
 -type queue_mode() :: atom().
@@ -95,7 +95,7 @@
 -callback purge_acks(state()) -> state().
 
 %% Publish a message.
--callback publish(rabbit_types:basic_message(),
+-callback publish(mc:state(),
                   rabbit_types:message_properties(), boolean(), pid(), flow(),
                   state()) -> state().
 
@@ -105,7 +105,7 @@
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
 %% (i.e. saves the round trip through the backing queue).
--callback publish_delivered(rabbit_types:basic_message(),
+-callback publish_delivered(mc:state(),
                             rabbit_types:message_properties(), pid(), flow(),
                             state())
                            -> {ack(), state()}.
@@ -187,7 +187,7 @@
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
--callback fold(fun((rabbit_types:basic_message(),
+-callback fold(fun((mc:state(),
                     rabbit_types:message_properties(),
                     boolean(), A) -> {('stop' | 'cont'), A}),
                A, state()) -> {A, state()}.
@@ -246,7 +246,7 @@
 %% Called prior to a publish or publish_delivered call. Allows the BQ
 %% to signal that it's already seen this message, (e.g. it was published
 %% or discarded previously) specifying whether to drop the message or reject it.
--callback is_duplicate(rabbit_types:basic_message(), state())
+-callback is_duplicate(mc:state(), state())
                       -> {{true, drop} | {true, reject} | boolean(), state()}.
 
 -callback set_queue_mode(queue_mode(), state()) -> state().

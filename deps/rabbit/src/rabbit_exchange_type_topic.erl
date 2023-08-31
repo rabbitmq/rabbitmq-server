@@ -36,13 +36,12 @@ serialise_events() -> false.
 
 %% route/2 and route/3 can return duplicate destinations (and duplicate binding keys).
 %% The caller of these functions is responsible for deduplication.
-route(Exchange, Delivery) ->
-    route(Exchange, Delivery, #{}).
+route(Exchange, Msg) ->
+    route(Exchange, Msg, #{}).
 
-route(#exchange{name = XName},
-      #delivery{message = #basic_message{routing_keys = Routes}},
-      Opts) ->
-    lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- Routes]).
+route(#exchange{name = XName}, Msg, Opts) ->
+    RKeys = mc:get_annotation(routing_keys, Msg),
+    lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- RKeys]).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.

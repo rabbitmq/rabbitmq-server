@@ -12,54 +12,38 @@
 
 -export([intercept/1]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
-
 -define(HEADER_TIMESTAMP, <<"timestamp_in_ms">>).
 -define(HEADER_ROUTING_NODE, <<"x-routed-by">>).
 
--type content() :: rabbit_types:decoded_content().
-
--spec intercept(content()) -> content().
-intercept(Content) ->
+-spec intercept(mc:state()) -> mc:state().
+intercept(Msg) ->
     Interceptors = persistent_term:get({rabbit, incoming_message_interceptors}, []),
-    lists:foldl(fun(I, C) ->
-                        intercept(C, I)
-                end, Content, Interceptors).
+    lists:foldl(fun({InterceptorName, Overwrite}, M) ->
+                        intercept(M, InterceptorName, Overwrite)
+                end, Msg, Interceptors).
 
-intercept(Content, {set_header_routing_node, Overwrite}) ->
+intercept(Msg, set_header_routing_node, Overwrite) ->
     Node = atom_to_binary(node()),
-    set_header(Content, {?HEADER_ROUTING_NODE, longstr, Node}, Overwrite);
-intercept(Content0, {set_header_timestamp, Overwrite}) ->
-    NowMs = os:system_time(millisecond),
-    NowSecs = NowMs div 1_000,
-    Content = set_header(Content0, {?HEADER_TIMESTAMP, long, NowMs}, Overwrite),
-    set_property_timestamp(Content, NowSecs, Overwrite).
+    set_annotation(Msg, ?HEADER_ROUTING_NODE, Node, Overwrite);
+intercept(Msg0, set_header_timestamp, Overwrite) ->
+    Millis = os:system_time(millisecond),
+    Msg = set_annotation(Msg0, ?HEADER_TIMESTAMP, Millis, Overwrite),
+    set_timestamp(Msg, Millis, Overwrite).
 
--spec set_header(content(),
-                 {binary(), rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value()},
-                 boolean()) ->
-    content().
-set_header(Content = #content{properties = Props = #'P_basic'{headers = Headers0}},
-           Header = {Key, Type, Value}, Overwrite) ->
-    case {rabbit_basic:header(Key, Headers0), Overwrite} of
+-spec set_annotation(mc:state(), mc:ann_key(), mc:ann_value(), boolean()) -> mc:state().
+set_annotation(Msg, Key, Value, Overwrite) ->
+    case {mc:x_header(Key, Msg), Overwrite} of
         {Val, false} when Val =/= undefined ->
-            Content;
+            Msg;
         _ ->
-            Headers = if Headers0 =:= undefined -> [Header];
-                         true -> rabbit_misc:set_table_value(Headers0, Key, Type, Value)
-                      end,
-            Content#content{properties = Props#'P_basic'{headers = Headers},
-                            properties_bin = none}
+            mc:set_annotation(Key, Value, Msg)
     end.
 
--spec set_property_timestamp(content(), pos_integer(), boolean()) -> content().
-set_property_timestamp(Content = #content{properties = Props = #'P_basic'{timestamp = Ts}},
-                       Timestamp, Overwrite) ->
-    case {Ts, Overwrite} of
-        {Secs, false} when is_integer(Secs) ->
-            Content;
+-spec set_timestamp(mc:state(), pos_integer(), boolean()) -> mc:state().
+set_timestamp(Msg, Timestamp, Overwrite) ->
+    case {mc:timestamp(Msg), Overwrite} of
+        {Ts, false} when is_integer(Ts) ->
+            Msg;
         _ ->
-            Content#content{properties = Props#'P_basic'{timestamp = Timestamp},
-                            properties_bin = none}
+            mc:set_annotation(timestamp, Timestamp, Msg)
     end.
