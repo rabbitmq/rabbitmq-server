@@ -130,11 +130,17 @@ is_compatible(_, _, _) ->
 -spec init(amqqueue:amqqueue()) -> {ok, rabbit_fifo_client:state()}.
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    %% This lookup could potentially return an {error, not_found}, but we do not
-    %% know what to do if the queue has `disappeared`. Let it crash.
-    {Name, _LeaderNode} = Leader = amqqueue:get_pid(Q),
+    {Name, _} = MaybeLeader = amqqueue:get_pid(Q),
+    Leader = case ra_leaderboard:lookup_leader(Name) of
+                 undefined ->
+                     %% leader from queue record will have to suffice
+                     MaybeLeader;
+                 LikelyLeader ->
+                     LikelyLeader
+             end,
     Nodes = get_nodes(Q),
-    %% Ensure the leader is listed first
+    %% Ensure the leader is listed first to increase likelihood of first
+    %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
     {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
