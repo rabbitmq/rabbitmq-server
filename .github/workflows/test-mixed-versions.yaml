@@ -162,11 +162,11 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe-${{ matrix.otp_version_id }} \
-          --test_tag_filters=mixed-version-cluster,-exclusive,-aws,-docker \
+          --test_tag_filters=mixed-version-cluster,-no-remote-exec,-aws,-docker \
           --build_tests_only \
           --verbose_failures
-  test-exclusive-mixed-versions:
-    name: Test (Exclusive Tests with Mixed Version Cluster)
+  test-no-remote-exec-mixed-versions:
+    name: Test (No-Remote-Exec Tests with Mixed Version Cluster)
     runs-on: ubuntu-20.04
     needs: ensure-mixed-version-archive
     strategy:
@@ -212,10 +212,10 @@ jobs:
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
-    - name: RUN EXCLUSIVE TESTS
+    - name: RUN NO-REMOTE-EXEC TESTS
       run: |
-        MIXED_EXCLUSIVE_TESTS=$(bazel query 'attr(tags, "mixed-version-cluster", attr(tags, "exclusive", tests(//...)))')
-        bazelisk test $MIXED_EXCLUSIVE_TESTS \
+        MIXED_NO_REMOTE_EXEC_TESTS=$(bazel query 'attr(tags, "mixed-version-cluster", attr(tags, "no-remote-exec", tests(//...)))')
+        bazelisk test $MIXED_NO_REMOTE_EXEC_TESTS \
           --config=buildbuddy \
           --test_tag_filters=-aws,-docker \
           --build_tests_only \
@@ -224,7 +224,7 @@ jobs:
   summary-mixed-versions:
     needs:
     - test-mixed-versions
-    - test-exclusive-mixed-versions
+    - test-no-remote-exec-mixed-versions
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
