@@ -1326,10 +1326,21 @@ run_pending_action({remove, MsgId, CRef}, State) ->
 
 update_msg_cache(CacheEts, MsgId, Msg) ->
     case ets:insert_new(CacheEts, {MsgId, Msg, 1}) of
-        true  -> ok;
-        false -> rabbit_misc:safe_ets_update_counter(
-                   CacheEts, MsgId, {3, +1}, fun (_) -> ok end,
-                   fun () -> update_msg_cache(CacheEts, MsgId, Msg) end)
+        true  ->
+            ok;
+        false ->
+            %% Note: This is basically rabbit_misc:safe_ets_update_counter/5,
+            %% but without the debug log that we don't want as the update is
+            %% more likely to fail following recent reworkings.
+            try
+                ets:update_counter(CacheEts, MsgId, {3, +1}),
+                ok
+            catch error:badarg ->
+                %% The entry must have been removed between
+                %% insert_new and update_counter, most likely
+                %% due to a file rollover or a confirm. Try again.
+                update_msg_cache(CacheEts, MsgId, Msg)
+            end
     end.
 
 adjust_valid_total_size(File, Delta, State = #msstate {
