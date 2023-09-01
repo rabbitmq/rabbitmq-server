@@ -1536,9 +1536,9 @@ does_node_support(Node, FeatureNames, Timeout) ->
               [Node, FeatureNames]),
             false;
         {error, Reason} ->
-            rabbit_log_feature_flags:error(
-              "Feature flags: error while querying `~p` support on "
-              "node ~s: ~p",
+            rabbit_log_feature_flags:warning(
+              "Feature flags: error while querying `~tp` support on "
+              "node ~ts: ~tp",
               [FeatureNames, Node, Reason]),
             false;
         true ->

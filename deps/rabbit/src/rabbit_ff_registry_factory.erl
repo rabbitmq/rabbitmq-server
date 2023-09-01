@@ -680,9 +680,9 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               [RegistryVsn, registry_vsn()]),
             ok;
         {error, {restart, Expected, Current}} ->
-            rabbit_log_feature_flags:error(
+            rabbit_log_feature_flags:debug(
               "Feature flags: another registry module was loaded in the "
-              "meantime (expected old vsn: ~p, current vsn: ~p); "
+              "meantime (expected old vsn: ~tp, current vsn: ~tp); "
               "restarting the regen",
               [Expected, Current]),
             restart;
