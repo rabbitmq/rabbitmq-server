@@ -31,7 +31,7 @@ build:rbe --config=buildbuddy
 
 build:rbe --remote_executor=grpcs://remote.buildbuddy.io
 
-build:rbe --spawn_strategy=remote
+build:rbe --spawn_strategy=remote,local
 build:rbe --test_strategy=""
 build:rbe --jobs=50
 

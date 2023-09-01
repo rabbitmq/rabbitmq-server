@@ -43,9 +43,13 @@ jobs:
         bazelisk test //... \
           --config=rbe \
 <<<<<<< HEAD
+<<<<<<< HEAD
           --test_tag_filters=-mixed-version-cluster,-exclusive,-aws,-docker,-dialyze \
 =======
           --test_tag_filters=-mixed-version-cluster,-no-remote-exec,-aws,-docker \
 >>>>>>> c814b604bb (Use the no-remote-exec instead of exclusive tag for some tests)
+=======
+          --test_tag_filters=-mixed-version-cluster,-aws,-docker \
+>>>>>>> ac2d4e6023 (Run the local and remote suites in a single pass)
           --build_tests_only \
           --verbose_failures
