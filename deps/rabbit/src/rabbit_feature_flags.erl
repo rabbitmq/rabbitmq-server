@@ -1536,10 +1536,18 @@ does_node_support(Node, FeatureNames, Timeout) ->
               [Node, FeatureNames]),
             false;
         {error, Reason} ->
+<<<<<<< HEAD
             rabbit_log_feature_flags:error(
               "Feature flags: error while querying `~p` support on "
               "node ~s: ~p",
               [FeatureNames, Node, Reason]),
+=======
+            ?LOG_WARNING(
+              "Feature flags: error while querying `~tp` support on "
+              "node ~ts: ~tp",
+              [FeatureNames, Node, Reason],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+>>>>>>> 98792f34dd (rabbit_feature_flags: Lower the level of some log messages)
             false;
         true ->
             rabbit_log_feature_flags:debug(
