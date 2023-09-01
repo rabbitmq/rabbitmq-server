@@ -1258,7 +1258,7 @@ does_node_support(Node, FeatureNames, Timeout) ->
           end,
     case Ret of
         {error, Reason} ->
-            ?LOG_ERROR(
+            ?LOG_WARNING(
               "Feature flags: error while querying `~tp` support on "
               "node ~ts: ~tp",
               [FeatureNames, Node, Reason],

@@ -1360,7 +1360,7 @@ rpc_call(Node, Module, Function, Args, Timeout) ->
         %% time, for instance, if there is a lot of data to migrate.
         error:{erpc, noconnection} = Reason
           when is_integer(Timeout) andalso Timeout > SleepBetweenRetries ->
-            ?LOG_ERROR(
+            ?LOG_WARNING(
                "Feature flags: no connection to node `~ts`; "
                "retrying in ~b milliseconds",
                [Node, SleepBetweenRetries],

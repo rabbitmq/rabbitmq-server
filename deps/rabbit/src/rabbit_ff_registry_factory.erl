@@ -798,7 +798,7 @@ load_registry_mod(RegistryVsn, Mod, Bin) ->
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
         {error, {restart, Expected, Current}} ->
-            ?LOG_ERROR(
+            ?LOG_DEBUG(
               "Feature flags: another registry module was loaded in the "
               "meantime (expected old vsn: ~tp, current vsn: ~tp); "
               "restarting the regen",
