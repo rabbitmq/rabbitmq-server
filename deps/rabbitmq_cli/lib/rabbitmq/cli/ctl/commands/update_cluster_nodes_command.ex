@@ -17,12 +17,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
     long_or_short_names = Config.get_option(:longnames, options)
     seed_node_normalised = Helpers.normalise_node(seed_node, long_or_short_names)
 
-    :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_mnesia,
-      :update_cluster_nodes,
-      [seed_node_normalised]
-    )
+    case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :update_cluster_nodes, [
+           seed_node_normalised
+         ]) do
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :update_cluster_nodes, [
+          seed_node_normalised
+        ])
+
+      ret0 ->
+        ret0
+    end
   end
 
   def usage() do
