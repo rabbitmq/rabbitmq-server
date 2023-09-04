@@ -30,9 +30,7 @@
 %% @private
 
 setup_schema() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> setup_schema_in_mnesia() end
-       }).
+    setup_schema_in_mnesia().
 
 setup_schema_in_mnesia() ->
     TableName = status_table_name(),
@@ -104,9 +102,7 @@ status_table_definition() ->
 %% @private
 
 set(Status) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(Status) end
-       }).
+    set_in_mnesia(Status).
 
 set_in_mnesia(Status) ->
     Res = mnesia:transaction(
@@ -145,9 +141,7 @@ set_in_mnesia(Status) ->
 %% @private
 
 get(Node) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Node) end
-       }).
+    get_in_mnesia(Node).
 
 get_in_mnesia(Node) ->
     case catch mnesia:dirty_read(?TABLE, Node) of
@@ -158,7 +152,7 @@ get_in_mnesia(Node) ->
     end.
 
 %% -------------------------------------------------------------------
-%% get().
+%% get_consistent().
 %% -------------------------------------------------------------------
 
 -spec get_consistent(Node) -> Status when
@@ -171,9 +165,7 @@ get_in_mnesia(Node) ->
 %% @private
 
 get_consistent(Node) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_consistent_in_mnesia(Node) end
-       }).
+    get_consistent_in_mnesia(Node).
 
 get_consistent_in_mnesia(Node) ->
     case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of

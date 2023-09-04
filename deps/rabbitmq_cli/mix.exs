@@ -30,6 +30,7 @@ defmodule RabbitMQCtl.MixfileBase do
           :rabbit,
           :rabbit_control_misc,
           :rabbit_data_coercion,
+          :rabbit_db_cluster,
           :rabbit_env,
           :rabbit_event,
           :rabbit_file,

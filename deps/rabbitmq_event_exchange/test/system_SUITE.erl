@@ -307,7 +307,7 @@ audit_policy(Config) ->
     User = <<"Bugs Bunny">>,
 
     rabbit_ct_broker_helpers:set_policy(Config, 0, <<".*">>, <<"all">>, <<"queues">>,
-                                        [{<<"ha-mode">>, <<"all">>}], User),
+                                        [{<<"max-length-bytes">>, 10000}], User),
     receive_user_in_event(<<"policy.set">>, User),
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<".*">>, User),

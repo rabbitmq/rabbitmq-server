@@ -51,8 +51,7 @@ create_or_get(VHostName, Limits, Metadata)
        is_list(Limits) andalso
        is_map(Metadata) ->
     VHost = vhost:new(VHostName, Limits, Metadata),
-    rabbit_db:run(
-      #{mnesia => fun() -> create_or_get_in_mnesia(VHostName, VHost) end}).
+    create_or_get_in_mnesia(VHostName, VHost).
 
 create_or_get_in_mnesia(VHostName, VHost) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -97,8 +96,7 @@ merge_metadata(VHostName, Metadata)
     end.
 
 do_merge_metadata(VHostName, Metadata) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> merge_metadata_in_mnesia(VHostName, Metadata) end}).
+    merge_metadata_in_mnesia(VHostName, Metadata).
 
 merge_metadata_in_mnesia(VHostName, Metadata) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -133,8 +131,7 @@ merge_metadata_in_mnesia_tx(VHostName, Metadata) ->
 set_tags(VHostName, Tags)
   when is_binary(VHostName) andalso is_list(Tags) ->
     ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(Tag) || Tag <- Tags]),
-    rabbit_db:run(
-      #{mnesia => fun() -> set_tags_in_mnesia(VHostName, ConvertedTags) end}).
+    set_tags_in_mnesia(VHostName, ConvertedTags).
 
 set_tags_in_mnesia(VHostName, Tags) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -163,8 +160,7 @@ do_set_tags(VHost, Tags) when ?is_vhost(VHost) andalso is_list(Tags) ->
 %% @private
 
 exists(VHostName) when is_binary(VHostName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> exists_in_mnesia(VHostName) end}).
+    exists_in_mnesia(VHostName).
 
 exists_in_mnesia(VHostName) ->
     mnesia:dirty_read({?MNESIA_TABLE, VHostName}) /= [].
@@ -184,8 +180,7 @@ exists_in_mnesia(VHostName) ->
 %% @private
 
 get(VHostName) when is_binary(VHostName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(VHostName) end}).
+    get_in_mnesia(VHostName).
 
 get_in_mnesia(VHostName) ->
     case mnesia:dirty_read({?MNESIA_TABLE, VHostName}) of
@@ -206,8 +201,7 @@ get_in_mnesia(VHostName) ->
 %% @private
 
 get_all() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end}).
+    get_all_in_mnesia().
 
 get_all_in_mnesia() ->
     mnesia:dirty_match_object(?MNESIA_TABLE, vhost:pattern_match_all()).
@@ -225,8 +219,7 @@ get_all_in_mnesia() ->
 %% @private
 
 list() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> list_in_mnesia() end}).
+    list_in_mnesia().
 
 list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
@@ -249,8 +242,7 @@ list_in_mnesia() ->
 
 update(VHostName, UpdateFun)
   when is_binary(VHostName) andalso is_function(UpdateFun, 1) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_in_mnesia(VHostName, UpdateFun) end}).
+    update_in_mnesia(VHostName, UpdateFun).
 
 update_in_mnesia(VHostName, UpdateFun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -310,8 +302,7 @@ with_fun_in_mnesia_tx(VHostName, TxFun)
 %% @private
 
 delete(VHostName) when is_binary(VHostName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(VHostName) end}).
+    delete_in_mnesia(VHostName).
 
 delete_in_mnesia(VHostName) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -332,8 +323,7 @@ delete_in_mnesia_tx(VHostName) ->
 %% @private
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end}).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),

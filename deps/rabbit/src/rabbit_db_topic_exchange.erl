@@ -32,9 +32,7 @@
 %% @private
 
 set(#binding{source = XName, key = BindingKey, destination = Destination, args = Args}) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(XName, BindingKey, Destination, Args) end
-       }).
+    set_in_mnesia(XName, BindingKey, Destination, Args).
 
 %% -------------------------------------------------------------------
 %% delete_all_for_exchange().
@@ -47,9 +45,7 @@ set(#binding{source = XName, key = BindingKey, destination = Destination, args =
 %% @private
 
 delete_all_for_exchange(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_all_for_exchange_in_mnesia(XName) end
-       }).
+    delete_all_for_exchange_in_mnesia(XName).
 
 %% -------------------------------------------------------------------
 %% delete().
@@ -62,9 +58,7 @@ delete_all_for_exchange(XName) ->
 %% @private
 
 delete(Bs) when is_list(Bs) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Bs) end
-       }).
+    delete_in_mnesia(Bs).
 
 %% -------------------------------------------------------------------
 %% match().
@@ -82,12 +76,7 @@ delete(Bs) when is_list(Bs) ->
 
 match(XName, RoutingKey, Opts) ->
     BKeys = maps:get(return_binding_keys, Opts, false),
-    rabbit_db:run(
-      #{mnesia =>
-        fun() ->
-                match_in_mnesia(XName, RoutingKey, BKeys)
-        end
-       }).
+    match_in_mnesia(XName, RoutingKey, BKeys).
 
 %% -------------------------------------------------------------------
 %% clear().
@@ -99,9 +88,7 @@ match(XName, RoutingKey, Opts) ->
 %% @private
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end
-       }).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?MNESIA_NODE_TABLE),

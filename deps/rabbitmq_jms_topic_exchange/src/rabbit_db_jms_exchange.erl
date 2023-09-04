@@ -23,9 +23,7 @@
 %% -------------------------------------------------------------------
 
 setup_schema() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> setup_schema_in_mnesia() end
-       }).
+    setup_schema_in_mnesia().
 
 setup_schema_in_mnesia() ->
     case mnesia:create_table( ?JMS_TOPIC_TABLE
@@ -43,10 +41,7 @@ setup_schema_in_mnesia() ->
 %% -------------------------------------------------------------------
 
 create_or_update(XName, BindingKeyAndFun, ErrorFun) ->
-    rabbit_db:run(
-      #{mnesia =>
-            fun() -> create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun) end
-       }).
+    create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun).
 
 create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -61,9 +56,7 @@ create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun) ->
 %% -------------------------------------------------------------------
 
 insert(XName, BFuns) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> insert_in_mnesia(XName, BFuns) end
-       }).
+    insert_in_mnesia(XName, BFuns).
 
 insert_in_mnesia(XName, BFuns) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -76,9 +69,7 @@ insert_in_mnesia(XName, BFuns) ->
 %% -------------------------------------------------------------------
 
 get(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(XName) end
-       }).
+    get_in_mnesia(XName).
 
 get_in_mnesia(XName) ->
     mnesia:async_dirty(
@@ -98,19 +89,14 @@ get_in_mnesia(XName) ->
 %% -------------------------------------------------------------------
 
 delete(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(XName) end
-       }).
+    delete_in_mnesia(XName).
 
 delete_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun() -> mnesia:delete(?JMS_TOPIC_TABLE, XName, write) end).
 
 delete(XName, BindingKeys, ErrorFun) ->
-    rabbit_db:run(
-      #{mnesia =>
-            fun() -> delete_in_mnesia(XName, BindingKeys, ErrorFun) end
-       }).
+    delete_in_mnesia(XName, BindingKeys, ErrorFun).
 
 delete_in_mnesia(XName, BindingKeys, ErrorFun) ->
     rabbit_mnesia:execute_mnesia_transaction(

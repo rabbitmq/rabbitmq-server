@@ -23,9 +23,7 @@
 %% -------------------------------------------------------------------
 
 setup_schema() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> setup_schema_in_mnesia() end
-       }).
+    setup_schema_in_mnesia().
 
 setup_schema_in_mnesia() ->
     _ = mnesia:create_table(?RH_TABLE,
@@ -41,9 +39,7 @@ setup_schema_in_mnesia() ->
 %% -------------------------------------------------------------------
 
 get(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(XName) end
-       }).
+    get_in_mnesia(XName).
 
 get_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -62,9 +58,7 @@ get_in_mnesia_tx(XName) ->
 %% -------------------------------------------------------------------
 
 insert(XName, Message, Length) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> insert_in_mnesia(XName, Message, Length) end
-       }).
+    insert_in_mnesia(XName, Message, Length).
 
 insert_in_mnesia(XName, Message, Length) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -89,17 +83,13 @@ insert0_in_mnesia(Key, Cached, Message, Length) ->
 %% -------------------------------------------------------------------
 
 delete() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia() end
-       }).
+    delete_in_mnesia().
 
 delete_in_mnesia() ->
     _ = mnesia:delete_table(?RH_TABLE).
 
 delete(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(XName) end
-       }).
+    delete_in_mnesia(XName).
 
 delete_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(

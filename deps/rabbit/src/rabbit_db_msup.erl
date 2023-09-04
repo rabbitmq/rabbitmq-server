@@ -37,9 +37,7 @@
       Ret :: 'ok' | {error, Reason :: term()}.
 
 create_tables() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_tables_in_mnesia([?TABLE_DEF]) end
-       }).
+    create_tables_in_mnesia([?TABLE_DEF]).
 
 create_tables_in_mnesia([]) ->
     ok;
@@ -74,11 +72,7 @@ table_definitions() ->
       Ret :: start | undefined | pid().
 
 create_or_update(Group, Overall, Delegate, ChildSpec, Id) ->
-    rabbit_db:run(
-      #{mnesia =>
-            fun() ->
-                    create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id)
-            end}).
+    create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id).
 
 create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -126,9 +120,7 @@ write_in_mnesia(Group, Overall, ChildSpec, Id) ->
       Id :: any().
 
 delete(Group, Id) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Group, Id) end
-       }).
+    delete_in_mnesia(Group, Id).
 
 delete_in_mnesia(Group, Id) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -149,9 +141,7 @@ find_mirror(Group, Id) ->
     %% If we did this inside a tx we could still have failover
     %% immediately after the tx - we can't be 100% here. So we may as
     %% well dirty_select.
-    rabbit_db:run(
-      #{mnesia => fun() -> find_mirror_in_mnesia(Group, Id) end
-       }).
+    find_mirror_in_mnesia(Group, Id).
 
 find_mirror_in_mnesia(Group, Id) ->
     MatchHead = #mirrored_sup_childspec{mirroring_pid = '$1',
@@ -171,9 +161,7 @@ find_mirror_in_mnesia(Group, Id) ->
       ChildSpec :: supervisor2:child_spec().
 
 update_all(Overall, OldOverall) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_all_in_mnesia(Overall, OldOverall) end
-       }).
+    update_all_in_mnesia(Overall, OldOverall).
 
 update_all_in_mnesia(Overall, OldOverall) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -194,9 +182,7 @@ update_all_in_mnesia(Overall, OldOverall) ->
       Group :: any().
 
 delete_all(Group) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_all_in_mnesia(Group) end
-       }).
+    delete_all_in_mnesia(Group).
 
 delete_all_in_mnesia(Group) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -215,8 +201,7 @@ delete_all_in_mnesia(Group) ->
 -spec clear() -> ok.
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end}).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?TABLE),
