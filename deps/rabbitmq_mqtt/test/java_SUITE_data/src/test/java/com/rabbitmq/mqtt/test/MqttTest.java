@@ -520,6 +520,7 @@ public class MqttTest implements MqttCallback {
     // Message has been delivered but connection has failed.
     waitAtMost(() -> receivedMessagesSize() == 1);
     assertThat(firstMessage().getPayload()).isEqualTo(payload);
+    Thread.sleep(100);
     assertThat(client.isConnected()).isFalse();
 
     receivedMessages.clear();
