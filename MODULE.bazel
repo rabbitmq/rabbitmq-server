@@ -41,6 +41,21 @@ bazel_dep(
     repo_name = "looking_glass",
 )
 
+<<<<<<< HEAD
+=======
+bazel_dep(
+    name = "rabbitmq_osiris",
+    version = "1.6.4",
+    repo_name = "osiris",
+)
+
+bazel_dep(
+    name = "rabbitmq_ra",
+    version = "2.6.2",
+    repo_name = "ra",
+)
+
+>>>>>>> 34d05fdfc8 (Use our fork of BCR for erlang specific packages)
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
