@@ -28,6 +28,7 @@
 start(normal, []) ->
     Config = parse_configuration(),
     Listeners = parse_listener_configuration(),
+    rabbit_global_counters:init([{protocol, stomp}]),
     Result = rabbit_stomp_sup:start_link(Listeners, Config),
     EMPid = case rabbit_event:start_link() of
               {ok, Pid}                       -> Pid;

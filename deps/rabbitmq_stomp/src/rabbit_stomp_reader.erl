@@ -20,10 +20,6 @@
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
--define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state,
-                        timeout]).
-
 -record(reader_state, {
     socket,
     conn_name,
@@ -84,6 +80,8 @@ init([SupHelperPid, Ref, Configuration]) ->
             MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
             erlang:send_after(LoginTimeout, self(), login_timeout),
 
+            rabbit_networking:register_non_amqp_connection(self()),
+
             gen_server2:enter_loop(?MODULE, [],
               rabbit_event:init_stats_timer(
                 run_socket(control_throttle(
@@ -118,6 +116,14 @@ handle_call({info, InfoItems}, _From, State) ->
 handle_call(Msg, From, State) ->
     {stop, {stomp_unexpected_call, Msg, From}, State}.
 
+handle_cast(QueueEvent = {queue_event, _, _}, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:handle_queue_event(QueueEvent, ProcState) of
+        {ok, NewProcState} ->
+            {noreply, processor_state(NewProcState, State), hibernate};
+        {error, Reason, NewProcState} ->
+            {stop, Reason, processor_state(NewProcState, State)}
+    end;
 handle_cast({close_connection, Reason}, State) ->
     {stop, {shutdown, {server_initiated_close, Reason}}, State};
 handle_cast(client_timeout, State) ->
@@ -125,6 +131,11 @@ handle_cast(client_timeout, State) ->
 handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
+handle_info(connection_created, State) ->
+    Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_created(self(), Infos),
+    rabbit_event:notify(connection_created, Infos),
+    {noreply, State, hibernate};
 
 handle_info({Tag, Sock, Data}, State=#reader_state{socket=Sock})
         when Tag =:= tcp; Tag =:= ssl ->
@@ -149,6 +160,15 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, run_socket(control_throttle(State)), hibernate};
 
+handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt, State) ->
+    ProcState = processor_state(State),
+    {ok, NewProcState} = rabbit_stomp_processor:handle_down(Evt, ProcState),
+    {noreply, processor_state(NewProcState, State), hibernate};
+
+handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid),
+    {noreply, State, hibernate};
+
 %%----------------------------------------------------------------------------
 
 handle_info(client_timeout, State) ->
@@ -156,50 +176,14 @@ handle_info(client_timeout, State) ->
 
 handle_info(login_timeout, State) ->
     ProcState = processor_state(State),
-    case rabbit_stomp_processor:info(channel, ProcState) of
-        none ->
+    case rabbit_stomp_processor:info(user, ProcState) of
+        undefined ->
             {stop, {shutdown, login_timeout}, State};
         _ ->
             {noreply, State, hibernate}
     end;
 
 %%----------------------------------------------------------------------------
-
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
-    ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag,
-                                                                 IsMulti,
-                                                                 ProcState),
-    {noreply, processor_state(NewProcState, State), hibernate};
-handle_info({Delivery = #'basic.deliver'{},
-             Message = #amqp_msg{}},
-             State) ->
-    %% receiving a message from a quorum queue
-    %% no delivery context
-    handle_info({Delivery, Message, undefined}, State);
-handle_info({Delivery = #'basic.deliver'{},
-             #amqp_msg{props = Props, payload = Payload},
-             DeliveryCtx},
-             State) ->
-    ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
-                                                        Props,
-                                                        Payload,
-                                                        DeliveryCtx,
-                                                        ProcState),
-    {noreply, processor_state(NewProcState, State), hibernate};
-handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
-    ProcState = processor_state(State),
-    case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
-      {ok, NewProcState, _} ->
-        {noreply, processor_state(NewProcState, State), hibernate};
-      {stop, Reason, NewProcState} ->
-        {stop, Reason, processor_state(NewProcState, State)}
-    end;
 
 handle_info({start_heartbeats, {0, 0}}, State) ->
     {noreply, State#reader_state{timeout_sec = {0, 0}}};
@@ -217,14 +201,8 @@ handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 
 
 %%----------------------------------------------------------------------------
-handle_info({'EXIT', From, Reason}, State) ->
-  ProcState = processor_state(State),
-  case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
-    {stop, NewReason, NewProcState} ->
-        {stop, NewReason, processor_state(NewProcState, State)};
-    unknown_exit ->
-        {stop, {connection_died, Reason}, State}
-  end.
+handle_info({'EXIT', _From, Reason}, State) ->
+    {stop, {connection_died, Reason}, State}.
 %%----------------------------------------------------------------------------
 
 process_received_bytes([], State) ->
@@ -254,14 +232,13 @@ process_received_bytes(Bytes,
                     {stop, normal, State};
                 false ->
                     try rabbit_stomp_processor:process_frame(Frame, ProcState) of
-                        {ok, NewProcState, Conn} ->
+                        {ok, NewProcState} ->
                             PS = rabbit_stomp_frame:initial_state(),
                             NextState = maybe_block(State, Frame),
                             process_received_bytes(Rest, NextState#reader_state{
                                                            current_frame_size = 0,
                                                            processor_state = NewProcState,
-                                                           parse_state     = PS,
-                                                           connection      = Conn});
+                                                           parse_state     = PS});
                         {stop, Reason, NewProcState} ->
                             {stop, Reason,
                              processor_state(NewProcState, State)}
@@ -324,9 +301,13 @@ terminate(Reason, undefined) ->
     log_reason(Reason, undefined),
     {stop, Reason};
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
-  maybe_emit_stats(State),
-  log_reason(Reason, State),
-  _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    maybe_emit_stats(State),
+    rabbit_core_metrics:connection_closed(self()),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_event:notify(connection_closed, Infos),
+    rabbit_networking:unregister_non_amqp_connection(self()),
+    log_reason(Reason, State),
+    _ = rabbit_stomp_processor:flush_and_die(ProcState),
     {stop, Reason}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -439,11 +420,11 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#reader_state{connection = C}) when C == none; C == undefined ->
-    %% Avoid emitting stats on terminate when the connection has not yet been
-    %% established, as this causes orphan entries on the stats database
-    State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
-    ensure_stats_timer(State1);
+%% emit_stats(State=#reader_state{connection = C}) when C == none; C == undefined ->
+%%     %% Avoid emitting stats on terminate when the connection has not yet been
+%%     %% established, as this causes orphan entries on the stats database
+%%     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
+%%     ensure_stats_timer(State1);
 emit_stats(State) ->
     [{_, Pid},
      {_, Recv_oct},
@@ -469,7 +450,7 @@ processor_state(ProcState, #reader_state{} = State) ->
 
 infos(Items, State) -> [{Item, info_internal(Item, State)} || Item <- Items].
 
-info_internal(pid, State) -> info_internal(connection, State);
+info_internal(pid, _) -> self();
 info_internal(SockStat, #reader_state{socket = Sock}) when SockStat =:= recv_oct;
                                                            SockStat =:= recv_cnt;
                                                            SockStat =:= send_oct;
@@ -491,8 +472,10 @@ info_internal(timeout, #reader_state{timeout_sec = undefined}) ->
     0;
 info_internal(conn_name, #reader_state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
-info_internal(connection, #reader_state{connection = Val}) ->
-    Val;
+info_internal(name, #reader_state{conn_name = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
+info_internal(connection, #reader_state{connection = _Val}) ->
+    self();
 info_internal(connection_state, #reader_state{state = Val}) ->
     Val;
 info_internal(Key, #reader_state{processor_state = ProcState}) ->

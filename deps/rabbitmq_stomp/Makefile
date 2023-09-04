@@ -9,7 +9,7 @@ define PROJECT_ENV
 	      {passcode, <<"guest">>}]},
 	    {default_vhost, <<"/">>},
 	    {default_topic_exchange, <<"amq.topic">>},
-		{default_nack_requeue, true},
+	    {default_nack_requeue, true},
 	    {ssl_cert_login, false},
 	    {implicit_connect, false},
 	    {tcp_listeners, [61613]},
