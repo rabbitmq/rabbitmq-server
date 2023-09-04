@@ -1757,6 +1757,9 @@ forget_all_durable(Node) ->
 forget_node_for_queue(_DeadNode, Q)
   when ?amqqueue_is_quorum(Q) ->
     ok;
+forget_node_for_queue(_DeadNode, Q)
+  when ?amqqueue_is_stream(Q) ->
+    ok;
 forget_node_for_queue(DeadNode, Q) ->
     RS = amqqueue:get_recoverable_slaves(Q),
     forget_node_for_queue(DeadNode, RS, Q).
