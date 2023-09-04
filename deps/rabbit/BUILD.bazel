@@ -442,7 +442,7 @@ rabbitmq_integration_suite(
     shard_count = 2,
     # The enabling_* tests chmod files and then expect writes to be blocked.
     # This probably doesn't work because we are root in the remote docker image.
-    tags = ["exclusive"],
+    tags = ["no-remote-exec"],
     runtime_deps = [
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:erlang_app",
     ],
