@@ -117,7 +117,7 @@ setup_schema() ->
 
 disable_plugin() ->
     rabbit_registry:unregister(exchange, <<"x-recent-history">>),
-    rabbit_db_rh_exchange:delete(),
+    _ = rabbit_db_rh_exchange:delete(),
     ok.
 
 %%----------------------------------------------------------------------------
