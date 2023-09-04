@@ -228,7 +228,8 @@ add_delivery_count_header(Msg, Count) ->
     case mc:is(Msg) of
         true when is_integer(Count) andalso
                   Count > 0 ->
-            mc:set_annotation(<<"x-delivery-count">>, Count, Msg);
+            mc:set_annotation(<<"x-delivery-count">>, Count,
+                              mc:prepare(read, Msg));
         _ ->
             Msg
     end.

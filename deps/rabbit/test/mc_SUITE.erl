@@ -27,7 +27,8 @@ all_tests() ->
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      amqp_amqpl,
-     amqp_to_amqpl_data_body
+     amqp_to_amqpl_data_body,
+     amqp_amqpl_amqp_bodies
     ].
 
 groups() ->
@@ -443,41 +444,47 @@ amqp_to_amqpl_data_body(_Config) ->
                            iolist_to_binary(PayFrag))
       end, Cases).
 
-amqp10_non_single_data_bodies(_Config) ->
+amqp_amqpl_amqp_bodies(_Config) ->
     Props = #'P_basic'{type = <<"amqp-1.0">>},
-    Payloads = [
-                [#'v1_0.data'{content = <<"hello">>},
-                 #'v1_0.data'{content = <<"brave">>},
-                 #'v1_0.data'{content = <<"new">>},
-                 #'v1_0.data'{content = <<"world">>}
-                ],
-                #'v1_0.amqp_value'{content = {utf8, <<"hello world">>}},
-                [#'v1_0.amqp_sequence'{content = [{utf8, <<"one">>},
-                                                  {utf8, <<"blah">>}]},
-                 #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
-                ]
-               ],
+    Bodies = [
+              #'v1_0.data'{content = <<"helo world">>},
+              [#'v1_0.data'{content = <<"hello">>},
+               #'v1_0.data'{content = <<"brave">>},
+               #'v1_0.data'{content = <<"new">>},
+               #'v1_0.data'{content = <<"world">>}
+              ],
+              #'v1_0.amqp_value'{content = {utf8, <<"hello world">>}},
+              [#'v1_0.amqp_sequence'{content = [{utf8, <<"one">>},
+                                                {utf8, <<"blah">>}]},
+               #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
+              ]
+             ],
 
     [begin
          EncodedPayload = amqp10_encode_bin(Payload),
 
-         MsgRecord0 = rabbit_msg_record:from_amqp091(Props, EncodedPayload),
-         MsgRecord = rabbit_msg_record:init(
-                       iolist_to_binary(rabbit_msg_record:to_iodata(MsgRecord0))),
-         {PropsOut, PayloadEncodedOut} = rabbit_msg_record:to_amqp091(MsgRecord),
-         PayloadOut = case amqp10_framing:decode_bin(iolist_to_binary(PayloadEncodedOut)) of
-                          L when length(L) =:= 1 ->
-                              lists:nth(1, L);
-                          L ->
-                              L
+         Ex = #resource{virtual_host = <<"/">>,
+                        kind = exchange,
+                        name = <<"ex">>},
+         LegacyMsg = mc_amqpl:message(Ex, <<"rkey">>,
+                                      #content{payload_fragments_rev =
+                                                   lists:reverse(EncodedPayload),
+                                               properties = Props},
+                                      #{}, true),
+
+         AmqpMsg = mc:convert(mc_amqp, LegacyMsg),
+         %% drop any non body sections
+         BodySections = lists:nthtail(3, mc:protocol_state(AmqpMsg)),
+
+         AssertBody = case is_list(Payload) of
+                          true ->
+                              Payload;
+                          false ->
+                              [Payload]
                       end,
-
-         ?assertEqual(Props, PropsOut),
-         ?assertEqual(iolist_to_binary(EncodedPayload),
-                      iolist_to_binary(PayloadEncodedOut)),
-         ?assertEqual(Payload, PayloadOut)
-
-     end || Payload <- Payloads],
+         % ct:pal("ProtoState ~p", [BodySections]),
+         ?assertEqual(AssertBody, BodySections)
+     end || Payload <- Bodies],
     ok.
 
 unsupported_091_header_is_dropped(_Config) ->
@@ -630,9 +637,9 @@ reuse_amqp10_binary_chunks(_Config) ->
     ok.
 
 amqp10_encode_bin(L) when is_list(L) ->
-    iolist_to_binary([amqp10_encode_bin(X) || X <- L]);
+    [iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- L];
 amqp10_encode_bin(X) ->
-    iolist_to_binary(amqp10_framing:encode_bin(X)).
+    [iolist_to_binary(amqp10_framing:encode_bin(X))].
 
 %% Utility
 
