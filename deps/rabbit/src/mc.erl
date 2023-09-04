@@ -64,18 +64,18 @@
                           integer() |
                           float() |
                           boolean().
--type tagged_prop() :: {uuid, binary()} |
-                       {utf8, binary()} |
-                       {binary, binary()} |
-                       {boolean, boolean()} |
-                       {double | float, float()} |
-                       {long | int | short | byte, integer()} |
-                       {ulong | uint | ushort | ubyte, non_neg_integer()} |
-                       {timestamp, non_neg_integer()} |
-                       {list, [tagged_prop()]} |
-                       {map, [{tagged_prop(), tagged_prop()}]} |
-                       null |
-                       undefined.
+-type tagged_value() :: {uuid, binary()} |
+                        {utf8, binary()} |
+                        {binary, binary()} |
+                        {boolean, boolean()} |
+                        {double | float, float()} |
+                        {long | int | short | byte, integer()} |
+                        {ulong | uint | ushort | ubyte, non_neg_integer()} |
+                        {timestamp, non_neg_integer()} |
+                        {list, [tagged_value()]} |
+                        {map, [{tagged_value(), tagged_value()}]} |
+                        null |
+                        undefined.
 
 %% behaviour callbacks for protocol specific implementation
 
@@ -93,12 +93,12 @@
 %% retrieve and x- header from the protocol data
 %% the return value should be tagged with an AMQP 1.0 type
 -callback x_header(binary(), proto_state()) ->
-    tagged_prop().
+    tagged_value().
 
 %% retrieve a property field from the protocol data
 %% e.g. message_id, correlation_id
 -callback property(atom(), proto_state()) ->
-    tagged_prop().
+    tagged_value().
 
 %% return a map of header values used for message routing,
 %% optionally include x- headers and / or complex types (i.e. tables, arrays etc)
@@ -176,7 +176,7 @@ set_annotation(Key, Value, BasicMessage) ->
     mc_compat:set_annotation(Key, Value, BasicMessage).
 
 -spec x_header(Key :: binary(), state()) ->
-    tagged_prop().
+    tagged_value().
 x_header(Key, #?MODULE{protocol = Proto,
                        annotations = Anns,
                        data = Data}) ->
