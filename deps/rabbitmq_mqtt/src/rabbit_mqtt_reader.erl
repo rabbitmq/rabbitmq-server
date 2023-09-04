@@ -336,13 +336,14 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                 connect_packet_unprocessed ->
                     Send = fun(Data) ->
                                    try rabbit_net:port_command(Socket, Data)
-                                   catch error:Error ->
+                                   catch error:Reason ->
                                              ?LOG_ERROR("writing to MQTT socket ~p failed: ~p",
-                                                        [Socket, Error])
+                                                        [Socket, Reason]),
+                                             exit({send_failed, Reason})
                                    end,
                                    ok
                            end,
-                    case rabbit_mqtt_processor:init(Packet, Socket, ConnName, Send) of
+                    try rabbit_mqtt_processor:init(Packet, Socket, ConnName, Send) of
                         {ok, ProcState1} ->
                             ?LOG_INFO("Accepted MQTT connection ~ts for client ID ~ts",
                                       [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),
@@ -358,9 +359,11 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                             ?LOG_ERROR("Rejected MQTT connection ~ts with Connect Reason Code ~p",
                                        [ConnName, ConnectReasonCode]),
                             {stop, shutdown, {_SendWill = false, State}}
+                    catch exit:{send_failed, Reason} ->
+                              network_error(Reason, State)
                     end;
                 _ ->
-                    case rabbit_mqtt_processor:process_packet(Packet, ProcState) of
+                    try rabbit_mqtt_processor:process_packet(Packet, ProcState) of
                         {ok, ProcState1} ->
                             process_received_bytes(
                               Rest,
@@ -377,6 +380,8 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                             {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                         {stop, {disconnect, {client_initiated, SendWill}}, ProcState1} ->
                             {stop, normal, {SendWill, pstate(State, ProcState1)}}
+                    catch exit:{send_failed, Reason} ->
+                              network_error(Reason, State)
                     end
             end;
         {error, {disconnect_reason_code, ReasonCode} = Reason} ->
