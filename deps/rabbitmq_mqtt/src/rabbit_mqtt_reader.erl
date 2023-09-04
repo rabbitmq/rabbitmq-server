@@ -365,18 +365,10 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                         {error, Reason, ProcState1} ->
                             ?LOG_ERROR("MQTT protocol error on connection ~ts: ~tp", [ConnName, Reason]),
                             {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-<<<<<<< HEAD
                         {stop, disconnect, ProcState1} ->
                             {stop, normal, {_SendWill = false, pstate(State, ProcState1)}}
-=======
-                        {stop, {disconnect, server_initiated} = Reason, ProcState1} ->
-                            ?LOG_ERROR("MQTT protocol error on connection ~ts: ~tp", [ConnName, Reason]),
-                            {stop, {shutdown, Reason}, pstate(State, ProcState1)};
-                        {stop, {disconnect, {client_initiated, SendWill}}, ProcState1} ->
-                            {stop, normal, {SendWill, pstate(State, ProcState1)}}
                     catch exit:{send_failed, Reason} ->
                               network_error(Reason, State)
->>>>>>> 81cbc0a7f0 (Close MQTT connection if sending fails)
                     end
             end;
         {error, {cannot_parse, Reason, Stacktrace}} ->
