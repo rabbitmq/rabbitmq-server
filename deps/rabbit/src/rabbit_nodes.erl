@@ -217,7 +217,7 @@ is_reachable(Node) when is_atom(Node) ->
 
 list_reachable() ->
     Members = list_members(),
-    filter_reachable(Members).
+    do_filter_reachable(Members).
 
 -spec list_unreachable() -> Nodes when
       Nodes :: [node()].
@@ -293,7 +293,6 @@ is_running(Node) when is_atom(Node) ->
 is_running(Nodes) when is_list(Nodes) ->
     lists:sort(Nodes) =:= lists:sort(filter_running(Nodes)).
 
-
 -spec list_running() -> Nodes when
       Nodes :: [node()].
 %% @doc Returns the list of nodes in the cluster where RabbitMQ is running.
@@ -306,7 +305,7 @@ is_running(Nodes) when is_list(Nodes) ->
 
 list_running() ->
     Members = list_members(),
-    filter_running(Members).
+    do_filter_running(Members).
 
 -spec list_not_running() -> Nodes when
       Nodes :: [node()].
@@ -406,7 +405,7 @@ is_serving(Node) when is_atom(Node) ->
 
 list_serving() ->
     Members = list_members(),
-    filter_serving(Members).
+    do_filter_serving(Members).
 
 -spec list_not_serving() -> Nodes when
       Nodes :: [node()].
