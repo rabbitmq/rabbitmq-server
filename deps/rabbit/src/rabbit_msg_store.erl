@@ -129,7 +129,7 @@
         }).
 
 -record(file_summary,
-        {file, valid_total_size, file_size, locked}).
+        {file, valid_total_size, unused1, unused2, file_size, locked, unused3}).
 
 -record(gc_state,
         { dir,
