@@ -33,8 +33,7 @@
 %% @private
 
 set(Key, Term) when is_atom(Key) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(Key, Term) end}).
+    set_in_mnesia(Key, Term).
 
 set_in_mnesia(Key, Term) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -59,8 +58,7 @@ set(VHostName, Comp, Name, Term)
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
     Key = {VHostName, Comp, Name},
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(VHostName, Key, Term) end}).
+    set_in_mnesia(VHostName, Key, Term).
 
 set_in_mnesia(VHostName, Key, Term) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -96,11 +94,9 @@ get({VHostName, Comp, Name} = Key)
   when is_binary(VHostName) andalso
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Key) end});
+    get_in_mnesia(Key);
 get(Key) when is_atom(Key) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Key) end}).
+    get_in_mnesia(Key).
 
 get_in_mnesia(Key) ->
     case mnesia:dirty_read(?MNESIA_TABLE, Key) of
@@ -124,11 +120,9 @@ get_or_set({VHostName, Comp, Name} = Key, Default)
   when is_binary(VHostName) andalso
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end});
+    get_or_set_in_mnesia(Key, Default);
 get_or_set(Key, Default) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end}).
+    get_or_set_in_mnesia(Key, Default).
 
 get_or_set_in_mnesia(Key, Default) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -158,8 +152,7 @@ get_or_set_in_mnesia_tx(Key, Default) ->
 %% @private
 
 get_all() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end}).
+    get_all_in_mnesia().
 
 get_all_in_mnesia() ->
     rabbit_mnesia:dirty_read_all(?MNESIA_TABLE).
@@ -178,8 +171,7 @@ get_all_in_mnesia() ->
 get_all(VHostName, Comp)
   when (is_binary(VHostName) orelse VHostName =:= '_') andalso
        (is_binary(Comp) orelse Comp =:= '_') ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(VHostName, Comp) end}).
+    get_all_in_mnesia(VHostName, Comp).
 
 get_all_in_mnesia(VHostName, Comp) ->
     mnesia:async_dirty(
@@ -204,8 +196,7 @@ get_all_in_mnesia(VHostName, Comp) ->
 %% @private
 
 delete(Key) when is_atom(Key) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Key) end}).
+    delete_in_mnesia(Key).
 
 -spec delete(VHostName, Comp, Name) -> ok when
       VHostName :: vhost:name() | '_',
@@ -221,13 +212,10 @@ delete(VHostName, Comp, Name)
        is_binary(Comp) andalso
        (is_binary(Name) orelse (is_atom(Name) andalso Name =/= '_')) ->
     Key = {VHostName, Comp, Name},
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Key) end});
+    delete_in_mnesia(Key);
 delete(VHostName, Comp, Name)
   when VHostName =:= '_' orelse Comp =:= '_' orelse Name =:= '_' ->
-    rabbit_db:run(
-      #{mnesia =>
-        fun() -> delete_matching_in_mnesia(VHostName, Comp, Name) end}).
+    delete_matching_in_mnesia(VHostName, Comp, Name).
 
 delete_in_mnesia(Key) ->
     rabbit_mnesia:execute_mnesia_transaction(

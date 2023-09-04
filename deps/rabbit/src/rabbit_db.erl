@@ -19,7 +19,6 @@
          is_virgin_node/0, is_virgin_node/1,
          dir/0,
          ensure_dir_exists/0]).
--export([run/1]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -49,8 +48,7 @@ init() ->
 
     pre_init(IsVirgin),
 
-    Ret = run(
-            #{mnesia => fun init_using_mnesia/0}),
+    Ret = init_using_mnesia(),
     case Ret of
         ok ->
             ?LOG_DEBUG(
@@ -91,9 +89,8 @@ init_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    Ret = run(
-            #{mnesia => fun reset_using_mnesia/0}),
-    post_reset(Ret).
+    ok = reset_using_mnesia(),
+    post_reset().
 
 reset_using_mnesia() ->
     ?LOG_INFO(
@@ -106,9 +103,8 @@ reset_using_mnesia() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    Ret = run(
-            #{mnesia => fun force_reset_using_mnesia/0}),
-    post_reset(Ret).
+    ok = force_reset_using_mnesia(),
+    post_reset().
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(
@@ -124,8 +120,7 @@ force_reset_using_mnesia() ->
 %% state, like if critical members are MIA.
 
 force_load_on_next_boot() ->
-    run(
-      #{mnesia => fun force_load_on_next_boot_using_mnesia/0}).
+    force_load_on_next_boot_using_mnesia().
 
 force_load_on_next_boot_using_mnesia() ->
     ?LOG_DEBUG(
@@ -133,11 +128,9 @@ force_load_on_next_boot_using_mnesia() ->
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_load_next_boot().
 
-post_reset(ok) ->
+post_reset() ->
     rabbit_feature_flags:reset_registry(),
-    ok;
-post_reset({error, _} = Error) ->
-    Error.
+    ok.
 
 %% -------------------------------------------------------------------
 %% is_virgin_node().
@@ -152,8 +145,7 @@ post_reset({error, _} = Error) ->
 %% @see is_virgin_node/1.
 
 is_virgin_node() ->
-    run(
-      #{mnesia => fun is_virgin_node_using_mnesia/0}).
+    is_virgin_node_using_mnesia().
 
 is_virgin_node_using_mnesia() ->
     rabbit_mnesia:is_virgin_node().
@@ -186,8 +178,7 @@ is_virgin_node(Node) when is_atom(Node) ->
 %% @returns the directory path.
 
 dir() ->
-    run(
-      #{mnesia => fun mnesia_dir/0}).
+    mnesia_dir().
 
 mnesia_dir() ->
     rabbit_mnesia:dir().
@@ -207,26 +198,15 @@ ensure_dir_exists() ->
     end.
 
 %% -------------------------------------------------------------------
-%% run().
+%% list_in_mnesia().
 %% -------------------------------------------------------------------
 
--spec run(Funs) -> Ret when
-      Funs :: #{mnesia := Fun},
-      Fun :: fun(() -> Ret),
-      Ret :: any().
-%% @doc Runs the function corresponding to the used database engine.
-%%
-%% @returns the return value of `Fun'.
-
-run(Funs)
-  when is_map(Funs) andalso is_map_key(mnesia, Funs) ->
-    #{mnesia := MnesiaFun} = Funs,
-    run_using_mnesia(MnesiaFun).
-
-run_using_mnesia(Fun) ->
-    Fun().
+-spec list_in_mnesia(Table, Match) -> Objects when
+      Table :: atom(),
+      Match :: any(),
+      Objects :: [any()].
 
 list_in_mnesia(Table, Match) ->
-    %% Not dirty_match_object since that would not be transactional when used in a
-    %% tx context
+    %% Not dirty_match_object since that would not be transactional when used
+    %% in a tx context
     mnesia:async_dirty(fun () -> mnesia:match_object(Table, Match, read) end).

@@ -57,8 +57,7 @@
 %% @private
 
 get_all() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end}).
+    get_all_in_mnesia().
 
 get_all_in_mnesia() ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, #exchange{_ = '_'}).
@@ -73,9 +72,7 @@ get_all_in_mnesia() ->
 %% @private
 
 get_all(VHost) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(VHost) end
-       }).
+    get_all_in_mnesia(VHost).
 
 get_all_in_mnesia(VHost) ->
     Match = #exchange{name = rabbit_misc:r(VHost, exchange), _ = '_'},
@@ -94,9 +91,7 @@ get_all_in_mnesia(VHost) ->
 %% @private
 
 get_all_durable() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_durable_in_mnesia() end
-       }).
+    get_all_durable_in_mnesia().
 
 get_all_durable_in_mnesia() ->
     rabbit_db:list_in_mnesia(rabbit_durable_exchange, #exchange{_ = '_'}).
@@ -114,9 +109,7 @@ get_all_durable_in_mnesia() ->
 %% @private
 
 list() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> list_in_mnesia() end
-       }).
+    list_in_mnesia().
 
 list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
@@ -136,9 +129,7 @@ list_in_mnesia() ->
 %% @private
 
 get(Name) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Name) end
-       }).
+    get_in_mnesia(Name).
  
 get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
@@ -157,9 +148,7 @@ get_in_mnesia(Name) ->
 %% @private
 
 get_many(Names) when is_list(Names) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_many_in_mnesia(?MNESIA_TABLE, Names) end
-       }).
+    get_many_in_mnesia(?MNESIA_TABLE, Names).
 
 get_many_in_mnesia(Table, [Name]) -> ets:lookup(Table, Name);
 get_many_in_mnesia(Table, Names) when is_list(Names) ->
@@ -179,8 +168,7 @@ get_many_in_mnesia(Table, Names) when is_list(Names) ->
 %% @private
 
 count() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> count_in_mnesia() end}).
+    count_in_mnesia().
 
 count_in_mnesia() ->
     mnesia:table_info(?MNESIA_TABLE, size).
@@ -201,9 +189,7 @@ count_in_mnesia() ->
 %% @private
 
 update(XName, Fun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_in_mnesia(XName, Fun) end
-       }).
+    update_in_mnesia(XName, Fun).
 
 update_in_mnesia(XName, Fun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -254,9 +240,7 @@ set_ram_in_mnesia_tx(X) ->
 %% @private
 
 create_or_get(X) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_or_get_in_mnesia(X) end
-       }).
+    create_or_get_in_mnesia(X).
 
 create_or_get_in_mnesia(#exchange{name = XName} = X) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -282,9 +266,7 @@ create_or_get_in_mnesia(#exchange{name = XName} = X) ->
 %% @private
 
 set(Xs) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(Xs) end
-       }).
+    set_in_mnesia(Xs).
 
 set_in_mnesia(Xs) when is_list(Xs) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -307,9 +289,7 @@ set_in_mnesia(Xs) when is_list(Xs) ->
 %% @private
 
 peek_serial(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> peek_serial_in_mnesia(XName) end
-       }).
+    peek_serial_in_mnesia(XName).
 
 peek_serial_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -337,9 +317,7 @@ peek_serial_in_mnesia_tx(XName, LockType) ->
 %% @private
 
 next_serial(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> next_serial_in_mnesia(XName) end
-       }).
+    next_serial_in_mnesia(XName).
 
 next_serial_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(fun() ->
@@ -380,9 +358,7 @@ next_serial_in_mnesia_tx(XName) ->
 %% @private
 
 delete(XName, IfUnused) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(XName, IfUnused) end
-       }).
+    delete_in_mnesia(XName, IfUnused).
 
 delete_in_mnesia(XName, IfUnused) ->
     DeletionFun = case IfUnused of
@@ -433,9 +409,7 @@ delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSour
 %% @private
 
 delete_serial(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_serial_in_mnesia(XName) end
-       }).
+    delete_serial_in_mnesia(XName).
 
 delete_serial_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -457,9 +431,7 @@ delete_serial_in_mnesia(XName) ->
 %% @private
 
 recover(VHost) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> recover_in_mnesia(VHost) end
-       }).
+    recover_in_mnesia(VHost).
 
 recover_in_mnesia(VHost) ->
     rabbit_mnesia:table_filter(
@@ -492,9 +464,7 @@ recover_in_mnesia(VHost) ->
 %% @private
 
 match(Pattern) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> match_in_mnesia(Pattern) end
-       }).
+    match_in_mnesia(Pattern).
 
 match_in_mnesia(Pattern) -> 
     case mnesia:transaction(
@@ -519,8 +489,7 @@ match_in_mnesia(Pattern) ->
 %% @private
 
 exists(Name) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> exists_in_mnesia(Name) end}).
+    exists_in_mnesia(Name).
 
 exists_in_mnesia(Name) ->
     ets:member(?MNESIA_TABLE, Name).
@@ -535,8 +504,7 @@ exists_in_mnesia(Name) ->
 %% @private
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end}).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),

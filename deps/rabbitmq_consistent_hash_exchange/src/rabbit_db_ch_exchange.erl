@@ -21,9 +21,7 @@
 -define(HASH_RING_STATE_TABLE, rabbit_exchange_type_consistent_hash_ring_state).
 
 setup_schema() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> setup_schema_in_mnesia() end
-       }).
+    setup_schema_in_mnesia().
 
 setup_schema_in_mnesia() ->
     _ = mnesia:create_table(?HASH_RING_STATE_TABLE, [{record_name, chx_hash_ring},
@@ -33,9 +31,7 @@ setup_schema_in_mnesia() ->
     rabbit_table:wait([?HASH_RING_STATE_TABLE]).
 
 create(X) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_in_mnesia(X) end
-       }).
+    create_in_mnesia(X).
 
 create_in_mnesia(X) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -54,9 +50,7 @@ create_in_mnesia_tx(X) ->
     end.
 
 create_binding(Src, Dst, Weight, UpdateFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_binding_in_mnesia(Src, Dst, Weight, UpdateFun) end
-       }).
+    create_binding_in_mnesia(Src, Dst, Weight, UpdateFun).
 
 create_binding_in_mnesia(Src, Dst, Weight, UpdateFun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -80,9 +74,7 @@ create_binding_in_mnesia_tx(Src, Dst, Weight, UpdateFun) ->
     end.
 
 get(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(XName) end
-       }).
+    get_in_mnesia(XName).
 
 get_in_mnesia(XName) ->
     case ets:lookup(?HASH_RING_STATE_TABLE, XName) of
@@ -93,9 +85,7 @@ get_in_mnesia(XName) ->
     end.
 
 delete(XName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(XName) end
-       }).
+    delete_in_mnesia(XName).
 
 delete_in_mnesia(XName) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -105,9 +95,7 @@ delete_in_mnesia(XName) ->
       end).
 
 delete_bindings(Bindings, DeleteFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_bindings_in_mnesia(Bindings, DeleteFun) end
-       }).
+    delete_bindings_in_mnesia(Bindings, DeleteFun).
 
 delete_bindings_in_mnesia(Bindings, DeleteFun) ->
     rabbit_mnesia:execute_mnesia_transaction(

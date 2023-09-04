@@ -55,9 +55,7 @@
 %% @private
 
 exists(Binding) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> exists_in_mnesia(Binding) end
-       }).
+    exists_in_mnesia(Binding).
 
 exists_in_mnesia(Binding) ->
     binding_action_in_mnesia(
@@ -105,9 +103,7 @@ not_found_or_absent_errs_in_mnesia(Names) ->
 %% @private
 
 create(Binding, ChecksFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_in_mnesia(Binding, ChecksFun) end
-       }).
+    create_in_mnesia(Binding, ChecksFun).
 
 create_in_mnesia(Binding, ChecksFun) ->
     binding_action_in_mnesia(
@@ -150,9 +146,7 @@ create_in_mnesia(Binding, ChecksFun) ->
 %% @private
 
 delete(Binding, ChecksFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(Binding, ChecksFun) end
-       }).
+    delete_in_mnesia(Binding, ChecksFun).
 
 delete_in_mnesia(Binding, ChecksFun) ->
     binding_action_in_mnesia(
@@ -219,9 +213,7 @@ not_found_or_absent_in_mnesia(#resource{kind = queue}    = Name) ->
 %% @private
 
 get_all() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end
-       }).
+    get_all_in_mnesia().
 
 get_all_in_mnesia() ->
     mnesia:async_dirty(
@@ -240,9 +232,7 @@ get_all_in_mnesia() ->
 %% @private
 
 get_all(VHost) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(VHost) end
-       }).
+    get_all_in_mnesia(VHost).
 
 get_all_in_mnesia(VHost) ->
     VHostResource = rabbit_misc:r(VHost, '_'),
@@ -265,9 +255,7 @@ get_all_in_mnesia(VHost) ->
 %% @private
 
 get_all(SrcName, DstName, Reverse) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(SrcName, DstName, Reverse) end
-       }).
+    get_all_in_mnesia(SrcName, DstName, Reverse).
 
 get_all_in_mnesia(SrcName, DstName, Reverse) ->
     Route = #route{binding = #binding{source      = SrcName,
@@ -290,9 +278,7 @@ get_all_in_mnesia(SrcName, DstName, Reverse) ->
 %% @private
 
 get_all_for_source(Resource) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_for_source_in_mnesia(Resource) end
-       }).
+    get_all_for_source_in_mnesia(Resource).
 
 get_all_for_source_in_mnesia(Resource) ->
     Route = #route{binding = #binding{source = Resource, _ = '_'}},
@@ -326,9 +312,7 @@ list_for_route(Route, true) ->
 %% @private
 
 get_all_for_destination(Dst) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_for_destination_in_mnesia(Dst) end
-       }).
+    get_all_for_destination_in_mnesia(Dst).
 
 get_all_for_destination_in_mnesia(Dst) ->
     Route = #route{binding = #binding{destination = Dst,
@@ -354,9 +338,7 @@ get_all_for_destination_in_mnesia(Dst) ->
 %% @private
 
 fold(Fun, Acc) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> fold_in_mnesia(Fun, Acc) end
-       }).
+    fold_in_mnesia(Fun, Acc).
 
 fold_in_mnesia(Fun, Acc) ->
     ets:foldl(fun(#route{binding = Binding}, Acc0) ->
@@ -381,9 +363,7 @@ fold_in_mnesia(Fun, Acc) ->
 %% @private
 
 match(SrcName, Match) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> match_in_mnesia(SrcName, Match) end
-       }).
+    match_in_mnesia(SrcName, Match).
 
 match_in_mnesia(SrcName, Match) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
@@ -411,9 +391,7 @@ match_in_mnesia(SrcName, Match) ->
 %% @private
 
 match_routing_key(SrcName, RoutingKeys, UseIndex) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) end
-       }).
+    match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex).
 
 match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
     case UseIndex of
@@ -433,9 +411,7 @@ match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
 %% @private
 
 recover() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> recover_in_mnesia() end
-       }).
+    recover_in_mnesia().
 
 recover_in_mnesia() ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -462,15 +438,14 @@ recover_in_mnesia() ->
 %% @private
 
 recover(RecoverFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> recover_in_mnesia(RecoverFun) end
-       }).
+    recover_in_mnesia(RecoverFun).
 
 recover_in_mnesia(RecoverFun) ->
-    [RecoverFun(Route, Src, Dst, fun recover_semi_durable_route/2) ||
-        #route{binding = #binding{destination = Dst,
-                                  source = Src}} = Route <-
-            rabbit_mnesia:dirty_read_all(?MNESIA_SEMI_DURABLE_TABLE)].
+    _ = [RecoverFun(Route, Src, Dst, fun recover_semi_durable_route/2) ||
+         #route{binding = #binding{destination = Dst,
+                                   source = Src}} = Route <-
+         rabbit_mnesia:dirty_read_all(?MNESIA_SEMI_DURABLE_TABLE)],
+    ok.
 
 %% -------------------------------------------------------------------
 %% delete_all_for_exchange_in_mnesia().
@@ -578,8 +553,7 @@ has_for_source_in_mnesia(SrcName) ->
 %% @private
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end}).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),

@@ -27,9 +27,7 @@
       Ret :: {[{Exchange, Exchange}], [{Queue, Queue}]}.
 
 update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) end
-       }).
+    update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun).
 
 %% [1] We need to prevent this from becoming O(n^2) in a similar
 %% manner to rabbit_binding:remove_for_{source,destination}. So see

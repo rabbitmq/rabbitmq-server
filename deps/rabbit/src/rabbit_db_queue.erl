@@ -76,9 +76,7 @@
 %% @private
 
 get_all() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia() end
-       }).
+    get_all_in_mnesia().
 
 get_all_in_mnesia() ->
     list_with_possible_retry_in_mnesia(
@@ -97,9 +95,7 @@ get_all_in_mnesia() ->
 %% @private
 
 get_all(VHostName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_in_mnesia(VHostName) end
-       }).
+    get_all_in_mnesia(VHostName).
 
 get_all_in_mnesia(VHostName) ->
     list_with_possible_retry_in_mnesia(
@@ -122,9 +118,7 @@ get_all_in_mnesia(VHostName) ->
 %% @private
 
 get_all_durable() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_durable_in_mnesia() end
-       }).
+    get_all_durable_in_mnesia().
 
 get_all_durable_in_mnesia() ->
     list_with_possible_retry_in_mnesia(
@@ -143,9 +137,7 @@ get_all_durable_in_mnesia() ->
 %% @private
 
 get_all_durable_by_type(Type) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_durable_by_type_in_mnesia(Type) end
-       }).
+    get_all_durable_by_type_in_mnesia(Type).
 
 get_all_durable_by_type_in_mnesia(Type) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
@@ -166,9 +158,7 @@ get_all_durable_by_type_in_mnesia(Type) ->
 %% @private
 
 filter_all_durable(FilterFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> filter_all_durable_in_mnesia(FilterFun) end
-       }).
+    filter_all_durable_in_mnesia(FilterFun).
 
 filter_all_durable_in_mnesia(FilterFun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -192,9 +182,7 @@ filter_all_durable_in_mnesia(FilterFun) ->
 %% @private
 
 list() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> list_in_mnesia() end
-       }).
+    list_in_mnesia().
 
 list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
@@ -213,9 +201,7 @@ list_in_mnesia() ->
 %% @private
 
 count() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> count_in_mnesia() end
-       }).
+    count_in_mnesia().
 
 count_in_mnesia() ->
     mnesia:table_info(?MNESIA_TABLE, size).
@@ -240,9 +226,7 @@ count(VHostName) ->
     end.
 
 list_for_count(VHostName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> list_for_count_in_mnesia(VHostName) end
-       }).
+    list_for_count_in_mnesia(VHostName).
 
 list_for_count_in_mnesia(VHostName) ->
     %% this is certainly suboptimal but there is no way to count
@@ -267,9 +251,7 @@ list_for_count_in_mnesia(VHostName) ->
       Ret :: ok | Deletions :: rabbit_binding:deletions().
 
 delete(QueueName, Reason) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_in_mnesia(QueueName, Reason) end
-       }).
+    delete_in_mnesia(QueueName, Reason).
 
 delete_in_mnesia(QueueName, Reason) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -301,9 +283,7 @@ internal_delete(QueueName, OnlyDurable, Reason) ->
     %% Only used by rabbit_amqqueue:forget_node_for_queue, which is only called
     %% by `rabbit_mnesia:remove_node_if_mnesia_running'. Thus, once mnesia and/or
     %% HA queues are removed it can be removed.
-    rabbit_db:run(
-      #{mnesia => fun() -> internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) end
-       }).
+    internal_delete_in_mnesia(QueueName, OnlyDurable, Reason).
 
 internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
     ok = mnesia:delete({?MNESIA_TABLE, QueueName}),
@@ -329,9 +309,7 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
 -spec get_many(rabbit_exchange:route_return()) ->
     [amqqueue:amqqueue() | {amqqueue:amqqueue(), rabbit_exchange:route_infos()}].
 get_many(Names) when is_list(Names) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_many_in_mnesia(?MNESIA_TABLE, Names) end
-       }).
+    get_many_in_mnesia(?MNESIA_TABLE, Names).
 
 get_many_in_mnesia(Table, [{Name, RouteInfos}])
   when is_map(RouteInfos) ->
@@ -366,9 +344,7 @@ get_many_in_mnesia(Table, Names)
       QName :: rabbit_amqqueue:name(),
       Ret :: {ok, Queue :: amqqueue:amqqueue()} | {error, not_found}.
 get(Name) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_in_mnesia(Name) end
-       }).
+    get_in_mnesia(Name).
 
 get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
@@ -382,9 +358,7 @@ get_in_mnesia(Name) ->
       Ret :: {ok, Queue :: amqqueue:amqqueue()} | {error, not_found}.
 
 get_durable(Name) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_durable_in_mnesia(Name) end
-       }).
+    get_durable_in_mnesia(Name).
 
 get_durable_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_DURABLE_TABLE, Name}).
@@ -398,9 +372,7 @@ get_durable_in_mnesia(Name) ->
       Ret :: [Queue :: amqqueue:amqqueue()].
 
 get_many_durable(Names) when is_list(Names) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_many_in_mnesia(?MNESIA_DURABLE_TABLE, Names) end
-       }).
+    get_many_in_mnesia(?MNESIA_DURABLE_TABLE, Names).
 
 %% -------------------------------------------------------------------
 %% update().
@@ -416,9 +388,7 @@ get_many_durable(Names) when is_list(Names) ->
 %% @private
 
 update(QName, Fun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_in_mnesia(QName, Fun) end
-       }).
+    update_in_mnesia(QName, Fun).
 
 update_in_mnesia(QName, Fun) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -437,9 +407,7 @@ update_in_mnesia(QName, Fun) ->
 %% @private
 
 update_decorators(QName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> update_decorators_in_mnesia(QName) end
-       }).
+    update_decorators_in_mnesia(QName).
 
 update_decorators_in_mnesia(Name) ->
     rabbit_mnesia:execute_mnesia_transaction(
@@ -464,10 +432,7 @@ update_decorators_in_mnesia(Name) ->
 %% @private
 
 update_durable(UpdateFun, FilterFun) ->
-    rabbit_db:run(
-      #{mnesia =>
-            fun() -> update_durable_in_mnesia(UpdateFun, FilterFun) end
-       }).
+    update_durable_in_mnesia(UpdateFun, FilterFun).
 
 update_durable_in_mnesia(UpdateFun, FilterFun) ->
     Pattern = amqqueue:pattern_match_all(),
@@ -495,9 +460,7 @@ update_durable_in_mnesia(UpdateFun, FilterFun) ->
 %% @private
 
 exists(QName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> exists_in_mnesia(QName) end
-       }).
+    exists_in_mnesia(QName).
 
 exists_in_mnesia(QName) ->
     ets:member(?MNESIA_TABLE, QName).
@@ -518,9 +481,7 @@ exists_in_mnesia(QName) ->
 %% @private
 
 consistent_exists(QName) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> consistent_exists_in_mnesia(QName) end
-       }).
+    consistent_exists_in_mnesia(QName).
 
 consistent_exists_in_mnesia(QName) ->
     case mnesia:read({?MNESIA_TABLE, QName}) of
@@ -544,9 +505,7 @@ consistent_exists_in_mnesia(QName) ->
 
 get_all_by_type(Type) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_by_pattern_in_mnesia(Pattern) end
-       }).
+    get_all_by_pattern_in_mnesia(Pattern).
 
 get_all_by_pattern_in_mnesia(Pattern) ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, Pattern).
@@ -568,9 +527,7 @@ get_all_by_pattern_in_mnesia(Pattern) ->
 %% @private
 
 get_all_by_type_and_node(VHostName, Type, Node) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) end
-       }).
+    get_all_by_type_and_node_in_mnesia(VHostName, Type, Node).
 
 get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) ->
     mnesia:async_dirty(
@@ -596,9 +553,7 @@ get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) ->
 %% @private
 
 create_or_get(Q) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> create_or_get_in_mnesia(Q) end
-       }).
+    create_or_get_in_mnesia(Q).
 
 create_or_get_in_mnesia(Q) ->
     DurableQ = amqqueue:reset_mirroring_and_decorators(Q),
@@ -632,9 +587,7 @@ create_or_get_in_mnesia(Q) ->
 %% @private
 
 set(Q) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_in_mnesia(Q) end
-       }).
+    set_in_mnesia(Q).
 
 set_in_mnesia(Q) ->
     DurableQ = amqqueue:reset_mirroring_and_decorators(Q),
@@ -665,9 +618,7 @@ set_in_mnesia_tx(DurableQ, Q) ->
 %% @private
 
 set_many(Qs) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_many_in_mnesia(Qs) end
-       }).
+    set_many_in_mnesia(Qs).
 
 set_many_in_mnesia(Qs) ->
     {atomic, ok} =
@@ -693,9 +644,7 @@ set_many_in_mnesia(Qs) ->
 %% @private
 
 delete_transient(FilterFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> delete_transient_in_mnesia(FilterFun) end
-       }).
+    delete_transient_in_mnesia(FilterFun).
 
 delete_transient_in_mnesia(FilterFun) ->
     Qs = rabbit_mnesia:execute_mnesia_transaction(
@@ -748,9 +697,7 @@ partition_queues(T) ->
 %% @private
 
 foreach_transient(UpdateFun) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> foreach_transient_in_mnesia(UpdateFun) end
-       }).
+    foreach_transient_in_mnesia(UpdateFun).
 
 foreach_transient_in_mnesia(UpdateFun) ->
     Pattern = amqqueue:pattern_match_all(),
@@ -773,10 +720,7 @@ foreach_transient_in_mnesia(UpdateFun) ->
 %% @private
 
 foreach_durable(UpdateFun, FilterFun) ->
-    rabbit_db:run(
-      #{mnesia =>
-            fun() -> foreach_durable_in_mnesia(UpdateFun, FilterFun) end
-       }).
+    foreach_durable_in_mnesia(UpdateFun, FilterFun).
 
 foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
     %% Note rabbit is not running so we avoid e.g. the worker pool. Also why
@@ -802,9 +746,7 @@ foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
 %% @private
 
 set_dirty(Q) ->
-    rabbit_db:run(
-      #{mnesia => fun() -> set_dirty_in_mnesia(Q) end
-       }).
+    set_dirty_in_mnesia(Q).
 
 set_dirty_in_mnesia(Q) ->
     ok = mnesia:dirty_write(?MNESIA_TABLE, rabbit_queue_decorator:set(Q)).
@@ -858,8 +800,7 @@ get_durable_in_mnesia_tx(Name) ->
 %% @private
 
 clear() ->
-    rabbit_db:run(
-      #{mnesia => fun() -> clear_in_mnesia() end}).
+    clear_in_mnesia().
 
 clear_in_mnesia() ->
     {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),
