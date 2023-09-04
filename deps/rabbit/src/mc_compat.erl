@@ -63,9 +63,10 @@ set_annotation(routing_keys, Value, #basic_message{} = Msg) ->
 set_annotation(exchange, Value, #basic_message{exchange_name = Ex} = Msg) ->
     Msg#basic_message{exchange_name = Ex#resource{name = Value}};
 set_annotation(<<"x-", _/binary>> = Key, Value,
-               #basic_message{content =
-                              #content{properties =
-                                       #'P_basic'{headers = H0} = B} = C0} = Msg) ->
+               #basic_message{content = Content0} = Msg) ->
+    #content{properties =
+             #'P_basic'{headers = H0} = B} = C0 =
+        rabbit_binary_parser:ensure_content_decoded(Content0),
     T = case Value of
             _ when is_integer(Value) ->
                 long;

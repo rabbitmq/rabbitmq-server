@@ -282,7 +282,15 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
               end,
     %% TODO: only add header section if at least one of the fields
     %% needs to be set
+    Ttl = case Expiration of
+              undefined ->
+                  undefined;
+              _ ->
+                  binary_to_integer(Expiration)
+          end,
+
     H = #'v1_0.header'{durable = DelMode =:= 2,
+                       ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
                        priority = wrap(ubyte, Priority)},
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
@@ -327,21 +335,23 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                             is_binary(K)
                         ],
 
-                 %% properties that _are_ potentially used by the broker
-                 %% are stored as message annotations
-                 %% an alternative woud be to store priority and delivery mode in
-                 %% the amqp (1.0) header section using the dura
-                 MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type,
-                               map_add(symbol, <<"x-basic-priority">>, ubyte, Priority,
-                                       map_add(symbol, <<"x-basic-delivery-mode">>, ubyte, DelMode,
-                                               map_add(symbol, <<"x-basic-expiration">>, utf8, Expiration,
-                                                       MAC0)))),
+                 %% `type' doesn't have a direct equivalent so adding as
+                 %% a message annotation here
+                 MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
                  #'v1_0.message_annotations'{content = MAC};
              Section ->
                  Section
          end,
 
-    Sections = [H, P, AP, MA, #'v1_0.data'{content = lists:reverse(Payload)}],
+    BodySections = case Type of
+                       ?AMQP10_TYPE ->
+                           amqp10_framing:decode_bin(
+                             iolist_to_binary(lists:reverse(Payload)));
+                       _ ->
+                           [#'v1_0.data'{content = lists:reverse(Payload)}]
+                   end,
+
+    Sections = [H, MA, P, AP | BodySections],
     mc_amqp:convert_from(mc_amqp, Sections);
 convert_to(_TargetProto, _Content) ->
     not_implemented.
