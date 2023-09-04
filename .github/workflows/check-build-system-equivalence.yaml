@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 15
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ github.event.inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
@@ -74,7 +74,7 @@ jobs:
     timeout-minutes: 15
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: rabbitmq
         ref: ${{ github.event.inputs.ref || github.ref }}
@@ -112,7 +112,7 @@ jobs:
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: rabbitmq-server
         ref: ${{ github.event.inputs.ref || github.ref }}
