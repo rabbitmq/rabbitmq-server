@@ -68,10 +68,13 @@
                        {utf8, binary()} |
                        {binary, binary()} |
                        {boolean, boolean()} |
-                       {long, integer()} |
-                       {ulong, non_neg_integer() } |
+                       {double | float, float()} |
+                       {long | int | short | byte, integer()} |
+                       {ulong | uint | ushort | ubyte, non_neg_integer()} |
+                       {timestamp, non_neg_integer()} |
                        {list, [tagged_prop()]} |
                        {map, [{tagged_prop(), tagged_prop()}]} |
+                       null |
                        undefined.
 
 %% behaviour callbacks for protocol specific implementation
