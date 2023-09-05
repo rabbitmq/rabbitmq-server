@@ -2,7 +2,7 @@
 
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-SUITE_FILE=${1:-"all-suites"}
+SUITE_FILE=${1:-"full-suite-management-ui"}
 OVERALL_TEST_RESULT=0
 GREEN='\033[0;32m'
 RED='\033[0;31m'
