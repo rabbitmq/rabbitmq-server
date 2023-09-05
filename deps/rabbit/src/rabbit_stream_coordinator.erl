@@ -931,18 +931,27 @@ send_self_command(Cmd) ->
 
 phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
     fun() ->
-            try osiris_server_sup:delete_child(Node, Conf) of
-                ok ->
-                    rabbit_log:info("~ts: Member deleted for ~ts : on node ~ts",
+            case rabbit_nodes:is_member(Node) of
+                true ->
+                    try osiris_server_sup:delete_child(Node, Conf) of
+                        ok ->
+                            rabbit_log:info("~ts: Member deleted for ~ts : on node ~ts",
+                                            [?MODULE, StreamId, Node]),
+                            send_self_command({member_deleted, StreamId, Arg});
+                        _ ->
+                            send_action_failed(StreamId, deleting, Arg)
+                    catch _:E ->
+                              rabbit_log:warning("~ts: Error while deleting member for ~ts : on node ~ts ~W",
+                                                 [?MODULE, StreamId, Node, E, 10]),
+                              maybe_sleep(E),
+                              send_action_failed(StreamId, deleting, Arg)
+                    end;
+                false ->
+                    %% node is no longer a cluster member, we return success to avoid
+                    %% trying to delete the member indefinitely
+                    rabbit_log:info("~ts: Member deleted/forgotten for ~ts : node ~ts is no longer a cluster member",
                                     [?MODULE, StreamId, Node]),
-                    send_self_command({member_deleted, StreamId, Arg});
-                _ ->
-                    send_action_failed(StreamId, deleting, Arg)
-            catch _:E ->
-                    rabbit_log:warning("~ts: Error while deleting member for ~ts : on node ~ts ~W",
-                                       [?MODULE, StreamId, Node, E, 10]),
-                    maybe_sleep(E),
-                    send_action_failed(StreamId, deleting, Arg)
+                    send_self_command({member_deleted, StreamId, Arg})
             end
     end.
 
