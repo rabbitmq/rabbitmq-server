@@ -11,12 +11,26 @@ HTTPD_DOCKER_IMAGE=httpd:latest
 PADDING=""
 declare -a REQUIRED_COMPONENTS
 
-BIN_DIR=$(realpath ${SCRIPT}/../bin)
-LOGS=${SCRIPT}/../logs/${SUITE}
-SCREENS=${SCRIPT}/../screens/${SUITE}
+find_selenium_dir() {
+  TEST_PATH=$1
+  FOUND=""
+  while [[ $TEST_PATH != "" && $FOUND == "" ]]; do
+    FILENAME=$(basename "$TEST_PATH")
+    if [[ $FILENAME == "selenium" ]]; then
+      FOUND=$TEST_PATH
+    fi
+    TEST_PATH="$(dirname $TEST_PATH)"
+  done
+  echo $FOUND
+}
+
+SELENIUM_ROOT_FOLDER=$(find_selenium_dir $SCRIPT)
+TEST_DIR=$SELENIUM_ROOT_FOLDER/test
+BIN_DIR=$SELENIUM_ROOT_FOLDER/bin
+LOGS=${SELENIUM_ROOT_FOLDER}/logs/${SUITE}
+SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=/tmp/selenium/${SUITE}
 ENV_FILE=$CONF_DIR/.env
-SELENIUM_ROOT_FOLDER=$BIN_DIR/..
 
 parse_arguments() {
   if [[ "$#" -gt 0 ]]
@@ -64,7 +78,6 @@ ensure_docker_network() {
   end "$DOCKER_NETWORK network exists"
 }
 init_suite() {
-  TEST_DIR=$(realpath ${SCRIPT}/../test)
   TEST_CASES_DIR=$(realpath ${TEST_DIR}${TEST_CASES_PATH:?"missing TEST_CASES_PATH"})
   if [ -z "${TEST_CONFIG_PATH}" ]; then TEST_CONFIG_DIR=$TEST_CASES_DIR
   else TEST_CONFIG_DIR=$(realpath ${TEST_DIR}${TEST_CONFIG_PATH})
