@@ -129,6 +129,24 @@ if "!RABBITMQ_BOOT_MODULE!"=="" (
     )
 )
 
+if "!RABBITMQ_CONFIG_FILE!"=="" (
+    if not "!CONFIG_FILE!"=="" (
+        set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
+    )
+)
+
+if "!RABBITMQ_LOG_BASE!"=="" (
+    if not "!LOG_BASE!"=="" (
+        set RABBITMQ_LOG_BASE=!LOG_BASE!
+    )
+)
+
+if "!RABBITMQ_MNESIA_BASE!"=="" (
+    if not "!MNESIA_BASE!"=="" (
+        set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
+    )
+)
+
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 if "!RABBITMQ_CTL_ERL_ARGS!"=="" (
     if not "!CTL_ERL_ARGS!"=="" (
@@ -164,13 +182,6 @@ if "!RABBITMQ_SERVICENAME!"=="" (
 )
 
 REM Environment cleanup
-set BOOT_MODULE=
-set CONFIG_FILE=
-set FEATURE_FLAGS_FILE=
-set ENABLED_PLUGINS_FILE=
-set LOG_BASE=
-set MNESIA_BASE=
-set PLUGINS_DIR=
 set SCRIPT_DIR=
 set SCRIPT_NAME=
 set TDP0=
