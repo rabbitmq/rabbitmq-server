@@ -1,22 +1,21 @@
-name: Test Management UI with Selenium
+name: Test Authentication/Authorization backends
 on:
   push:
     branches:
       - main
       - v3.12.x
       - v3.11.x
-      - bump-otp-for-oci
-      - bump-rbe-*
-      - bump-rules_erlang
     paths:
-      - 'deps/**'
+      - 'deps/rabbit/**'
+      - 'deps/rabbitmq_auth_**'
+      - 'deps/rabbitmq_management/selenium/**'
       - 'scripts/**'
       - .bazelrc
       - .bazelversion
       - BUILD.*
       - '*.bzl'
       - '*.bazel'
-      - .github/workflows/test-selenium.yaml
+      - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -93,7 +92,7 @@ jobs:
 
     - name: Run Suites
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh full-suite-authnz
 
     - name: Upload Test Artifacts
       if: always()
