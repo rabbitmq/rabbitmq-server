@@ -1,10 +1,9 @@
 name: Test Management UI changes on PRs
 on:
-  push:
+  pull_request:
     paths:
       - 'deps/rabbitmq_management/**'
       - .github/workflows/test-selenium-for-pull-requests.yaml
-  pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
