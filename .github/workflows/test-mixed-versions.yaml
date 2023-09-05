@@ -74,7 +74,9 @@ jobs:
       uses: actions/cache@v3.3.1
       with:
         path: "/home/runner/repo-cache/"
-        key: repo-cache-secondary-umbrella
+        key: repo-cache-secondary-umbrella-${{ hashFiles('primary-umbrella/MODULE.bazel','primary-umbrella/WORKSPACE','primary-umbrella/bazel/bzlmod/secondary_umbrella.bzl') }}
+        restore-keys: |
+          repo-cache-secondary-umbrella-
     - name: BUILD SECONDARY UMBRELLA ARCHIVE
       if: env.exists != 'true'
       working-directory: secondary-umbrella
