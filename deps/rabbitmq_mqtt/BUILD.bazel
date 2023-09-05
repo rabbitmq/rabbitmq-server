@@ -281,6 +281,7 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "//deps/amqp10_client:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",
+        "//deps/rabbitmq_stream_common:erlang_app",
         "@emqtt//:erlang_app",
     ],
 )
