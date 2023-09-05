@@ -824,6 +824,7 @@ delete_replica(VHost, Name, Node) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
+<<<<<<< HEAD
             case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
                 false ->
                     {error, node_not_running};
@@ -832,6 +833,11 @@ delete_replica(VHost, Name, Node) ->
                     {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
                     Reply
             end;
+=======
+            #{name := StreamId} = amqqueue:get_type_state(Q),
+            {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
+            Reply;
+>>>>>>> 8ace3d48aa (Delete stream replica even if node is down.)
         E ->
             E
     end.

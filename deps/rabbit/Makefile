@@ -148,7 +148,15 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
+<<<<<<< HEAD
 dep_osiris = git https://github.com/rabbitmq/osiris v1.6.4
+=======
+<<<<<<< HEAD
+dep_osiris = git https://github.com/rabbitmq/osiris v1.6.7
+=======
+dep_osiris = git https://github.com/rabbitmq/osiris v1.6.5
+>>>>>>> 1768694185 (Delete stream replica even if node is down.)
+>>>>>>> 8ace3d48aa (Delete stream replica even if node is down.)
 dep_systemd = hex 0.6.1
 dep_seshat = hex 0.4.0
 

@@ -43,7 +43,15 @@ bazel_dep(
 
 bazel_dep(
     name = "rabbitmq_osiris",
+<<<<<<< HEAD
     version = "1.6.4",
+=======
+<<<<<<< HEAD
+    version = "1.6.7",
+=======
+    version = "1.6.5",
+>>>>>>> 1768694185 (Delete stream replica even if node is down.)
+>>>>>>> 8ace3d48aa (Delete stream replica even if node is down.)
     repo_name = "osiris",
 )
 

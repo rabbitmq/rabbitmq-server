@@ -16,6 +16,8 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
+-define(WAIT, 5000).
+
 suite() ->
     [{timetrap, 15 * 60000}].
 
@@ -517,7 +519,7 @@ delete_replica(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     %% Not a member of the cluster, what would happen?
-    ?assertEqual({error, node_not_running},
+    ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, 'zen@rabbit'])),
     ?assertEqual(ok,
@@ -664,17 +666,20 @@ delete_down_replica(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
-    ?assertEqual({error, node_not_running},
+    ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
-    %% check it isn't gone
-    check_leader_and_replicas(Config, [Server0, Server1, Server2], members),
+    %% check it's gone
+    check_leader_and_replicas(Config, [Server0, Server2], members),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    rabbit_ct_helpers:await_condition(
-      fun() ->
-              ok == rpc:call(Server0, rabbit_stream_queue, delete_replica,
-                             [<<"/">>, Q, Server1])
-      end),
+    check_leader_and_replicas(Config, [Server0, Server2], members),
+    %% check the folder was deleted
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    StreamId = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_stream_id, [QName]),
+    Server1DataDir = rabbit_ct_broker_helpers:get_node_config(Config, 1, data_dir),
+    DeletedReplicaDir = filename:join([Server1DataDir, "stream", StreamId]),
+    timer:sleep(1000),
+    ?awaitMatch(false, filelib:is_dir(DeletedReplicaDir), ?WAIT),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 publish_coordinator_unavailable(Config) ->
@@ -1232,6 +1237,12 @@ get_leader_info(QName) ->
         _ ->
             {error, not_found}
     end.
+
+get_stream_id(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamId} = QState,
+    StreamId.
 
 kill_process(Config, Node, Pid) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, do_kill_process,
