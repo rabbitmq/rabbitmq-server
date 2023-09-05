@@ -1,0 +1,15 @@
+authnz-mgt/basic-auth-behind-proxy.sh
+authnz-mgt/basic-auth.sh
+authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix-via-proxy.sh
+authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
+authnz-mgt/oauth-idp-initiated-with-uaa-via-proxy.sh
+authnz-mgt/oauth-idp-initiated-with-uaa.sh
+authnz-mgt/oauth-with-keycloak.sh
+authnz-mgt/oauth-with-uaa-and-mgt-prefix.sh
+authnz-mgt/oauth-with-uaa-down.sh
+authnz-mgt/oauth-with-uaa.sh
+mgt/vhosts.sh
+mgt/definitions.sh
+mgt/exchanges.sh
+mgt/limits.sh
+mgt/mgt-only-exchanges.sh
