@@ -1,0 +1,5 @@
+authnz-mgt/basic-auth.sh
+authnz-mgt/oauth-with-uaa.sh
+mgt/vhosts.sh
+mgt/exchanges.sh
+mgt/limits.sh
