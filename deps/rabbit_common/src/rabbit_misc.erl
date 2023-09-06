@@ -20,7 +20,8 @@
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
-         protocol_error/3, protocol_error/4, protocol_error/1]).
+         protocol_error/3, protocol_error/4, protocol_error/1,
+         precondition_failed/1, precondition_failed/2]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -253,6 +254,8 @@
 -spec group_proplists_by(fun((proplists:proplist()) -> any()),
                          list(proplists:proplist())) -> list(list(proplists:proplist())).
 
+-spec precondition_failed(string()) -> no_return().
+-spec precondition_failed(string(), [any()]) -> no_return().
 
 %%----------------------------------------------------------------------------
 
@@ -285,6 +288,11 @@ protocol_error(Name, ExplanationFormat, Params, Method) ->
 
 protocol_error(#amqp_error{} = Error) ->
     exit(Error).
+
+precondition_failed(Format) -> precondition_failed(Format, []).
+
+precondition_failed(Format, Params) ->
+    protocol_error(precondition_failed, Format, Params).
 
 type_class(byte)          -> int;
 type_class(short)         -> int;
