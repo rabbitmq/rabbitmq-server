@@ -57,7 +57,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
         :rabbit_misc.rpc_call(
           node,
           :rabbit_amqqueue,
-          :delete,
+          :delete_with,
           [queue, if_unused, if_empty, "cli_user"],
           timeout
         )
