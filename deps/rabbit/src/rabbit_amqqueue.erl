@@ -2137,13 +2137,14 @@ pid_or_crashed(Node, VHost, QName) ->
             case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
                 {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
                 {ok, SPid} ->
-                    case sup_child(Node, SPid) of
+                    case rabbit_misc:remote_sup_child(Node, SPid) of
                        {ok, _}           -> QPid;   %% restarting
                        {error, no_child} -> crashed %% given up
                     end
             end;
         _       -> QPid
     end.
+<<<<<<< HEAD
 
 sup_child(Node, Sup) ->
     case rpc:call(Node, supervisor, which_children, [Sup]) of
@@ -2152,3 +2153,5 @@ sup_child(Node, Sup) ->
         {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
     end.
 >>>>>>> f0a29c95a5 (make kill_queue/{2,3} and kill_queue_hard/{2,3} from crashing_queues_SUITE reusable)
+=======
+>>>>>>> 5717bcd09d (refactor and move remote_sup_child/2 to rabbit_misc)
