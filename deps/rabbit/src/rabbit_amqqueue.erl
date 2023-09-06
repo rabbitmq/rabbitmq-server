@@ -53,7 +53,7 @@
 -export([delete_crashed/1,
          delete_crashed/2,
          delete_crashed_internal/2]).
-
+-export([delete_with/4, delete_with/6]).
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
@@ -1580,6 +1580,51 @@ delete_immediately_by_resource(Resources) ->
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
+
+-spec delete_with(amqqueue:amqqueue() | name(), boolean(), boolean(), rabbit_types:username()) ->
+    rabbit_types:ok(integer()) | rabbit_channel:channel_or_connection_exit().
+delete_with(QueueName, IfUnused, IfEmpty, ActingUser) ->
+    delete_with(QueueName, undefined, IfUnused, IfEmpty, ActingUser, false).
+
+-spec delete_with(amqqueue:amqqueue() | name(), pid(), boolean(), boolean(), rabbit_types:username(), boolean()) ->
+    rabbit_types:ok(integer()) | rabbit_channel:channel_or_connection_exit().
+delete_with(AMQQueue, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when ?is_amqqueue(AMQQueue) ->
+    QueueName = amqqueue:get_name(AMQQueue),
+    delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive);
+delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when is_record(QueueName, resource) ->
+    case with(
+           QueueName,
+           fun (Q) ->
+                if CheckExclusive ->
+                    check_exclusive_access(Q, ConnPid);
+                true ->
+                    ok
+                end,
+                rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
+           end,
+           fun (not_found) ->
+                   {ok, 0};
+               ({absent, Q, crashed}) ->
+                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, stopped}) ->
+                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, Reason}) ->
+                   absent(Q, Reason)
+           end) of
+        {error, in_use} ->
+            rabbit_misc:precondition_failed("~ts in use", [rabbit_misc:rs(QueueName)]);
+        {error, not_empty} ->
+            rabbit_misc:precondition_failed("~ts not empty", [rabbit_misc:rs(QueueName)]);
+        {error, {exit, _, _}} ->
+            %% rabbit_amqqueue:delete()/delegate:invoke might return {error, {exit, _, _}}
+            {ok, 0};
+        {ok, Count} ->
+            {ok, Count};
+        {protocol_error, Type, Reason, ReasonArgs} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
+    end.
 
 %% delete_crashed* INCLUDED FOR BACKWARDS COMPATBILITY REASONS
 delete_crashed(Q) when ?amqqueue_is_classic(Q) ->
