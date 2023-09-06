@@ -10,7 +10,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  def switches(), do: [pre_hashed_password: :boolean]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{pre_hashed_password: false}, opts)}
+  end
 
   def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
@@ -41,6 +45,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
           [username, password, Helpers.cli_acting_user()]
         )
     end
+  end
+
+  def run([username, password_hash], %{node: node_name, pre_hashed_password: true}) do
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_auth_backend_internal,
+      :add_user_sans_validation,
+      [username, password, Helpers.cli_acting_user(), :undefined, []]
+    )
   end
 
   def run([username, password], %{node: node_name}) do
