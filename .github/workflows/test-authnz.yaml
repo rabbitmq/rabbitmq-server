@@ -16,6 +16,11 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test-authnz.yaml
+  pull_request:
+    paths:
+      - 'deps/rabbitmq_auth_**'
+      - 'deps/rabbitmq_auth_**'
+      - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -26,11 +31,11 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "26.0"
+        - "25.3"
         browser:
         - chrome
         include:
-        - erlang_version: "26.0"
+        - erlang_version: "25.3"
           elixir_version: 1.14.5
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
