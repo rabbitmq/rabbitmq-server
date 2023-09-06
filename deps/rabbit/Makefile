@@ -151,6 +151,7 @@ PLT_APPS += mnesia
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.6.7
 dep_systemd = hex 0.6.1
+
 dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 
 define usage_xml_to_erl
