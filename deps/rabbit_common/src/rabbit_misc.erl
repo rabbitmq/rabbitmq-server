@@ -88,6 +88,7 @@
          maps_put_truthy/3,
          maps_put_falsy/3
         ]).
+-export([remote_sup_child/2]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1639,3 +1640,11 @@ maps_put_falsy(K, false, M) ->
     maps:put(K, false, M);
 maps_put_falsy(_K, _V, M) ->
     M.
+
+-spec remote_sup_child(node(), supervisor:sup_ref()) -> rabbit_types:ok_or_error2(supervisor:child(), no_child | no_sup).
+remote_sup_child(Node, Sup) ->
+    case rpc:call(Node, supervisor, which_children, [Sup]) of
+        [{_, Child, _, _}]              -> {ok, Child};
+        []                              -> {error, no_child};
+        {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
+    end.
