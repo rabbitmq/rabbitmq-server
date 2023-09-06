@@ -567,6 +567,17 @@ defmodule TestHelper do
     assert {:error, :econnrefused} == AMQP.Connection.open(virtual_host: vhost)
   end
 
+  def crash_queue(queue_resource = {:resource, vhost, :queue, queue_name}) do
+    node = get_rabbit_hostname()
+
+    :rabbit_misc.rpc_call(node, :rabbit_amqqueue, :kill_queue_hard, [node, vhost, queue_name])
+
+    :ok = :rabbit_misc.rpc_call(node, :rabbit_control_misc, :await_state, [node, vhost, queue_name, :crashed])
+
+    {:existing, existing_amqqueue} = declare_queue(queue_name, vhost, true)
+    :crashed = :amqqueue.get_state(existing_amqqueue)
+  end
+
   def delete_all_queues() do
     try do
       immediately_delete_all_queues(:rabbit_amqqueue.list())
