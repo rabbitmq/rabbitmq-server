@@ -10,6 +10,7 @@
 -export([emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
          emitting_map_with_exit_handler/5, wait_for_info_messages/6,
          spawn_emitter_caller/7, await_emitters_termination/1,
+         await_new_pid/4, await_state/3, await_state/4, await_state/5,
          print_cmd_result/2]).
 
 -spec emitting_map(pid(), reference(), fun(), list()) -> 'ok'.
@@ -25,6 +26,10 @@
       InitialAcc :: term(), Acc :: term(), OK :: {ok, Acc}, Err :: {error, term()}.
 -spec spawn_emitter_caller(node(), module(), atom(), [term()], reference(), pid(), timeout()) -> 'ok'.
 -spec await_emitters_termination([pid()]) -> 'ok'.
+-spec await_new_pid(node(), rabbit_types:vhost(), rabbit_amqqueue:name(), pid()) -> pid().
+-spec await_state(node(), rabbit_amqqueue:name(), atom()) -> 'ok'.
+-spec await_state(node(), rabbit_types:vhost(), rabbit_amqqueue:name(), atom()) -> 'ok'.
+-spec await_state(node(), rabbit_types:vhost(), rabbit_amqqueue:name(), atom(), integer()) -> 'ok'.
 
 -spec print_cmd_result(atom(), term()) -> 'ok'.
 
@@ -177,3 +182,36 @@ notify_if_timeout(Pid, Ref, Timeout) ->
 
 print_cmd_result(authenticate_user, _Result) -> io:format("Success~n");
 print_cmd_result(join_cluster, already_member) -> io:format("The node is already a member of this cluster~n").
+
+await_new_pid(Node, VHost, QName, OldPid) ->
+    case rabbit_amqqueue:pid_or_crashed(Node, VHost, QName) of
+        OldPid -> timer:sleep(10),
+                  await_new_pid(Node, VHost, QName, OldPid);
+        New    -> New
+    end.
+
+await_state(Node, QName, State) ->
+    await_state(Node, <<"/">>, QName, State).
+
+await_state(Node, VHost, QName, State) ->
+    await_state(Node, VHost, QName, State, 30000).
+
+await_state(Node, VHost, QName, State, Time) ->
+    case state(Node, VHost, QName) of
+        State ->
+            ok;
+        Other ->
+            case Time of
+                0 -> exit({timeout_awaiting_state, State, Other});
+                _ -> timer:sleep(100),
+                     await_state(Node, VHost, QName, State, Time - 100)
+            end
+    end.
+
+state(Node, VHost, QName) ->
+    Res = rabbit_misc:r(VHost, queue, QName),
+    Infos = rpc:call(Node, rabbit_amqqueue, info_all, [VHost, [name, state]]),
+    case Infos of
+        []                               -> undefined;
+        [[{name,  Res}, {state, State}]] -> State
+    end.

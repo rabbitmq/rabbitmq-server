@@ -55,6 +55,7 @@
          delete_crashed_internal/2]).
 -export([delete_with/4, delete_with/6]).
 -export([pid_of/1, pid_of/2]).
+-export([pid_or_crashed/3]).
 -export([mark_local_durable_queues_stopped/1]).
 
 -export([rebalance/3]).
@@ -70,6 +71,8 @@
 
 -export([prepend_extra_bcc/1]).
 -export([queue/1, queue_names/1]).
+
+-export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -2105,4 +2108,53 @@ is_queue_args_combination_permitted(Durable, Exclusive) ->
             true;
         true ->
             rabbit_deprecated_features:is_permitted(transient_nonexcl_queues)
+    end.
+
+-spec kill_queue_hard(rabbit_types:vhost(), rabbit_amqqueue:name()) -> ok.
+kill_queue_hard(Node, QName) ->
+    kill_queue_hard(Node, <<"/">>, QName).
+
+-spec kill_queue_hard(node(), rabbit_types:vhost(), rabbit_amqqueue:name()) -> ok.
+kill_queue_hard(Node, VHost, QName) ->
+    case kill_queue(Node, VHost, QName) of
+        crashed -> ok;
+        _NewPid -> timer:sleep(100),
+                   kill_queue_hard(Node, VHost, QName)
+    end.
+
+-spec kill_queue(rabbit_types:vhost(), name()) -> ok.
+kill_queue(Node, QName) ->
+    kill_queue(Node, <<"/">>, QName).
+
+-spec kill_queue(node(), rabbit_types:vhost(), name()) -> ok.
+kill_queue(Node, VHost, QName) ->
+    Pid1 = pid_or_crashed(Node, VHost, QName),
+    exit(Pid1, boom),
+    rabbit_control_misc:await_new_pid(Node, VHost, QName, Pid1).
+
+-spec pid_or_crashed(node(), rabbit_types:vhost(), name()) -> pid() | crashed.
+pid_or_crashed(Node, VHost, QName) ->
+    QResource = rabbit_misc:r(VHost, queue, QName),
+    {ok, Q} = rpc:call(Node, rabbit_amqqueue, lookup, [QResource]),
+    QPid = amqqueue:get_pid(Q),
+    State = amqqueue:get_state(Q),
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+    case State of
+        crashed ->
+            case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
+                {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
+                {ok, SPid} ->
+                    case sup_child(Node, SPid) of
+                       {ok, _}           -> QPid;   %% restarting
+                       {error, no_child} -> crashed %% given up
+                    end
+            end;
+        _       -> QPid
+    end.
+
+sup_child(Node, Sup) ->
+    case rpc:call(Node, supervisor, which_children, [Sup]) of
+        [{_, Child, _, _}]              -> {ok, Child};
+        []                              -> {error, no_child};
+        {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
     end.
