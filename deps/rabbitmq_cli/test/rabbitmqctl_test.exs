@@ -168,7 +168,7 @@ defmodule RabbitMQCtlTest do
     capture_io(:stderr, fn -> error_check(command, exit_dataerr()) end)
   end
 
-  test "a mcommand with an unsupported option as the first command-line arg fails gracefully" do
+  test "a command with an unsupported option as the first command-line arg fails gracefully" do
     command1 = ["--invalid=true", "list_permissions", "-p", "/"]
 
     assert capture_io(:stderr, fn ->
