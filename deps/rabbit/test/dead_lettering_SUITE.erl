@@ -34,6 +34,8 @@ groups() ->
                        dead_letter_reject_requeue_reject_norequeue,
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
+                       dead_letter_headers_should_be_appended_for_each_event,
+                       dead_letter_headers_should_be_appended_for_republish,
                        dead_letter_routing_key_header_CC,
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
@@ -1071,6 +1073,99 @@ dead_letter_headers_cycle(Config) ->
         amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
     ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)).
+
+dead_letter_headers_should_be_appended_for_each_event(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+    QName = ?config(queue_name, Config),
+    Dlx1Name = ?config(queue_name_dlx, Config),
+    Dlx2Name = ?config(queue_name_dlx_2, Config),
+
+    DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                      {<<"x-dead-letter-routing-key">>, longstr, Dlx1Name}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    DeadLetterArgsDlx = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                         {<<"x-dead-letter-routing-key">>, longstr, Dlx2Name}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx1Name, arguments = DeadLetterArgsDlx ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx2Name, arguments = Args, durable = Durable}),
+
+    P = <<"msg1">>,
+
+    %% Publish message
+    publish(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[Dlx1Name, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P,
+                                                      props = #'P_basic'{headers = Headers1}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = Dlx1Name}),
+    {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
+    ?assertEqual({longstr, QName}, rabbit_misc:table_lookup(Death1, <<"queue">>)),
+
+    wait_for_messages(Config, [[Dlx1Name, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
+                                        multiple     = false,
+                                        requeue      = false}),
+    %% Message its being republished
+    wait_for_messages(Config, [[Dlx2Name, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P,
+                                  props = #'P_basic'{headers = Headers2}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = Dlx2Name}),
+    {array, [{table, DeathDlx}, {table, _DeathQ}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)).
+
+dead_letter_headers_should_be_appended_for_republish(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+    QName = ?config(queue_name, Config),
+    DlxName = ?config(queue_name_dlx, Config),
+
+    DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                      {<<"x-dead-letter-routing-key">>, longstr, DlxName}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DlxName, arguments = Args, durable = Durable}),
+
+    P = <<"msg1">>,
+
+    %% Publish message
+    publish(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P,
+                                                      props = #'P_basic'{headers = Headers1}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
+    {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
+    ?assertEqual({longstr, <<"rejected">>}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
+
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+
+    wait_for_messages(Config, [[DlxName, <<"0">>, <<"0">>, <<"0">>]]),
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-max-length">>, long, 0}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = Durable}),
+
+    %% publish, should go straight to the dlx
+    publish(Ch, QName, [P], Headers1),
+
+    wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P,
+                                  props = #'P_basic'{headers = Headers2}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
+
+    {array, [{table, Death2}, {table, _Death1}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({longstr, <<"maxlen">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)).
 
 %% Dead-lettering a message modifies its headers:
 %% the exchange name is replaced with that of the latest dead-letter exchange,
