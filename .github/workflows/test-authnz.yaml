@@ -16,6 +16,11 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test-authnz.yaml
+  pull_request:
+    paths:
+      - 'deps/rabbitmq_auth_**'
+      - 'deps/rabbitmq_auth_**'
+      - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
