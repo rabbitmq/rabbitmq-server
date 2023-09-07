@@ -1075,7 +1075,7 @@ dead_letter_headers_cycle(Config) ->
     ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)).
 
 dead_letter_headers_should_be_appended_for_each_event(Config) ->
-    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
@@ -1117,10 +1117,11 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
                                   props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = Dlx2Name}),
     {array, [{table, DeathDlx}, {table, _DeathQ}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
-    ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)).
+    ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 dead_letter_headers_should_be_appended_for_republish(Config) ->
-    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
@@ -1165,7 +1166,8 @@ dead_letter_headers_should_be_appended_for_republish(Config) ->
         amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
 
     {array, [{table, Death2}, {table, _Death1}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
-    ?assertEqual({longstr, <<"maxlen">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)).
+    ?assertEqual({longstr, <<"maxlen">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 %% Dead-lettering a message modifies its headers:
 %% the exchange name is replaced with that of the latest dead-letter exchange,

@@ -1604,6 +1604,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
+        name = "transactions_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/transactions_SUITE.erl"],
+        outs = ["test/transactions_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
         name = "unit_access_control_SUITE_beam_files",
         testonly = True,
         srcs = ["test/unit_access_control_SUITE.erl"],

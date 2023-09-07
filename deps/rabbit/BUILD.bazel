@@ -890,6 +890,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "transactions_SUITE",
+    size = "medium",
+)
+
+rabbitmq_integration_suite(
     name = "unit_access_control_authn_authz_context_propagation_SUITE",
     size = "medium",
     additional_beam = [
