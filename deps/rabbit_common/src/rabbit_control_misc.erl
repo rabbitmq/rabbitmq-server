@@ -30,7 +30,7 @@
 -spec await_emitters_termination([pid()]) -> 'ok'.
 -spec await_new_pid(node(), rabbit_amqqueue:name(), pid()) -> pid().
 -spec await_state(node(), rabbit_amqqueue:name() | binary(), atom()) -> 'ok'.
--spec await_state(node(), rabbit_amqqueue:name(), atom(), integer()) -> 'ok'.
+-spec await_state(node(), rabbit_amqqueue:name() | binary(), atom(), integer()) -> 'ok'.
 
 -spec print_cmd_result(atom(), term()) -> 'ok'.
 
@@ -199,6 +199,9 @@ await_state(Node, QName, State) when is_binary(QName) ->
 await_state(Node, QRes = #resource{kind = queue}, State) ->
     await_state(Node, QRes, State, ?DEFAULT_AWAIT_STATE_TIMEOUT).
 
+await_state(Node, QName, State, Time) when is_binary(QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    await_state(Node, QRes, State, Time);
 await_state(Node, QRes = #resource{kind = queue}, State, Time) ->
     case state(Node, QRes) of
         State ->
