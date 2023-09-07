@@ -1828,8 +1828,8 @@ util_ensure_endpoint(_, {queue, Name}, Params, State=#proc_state{route_state = R
                                                                  vhost = VHost}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
     QueueNameBin = list_to_binary(Name),
-    RState1 = case sets:is_element(Params1, RoutingState) of
-                  true -> State;
+    RState1 = case sets:is_element(QueueNameBin, RoutingState) of
+                  true -> RoutingState;
                   _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
                           {ok, Queue} = create_queue(Amqqueue, State),
                           #resource{name = QNameBin} = amqqueue:get_name(Queue),
