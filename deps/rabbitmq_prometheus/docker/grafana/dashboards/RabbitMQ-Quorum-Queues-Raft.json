@@ -1106,7 +1106,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) - \n  (rabbitmq_raft_log_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n) by(queue, rabbitmq_node) > 5000",
+          "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) - \n  (rabbitmq_raft_log_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n) by(queue, rabbitmq_node)",
           "hide": false,
           "legendFormat": "{{rabbitmq_node}} {{queue}}",
           "refId": "A"
