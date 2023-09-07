@@ -87,7 +87,7 @@ handle_event(#event{type      = Type,
                                                   TS, milli_seconds, seconds)},
                 Content = rabbit_basic:build_content(PBasic, <<>>),
                 XName = exchange(VHost),
-                Msg = mc_amqpl:message(XName, Key, Content),
+                {ok, Msg} = mc_amqpl:message(XName, Key, Content),
                 rabbit_queue_type:publish_at_most_once(XName, Msg)
         end,
     {ok, State};

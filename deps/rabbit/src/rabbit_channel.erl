@@ -1289,7 +1289,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                           DecodedContent) of
         {error, Reason}  ->
             precondition_failed("invalid message: ~tp", [Reason]);
-        Message0 ->
+        {ok, Message0} ->
             Message = rabbit_message_interceptor:intercept(Message0),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             [rabbit_channel:deliver_reply(RK, Message) ||

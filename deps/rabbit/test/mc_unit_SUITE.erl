@@ -487,11 +487,11 @@ amqp_amqpl_amqp_bodies(_Config) ->
          Ex = #resource{virtual_host = <<"/">>,
                         kind = exchange,
                         name = <<"ex">>},
-         LegacyMsg = mc_amqpl:message(Ex, <<"rkey">>,
-                                      #content{payload_fragments_rev =
-                                                   lists:reverse(EncodedPayload),
-                                               properties = Props},
-                                      #{}, true),
+         {ok, LegacyMsg} = mc_amqpl:message(Ex, <<"rkey">>,
+                                            #content{payload_fragments_rev =
+                                                     lists:reverse(EncodedPayload),
+                                                     properties = Props},
+                                            #{}, true),
 
          AmqpMsg = mc:convert(mc_amqp, LegacyMsg),
          %% drop any non body sections

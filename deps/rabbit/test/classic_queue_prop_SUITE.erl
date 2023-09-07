@@ -801,7 +801,7 @@ cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Mandatory, Expiratio
                                                expiration = do_encode_expiration(Expiration)},
                                     Payload),
 
-    Msg0 = mc_amqpl:message(Ex, <<>>, BasicMsg#basic_message.content),
+    {ok, Msg0} = mc_amqpl:message(Ex, <<>>, BasicMsg#basic_message.content),
     Msg = mc:set_annotation(id, BasicMsg#basic_message.id, Msg0),
     {ok, _, _} = rabbit_queue_type:deliver([AMQ], Msg, #{}, stateless),
     Content = mc:protocol_state(Msg),

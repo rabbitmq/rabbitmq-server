@@ -431,9 +431,9 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
     Res = try
               Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
               Content = #content{properties = #'P_basic'{}},
-              DummyMsg = mc_amqpl:message(ExchangeName,
-                                          RoutingKey,
-                                          Content),
+              {ok, DummyMsg} = mc_amqpl:message(ExchangeName,
+                                                RoutingKey,
+                                                Content),
               case rabbit_exchange:route(Exchange, DummyMsg) of
                   [] ->
                       {ok, no_route};

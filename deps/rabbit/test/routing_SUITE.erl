@@ -196,9 +196,9 @@ test_topic_expect_match(X, List) ->
               BinKey = list_to_binary(Key),
               Message = rabbit_basic:message(X#exchange.name, BinKey,
                                              #'P_basic'{}, <<>>),
-              Msg = mc_amqpl:message(X#exchange.name,
-                                     BinKey,
-                                     Message#basic_message.content),
+              {ok, Msg} = mc_amqpl:message(X#exchange.name,
+                                           BinKey,
+                                           Message#basic_message.content),
               Res = rabbit_exchange_type_topic:route(X, Msg),
               ExpectedRes = [rabbit_misc:r(?VHOST, queue, list_to_binary(Q)) ||
                              Q <- Expected],
