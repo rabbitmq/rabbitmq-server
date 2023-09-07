@@ -72,7 +72,7 @@
 -export([prepend_extra_bcc/1]).
 -export([queue/1, queue_names/1]).
 
--export([kill_queue/2, kill_queue/3, kill_queue_hard/2]).
+-export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -119,6 +119,7 @@
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
          active, activity_status, arguments]).
+-define(KILL_QUEUE_DELAY_INTERVAL, 100).
 
 warn_file_limit() ->
     DurableQueues = find_recoverable_queues(),
@@ -2112,17 +2113,27 @@ is_queue_args_combination_permitted(Durable, Exclusive) ->
 
 -spec kill_queue_hard(node(), name()) -> ok.
 kill_queue_hard(Node, QRes = #resource{kind = queue}) ->
-    case kill_queue(Node, QRes) of
+    kill_queue_hard(Node, QRes, boom).
+
+-spec kill_queue_hard(node(), name(), atom()) -> ok.
+kill_queue_hard(Node, QRes = #resource{kind = queue}, Reason) ->
+    case kill_queue(Node, QRes, Reason) of
         crashed -> ok;
-        _NewPid -> timer:sleep(100),
-                   kill_queue_hard(Node, QRes)
+        stopped -> ok;
+        _NewPid -> timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
+                   kill_queue_hard(Node, QRes, Reason)
     end.
 
--spec kill_queue(node(), name()) -> ok.
+-spec kill_queue(node(), name()) -> pid() | crashed.
 kill_queue(Node, QRes = #resource{kind = queue}) ->
     kill_queue(Node, QRes, boom).
 
--spec kill_queue(node(), name(), atom()) -> ok.
+-spec kill_queue(node(), name(), atom()) -> pid() | crashed | stopped.
+kill_queue(Node, QRes = #resource{kind = queue}, Reason = shutdown) ->
+    Pid1 = pid_or_crashed(Node, QRes),
+    exit(Pid1, Reason),
+    rabbit_control_misc:await_state(Node, QRes, stopped),
+    stopped;
 kill_queue(Node, QRes = #resource{kind = queue}, Reason) ->
     Pid1 = pid_or_crashed(Node, QRes),
     exit(Pid1, Reason),
