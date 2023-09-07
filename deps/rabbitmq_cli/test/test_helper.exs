@@ -572,7 +572,12 @@ defmodule TestHelper do
 
     :rabbit_misc.rpc_call(node, :rabbit_amqqueue, :kill_queue_hard, [node, queue_resource])
 
-    :ok = :rabbit_misc.rpc_call(node, :rabbit_control_misc, :await_state, [node, queue_resource, :crashed])
+    :ok =
+      :rabbit_misc.rpc_call(node, :rabbit_control_misc, :await_state, [
+        node,
+        queue_resource,
+        :crashed
+      ])
 
     {:existing, existing_amqqueue} = declare_queue(queue_name, vhost, true)
     :crashed = :amqqueue.get_state(existing_amqqueue)
