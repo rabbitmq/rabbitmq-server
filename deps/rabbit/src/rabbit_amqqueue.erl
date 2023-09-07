@@ -2112,7 +2112,7 @@ kill_queue_hard(Node, QRes = #resource{kind = queue}) ->
     end.
 
 -spec kill_queue(node(), name()) -> ok.
-kill_queue(Node, QRes) ->
+kill_queue(Node, QRes = #resource{kind = queue}) ->
     kill_queue(Node, QRes, boom).
 
 -spec kill_queue(node(), name(), atom()) -> ok.
