@@ -441,7 +441,17 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
             lists:foldl(
               fun ({{symbol, <<"x-routing-key">>},
                     {utf8, Key}}, Acc) ->
-                      Acc#{routing_keys => [Key]};
+                      maps:update_with(routing_keys,
+                                       fun(L) -> [Key | L] end,
+                                       [Key],
+                                       Acc);
+                  ({{symbol, <<"x-cc">>},
+                    {list, CCs0}}, Acc) ->
+                      CCs = [CC || {_T, CC} <- CCs0],
+                      maps:update_with(routing_keys,
+                                       fun(L) -> L ++ CCs end,
+                                       CCs,
+                                       Acc);
                   ({{symbol, <<"x-exchange">>},
                     {utf8, Exchange}}, Acc) ->
                       Acc#{exchange => Exchange};

@@ -327,14 +327,18 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
     %% x- headers are stored as message annotations
     MA = case amqp10_section_header(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
              undefined ->
-                 MAC0 = [{{symbol, K}, from_091(T, V)}
-                         || {K, T, V} <- Headers,
-                            mc_util:is_x_header(K),
-                            %% all message annotation keys need to be either a symbol or ulong
-                            %% but 0.9.1 field-table names are always strings
-                            is_binary(K)
-                        ],
-
+                 MAC0 = lists:filtermap(
+                          fun({<<"x-", _/binary>> = K, T, V}) ->
+                                  %% All message annotation keys need to be either a symbol or ulong
+                                  %% but 0.9.1 field-table names are always strings.
+                                  {true, {{symbol, K}, from_091(T, V)}};
+                             ({<<"CC">>, T = array, V}) ->
+                                  %% Special case the 0.9.1 CC header into 1.0 message annotations because
+                                  %% 1.0 application properties must not contain list or array values.
+                                  {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
+                             (_) ->
+                                  false
+                          end, Headers),
                  %% `type' doesn't have a direct equivalent so adding as
                  %% a message annotation here
                  MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
