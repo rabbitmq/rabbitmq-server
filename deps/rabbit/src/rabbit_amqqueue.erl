@@ -2121,22 +2121,26 @@ kill_queue(Node, QRes = #resource{kind = queue}, Reason) ->
     exit(Pid1, Reason),
     rabbit_control_misc:await_new_pid(Node, QRes, Pid1).
 
--spec pid_or_crashed(node(), name()) -> pid() | crashed.
+-spec pid_or_crashed(node(), name()) -> pid() | crashed | rabbit_types:error(term()).
 pid_or_crashed(Node, QRes = #resource{virtual_host = VHost, kind = queue}) ->
-    {ok, Q} = rpc:call(Node, rabbit_amqqueue, lookup, [QRes]),
-    QPid = amqqueue:get_pid(Q),
-    State = amqqueue:get_state(Q),
-    case State of
-        crashed ->
-            case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
-                {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
-                {ok, SPid} ->
-                    case rabbit_misc:remote_sup_child(Node, SPid) of
-                       {ok, _}           -> QPid;   %% restarting
-                       {error, no_child} -> crashed %% given up
-                    end
+    case rpc:call(Node, rabbit_amqqueue, lookup, [QRes]) of
+        {ok, Q} ->
+            QPid = amqqueue:get_pid(Q),
+            State = amqqueue:get_state(Q),
+            case State of
+                crashed ->
+                    case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
+                        {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
+                        {ok, SPid} ->
+                            case rabbit_misc:remote_sup_child(Node, SPid) of
+                            {ok, _}           -> QPid;   %% restarting
+                            {error, no_child} -> crashed %% given up
+                            end
+                    end;
+                _       -> QPid
             end;
-        _       -> QPid
+        Error = {error, _} -> Error;
+        Reason             -> {error, Reason}
     end.
 <<<<<<< HEAD
 
