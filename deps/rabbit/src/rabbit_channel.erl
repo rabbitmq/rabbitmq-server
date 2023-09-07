@@ -1284,26 +1284,30 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                 {Opts, SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
         end,
     % rabbit_feature_flags:is_enabled(message_containers),
-    Message0 = mc_amqpl:message(ExchangeName,
-                                RoutingKey,
-                                DecodedContent),
-    Message = rabbit_message_interceptor:intercept(Message0),
-    QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-    [rabbit_channel:deliver_reply(RK, Message) ||
-     {virtual_reply_queue, RK} <- QNames],
-    Queues = rabbit_amqqueue:lookup_many(QNames),
-    ok = process_routing_mandatory(Mandatory, Queues, SeqNum, Message, ExchangeName, State0),
-    rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
-                        Username, TraceState),
-    %% TODO: call delivery_to_queues with plain args
-    Delivery = {Message, DeliveryOptions, Queues},
-    {noreply, case Tx of
-                  none ->
-                      deliver_to_queues(ExchangeName, Delivery, State1);
-                  {Msgs, Acks} ->
-                      Msgs1 = ?QUEUE:in(Delivery, Msgs),
-                      State1#ch{tx = {Msgs1, Acks}}
-              end};
+    case mc_amqpl:message(ExchangeName,
+                          RoutingKey,
+                          DecodedContent) of
+        {error, Reason}  ->
+            precondition_failed("invalid message: ~tp", [Reason]);
+        Message0 ->
+            Message = rabbit_message_interceptor:intercept(Message0),
+            QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
+            [rabbit_channel:deliver_reply(RK, Message) ||
+             {virtual_reply_queue, RK} <- QNames],
+            Queues = rabbit_amqqueue:lookup_many(QNames),
+            ok = process_routing_mandatory(Mandatory, Queues, SeqNum, Message, ExchangeName, State0),
+            rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
+                                Username, TraceState),
+            %% TODO: call delivery_to_queues with plain args
+            Delivery = {Message, DeliveryOptions, Queues},
+            {noreply, case Tx of
+                          none ->
+                              deliver_to_queues(ExchangeName, Delivery, State1);
+                          {Msgs, Acks} ->
+                              Msgs1 = ?QUEUE:in(Delivery, Msgs),
+                              State1#ch{tx = {Msgs1, Acks}}
+                      end}
+    end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,

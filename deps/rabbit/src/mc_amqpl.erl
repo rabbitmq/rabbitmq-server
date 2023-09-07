@@ -433,7 +433,7 @@ protocol_state(Content0, Anns) ->
     %% changed
     protocol_state(prepare(read, Content0), Anns).
 
--spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) -> mc:state().
+-spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) -> mc:state() | {error, Reason :: any()}.
 message(ExchangeName, RoutingKey, Content) ->
     message(ExchangeName, RoutingKey, Content, #{}).
 
@@ -449,11 +449,15 @@ message(#resource{name = ExchangeNameBin}, RoutingKey,
         #content{properties = Props} = Content, Anns, true)
   when is_binary(RoutingKey) andalso
        is_map(Anns) ->
-    HeaderRoutes = rabbit_basic:header_routes(Props#'P_basic'.headers),
-    mc:init(?MODULE,
-            rabbit_basic:strip_bcc_header(Content),
-            Anns#{routing_keys => [RoutingKey | HeaderRoutes],
-                  exchange => ExchangeNameBin});
+    case rabbit_basic:header_routes(Props#'P_basic'.headers) of
+        {error, _} = Error ->
+            Error;
+        HeaderRoutes ->
+            mc:init(?MODULE,
+                    rabbit_basic:strip_bcc_header(Content),
+                    Anns#{routing_keys => [RoutingKey | HeaderRoutes],
+                          exchange => ExchangeNameBin})
+    end;
 message(#resource{} = XName, RoutingKey,
         #content{} = Content, Anns, false) ->
     {ok, Msg} = rabbit_basic:message(XName, RoutingKey, Content),
