@@ -34,7 +34,10 @@
 
 -spec print_cmd_result(atom(), term()) -> 'ok'.
 
--define(DEFAULT_AWAIT_STATE_TIMEOUT, 30000).
+-define(DEFAULT_AWAIT_STATE_TIMEOUT,  30000).
+-define(AWAIT_NEW_PID_DELAY_INTERVAL, 10).
+-define(AWAIT_STATE_DELAY_INTERVAL,   100).
+-define(AWAIT_STATE_DELAY_TIME_DELTA, 100).
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
     emitting_map(AggregatorPid, Ref, Fun, List, continue),
@@ -188,7 +191,7 @@ print_cmd_result(join_cluster, already_member) -> io:format("The node is already
 
 await_new_pid(Node, QRes = #resource{kind = queue}, OldPid) ->
     case rabbit_amqqueue:pid_or_crashed(Node, QRes) of
-        OldPid -> timer:sleep(10),
+        OldPid -> timer:sleep(?AWAIT_NEW_PID_DELAY_INTERVAL),
                   await_new_pid(Node, QRes, OldPid);
         New    -> New
     end.
@@ -209,8 +212,8 @@ await_state(Node, QRes = #resource{kind = queue}, State, Time) ->
         Other ->
             case Time of
                 0 -> exit({timeout_awaiting_state, State, Other});
-                _ -> timer:sleep(100),
-                     await_state(Node, QRes, State, Time - 100)
+                _ -> timer:sleep(?AWAIT_STATE_DELAY_INTERVAL),
+                     await_state(Node, QRes, State, Time - ?AWAIT_STATE_DELAY_TIME_DELTA)
             end
     end.
 
