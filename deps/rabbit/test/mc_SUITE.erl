@@ -328,18 +328,17 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ok.
 
 amqpl_cc_amqp_bin_amqpl(_Config) ->
-    Props = #'P_basic'{headers = [{<<"CC">>, array, [{longstr, <<"q1">>},
-                                                     {longstr, <<"q2">>}]}]},
+    Headers = [{<<"CC">>, array, [{longstr, <<"q1">>},
+                                  {longstr, <<"q2">>}]}],
+    Props = #'P_basic'{headers = Headers},
     Content = #content{properties = Props,
                        payload_fragments_rev = [<<"data">>]},
     X = rabbit_misc:r(<<"/">>, exchange, <<"exch">>),
     Msg = mc_amqpl:message(X, <<"apple">>, Content, #{}, true),
 
-    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, Msg)),
     RoutingKeys =  [<<"apple">>, <<"q1">>, <<"q2">>],
     ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, Msg)),
 
-    %% roundtrip to binary
     Msg10Pre = mc:convert(mc_amqp, Msg),
     Sections = amqp10_framing:decode_bin(
                  iolist_to_binary(amqp_serialize(Msg10Pre))),
@@ -347,7 +346,9 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, Msg10)),
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
-    ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, MsgL2)).
+    ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, MsgL2)),
+    ?assertMatch(#content{properties = #'P_basic'{headers = Headers}},
+                 mc:protocol_state(MsgL2)).
 
 thead2(T, Value) ->
     {symbol(atom_to_binary(T)), {T, Value}}.
