@@ -96,7 +96,8 @@ test_queue_failure(Node, Ch, RaceConn, MsgCount, FollowerCount, Decl) ->
         publish(Ch, QName, transient),
         publish(Ch, QName, durable),
         Racer = spawn_declare_racer(RaceConn, Decl),
-        rabbit_amqqueue:kill_queue(Node, QName),
+        QRes = rabbit_misc:r(<<"/">>, queue, QName),
+        rabbit_amqqueue:kill_queue(Node, QRes),
         assert_message_count(MsgCount, Ch, QName),
         assert_follower_count(FollowerCount, Node, QName),
         stop_declare_racer(Racer)
@@ -114,7 +115,8 @@ give_up_after_repeated_crashes(Config) ->
                                             durable = true}),
     rabbit_control_misc:await_state(A, QName, running),
     publish(ChA, QName, durable),
-    rabbit_amqqueue:kill_queue_hard(A, QName),
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    rabbit_amqqueue:kill_queue_hard(A, QRes),
     {'EXIT', _} = (catch amqp_channel:call(
                            ChA, #'queue.declare'{queue   = QName,
                                                  durable = true})),
