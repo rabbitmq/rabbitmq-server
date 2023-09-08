@@ -791,7 +791,7 @@ maybe_clean_up_queue(Queue, #proc_state{auth_login = Username}) ->
     ok.
 
 do_send(Destination, _DestHdr,
-        Frame = #stomp_frame{body_iolist = BodyFragments},
+        Frame = #stomp_frame{body_iolist_rev = BodyFragments},
         State0 = #proc_state{default_topic_exchange = DfltTopicEx,
                              delivery_flow = Flow,
                              user = User,
@@ -839,7 +839,7 @@ do_send(Destination, _DestHdr,
                           properties = Props,
                           properties_bin = none,
                           protocol = none,
-                          payload_fragments_rev = [BodyFragments]
+                          payload_fragments_rev = BodyFragments
                          },
 
             Message0 = mc_amqpl:message(ExchangeName, RoutingKey, Content0),
@@ -1467,7 +1467,7 @@ ok(State) ->
 ok(Command, Headers, BodyFragments, State) ->
     {ok, #stomp_frame{command     = Command,
                       headers     = Headers,
-                      body_iolist = BodyFragments}, State}.
+                      body_iolist_rev = lists:reverse(BodyFragments)}, State}.
 
 amqp_death(ErrorName, Explanation, State) when is_atom(ErrorName) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
@@ -1507,11 +1507,11 @@ log_error(Message, Detail, ServerPrivateDetail) ->
 send_frame(Command, Headers, BodyFragments, State) ->
     send_frame(#stomp_frame{command     = Command,
                             headers     = Headers,
-                            body_iolist = BodyFragments},
+                            body_iolist_rev = BodyFragments},
                State).
 
 send_frame(Frame, State = #proc_state{send_fun = SendFun,
-                                 trailing_lf = TrailingLF}) ->
+                                      trailing_lf = TrailingLF}) ->
     SendFun(rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     State.
 
@@ -1524,7 +1524,7 @@ send_error_frame(Message, ExtraHeaders, Detail, State) ->
                          {"content-type", "text/plain"},
                          {"version", string:join(?SUPPORTED_VERSIONS, ",")}] ++
                         ExtraHeaders,
-                        Detail, State).
+                        iolist_to_binary(Detail), State).
 
 send_error(Message, Detail, State) ->
     send_error_frame(Message, [], Detail, State).

@@ -5,4 +5,4 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--record(stomp_frame, {command, headers, body_iolist}).
+-record(stomp_frame, {command, headers, body_iolist_rev}).

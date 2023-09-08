@@ -58,7 +58,7 @@ parse_simple_frame_gen(Term) ->
     [?assertEqual({ok, Value},
                   rabbit_stomp_frame:header(Frame, Key)) ||
         {Key, Value} <- Headers],
-    #stomp_frame{body_iolist = Body} = Frame,
+    #stomp_frame{body_iolist_rev = Body} = Frame,
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
 
 parse_command_only(_) ->
@@ -113,7 +113,7 @@ parse_resume_mid_body(_) ->
     First = "COMMAND\n\nABC",
     Second = "DEF\0",
     {more, Resume} = parse(First),
-    {ok, #stomp_frame{command = "COMMAND", body_iolist = Body}, _Rest} =
+    {ok, #stomp_frame{command = "COMMAND", body_iolist_rev = Body}, _Rest} =
          parse(Second, Resume),
     ?assertEqual([<<"ABC">>, <<"DEF">>], Body).
 
@@ -145,7 +145,7 @@ no_nested_escapes(_) ->
     ?assertEqual(Frame,
                  #stomp_frame{command = "COM\\\\rAND",
                               headers = [{"hdr\\rname", "hdr\\rval"}],
-                              body_iolist = []}).
+                              body_iolist_rev = []}).
 
 header_name_with_cr(_) ->
     Content = "COMMAND\nhead\rer:val\n\n\0",
@@ -161,7 +161,7 @@ header_value_with_colon(_) ->
     ?assertEqual(Frame,
                  #stomp_frame{ command     = "COMMAND",
                                headers     = [{"header", "val:ue"}],
-                               body_iolist = []}).
+                               body_iolist_rev = []}).
 
 stream_offset_header(_) ->
     TestCases = [

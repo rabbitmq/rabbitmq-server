@@ -163,8 +163,8 @@ parse_body2(Content, Frame, Chunks, {more, Left}) ->
     more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, Left) end);
 parse_body2(Content, Frame, Chunks, {done, Pos}) ->
     <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
-    Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
-    {ok, Frame#stomp_frame{body_iolist = Body}, Rest}.
+    Body = finalize_chunk(Chunk, Chunks),
+    {ok, Frame#stomp_frame{body_iolist_rev = Body}, Rest}.
 
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
@@ -249,7 +249,7 @@ serialize(Frame, true) ->
     serialize(Frame, false) ++ [?LF];
 serialize(#stomp_frame{command = Command,
                        headers = Headers,
-                       body_iolist = BodyFragments}, false) ->
+                       body_iolist_rev = BodyFragments}, false) ->
     Len = iolist_size(BodyFragments),
     [Command, ?LF,
      lists:map(fun serialize_header/1,
@@ -258,7 +258,10 @@ serialize(#stomp_frame{command = Command,
          Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), ?LF];
          true    -> []
      end,
-     ?LF, BodyFragments, 0].
+     ?LF, case BodyFragments of
+              _ when is_binary(BodyFragments) -> BodyFragments;
+              _ -> lists:reverse(BodyFragments)
+          end, 0].
 
 serialize_header({K, V}) when is_integer(V) -> hdr(escape(K), integer_to_list(V));
 serialize_header({K, V}) when is_boolean(V) -> hdr(escape(K), boolean_to_list(V));
