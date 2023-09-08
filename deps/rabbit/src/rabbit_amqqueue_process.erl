@@ -913,7 +913,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
             {ok, State1};
         {ChAckTags, ChCTags, Consumers1} ->
             QName = qname(State1),
-            [emit_consumer_deleted(DownPid, CTag, QName, ?INTERNAL_USER) || CTag <- ChCTags],
+            [rabbit_core_metrics:consumer_deleted(DownPid, CTag, QName) || CTag <- ChCTags],
             Holder1 = new_single_active_consumer_after_channel_down(DownPid, Holder, SingleActiveConsumerOn, Consumers1),
             State2 = State1#q{consumers          = Consumers1,
                               active_consumer    = Holder1},
