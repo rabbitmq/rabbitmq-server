@@ -38,8 +38,6 @@ jobs:
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 25_3
     steps:
-<<<<<<< HEAD
-=======
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -55,7 +53,6 @@ jobs:
           docker-images: false
           swap-storage: true
 
->>>>>>> bd8d56a5d3 (Try to avoid running out of space in the OCI workflow in actions)
       - name: Checkout
         uses: actions/checkout@v3
 
