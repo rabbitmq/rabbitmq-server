@@ -22,7 +22,7 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.3
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
