@@ -1606,12 +1606,12 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
 
 -spec delete_with(amqqueue:amqqueue() | name(), boolean(), boolean(), rabbit_types:username()) ->
-    rabbit_types:ok(integer()) | rabbit_channel:channel_or_connection_exit().
+    rabbit_types:ok(integer()) | rabbit_misc:channel_or_connection_exit().
 delete_with(QueueName, IfUnused, IfEmpty, ActingUser) ->
     delete_with(QueueName, undefined, IfUnused, IfEmpty, ActingUser, false).
 
--spec delete_with(amqqueue:amqqueue() | name(), pid(), boolean(), boolean(), rabbit_types:username(), boolean()) ->
-    rabbit_types:ok(integer()) | rabbit_channel:channel_or_connection_exit().
+-spec delete_with(amqqueue:amqqueue() | name(), pid() | undefined, boolean(), boolean(), rabbit_types:username(), boolean()) ->
+    rabbit_types:ok(integer()) | rabbit_misc:channel_or_connection_exit().
 delete_with(AMQQueue, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when ?is_amqqueue(AMQQueue) ->
     QueueName = amqqueue:get_name(AMQQueue),
     delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive);
@@ -1629,10 +1629,10 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
            fun (not_found) ->
                    {ok, 0};
                ({absent, Q, crashed}) ->
-                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   _ = delete_crashed(Q, Username),
                    {ok, 0};
                ({absent, Q, stopped}) ->
-                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   _ = delete_crashed(Q, Username),
                    {ok, 0};
                ({absent, Q, Reason}) ->
                    absent(Q, Reason)
@@ -2120,24 +2120,31 @@ kill_queue_hard(Node, QRes = #resource{kind = queue}, Reason) ->
     case kill_queue(Node, QRes, Reason) of
         crashed -> ok;
         stopped -> ok;
-        _NewPid -> timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
-                   kill_queue_hard(Node, QRes, Reason)
+        NewPid when is_pid(NewPid) -> timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
+                   kill_queue_hard(Node, QRes, Reason);
+        Error -> Error
     end.
 
--spec kill_queue(node(), name()) -> pid() | crashed.
+-spec kill_queue(node(), name()) -> pid() | crashed | stopped | rabbit_types:error(term()).
 kill_queue(Node, QRes = #resource{kind = queue}) ->
     kill_queue(Node, QRes, boom).
 
--spec kill_queue(node(), name(), atom()) -> pid() | crashed | stopped.
+-spec kill_queue(node(), name(), atom()) -> pid() | crashed | stopped | rabbit_types:error(term()).
 kill_queue(Node, QRes = #resource{kind = queue}, Reason = shutdown) ->
     Pid1 = pid_or_crashed(Node, QRes),
     exit(Pid1, Reason),
-    rabbit_control_misc:await_state(Node, QRes, stopped),
+    rabbit_amqqueue_control:await_state(Node, QRes, stopped),
     stopped;
 kill_queue(Node, QRes = #resource{kind = queue}, Reason) ->
-    Pid1 = pid_or_crashed(Node, QRes),
-    exit(Pid1, Reason),
-    rabbit_control_misc:await_new_pid(Node, QRes, Pid1).
+    case pid_or_crashed(Node, QRes) of
+        Pid1 when is_pid(Pid1) ->
+            exit(Pid1, Reason),
+            rabbit_amqqueue_control:await_new_pid(Node, QRes, Pid1);
+        crashed ->
+            crashed;
+        Error ->
+            Error
+    end.
 
 -spec pid_or_crashed(node(), name()) -> pid() | crashed | rabbit_types:error(term()).
 pid_or_crashed(Node, QRes = #resource{virtual_host = VHost, kind = queue}) ->

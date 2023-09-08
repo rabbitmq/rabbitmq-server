@@ -1641,7 +1641,7 @@ maps_put_falsy(K, false, M) ->
 maps_put_falsy(_K, _V, M) ->
     M.
 
--spec remote_sup_child(node(), supervisor:sup_ref()) -> rabbit_types:ok_or_error2(supervisor:child(), no_child | no_sup).
+-spec remote_sup_child(node(), rabbit_types:sup_ref()) -> rabbit_types:ok_or_error2(rabbit_types:child(), no_child | no_sup).
 remote_sup_child(Node, Sup) ->
     case rpc:call(Node, supervisor, which_children, [Sup]) of
         [{_, Child, _, _}]              -> {ok, Child};

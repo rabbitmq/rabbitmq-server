@@ -573,7 +573,7 @@ defmodule TestHelper do
     :rabbit_misc.rpc_call(node, :rabbit_amqqueue, :kill_queue_hard, [node, queue_resource])
 
     :ok =
-      :rabbit_misc.rpc_call(node, :rabbit_control_misc, :await_state, [
+      :rabbit_misc.rpc_call(node, :rabbit_amqqueue_control, :await_state, [
         node,
         queue_resource,
         :crashed

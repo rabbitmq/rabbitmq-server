@@ -113,22 +113,22 @@ give_up_after_repeated_crashes(Config) ->
     amqp_channel:call(ChA, #'confirm.select'{}),
     amqp_channel:call(ChA, #'queue.declare'{queue   = QName,
                                             durable = true}),
-    rabbit_control_misc:await_state(A, QName, running),
+    rabbit_amqqueue_control:await_state(A, QName, running),
     publish(ChA, QName, durable),
     QRes = rabbit_misc:r(<<"/">>, queue, QName),
     rabbit_amqqueue:kill_queue_hard(A, QRes),
     {'EXIT', _} = (catch amqp_channel:call(
                            ChA, #'queue.declare'{queue   = QName,
                                                  durable = true})),
-    rabbit_control_misc:await_state(A, QName, crashed),
+    rabbit_amqqueue_control:await_state(A, QName, crashed),
     amqp_channel:call(ChB, #'queue.delete'{queue = QName}),
     amqp_channel:call(ChB, #'queue.declare'{queue   = QName,
                                             durable = true}),
-    rabbit_control_misc:await_state(A, QName, running),
+    rabbit_amqqueue_control:await_state(A, QName, running),
 
     %% Since it's convenient, also test absent queue status here.
     rabbit_ct_broker_helpers:stop_node(Config, B),
-    rabbit_control_misc:await_state(A, QName, down),
+    rabbit_amqqueue_control:await_state(A, QName, down),
     ok.
 
 

@@ -584,6 +584,7 @@ rabbit:
 - rabbit_access_control
 - rabbit_alarm
 - rabbit_amqqueue
+- rabbit_amqqueue_control
 - rabbit_amqqueue_process
 - rabbit_amqqueue_sup
 - rabbit_amqqueue_sup_sup
