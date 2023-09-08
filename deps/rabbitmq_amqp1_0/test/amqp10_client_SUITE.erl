@@ -29,6 +29,7 @@ groups() ->
                   roundtrip_classic_queue_with_drain,
                   roundtrip_quorum_queue_with_drain,
                   roundtrip_stream_queue_with_drain,
+                  amqp_stream_amqpl,
                   message_headers_conversion
                  ]},
      {metrics, [], [
@@ -303,6 +304,58 @@ roundtrip_queue_with_drain(Config, QueueType, QName) when is_binary(QueueType) -
     ok = amqp10_client:close_connection(Connection),
     ok.
 
+%% Send a message with a body containing a single AMQP 1.0 value section
+%% to a stream and consume via AMQP 0.9.1.
+amqp_stream_amqpl(Config) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    ContainerId = QName = atom_to_binary(?FUNCTION_NAME),
+
+    amqp_channel:call(Ch, #'queue.declare'{
+                             queue = QName,
+                             durable = true,
+                             arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+
+    Address = <<"/amq/queue/", QName/binary>>,
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => ContainerId,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address),
+    wait_for_credit(Sender),
+    OutMsg = amqp10_msg:new(<<"my-tag">>, {'v1_0.amqp_value', {binary, <<0, 255>>}}, true),
+    ok = amqp10_client:send_msg(Sender, OutMsg),
+    flush("final"),
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:close_connection(Connection),
+
+    #'basic.qos_ok'{} =  amqp_channel:call(Ch, #'basic.qos'{global = false,
+                                                            prefetch_count = 1}),
+    CTag = <<"my-tag">>,
+    #'basic.consume_ok'{} = amqp_channel:subscribe(
+                              Ch,
+                              #'basic.consume'{
+                                 queue = QName,
+                                 consumer_tag = CTag,
+                                 arguments = [{<<"x-stream-offset">>, longstr, <<"first">>}]},
+                              self()),
+    receive
+        {#'basic.deliver'{consumer_tag = CTag,
+                          redelivered  = false},
+         #amqp_msg{props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+            ok
+    after 5000 ->
+              exit(basic_deliver_timeout)
+    end,
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
 message_headers_conversion(Config) ->
     Host = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -468,7 +521,7 @@ wait_for_accepts(N) ->
 
 delete_queue(Config, QName) -> 
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    _ = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     rabbit_ct_client_helpers:close_channel(Ch).
 
 
