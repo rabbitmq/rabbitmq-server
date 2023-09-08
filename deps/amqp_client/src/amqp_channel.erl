@@ -886,9 +886,6 @@ flush_writer(#state{driver = direct}) ->
     ok.
 amqp_msg(none) ->
     none;
-amqp_msg({DTag, Content}) ->
-    {Props, Payload} = rabbit_basic_common:from_content(Content),
-    {DTag, #amqp_msg{props = Props, payload = Payload}};
 amqp_msg(Content) ->
     {Props, Payload} = rabbit_basic_common:from_content(Content),
     #amqp_msg{props = Props, payload = Payload}.
