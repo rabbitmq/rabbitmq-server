@@ -42,8 +42,6 @@ jobs:
 =======
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
-<<<<<<< HEAD
-=======
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -56,7 +54,6 @@ jobs:
           large-packages: true
           docker-images: false
           swap-storage: true
->>>>>>> 901972a701 (Try to avoid running out of space in the OCI workflow in actions)
 
 >>>>>>> bd8d56a5d3 (Try to avoid running out of space in the OCI workflow in actions)
       - name: Checkout
