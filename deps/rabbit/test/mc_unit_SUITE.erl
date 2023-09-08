@@ -334,7 +334,7 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     Content = #content{properties = Props,
                        payload_fragments_rev = [<<"data">>]},
     X = rabbit_misc:r(<<"/">>, exchange, <<"exch">>),
-    Msg = mc_amqpl:message(X, <<"apple">>, Content, #{}, true),
+    {ok, Msg} = mc_amqpl:message(X, <<"apple">>, Content, #{}, true),
 
     RoutingKeys =  [<<"apple">>, <<"q1">>, <<"q2">>],
     ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, Msg)),
