@@ -1214,12 +1214,15 @@ dead_letter_headers_CC(Config) ->
                                         multiple     = false,
                                         requeue      = false}),
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"1">>, <<"1">>]]),
-    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
-                                  props = #'P_basic'{headers = Headers3}}} =
+    {#'basic.get_ok'{delivery_tag = DTag2}, #amqp_msg{payload = P1,
+                                                      props = #'P_basic'{headers = Headers3}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     consume_empty(Ch, QName),
     ?assertEqual({array, [{longstr, DLXQName}]}, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
-    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
+    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2,
+                                       multiple     = true}),
+    wait_for_messages(Config, [[DLXQName, <<"0">>, <<"0">>, <<"0">>]]).
 
 %% 15) CC header is removed when routing key is specified
 dead_letter_headers_CC_with_routing_key(Config) ->
@@ -1230,7 +1233,6 @@ dead_letter_headers_CC_with_routing_key(Config) ->
     Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
-    %% Do not use a specific key for dead lettering, the CC header is passed
     DeadLetterArgs = [{<<"x-dead-letter-routing-key">>, longstr, DLXQName},
                       {<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
@@ -1267,10 +1269,9 @@ dead_letter_headers_CC_with_routing_key(Config) ->
                                   props = #'P_basic'{headers = Headers3}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     consume_empty(Ch, QName),
-    %% TODO: commented out assert,
-    %% this only checks that the message was mutated, which is bad not that
-    %% it wasn't included in routing
-    % ?assertEqual(undefined, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
+    %% we keep the CC header as of RabbitMQ 3.13 (with message containers)
+    %% to avoid mutating the message
+    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
     ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
 
 %% 16) the BCC header will always be removed
