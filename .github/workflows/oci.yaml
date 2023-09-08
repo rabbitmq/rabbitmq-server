@@ -38,6 +38,21 @@ jobs:
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
+<<<<<<< HEAD
+=======
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+>>>>>>> 901972a701 (Try to avoid running out of space in the OCI workflow in actions)
 
       - name: Checkout
         uses: actions/checkout@v4
