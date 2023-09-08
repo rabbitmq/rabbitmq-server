@@ -7,12 +7,9 @@
 
 -module(rabbit_control_misc).
 
--include_lib("rabbit_common/include/resource.hrl").
-
 -export([emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
          emitting_map_with_exit_handler/5, wait_for_info_messages/6,
          spawn_emitter_caller/7, await_emitters_termination/1,
-         await_new_pid/3, await_state/3, await_state/4,
          print_cmd_result/2]).
 
 -spec emitting_map(pid(), reference(), fun(), list()) -> 'ok'.
@@ -28,16 +25,8 @@
       InitialAcc :: term(), Acc :: term(), OK :: {ok, Acc}, Err :: {error, term()}.
 -spec spawn_emitter_caller(node(), module(), atom(), [term()], reference(), pid(), timeout()) -> 'ok'.
 -spec await_emitters_termination([pid()]) -> 'ok'.
--spec await_new_pid(node(), rabbit_amqqueue:name(), pid()) -> pid().
--spec await_state(node(), rabbit_amqqueue:name() | binary(), atom()) -> 'ok'.
--spec await_state(node(), rabbit_amqqueue:name() | binary(), atom(), integer()) -> 'ok'.
 
 -spec print_cmd_result(atom(), term()) -> 'ok'.
-
--define(DEFAULT_AWAIT_STATE_TIMEOUT,  30000).
--define(AWAIT_NEW_PID_DELAY_INTERVAL, 10).
--define(AWAIT_STATE_DELAY_INTERVAL,   100).
--define(AWAIT_STATE_DELAY_TIME_DELTA, 100).
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
     emitting_map(AggregatorPid, Ref, Fun, List, continue),
@@ -188,38 +177,3 @@ notify_if_timeout(Pid, Ref, Timeout) ->
 
 print_cmd_result(authenticate_user, _Result) -> io:format("Success~n");
 print_cmd_result(join_cluster, already_member) -> io:format("The node is already a member of this cluster~n").
-
-await_new_pid(Node, QRes = #resource{kind = queue}, OldPid) ->
-    case rabbit_amqqueue:pid_or_crashed(Node, QRes) of
-        OldPid -> timer:sleep(?AWAIT_NEW_PID_DELAY_INTERVAL),
-                  await_new_pid(Node, QRes, OldPid);
-        New    -> New
-    end.
-
-await_state(Node, QName, State) when is_binary(QName) ->
-    QRes = rabbit_misc:r(<<"/">>, queue, QName),
-    await_state(Node, QRes, State);
-await_state(Node, QRes = #resource{kind = queue}, State) ->
-    await_state(Node, QRes, State, ?DEFAULT_AWAIT_STATE_TIMEOUT).
-
-await_state(Node, QName, State, Time) when is_binary(QName) ->
-    QRes = rabbit_misc:r(<<"/">>, queue, QName),
-    await_state(Node, QRes, State, Time);
-await_state(Node, QRes = #resource{kind = queue}, State, Time) ->
-    case state(Node, QRes) of
-        State ->
-            ok;
-        Other ->
-            case Time of
-                0 -> exit({timeout_awaiting_state, State, Other});
-                _ -> timer:sleep(?AWAIT_STATE_DELAY_INTERVAL),
-                     await_state(Node, QRes, State, Time - ?AWAIT_STATE_DELAY_TIME_DELTA)
-            end
-    end.
-
-state(Node, QRes = #resource{virtual_host = VHost}) ->
-    Infos = rpc:call(Node, rabbit_amqqueue, info_all, [VHost, [name, state]]),
-    case Infos of
-        []                               -> undefined;
-        [[{name,  QRes}, {state, State}]] -> State
-    end.
