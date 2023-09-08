@@ -1778,13 +1778,17 @@ parse_endpoint(undefined) ->
 parse_endpoint(Destination) when is_binary(Destination) ->
     parse_endpoint(unicode:characters_to_list(Destination));
 parse_endpoint(Destination) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
+    case string:split(Destination, "/", all) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
-        ["", Type | Rest]
-            when Type =:= "exchange" orelse Type =:= "queue" orelse
-                 Type =:= "topic"    orelse Type =:= "temp-queue" ->
-            parse_endpoint0(atomise(Type), Rest);
+        ["", "exchange" | Rest] ->
+            parse_endpoint0(exchange, Rest);
+        ["", "queue" | Rest] ->
+            parse_endpoint0(queue, Rest);
+        ["", "topic" | Rest] ->
+            parse_endpoint0(topic, Rest);
+        ["", "temp-queue" | Rest] ->
+            parse_endpoint0(temp_queue, Rest);
         ["", "amq", "queue" | Rest] ->
             parse_endpoint0(amqqueue, Rest);
         ["", "reply-queue" = Prefix | [_|_]] ->
@@ -1910,9 +1914,6 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #proc_state{user = #user{usernam
 
 to_url([])  -> [];
 to_url(Lol) -> "/" ++ string:join(Lol, "/").
-
-atomise(Name) when is_list(Name) ->
-    list_to_atom(re:replace(Name, "-", "_", [{return,list}, global])).
 
 unescape(Str) -> unescape(Str, []).
 
