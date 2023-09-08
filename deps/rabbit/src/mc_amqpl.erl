@@ -91,8 +91,11 @@ convert_from(mc_amqp, Sections) ->
                 %% TODO: This is potentially inefficient, but #content.payload_fragments_rev expects
                 %% currently a flat list of binaries. Can we make rabbit_writer work
                 %% with an iolist instead?
-                {[erlang:iolist_to_iovec(amqp10_framing:encode_bin(X))
-                  || X <- BodyRev], ?AMQP10_TYPE}
+                BinsRev = [begin
+                               IoList = amqp10_framing:encode_bin(X),
+                               erlang:iolist_to_binary(IoList)
+                           end || X <- BodyRev],
+                {BinsRev, ?AMQP10_TYPE}
         end,
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId0,
