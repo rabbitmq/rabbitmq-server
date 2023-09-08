@@ -87,7 +87,7 @@ jobs:
         repository: bazelbuild/bazel
         path: bazel
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.1
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/.cache/bazel"
         key: bazel

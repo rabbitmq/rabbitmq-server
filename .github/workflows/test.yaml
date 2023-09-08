@@ -36,7 +36,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.1
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
@@ -86,7 +86,7 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.1
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
