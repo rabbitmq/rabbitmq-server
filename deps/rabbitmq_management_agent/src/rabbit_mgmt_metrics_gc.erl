@@ -136,6 +136,18 @@ delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals],
     ok.
 
+index_delete(consumer_stats = Table, channel = Type, Id) ->
+    IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
+    MatchPattern = {'_', Id, '_'},
+    %% Delete consumer_stats_queue_index
+    ets:match_delete(consumer_stats_queue_index,
+                     {'_', MatchPattern}),
+    %% Delete consumer_stats
+    ets:match_delete(consumer_stats,
+                     {MatchPattern,'_'}),
+    %% Delete consumer_stats_channel_index
+    ets:delete(IndexTable, Id),
+    ok;
 index_delete(Table, Type, Id) ->
     IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
     Keys = ets:lookup(IndexTable, Id),
